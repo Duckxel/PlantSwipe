@@ -94,6 +94,8 @@ import {
 } from "@/lib/broadcastStorage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { processAllPlantRequests } from "@/lib/aiPrefillService";
+import { getEnglishPlantName } from "@/lib/aiPlantFill";
+import { Languages } from "lucide-react";
 import { 
   buildCategoryProgress, 
   createEmptyCategoryProgress, 
@@ -1607,6 +1609,12 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
   const [createPlantName, setCreatePlantName] = React.useState<string>("");
+  
+  // Plant request editing state
+  const [editingRequestId, setEditingRequestId] = React.useState<string | null>(null);
+  const [editingRequestName, setEditingRequestName] = React.useState<string>("");
+  const [savingRequestName, setSavingRequestName] = React.useState<boolean>(false);
+  const [translatingRequestId, setTranslatingRequestId] = React.useState<string | null>(null);
   const requestViewMode: RequestViewMode = React.useMemo(() => {
     if (currentPath.includes("/admin/plants/requests")) return "requests";
     return "plants";
@@ -1655,7 +1663,35 @@ export const AdminPage: React.FC = () => {
   const [aiPrefillCurrentField, setAiPrefillCurrentField] = React.useState<string | null>(null);
   const [aiPrefillFieldProgress, setAiPrefillFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 });
   const [aiPrefillCategoryProgress, setAiPrefillCategoryProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress());
-  const [aiPrefillCompletedPlants, setAiPrefillCompletedPlants] = React.useState<Array<{ name: string; success: boolean; error?: string }>>([]);
+  const [aiPrefillCompletedPlants, setAiPrefillCompletedPlants] = React.useState<Array<{ name: string; success: boolean; error?: string; durationMs?: number }>>([]);
+  const [aiPrefillStartTime, setAiPrefillStartTime] = React.useState<number | null>(null);
+  const [aiPrefillElapsedTime, setAiPrefillElapsedTime] = React.useState<number>(0);
+  const [aiPrefillPlantStartTime, setAiPrefillPlantStartTime] = React.useState<number | null>(null);
+
+  // Timer effect for elapsed time
+  React.useEffect(() => {
+    if (!aiPrefillRunning || !aiPrefillStartTime) {
+      return;
+    }
+    const interval = setInterval(() => {
+      setAiPrefillElapsedTime(Date.now() - aiPrefillStartTime);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [aiPrefillRunning, aiPrefillStartTime]);
+
+  // Helper to format duration
+  const formatDuration = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    }
+    if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    }
+    return `${seconds}s`;
+  };
 
   // Category labels for display
   const aiPrefillCategoryLabels: Record<PlantFormCategory, string> = {
@@ -1867,6 +1903,94 @@ export const AdminPage: React.FC = () => {
     },
     [],
   );
+
+  // Start editing a plant request name
+  const handleStartEditRequest = React.useCallback((req: PlantRequestRow) => {
+    setEditingRequestId(req.id);
+    setEditingRequestName(req.plant_name);
+  }, []);
+
+  // Cancel editing
+  const handleCancelEditRequest = React.useCallback(() => {
+    setEditingRequestId(null);
+    setEditingRequestName("");
+  }, []);
+
+  // Save edited plant request name
+  const handleSaveRequestName = React.useCallback(async (requestId: string) => {
+    const trimmedName = editingRequestName.trim();
+    if (!trimmedName) return;
+    
+    setSavingRequestName(true);
+    try {
+      const { error } = await supabase
+        .from("requested_plants")
+        .update({ 
+          plant_name: trimmedName,
+          plant_name_normalized: trimmedName.toLowerCase().trim(),
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", requestId);
+      
+      if (error) throw new Error(error.message);
+      
+      // Update local state
+      setPlantRequests((prev) => 
+        prev.map((req) => 
+          req.id === requestId 
+            ? { ...req, plant_name: trimmedName, plant_name_normalized: trimmedName.toLowerCase().trim() }
+            : req
+        )
+      );
+      
+      setEditingRequestId(null);
+      setEditingRequestName("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPlantRequestsError(`Failed to update name: ${msg}`);
+    } finally {
+      setSavingRequestName(false);
+    }
+  }, [editingRequestName, supabase]);
+
+  // Translate plant request name to English using AI (auto-detects language)
+  const handleTranslateRequestName = React.useCallback(async (req: PlantRequestRow) => {
+    setTranslatingRequestId(req.id);
+    try {
+      // Use AI to get the English common name (auto-detects source language)
+      const result = await getEnglishPlantName(req.plant_name);
+      const translatedName = result.englishName;
+      
+      // If translation is different, update the database
+      if (translatedName && translatedName.toLowerCase() !== req.plant_name.toLowerCase()) {
+        const { error } = await supabase
+          .from("requested_plants")
+          .update({ 
+            plant_name: translatedName,
+            plant_name_normalized: translatedName.toLowerCase().trim(),
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", req.id);
+        
+        if (error) throw new Error(error.message);
+        
+        // Update local state
+        setPlantRequests((prev) => 
+          prev.map((r) => 
+            r.id === req.id 
+              ? { ...r, plant_name: translatedName, plant_name_normalized: translatedName.toLowerCase().trim() }
+              : r
+          )
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPlantRequestsError(`Failed to translate: ${msg}`);
+    } finally {
+      setTranslatingRequestId(null);
+    }
+  }, [supabase]);
+
   const handleOpenPlantEditor = React.useCallback(
     (plantId: string) => {
       if (!plantId) return;
@@ -2379,6 +2503,9 @@ export const AdminPage: React.FC = () => {
     if (aiPrefillRunning || plantRequests.length === 0) return;
     
     const abortController = new AbortController();
+    const overallStartTime = Date.now();
+    let plantStartTime = Date.now();
+    
     setAiPrefillAbortController(abortController);
     setAiPrefillRunning(true);
     setAiPrefillError(null);
@@ -2387,6 +2514,9 @@ export const AdminPage: React.FC = () => {
     setAiPrefillCurrentField(null);
     setAiPrefillFieldProgress({ completed: 0, total: 0 });
     setAiPrefillCompletedPlants([]);
+    setAiPrefillStartTime(overallStartTime);
+    setAiPrefillElapsedTime(0);
+    setAiPrefillPlantStartTime(plantStartTime);
     initAiPrefillCategoryProgress();
     
     try {
@@ -2416,9 +2546,13 @@ export const AdminPage: React.FC = () => {
           onPlantProgress: ({ current, total, plantName }) => {
             setAiPrefillProgress({ current, total });
             setAiPrefillCurrentPlant(plantName);
+            // Track start time for new plant
+            plantStartTime = Date.now();
+            setAiPrefillPlantStartTime(plantStartTime);
           },
           onPlantComplete: ({ plantName, requestId, success, error }) => {
-            setAiPrefillCompletedPlants((prev) => [...prev.slice(-4), { name: plantName, success, error }]);
+            const durationMs = Date.now() - plantStartTime;
+            setAiPrefillCompletedPlants((prev) => [...prev.slice(-4), { name: plantName, success, error, durationMs }]);
             if (success) {
               // Remove completed plant from the local list immediately for visual feedback
               setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
@@ -2450,6 +2584,8 @@ export const AdminPage: React.FC = () => {
       setAiPrefillStatus('idle');
       setAiPrefillCurrentField(null);
       setAiPrefillFieldProgress({ completed: 0, total: 0 });
+      setAiPrefillStartTime(null);
+      setAiPrefillPlantStartTime(null);
     }
   }, [aiPrefillRunning, plantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
 
@@ -7475,6 +7611,9 @@ export const AdminPage: React.FC = () => {
                                 <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
                                   AI Prefill in Progress
                                 </span>
+                                <span className="text-xs bg-purple-200 dark:bg-purple-800 px-2 py-0.5 rounded-full text-purple-700 dark:text-purple-300 font-mono">
+                                  {formatDuration(aiPrefillElapsedTime)}
+                                </span>
                               </div>
                               <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
                                 Plant {aiPrefillProgress.current + 1} of {aiPrefillProgress.total}
@@ -7590,8 +7729,13 @@ export const AdminPage: React.FC = () => {
                                         <X className="h-3 w-3 flex-shrink-0" />
                                       )}
                                       <span className="truncate">{plant.name}</span>
+                                      {plant.durationMs && (
+                                        <span className="ml-auto text-[10px] font-mono opacity-70">
+                                          {formatDuration(plant.durationMs)}
+                                        </span>
+                                      )}
                                       {!plant.success && plant.error && (
-                                        <span className="truncate opacity-70 ml-auto text-[10px]">{plant.error}</span>
+                                        <span className="truncate opacity-70 text-[10px]">{plant.error}</span>
                                       )}
                                     </div>
                                   ))}
@@ -7675,9 +7819,73 @@ export const AdminPage: React.FC = () => {
                                     >
                                       <div className="flex items-start gap-2 flex-1">
                                         <div className="flex-1">
-                                          <div className="text-sm font-medium">
-                                            {req.plant_name}
-                                          </div>
+                                          {editingRequestId === req.id ? (
+                                            <div className="flex items-center gap-2">
+                                              <Input
+                                                value={editingRequestName}
+                                                onChange={(e) => setEditingRequestName(e.target.value)}
+                                                className="h-8 text-sm"
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                  if (e.key === 'Enter') {
+                                                    handleSaveRequestName(req.id);
+                                                  } else if (e.key === 'Escape') {
+                                                    handleCancelEditRequest();
+                                                  }
+                                                }}
+                                              />
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                                onClick={() => handleSaveRequestName(req.id)}
+                                                disabled={savingRequestName}
+                                              >
+                                                {savingRequestName ? (
+                                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                  <Check className="h-4 w-4 text-green-600" />
+                                                )}
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                                onClick={handleCancelEditRequest}
+                                              >
+                                                <X className="h-4 w-4 text-red-600" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-1">
+                                              <div className="text-sm font-medium">
+                                                {req.plant_name}
+                                              </div>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 opacity-40 hover:opacity-100"
+                                                onClick={() => handleStartEditRequest(req)}
+                                                title="Edit name"
+                                              >
+                                                <Pencil className="h-3 w-3" />
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 opacity-40 hover:opacity-100"
+                                                onClick={() => handleTranslateRequestName(req)}
+                                                disabled={translatingRequestId === req.id}
+                                                title="Translate to English (DeepL)"
+                                              >
+                                                {translatingRequestId === req.id ? (
+                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                  <Languages className="h-3 w-3" />
+                                                )}
+                                              </Button>
+                                            </div>
+                                          )}
                                           <div
                                             className="text-xs opacity-60"
                                             title={updatedTitle}

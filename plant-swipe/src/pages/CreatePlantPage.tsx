@@ -297,7 +297,7 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
       return {
         ...entry,
         quantity: Number.isFinite(parsedQuantity as number) ? Number(parsedQuantity) : undefined,
-        season: entry.season?.trim() || undefined,
+        season: entry.season && typeof entry.season === 'string' ? entry.season.trim() : undefined,
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
@@ -324,9 +324,9 @@ async function upsertColors(colors: PlantColor[]) {
   if (!colors?.length) return [] as string[]
   const normalized = colors
     .map((c) => {
-      const name = c.name?.trim()
+      const name = c.name && typeof c.name === 'string' ? c.name.trim() : null
       if (!name) return null
-      const hex = c.hexCode?.trim()
+      const hex = c.hexCode && typeof c.hexCode === 'string' ? c.hexCode.trim() : null
       return {
         name,
         hex_code: hex && hex.length ? (hex.startsWith("#") ? hex : `#${hex}`) : null,
@@ -363,7 +363,7 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   
   // First pass: filter and deduplicate by normalized link (case-insensitive, trimmed)
   const filtered = list.filter((img) => {
-    const link = img.link?.trim()
+    const link = img.link && typeof img.link === 'string' ? img.link.trim() : null
     if (!link) return false
     const linkLower = link.toLowerCase()
     if (seenLinks.has(linkLower)) {
@@ -503,8 +503,12 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   await supabase.from('plant_sources').delete().eq('plant_id', plantId)
   if (!sources?.length) return
   const rows = sources
-    .filter((s) => s.name?.trim())
-    .map((s) => ({ plant_id: plantId, name: s.name.trim(), url: s.url?.trim() || null }))
+    .filter((s) => s.name && typeof s.name === 'string' && s.name.trim())
+    .map((s) => ({ 
+      plant_id: plantId, 
+      name: String(s.name).trim(), 
+      url: s.url && typeof s.url === 'string' ? s.url.trim() : null 
+    }))
   if (!rows.length) return
   const { error } = await supabase.from('plant_sources').insert(rows)
   if (error) throw new Error(error.message)
@@ -514,9 +518,9 @@ function mapInfusionMixRows(rows?: Array<{ mix_name?: string | null; benefit?: s
   const result: Record<string, string> = {}
   if (!rows) return result
   for (const row of rows) {
-    const key = row?.mix_name?.trim()
+    const key = row?.mix_name && typeof row.mix_name === 'string' ? row.mix_name.trim() : null
     if (!key) continue
-    const value = row?.benefit?.trim()
+    const value = row?.benefit && typeof row.benefit === 'string' ? row.benefit.trim() : null
     result[key] = value || ''
   }
   return result
@@ -533,9 +537,9 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
   if (!infusionMix) return
   const rows = Object.entries(infusionMix)
     .map(([mix, benefit]) => {
-      const trimmedName = mix?.trim()
+      const trimmedName = mix && typeof mix === 'string' ? mix.trim() : null
       if (!trimmedName) return null
-      const trimmedBenefit = benefit?.trim()
+      const trimmedBenefit = benefit && typeof benefit === 'string' ? benefit.trim() : null
       return {
         plant_id: plantId,
         mix_name: trimmedName,
@@ -1113,7 +1117,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const savePlant = async (plantOverride?: Plant) => {
       const saveLanguage = language
       const plantToSave = plantOverride || plant
-      const trimmedName = plantToSave.name.trim()
+      const trimmedName = plantToSave.name && typeof plantToSave.name === 'string' ? plantToSave.name.trim() : ''
       if (!trimmedName) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
       const isEnglish = saveLanguage === 'en'
       const existingPlantId = plantToSave.id || id
@@ -1439,7 +1443,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     }
 
   const runAiFill = async () => {
-    const trimmedName = plant.name.trim()
+    const trimmedName = plant.name && typeof plant.name === 'string' ? plant.name.trim() : ''
     if (!trimmedName) {
       setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.'))
       return
@@ -1677,7 +1681,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       setError(t('plantAdmin.translationNoTargets', 'No other languages configured for translation.'))
       return
     }
-    if (!plant.name.trim()) {
+    if (!(plant.name && typeof plant.name === 'string' && plant.name.trim())) {
       setError(t('plantAdmin.nameRequired', 'Name is required'))
       return
     }
@@ -1905,12 +1909,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               <Button
                 type="button"
                 onClick={aiCompleted ? undefined : runAiFill}
-                disabled={aiWorking || !plant.name.trim() || aiCompleted}
+                disabled={aiWorking || !(plant.name && typeof plant.name === 'string' && plant.name.trim()) || aiCompleted}
               >
                 {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 {aiCompleted ? t('plantAdmin.aiFilled', 'AI Filled') : t('plantAdmin.aiFill', 'AI fill all fields')}
               </Button>
-              {!plant.name.trim() && (
+              {!(plant.name && typeof plant.name === 'string' && plant.name.trim()) && (
                 <span className="text-xs text-muted-foreground self-center">{t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')}</span>
               )}
             </div>

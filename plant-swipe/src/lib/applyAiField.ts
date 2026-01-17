@@ -289,8 +289,39 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       }
         return { ...next, growth: { ...(next.growth || {}), ...payload } }
     }
-    case 'usage':
-      return { ...next, usage: { ...(next.usage || {}), ...(data as Record<string, unknown>) } }
+    case 'usage': {
+      const payload = { ...(data as Record<string, unknown>) }
+      // Normalize infusionMix - AI might return array of objects [{mix_name, benefit}] instead of Record<string, string>
+      if ('infusionMix' in payload) {
+        const mix = payload.infusionMix
+        if (Array.isArray(mix)) {
+          // Convert array of {mix_name, benefit} objects to Record<string, string>
+          const normalized: Record<string, string> = {}
+          for (const item of mix) {
+            if (item && typeof item === 'object') {
+              const key = (item as any).mix_name || (item as any).name || (item as any).key
+              const value = (item as any).benefit || (item as any).value || ''
+              if (key && typeof key === 'string' && key.trim()) {
+                normalized[key.trim()] = typeof value === 'string' ? value.trim() : String(value || '')
+              }
+            }
+          }
+          payload.infusionMix = normalized
+        } else if (mix && typeof mix === 'object' && !Array.isArray(mix)) {
+          // Already a Record - ensure values are strings
+          const normalized: Record<string, string> = {}
+          for (const [k, v] of Object.entries(mix as Record<string, unknown>)) {
+            if (k && typeof k === 'string' && k.trim()) {
+              normalized[k.trim()] = typeof v === 'string' ? v.trim() : String(v || '')
+            }
+          }
+          payload.infusionMix = normalized
+        } else {
+          payload.infusionMix = {}
+        }
+      }
+      return { ...next, usage: { ...(next.usage || {}), ...payload } }
+    }
     case 'ecology': {
       const payload = { ...(data as Record<string, unknown>) }
       const polenizerResult = normalizeEnumArrayInput(polenizerEnum as EnumTools, (payload as any).polenizer)

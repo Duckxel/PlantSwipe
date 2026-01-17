@@ -759,7 +759,8 @@ const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
   : null
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
-const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
+const openaiModel = process.env.OPENAI_MODEL || 'gpt-5.2-2025-12-11'
+const openaiModelNano = process.env.OPENAI_MODEL_NANO || 'gpt-5-nano'
 let openaiClient = null
 let openai = null // Alias for garden advice endpoints
 if (openaiApiKey) {
@@ -2256,11 +2257,11 @@ async function generateFieldData(options) {
   const response = await openaiClient.responses.create(
     {
       model: openaiModel,
-      reasoning: { effort: 'low' },
+      reasoning: { effort: 'medium' },
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) }
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) }
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -2317,12 +2318,12 @@ async function verifyPlantNameCandidate(plantName) {
 
   const response = await openaiClient.responses.create(
     {
-      model: openaiModel,
+      model: openaiModelNano,
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -3097,7 +3098,7 @@ Rules:
     const prompt = `What is the common English name for this plant: "${plantName}"?`
     
     const response = await openaiClient.responses.create({
-      model: openaiModel,
+      model: openaiModelNano,
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
@@ -3168,32 +3169,40 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
 
     const aggregated = {}
 
-    for (const fieldKey of Object.keys(schemaBlueprint)) {
-      const fieldSchema = sanitizedSchema[fieldKey]
-      if (!fieldSchema) {
-        continue
-      }
-
-      const existingFieldRaw =
-        existingDataRaw && typeof existingDataRaw === 'object'
-          ? existingDataRaw[fieldKey]
-          : undefined
-      const existingFieldClean =
-        existingFieldRaw !== undefined ? removeNullValues(existingFieldRaw) : undefined
-
-      const fieldValue = await generateFieldData({
-        plantName,
-        fieldKey,
-        fieldSchema,
-        existingField: existingFieldClean,
+    // Prepare all field tasks
+    const fieldTasks = Object.keys(schemaBlueprint)
+      .filter((fieldKey) => sanitizedSchema[fieldKey])
+      .map((fieldKey) => {
+        const fieldSchema = sanitizedSchema[fieldKey]
+        const existingFieldRaw =
+          existingDataRaw && typeof existingDataRaw === 'object'
+            ? existingDataRaw[fieldKey]
+            : undefined
+        const existingFieldClean =
+          existingFieldRaw !== undefined ? removeNullValues(existingFieldRaw) : undefined
+        return { fieldKey, fieldSchema, existingFieldClean }
       })
 
-      const cleanedField =
-        fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
-      if (cleanedField !== undefined) {
-        aggregated[fieldKey] = removeExternalIds(cleanedField)
-      } else {
-        delete aggregated[fieldKey]
+    // Process fields one by one (sequential)
+    for (const { fieldKey, fieldSchema, existingFieldClean } of fieldTasks) {
+      try {
+        const fieldValue = await generateFieldData({
+          plantName,
+          fieldKey,
+          fieldSchema,
+          existingField: existingFieldClean,
+        })
+
+        const cleanedField =
+          fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+        if (cleanedField !== undefined) {
+          aggregated[fieldKey] = removeExternalIds(cleanedField)
+        } else {
+          delete aggregated[fieldKey]
+        }
+      } catch (err) {
+        console.error(`[server] AI fill failed for field "${fieldKey}":`, err?.message || err)
+        // Continue with next field on error
       }
     }
 
@@ -5316,7 +5325,7 @@ app.post('/api/blog/summarize', async (req, res) => {
         input: promptSections.join('\n\n'),
         max_output_tokens: 150,
       },
-      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
     )
     const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
     res.json({ summary })
