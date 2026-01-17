@@ -332,11 +332,13 @@ export function NotificationPanel({
                             onClick={() => handleRejectFriendRequest(request.id)}
                             disabled={isProcessing}
                             title={t('common.decline', { defaultValue: 'Decline' })}
+                            aria-label={t('common.decline', { defaultValue: 'Decline' })}
+                            aria-busy={isProcessing}
                           >
                             {isProcessing ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                             ) : (
-                              <X className="h-4 w-4" />
+                              <X className="h-4 w-4" aria-hidden="true" />
                             )}
                           </Button>
                           <Button
@@ -344,12 +346,14 @@ export function NotificationPanel({
                             className="h-8 rounded-lg text-xs bg-blue-500 hover:bg-blue-600 text-white shadow-sm shadow-blue-500/25"
                             onClick={() => handleAcceptFriendRequest(request.id)}
                             disabled={isProcessing}
+                            aria-label={t('common.accept', { defaultValue: 'Accept' })}
+                            aria-busy={isProcessing}
                           >
                             {isProcessing ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                             ) : (
                               <>
-                                <Check className="h-3.5 w-3.5 mr-1" />
+                                <Check className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
                                 {t('common.accept', { defaultValue: 'Accept' })}
                               </>
                             )}
@@ -451,11 +455,13 @@ export function NotificationPanel({
                             onClick={() => handleDeclineGardenInvite(invite.id)}
                             disabled={isProcessing}
                             title={t('common.decline', { defaultValue: 'Decline' })}
+                            aria-label={t('common.decline', { defaultValue: 'Decline' })}
+                            aria-busy={isProcessing}
                           >
                             {isProcessing ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                             ) : (
-                              <X className="h-4 w-4" />
+                              <X className="h-4 w-4" aria-hidden="true" />
                             )}
                           </Button>
                           <Button
@@ -463,12 +469,14 @@ export function NotificationPanel({
                             className="h-8 rounded-lg text-xs bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm shadow-emerald-500/25"
                             onClick={() => handleAcceptGardenInvite(invite.id)}
                             disabled={isProcessing}
+                            aria-label={t('common.accept', { defaultValue: 'Accept' })}
+                            aria-busy={isProcessing}
                           >
                             {isProcessing ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                             ) : (
                               <>
-                                <Check className="h-3.5 w-3.5 mr-1" />
+                                <Check className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
                                 {t('common.accept', { defaultValue: 'Accept' })}
                               </>
                             )}
