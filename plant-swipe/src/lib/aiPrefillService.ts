@@ -588,55 +588,99 @@ export async function processPlantRequest(
       throw new Error('Operation cancelled')
     }
     
-    // Stage 3: Translate to other languages
+    // Stage 3: Translate to other languages (in parallel)
     onProgress?.({ stage: 'translating', plantName: displayName })
     
     const targetLanguages = SUPPORTED_LANGUAGES.filter((lang) => lang !== 'en')
-    const translatedRows = []
     
-    for (const target of targetLanguages) {
-      if (signal?.aborted) {
-        // Clean up
-        await supabase.from('plant_translations').delete().eq('plant_id', plantId)
-        await supabase.from('plants').delete().eq('id', plantId)
-        throw new Error('Operation cancelled')
-      }
-      
-      const translatedName = await translateText(String(plant.name || trimmedName || ''), target, 'en')
-      const translatedGivenNames = await translateArray(plant.identity?.givenNames || [], target, 'en')
-      const translateArraySafe = (arr?: string[]) => translateArray((arr || []).map(s => String(s || '')), target, 'en')
-      const translateStringSafe = async (s?: string | null) => {
-        if (!s || typeof s !== 'string') return null
-        return translateText(s, target, 'en')
-      }
-      const translatedSourceName = primarySource?.name
-        ? await translateText(String(primarySource.name), target, 'en')
-        : undefined
-      
-      translatedRows.push({
-        plant_id: plantId,
-        language: target,
-        name: translatedName,
-        given_names: translatedGivenNames,
-        overview: await translateStringSafe(plant.identity?.overview),
-        allergens: await translateArraySafe(plant.identity?.allergens),
-        symbolism: await translateArraySafe(plant.identity?.symbolism),
-        origin: await translateArraySafe(plant.plantCare?.origin),
-        advice_soil: await translateStringSafe(plant.plantCare?.adviceSoil),
-        advice_mulching: await translateStringSafe(plant.plantCare?.adviceMulching),
-        advice_fertilizer: await translateStringSafe(plant.plantCare?.adviceFertilizer),
-        advice_tutoring: await translateStringSafe(plant.growth?.adviceTutoring),
-        advice_sowing: await translateStringSafe(plant.growth?.adviceSowing),
-        cut: await translateStringSafe(plant.growth?.cut),
-        advice_medicinal: await translateStringSafe(plant.usage?.adviceMedicinal),
-        nutritional_intake: await translateArraySafe(plant.usage?.nutritionalIntake),
-        recipes_ideas: await translateArraySafe(plant.usage?.recipesIdeas),
-        advice_infusion: await translateStringSafe(plant.usage?.adviceInfusion),
-        ground_effect: await translateStringSafe(plant.ecology?.groundEffect),
-        source_name: translatedSourceName || null,
-        source_url: primarySource?.url ? String(primarySource.url) : null,
-        tags: await translateArraySafe(plant.miscellaneous?.tags),
+    // Translate to all languages in parallel
+    const translatedRows = await Promise.all(
+      targetLanguages.map(async (target) => {
+        if (signal?.aborted) {
+          throw new Error('Operation cancelled')
+        }
+        
+        const translateArraySafe = (arr?: string[]) => translateArray((arr || []).map(s => String(s || '')), target, 'en')
+        const translateStringSafe = async (s?: string | null) => {
+          if (!s || typeof s !== 'string') return null
+          return translateText(s, target, 'en')
+        }
+        
+        // Run all translations for this language in parallel
+        const [
+          translatedName,
+          translatedGivenNames,
+          translatedSourceName,
+          overview,
+          allergens,
+          symbolism,
+          origin,
+          advice_soil,
+          advice_mulching,
+          advice_fertilizer,
+          advice_tutoring,
+          advice_sowing,
+          cut,
+          advice_medicinal,
+          nutritional_intake,
+          recipes_ideas,
+          advice_infusion,
+          ground_effect,
+          tags,
+        ] = await Promise.all([
+          translateText(String(plant.name || trimmedName || ''), target, 'en'),
+          translateArray(plant.identity?.givenNames || [], target, 'en'),
+          primarySource?.name ? translateText(String(primarySource.name), target, 'en') : Promise.resolve(undefined),
+          translateStringSafe(plant.identity?.overview),
+          translateArraySafe(plant.identity?.allergens),
+          translateArraySafe(plant.identity?.symbolism),
+          translateArraySafe(plant.plantCare?.origin),
+          translateStringSafe(plant.plantCare?.adviceSoil),
+          translateStringSafe(plant.plantCare?.adviceMulching),
+          translateStringSafe(plant.plantCare?.adviceFertilizer),
+          translateStringSafe(plant.growth?.adviceTutoring),
+          translateStringSafe(plant.growth?.adviceSowing),
+          translateStringSafe(plant.growth?.cut),
+          translateStringSafe(plant.usage?.adviceMedicinal),
+          translateArraySafe(plant.usage?.nutritionalIntake),
+          translateArraySafe(plant.usage?.recipesIdeas),
+          translateStringSafe(plant.usage?.adviceInfusion),
+          translateStringSafe(plant.ecology?.groundEffect),
+          translateArraySafe(plant.miscellaneous?.tags),
+        ])
+        
+        return {
+          plant_id: plantId,
+          language: target,
+          name: translatedName,
+          given_names: translatedGivenNames,
+          overview,
+          allergens,
+          symbolism,
+          origin,
+          advice_soil,
+          advice_mulching,
+          advice_fertilizer,
+          advice_tutoring,
+          advice_sowing,
+          cut,
+          advice_medicinal,
+          nutritional_intake,
+          recipes_ideas,
+          advice_infusion,
+          ground_effect,
+          source_name: translatedSourceName || null,
+          source_url: primarySource?.url ? String(primarySource.url) : null,
+          tags,
+        }
       })
+    )
+    
+    if (signal?.aborted) {
+      // Clean up
+      await supabase.from('plant_translations').delete().eq('plant_id', plantId)
+      await supabase.from('plants').delete().eq('id', plantId)
+      throw new Error('Operation cancelled')
     }
     
     if (translatedRows.length) {
@@ -679,6 +723,7 @@ export async function processPlantRequest(
 
 /**
  * Process all plant requests with AI fill, save, and translate
+ * Plants are processed one at a time, but fields within each plant are filled in parallel
  */
 export async function processAllPlantRequests(
   requests: Array<{ id: string; plant_name: string }>,
@@ -693,6 +738,7 @@ export async function processAllPlantRequests(
   let processed = 0
   let failed = 0
   
+  // Process plants one at a time (fields within each plant are parallelized)
   for (let i = 0; i < requests.length; i++) {
     if (signal?.aborted) {
       return { processed, failed, cancelled: true }
