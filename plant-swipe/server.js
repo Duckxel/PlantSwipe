@@ -8875,6 +8875,7 @@ app.get('/api/admin/member', async (req, res) => {
     let bugPoints = null
     let bugCatcherRank = null
     let bugActionsCompleted = null
+    let bugCompletedActions = []
     try {
       const userRoles = Array.isArray(profile?.roles) ? profile.roles : []
       if (userRoles.includes('bug_catcher')) {
@@ -8888,12 +8889,41 @@ app.get('/api/admin/member', async (req, res) => {
             bugCatcherRank = rankData
           }
           
-          // Get actions completed count
-          const { count: actionsCount } = await supabaseServiceClient
+          // Get actions completed with details
+          const { data: actionsData, count: actionsCount } = await supabaseServiceClient
             .from('bug_action_responses')
-            .select('*', { count: 'exact', head: true })
+            .select(`
+              id,
+              action_id,
+              answers,
+              points_earned,
+              completed_at,
+              bug_actions (
+                id,
+                title,
+                description,
+                questions,
+                status
+              )
+            `, { count: 'exact' })
             .eq('user_id', user.id)
+            .order('completed_at', { ascending: false })
           bugActionsCompleted = actionsCount || 0
+          
+          // Format completed actions for response
+          if (actionsData && actionsData.length > 0) {
+            bugCompletedActions = actionsData.map(action => ({
+              id: action.id,
+              actionId: action.action_id,
+              title: action.bug_actions?.title || 'Unknown Action',
+              description: action.bug_actions?.description || null,
+              questions: action.bug_actions?.questions || [],
+              answers: action.answers || {},
+              pointsEarned: action.points_earned || 0,
+              completedAt: action.completed_at,
+              actionStatus: action.bug_actions?.status || 'unknown'
+            }))
+          }
         } else if (sql) {
           // Fallback to direct SQL
           const rankResult = await sql`SELECT get_bug_catcher_rank(${user.id}::uuid) as rank`
@@ -8901,8 +8931,38 @@ app.get('/api/admin/member', async (req, res) => {
             bugCatcherRank = rankResult[0].rank
           }
           
-          const actionsResult = await sql`SELECT COUNT(*) as count FROM public.bug_action_responses WHERE user_id = ${user.id}::uuid`
-          bugActionsCompleted = parseInt(actionsResult?.[0]?.count || '0', 10)
+          // Get completed actions with details via SQL
+          const actionsResult = await sql`
+            SELECT 
+              bar.id,
+              bar.action_id,
+              bar.answers,
+              bar.points_earned,
+              bar.completed_at,
+              ba.title,
+              ba.description,
+              ba.questions,
+              ba.status as action_status
+            FROM public.bug_action_responses bar
+            JOIN public.bug_actions ba ON ba.id = bar.action_id
+            WHERE bar.user_id = ${user.id}::uuid
+            ORDER BY bar.completed_at DESC
+          `
+          bugActionsCompleted = actionsResult?.length || 0
+          
+          if (actionsResult && actionsResult.length > 0) {
+            bugCompletedActions = actionsResult.map(action => ({
+              id: action.id,
+              actionId: action.action_id,
+              title: action.title || 'Unknown Action',
+              description: action.description || null,
+              questions: action.questions || [],
+              answers: action.answers || {},
+              pointsEarned: action.points_earned || 0,
+              completedAt: action.completed_at,
+              actionStatus: action.action_status || 'unknown'
+            }))
+          }
         }
       }
     } catch (bugCatcherErr) {
@@ -8944,6 +9004,7 @@ app.get('/api/admin/member', async (req, res) => {
       bugPoints,
       bugCatcherRank,
       bugActionsCompleted,
+      bugCompletedActions,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })

@@ -3963,6 +3963,17 @@ export const AdminPage: React.FC = () => {
     bugPoints?: number | null;
     bugCatcherRank?: number | null;
     bugActionsCompleted?: number | null;
+    bugCompletedActions?: Array<{
+      id: string;
+      actionId: string;
+      title: string;
+      description: string | null;
+      questions: Array<{ id: string; title: string; required: boolean; type: string }>;
+      answers: Record<string, string | boolean>;
+      pointsEarned: number;
+      completedAt: string;
+      actionStatus: string;
+    }>;
   } | null>(null);
   const [banReason, setBanReason] = React.useState("");
   const [banSubmitting, setBanSubmitting] = React.useState(false);
@@ -3993,6 +4004,7 @@ export const AdminPage: React.FC = () => {
   const [roleSubmitting, setRoleSubmitting] = React.useState<string | null>(null);
   const [rolesOpen, setRolesOpen] = React.useState(false); // Default to collapsed
   const [confirmAdminOpen, setConfirmAdminOpen] = React.useState(false); // Confirmation dialog for admin role
+  const [bugActionsDialogOpen, setBugActionsDialogOpen] = React.useState(false); // Bug catcher actions dialog
 
   // Container ref for Members tab to run form-field validation logs
   const membersContainerRef = React.useRef<HTMLDivElement | null>(null);
@@ -4438,6 +4450,19 @@ export const AdminPage: React.FC = () => {
           bugPoints: typeof data?.bugPoints === "number" ? data.bugPoints : null,
           bugCatcherRank: typeof data?.bugCatcherRank === "number" ? data.bugCatcherRank : null,
           bugActionsCompleted: typeof data?.bugActionsCompleted === "number" ? data.bugActionsCompleted : null,
+          bugCompletedActions: Array.isArray(data?.bugCompletedActions) 
+            ? data.bugCompletedActions.map((action: any) => ({
+                id: String(action.id || ''),
+                actionId: String(action.actionId || ''),
+                title: String(action.title || 'Unknown Action'),
+                description: action.description || null,
+                questions: Array.isArray(action.questions) ? action.questions : [],
+                answers: action.answers || {},
+                pointsEarned: typeof action.pointsEarned === 'number' ? action.pointsEarned : 0,
+                completedAt: action.completedAt || null,
+                actionStatus: action.actionStatus || 'unknown',
+              }))
+            : [],
         });
         // Extract and set member roles
         const profileRoles = Array.isArray(data?.profile?.roles) ? data.profile.roles : [];
@@ -8877,19 +8902,124 @@ export const AdminPage: React.FC = () => {
                                   {/* Divider */}
                                   <div className="h-10 w-px bg-orange-200 dark:bg-orange-700/50" />
                                   
-                                  {/* Actions Completed */}
-                                  <div className="text-center">
+                                  {/* Actions Completed - Clickable */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setBugActionsDialogOpen(true)}
+                                    className="text-center p-2 -m-2 rounded-xl hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors cursor-pointer"
+                                    disabled={!memberData.bugActionsCompleted}
+                                  >
                                     <div className="flex items-center justify-center gap-1.5 mb-1">
                                       <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                                       <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
                                         {typeof memberData.bugActionsCompleted === 'number' ? memberData.bugActionsCompleted : 0}
                                       </span>
                                     </div>
-                                    <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70 font-medium">Actions</div>
-                                  </div>
+                                    <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70 font-medium">
+                                      Actions
+                                      {(memberData.bugActionsCompleted || 0) > 0 && (
+                                        <span className="ml-1 opacity-60">(click to view)</span>
+                                      )}
+                                    </div>
+                                  </button>
                                 </div>
                               </div>
                             )}
+
+                            {/* Bug Catcher Completed Actions Dialog */}
+                            <Dialog open={bugActionsDialogOpen} onOpenChange={setBugActionsDialogOpen}>
+                              <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2">
+                                    <Bug className="h-5 w-5 text-orange-500" />
+                                    Completed Actions
+                                    <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                      {memberData?.bugCompletedActions?.length || 0}
+                                    </Badge>
+                                  </DialogTitle>
+                                  <DialogDescription>
+                                    Actions completed by {memberData?.profile?.display_name || 'this user'}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                
+                                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                                  {(!memberData?.bugCompletedActions || memberData.bugCompletedActions.length === 0) ? (
+                                    <div className="text-center py-8 text-stone-500">
+                                      <CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                                      <p>No completed actions yet</p>
+                                    </div>
+                                  ) : (
+                                    memberData.bugCompletedActions.map((action) => (
+                                      <div
+                                        key={action.id}
+                                        className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden"
+                                      >
+                                        {/* Action Header */}
+                                        <div className="px-4 py-3 bg-stone-50 dark:bg-[#252526] border-b border-stone-200 dark:border-[#3e3e42]">
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div className="flex-1 min-w-0">
+                                              <h4 className="font-semibold text-sm truncate">{action.title}</h4>
+                                              {action.description && (
+                                                <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5 line-clamp-2">{action.description}</p>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                              <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                                +{action.pointsEarned} pts
+                                              </Badge>
+                                              {action.actionStatus === 'closed' && (
+                                                <Badge variant="secondary" className="text-stone-500">Closed</Badge>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="text-xs text-stone-400 mt-2">
+                                            Completed {action.completedAt ? new Date(action.completedAt).toLocaleString() : 'Unknown date'}
+                                          </div>
+                                        </div>
+                                        
+                                        {/* Action Answers */}
+                                        {action.questions && action.questions.length > 0 && (
+                                          <div className="p-4 space-y-3">
+                                            <div className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wide">
+                                              Answers
+                                            </div>
+                                            {action.questions.map((question) => {
+                                              const answer = action.answers[question.id];
+                                              return (
+                                                <div key={question.id} className="space-y-1">
+                                                  <div className="text-sm font-medium flex items-center gap-1.5">
+                                                    {question.title}
+                                                    {question.required && <span className="text-red-500 text-xs">*</span>}
+                                                  </div>
+                                                  <div className="text-sm bg-stone-100 dark:bg-[#1e1e1e] rounded-lg px-3 py-2 break-words">
+                                                    {answer === undefined || answer === null || answer === '' ? (
+                                                      <span className="text-stone-400 italic">No answer provided</span>
+                                                    ) : typeof answer === 'boolean' ? (
+                                                      <span className={answer ? 'text-emerald-600' : 'text-red-500'}>
+                                                        {answer ? 'Yes' : 'No'}
+                                                      </span>
+                                                    ) : (
+                                                      String(answer)
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                        
+                                        {/* No questions case */}
+                                        {(!action.questions || action.questions.length === 0) && (
+                                          <div className="p-4 text-sm text-stone-500 italic">
+                                            This action had no questions to answer
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
 
                             {/* Roles Management Section - Only shown when rolesOpen is true */}
                             {rolesOpen && (
