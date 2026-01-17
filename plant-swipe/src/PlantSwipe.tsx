@@ -463,9 +463,30 @@ export default function PlantSwipe() {
               const c = document.createElement('canvas')
               const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | WebGL2RenderingContext | null
               if (!gl) return null
-              const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
-              const vendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : null
-              const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : null
+              // Use standard VENDOR and RENDERER parameters (Firefox compatible)
+              // WEBGL_debug_renderer_info is deprecated in Firefox
+              let vendor: string | null = null
+              let renderer: string | null = null
+              try {
+                // Try standard parameters first (works in Firefox)
+                vendor = gl.getParameter(gl.VENDOR) as string | null
+                renderer = gl.getParameter(gl.RENDERER) as string | null
+              } catch {
+                // Fallback silently
+              }
+              // If standard params returned generic values, try the extension (Chrome/Safari)
+              // but only if it's available (not in Firefox)
+              if ((!vendor || vendor === 'WebKit' || vendor === 'Mozilla') || (!renderer || renderer === 'WebKit WebGL')) {
+                try {
+                  const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
+                  if (debugInfo) {
+                    vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) as string | null
+                    renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string | null
+                  }
+                } catch {
+                  // Extension not available, use standard values
+                }
+              }
               return { vendor: vendor ?? null, renderer: renderer ?? null }
             } catch {
               // WebGL not available
