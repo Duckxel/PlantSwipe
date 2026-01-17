@@ -2743,10 +2743,7 @@
         "translating": "Translating...",
         "showOriginal": "Show original",
         "showTranslation": "Show translation",
-        "originalLanguage": "Original: {{language}}",
-        "translatedFrom": "Translated from {{language}}",
-        "translationFailed": "Translation failed. Please try again.",
-        "autoDetected": "Language detected: {{language}}"
+        "translationFailed": "Translation failed. Please try again."
       }
     },
     "admin": {
