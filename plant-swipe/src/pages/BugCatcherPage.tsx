@@ -10,7 +10,6 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { checkBugCatcherAccess } from "@/constants/userRoles"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
-import { useTranslation } from "react-i18next"
 import {
   Bug,
   Trophy,
@@ -19,9 +18,7 @@ import {
   CheckCircle2,
   Clock,
   ChevronRight,
-  Star,
   Medal,
-  Flame,
   AlertCircle,
   Send,
   History,
@@ -83,7 +80,6 @@ type PageView = 'dashboard' | 'report'
 export function BugCatcherPage() {
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
-  const { t } = useTranslation('common')
 
   const [loading, setLoading] = React.useState(true)
   const [pageView, setPageView] = React.useState<PageView>('dashboard')

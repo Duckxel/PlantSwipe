@@ -12,9 +12,7 @@ import {
   Bug,
   Plus,
   Trash2,
-  Check,
   X,
-  Clock,
   Users,
   Zap,
   Target,
@@ -22,7 +20,6 @@ import {
   Loader2,
   ChevronRight,
   Eye,
-  Calendar,
   CheckCircle2,
   XCircle,
   FileText,
@@ -30,7 +27,6 @@ import {
   Edit2,
   Archive,
   Play,
-  Pause,
   Save,
 } from "lucide-react"
 
