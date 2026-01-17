@@ -21,7 +21,7 @@ import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { cn } from "@/lib/utils"
 import { createPlantProAdvice, deletePlantProAdvice, fetchPlantProAdvices, updatePlantProAdvice, uploadProAdviceImage, getOrTranslateProAdvice } from "@/lib/proAdvice"
 import type { PlantProAdvice } from "@/types/proAdvice"
-import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
+import type { SupportedLanguage } from "@/lib/i18n"
 
 /** Language display names for UI */
 const LANGUAGE_NAMES: Record<string, Record<SupportedLanguage, string>> = {
@@ -155,12 +155,6 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
     const originalLang = advice.originalLanguage.toLowerCase()
     // Show translate if original language differs from current UI language
     return originalLang !== currentLanguage
-  }, [currentLanguage])
-
-  // Check if we already have a cached translation
-  const hasCachedTranslation = React.useCallback((advice: PlantProAdvice): boolean => {
-    if (!advice.translations) return false
-    return !!advice.translations[currentLanguage]
   }, [currentLanguage])
 
   // Handle translation request
