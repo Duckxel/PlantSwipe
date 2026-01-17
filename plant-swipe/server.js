@@ -10642,7 +10642,7 @@ app.options('/api/admin/demote-admin', (_req, res) => {
 })
 
 // Valid user roles (excluding 'plus' which is payment-based)
-const ADMIN_ASSIGNABLE_ROLES = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip']
+const ADMIN_ASSIGNABLE_ROLES = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip', 'bug_catcher']
 const ALL_USER_ROLES = [...ADMIN_ASSIGNABLE_ROLES, 'plus']
 
 // Admin: add a role to a user
