@@ -14,6 +14,7 @@ import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
 import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
+import { AdminBugsPanel } from "@/components/admin/AdminBugsPanel";
 import { AdminUserMessagesDialog } from "@/components/admin/AdminUserMessagesDialog";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
@@ -81,6 +82,7 @@ import {
   MessageSquareText,
   BookOpen,
   Flower2,
+  Bug,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -138,6 +140,7 @@ type AdminTab =
   | "overview"
   | "members"
   | "plants"
+  | "bugs"
   | "stocks"
   | "upload"
   | "notifications"
@@ -3762,6 +3765,7 @@ export const AdminPage: React.FC = () => {
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin", adminOnly: true },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
     { key: "plants", label: "Plants", Icon: Leaf, path: "/admin/plants" },
+    { key: "bugs", label: "Bugs", Icon: Bug, path: "/admin/bugs", adminOnly: true },
     { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
@@ -3778,6 +3782,7 @@ export const AdminPage: React.FC = () => {
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
     if (currentPath.includes("/admin/plants")) return "plants";
+    if (currentPath.includes("/admin/bugs")) return "bugs";
     if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
@@ -6944,6 +6949,11 @@ export const AdminPage: React.FC = () => {
                 {/* Stocks Tab */}
                 {activeTab === "stocks" && (
                   <AdminStocksPanel />
+                )}
+
+                {/* Bugs Tab */}
+                {activeTab === "bugs" && (
+                  <AdminBugsPanel />
                 )}
 
                 {/* Plants Tab */}

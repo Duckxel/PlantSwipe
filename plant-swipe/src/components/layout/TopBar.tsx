@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle, MessageCircle, ScanLine } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle, MessageCircle, ScanLine, Bug } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -18,7 +18,7 @@ import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { useNotifications } from "@/hooks/useNotifications"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { checkEditorAccess } from "@/constants/userRoles"
+import { checkEditorAccess, checkBugCatcherAccess } from "@/constants/userRoles"
 import { NotificationBell } from "@/components/layout/NotificationPanel"
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
@@ -184,6 +184,11 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                   {checkEditorAccess(profile) && (
                     <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                       <Shield className="h-4 w-4" /> {t('common.admin')}
+                    </button>
+                  )}
+                  {checkBugCatcherAccess(profile) && (
+                    <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/bug-catcher') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2 text-orange-600 dark:text-orange-400" role="menuitem">
+                      <Bug className="h-4 w-4" /> {t('common.bugCatcher', { defaultValue: 'Bug Catching' })}
                     </button>
                   )}
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
