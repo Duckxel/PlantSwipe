@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle, Bug, Zap, Medal } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle, Bug, Medal } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
 import type { UserRole } from "@/constants/userRoles"
 import { hasBugCatcherRole } from "@/constants/userRoles"
@@ -1337,7 +1337,25 @@ export default function PublicProfilePage() {
                 <div className="mt-4">
                   <Card className={glassCard}>
                     <CardContent className="p-6 md:p-8 space-y-4">
-                      <div className="text-lg font-semibold">{t("profile.highlights")}</div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-lg font-semibold">{t("profile.highlights")}</div>
+                        {/* Bug Catcher Badge - simple inline display */}
+                        {pp.roles && hasBugCatcherRole(pp.roles) && stats?.bugPoints !== undefined && (stats.bugPoints > 0 || (stats.bugCatcherRank && stats.bugCatcherRank <= 10)) && (
+                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-100 dark:bg-stone-800 text-sm">
+                            <Bug className="h-4 w-4 text-orange-500" />
+                            <span className="font-medium tabular-nums">{stats.bugPoints} pts</span>
+                            {stats.bugCatcherRank && stats.bugCatcherRank > 0 && (
+                              <>
+                                <span className="text-stone-400">•</span>
+                                <span className="text-stone-600 dark:text-stone-400">#{stats.bugCatcherRank}</span>
+                              </>
+                            )}
+                            {stats.bugCatcherRank && stats.bugCatcherRank <= 10 && (
+                              <Medal className="h-3.5 w-3.5 text-amber-500" />
+                            )}
+                          </div>
+                        )}
+                      </div>
                     <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-0">
                       {/* Task completion grid - left side */}
                       <div className="flex-1 flex justify-center items-center py-2">
@@ -1396,40 +1414,6 @@ export default function PublicProfilePage() {
                       </div>
                     </div>
                     
-                    {/* Bug Catcher Stats - shown if user has bug_catcher role and is in top 10 or has points */}
-                    {pp.roles && hasBugCatcherRole(pp.roles) && stats?.bugPoints !== undefined && (stats.bugPoints > 0 || (stats.bugCatcherRank && stats.bugCatcherRank <= 10)) && (
-                      <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200/50 dark:border-orange-700/50">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Bug className="h-5 w-5 text-orange-500" />
-                          <span className="font-medium text-orange-900 dark:text-orange-100">{t('profile.bugCatcher', { defaultValue: 'Bug Catcher' })}</span>
-                          {stats.bugCatcherRank && stats.bugCatcherRank <= 10 && (
-                            <span className="ml-auto flex items-center gap-1 text-sm font-medium text-amber-600 dark:text-amber-400">
-                              <Medal className="h-4 w-4" />
-                              {t('profile.topRank', { rank: stats.bugCatcherRank, defaultValue: `Top #${stats.bugCatcherRank}` })}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <div className="flex items-center gap-2">
-                            <Zap className="h-5 w-5 text-orange-500" />
-                            <div>
-                              <div className="text-xl font-bold tabular-nums text-orange-700 dark:text-orange-300">{stats.bugPoints}</div>
-                              <div className="text-xs opacity-60">{t('profile.bugPoints', { defaultValue: 'Bug Points' })}</div>
-                            </div>
-                          </div>
-                          {stats.bugCatcherRank && stats.bugCatcherRank > 0 && (
-                            <div className="flex items-center gap-2">
-                              <Trophy className="h-5 w-5 text-amber-500" />
-                              <div>
-                                <div className="text-xl font-bold tabular-nums text-amber-700 dark:text-amber-300">#{stats.bugCatcherRank}</div>
-                                <div className="text-xs opacity-60">{t('profile.rank', { defaultValue: 'Rank' })}</div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                
                 {tooltip && createPortal(
                   <div
                     className="fixed z-[70] pointer-events-none"
