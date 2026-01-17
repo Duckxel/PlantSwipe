@@ -262,7 +262,9 @@ const LandingPage: React.FC = () => {
   React.useEffect(() => {
     const loadData = async () => {
       try {
-        const [settingsRes, heroRes, statsRes, featuresRes, testimonialsRes, faqRes] = await Promise.all([
+        // Execute all queries in parallel, but handle errors individually
+        // Some tables may not exist yet (404), which is fine - we fall back to defaults
+        const results = await Promise.allSettled([
           supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
           supabase.from("landing_hero_cards").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
@@ -271,16 +273,30 @@ const LandingPage: React.FC = () => {
           supabase.from("landing_faq").select("*").eq("is_active", true).order("position"),
         ])
 
-        const features = featuresRes.data || []
+        // Extract data safely, using null/empty array as fallback for any failures
+        const getData = <T,>(result: PromiseSettledResult<{ data: T | null; error: unknown }>, defaultValue: T): T => {
+          if (result.status === 'rejected') return defaultValue
+          const { data, error } = result.value
+          // Treat any error (including 404 for missing tables) as "use default"
+          if (error || data === null) return defaultValue
+          return data
+        }
+
+        const settings = getData(results[0], null)
+        const heroCards = getData(results[1], [])
+        const stats = getData(results[2], null)
+        const features = getData(results[3], []) as LandingFeature[]
+        const testimonials = getData(results[4], [])
+        const faqItems = getData(results[5], [])
         
         setLandingData({
-          heroCards: heroRes.data || [],
-          stats: statsRes.data || null,
+          heroCards: heroCards || [],
+          stats: stats || null,
           circleFeatures: features.filter((f: LandingFeature) => f.is_in_circle),
           gridFeatures: features.filter((f: LandingFeature) => !f.is_in_circle),
-          testimonials: testimonialsRes.data || [],
-          faqItems: faqRes.data || [],
-          settings: settingsRes.data || null,
+          testimonials: testimonials || [],
+          faqItems: faqItems || [],
+          settings: settings || null,
           loading: false,
         })
       } catch (e) {

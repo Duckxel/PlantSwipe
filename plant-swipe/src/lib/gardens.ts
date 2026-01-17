@@ -1256,9 +1256,16 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
         difficulty: maintenanceLevel,
       },
       seedsAvailable: Boolean(p.seeds_available ?? false),
-      classification: typeof p.classification === 'string'
-        ? JSON.parse(p.classification)
-        : (p.classification as Plant['classification']) || undefined,
+      classification: (() => {
+        if (typeof p.classification === 'string') {
+          try {
+            return JSON.parse(p.classification)
+          } catch {
+            return undefined
+          }
+        }
+        return (p.classification as Plant['classification']) || undefined
+      })(),
     }
   }
   return rows.map(r => ({

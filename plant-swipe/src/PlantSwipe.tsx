@@ -2,6 +2,7 @@ import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
 import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X } from "lucide-react";
@@ -135,6 +136,17 @@ export default function PlantSwipe() {
   const { t } = useTranslation('common')
   const routeLoadingFallback = (
     <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>
+  )
+  const routeErrorFallback = (
+    <div className="p-8 text-center">
+      <p className="text-stone-600 dark:text-stone-400 mb-4">{t('common.loadError', 'Failed to load this page. Please check your internet connection.')}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+      >
+        {t('common.reload', 'Reload Page')}
+      </button>
+    </div>
   )
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
@@ -1601,6 +1613,7 @@ export default function PlantSwipe() {
     if (isLandingPage) {
       return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <ErrorBoundary fallback={routeErrorFallback}>
           <Routes>
             <Route
               path="/"
@@ -1612,6 +1625,7 @@ export default function PlantSwipe() {
             />
             <Route path="*" element={<Navigate to="/discovery" replace />} />
           </Routes>
+          </ErrorBoundary>
           {/* Auth Dialog for landing page */}
           <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
             <DialogContent className="rounded-2xl">
@@ -1735,6 +1749,7 @@ export default function PlantSwipe() {
 
             {/* Main content area */}
             <main className="min-h-[60vh]" aria-live="polite">
+              <ErrorBoundary fallback={routeErrorFallback}>
               {/* Sticky search bar for search view - hides on scroll down on mobile */}
               {currentView === "search" && (
                 <div 
@@ -2146,6 +2161,7 @@ export default function PlantSwipe() {
               }
             />
           </Routes>
+              </ErrorBoundary>
         </main>
       </div>
 
