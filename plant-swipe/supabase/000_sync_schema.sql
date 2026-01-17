@@ -856,6 +856,8 @@ create table if not exists public.plant_pro_advices (
   author_avatar_url text,
   author_roles text[] not null default '{}'::text[],
   content text not null,
+  original_language text,
+  translations jsonb not null default '{}'::jsonb,
   image_url text,
   reference_url text,
   metadata jsonb not null default '{}'::jsonb,
@@ -863,7 +865,53 @@ create table if not exists public.plant_pro_advices (
   constraint plant_pro_advices_content_not_blank check (char_length(btrim(content)) > 0),
   constraint plant_pro_advices_metadata_object check (metadata is null or jsonb_typeof(metadata) = 'object')
 );
+
+-- Add translation columns if they don't exist (for existing databases)
+-- This ensures the columns are added without losing existing data
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'plant_pro_advices' 
+    and column_name = 'original_language'
+  ) then
+    alter table public.plant_pro_advices add column original_language text;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'plant_pro_advices' 
+    and column_name = 'translations'
+  ) then
+    alter table public.plant_pro_advices add column translations jsonb not null default '{}'::jsonb;
+  end if;
+end $$;
+
+-- Add constraint for translations column if it doesn't exist
+do $$ begin
+  if not exists (
+    select 1 from information_schema.table_constraints 
+    where table_schema = 'public' 
+    and table_name = 'plant_pro_advices' 
+    and constraint_name = 'plant_pro_advices_translations_object'
+  ) then
+    alter table public.plant_pro_advices 
+      add constraint plant_pro_advices_translations_object 
+      check (translations is null or jsonb_typeof(translations) = 'object');
+  end if;
+end $$;
+
+-- Create indexes
 create index if not exists plant_pro_advices_plant_created_idx on public.plant_pro_advices (plant_id, created_at desc);
+create index if not exists plant_pro_advices_original_language_idx on public.plant_pro_advices (original_language);
+
+-- Add column comments
+comment on column public.plant_pro_advices.original_language is 'ISO language code of the original content (e.g., en, fr). Detected via DeepL API when advice is created.';
+comment on column public.plant_pro_advices.translations is 'JSONB object storing cached translations keyed by language code. Example: {"fr": "Traduit...", "en": "Translated..."}';
+
 alter table public.plant_pro_advices enable row level security;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_pro_advices' and policyname='plant_pro_advices_select_all') then

@@ -11360,6 +11360,115 @@ app.post('/api/translate', async (req, res) => {
   }
 })
 
+// DeepL Language Detection API endpoint
+// Uses DeepL's translation API with auto-detect (omitting source_lang)
+app.post('/api/detect-language', async (req, res) => {
+  try {
+    const { text } = req.body
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid text field' })
+    }
+
+    // Get DeepL API key from environment
+    const deeplApiKey = process.env.DEEPL_API_KEY
+    if (!deeplApiKey) {
+      console.error('[detect-language] DeepL API key not configured')
+      return res.status(500).json({ error: 'Language detection service not configured' })
+    }
+
+    // Use DeepL API (Pro: https://api.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+
+    // DeepL detects source language when source_lang is omitted
+    // We translate to EN as a dummy target just to get the detection
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text.substring(0, 500), // Use first 500 chars for detection efficiency
+        target_lang: 'EN', // Dummy target, we just want the detection
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[detect-language] DeepL API error:', response.status, errorText)
+      return res.status(response.status).json({ error: 'Language detection failed: ' + (errorText || response.statusText) })
+    }
+
+    const data = await response.json()
+    const detectedLanguage = data.translations?.[0]?.detected_source_language?.toLowerCase() || null
+
+    res.json({ detectedLanguage })
+  } catch (error) {
+    console.error('[detect-language] Detection error:', error)
+    res.status(500).json({ error: 'Language detection service error: ' + (error?.message || 'Unknown error') })
+  }
+})
+
+// DeepL Translation with Language Detection API endpoint
+// Translates text AND returns the detected source language
+app.post('/api/translate-detect', async (req, res) => {
+  try {
+    const { text, target_lang } = req.body
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid text field' })
+    }
+
+    if (!target_lang) {
+      return res.status(400).json({ error: 'Missing target_lang' })
+    }
+
+    // Get DeepL API key from environment
+    const deeplApiKey = process.env.DEEPL_API_KEY
+    if (!deeplApiKey) {
+      console.error('[translate-detect] DeepL API key not configured')
+      return res.status(500).json({ error: 'Translation service not configured' })
+    }
+
+    // Use DeepL API (Pro: https://api.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+
+    // Omit source_lang to let DeepL auto-detect
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        target_lang: target_lang.toUpperCase(),
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[translate-detect] DeepL API error:', response.status, errorText)
+      return res.status(response.status).json({ error: 'Translation failed: ' + (errorText || response.statusText) })
+    }
+
+    const data = await response.json()
+    const translatedText = data.translations?.[0]?.text || text
+    const detectedLanguage = data.translations?.[0]?.detected_source_language?.toLowerCase() || null
+
+    // If detected language equals target language, return original text
+    if (detectedLanguage === target_lang.toLowerCase()) {
+      return res.json({ translatedText: text, detectedLanguage, skipped: true })
+    }
+
+    res.json({ translatedText, detectedLanguage })
+  } catch (error) {
+    console.error('[translate-detect] Translation error:', error)
+    res.status(500).json({ error: 'Translation service error: ' + (error?.message || 'Unknown error') })
+  }
+})
+
 app.get('/api/plants', async (_req, res) => {
   try {
     const setPlantsCache = () => {
