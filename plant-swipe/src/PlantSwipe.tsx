@@ -2,6 +2,7 @@ import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
 import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X } from "lucide-react";
@@ -136,6 +137,17 @@ export default function PlantSwipe() {
   const { t } = useTranslation('common')
   const routeLoadingFallback = (
     <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>
+  )
+  const routeErrorFallback = (
+    <div className="p-8 text-center">
+      <p className="text-stone-600 dark:text-stone-400 mb-4">{t('common.loadError', 'Failed to load this page. Please check your internet connection.')}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+      >
+        {t('common.reload', 'Reload Page')}
+      </button>
+    </div>
   )
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
@@ -452,9 +464,30 @@ export default function PlantSwipe() {
               const c = document.createElement('canvas')
               const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | WebGL2RenderingContext | null
               if (!gl) return null
-              const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
-              const vendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : null
-              const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : null
+              // Use standard VENDOR and RENDERER parameters (Firefox compatible)
+              // WEBGL_debug_renderer_info is deprecated in Firefox
+              let vendor: string | null = null
+              let renderer: string | null = null
+              try {
+                // Try standard parameters first (works in Firefox)
+                vendor = gl.getParameter(gl.VENDOR) as string | null
+                renderer = gl.getParameter(gl.RENDERER) as string | null
+              } catch {
+                // Fallback silently
+              }
+              // If standard params returned generic values, try the extension (Chrome/Safari)
+              // but only if it's available (not in Firefox)
+              if ((!vendor || vendor === 'WebKit' || vendor === 'Mozilla') || (!renderer || renderer === 'WebKit WebGL')) {
+                try {
+                  const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
+                  if (debugInfo) {
+                    vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) as string | null
+                    renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string | null
+                  }
+                } catch {
+                  // Extension not available, use standard values
+                }
+              }
               return { vendor: vendor ?? null, renderer: renderer ?? null }
             } catch {
               // WebGL not available
@@ -1602,6 +1635,7 @@ export default function PlantSwipe() {
     if (isLandingPage) {
       return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <ErrorBoundary fallback={routeErrorFallback}>
           <Routes>
             <Route
               path="/"
@@ -1613,6 +1647,7 @@ export default function PlantSwipe() {
             />
             <Route path="*" element={<Navigate to="/discovery" replace />} />
           </Routes>
+          </ErrorBoundary>
           {/* Auth Dialog for landing page */}
           <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
             <DialogContent className="rounded-2xl">
@@ -1736,6 +1771,7 @@ export default function PlantSwipe() {
 
             {/* Main content area */}
             <main className="min-h-[60vh]" aria-live="polite">
+              <ErrorBoundary fallback={routeErrorFallback}>
               {/* Sticky search bar for search view - hides on scroll down on mobile */}
               {currentView === "search" && (
                 <div 
@@ -2157,6 +2193,7 @@ export default function PlantSwipe() {
               }
             />
           </Routes>
+              </ErrorBoundary>
         </main>
       </div>
 

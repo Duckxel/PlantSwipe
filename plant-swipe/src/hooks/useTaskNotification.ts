@@ -38,34 +38,29 @@ async function fastCheckPendingTasks(userId: string): Promise<boolean | null> {
     // Quick check: are there ANY incomplete task occurrences for today in user's gardens?
     // This is a fast COUNT query with LIMIT 1 (we just need to know if any exist)
     // Note: garden_plant_task_occurrences doesn't have garden_id directly, need to join through garden_plant_tasks
-    const { count, error: countError } = await supabase
+    // Note: PostgREST doesn't support column-to-column comparisons (e.g., completed_count.lt.required_count)
+    // So we only check for completed_at being null, and filter the rest client-side if needed
+    const { data: incomplete, error: incompleteError } = await supabase
       .from("garden_plant_task_occurrences")
-      .select("id, garden_plant_tasks!inner(garden_id)", { count: "exact", head: true })
+      .select("id, completed_count, required_count, completed_at, garden_plant_tasks!inner(garden_id)")
       .gte("due_at", startOfDay)
       .lte("due_at", endOfDay)
       .in("garden_plant_tasks.garden_id", gardenIds)
-      .or("completed_at.is.null,completed_count.lt.required_count")
-      .limit(1)
+      .limit(10) // Fetch a small batch to check
 
-    if (countError) {
-      // Try alternative approach: check if completed_count < required_count
-      const { data: incomplete, error: incompleteError } = await supabase
-        .from("garden_plant_task_occurrences")
-        .select("id, completed_count, required_count, garden_plant_tasks!inner(garden_id)")
-        .gte("due_at", startOfDay)
-        .lte("due_at", endOfDay)
-        .in("garden_plant_tasks.garden_id", gardenIds)
-        .is("completed_at", null)
-        .limit(1)
-
-      if (incompleteError) {
-        return null // Fallback to cache
-      }
-
-      return incomplete && incomplete.length > 0
+    if (incompleteError) {
+      return null // Fallback to cache
     }
 
-    return (count ?? 0) > 0
+    // Check if any occurrence is incomplete (completed_at is null OR completed_count < required_count)
+    const hasIncompleteTasks = incomplete?.some(occ => {
+      if (occ.completed_at === null) return true
+      const completed = occ.completed_count ?? 0
+      const required = occ.required_count ?? 1
+      return completed < required
+    }) ?? false
+
+    return hasIncompleteTasks
   } catch {
     return null // Fallback to cache
   }
