@@ -8871,6 +8871,44 @@ app.get('/api/admin/member', async (req, res) => {
       console.error('[member-lookup] failed to fetch user reports', reportsErr)
     }
 
+    // Bug Catcher stats (if user has bug_catcher role)
+    let bugPoints = null
+    let bugCatcherRank = null
+    let bugActionsCompleted = null
+    try {
+      const userRoles = Array.isArray(profile?.roles) ? profile.roles : []
+      if (userRoles.includes('bug_catcher')) {
+        // Get bug points from profile
+        bugPoints = typeof profile?.bug_points === 'number' ? profile.bug_points : 0
+        
+        // Get rank using RPC function
+        if (supabaseServiceClient) {
+          const { data: rankData } = await supabaseServiceClient.rpc('get_bug_catcher_rank', { _user_id: user.id })
+          if (typeof rankData === 'number') {
+            bugCatcherRank = rankData
+          }
+          
+          // Get actions completed count
+          const { count: actionsCount } = await supabaseServiceClient
+            .from('bug_action_responses')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+          bugActionsCompleted = actionsCount || 0
+        } else if (sql) {
+          // Fallback to direct SQL
+          const rankResult = await sql`SELECT get_bug_catcher_rank(${user.id}::uuid) as rank`
+          if (rankResult?.[0]?.rank) {
+            bugCatcherRank = rankResult[0].rank
+          }
+          
+          const actionsResult = await sql`SELECT COUNT(*) as count FROM public.bug_action_responses WHERE user_id = ${user.id}::uuid`
+          bugActionsCompleted = parseInt(actionsResult?.[0]?.count || '0', 10)
+        }
+      }
+    } catch (bugCatcherErr) {
+      console.error('[member-lookup] failed to fetch bug catcher stats', bugCatcherErr)
+    }
+
     const currentThreatLevel = typeof threatLevel === 'number' ? threatLevel : (typeof profile?.threat_level === 'number' ? profile.threat_level : null)
     res.json({
       ok: true,
@@ -8903,6 +8941,9 @@ app.get('/api/admin/member', async (req, res) => {
       topDevices: topDevices.slice(0, 5),
       meanRpm5m,
       adminNotes,
+      bugPoints,
+      bugCatcherRank,
+      bugActionsCompleted,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })

@@ -110,7 +110,6 @@ export function BugCatcherPage() {
   const [bugDescription, setBugDescription] = React.useState('')
   const [stepsToReproduce, setStepsToReproduce] = React.useState('')
   const [screenshots, setScreenshots] = React.useState<string[]>([])
-  const [userInfo, setUserInfo] = React.useState({ username: '', role: '', server: '', device: '' })
   const [consoleLogs, setConsoleLogs] = React.useState('')
   const [submittingReport, setSubmittingReport] = React.useState(false)
   const [reportError, setReportError] = React.useState<string | null>(null)
@@ -162,10 +161,10 @@ export function BugCatcherPage() {
         setLeaderboard(leaderboardData)
       }
 
-      // Get available actions (max 5)
+      // Get available actions (max 10)
       const { data: actionsData } = await supabase.rpc('get_available_bug_actions', { 
         _user_id: user.id, 
-        _limit: 5 
+        _limit: 10 
       })
       if (actionsData) {
         setAvailableActions(actionsData)
@@ -198,17 +197,6 @@ export function BugCatcherPage() {
       setLoading(false)
     }
   }, [user?.id, hasBugCatcherRole, loadData])
-
-  // Pre-fill user info from profile
-  React.useEffect(() => {
-    if (profile) {
-      setUserInfo(prev => ({
-        ...prev,
-        username: profile.display_name || '',
-        role: profile.roles?.join(', ') || 'member'
-      }))
-    }
-  }, [profile])
 
   const handleRefresh = () => {
     setRefreshing(true)
@@ -305,7 +293,6 @@ export function BugCatcherPage() {
         _description: bugDescription.trim(),
         _steps_to_reproduce: stepsToReproduce.trim() || null,
         _screenshots: screenshots,
-        _user_info: userInfo,
         _console_logs: consoleLogs.trim() || null
       })
 
@@ -621,7 +608,7 @@ export function BugCatcherPage() {
                 <div className="flex items-center gap-2 mb-4">
                   <ClipboardList className="h-5 w-5 text-emerald-500" />
                   <h2 className="text-lg font-semibold">Recommended Actions</h2>
-                  <Badge variant="secondary" className="ml-auto">{availableActions.length}/5</Badge>
+                  <Badge variant="secondary" className="ml-auto">{availableActions.length}/10</Badge>
                 </div>
 
                 {availableActions.length === 0 ? (
@@ -888,53 +875,6 @@ export function BugCatcherPage() {
                       {screenshotError}
                     </div>
                   )}
-                </div>
-
-                {/* User Info */}
-                <div className="p-4 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-stone-900/20">
-                  <Label className="text-sm font-medium">Your Info (Optional)</Label>
-                  <div className="grid grid-cols-2 gap-3 mt-3">
-                    <div>
-                      <Label htmlFor="info-username" className="text-xs opacity-60">Username</Label>
-                      <Input
-                        id="info-username"
-                        value={userInfo.username}
-                        onChange={(e) => setUserInfo(prev => ({ ...prev, username: e.target.value }))}
-                        placeholder="Your username"
-                        className="mt-1 rounded-lg text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="info-role" className="text-xs opacity-60">Role</Label>
-                      <Input
-                        id="info-role"
-                        value={userInfo.role}
-                        onChange={(e) => setUserInfo(prev => ({ ...prev, role: e.target.value }))}
-                        placeholder="Your role"
-                        className="mt-1 rounded-lg text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="info-server" className="text-xs opacity-60">Server</Label>
-                      <Input
-                        id="info-server"
-                        value={userInfo.server}
-                        onChange={(e) => setUserInfo(prev => ({ ...prev, server: e.target.value }))}
-                        placeholder="e.g., EU, US"
-                        className="mt-1 rounded-lg text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="info-device" className="text-xs opacity-60">Device</Label>
-                      <Input
-                        id="info-device"
-                        value={userInfo.device}
-                        onChange={(e) => setUserInfo(prev => ({ ...prev, device: e.target.value }))}
-                        placeholder="e.g., iPhone 14, Chrome"
-                        className="mt-1 rounded-lg text-sm"
-                      />
-                    </div>
-                  </div>
                 </div>
 
                 {/* Console Logs */}

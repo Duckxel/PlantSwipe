@@ -83,6 +83,9 @@ import {
   BookOpen,
   Flower2,
   Bug,
+  Zap,
+  Trophy,
+  CheckCircle2,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
@@ -3957,6 +3960,9 @@ export const AdminPage: React.FC = () => {
     }>;
     reportsAgainstCount?: number;
     reportsByCount?: number;
+    bugPoints?: number | null;
+    bugCatcherRank?: number | null;
+    bugActionsCompleted?: number | null;
   } | null>(null);
   const [banReason, setBanReason] = React.useState("");
   const [banSubmitting, setBanSubmitting] = React.useState(false);
@@ -4429,6 +4435,9 @@ export const AdminPage: React.FC = () => {
             : [],
           reportsAgainstCount: typeof data?.reportsAgainstCount === "number" ? data.reportsAgainstCount : 0,
           reportsByCount: typeof data?.reportsByCount === "number" ? data.reportsByCount : 0,
+          bugPoints: typeof data?.bugPoints === "number" ? data.bugPoints : null,
+          bugCatcherRank: typeof data?.bugCatcherRank === "number" ? data.bugCatcherRank : null,
+          bugActionsCompleted: typeof data?.bugActionsCompleted === "number" ? data.bugActionsCompleted : null,
         });
         // Extract and set member roles
         const profileRoles = Array.isArray(data?.profile?.roles) ? data.profile.roles : [];
@@ -8440,6 +8449,38 @@ export const AdminPage: React.FC = () => {
                                               memberData.user.created_at,
                                             ).toLocaleDateString()}
                                           </Badge>
+                                        )}
+                                        {/* Bug Catcher Stats */}
+                                        {memberRoles.includes('bug_catcher' as UserRole) && (
+                                          <>
+                                            {typeof memberData.bugPoints === 'number' && (
+                                              <Badge
+                                                variant="secondary"
+                                                className="rounded-full px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-700"
+                                              >
+                                                <Zap className="h-3 w-3 mr-1" />
+                                                {memberData.bugPoints} Bug Points
+                                              </Badge>
+                                            )}
+                                            {typeof memberData.bugCatcherRank === 'number' && memberData.bugCatcherRank > 0 && (
+                                              <Badge
+                                                variant="secondary"
+                                                className="rounded-full px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700"
+                                              >
+                                                <Trophy className="h-3 w-3 mr-1" />
+                                                Rank #{memberData.bugCatcherRank}
+                                              </Badge>
+                                            )}
+                                            {typeof memberData.bugActionsCompleted === 'number' && (
+                                              <Badge
+                                                variant="secondary"
+                                                className="rounded-full px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700"
+                                              >
+                                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                                {memberData.bugActionsCompleted} Actions
+                                              </Badge>
+                                            )}
+                                          </>
                                         )}
                                       </div>
                                     </div>

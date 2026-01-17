@@ -8829,14 +8829,13 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.update_bug_action_response(uuid, uuid, jsonb) TO authenticated;
 
--- Function to submit a bug report
+-- Function to submit a bug report (auto-fills user info from profile)
 CREATE OR REPLACE FUNCTION public.submit_bug_report(
     _user_id uuid,
     _bug_name text,
     _description text,
     _steps_to_reproduce text DEFAULT NULL,
     _screenshots jsonb DEFAULT '[]',
-    _user_info jsonb DEFAULT '{}',
     _console_logs text DEFAULT NULL
 )
 RETURNS TABLE(success boolean, report_id uuid, points_earned integer, message text)
@@ -8847,12 +8846,26 @@ AS $$
 DECLARE
     v_report_id uuid;
     v_base_points integer := 5;  -- Base points for submitting a bug report
+    v_user_info jsonb;
+    v_display_name text;
+    v_roles text[];
 BEGIN
-    -- Check if user has bug_catcher role
-    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = _user_id AND 'bug_catcher' = ANY(COALESCE(roles, '{}'))) THEN
+    -- Check if user has bug_catcher role and get profile info
+    SELECT display_name, roles INTO v_display_name, v_roles
+    FROM public.profiles 
+    WHERE id = _user_id AND 'bug_catcher' = ANY(COALESCE(roles, '{}'));
+    
+    IF v_display_name IS NULL AND v_roles IS NULL THEN
         RETURN QUERY SELECT false, NULL::uuid, 0, 'User is not a bug catcher'::text;
         RETURN;
     END IF;
+    
+    -- Auto-populate user info from profile
+    v_user_info := jsonb_build_object(
+        'username', COALESCE(v_display_name, ''),
+        'roles', COALESCE(array_to_string(v_roles, ', '), 'bug_catcher'),
+        'user_id', _user_id::text
+    );
     
     -- Insert bug report
     INSERT INTO public.bug_reports (
@@ -8861,7 +8874,7 @@ BEGIN
     )
     VALUES (
         _user_id, _bug_name, _description, _steps_to_reproduce,
-        _screenshots, _user_info, _console_logs, v_base_points
+        _screenshots, v_user_info, _console_logs, v_base_points
     )
     RETURNING id INTO v_report_id;
     
@@ -8878,7 +8891,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.submit_bug_report(uuid, text, text, text, jsonb, jsonb, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.submit_bug_report(uuid, text, text, text, jsonb, text) TO authenticated;
 
 -- Function for admin to complete a bug report (awards bonus points)
 CREATE OR REPLACE FUNCTION public.admin_complete_bug_report(
