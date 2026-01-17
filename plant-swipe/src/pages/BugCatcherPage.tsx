@@ -25,7 +25,6 @@ import {
   ClipboardList,
   Crown,
   Loader2,
-  ImagePlus,
   X,
   Check,
   RefreshCw,
