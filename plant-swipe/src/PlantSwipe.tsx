@@ -19,7 +19,7 @@ import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import type { Plant, PlantSeason } from "@/types/plant";
+import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import { RequireEditor } from "@/pages/RequireAdmin";
@@ -70,6 +70,26 @@ type ColorOption = {
   isPrimary: boolean
   parentIds: string[]
   translations: Record<string, string>  // language -> translated name
+}
+
+type PreparedPlant = Plant & {
+  _searchString: string
+  _normalizedColors: string[]
+  _colorSet: Set<string>           // O(1) color lookups
+  _colorTokens: Set<string>        // Pre-tokenized colors for compound matching
+  _typeLabel: string | null
+  _usageLabels: string[]
+  _usageSet: Set<string>           // O(1) usage lookups
+  _habitats: string[]
+  _habitatSet: Set<string>         // O(1) habitat lookups
+  _maintenance: string
+  _petSafe: boolean
+  _humanSafe: boolean
+  _livingSpace: string
+  _seasonsSet: Set<string>         // O(1) season lookups
+  _createdAtTs: number             // Pre-parsed timestamp for sorting
+  _popularityLikes: number         // Pre-extracted popularity for sorting
+  _hasImage: boolean               // Pre-computed image availability
 }
 
 type ExtendedWindow = Window & {
@@ -545,131 +565,205 @@ export default function PlantSwipe() {
     }
   }, [user?.id, profile?.display_name])
 
-  const filtered = useMemo(() => {
-    const lowerQuery = query.toLowerCase()
-    const normalizedType = typeFilter?.toLowerCase() ?? null
-    const normalizedUsage = usageFilters.map((u) => u.toLowerCase())
-    const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
-
-    // Build a map of color IDs that should match for each selected filter
-    // When a primary color is selected, include all its children colors
-    const getMatchingColorNames = (filterColorName: string): string[] => {
-      const filterColor = colorOptions.find((c) => c.name.toLowerCase() === filterColorName)
-      if (!filterColor) return [filterColorName]
-
-      const matchingNames = [filterColorName]
-      
-      // If this is a primary color, include all colors that have it as a parent
-      if (filterColor.isPrimary) {
-        colorOptions.forEach((c) => {
-          if (c.parentIds.includes(filterColor.id)) {
-            matchingNames.push(c.name.toLowerCase())
-          }
-        })
-      }
-
-      return matchingNames
-    }
-
-    // Build expanded color filters including children
-    const expandedColorFilters = normalizedColorFilters.flatMap((f) => getMatchingColorNames(f))
-
-    const colorMatches = (colorName: string, normalizedColorFilter: string): boolean => {
-      const normalizedColor = (colorName || "").toLowerCase().trim()
-      if (!normalizedColor) return false
-
-      if (normalizedColor === normalizedColorFilter) {
-        return true
-      }
-
-      const tokens = normalizedColor
-        .replace(/[-_/]+/g, " ")
-        .split(/\s+/)
-        .filter(Boolean)
-
-      return tokens.includes(normalizedColorFilter)
-    }
-
-    // Normalize habitat filters
-    const normalizedHabitatFilters = habitatFilters.map((h) => h.toLowerCase())
-    
-    // Normalize maintenance filter
-    const normalizedMaintenanceFilter = maintenanceFilter?.toLowerCase() ?? null
-
-    return plants.filter((p: Plant) => {
-      // Extract colors from both legacy format (p.colors) and new format (p.identity?.colors)
+  // Pre-calculate normalized values for all plants to optimize filter performance
+  // This avoids repeating expensive string operations on every filter change
+  // All Set-based lookups enable O(1) membership tests instead of O(n) array scans
+  const preparedPlants = useMemo(() => {
+    return plants.map((p) => {
+      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
       const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors) 
+      const identityColors = Array.isArray(p.identity?.colors)
         ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
         : []
       const colors = [...legacyColors, ...identityColors]
-      const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
-        .toLowerCase()
-        .includes(lowerQuery)
-      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
-      // Match if any of the selected colors (including children) matches any of the plant's colors (OR logic)
-      const matchesColor = expandedColorFilters.length === 0 
-        ? true 
-        : expandedColorFilters.some((filterColor) => 
-            colors.some((plantColor) => colorMatches(plantColor, filterColor))
-          )
-      const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
-      const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
+      const normalizedColors = colors.map(c => c.toLowerCase().trim())
+      const colorSet = new Set(normalizedColors)
+      
+      // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
+      // This avoids regex operations during filtering
+      const colorTokens = new Set<string>()
+      normalizedColors.forEach(color => {
+        colorTokens.add(color)
+        // Split compound colors and add individual tokens
+        const tokens = color.replace(/[-_/]+/g, ' ').split(/\s+/).filter(Boolean)
+        tokens.forEach(token => colorTokens.add(token))
+      })
+
+      // Search string
+      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`.toLowerCase()
+
+      // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
-      const matchesType = normalizedType ? typeLabel === normalizedType : true
-      const plantUsageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-      const matchesUsage = normalizedUsage.length
-        ? normalizedUsage.every((usage) => plantUsageLabels.includes(usage))
-        : true
+
+      // Usage - both array and Set
+      const usageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
+      const usageSet = new Set(usageLabels)
+
+      // Habitat - both array and Set for O(1) lookups
+      const habitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+      const habitatSet = new Set(habitats)
+
+      // Maintenance
+      const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+
+      // Toxicity
+      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+
+      // Living space
+      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
+
+      // Seasons - convert to Set for O(1) lookups
+      const seasons = Array.isArray(p.seasons) ? p.seasons : []
+      const seasonsSet = new Set(seasons.map(s => String(s)))
+
+      // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
+      const createdAtValue = p.meta?.createdAt
+      const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
+      const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
+
+      // Pre-extract popularity for faster sorting
+      const popularityLikes = p.popularity?.likes ?? 0
+
+      // Pre-compute image availability for Discovery page filtering
+      const hasLegacyImage = Boolean(p.image)
+      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
+      const hasImage = hasLegacyImage || hasImagesArray
+
+      return {
+        ...p,
+        _searchString: searchString,
+        _normalizedColors: normalizedColors,
+        _colorSet: colorSet,
+        _colorTokens: colorTokens,
+        _typeLabel: typeLabel,
+        _usageLabels: usageLabels,
+        _usageSet: usageSet,
+        _habitats: habitats,
+        _habitatSet: habitatSet,
+        _maintenance: maintenance,
+        _petSafe: petSafe,
+        _humanSafe: humanSafe,
+        _livingSpace: livingSpace,
+        _seasonsSet: seasonsSet,
+        _createdAtTs: createdAtTsFinal,
+        _popularityLikes: popularityLikes,
+        _hasImage: hasImage
+      } as PreparedPlant
+    })
+  }, [plants])
+
+  // Memoize color filter expansion separately to avoid recomputing on every filter change
+  // This builds a Set of all color names that should match (including children of primary colors)
+  const expandedColorFilterSet = useMemo(() => {
+    const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
+    if (normalizedColorFilters.length === 0) return null
+    
+    const expandedSet = new Set<string>()
+    
+    normalizedColorFilters.forEach((filterColorName) => {
+      expandedSet.add(filterColorName)
       
-      // Habitat filter - match if plant has ANY of the selected habitats (OR logic)
-      const plantHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
-      const matchesHabitat = normalizedHabitatFilters.length === 0 
-        ? true 
-        : normalizedHabitatFilters.some((h) => plantHabitats.includes(h))
+      // Find the color in colorOptions to check if it's primary
+      const filterColor = colorOptions.find((c) => c.name.toLowerCase() === filterColorName)
+      if (filterColor?.isPrimary) {
+        // Include all colors that have this as a parent
+        colorOptions.forEach((c) => {
+          if (c.parentIds.includes(filterColor.id)) {
+            expandedSet.add(c.name.toLowerCase())
+          }
+        })
+      }
+    })
+    
+    return expandedSet
+  }, [colorFilter, colorOptions])
+
+  // Pre-normalize filter values to avoid repeated lowercasing during filtering
+  const normalizedFilters = useMemo(() => ({
+    query: query.toLowerCase(),
+    type: typeFilter?.toLowerCase() ?? null,
+    usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
+    habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
+    maintenance: maintenanceFilter?.toLowerCase() ?? null,
+    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase()))
+  }), [query, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters])
+
+  const filtered = useMemo(() => {
+    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet } = normalizedFilters
+    
+    // Pre-compute living space matching logic
+    const livingSpaceCount = livingSpaceSet.size
+    const requiresBoth = livingSpaceCount === 2
+    const requiresIndoor = livingSpaceSet.has('indoor')
+    const requiresOutdoor = livingSpaceSet.has('outdoor')
+
+    return preparedPlants.filter((p) => {
+      // Early exit pattern: check cheapest conditions first
+      // Boolean checks are O(1) and fastest
+      if (petSafe && !p._petSafe) return false
+      if (humanSafe && !p._humanSafe) return false
+      if (onlySeeds && !p.seedsAvailable) return false
+      if (onlyFavorites && !likedSet.has(p.id)) return false
       
-      // Maintenance level filter
-      const plantMaintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
-      const matchesMaintenance = !normalizedMaintenanceFilter 
-        ? true 
-        : plantMaintenance === normalizedMaintenanceFilter
+      // String equality checks - still O(1)
+      if (normalizedType && p._typeLabel !== normalizedType) return false
+      if (normalizedMaintenanceFilter && p._maintenance !== normalizedMaintenanceFilter) return false
       
-      // Pet-safe filter - show only plants that are Non-Toxic to pets
-      const plantToxicityPets = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '')
-      const matchesPetSafe = !petSafe 
-        ? true 
-        : plantToxicityPets === 'nontoxic'
+      // Season filter - O(1) Set lookup
+      if (seasonFilter && !p._seasonsSet.has(seasonFilter)) return false
       
-      // Human-safe filter - show only plants that are Non-Toxic to humans
-      const plantToxicityHuman = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '')
-      const matchesHumanSafe = !humanSafe 
-        ? true 
-        : plantToxicityHuman === 'nontoxic'
-      
-      // Living space filter with special logic:
-      // - Nothing selected = show all plants
-      // - Indoor only = show plants with livingSpace "Indoor" or "Both"
-      // - Outdoor only = show plants with livingSpace "Outdoor" or "Both"
-      // - Both selected = show ONLY plants that have livingSpace "Both" (can be both indoor AND outdoor)
-      const plantLivingSpace = (p.identity?.livingSpace || '').toLowerCase()
-      let matchesLivingSpace = true
-      if (livingSpaceFilters.length === 2) {
-        // Both Indoor and Outdoor selected - show only plants that can be BOTH
-        matchesLivingSpace = plantLivingSpace === 'both'
-      } else if (livingSpaceFilters.length === 1) {
-        const selectedSpace = livingSpaceFilters[0].toLowerCase()
-        if (selectedSpace === 'indoor') {
-          matchesLivingSpace = plantLivingSpace === 'indoor' || plantLivingSpace === 'both'
-        } else if (selectedSpace === 'outdoor') {
-          matchesLivingSpace = plantLivingSpace === 'outdoor' || plantLivingSpace === 'both'
+      // Living space filter - pre-computed logic
+      if (livingSpaceCount > 0) {
+        if (requiresBoth) {
+          if (p._livingSpace !== 'both') return false
+        } else if (requiresIndoor) {
+          if (p._livingSpace !== 'indoor' && p._livingSpace !== 'both') return false
+        } else if (requiresOutdoor) {
+          if (p._livingSpace !== 'outdoor' && p._livingSpace !== 'both') return false
         }
       }
-      // If no filters selected, show all plants
       
-      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage && matchesHabitat && matchesMaintenance && matchesPetSafe && matchesHumanSafe && matchesLivingSpace
+      // Usage filter - O(k) where k is number of selected usages, using O(1) Set lookups
+      if (usageSet.size > 0) {
+        for (const usage of usageSet) {
+          if (!p._usageSet.has(usage)) return false
+        }
+      }
+      
+      // Habitat filter - OR logic: match if plant has ANY selected habitat
+      // Using O(1) Set lookups instead of O(n) array includes
+      if (habitatSet.size > 0) {
+        let hasMatchingHabitat = false
+        for (const h of habitatSet) {
+          if (p._habitatSet.has(h)) {
+            hasMatchingHabitat = true
+            break
+          }
+        }
+        if (!hasMatchingHabitat) return false
+      }
+      
+      // Color filter - using pre-computed color tokens for O(1) lookups
+      if (expandedColorFilterSet) {
+        let hasMatchingColor = false
+        for (const filterColor of expandedColorFilterSet) {
+          // Check both exact match and tokenized match using pre-computed Sets
+          if (p._colorSet.has(filterColor) || p._colorTokens.has(filterColor)) {
+            hasMatchingColor = true
+            break
+          }
+        }
+        if (!hasMatchingColor) return false
+      }
+      
+      // Search query - string includes is O(n*m) but unavoidable for substring search
+      // Checked last as it's the most expensive operation
+      if (lowerQuery && !p._searchString.includes(lowerQuery)) return false
+      
+      return true
     })
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, habitatFilters, maintenanceFilter, petSafe, humanSafe, livingSpaceFilters, likedSet, colorOptions])
+  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, onlySeeds, onlyFavorites, petSafe, humanSafe, likedSet])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
@@ -679,16 +773,12 @@ export default function PlantSwipe() {
     if (filtered.length === 0) return []
     
     // Filter out plants without images for Discovery page
-    const plantsWithImages = filtered.filter((p) => {
-      // Check for image in multiple locations
-      const hasLegacyImage = Boolean(p.image)
-      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
-      return hasLegacyImage || hasImagesArray
-    })
+    // Using pre-computed _hasImage for O(1) check instead of re-computing
+    const plantsWithImages = (filtered as PreparedPlant[]).filter((p) => p._hasImage)
     
     if (plantsWithImages.length === 0) return []
     
-    const shuffleList = (list: Plant[]) => {
+    const shuffleList = (list: PreparedPlant[]) => {
       const arr = list.slice()
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
@@ -697,8 +787,8 @@ export default function PlantSwipe() {
       return arr
     }
     const now = new Date()
-    const promoted: Plant[] = []
-    const regular: Plant[] = []
+    const promoted: PreparedPlant[] = []
+    const regular: PreparedPlant[] = []
     plantsWithImages.forEach((plant) => {
       if (isPlantOfTheMonth(plant, now)) {
         promoted.push(plant)
@@ -714,16 +804,14 @@ export default function PlantSwipe() {
 
   const sortedSearchResults = useMemo(() => {
     if (searchSort === "default") return filtered
-    const arr = filtered.slice()
+    
+    // Cast to PreparedPlant[] since filtered comes from preparedPlants
+    const arr = filtered.slice() as PreparedPlant[]
+    
     if (searchSort === "newest") {
-      const getCreatedAtValue = (plant: Plant) => {
-        const value = plant.meta?.createdAt
-        if (!value) return 0
-        const ts = Date.parse(value)
-        return Number.isNaN(ts) ? 0 : ts
-      }
+      // Use pre-computed timestamp - no Date.parse on each comparison
       arr.sort((a, b) => {
-        const diff = getCreatedAtValue(b) - getCreatedAtValue(a)
+        const diff = b._createdAtTs - a._createdAtTs
         if (diff !== 0) return diff
         return a.name.localeCompare(b.name)
       })
@@ -735,8 +823,9 @@ export default function PlantSwipe() {
         return a.name.localeCompare(b.name)
       })
     } else if (searchSort === "popular") {
+      // Use pre-computed popularity - no property access chain on each comparison
       arr.sort((a, b) => {
-        const diff = (b.popularity?.likes ?? 0) - (a.popularity?.likes ?? 0)
+        const diff = b._popularityLikes - a._popularityLikes
         if (diff !== 0) return diff
         return a.name.localeCompare(b.name)
       })
