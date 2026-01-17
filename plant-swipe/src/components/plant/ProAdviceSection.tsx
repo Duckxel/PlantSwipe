@@ -872,42 +872,54 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
+                  {/* Translate button - at the top */}
+                  {shouldShowTranslateOption(expandedAdvice) && (
+                    <div>
+                      {translationState.error && (
+                        <p className="text-xs text-red-600 mb-2">{translationState.error}</p>
+                      )}
+                      {translationState.isTranslating ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          className="text-xs border-amber-300 text-amber-700 bg-amber-50"
+                        >
+                          {t("translation.translating")}
+                        </Button>
+                      ) : translationState.translatedContent ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={toggleTranslation}
+                          className="text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
+                        >
+                          {translationState.showTranslated 
+                            ? t("translation.showOriginal") 
+                            : t("translation.showTranslation")}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleTranslate(expandedAdvice)}
+                          className="text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
+                        >
+                          {t("translation.translate")}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Full content - original or translated */}
                   <p className="text-base text-amber-900 whitespace-pre-line leading-relaxed">
                     {translationState.showTranslated && translationState.translatedContent
                       ? translationState.translatedContent
                       : expandedAdvice.content}
                   </p>
-
-                  {/* Simple Twitter-like translate link */}
-                  {shouldShowTranslateOption(expandedAdvice) && (
-                    <>
-                      {translationState.error && (
-                        <p className="text-xs text-red-600">{translationState.error}</p>
-                      )}
-                      {translationState.isTranslating ? (
-                        <span className="text-sm text-amber-600/70">{t("translation.translating")}</span>
-                      ) : translationState.translatedContent ? (
-                        <button
-                          type="button"
-                          onClick={toggleTranslation}
-                          className="text-sm text-amber-600/80 hover:text-amber-700 hover:underline transition-colors"
-                        >
-                          {translationState.showTranslated 
-                            ? t("translation.showOriginal") 
-                            : t("translation.showTranslation")}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleTranslate(expandedAdvice)}
-                          className="text-sm text-amber-600/80 hover:text-amber-700 hover:underline transition-colors"
-                        >
-                          {t("translation.translate")}
-                        </button>
-                      )}
-                    </>
-                  )}
 
                   {/* Full-size image */}
                   {expandedAdvice.imageUrl && (
