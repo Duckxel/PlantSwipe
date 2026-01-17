@@ -578,28 +578,92 @@ fi
 log "Installing dependencies with Bun…"
 cd "$NODE_DIR"
 
-# Ensure Bun is available in PATH
-BUN_BIN=""
-if command -v bun >/dev/null 2>&1; then
-  BUN_BIN="$(command -v bun)"
-elif [[ -x "$HOME/.bun/bin/bun" ]]; then
-  BUN_BIN="$HOME/.bun/bin/bun"
-  export PATH="$HOME/.bun/bin:$PATH"
-elif [[ -n "$REPO_OWNER" ]]; then
+# Ensure Bun is available in PATH - check multiple locations
+BUN_SYSTEM_PATH="/usr/local/bin/bun"
+BUN_USER_PATH="$HOME/.bun/bin/bun"
+OWNER_HOME=""
+if [[ -n "$REPO_OWNER" ]]; then
   OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "")"
-  if [[ -n "$OWNER_HOME" && -x "$OWNER_HOME/.bun/bin/bun" ]]; then
-    BUN_BIN="$OWNER_HOME/.bun/bin/bun"
-  fi
+fi
+BUN_OWNER_PATH=""
+if [[ -n "$OWNER_HOME" ]]; then
+  BUN_OWNER_PATH="$OWNER_HOME/.bun/bin/bun"
 fi
 
+find_bun() {
+  # Check in order of preference: system-wide, user, repo owner
+  if command -v bun >/dev/null 2>&1; then
+    command -v bun
+    return 0
+  elif [[ -x "$BUN_SYSTEM_PATH" ]]; then
+    echo "$BUN_SYSTEM_PATH"
+    return 0
+  elif [[ -x "$BUN_USER_PATH" ]]; then
+    echo "$BUN_USER_PATH"
+    return 0
+  elif [[ -n "$BUN_OWNER_PATH" && -x "$BUN_OWNER_PATH" ]]; then
+    echo "$BUN_OWNER_PATH"
+    return 0
+  fi
+  return 1
+}
+
+BUN_BIN="$(find_bun || true)"
+
+# Add Bun paths to PATH if found
+if [[ -d "$HOME/.bun/bin" ]]; then
+  export PATH="$HOME/.bun/bin:$PATH"
+fi
+if [[ -n "$OWNER_HOME" && -d "$OWNER_HOME/.bun/bin" ]]; then
+  export PATH="$OWNER_HOME/.bun/bin:$PATH"
+fi
+
+# If Bun not found, attempt to install it
 if [[ -z "$BUN_BIN" ]]; then
   log "[WARN] Bun not found, attempting to install…"
-  curl -fsSL https://bun.sh/install | bash
-  export PATH="$HOME/.bun/bin:$PATH"
-  BUN_BIN="$HOME/.bun/bin/bun"
+  
+  # Check if unzip is available (required by Bun installer)
+  if ! command -v unzip >/dev/null 2>&1; then
+    log "[ERROR] unzip is required for Bun installation but not found."
+    log "[ERROR] Please install unzip first: sudo apt-get install unzip"
+    exit 1
+  fi
+  
+  # Install Bun
+  if ! curl -fsSL https://bun.sh/install | bash; then
+    log "[ERROR] Bun installation failed."
+    exit 1
+  fi
+  
+  export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+  BUN_BIN="$BUN_INSTALL/bin/bun"
+  
+  # Verify installation
+  if [[ ! -x "$BUN_BIN" ]]; then
+    log "[ERROR] Bun installation completed but binary not found at $BUN_BIN"
+    exit 1
+  fi
+  
+  # If running as root, also install for repo owner
+  if [[ $EUID -eq 0 && -n "$REPO_OWNER" && "$REPO_OWNER" != "root" && -n "$OWNER_HOME" ]]; then
+    log "Also installing Bun for repo owner $REPO_OWNER…"
+    $SUDO mkdir -p "$OWNER_HOME/.bun"
+    $SUDO chown -R "$REPO_OWNER:$REPO_OWNER" "$OWNER_HOME/.bun"
+    sudo -u "$REPO_OWNER" -H bash -c "export BUN_INSTALL='$OWNER_HOME/.bun' && curl -fsSL https://bun.sh/install | bash" || {
+      # Fallback: copy bun binary
+      log "[WARN] Could not install Bun for $REPO_OWNER, copying binary…"
+      $SUDO mkdir -p "$OWNER_HOME/.bun/bin"
+      $SUDO cp "$BUN_BIN" "$OWNER_HOME/.bun/bin/bun"
+      $SUDO chown -R "$REPO_OWNER:$REPO_OWNER" "$OWNER_HOME/.bun"
+      $SUDO chmod +x "$OWNER_HOME/.bun/bin/bun"
+    }
+  fi
+  
+  log "Bun installed successfully."
 fi
 
-log "Using Bun at: $BUN_BIN"
+log "Using Bun at: $BUN_BIN (version: $("$BUN_BIN" --version 2>/dev/null || echo 'unknown'))"
 
 # Check if we can skip bun install by comparing bun.lockb hash
 LOCK_HASH_FILE="$NODE_DIR/.bun-lock-hash"
