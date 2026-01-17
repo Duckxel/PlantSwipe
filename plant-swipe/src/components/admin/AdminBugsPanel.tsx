@@ -28,6 +28,7 @@ import {
   Archive,
   Play,
   Save,
+  Search,
 } from "lucide-react"
 
 type BugAction = {
@@ -109,6 +110,10 @@ export const AdminBugsPanel: React.FC = () => {
   // Action responses for viewing
   const [viewingResponses, setViewingResponses] = React.useState<any[]>([])
   const [responsesDialogOpen, setResponsesDialogOpen] = React.useState(false)
+
+  // Action search and filter
+  const [actionSearch, setActionSearch] = React.useState('')
+  const [actionStatusFilter, setActionStatusFilter] = React.useState<'all' | BugAction['status']>('all')
 
   const loadData = React.useCallback(async () => {
     try {
@@ -377,6 +382,38 @@ export const AdminBugsPanel: React.FC = () => {
     setEditingAction({ ...editingAction, questions })
   }
 
+  // Computed: action counts by status
+  const actionStatusCounts = React.useMemo(() => {
+    return {
+      all: actions.length,
+      draft: actions.filter(a => a.status === 'draft').length,
+      planned: actions.filter(a => a.status === 'planned').length,
+      active: actions.filter(a => a.status === 'active').length,
+      closed: actions.filter(a => a.status === 'closed').length,
+    }
+  }, [actions])
+
+  // Computed: filtered actions
+  const filteredActions = React.useMemo(() => {
+    let filtered = actions
+
+    // Filter by status
+    if (actionStatusFilter !== 'all') {
+      filtered = filtered.filter(a => a.status === actionStatusFilter)
+    }
+
+    // Filter by search
+    if (actionSearch.trim()) {
+      const search = actionSearch.toLowerCase().trim()
+      filtered = filtered.filter(a => 
+        a.title.toLowerCase().includes(search) ||
+        (a.description && a.description.toLowerCase().includes(search))
+      )
+    }
+
+    return filtered
+  }, [actions, actionStatusFilter, actionSearch])
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'draft':
@@ -511,6 +548,7 @@ export const AdminBugsPanel: React.FC = () => {
       {/* Actions List */}
       {view === 'actions' && (
         <div className="space-y-4">
+          {/* Header with Create Button */}
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Actions</h3>
             <Button className="rounded-xl" onClick={handleCreateAction}>
@@ -519,6 +557,103 @@ export const AdminBugsPanel: React.FC = () => {
             </Button>
           </div>
 
+          {/* Status Filter Tabs */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setActionStatusFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                actionStatusFilter === 'all'
+                  ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900'
+                  : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
+              }`}
+            >
+              All
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-xs">
+                {actionStatusCounts.all}
+              </span>
+            </button>
+            <button
+              onClick={() => setActionStatusFilter('draft')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                actionStatusFilter === 'draft'
+                  ? 'bg-stone-600 text-white'
+                  : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
+              }`}
+            >
+              Draft
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-xs">
+                {actionStatusCounts.draft}
+              </span>
+            </button>
+            <button
+              onClick={() => setActionStatusFilter('planned')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                actionStatusFilter === 'planned'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50'
+              }`}
+            >
+              Planned
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-800/50 text-xs">
+                {actionStatusCounts.planned}
+              </span>
+            </button>
+            <button
+              onClick={() => setActionStatusFilter('active')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                actionStatusFilter === 'active'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+              }`}
+            >
+              Active
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-800/50 text-xs">
+                {actionStatusCounts.active}
+              </span>
+            </button>
+            <button
+              onClick={() => setActionStatusFilter('closed')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                actionStatusFilter === 'closed'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50'
+              }`}
+            >
+              Closed
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-800/50 text-xs">
+                {actionStatusCounts.closed}
+              </span>
+            </button>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+            <Input
+              type="text"
+              placeholder="Search actions by title or description..."
+              value={actionSearch}
+              onChange={(e) => setActionSearch(e.target.value)}
+              className="pl-10 rounded-xl"
+            />
+            {actionSearch && (
+              <button
+                onClick={() => setActionSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Results count */}
+          {(actionSearch || actionStatusFilter !== 'all') && (
+            <div className="text-sm text-stone-500">
+              Showing {filteredActions.length} of {actions.length} actions
+              {actionSearch && <span> matching "{actionSearch}"</span>}
+            </div>
+          )}
+
           {actions.length === 0 ? (
             <Card className={glassCard}>
               <CardContent className="p-8 text-center">
@@ -526,9 +661,26 @@ export const AdminBugsPanel: React.FC = () => {
                 <p className="text-sm opacity-70">No actions yet. Create your first action!</p>
               </CardContent>
             </Card>
+          ) : filteredActions.length === 0 ? (
+            <Card className={glassCard}>
+              <CardContent className="p-8 text-center">
+                <Search className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                <p className="text-sm opacity-70">No actions match your search or filter</p>
+                <Button 
+                  variant="link" 
+                  className="mt-2"
+                  onClick={() => {
+                    setActionSearch('')
+                    setActionStatusFilter('all')
+                  }}
+                >
+                  Clear filters
+                </Button>
+              </CardContent>
+            </Card>
           ) : (
             <div className="space-y-2">
-              {actions.map((action) => (
+              {filteredActions.map((action) => (
                 <Card key={action.id} className={`${glassCard} hover:border-stone-300 dark:hover:border-[#4e4e52] transition`}>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-4">
