@@ -5,7 +5,7 @@ const MAX_RETRIES = 3
 const INITIAL_RETRY_DELAY = 2000 // 2 seconds
 
 // Helper to delay execution (abortable)
-const delay = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+const delay = (ms: number, signal?: AbortSignal | null) => new Promise<void>((resolve, reject) => {
   if (signal?.aborted) {
     reject(new DOMException('Aborted', 'AbortError'))
     return
