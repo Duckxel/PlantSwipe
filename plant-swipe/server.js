@@ -957,6 +957,18 @@ const singleScanImageUpload = scanImageMulter.single('file')
 // Kindwise API key from environment
 const KINDWISE_API_KEY = process.env.KINDWISE || process.env.KINDWISE_API_KEY || ''
 
+// === Bug Screenshot Upload Settings ===
+const bugScreenshotUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
+const bugScreenshotUploadPrefix = 'bug-reports' // Organize under bug-reports/ folder
+const bugScreenshotMaxBytes = 10 * 1024 * 1024 // 10MB
+const bugScreenshotMaxDimension = 1920 // High resolution to capture bug details
+const bugScreenshotWebpQuality = 60 // Slightly higher quality to preserve bug details
+const bugScreenshotMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: bugScreenshotMaxBytes },
+})
+const singleBugScreenshotUpload = bugScreenshotMulter.single('file')
+
 // Mime types that should be optimized and converted to WebP
 const optimizableMimeTypes = new Set([
   'image/jpeg',
@@ -13380,6 +13392,212 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
       console.error('[scan] unexpected failure', err)
       if (!res.headersSent) {
         res.status(500).json({ error: 'Unexpected failure during scan' })
+      }
+    })
+  })
+})
+
+// Upload bug screenshot for bug reports
+// Endpoint: POST /api/bug-report/upload-screenshot
+app.post('/api/bug-report/upload-screenshot', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'You must be signed in to upload bug screenshots' })
+    return
+  }
+
+  // Verify user has bug_catcher role
+  let hasBugCatcherRole = false
+  try {
+    const { data: profileData } = await supabaseServiceClient
+      .from('profiles')
+      .select('roles')
+      .eq('id', user.id)
+      .single()
+    if (profileData?.roles && Array.isArray(profileData.roles)) {
+      hasBugCatcherRole = profileData.roles.includes('bug_catcher')
+    }
+  } catch (err) {
+    console.error('[bug-screenshot] failed to check user role', err)
+  }
+
+  if (!hasBugCatcherRole) {
+    res.status(403).json({ error: 'Only Bug Catchers can upload bug screenshots' })
+    return
+  }
+
+  singleBugScreenshotUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(bugScreenshotMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+
+      const mime = (file.mimetype || '').toLowerCase()
+      const allowedMimes = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'image/heic',
+        'image/heif',
+        'image/avif',
+      ]
+      if (!allowedMimes.includes(mime)) {
+        res.status(400).json({
+          error: `Unsupported image type: ${mime}. Allowed: JPEG, PNG, WebP, GIF, HEIC, AVIF`,
+        })
+        return
+      }
+
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      let finalMimeType = 'image/webp'
+
+      // GIFs are kept as-is to preserve animation
+      if (mime === 'image/gif') {
+        optimizedBuffer = file.buffer
+        finalMimeType = 'image/gif'
+      } else {
+        try {
+          optimizedBuffer = await sharp(file.buffer)
+            .rotate()
+            .resize({
+              width: bugScreenshotMaxDimension,
+              height: bugScreenshotMaxDimension,
+              fit: 'inside',
+              withoutEnlargement: true,
+              fastShrinkOnLoad: true,
+            })
+            .webp({
+              quality: bugScreenshotWebpQuality,
+              effort: 5,
+              smartSubsample: true,
+            })
+            .toBuffer()
+        } catch (sharpErr) {
+          console.error('[bug-screenshot] failed to convert image to webp', sharpErr)
+          res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+          return
+        }
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const userSegment = sanitizePathSegment(`user-${user.id}`, 'user')
+      const timestamp = Date.now()
+      const typeSegment = userSegment ? `bug-${userSegment}-${timestamp}` : `bug-${timestamp}`
+      const objectPath = buildUploadObjectPath(baseName, typeSegment, bugScreenshotUploadPrefix)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(bugScreenshotUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: finalMimeType,
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[bug-screenshot] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(bugScreenshotUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      // Transform URL to use media proxy (hides Supabase project URL)
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+      if (!proxyUrl) {
+        res.status(500).json({ error: 'Failed to generate public URL for screenshot' })
+        return
+      }
+
+      const compressionPercent =
+        file.size > 0
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+      // Get user display name for media tracking
+      let uploaderDisplayName = 'Unknown'
+      try {
+        const { data: pdata } = await supabaseServiceClient
+          .from('profiles')
+          .select('display_name')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (pdata?.display_name) {
+          uploaderDisplayName = pdata.display_name
+        }
+      } catch {
+        /* ignore */
+      }
+
+      // Record in admin media uploads for tracking
+      try {
+        await recordAdminMediaUpload({
+          adminId: user.id,
+          adminEmail: user.email || null,
+          adminName: uploaderDisplayName,
+          bucket: bugScreenshotUploadBucket,
+          path: objectPath,
+          publicUrl: proxyUrl,
+          mimeType: finalMimeType,
+          originalMimeType: mime,
+          sizeBytes: optimizedBuffer.length,
+          originalSizeBytes: file.size,
+          quality: finalMimeType === 'image/gif' ? null : bugScreenshotWebpQuality,
+          compressionPercent,
+          uploadSource: 'bug_screenshot',
+          metadata: {
+            source: 'bug_screenshot',
+            originalName: file.originalname,
+            userId: user.id,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      } catch (recordErr) {
+        console.error('[bug-screenshot] failed to record media upload', recordErr)
+      }
+
+      res.json({
+        ok: true,
+        url: proxyUrl,
+        bucket: bugScreenshotUploadBucket,
+        path: objectPath,
+        mimeType: finalMimeType,
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        compressionPercent,
+      })
+    })().catch((err) => {
+      console.error('[bug-screenshot] unexpected failure', err)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected failure during upload' })
       }
     })
   })

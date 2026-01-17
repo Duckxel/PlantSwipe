@@ -29,6 +29,8 @@ import {
   X,
   Check,
   RefreshCw,
+  Upload,
+  Trash2,
 } from "lucide-react"
 
 type LeaderboardEntry = {
@@ -113,6 +115,12 @@ export function BugCatcherPage() {
   const [submittingReport, setSubmittingReport] = React.useState(false)
   const [reportError, setReportError] = React.useState<string | null>(null)
   const [reportSuccess, setReportSuccess] = React.useState(false)
+
+  // Screenshot upload state
+  const [uploadingScreenshot, setUploadingScreenshot] = React.useState(false)
+  const [screenshotError, setScreenshotError] = React.useState<string | null>(null)
+  const [dragActive, setDragActive] = React.useState(false)
+  const screenshotInputRef = React.useRef<HTMLInputElement | null>(null)
 
   // Check if user has bug_catcher role
   const hasBugCatcherRole = React.useMemo(() => {
@@ -327,6 +335,102 @@ export function BugCatcherPage() {
       setSubmittingReport(false)
     }
   }
+
+  // Screenshot upload handler
+  const handleScreenshotUpload = React.useCallback(async (file: File | null) => {
+    if (!file) return
+    
+    setScreenshotError(null)
+    
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif', 'image/avif']
+    if (!allowedTypes.includes(file.type)) {
+      setScreenshotError('Please upload a valid image file (JPEG, PNG, WebP, GIF, HEIC, AVIF)')
+      return
+    }
+    
+    // Validate file size (10MB max)
+    const maxSize = 10 * 1024 * 1024
+    if (file.size > maxSize) {
+      setScreenshotError('File size must be under 10MB')
+      return
+    }
+    
+    // Max 5 screenshots
+    if (screenshots.length >= 5) {
+      setScreenshotError('Maximum 5 screenshots allowed')
+      return
+    }
+    
+    setUploadingScreenshot(true)
+    
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      
+      if (!token) {
+        setScreenshotError('You must be signed in to upload screenshots')
+        return
+      }
+      
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const response = await fetch('/api/bug-report/upload-screenshot', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData,
+        credentials: 'same-origin'
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to upload screenshot')
+      }
+      
+      if (data.url) {
+        setScreenshots(prev => [...prev, data.url])
+      }
+    } catch (error: any) {
+      console.error('Screenshot upload error:', error)
+      setScreenshotError(error?.message || 'Failed to upload screenshot')
+    } finally {
+      setUploadingScreenshot(false)
+    }
+  }, [screenshots.length])
+
+  const handleScreenshotDrop = React.useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      handleScreenshotUpload(file)
+    }
+  }, [handleScreenshotUpload])
+
+  const handleScreenshotBrowse = React.useCallback(() => {
+    screenshotInputRef.current?.click()
+  }, [])
+
+  const handleScreenshotFileChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handleScreenshotUpload(file)
+    }
+    // Reset input so the same file can be selected again
+    if (e.target) {
+      e.target.value = ''
+    }
+  }, [handleScreenshotUpload])
+
+  const removeScreenshot = React.useCallback((index: number) => {
+    setScreenshots(prev => prev.filter((_, i) => i !== index))
+  }, [])
 
   const getRankIcon = (rank: number) => {
     if (rank === 1) return <Crown className="h-5 w-5 text-yellow-500" />
@@ -679,13 +783,111 @@ export function BugCatcherPage() {
                   />
                 </div>
 
-                {/* Screenshots - Placeholder for future implementation */}
+                {/* Screenshots - Drag and Drop Upload */}
                 <div>
                   <Label className="text-sm font-medium">Screenshots (Optional)</Label>
-                  <div className="mt-2 p-4 border-2 border-dashed border-stone-200 dark:border-[#3e3e42] rounded-xl text-center">
-                    <ImagePlus className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm opacity-60">Screenshot upload coming soon</p>
-                  </div>
+                  <p className="text-xs opacity-60 mt-1 mb-2">Upload up to 5 images of the bug ({screenshots.length}/5)</p>
+                  
+                  {/* Uploaded Screenshots Preview */}
+                  {screenshots.length > 0 && (
+                    <div className="flex flex-wrap gap-3 mb-3">
+                      {screenshots.map((url, index) => (
+                        <div 
+                          key={index} 
+                          className="relative group w-24 h-24 rounded-xl overflow-hidden border border-stone-200 dark:border-[#3e3e42] bg-stone-100 dark:bg-stone-800"
+                        >
+                          <img 
+                            src={url} 
+                            alt={`Screenshot ${index + 1}`} 
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeScreenshot(index)}
+                            className="absolute top-1 right-1 p-1 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Drop Zone */}
+                  {screenshots.length < 5 && (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (!dragActive) setDragActive(true)
+                      }}
+                      onDragEnter={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setDragActive(true)
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setDragActive(false)
+                      }}
+                      onDrop={handleScreenshotDrop}
+                      onClick={handleScreenshotBrowse}
+                      className={`
+                        mt-2 p-6 border-2 border-dashed rounded-xl text-center cursor-pointer transition-all
+                        ${dragActive 
+                          ? 'border-orange-500 bg-orange-50/50 dark:bg-orange-900/20 scale-[1.02]' 
+                          : 'border-stone-200 dark:border-[#3e3e42] hover:border-orange-300 dark:hover:border-orange-700'
+                        }
+                        ${uploadingScreenshot ? 'opacity-70 pointer-events-none' : ''}
+                      `}
+                    >
+                      <input
+                        ref={screenshotInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,image/avif"
+                        hidden
+                        onChange={handleScreenshotFileChange}
+                        disabled={uploadingScreenshot}
+                      />
+                      
+                      <div className={`
+                        mx-auto mb-3 w-12 h-12 rounded-2xl flex items-center justify-center transition-colors
+                        ${dragActive 
+                          ? 'bg-orange-500 text-white' 
+                          : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+                        }
+                      `}>
+                        {uploadingScreenshot ? (
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        ) : (
+                          <Upload className="h-6 w-6" />
+                        )}
+                      </div>
+                      
+                      <div className="text-sm font-medium">
+                        {dragActive ? (
+                          'Drop your image here'
+                        ) : uploadingScreenshot ? (
+                          'Uploading...'
+                        ) : (
+                          <>
+                            Drag & drop or{' '}
+                            <span className="text-orange-600 dark:text-orange-400">browse</span>
+                          </>
+                        )}
+                      </div>
+                      <p className="text-xs opacity-50 mt-1">PNG, JPG, WebP, GIF. Max 10MB</p>
+                    </div>
+                  )}
+                  
+                  {/* Screenshot Error */}
+                  {screenshotError && (
+                    <div className="mt-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs flex items-center gap-2">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      {screenshotError}
+                    </div>
+                  )}
                 </div>
 
                 {/* User Info */}
