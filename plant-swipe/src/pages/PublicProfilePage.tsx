@@ -8,9 +8,10 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle, Bug, Medal } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
 import type { UserRole } from "@/constants/userRoles"
+import { hasBugCatcherRole } from "@/constants/userRoles"
 import { SearchInput } from "@/components/ui/search-input"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
@@ -50,6 +51,9 @@ type PublicStats = {
   currentStreak: number
   bestStreak: number
   friendsCount?: number
+  // Bug Catcher stats
+  bugPoints?: number
+  bugCatcherRank?: number
 }
 
 type DayAgg = { day: string; completed: number; any_success: boolean }
@@ -335,6 +339,23 @@ export default function PublicProfilePage() {
             setStats((prev) => prev ? { ...prev, friendsCount: friendCount } : null)
           } else {
             setStats((prev) => prev ? { ...prev, friendsCount: 0 } : null)
+          }
+
+          // Bug Catcher stats (if user has bug_catcher role)
+          if (hasBugCatcherRole(profileRoles)) {
+            const { data: profilePoints } = await supabase
+              .from('profiles')
+              .select('bug_points')
+              .eq('id', userId)
+              .single()
+            
+            const { data: bugRank } = await supabase.rpc('get_bug_catcher_rank', { _user_id: userId })
+            
+            setStats((prev) => prev ? {
+              ...prev,
+              bugPoints: profilePoints?.bug_points || 0,
+              bugCatcherRank: bugRank || 0
+            } : null)
           }
 
           // Heatmap: last 28 days (4 rows × 7 columns)
@@ -1316,7 +1337,25 @@ export default function PublicProfilePage() {
                 <div className="mt-4">
                   <Card className={glassCard}>
                     <CardContent className="p-6 md:p-8 space-y-4">
-                      <div className="text-lg font-semibold">{t("profile.highlights")}</div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-lg font-semibold">{t("profile.highlights")}</div>
+                        {/* Bug Catcher Badge - simple inline display */}
+                        {pp.roles && hasBugCatcherRole(pp.roles) && stats?.bugPoints !== undefined && (stats.bugPoints > 0 || (stats.bugCatcherRank && stats.bugCatcherRank <= 10)) && (
+                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-100 dark:bg-stone-800 text-sm">
+                            <Bug className="h-4 w-4 text-orange-500" />
+                            <span className="font-medium tabular-nums">{stats.bugPoints} pts</span>
+                            {stats.bugCatcherRank && stats.bugCatcherRank > 0 && (
+                              <>
+                                <span className="text-stone-400">•</span>
+                                <span className="text-stone-600 dark:text-stone-400">#{stats.bugCatcherRank}</span>
+                              </>
+                            )}
+                            {stats.bugCatcherRank && stats.bugCatcherRank <= 10 && (
+                              <Medal className="h-3.5 w-3.5 text-amber-500" />
+                            )}
+                          </div>
+                        )}
+                      </div>
                     <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-0">
                       {/* Task completion grid - left side */}
                       <div className="flex-1 flex justify-center items-center py-2">
@@ -1374,7 +1413,7 @@ export default function PublicProfilePage() {
                         </div>
                       </div>
                     </div>
-                
+                    
                 {tooltip && createPortal(
                   <div
                     className="fixed z-[70] pointer-events-none"

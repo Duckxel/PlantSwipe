@@ -119,6 +119,26 @@ const EditorBadgeIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 )
 
+const BugCatcherBadgeIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg 
+    className={className} 
+    viewBox="0 0 24 24" 
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    {/* Bug/Beetle badge - net catching a bug */}
+    <circle cx="12" cy="14" r="5" fillOpacity="0.3"/>
+    <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fillOpacity="0.6"/>
+    {/* Bug body */}
+    <ellipse cx="12" cy="14" rx="3" ry="4"/>
+    <circle cx="12" cy="9" r="2"/>
+    {/* Bug antennae */}
+    <path d="M10 7.5L8 5M14 7.5L16 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+    {/* Bug legs */}
+    <path d="M9 12L6 11M15 12L18 11M9 15L6 16M15 15L18 16" stroke="currentColor" strokeWidth="1" strokeLinecap="round" fill="none"/>
+  </svg>
+)
+
 // Icon mapping for each role
 const RoleIcons: Record<UserRole, React.FC<{ className?: string }>> = {
   admin: AdminBadgeIcon,
@@ -128,6 +148,7 @@ const RoleIcons: Record<UserRole, React.FC<{ className?: string }>> = {
   creator: CreatorBadgeIcon,
   vip: VipBadgeIcon,
   plus: PlusBadgeIcon,
+  bug_catcher: BugCatcherBadgeIcon,
 }
 
 interface UserRoleBadgeProps {
@@ -202,6 +223,11 @@ export const UserRoleBadge: React.FC<UserRoleBadgeProps> = ({
           iconClass: 'text-blue-500 dark:text-blue-400 drop-shadow-[0_0_3px_rgba(59,130,246,0.5)]',
           wrapperClass: '',
         }
+      case USER_ROLES.BUG_CATCHER:
+        return {
+          iconClass: 'text-orange-500 dark:text-orange-400 drop-shadow-[0_0_3px_rgba(249,115,22,0.5)]',
+          wrapperClass: '',
+        }
       default:
         return {
           iconClass: config.iconColor + ' ' + config.darkIconColor,
@@ -258,7 +284,7 @@ export const UserRoleBadges: React.FC<UserRoleBadgesProps> = ({
 }) => {
   if (!roles || !Array.isArray(roles) || roles.length === 0) return null
 
-  // Order badges by visual importance: Pro, Admin, VIP, Plus, Merchant, Creator, Editor
+  // Order badges by visual importance: Pro, Admin, VIP, Plus, Merchant, Creator, Editor, Bug Catcher
   const badgeOrder: UserRole[] = [
     USER_ROLES.PRO,
     USER_ROLES.ADMIN,
@@ -267,6 +293,7 @@ export const UserRoleBadges: React.FC<UserRoleBadgesProps> = ({
     USER_ROLES.MERCHANT,
     USER_ROLES.CREATOR,
     USER_ROLES.EDITOR,
+    USER_ROLES.BUG_CATCHER,
   ]
 
   const sortedRoles = [...roles].sort((a, b) => {
@@ -329,6 +356,7 @@ export const ProfileNameBadges: React.FC<{
     USER_ROLES.MERCHANT,
     USER_ROLES.CREATOR,
     USER_ROLES.EDITOR,
+    USER_ROLES.BUG_CATCHER,
   ]
 
   const badgesToShow = effectiveRoles.filter(role => visibleBadges.includes(role))
@@ -342,6 +370,7 @@ export const ProfileNameBadges: React.FC<{
     USER_ROLES.MERCHANT,
     USER_ROLES.CREATOR,
     USER_ROLES.EDITOR,
+    USER_ROLES.BUG_CATCHER,
   ]
 
   const sortedBadges = [...badgesToShow].sort((a, b) => {
