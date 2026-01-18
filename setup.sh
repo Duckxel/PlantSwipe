@@ -521,7 +521,7 @@ render_service_env() {
   {
     for k in "${!kv[@]}"; do printf "%s=%s\n" "$k" "${kv[$k]}"; done | sort
   } > "$tmp"
-  $SUDO install -m 0640 "$tmp" "$out"
+  $SUDO install -m 0640 -o root -g "$SERVICE_USER" "$tmp" "$out"
   rm -f "$tmp"
 }
 

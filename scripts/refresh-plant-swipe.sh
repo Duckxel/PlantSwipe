@@ -811,7 +811,7 @@ render_service_env() {
   {
     for k in "${!kv[@]}"; do printf "%s=%s\n" "$k" "${kv[$k]}"; done | sort
   } > "$tmp"
-  $SUDO install -m 0640 "$tmp" "$service_env_file"
+  $SUDO install -m 0640 -o root -g www-data "$tmp" "$service_env_file"
   rm -f "$tmp"
 
   # Ensure both services load it via drop-ins (non-destructive)
