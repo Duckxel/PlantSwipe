@@ -154,6 +154,14 @@ type ShowcaseCard = {
   description: string | null
   badge_text: string | null
   image_url: string | null
+  cover_image_url: string | null
+  plant_images: Array<{ url: string; name: string }> | null
+  garden_name: string | null
+  plants_count: number | null
+  species_count: number | null
+  streak_count: number | null
+  progress_percent: number | null
+  link_url: string | null
   color: string
   is_active: boolean
 }
@@ -2569,6 +2577,8 @@ const ShowcaseTab: React.FC<{
 }> = ({ cards, setCards, setSaving, sectionVisible }) => {
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
+  const [imagePickerTarget, setImagePickerTarget] = React.useState<"image" | "cover" | "plant">("image")
+  const [expandedCardId, setExpandedCardId] = React.useState<string | null>(null)
 
   const addCard = async () => {
     const newCard: Partial<ShowcaseCard> = {
@@ -2579,6 +2589,11 @@ const ShowcaseTab: React.FC<{
       description: "Card description",
       color: "emerald",
       is_active: true,
+      plants_count: 12,
+      species_count: 8,
+      streak_count: 7,
+      progress_percent: 85,
+      plant_images: [],
     }
 
     const { data, error } = await supabase
@@ -2617,6 +2632,22 @@ const ShowcaseTab: React.FC<{
     }
   }
 
+  const addPlantImage = (cardId: string, url: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const currentImages = card.plant_images || []
+    const newImages = [...currentImages, { url, name: `Plant ${currentImages.length + 1}` }]
+    updateCard(cardId, { plant_images: newImages })
+  }
+
+  const removePlantImage = (cardId: string, index: number) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const currentImages = card.plant_images || []
+    const newImages = currentImages.filter((_, i) => i !== index)
+    updateCard(cardId, { plant_images: newImages })
+  }
+
   const editingCard = cards.find(c => c.id === editingCardId)
 
   return (
@@ -2642,8 +2673,12 @@ const ShowcaseTab: React.FC<{
         </Card>
       ) : (
         <div className="space-y-4">
-          {cards.map((card) => (
-            <Card key={card.id} className="rounded-xl">
+          {cards.map((card) => {
+            const isExpanded = expandedCardId === card.id
+            const isGardenType = card.card_type === "main" || card.card_type === "garden"
+            
+            return (
+            <Card key={card.id} className="rounded-xl overflow-hidden">
               <CardContent className="p-4">
                 <div className="flex items-start gap-4">
                   {/* Icon Picker */}
@@ -2673,7 +2708,9 @@ const ShowcaseTab: React.FC<{
                         >
                           <option value="small">Small</option>
                           <option value="large">Large (2-column)</option>
-                          <option value="main">Main (Dashboard)</option>
+                          <option value="main">Main (Garden Dashboard)</option>
+                          <option value="analytics">Analytics</option>
+                          <option value="tasks">Tasks List</option>
                         </select>
                       </div>
                       <div className="space-y-1.5">
@@ -2695,17 +2732,18 @@ const ShowcaseTab: React.FC<{
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs text-stone-500">Image</Label>
+                        <Label className="text-xs text-stone-500">Icon Image</Label>
                         <Button
                           variant="outline"
                           className="w-full rounded-xl justify-start"
                           onClick={() => {
                             setEditingCardId(card.id)
+                            setImagePickerTarget("image")
                             setImagePickerOpen(true)
                           }}
                         >
                           <ImageIcon className="h-4 w-4 mr-2" />
-                          {card.image_url ? "Change Image" : "Add Image"}
+                          {card.image_url ? "Change" : "Add"}
                         </Button>
                       </div>
                     </div>
@@ -2718,6 +2756,153 @@ const ShowcaseTab: React.FC<{
                         rows={2}
                       />
                     </div>
+
+                    {/* Expand button for garden/main type */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedCardId(isExpanded ? null : card.id)}
+                      className="rounded-xl text-xs"
+                    >
+                      {isExpanded ? "Hide Advanced Options" : "Show Advanced Options (Images, Stats)"}
+                    </Button>
+
+                    {/* Expanded options for garden-type cards */}
+                    {isExpanded && (
+                      <div className="space-y-4 pt-4 border-t border-stone-200 dark:border-stone-700">
+                        {/* Cover Image */}
+                        <div className="space-y-2">
+                          <Label className="text-xs text-stone-500 font-medium">Cover Image (Background)</Label>
+                          <div className="flex items-center gap-3">
+                            {card.cover_image_url && (
+                              <div className="relative w-24 h-16 rounded-lg overflow-hidden">
+                                <img src={card.cover_image_url} alt="Cover" className="w-full h-full object-cover" />
+                                <button
+                                  onClick={() => updateCard(card.id, { cover_image_url: null })}
+                                  className="absolute top-1 right-1 h-5 w-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl"
+                              onClick={() => {
+                                setEditingCardId(card.id)
+                                setImagePickerTarget("cover")
+                                setImagePickerOpen(true)
+                              }}
+                            >
+                              <ImageIcon className="h-4 w-4 mr-2" />
+                              {card.cover_image_url ? "Change Cover" : "Add Cover Image"}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Garden Name */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-stone-500">Garden Name (for preview)</Label>
+                          <Input
+                            value={card.garden_name || ""}
+                            onChange={(e) => updateCard(card.id, { garden_name: e.target.value })}
+                            className="rounded-xl"
+                            placeholder="My Indoor Jungle"
+                          />
+                        </div>
+
+                        {/* Garden Stats */}
+                        <div className="grid grid-cols-4 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-stone-500">Plants</Label>
+                            <Input
+                              type="number"
+                              value={card.plants_count || 12}
+                              onChange={(e) => updateCard(card.id, { plants_count: parseInt(e.target.value) || 0 })}
+                              className="rounded-xl"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-stone-500">Species</Label>
+                            <Input
+                              type="number"
+                              value={card.species_count || 8}
+                              onChange={(e) => updateCard(card.id, { species_count: parseInt(e.target.value) || 0 })}
+                              className="rounded-xl"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-stone-500">Streak</Label>
+                            <Input
+                              type="number"
+                              value={card.streak_count || 7}
+                              onChange={(e) => updateCard(card.id, { streak_count: parseInt(e.target.value) || 0 })}
+                              className="rounded-xl"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-stone-500">Progress %</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={card.progress_percent || 85}
+                              onChange={(e) => updateCard(card.id, { progress_percent: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                              className="rounded-xl"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Plant Images Gallery */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-stone-500 font-medium">Plant Images Gallery</Label>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl"
+                              onClick={() => {
+                                setEditingCardId(card.id)
+                                setImagePickerTarget("plant")
+                                setImagePickerOpen(true)
+                              }}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add Plant
+                            </Button>
+                          </div>
+                          {(card.plant_images && card.plant_images.length > 0) ? (
+                            <div className="flex flex-wrap gap-2">
+                              {card.plant_images.map((img, idx) => (
+                                <div key={idx} className="relative w-16 h-16 rounded-xl overflow-hidden group">
+                                  <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                                  <button
+                                    onClick={() => removePlantImage(card.id, idx)}
+                                    className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-stone-400">No plant images yet. Add some to show in the garden preview.</p>
+                          )}
+                        </div>
+
+                        {/* Link URL */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-stone-500">Link URL (optional)</Label>
+                          <Input
+                            value={card.link_url || ""}
+                            onChange={(e) => updateCard(card.id, { link_url: e.target.value })}
+                            className="rounded-xl"
+                            placeholder="/garden/example"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -2745,7 +2930,7 @@ const ShowcaseTab: React.FC<{
                 </div>
               </CardContent>
             </Card>
-          ))}
+          )})}
         </div>
       )}
 
@@ -2757,10 +2942,22 @@ const ShowcaseTab: React.FC<{
         }}
         onSelect={(url) => {
           if (editingCardId) {
-            updateCard(editingCardId, { image_url: url })
+            if (imagePickerTarget === "cover") {
+              updateCard(editingCardId, { cover_image_url: url })
+            } else if (imagePickerTarget === "plant") {
+              addPlantImage(editingCardId, url)
+            } else {
+              updateCard(editingCardId, { image_url: url })
+            }
           }
         }}
-        currentImage={editingCard?.image_url}
+        currentImage={
+          imagePickerTarget === "cover" 
+            ? editingCard?.cover_image_url 
+            : imagePickerTarget === "plant" 
+              ? null 
+              : editingCard?.image_url
+        }
       />
     </div>
   )
