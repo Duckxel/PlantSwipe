@@ -46,6 +46,12 @@ import {
   Mail,
   GraduationCap,
   HandHeart,
+  BarChart3,
+  Search,
+  Flame,
+  CheckCircle2,
+  CircleDot,
+  PawPrint,
 } from "lucide-react"
 
 // Icon mapping for dynamic rendering
@@ -53,7 +59,7 @@ const iconMap: Record<string, React.ElementType> = {
   Leaf, Droplets, Sun, Bell, BookMarked, Camera, NotebookPen, Wifi, Users, Check,
   Clock, TrendingUp, Shield, Heart, Globe, Zap, MessageCircle, Flower2,
   TreeDeciduous, Sprout, Star, Sparkles, Palette, Share2, Calendar, Target, Award, Lightbulb,
-  Instagram, Twitter, Mail, GraduationCap, HandHeart,
+  Instagram, Twitter, Mail, GraduationCap, HandHeart, BarChart3, Search, Flame, CheckCircle2, CircleDot, PawPrint,
 }
 
 // Types for database data
@@ -474,22 +480,24 @@ const HeroSection: React.FC = () => {
               {description}
             </p>
 
-            {/* CTA Buttons */}
+            {/* CTA Buttons - Enhanced with stronger visual emphasis */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <Link
                 to={ctaPrimaryLink}
-                className="group relative inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-emerald-500 text-white text-base font-semibold overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-0.5"
+                className="group relative inline-flex items-center justify-center gap-3 px-10 py-5 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-500 to-teal-500 text-white text-lg font-bold overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-1 animate-gradient"
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Leaf className="relative h-5 w-5" />
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity animate-gradient" />
+                <Sparkles className="relative h-5 w-5" />
                 <span className="relative">{ctaPrimaryText}</span>
+                <ArrowRight className="relative h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link
                 to={ctaSecondaryLink}
-                className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/80 dark:bg-white/10 backdrop-blur-sm text-stone-900 dark:text-white text-base font-semibold border border-stone-200 dark:border-white/20 hover:bg-white dark:hover:bg-white/20 transition-all duration-300 hover:-translate-y-0.5"
+                className="group inline-flex items-center justify-center gap-2 px-8 py-5 rounded-2xl bg-white/90 dark:bg-white/10 backdrop-blur-sm text-stone-900 dark:text-white text-base font-semibold border-2 border-emerald-500/30 dark:border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all duration-300 hover:-translate-y-0.5"
               >
+                <Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 <span>{ctaSecondaryText}</span>
-                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="h-4 w-4 text-emerald-600 dark:text-emerald-400 group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>
 
@@ -1116,7 +1124,7 @@ const HowItWorksSection: React.FC = () => {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   SHOWCASE SECTION - Enhanced
+   SHOWCASE SECTION - Enhanced with UI Previews
    ═══════════════════════════════════════════════════════════════════════════════ */
 const ShowcaseSection: React.FC = () => {
   const { t } = useTranslation("Landing")
@@ -1134,47 +1142,163 @@ const ShowcaseSection: React.FC = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {/* Main Dashboard Card */}
+          {/* Public Garden Card - Main Feature */}
           <div className="md:col-span-2 md:row-span-2 group relative rounded-3xl overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 to-teal-600" />
             <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-50" />
             <div className="relative h-full min-h-[400px] p-8 flex flex-col justify-between">
-              <span className="inline-flex self-start px-4 py-2 rounded-full bg-white/20 text-white text-sm font-medium backdrop-blur-sm">
-                {t("showcase.dashboardPreview")}
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 text-white text-sm font-medium backdrop-blur-sm">
+                  <Globe className="h-4 w-4" />
+                  {t("showcase.publicGardenPreview", { defaultValue: "Public Garden" })}
+                </span>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500/90 text-white text-xs font-semibold">
+                  <Flame className="h-3 w-3" />
+                  {t("showcase.publicGardenStreak", { defaultValue: "7 day streak" })}
+                </div>
+              </div>
+              
+              {/* Garden Preview UI */}
+              <div className="flex-1 flex items-center justify-center py-8">
+                <div className="grid grid-cols-4 gap-3">
+                  {[...Array(8)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-16 w-16 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center group-hover:scale-105 transition-transform"
+                      style={{ animationDelay: `${i * 0.1}s` }}
+                    >
+                      <Leaf className={`h-6 w-6 text-white/70 ${i % 3 === 0 ? 'rotate-12' : i % 3 === 1 ? '-rotate-12' : ''}`} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
               <div className="space-y-4">
-                <h3 className="text-3xl font-bold text-white">{t("showcase.dashboardTitle")}</h3>
-                <p className="text-white/80 max-w-md">{t("showcase.dashboardDescription")}</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex -space-x-2">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className={`h-8 w-8 rounded-full border-2 border-white/50 ${['bg-emerald-400', 'bg-teal-400', 'bg-green-400', 'bg-lime-400'][i]}`} />
+                    ))}
+                  </div>
+                  <span className="text-white/80 text-sm">{t("showcase.publicGardenPlants", { defaultValue: "12 plants" })}</span>
+                </div>
+                <h3 className="text-3xl font-bold text-white">{t("showcase.publicGardenTitle", { defaultValue: "Share your green space" })}</h3>
+                <p className="text-white/80 max-w-md">{t("showcase.publicGardenDescription", { defaultValue: "Create beautiful public gardens, showcase your plants, and inspire other gardeners in the community." })}</p>
               </div>
             </div>
           </div>
 
-          {/* Water Reminder Card */}
-          <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1">
-            <div className="h-12 w-12 rounded-xl bg-blue-500 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
-              <Droplets className="h-6 w-6 text-white" />
+          {/* Tasks Card - Watering Reminder with Task List */}
+          <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="h-12 w-12 rounded-xl bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
+                <Droplets className="h-6 w-6 text-white" />
+              </div>
+              <span className="px-2 py-1 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-medium">
+                {t("showcase.tasksText", { defaultValue: "3 plants need attention" })}
+              </span>
             </div>
-            <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.wateringReminder")}</p>
-            <p className="text-sm text-stone-600 dark:text-stone-400">{t("showcase.wateringText")}</p>
+            <p className="font-semibold text-stone-900 dark:text-white mb-3">{t("showcase.tasksReminder", { defaultValue: "Today's Tasks" })}</p>
+            
+            {/* Task List Preview */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                <span className="text-xs text-stone-600 dark:text-stone-400 line-through">{t("showcase.taskWater", { defaultValue: "Water your Pothos" })}</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
+                <CircleDot className="h-4 w-4 text-blue-500" />
+                <span className="text-xs text-stone-700 dark:text-stone-300">{t("showcase.taskFertilize", { defaultValue: "Fertilize Monstera" })}</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
+                <CircleDot className="h-4 w-4 text-blue-500" />
+                <span className="text-xs text-stone-700 dark:text-stone-300">{t("showcase.taskMist", { defaultValue: "Mist your Fern" })}</span>
+              </div>
+            </div>
           </div>
 
-          {/* Light Check Card */}
-          <div className="group rounded-3xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1">
-            <div className="h-12 w-12 rounded-xl bg-amber-500 flex items-center justify-center mb-4 shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">
-              <Sun className="h-6 w-6 text-white" />
+          {/* Analytics Card */}
+          <div className="group rounded-3xl bg-gradient-to-br from-purple-500/10 to-violet-500/10 border border-purple-500/20 p-6 hover:border-purple-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="h-12 w-12 rounded-xl bg-purple-500 flex items-center justify-center shadow-lg shadow-purple-500/30 group-hover:scale-110 transition-transform">
+                <BarChart3 className="h-6 w-6 text-white" />
+              </div>
             </div>
-            <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.lightCheck")}</p>
-            <p className="text-sm text-stone-600 dark:text-stone-400">{t("showcase.lightText")}</p>
+            <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</p>
+            <p className="text-xs text-stone-600 dark:text-stone-400 mb-4">{t("showcase.analyticsText", { defaultValue: "Track your garden's health" })}</p>
+            
+            {/* Mini Chart Preview */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-stone-500 dark:text-stone-400">Completion</span>
+                <span className="text-sm font-bold text-purple-600 dark:text-purple-400">{t("showcase.analyticsCompletion", { defaultValue: "92%" })}</span>
+              </div>
+              <div className="h-2 rounded-full bg-purple-500/20 overflow-hidden">
+                <div className="h-full w-[92%] rounded-full bg-gradient-to-r from-purple-500 to-violet-500" />
+              </div>
+              <div className="flex items-center gap-4 pt-2">
+                <div className="flex items-center gap-1">
+                  <Flame className="h-3 w-3 text-orange-500" />
+                  <span className="text-xs text-stone-600 dark:text-stone-400">{t("showcase.analyticsStreak", { defaultValue: "14 day streak" })}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3 text-emerald-500" />
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400">+12%</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Pet Safety Card */}
-          <div className="md:col-span-1 group rounded-3xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-500/20 p-6 hover:border-rose-500/40 transition-all duration-300 hover:-translate-y-1">
+          <div className="group rounded-3xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-500/20 p-6 hover:border-rose-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
             <div className="flex items-center gap-2 mb-4">
               <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
               <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t("showcase.toxicityAlert")}</span>
             </div>
-            <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.petWarning")}</p>
-            <p className="text-sm text-stone-600 dark:text-stone-400">{t("showcase.petWarningText")}</p>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                <PawPrint className="h-5 w-5 text-rose-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-stone-900 dark:text-white text-sm">{t("showcase.petWarning")}</p>
+                <p className="text-xs text-stone-600 dark:text-stone-400">{t("showcase.petWarningText")}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
+              <Shield className="h-4 w-4 text-rose-500" />
+              <span className="text-xs text-rose-600 dark:text-rose-400">Keep away from pets</span>
+            </div>
+          </div>
+
+          {/* Encyclopedia Card */}
+          <div className="md:col-span-2 group rounded-3xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <div className="flex-shrink-0">
+                <div className="h-14 w-14 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">
+                  <BookMarked className="h-7 w-7 text-white" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.encyclopediaTitle", { defaultValue: "Plant Encyclopedia" })}</p>
+                <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">{t("showcase.encyclopediaText", { defaultValue: "10,000+ species with care guides" })}</p>
+                
+                {/* Search Bar Preview */}
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/60 dark:bg-white/5 border border-amber-500/20 max-w-md">
+                  <Search className="h-4 w-4 text-stone-400" />
+                  <span className="text-sm text-stone-400">{t("showcase.encyclopediaSearch", { defaultValue: "Search any plant..." })}</span>
+                </div>
+              </div>
+              <div className="flex gap-2 md:ml-auto">
+                {[Leaf, Flower2, TreeDeciduous, Sprout].map((Icon, i) => (
+                  <div 
+                    key={i} 
+                    className="h-10 w-10 rounded-xl bg-white/60 dark:bg-white/5 border border-amber-500/10 flex items-center justify-center"
+                  >
+                    <Icon className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
