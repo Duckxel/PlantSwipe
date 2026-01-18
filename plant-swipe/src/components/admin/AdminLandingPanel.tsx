@@ -164,6 +164,16 @@ type ShowcaseCard = {
   link_url: string | null
   color: string
   is_active: boolean
+  selected_garden_ids: string[] | null
+}
+
+type PublicGardenOption = {
+  id: string
+  name: string
+  coverImageUrl: string | null
+  plantCount: number
+  streak: number
+  ownerDisplayName: string | null
 }
 
 type Testimonial = {
@@ -2579,6 +2589,63 @@ const ShowcaseTab: React.FC<{
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
   const [imagePickerTarget, setImagePickerTarget] = React.useState<"image" | "cover" | "plant">("image")
   const [expandedCardId, setExpandedCardId] = React.useState<string | null>(null)
+  const [publicGardens, setPublicGardens] = React.useState<PublicGardenOption[]>([])
+  const [loadingGardens, setLoadingGardens] = React.useState(false)
+  const [gardenSelectorOpen, setGardenSelectorOpen] = React.useState<string | null>(null)
+
+  // Fetch public gardens when component mounts
+  React.useEffect(() => {
+    const fetchPublicGardens = async () => {
+      setLoadingGardens(true)
+      try {
+        const { data, error } = await supabase
+          .from('gardens')
+          .select('id, name, cover_image_url, streak, created_by')
+          .eq('privacy', 'public')
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        if (!error && data) {
+          // Fetch plant counts
+          const gardenIds = data.map((g: any) => g.id)
+          const { data: plantCounts } = await supabase
+            .from('garden_plants')
+            .select('garden_id')
+            .in('garden_id', gardenIds)
+          
+          const countByGarden: Record<string, number> = {}
+          for (const p of plantCounts || []) {
+            countByGarden[p.garden_id] = (countByGarden[p.garden_id] || 0) + 1
+          }
+          
+          // Fetch owner names
+          const ownerIds = [...new Set(data.map((g: any) => g.created_by))]
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, display_name')
+            .in('id', ownerIds)
+          
+          const ownerNames: Record<string, string> = {}
+          for (const p of profiles || []) {
+            ownerNames[p.id] = p.display_name || ''
+          }
+          
+          setPublicGardens(data.map((g: any) => ({
+            id: g.id,
+            name: g.name,
+            coverImageUrl: g.cover_image_url,
+            plantCount: countByGarden[g.id] || 0,
+            streak: g.streak || 0,
+            ownerDisplayName: ownerNames[g.created_by] || null
+          })))
+        }
+      } catch (e) {
+        console.error('Failed to fetch public gardens:', e)
+      }
+      setLoadingGardens(false)
+    }
+    fetchPublicGardens()
+  }, [])
 
   const addCard = async () => {
     const newCard: Partial<ShowcaseCard> = {
@@ -2594,6 +2661,7 @@ const ShowcaseTab: React.FC<{
       streak_count: 7,
       progress_percent: 85,
       plant_images: [],
+      selected_garden_ids: [],
     }
 
     const { data, error } = await supabase
@@ -2646,6 +2714,21 @@ const ShowcaseTab: React.FC<{
     const currentImages = card.plant_images || []
     const newImages = currentImages.filter((_, i) => i !== index)
     updateCard(cardId, { plant_images: newImages })
+  }
+
+  const toggleGardenSelection = (cardId: string, gardenId: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const currentIds = card.selected_garden_ids || []
+    const newIds = currentIds.includes(gardenId)
+      ? currentIds.filter(id => id !== gardenId)
+      : [...currentIds, gardenId]
+    updateCard(cardId, { selected_garden_ids: newIds })
+  }
+
+  const getSelectedGardensInfo = (selectedIds: string[] | null) => {
+    if (!selectedIds || selectedIds.length === 0) return []
+    return publicGardens.filter(g => selectedIds.includes(g.id))
   }
 
   const editingCard = cards.find(c => c.id === editingCardId)
@@ -2769,6 +2852,113 @@ const ShowcaseTab: React.FC<{
                     {/* Expanded options for garden-type cards */}
                     {isExpanded && (
                       <div className="space-y-4 pt-4 border-t border-stone-200 dark:border-stone-700">
+                        {/* Select Public Gardens */}
+                        {card.card_type === "main" && (
+                          <div className="space-y-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <Label className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                                  Select Public Gardens to Showcase
+                                </Label>
+                                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                  Choose real gardens to display on the landing page
+                                </p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="rounded-xl border-emerald-300"
+                                onClick={() => setGardenSelectorOpen(gardenSelectorOpen === card.id ? null : card.id)}
+                              >
+                                {gardenSelectorOpen === card.id ? "Close" : "Select Gardens"}
+                              </Button>
+                            </div>
+
+                            {/* Selected Gardens Preview */}
+                            {(card.selected_garden_ids && card.selected_garden_ids.length > 0) && (
+                              <div className="flex flex-wrap gap-2">
+                                {getSelectedGardensInfo(card.selected_garden_ids).map(g => (
+                                  <div 
+                                    key={g.id} 
+                                    className="flex items-center gap-2 bg-white dark:bg-stone-800 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-700"
+                                  >
+                                    {g.coverImageUrl ? (
+                                      <img src={g.coverImageUrl} alt={g.name} className="w-6 h-6 rounded object-cover" />
+                                    ) : (
+                                      <div className="w-6 h-6 rounded bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center">
+                                        <Leaf className="h-3 w-3 text-emerald-600" />
+                                      </div>
+                                    )}
+                                    <span className="text-sm font-medium text-stone-700 dark:text-stone-200">{g.name}</span>
+                                    <span className="text-xs text-stone-500">{g.plantCount} plants</span>
+                                    <button
+                                      onClick={() => toggleGardenSelection(card.id, g.id)}
+                                      className="text-red-500 hover:text-red-600 ml-1"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Garden Selector Dropdown */}
+                            {gardenSelectorOpen === card.id && (
+                              <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 max-h-64 overflow-y-auto">
+                                {loadingGardens ? (
+                                  <div className="p-4 text-center text-stone-500">Loading gardens...</div>
+                                ) : publicGardens.length === 0 ? (
+                                  <div className="p-4 text-center text-stone-500">No public gardens found</div>
+                                ) : (
+                                  publicGardens.map(garden => {
+                                    const isSelected = card.selected_garden_ids?.includes(garden.id)
+                                    return (
+                                      <button
+                                        key={garden.id}
+                                        onClick={() => toggleGardenSelection(card.id, garden.id)}
+                                        className={`w-full flex items-center gap-3 p-3 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors border-b border-stone-100 dark:border-stone-700 last:border-0 ${
+                                          isSelected ? "bg-emerald-50 dark:bg-emerald-900/30" : ""
+                                        }`}
+                                      >
+                                        {garden.coverImageUrl ? (
+                                          <img src={garden.coverImageUrl} alt={garden.name} className="w-12 h-12 rounded-lg object-cover" />
+                                        ) : (
+                                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-800 dark:to-emerald-900 flex items-center justify-center">
+                                            <Leaf className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                          </div>
+                                        )}
+                                        <div className="flex-1 text-left">
+                                          <div className="font-medium text-stone-800 dark:text-stone-200">{garden.name}</div>
+                                          <div className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-2">
+                                            <span>{garden.plantCount} plants</span>
+                                            {garden.streak > 0 && <span>🔥 {garden.streak} streak</span>}
+                                            {garden.ownerDisplayName && <span>by {garden.ownerDisplayName}</span>}
+                                          </div>
+                                        </div>
+                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                          isSelected 
+                                            ? "bg-emerald-500 border-emerald-500 text-white" 
+                                            : "border-stone-300 dark:border-stone-600"
+                                        }`}>
+                                          {isSelected && <Check className="h-3 w-3" />}
+                                        </div>
+                                      </button>
+                                    )
+                                  })
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Manual Override Section */}
+                        <div className="text-xs text-stone-500 dark:text-stone-400">
+                          {card.card_type === "main" 
+                            ? "If no gardens selected above, these manual settings will be used:"
+                            : "Manual settings for this card:"
+                          }
+                        </div>
+
                         {/* Cover Image */}
                         <div className="space-y-2">
                           <Label className="text-xs text-stone-500 font-medium">Cover Image (Background)</Label>

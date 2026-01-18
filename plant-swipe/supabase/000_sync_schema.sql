@@ -8312,6 +8312,8 @@ create table if not exists public.landing_showcase_cards (
   link_url text,
   color text not null default 'emerald',
   is_active boolean not null default true,
+  -- Selected public gardens to showcase (array of garden IDs)
+  selected_garden_ids uuid[] default array[]::uuid[],
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

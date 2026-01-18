@@ -126,6 +126,23 @@ type ShowcaseCard = {
   link_url: string | null
   color: string
   is_active: boolean
+  selected_garden_ids: string[] | null
+}
+
+// Type for fetched garden data to display on landing page
+type ShowcaseGarden = {
+  id: string
+  name: string
+  coverImageUrl: string | null
+  streak: number
+  plantCount: number
+  previewPlants: Array<{
+    id: string
+    name: string
+    nickname: string | null
+    imageUrl: string | null
+  }>
+  ownerDisplayName: string | null
 }
 
 type LandingPageSettings = {
@@ -178,6 +195,7 @@ type LandingDataContextType = {
   circleFeatures: LandingFeature[]
   gridFeatures: LandingFeature[]
   showcaseCards: ShowcaseCard[]
+  showcaseGardens: ShowcaseGarden[]
   testimonials: Testimonial[]
   faqItems: FAQ[]
   settings: LandingPageSettings | null
@@ -190,6 +208,7 @@ const LandingDataContext = React.createContext<LandingDataContextType>({
   circleFeatures: [],
   gridFeatures: [],
   showcaseCards: [],
+  showcaseGardens: [],
   testimonials: [],
   faqItems: [],
   settings: null,
@@ -283,6 +302,7 @@ const LandingPage: React.FC = () => {
     circleFeatures: [],
     gridFeatures: [],
     showcaseCards: [],
+    showcaseGardens: [],
     testimonials: [],
     faqItems: [],
     settings: null,
@@ -321,12 +341,113 @@ const LandingPage: React.FC = () => {
         const testimonials = getData(results[5], [])
         const faqItems = getData(results[6], [])
         
+        // Collect all selected garden IDs from showcase cards
+        const allSelectedGardenIds = (showcaseCards || [])
+          .flatMap(card => card.selected_garden_ids || [])
+          .filter((id, idx, arr) => arr.indexOf(id) === idx) // dedupe
+        
+        // Fetch garden data if there are selected gardens
+        let showcaseGardens: ShowcaseGarden[] = []
+        if (allSelectedGardenIds.length > 0) {
+          try {
+            // Fetch gardens
+            const { data: gardens } = await supabase
+              .from('gardens')
+              .select('id, name, cover_image_url, streak, created_by')
+              .in('id', allSelectedGardenIds)
+            
+            if (gardens && gardens.length > 0) {
+              // Fetch plant data for each garden
+              const { data: gardenPlants } = await supabase
+                .from('garden_plants')
+                .select('id, garden_id, plant_id, nickname, sort_index')
+                .in('garden_id', allSelectedGardenIds)
+                .order('sort_index', { ascending: true })
+              
+              // Group plants by garden
+              const plantsByGarden: Record<string, any[]> = {}
+              for (const gp of gardenPlants || []) {
+                const gid = String(gp.garden_id)
+                if (!plantsByGarden[gid]) plantsByGarden[gid] = []
+                plantsByGarden[gid].push(gp)
+              }
+              
+              // Fetch plant images
+              const allPlantIds = [...new Set((gardenPlants || []).map(p => String(p.plant_id)))]
+              const plantsMap: Record<string, { name: string; imageUrl: string | null }> = {}
+              
+              if (allPlantIds.length > 0) {
+                const { data: plantRows } = await supabase
+                  .from('plants')
+                  .select('id, common_name, plant_images(link, use)')
+                  .in('id', allPlantIds)
+                
+                if (plantRows) {
+                  for (const p of plantRows) {
+                    const images = Array.isArray((p as any).plant_images) ? (p as any).plant_images : []
+                    const primaryImg = images.find((img: any) => img.use === 'primary')
+                    const imageUrl = primaryImg?.link || images[0]?.link || null
+                    plantsMap[String(p.id)] = {
+                      name: (p as any).common_name || '',
+                      imageUrl
+                    }
+                  }
+                }
+              }
+              
+              // Fetch owner names
+              const ownerIds = [...new Set(gardens.map(g => String(g.created_by)))]
+              const ownerNames: Record<string, string> = {}
+              if (ownerIds.length > 0) {
+                const { data: profiles } = await supabase
+                  .from('profiles')
+                  .select('id, display_name')
+                  .in('id', ownerIds)
+                if (profiles) {
+                  for (const p of profiles) {
+                    ownerNames[p.id] = p.display_name || ''
+                  }
+                }
+              }
+              
+              // Build showcase gardens
+              showcaseGardens = gardens.map((g: any) => {
+                const gid = String(g.id)
+                const gardenPlantsList = plantsByGarden[gid] || []
+                const previewPlants = gardenPlantsList.slice(0, 6).map((gp: any) => {
+                  const plantId = String(gp.plant_id)
+                  const plantData = plantsMap[plantId] || { name: '', imageUrl: null }
+                  return {
+                    id: String(gp.id),
+                    name: plantData.name,
+                    nickname: gp.nickname || null,
+                    imageUrl: plantData.imageUrl
+                  }
+                })
+                
+                return {
+                  id: gid,
+                  name: String(g.name),
+                  coverImageUrl: g.cover_image_url || null,
+                  streak: Number(g.streak ?? 0),
+                  plantCount: gardenPlantsList.length,
+                  previewPlants,
+                  ownerDisplayName: ownerNames[String(g.created_by)] || null
+                }
+              })
+            }
+          } catch (gardenErr) {
+            console.error("Failed to load showcase gardens:", gardenErr)
+          }
+        }
+        
         setLandingData({
           heroCards: heroCards || [],
           stats: stats || null,
           circleFeatures: features.filter((f: LandingFeature) => f.is_in_circle),
           gridFeatures: features.filter((f: LandingFeature) => !f.is_in_circle),
           showcaseCards: showcaseCards || [],
+          showcaseGardens,
           testimonials: testimonials || [],
           faqItems: faqItems || [],
           settings: settings || null,
@@ -1155,7 +1276,7 @@ const HowItWorksSection: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const ShowcaseSection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { showcaseCards } = useLandingData()
+  const { showcaseCards, showcaseGardens } = useLandingData()
 
   // Default chart data for analytics preview
   const chartData = [
@@ -1173,8 +1294,164 @@ const ShowcaseSection: React.FC = () => {
   const analyticsCard = showcaseCards.find(c => c.card_type === 'analytics')
   const tasksCard = showcaseCards.find(c => c.card_type === 'tasks')
 
-  // Helper to render a garden dashboard card
-  const renderGardenCard = (card: ShowcaseCard | undefined) => {
+  // Get selected gardens for the main card
+  const selectedGardenIds = mainCard?.selected_garden_ids || []
+  const selectedGardens = selectedGardenIds
+    .map(id => showcaseGardens.find(g => g.id === id))
+    .filter((g): g is ShowcaseGarden => g !== undefined)
+
+  // Helper to render a single real garden card
+  const renderRealGardenCard = (garden: ShowcaseGarden, _index: number, isLarge: boolean = true) => {
+    const gardenName = garden.name
+    const plantsCount = garden.plantCount
+    const streakCount = garden.streak
+    const coverImage = garden.coverImageUrl
+    const previewPlants = garden.previewPlants
+    const progressPercent = 85 // Default progress for display
+
+    return (
+      <Link
+        key={garden.id}
+        to={`/garden/${garden.id}`}
+        className={`group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 block ${
+          isLarge ? 'md:col-span-2 md:row-span-2' : ''
+        }`}
+      >
+        {/* Hero Section with cover image */}
+        <div className="relative overflow-hidden">
+          {coverImage ? (
+            <>
+              <div className="absolute inset-0">
+                <img src={coverImage} alt={gardenName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+              </div>
+              <div className={`relative z-10 p-6 ${isLarge ? 'md:p-8 min-h-[200px]' : 'min-h-[140px]'} flex flex-col justify-end`}>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                  <div className="space-y-3">
+                    <h3 className={`${isLarge ? 'text-2xl md:text-3xl' : 'text-xl'} font-bold text-white drop-shadow-lg`}>
+                      {gardenName}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                        <span className="text-base">🌱</span>
+                        <span className="font-semibold text-white text-sm">{plantsCount}</span>
+                        <span className="text-xs text-white/80">plants</span>
+                      </div>
+                      {streakCount > 0 && (
+                        <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                          <span className="text-base">🔥</span>
+                          <span className="font-semibold text-white text-sm">{streakCount}</span>
+                          <span className="text-xs text-white/80">day streak</span>
+                        </div>
+                      )}
+                    </div>
+                    {garden.ownerDisplayName && (
+                      <div className="text-xs text-white/70">by {garden.ownerDisplayName}</div>
+                    )}
+                  </div>
+                  {isLarge && (
+                    <div className="flex items-center gap-3">
+                      <div className="relative w-16 h-16">
+                        <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                          <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
+                          <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-lg" />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-lg font-bold text-white">{progressPercent}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
+              <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
+              <div className={`relative z-10 p-6 ${isLarge ? 'md:p-8' : ''}`}>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="space-y-3">
+                    <h3 className={`${isLarge ? 'text-2xl md:text-3xl' : 'text-xl'} font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent`}>
+                      {gardenName}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
+                        <span className="text-base">🌱</span>
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">{plantsCount}</span>
+                        <span className="text-xs text-stone-600 dark:text-stone-300">plants</span>
+                      </div>
+                      {streakCount > 0 && (
+                        <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
+                          <span className="text-base">🔥</span>
+                          <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{streakCount}</span>
+                          <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
+                        </div>
+                      )}
+                    </div>
+                    {garden.ownerDisplayName && (
+                      <div className="text-xs text-stone-500 dark:text-stone-400">by {garden.ownerDisplayName}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Plants Gallery - Show real plant images */}
+        {isLarge && (
+          <div className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
+                <span>🌿</span> Plants in Garden
+              </h4>
+              <span className="text-xs text-stone-500">{plantsCount} plants</span>
+            </div>
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+              {previewPlants.length > 0 ? (
+                previewPlants.slice(0, 6).map((plant) => (
+                  <div key={plant.id} className="relative aspect-square rounded-2xl overflow-hidden group/plant border border-stone-200/50 dark:border-stone-700/50">
+                    {plant.imageUrl ? (
+                      <img src={plant.imageUrl} alt={plant.nickname || plant.name} className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+                        <Leaf className="h-6 w-6 text-white/60" />
+                      </div>
+                    )}
+                    {plant.nickname && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                        <span className="text-[9px] text-white font-medium truncate block">{plant.nickname}</span>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                [1, 2, 3, 4, 5, 6].map((_, i) => (
+                  <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
+                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+                      <Leaf className="h-6 w-6 text-white/60" />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Badge */}
+        <div className="absolute top-3 left-3">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
+            <Globe className="h-3 w-3" />
+            Public Garden
+          </span>
+        </div>
+      </Link>
+    )
+  }
+
+  // Helper to render a manual garden card (fallback when no gardens selected)
+  const renderManualGardenCard = (card: ShowcaseCard | undefined) => {
     const gardenName = card?.garden_name || "My Indoor Jungle"
     const plantsCount = card?.plants_count || 12
     const speciesCount = card?.species_count || 8
@@ -1284,7 +1561,7 @@ const ShowcaseSection: React.FC = () => {
         {/* Plants Gallery */}
         <div className="p-5">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="font-semibold text-sm flex items-center gap-2">
+            <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
               <span>🌿</span> Plants in Garden
             </h4>
             <span className="text-xs text-stone-500">{plantsCount} plants</span>
@@ -1340,6 +1617,30 @@ const ShowcaseSection: React.FC = () => {
     )
   }
 
+  // Render garden cards - use selected gardens if available, otherwise fall back to manual
+  const renderGardenShowcase = () => {
+    if (selectedGardens.length > 0) {
+      // Show selected real gardens
+      if (selectedGardens.length === 1) {
+        // Single garden - show large
+        return renderRealGardenCard(selectedGardens[0], 0, true)
+      } else {
+        // Multiple gardens - show in a grid
+        return (
+          <div className="md:col-span-2 md:row-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {selectedGardens.slice(0, 4).map((garden, i) => (
+              <div key={garden.id} className={i === 0 ? 'md:col-span-2' : ''}>
+                {renderRealGardenCard(garden, i, i === 0)}
+              </div>
+            ))}
+          </div>
+        )
+      }
+    }
+    // Fall back to manual card
+    return renderManualGardenCard(mainCard)
+  }
+
   return (
     <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-stone-100/50 to-transparent dark:via-stone-900/30">
       <div className="max-w-7xl mx-auto">
@@ -1353,8 +1654,8 @@ const ShowcaseSection: React.FC = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {/* Garden Dashboard Card */}
-          {renderGardenCard(mainCard)}
+          {/* Garden Dashboard Card(s) - uses selected real gardens or manual fallback */}
+          {renderGardenShowcase()}
 
           {/* Tasks Card */}
           <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
