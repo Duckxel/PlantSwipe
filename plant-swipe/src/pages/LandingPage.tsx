@@ -1124,10 +1124,21 @@ const HowItWorksSection: React.FC = () => {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   SHOWCASE SECTION - Enhanced with Realistic UI Previews
+   SHOWCASE SECTION - Realistic UI Previews matching actual app components
    ═══════════════════════════════════════════════════════════════════════════════ */
 const ShowcaseSection: React.FC = () => {
   const { t } = useTranslation("Landing")
+
+  // Animated chart data for the analytics preview
+  const [chartData] = React.useState([
+    { day: 'M', completed: 3, due: 4 },
+    { day: 'T', completed: 5, due: 5 },
+    { day: 'W', completed: 2, due: 4 },
+    { day: 'T', completed: 6, due: 6 },
+    { day: 'F', completed: 4, due: 5 },
+    { day: 'S', completed: 5, due: 5 },
+    { day: 'S', completed: 6, due: 6 },
+  ])
 
   return (
     <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-stone-100/50 to-transparent dark:via-stone-900/30">
@@ -1142,87 +1153,101 @@ const ShowcaseSection: React.FC = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {/* Public Garden Card - Realistic UI Preview */}
-          <div className="md:col-span-2 md:row-span-2 group relative rounded-3xl overflow-hidden cursor-pointer">
-            {/* Cover Image Background - mimicking PublicGardenCard */}
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600 dark:from-emerald-700 dark:via-teal-800 dark:to-cyan-900">
-              {/* Decorative pattern overlay like PublicGardenCard */}
-              <div className="absolute inset-0 opacity-20">
-                <div className="absolute top-8 right-8 w-32 h-32 rounded-full border-2 border-white/30" />
-                <div className="absolute bottom-24 left-12 w-20 h-20 rounded-full border-2 border-white/20" />
-                <div className="absolute top-1/3 left-1/4 w-12 h-12 rounded-full bg-white/10" />
-              </div>
-              {/* Garden icon in center */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <TreeDeciduous 
-                  className="h-32 w-32 text-white/20 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500"
-                />
-              </div>
-            </div>
-            
-            {/* Gradient overlay for text legibility */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-            
-            {/* Streak badge - top right like PublicGardenCard */}
-            <div className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/90 backdrop-blur-sm text-white text-sm font-semibold shadow-lg group-hover:scale-105 transition-transform">
-              <Flame className="h-4 w-4" />
-              <span>7</span>
-            </div>
+          {/* Garden Dashboard Card - Realistic /garden/id UI */}
+          <div className="md:col-span-2 md:row-span-2 group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]">
+            {/* Hero Section - matching GardenDashboardPage OverviewSection */}
+            <div className="relative overflow-hidden bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+              {/* Decorative blurs */}
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
+              <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
+              
+              <div className="relative z-10 p-6 md:p-8">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="space-y-3">
+                    <h3 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+                      My Indoor Jungle
+                    </h3>
+                    {/* Stats badges - exactly like the real UI */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
+                        <span className="text-base">🌱</span>
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">12</span>
+                        <span className="text-xs text-stone-600 dark:text-stone-300">{t("showcase.publicGardenPlants", { defaultValue: "plants" }).split(' ').pop()}</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
+                        <span className="text-base">🔥</span>
+                        <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">7</span>
+                        <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-stone-200/50 dark:border-stone-500/20">
+                        <span className="text-base">🌿</span>
+                        <span className="font-semibold text-stone-700 dark:text-stone-300 text-sm">8</span>
+                        <span className="text-xs text-stone-600 dark:text-stone-300">species</span>
+                      </div>
+                    </div>
+                  </div>
 
-            {/* Badge - top left */}
-            <div className="absolute top-4 left-4">
-              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 text-white text-sm font-medium backdrop-blur-sm">
-                <Globe className="h-4 w-4" />
-                {t("showcase.publicGardenPreview", { defaultValue: "Public Garden" })}
-              </span>
-            </div>
-            
-            {/* Plant preview bubbles - bottom right like PublicGardenCard */}
-            <div className="absolute bottom-20 right-6 flex items-center group-hover:-translate-y-1 transition-transform duration-500">
-              {['bg-emerald-400', 'bg-teal-400', 'bg-green-400', 'bg-lime-400'].map((color, idx) => (
-                <div
-                  key={idx}
-                  className={`relative rounded-full overflow-hidden border-2 border-white dark:border-stone-800 shadow-lg ${color}`}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    marginLeft: idx === 0 ? 0 : -12,
-                    zIndex: 4 - idx,
-                  }}
-                >
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Leaf className="h-5 w-5 text-white/80" />
+                  {/* Progress Ring - exactly like the real UI */}
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-16 h-16">
+                      <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                        <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" className="text-stone-200 dark:text-stone-700" strokeWidth="6" />
+                        <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(85 / 100) * 163.4} 163.4`} className="drop-shadow-sm" />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">85%</span>
+                      </div>
+                    </div>
+                    <div className="hidden sm:block">
+                      <div className="text-xs text-stone-500 dark:text-stone-400">Today's progress</div>
+                      <div className="font-semibold text-stone-700 dark:text-stone-200 text-sm">6/7 tasks done</div>
+                    </div>
                   </div>
                 </div>
-              ))}
-              <div
-                className="relative flex items-center justify-center rounded-full bg-stone-800/90 text-white text-xs font-medium border-2 border-white shadow-lg"
-                style={{ width: 40, height: 40, marginLeft: -12, zIndex: 0 }}
-              >
-                +8
               </div>
-            </div>
-            
-            {/* Garden name and info - bottom left like PublicGardenCard */}
-            <div className="absolute bottom-0 inset-x-0 p-6">
-              <h3 className="font-bold text-white text-2xl leading-tight drop-shadow-md group-hover:-translate-y-1 transition-transform duration-300 mb-2">
-                My Indoor Jungle
-              </h3>
-              <div className="flex items-center gap-2 text-white/80 text-sm mb-4">
-                <Sprout className="h-4 w-4" />
-                <span>{t("showcase.publicGardenPlants", { defaultValue: "12 plants" })}</span>
-              </div>
-              <p className="text-white/70 text-sm max-w-md">{t("showcase.publicGardenDescription", { defaultValue: "Create beautiful public gardens, showcase your plants, and inspire other gardeners in the community." })}</p>
             </div>
 
-            {/* Hover glow effect like PublicGardenCard */}
-            <div 
-              className="absolute -inset-1 rounded-3xl transition-opacity duration-500 pointer-events-none -z-10 opacity-0 group-hover:opacity-100"
-              style={{
-                background: 'radial-gradient(circle at 50% 80%, rgba(16, 185, 129, 0.35) 0%, transparent 60%)',
-                filter: 'blur(12px)',
-              }}
-            />
+            {/* Plants Gallery - matching the real garden dashboard */}
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-sm flex items-center gap-2">
+                  <span>🌿</span> Plants in Garden
+                </h4>
+                <span className="text-xs text-stone-500">12 plants</span>
+              </div>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {[
+                  { color: 'from-emerald-400 to-teal-500', name: 'Monstera' },
+                  { color: 'from-green-400 to-emerald-500', name: 'Pothos' },
+                  { color: 'from-lime-400 to-green-500', name: 'Fern' },
+                  { color: 'from-teal-400 to-cyan-500', name: 'Snake Plant' },
+                  { color: 'from-emerald-500 to-green-600', name: 'Philodendron' },
+                  { color: 'from-green-500 to-teal-600', name: 'Peace Lily' },
+                ].map((plant, i) => (
+                  <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
+                    <div className={`absolute inset-0 bg-gradient-to-br ${plant.color}`}>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Leaf className="h-6 w-6 text-white/60" />
+                      </div>
+                    </div>
+                    {/* Task badge */}
+                    {i < 2 && (
+                      <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">
+                        {i + 1}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Badge */}
+            <div className="absolute top-3 left-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
+                <Globe className="h-3 w-3" />
+                Garden Dashboard
+              </span>
+            </div>
           </div>
 
           {/* Tasks Card - Watering Reminder with Task List */}
@@ -1254,81 +1279,120 @@ const ShowcaseSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Analytics Card - Realistic UI like GardenAnalyticsSection */}
+          {/* Analytics Card - Realistic UI with actual SVG chart like GardenAnalyticsSection */}
           <div className="group rounded-[28px] bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur border border-stone-200/70 dark:border-[#3e3e42]/70 p-5 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart3 className="w-5 h-5 text-emerald-500" />
-              <span className="font-semibold text-stone-900 dark:text-white text-sm">{t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</span>
+            {/* Header with tabs - like real analytics */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-emerald-500" />
+                <span className="font-semibold text-stone-900 dark:text-white text-sm">{t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</span>
+              </div>
+              <div className="flex bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5">
+                <span className="px-2 py-1 text-[10px] font-medium rounded-md bg-white dark:bg-stone-700 shadow-sm text-emerald-600 dark:text-emerald-400">Overview</span>
+                <span className="px-2 py-1 text-[10px] font-medium text-stone-500">Tasks</span>
+              </div>
             </div>
             
-            {/* Mini Stats Grid - mimicking GardenAnalyticsSection */}
+            {/* Stats Grid - exactly like GardenAnalyticsSection */}
             <div className="grid grid-cols-2 gap-2 mb-4">
-              {/* Completion Rate Card */}
-              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-3 relative overflow-hidden">
-                <div className="absolute -right-2 -top-2 w-12 h-12 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-xl" />
+              {/* Completion Rate */}
+              <div className="rounded-[20px] bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-3 relative overflow-hidden border border-stone-200/50 dark:border-stone-700/50">
+                <div className="absolute -right-3 -top-3 w-16 h-16 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-2xl" />
                 <div className="relative">
                   <div className="flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-300 mb-1">
                     <Target className="w-3 h-3" />
-                    <span>Completion</span>
+                    <span>Completion Rate</span>
                   </div>
-                  <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">92%</div>
-                  <div className="flex items-center gap-0.5 text-[9px] text-emerald-500">
-                    <TrendingUp className="w-2.5 h-2.5" />
-                    <span>+8%</span>
+                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">92%</div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <TrendingUp className="w-3 h-3 text-emerald-500" />
+                    <span className="text-[10px] text-emerald-500">+8%</span>
+                    <span className="text-[9px] text-stone-400">vs last week</span>
                   </div>
                 </div>
               </div>
               
-              {/* Streak Card */}
-              <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 p-3 relative overflow-hidden">
-                <div className="absolute -right-2 -top-2 w-12 h-12 bg-orange-200/30 dark:bg-orange-500/10 rounded-full blur-xl" />
+              {/* Streak */}
+              <div className="rounded-[20px] bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 p-3 relative overflow-hidden border border-stone-200/50 dark:border-stone-700/50">
+                <div className="absolute -right-3 -top-3 w-16 h-16 bg-orange-200/30 dark:bg-orange-500/10 rounded-full blur-2xl" />
                 <div className="relative">
                   <div className="flex items-center gap-1 text-[10px] text-orange-700 dark:text-orange-300 mb-1">
                     <Flame className="w-3 h-3" />
-                    <span>Streak</span>
+                    <span>Current Streak</span>
                   </div>
-                  <div className="text-xl font-bold text-orange-600 dark:text-orange-400">14</div>
-                  <div className="text-[9px] text-stone-500">Best: 21 days</div>
+                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">14</div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">Best: 21 days</div>
                 </div>
               </div>
             </div>
 
-            {/* Mini Activity Chart Preview */}
-            <div className="rounded-2xl bg-stone-50 dark:bg-stone-800/50 p-3 mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-stone-500 dark:text-stone-400 flex items-center gap-1">
+            {/* Activity Chart - Real SVG chart like GardenAnalyticsSection */}
+            <div className="rounded-[20px] bg-stone-50 dark:bg-stone-800/50 p-3 border border-stone-200/50 dark:border-stone-700/50">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] text-stone-600 dark:text-stone-400 flex items-center gap-1 font-medium">
                   <Calendar className="w-3 h-3" />
-                  Activity
+                  Activity History
                 </span>
                 <span className="text-[9px] text-stone-400">Last 7 days</span>
               </div>
-              {/* Mini Bar Chart */}
-              <div className="flex items-end justify-between gap-1 h-12">
-                {[65, 80, 45, 90, 70, 85, 95].map((height, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div 
-                      className="w-full rounded-sm bg-gradient-to-t from-emerald-500 to-teal-400"
-                      style={{ height: `${height}%` }}
-                    />
-                    <span className="text-[8px] text-stone-400">{['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}</span>
-                  </div>
-                ))}
+              
+              {/* SVG Line/Area Chart - mimicking Recharts */}
+              <div className="relative h-20">
+                <svg viewBox="0 0 280 80" className="w-full h-full" preserveAspectRatio="none">
+                  {/* Grid lines */}
+                  <defs>
+                    <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  
+                  {/* Area fill */}
+                  <path
+                    d="M 0,50 L 40,35 L 80,55 L 120,20 L 160,40 L 200,25 L 240,15 L 280,10 L 280,80 L 0,80 Z"
+                    fill="url(#areaGradient)"
+                  />
+                  
+                  {/* Line */}
+                  <path
+                    d="M 0,50 L 40,35 L 80,55 L 120,20 L 160,40 L 200,25 L 240,15 L 280,10"
+                    fill="none"
+                    stroke="#10b981"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  
+                  {/* Data points */}
+                  {[[0, 50], [40, 35], [80, 55], [120, 20], [160, 40], [200, 25], [240, 15], [280, 10]].map(([x, y], i) => (
+                    <circle key={i} cx={x} cy={y} r="3" fill="#10b981" className="drop-shadow-sm" />
+                  ))}
+                </svg>
+                
+                {/* X-axis labels */}
+                <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1 -mb-4">
+                  {chartData.map((d, i) => (
+                    <span key={i} className="text-[8px] text-stone-400">{d.day}</span>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Task Type Legend */}
-            <div className="flex flex-wrap gap-2">
-              {[
-                { color: 'bg-blue-500', label: 'Water' },
-                { color: 'bg-emerald-500', label: 'Fertilize' },
-                { color: 'bg-amber-500', label: 'Harvest' },
-              ].map(({ color, label }) => (
-                <div key={label} className="flex items-center gap-1">
-                  <div className={`w-2 h-2 rounded-full ${color}`} />
-                  <span className="text-[9px] text-stone-500 dark:text-stone-400">{label}</span>
-                </div>
-              ))}
+            {/* Task breakdown - like the real pie chart legend */}
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
+              <div className="flex gap-3">
+                {[
+                  { color: 'bg-blue-500', label: 'Water', count: 12 },
+                  { color: 'bg-green-500', label: 'Fertilize', count: 4 },
+                  { color: 'bg-amber-500', label: 'Other', count: 3 },
+                ].map(({ color, label, count }) => (
+                  <div key={label} className="flex items-center gap-1.5">
+                    <div className={`w-2 h-2 rounded-full ${color}`} />
+                    <span className="text-[9px] text-stone-600 dark:text-stone-400">{label}</span>
+                    <span className="text-[9px] font-medium text-stone-900 dark:text-white">{count}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
