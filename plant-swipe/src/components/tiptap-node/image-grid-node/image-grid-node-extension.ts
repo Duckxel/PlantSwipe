@@ -7,6 +7,11 @@ export type GridGap = "none" | "sm" | "md" | "lg"
 
 export interface ImageGridNodeOptions {
   HTMLAttributes: Record<string, unknown>
+  /**
+   * The folder to upload images to.
+   * @default 'image-grids'
+   */
+  uploadFolder?: string
 }
 
 export interface ImageGridImage {
@@ -104,6 +109,13 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
   addOptions() {
     return {
       HTMLAttributes: {},
+      uploadFolder: 'image-grids',
+    }
+  },
+
+  addStorage() {
+    return {
+      uploadFolder: this.options.uploadFolder || 'image-grids',
     }
   },
 

@@ -1,8 +1,11 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useMemo } from "react"
 import { Plus, Trash2, Image as ImageIcon } from "lucide-react"
 import type { GridColumns, GridGap, ImageGridImage } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
+
+// Default upload folder if not configured
+const DEFAULT_UPLOAD_FOLDER = "image-grids"
 
 const GAP_OPTIONS: { value: GridGap; label: string }[] = [
   { value: "none", label: "None" },
@@ -11,7 +14,7 @@ const GAP_OPTIONS: { value: GridGap; label: string }[] = [
   { value: "lg", label: "Large" },
 ]
 
-export function ImageGridNode({ node, updateAttributes, selected }: NodeViewProps) {
+export function ImageGridNode({ node, updateAttributes, selected, editor }: NodeViewProps) {
   const attrs = node.attrs as {
     images: ImageGridImage[] | undefined
     columns: GridColumns
@@ -22,6 +25,15 @@ export function ImageGridNode({ node, updateAttributes, selected }: NodeViewProp
   // Ensure images is always an array
   const images = Array.isArray(attrs.images) ? attrs.images : []
   const { columns = 2, gap = "md", rounded = true } = attrs
+
+  // Get upload folder from extension storage, fallback to default
+  const uploadFolder = useMemo(() => {
+    try {
+      return editor?.storage?.imageGrid?.uploadFolder || DEFAULT_UPLOAD_FOLDER
+    } catch {
+      return DEFAULT_UPLOAD_FOLDER
+    }
+  }, [editor])
 
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -48,7 +60,7 @@ export function ImageGridNode({ node, updateAttributes, selected }: NodeViewProp
         }
 
         try {
-          const url = await handleImageUpload(file, undefined, undefined, { folder: "email-templates" })
+          const url = await handleImageUpload(file, undefined, undefined, { folder: uploadFolder })
           newImages.push({ src: url, alt: file.name })
         } catch (error) {
           console.error("Failed to upload image:", error)
@@ -64,7 +76,7 @@ export function ImageGridNode({ node, updateAttributes, selected }: NodeViewProp
         fileInputRef.current.value = ""
       }
     },
-    [images, updateAttributes]
+    [images, updateAttributes, uploadFolder]
   )
 
   const removeImage = useCallback(
