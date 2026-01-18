@@ -5,3 +5,7 @@
 ## 2024-05-23 - Swipe Keyboard Navigation
 **Learning:** The keyboard navigation for the swipe interface was inverted (Left Arrow triggered "Next", Right Arrow triggered "Back"). This clashed with standard desktop patterns and the visual layout of the buttons.
 **Action:** Ensure keyboard shortcuts map to the visual direction of the UI controls (Left Key = Left Button/Back, Right Key = Right Button/Next).
+
+## 2025-05-23 - Built-in Button Loading State
+**Learning:** Manually adding spinners to buttons leads to inconsistent spacing and layout shifts, especially with icon-only buttons.
+**Action:** Extend the base `Button` component to accept a `loading` prop that handles spinner placement, disables interaction, and intelligently replaces content for icon buttons.
