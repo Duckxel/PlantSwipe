@@ -125,11 +125,11 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       switch (e.key) {
         case "ArrowLeft":
           e.preventDefault()
-          handlePass()
+          handlePrevious()
           break
         case "ArrowRight":
           e.preventDefault()
-          handlePrevious()
+          handlePass()
           break
         case "ArrowUp":
           e.preventDefault()
@@ -259,6 +259,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               }}
               onPointerDown={(e) => e.stopPropagation()}
               aria-label={t("plant.back")}
+              title={`${t("plant.back")} (Left Arrow)`}
             >
               {isDesktop ? (
                 <>
@@ -288,6 +289,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               }}
               onPointerDown={(e) => e.stopPropagation()}
               aria-label={t("plant.next")}
+              title={`${t("plant.next")} (Right Arrow)`}
             >
               {isDesktop ? (
                 <>
