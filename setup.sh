@@ -307,7 +307,7 @@ fi
 
 log "Installing base packages…"
 $PM_UPDATE
-$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd certbot python3-certbot-nginx
+$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd certbot python3-certbot-nginx unzip
 
 # Ensure global AWS RDS CA bundle for TLS to Supabase Postgres
 log "Installing AWS RDS global CA bundle for TLS…"
@@ -521,7 +521,7 @@ render_service_env() {
   {
     for k in "${!kv[@]}"; do printf "%s=%s\n" "$k" "${kv[$k]}"; done | sort
   } > "$tmp"
-  $SUDO install -m 0640 "$tmp" "$out"
+  $SUDO install -m 0640 -o root -g "$SERVICE_USER" "$tmp" "$out"
   rm -f "$tmp"
 }
 
@@ -532,37 +532,99 @@ render_service_env "$SERVICE_ENV_FILE"
 need_bun_install=false
 need_node_install=false
 
-# Check for Bun
-if ! command -v bun >/dev/null 2>&1; then
+# Check for Bun - look in multiple locations
+BUN_SYSTEM_PATH="/usr/local/bin/bun"
+BUN_ROOT_PATH="$HOME/.bun/bin/bun"
+SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+BUN_SERVICE_PATH="$SERVICE_HOME/.bun/bin/bun"
+
+find_bun() {
+  if command -v bun >/dev/null 2>&1; then
+    command -v bun
+    return 0
+  elif [[ -x "$BUN_SYSTEM_PATH" ]]; then
+    echo "$BUN_SYSTEM_PATH"
+    return 0
+  elif [[ -x "$BUN_ROOT_PATH" ]]; then
+    echo "$BUN_ROOT_PATH"
+    return 0
+  elif [[ -x "$BUN_SERVICE_PATH" ]]; then
+    echo "$BUN_SERVICE_PATH"
+    return 0
+  fi
+  return 1
+}
+
+BUN_BIN="$(find_bun || true)"
+if [[ -z "$BUN_BIN" ]]; then
   need_bun_install=true
 else
-  bun_ver_raw="$(bun --version 2>/dev/null || echo 0.0.0)"
+  bun_ver_raw="$("$BUN_BIN" --version 2>/dev/null || echo 0.0.0)"
   bun_major="${bun_ver_raw%%.*}"
   if [[ -z "$bun_major" || "$bun_major" -lt 1 ]]; then
     need_bun_install=true
   else
-    log "Bun is already installed (v$bun_ver_raw)."
+    log "Bun is already installed (v$bun_ver_raw) at $BUN_BIN."
   fi
 fi
 
 # Install Bun if needed
 if $need_bun_install; then
   log "Installing Bun (fast JavaScript runtime and package manager)…"
-  # Install Bun system-wide
-  curl -fsSL https://bun.sh/install | bash
+  
+  # Install Bun for root user first
+  if ! curl -fsSL https://bun.sh/install | bash; then
+    log "[WARN] Bun installation for root failed. Retrying with BUN_INSTALL set…"
+    export BUN_INSTALL="$HOME/.bun"
+    curl -fsSL https://bun.sh/install | BUN_INSTALL="$HOME/.bun" bash || true
+  fi
+  
   # Add Bun to PATH for current session
-  export BUN_INSTALL="$HOME/.bun"
+  export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
   export PATH="$BUN_INSTALL/bin:$PATH"
-  # Also install for service user
+  
+  # Install Bun for service user (important for running bun as www-data)
   if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
     log "Installing Bun for service user $SERVICE_USER…"
-    sudo -u "$SERVICE_USER" -H bash -c 'curl -fsSL https://bun.sh/install | bash' || true
+    # Create .bun directory with correct permissions
+    $SUDO mkdir -p "$SERVICE_HOME/.bun"
+    $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.bun"
+    
+    # Install Bun as service user
+    if ! sudo -u "$SERVICE_USER" -H bash -c "export BUN_INSTALL='$SERVICE_HOME/.bun' && curl -fsSL https://bun.sh/install | bash"; then
+      log "[WARN] Bun installation for $SERVICE_USER failed. Copying from root installation…"
+      # Fallback: copy root's bun to service user
+      if [[ -x "$HOME/.bun/bin/bun" ]]; then
+        $SUDO mkdir -p "$SERVICE_HOME/.bun/bin"
+        $SUDO cp "$HOME/.bun/bin/bun" "$SERVICE_HOME/.bun/bin/bun"
+        $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.bun"
+        $SUDO chmod +x "$SERVICE_HOME/.bun/bin/bun"
+        log "Copied Bun to $SERVICE_HOME/.bun/bin/bun"
+      fi
+    fi
+  fi
+  
+  # Also install Bun system-wide for easier access
+  if [[ -x "$HOME/.bun/bin/bun" && ! -x "$BUN_SYSTEM_PATH" ]]; then
+    log "Creating system-wide Bun symlink at $BUN_SYSTEM_PATH…"
+    $SUDO ln -sf "$HOME/.bun/bin/bun" "$BUN_SYSTEM_PATH" || true
+  fi
+  
+  # Re-find Bun after installation
+  BUN_BIN="$(find_bun || true)"
+  if [[ -n "$BUN_BIN" ]]; then
+    log "Bun installed successfully at $BUN_BIN"
+  else
+    log "[WARN] Bun installation may have issues. Will check again during build."
   fi
 fi
 
-# Ensure Bun is in PATH
+# Ensure Bun is in PATH for current session
 if [[ -d "$HOME/.bun/bin" ]]; then
   export PATH="$HOME/.bun/bin:$PATH"
+fi
+if [[ -d "$SERVICE_HOME/.bun/bin" ]]; then
+  export PATH="$SERVICE_HOME/.bun/bin:$PATH"
 fi
 
 # Check for Node.js (still needed for some tools and compatibility)
