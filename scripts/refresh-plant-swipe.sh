@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Refresh PlantSwipe deployment: git pull -> npm ci -> build -> reload nginx -> restart services
+# Refresh PlantSwipe deployment: git pull -> bun install -> build -> reload nginx -> restart services
 
 SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
 SCRIPT_DIR="$(cd -- "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd -P)"
@@ -574,22 +574,104 @@ if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
 fi
 fi
 
-# Install and build Node app
-log "Installing Node dependencies…"
+# Install and build Node app using Bun
+log "Installing dependencies with Bun…"
 cd "$NODE_DIR"
-# Use a writable per-repo npm cache to avoid /var/www/.npm permission issues
-CACHE_DIR="$NODE_DIR/.npm-cache"
-mkdir -p "$CACHE_DIR" || true
-chmod -R u+rwX "$CACHE_DIR" || true
-# Keep cache owned by the repo owner
+
+# Ensure Bun is available in PATH - check multiple locations
+BUN_SYSTEM_PATH="/usr/local/bin/bun"
+BUN_USER_PATH="$HOME/.bun/bin/bun"
+OWNER_HOME=""
 if [[ -n "$REPO_OWNER" ]]; then
-  chown -R "$REPO_OWNER:$REPO_OWNER" "$CACHE_DIR" || true
+  OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "")"
+fi
+BUN_OWNER_PATH=""
+if [[ -n "$OWNER_HOME" ]]; then
+  BUN_OWNER_PATH="$OWNER_HOME/.bun/bin/bun"
 fi
 
-# Check if we can skip npm install by comparing package-lock.json hash
-LOCK_HASH_FILE="$NODE_DIR/.npm-lock-hash"
+find_bun() {
+  # Check in order of preference: system-wide, user, repo owner
+  if command -v bun >/dev/null 2>&1; then
+    command -v bun
+    return 0
+  elif [[ -x "$BUN_SYSTEM_PATH" ]]; then
+    echo "$BUN_SYSTEM_PATH"
+    return 0
+  elif [[ -x "$BUN_USER_PATH" ]]; then
+    echo "$BUN_USER_PATH"
+    return 0
+  elif [[ -n "$BUN_OWNER_PATH" && -x "$BUN_OWNER_PATH" ]]; then
+    echo "$BUN_OWNER_PATH"
+    return 0
+  fi
+  return 1
+}
+
+BUN_BIN="$(find_bun || true)"
+
+# Add Bun paths to PATH if found
+if [[ -d "$HOME/.bun/bin" ]]; then
+  export PATH="$HOME/.bun/bin:$PATH"
+fi
+if [[ -n "$OWNER_HOME" && -d "$OWNER_HOME/.bun/bin" ]]; then
+  export PATH="$OWNER_HOME/.bun/bin:$PATH"
+fi
+
+# If Bun not found, attempt to install it
+if [[ -z "$BUN_BIN" ]]; then
+  log "[WARN] Bun not found, attempting to install…"
+  
+  # Check if unzip is available (required by Bun installer)
+  if ! command -v unzip >/dev/null 2>&1; then
+    log "[ERROR] unzip is required for Bun installation but not found."
+    log "[ERROR] Please install unzip first: sudo apt-get install unzip"
+    exit 1
+  fi
+  
+  # Install Bun
+  if ! curl -fsSL https://bun.sh/install | bash; then
+    log "[ERROR] Bun installation failed."
+    exit 1
+  fi
+  
+  export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+  BUN_BIN="$BUN_INSTALL/bin/bun"
+  
+  # Verify installation
+  if [[ ! -x "$BUN_BIN" ]]; then
+    log "[ERROR] Bun installation completed but binary not found at $BUN_BIN"
+    exit 1
+  fi
+  
+  # If running as root, also install for repo owner
+  if [[ $EUID -eq 0 && -n "$REPO_OWNER" && "$REPO_OWNER" != "root" && -n "$OWNER_HOME" ]]; then
+    log "Also installing Bun for repo owner $REPO_OWNER…"
+    $SUDO mkdir -p "$OWNER_HOME/.bun"
+    $SUDO chown -R "$REPO_OWNER:$REPO_OWNER" "$OWNER_HOME/.bun"
+    sudo -u "$REPO_OWNER" -H bash -c "export BUN_INSTALL='$OWNER_HOME/.bun' && curl -fsSL https://bun.sh/install | bash" || {
+      # Fallback: copy bun binary
+      log "[WARN] Could not install Bun for $REPO_OWNER, copying binary…"
+      $SUDO mkdir -p "$OWNER_HOME/.bun/bin"
+      $SUDO cp "$BUN_BIN" "$OWNER_HOME/.bun/bin/bun"
+      $SUDO chown -R "$REPO_OWNER:$REPO_OWNER" "$OWNER_HOME/.bun"
+      $SUDO chmod +x "$OWNER_HOME/.bun/bin/bun"
+    }
+  fi
+  
+  log "Bun installed successfully."
+fi
+
+log "Using Bun at: $BUN_BIN (version: $("$BUN_BIN" --version 2>/dev/null || echo 'unknown'))"
+
+# Check if we can skip bun install by comparing bun.lockb hash
+LOCK_HASH_FILE="$NODE_DIR/.bun-lock-hash"
 CURRENT_LOCK_HASH=""
-if [[ -f "$NODE_DIR/package-lock.json" ]]; then
+# Try bun.lockb first, fall back to package-lock.json for migration
+if [[ -f "$NODE_DIR/bun.lockb" ]]; then
+  CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lockb" 2>/dev/null | cut -d' ' -f1 || md5sum "$NODE_DIR/bun.lockb" 2>/dev/null | cut -d' ' -f1 || true)"
+elif [[ -f "$NODE_DIR/package-lock.json" ]]; then
   CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/package-lock.json" 2>/dev/null | cut -d' ' -f1 || md5sum "$NODE_DIR/package-lock.json" 2>/dev/null | cut -d' ' -f1 || true)"
 fi
 CACHED_LOCK_HASH=""
@@ -597,53 +679,62 @@ if [[ -f "$LOCK_HASH_FILE" ]]; then
   CACHED_LOCK_HASH="$(cat "$LOCK_HASH_FILE" 2>/dev/null || true)"
 fi
 
-SKIP_NPM_INSTALL=false
+SKIP_BUN_INSTALL=false
 if [[ -n "$CURRENT_LOCK_HASH" && "$CURRENT_LOCK_HASH" == "$CACHED_LOCK_HASH" && -d "$NODE_DIR/node_modules" ]]; then
-  log "package-lock.json unchanged — skipping npm install"
-  SKIP_NPM_INSTALL=true
+  log "Lock file unchanged — skipping bun install"
+  SKIP_BUN_INSTALL=true
 fi
 
-if [[ "$SKIP_NPM_INSTALL" != "true" ]]; then
-  log "Running npm ci…"
-  # Always run npm as the repo owner to keep ownership consistent
+if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
+  log "Running bun install…"
+  # Always run bun as the repo owner to keep ownership consistent
   if [[ "$REPO_OWNER" != "" ]]; then
+    OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
+    OWNER_BUN_PATH="$OWNER_HOME/.bun/bin"
     if [[ "$EUID" -eq 0 ]]; then
-      sudo -u "$REPO_OWNER" -H npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+      sudo -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
     elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
       if $SUDO -n true >/dev/null 2>&1; then
-        $SUDO -u "$REPO_OWNER" -H npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+        $SUDO -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
       else
-        npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+        bun install
       fi
     else
-      npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+      bun install
     fi
   else
-    npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
+    bun install
   fi
+  # Trust all packages to run postinstall scripts
+  bun pm trust --all 2>/dev/null || true
   # Save the lock hash for next time
+  if [[ -f "$NODE_DIR/bun.lockb" ]]; then
+    CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lockb" 2>/dev/null | cut -d' ' -f1 || true)"
+  fi
   if [[ -n "$CURRENT_LOCK_HASH" ]]; then
     echo "$CURRENT_LOCK_HASH" > "$LOCK_HASH_FILE" || true
   fi
 fi
 
-log "Building application…"
-# Limit Node.js memory to prevent OOM on low-RAM servers (default 512MB, override with NODE_BUILD_MEMORY)
+log "Building application with Bun…"
+# Limit memory to prevent OOM on low-RAM servers (default 512MB, override with NODE_BUILD_MEMORY)
 NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
 if [[ "$REPO_OWNER" != "" ]]; then
+  OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
+  OWNER_BUN_PATH="$OWNER_HOME/.bun/bin"
   if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H env CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
+    sudo -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
   elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
     if $SUDO -n true >/dev/null 2>&1; then
-      $SUDO -u "$REPO_OWNER" -H env CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
+      $SUDO -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
     else
-      CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
+      CI=${CI:-true} bun run build
     fi
   else
-    CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
+    CI=${CI:-true} bun run build
   fi
 else
-  CI=${CI:-true} NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY" npm_config_cache="$CACHE_DIR" npm run build
+  CI=${CI:-true} bun run build
 fi
 
 # Deploy Supabase Edge Functions (delegates to dedicated script)
@@ -720,7 +811,7 @@ render_service_env() {
   {
     for k in "${!kv[@]}"; do printf "%s=%s\n" "$k" "${kv[$k]}"; done | sort
   } > "$tmp"
-  $SUDO install -m 0640 "$tmp" "$service_env_file"
+  $SUDO install -m 0640 -o root -g www-data "$tmp" "$service_env_file"
   rm -f "$tmp"
 
   # Ensure both services load it via drop-ins (non-destructive)

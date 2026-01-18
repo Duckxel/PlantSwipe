@@ -13,6 +13,7 @@ dist-ssr
 .npm-cache
 /.npm-cache
 .npm-lock-hash
+.bun-lock-hash
 *.local
 .env
 .env.*

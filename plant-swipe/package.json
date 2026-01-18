@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "NODE_OPTIONS='--max-old-space-size=4096' npm run generate:sitemap && NODE_OPTIONS='--max-old-space-size=4096' tsc -b && NODE_OPTIONS='--max-old-space-size=4096' vite build",
-    "build:low-mem": "NODE_OPTIONS='--max-old-space-size=2048' npm run generate:sitemap && NODE_OPTIONS='--max-old-space-size=2048' tsc -b && NODE_OPTIONS='--max-old-space-size=2048' vite build",
+    "build": "bun run generate:sitemap && tsc -b && vite build",
+    "build:low-mem": "NODE_OPTIONS='--max-old-space-size=2048' bun run generate:sitemap && NODE_OPTIONS='--max-old-space-size=2048' tsc -b && NODE_OPTIONS='--max-old-space-size=2048' vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "serve": "node server.js",
-    "check-translations": "node scripts/check-translations.js",
-    "generate:sitemap": "node scripts/generate-sitemap.js"
+    "serve": "bun server.js",
+    "check-translations": "bun scripts/check-translations.js",
+    "generate:sitemap": "bun scripts/generate-sitemap.js"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.16",
@@ -102,5 +102,8 @@
     "workbox-precaching": "^7.3.0",
     "workbox-routing": "^7.3.0",
     "workbox-strategies": "^7.3.0"
-  }
+  },
+  "trustedDependencies": [
+    "@parcel/watcher"
+  ]
 }
