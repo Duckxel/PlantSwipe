@@ -1012,6 +1012,27 @@ export const AdminEmailTemplatePage: React.FC = () => {
           height: auto !important;
           display: block !important;
         }
+        /* Resizable Image Styles */
+        .email-preview-body [data-type="resizable-image"] {
+          padding: 16px 0 !important;
+          margin: 0 !important;
+        }
+        .email-preview-body [data-type="resizable-image"][data-align="left"] {
+          text-align: left !important;
+        }
+        .email-preview-body [data-type="resizable-image"][data-align="center"] {
+          text-align: center !important;
+        }
+        .email-preview-body [data-type="resizable-image"][data-align="right"] {
+          text-align: right !important;
+        }
+        .email-preview-body [data-type="resizable-image"] img {
+          max-width: 100% !important;
+          height: auto !important;
+          border-radius: 16px !important;
+          display: inline-block !important;
+          vertical-align: middle !important;
+        }
       `}</style>
       <div className="max-w-6xl mx-auto">
         {/* Rounded Background Wrapper */}
@@ -1757,6 +1778,27 @@ export const AdminEmailTemplatePage: React.FC = () => {
               width: 100% !important;
               height: auto !important;
               display: block !important;
+            }
+            /* Resizable Image Styles */
+            .email-preview-body [data-type="resizable-image"] {
+              padding: 16px 0 !important;
+              margin: 0 !important;
+            }
+            .email-preview-body [data-type="resizable-image"][data-align="left"] {
+              text-align: left !important;
+            }
+            .email-preview-body [data-type="resizable-image"][data-align="center"] {
+              text-align: center !important;
+            }
+            .email-preview-body [data-type="resizable-image"][data-align="right"] {
+              text-align: right !important;
+            }
+            .email-preview-body [data-type="resizable-image"] img {
+              max-width: 100% !important;
+              height: auto !important;
+              border-radius: 16px !important;
+              display: inline-block !important;
+              vertical-align: middle !important;
             }
           `}</style>
           {/* Floating Controls */}

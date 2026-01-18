@@ -380,6 +380,53 @@ function decodeImagesAttr(encoded: string | null): Array<{src: string, alt?: str
 }
 
 /**
+ * Converts resizable image divs to email-compatible table-based HTML
+ * For better alignment support across email clients
+ */
+function convertResizableImageToEmailHtml(html: string): string {
+  // Match resizable-image divs
+  const regex = /<div[^>]*data-type="resizable-image"[^>]*>([\s\S]*?)<\/div>/gi
+  
+  return html.replace(regex, (match) => {
+    // Extract attributes from the match
+    const alignMatch = match.match(/data-align="([^"]*)"/)
+    const widthMatch = match.match(/data-width="([^"]*)"/)
+    
+    const align = alignMatch ? alignMatch[1] : 'center'
+    const width = widthMatch ? widthMatch[1] : '100%'
+    
+    // Extract img tag
+    const imgMatch = match.match(/<img[^>]*>/i)
+    if (!imgMatch) return match
+    
+    // Get the img tag and update its style
+    let imgTag = imgMatch[0]
+    
+    // Extract existing src and alt
+    const srcMatch = imgTag.match(/src="([^"]*)"/)
+    const altMatch = imgTag.match(/alt="([^"]*)"/)
+    const titleMatch = imgTag.match(/title="([^"]*)"/)
+    
+    const src = srcMatch ? srcMatch[1] : ''
+    const alt = altMatch ? altMatch[1] : ''
+    const title = titleMatch ? titleMatch[1] : ''
+    
+    // Build email-compatible table structure
+    const alignAttr = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
+    
+    return `
+      <table role="presentation" data-type="resizable-image" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
+        <tr>
+          <td align="${alignAttr}" style="padding: 0;">
+            <img src="${src}" alt="${alt}" title="${title}" style="max-width: 100%; width: ${width}; height: auto; border-radius: 16px; display: inline-block;" />
+          </td>
+        </tr>
+      </table>
+    `.replace(/\s+/g, ' ').trim()
+  })
+}
+
+/**
  * Converts image grid divs to email-compatible table-based HTML
  * CSS Grid doesn't work in most email clients, so we use tables instead
  */
@@ -456,7 +503,10 @@ function convertImageGridToEmailTable(html: string): string {
 export function sanitizeEmailHtml(html: string): string {
   let result = html
 
-  // 0. Convert image grids to email-compatible tables (must be done early before other transformations)
+  // 0a. Convert resizable images to email-compatible tables
+  result = convertResizableImageToEmailHtml(result)
+  
+  // 0b. Convert image grids to email-compatible tables (must be done early before other transformations)
   result = convertImageGridToEmailTable(result)
 
   // 1. Replace all SVG logo URLs with PNG (Gmail doesn't support SVG)
