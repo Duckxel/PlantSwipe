@@ -6,6 +6,15 @@ import type { GardenInvite } from "@/types/notification";
 import type { TFunction } from "i18next";
 import type { User } from "@supabase/supabase-js";
 
+// Helper to compare Sets by content for React.memo optimization
+const areSetsEqual = <T,>(a: Set<T>, b: Set<T>): boolean => {
+  if (a.size !== b.size) return false;
+  for (const item of a) {
+    if (!b.has(item)) return false;
+  }
+  return true;
+};
+
 interface TaskOccurrence {
   id: string;
   taskId: string;
@@ -69,7 +78,53 @@ interface GardenListSidebarProps {
   processingInviteId: string | null;
 }
 
-export const GardenListSidebar = React.memo<GardenListSidebarProps>(({
+// Custom comparison function for React.memo to properly compare Sets
+const arePropsEqual = (
+  prevProps: GardenListSidebarProps,
+  nextProps: GardenListSidebarProps
+): boolean => {
+  // Compare primitive and reference types with shallow equality
+  if (
+    prevProps.user !== nextProps.user ||
+    prevProps.totalTasks !== nextProps.totalTasks ||
+    prevProps.totalDone !== nextProps.totalDone ||
+    prevProps.markingAllCompleted !== nextProps.markingAllCompleted ||
+    prevProps.loadingTasks !== nextProps.loadingTasks ||
+    prevProps.mismatchReloadAttempts !== nextProps.mismatchReloadAttempts ||
+    prevProps.processingInviteId !== nextProps.processingInviteId ||
+    prevProps.onMarkAllCompleted !== nextProps.onMarkAllCompleted ||
+    prevProps.onReloadTasks !== nextProps.onReloadTasks ||
+    prevProps.onCompleteAllForGarden !== nextProps.onCompleteAllForGarden ||
+    prevProps.onProgressOccurrence !== nextProps.onProgressOccurrence ||
+    prevProps.handleAcceptInvite !== nextProps.handleAcceptInvite ||
+    prevProps.handleDeclineInvite !== nextProps.handleDeclineInvite
+  ) {
+    return false;
+  }
+
+  // Compare Sets by content (not reference)
+  if (!areSetsEqual(prevProps.completingGardenIds, nextProps.completingGardenIds)) {
+    return false;
+  }
+  if (!areSetsEqual(prevProps.progressingOccIds, nextProps.progressingOccIds)) {
+    return false;
+  }
+
+  // Compare arrays and objects by reference (React best practice - parent should memoize these)
+  if (
+    prevProps.gardensWithTasks !== nextProps.gardensWithTasks ||
+    prevProps.todayTaskOccurrences !== nextProps.todayTaskOccurrences ||
+    prevProps.progressByGarden !== nextProps.progressByGarden ||
+    prevProps.occsByPlant !== nextProps.occsByPlant ||
+    prevProps.gardenInvites !== nextProps.gardenInvites
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+const GardenListSidebarComponent: React.FC<GardenListSidebarProps> = ({
   user,
   t,
   totalTasks,
@@ -366,4 +421,8 @@ export const GardenListSidebar = React.memo<GardenListSidebarProps>(({
       </div>
     </aside>
   );
-});
+};
+
+// Export the memoized component with custom comparison and displayName for DevTools
+export const GardenListSidebar = React.memo(GardenListSidebarComponent, arePropsEqual);
+GardenListSidebar.displayName = "GardenListSidebar";

@@ -2083,13 +2083,13 @@ export const GardenListPage: React.FC = () => {
     setProcessingInviteId(inviteId);
     try {
       await acceptGardenInvite(inviteId);
-      await Promise.all([loadGardenInvites(), loadGardens()]);
+      await Promise.all([loadGardenInvites(), load()]);
     } catch (e: any) {
       console.error('Failed to accept invite:', e);
     } finally {
       setProcessingInviteId(null);
     }
-  }, [loadGardenInvites]);
+  }, [loadGardenInvites, load]);
 
   // Handle decline garden invite
   const handleDeclineInvite = React.useCallback(async (inviteId: string) => {
