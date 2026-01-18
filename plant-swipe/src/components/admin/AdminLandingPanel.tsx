@@ -947,9 +947,31 @@ export const AdminLandingPanel: React.FC = () => {
         supabase.from("landing_faq").select("*").order("position"),
       ])
 
-      if (settingsRes.data) setSettings(settingsRes.data)
+      // Auto-initialize settings if table exists but no row
+      if (!settingsRes.data && !settingsRes.error) {
+        const { data: newSettings } = await supabase
+          .from("landing_page_settings")
+          .insert({})
+          .select()
+          .single()
+        if (newSettings) setSettings(newSettings)
+      } else if (settingsRes.data) {
+        setSettings(settingsRes.data)
+      }
+
+      // Auto-initialize stats if table exists but no row
+      if (!statsRes.data && !statsRes.error) {
+        const { data: newStats } = await supabase
+          .from("landing_stats")
+          .insert({})
+          .select()
+          .single()
+        if (newStats) setStats(newStats)
+      } else if (statsRes.data) {
+        setStats(statsRes.data)
+      }
+
       if (heroRes.data) setHeroCards(heroRes.data)
-      if (statsRes.data) setStats(statsRes.data)
       if (featuresRes.data) setFeatures(featuresRes.data)
       if (showcaseRes.data) setShowcaseCards(showcaseRes.data)
       if (testimonialsRes.data) setTestimonials(testimonialsRes.data)
@@ -1146,35 +1168,6 @@ const GlobalSettingsTab: React.FC<{
     setLocalSettings(settings)
   }, [settings])
 
-  const [initError, setInitError] = React.useState<string | null>(null)
-
-  const createDefaultSettings = async () => {
-    setSaving(true)
-    setInitError(null)
-    try {
-      const { data, error } = await supabase
-        .from("landing_page_settings")
-        .insert({})
-        .select()
-        .single()
-
-      if (error) {
-        console.error("Failed to create settings:", error)
-        setInitError(error.message || "Failed to initialize settings. Please ensure you have admin permissions.")
-        return
-      }
-
-      if (data) {
-        setSettings(data)
-        setLocalSettings(data)
-      }
-    } catch (e) {
-      console.error("Failed to create settings:", e)
-      setInitError("An unexpected error occurred. Please try again.")
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const saveSettings = async () => {
     if (!localSettings) return
@@ -1207,25 +1200,9 @@ const GlobalSettingsTab: React.FC<{
     return (
       <Card className="rounded-xl">
         <CardContent className="py-16 text-center">
-          <Settings className="h-12 w-12 mx-auto mb-4 text-stone-300" />
-          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">No global settings configured</h3>
-          <p className="text-sm text-stone-500 mb-4">Initialize your landing page settings to customize content and visibility</p>
-          
-          {initError && (
-            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
-              <AlertCircle className="h-4 w-4 inline mr-2" />
-              {initError}
-            </div>
-          )}
-          
-          <Button onClick={createDefaultSettings} disabled={saving} className="rounded-xl">
-            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-            Initialize Settings
-          </Button>
-          
-          <p className="text-xs text-stone-400 mt-4">
-            Note: The database table must exist. Run the migration first if you haven't already.
-          </p>
+          <Loader2 className="h-12 w-12 mx-auto mb-4 text-stone-300 animate-spin" />
+          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">Loading settings...</h3>
+          <p className="text-sm text-stone-500">Settings will be auto-initialized if needed</p>
         </CardContent>
       </Card>
     )
@@ -2207,30 +2184,6 @@ const StatsTab: React.FC<{
     setLocalStats(stats)
   }, [stats])
 
-  const createStats = async () => {
-    const newStats: Partial<LandingStats> = {
-      plants_count: "10K+",
-      plants_label: "Plant Species",
-      users_count: "50K+",
-      users_label: "Happy Gardeners",
-      tasks_count: "100K+",
-      tasks_label: "Care Tasks Done",
-      rating_value: "4.9",
-      rating_label: "App Store Rating",
-    }
-
-    const { data, error } = await supabase
-      .from("landing_stats")
-      .insert(newStats)
-      .select()
-      .single()
-
-    if (data && !error) {
-      setStats(data)
-      setLocalStats(data)
-    }
-  }
-
   const saveStats = async () => {
     if (!localStats) return
     setSaving(true)
@@ -2253,13 +2206,9 @@ const StatsTab: React.FC<{
     return (
       <Card className="rounded-xl">
         <CardContent className="py-16 text-center">
-          <BarChart3 className="h-12 w-12 mx-auto mb-4 text-stone-300" />
-          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">No stats configured</h3>
-          <p className="text-sm text-stone-500 mb-4">Initialize your landing page statistics</p>
-          <Button onClick={createStats} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
-            Initialize Stats
-          </Button>
+          <Loader2 className="h-12 w-12 mx-auto mb-4 text-stone-300 animate-spin" />
+          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">Loading stats...</h3>
+          <p className="text-sm text-stone-500">Stats will be auto-initialized if needed</p>
         </CardContent>
       </Card>
     )
