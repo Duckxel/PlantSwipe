@@ -163,7 +163,9 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   
   const seenLinks = new Set<string>()
   const filtered = list.filter((img) => {
-    const link = img.link?.trim()
+    // Ensure link is a string before calling trim() - AI might return objects
+    if (typeof img.link !== 'string') return false
+    const link = img.link.trim()
     if (!link) return false
     const linkLower = link.toLowerCase()
     if (seenLinks.has(linkLower)) return false

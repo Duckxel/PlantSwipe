@@ -407,9 +407,12 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
 
         const infusionMixRows = ((basePlant.plant_infusion_mixes as any[]) || [])
         const infusionMix = infusionMixRows.reduce((acc: Record<string, string>, row) => {
-          const key = row?.mix_name?.trim()
+          // Ensure mix_name is a string before calling trim()
+          if (typeof row?.mix_name !== 'string') return acc
+          const key = row.mix_name.trim()
           if (!key) return acc
-          acc[key] = row?.benefit?.trim() || ''
+          // Ensure benefit is a string before calling trim()
+          acc[key] = typeof row?.benefit === 'string' ? row.benefit.trim() : ''
           return acc
         }, {} as Record<string, string>)
 

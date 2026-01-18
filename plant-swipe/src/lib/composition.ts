@@ -60,7 +60,9 @@ export function expandCompositionFromDb(values?: string[] | null): CompositionUi
   if (!values?.length) return []
   const result: CompositionUiValue[] = []
   for (const raw of values) {
-    const trimmed = raw?.trim().toLowerCase()
+    // Ensure raw is a string before calling trim() - AI might return objects
+    if (typeof raw !== 'string') continue
+    const trimmed = raw.trim().toLowerCase()
     if (!trimmed) continue
     const uiValue = DB_TO_UI_MAP[trimmed as CompositionDbValue]
     if (uiValue && !result.includes(uiValue)) {
