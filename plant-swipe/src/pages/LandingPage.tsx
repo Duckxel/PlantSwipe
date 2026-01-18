@@ -1124,7 +1124,7 @@ const HowItWorksSection: React.FC = () => {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   SHOWCASE SECTION - Enhanced with UI Previews
+   SHOWCASE SECTION - Enhanced with Realistic UI Previews
    ═══════════════════════════════════════════════════════════════════════════════ */
 const ShowcaseSection: React.FC = () => {
   const { t } = useTranslation("Landing")
@@ -1142,50 +1142,87 @@ const ShowcaseSection: React.FC = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {/* Public Garden Card - Main Feature */}
-          <div className="md:col-span-2 md:row-span-2 group relative rounded-3xl overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 to-teal-600" />
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-50" />
-            <div className="relative h-full min-h-[400px] p-8 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 text-white text-sm font-medium backdrop-blur-sm">
-                  <Globe className="h-4 w-4" />
-                  {t("showcase.publicGardenPreview", { defaultValue: "Public Garden" })}
-                </span>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500/90 text-white text-xs font-semibold">
-                  <Flame className="h-3 w-3" />
-                  {t("showcase.publicGardenStreak", { defaultValue: "7 day streak" })}
-                </div>
+          {/* Public Garden Card - Realistic UI Preview */}
+          <div className="md:col-span-2 md:row-span-2 group relative rounded-3xl overflow-hidden cursor-pointer">
+            {/* Cover Image Background - mimicking PublicGardenCard */}
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600 dark:from-emerald-700 dark:via-teal-800 dark:to-cyan-900">
+              {/* Decorative pattern overlay like PublicGardenCard */}
+              <div className="absolute inset-0 opacity-20">
+                <div className="absolute top-8 right-8 w-32 h-32 rounded-full border-2 border-white/30" />
+                <div className="absolute bottom-24 left-12 w-20 h-20 rounded-full border-2 border-white/20" />
+                <div className="absolute top-1/3 left-1/4 w-12 h-12 rounded-full bg-white/10" />
               </div>
-              
-              {/* Garden Preview UI */}
-              <div className="flex-1 flex items-center justify-center py-8">
-                <div className="grid grid-cols-4 gap-3">
-                  {[...Array(8)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-16 w-16 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center group-hover:scale-105 transition-transform"
-                      style={{ animationDelay: `${i * 0.1}s` }}
-                    >
-                      <Leaf className={`h-6 w-6 text-white/70 ${i % 3 === 0 ? 'rotate-12' : i % 3 === 1 ? '-rotate-12' : ''}`} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex -space-x-2">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className={`h-8 w-8 rounded-full border-2 border-white/50 ${['bg-emerald-400', 'bg-teal-400', 'bg-green-400', 'bg-lime-400'][i]}`} />
-                    ))}
-                  </div>
-                  <span className="text-white/80 text-sm">{t("showcase.publicGardenPlants", { defaultValue: "12 plants" })}</span>
-                </div>
-                <h3 className="text-3xl font-bold text-white">{t("showcase.publicGardenTitle", { defaultValue: "Share your green space" })}</h3>
-                <p className="text-white/80 max-w-md">{t("showcase.publicGardenDescription", { defaultValue: "Create beautiful public gardens, showcase your plants, and inspire other gardeners in the community." })}</p>
+              {/* Garden icon in center */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <TreeDeciduous 
+                  className="h-32 w-32 text-white/20 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500"
+                />
               </div>
             </div>
+            
+            {/* Gradient overlay for text legibility */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+            
+            {/* Streak badge - top right like PublicGardenCard */}
+            <div className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/90 backdrop-blur-sm text-white text-sm font-semibold shadow-lg group-hover:scale-105 transition-transform">
+              <Flame className="h-4 w-4" />
+              <span>7</span>
+            </div>
+
+            {/* Badge - top left */}
+            <div className="absolute top-4 left-4">
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 text-white text-sm font-medium backdrop-blur-sm">
+                <Globe className="h-4 w-4" />
+                {t("showcase.publicGardenPreview", { defaultValue: "Public Garden" })}
+              </span>
+            </div>
+            
+            {/* Plant preview bubbles - bottom right like PublicGardenCard */}
+            <div className="absolute bottom-20 right-6 flex items-center group-hover:-translate-y-1 transition-transform duration-500">
+              {['bg-emerald-400', 'bg-teal-400', 'bg-green-400', 'bg-lime-400'].map((color, idx) => (
+                <div
+                  key={idx}
+                  className={`relative rounded-full overflow-hidden border-2 border-white dark:border-stone-800 shadow-lg ${color}`}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    marginLeft: idx === 0 ? 0 : -12,
+                    zIndex: 4 - idx,
+                  }}
+                >
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Leaf className="h-5 w-5 text-white/80" />
+                  </div>
+                </div>
+              ))}
+              <div
+                className="relative flex items-center justify-center rounded-full bg-stone-800/90 text-white text-xs font-medium border-2 border-white shadow-lg"
+                style={{ width: 40, height: 40, marginLeft: -12, zIndex: 0 }}
+              >
+                +8
+              </div>
+            </div>
+            
+            {/* Garden name and info - bottom left like PublicGardenCard */}
+            <div className="absolute bottom-0 inset-x-0 p-6">
+              <h3 className="font-bold text-white text-2xl leading-tight drop-shadow-md group-hover:-translate-y-1 transition-transform duration-300 mb-2">
+                My Indoor Jungle
+              </h3>
+              <div className="flex items-center gap-2 text-white/80 text-sm mb-4">
+                <Sprout className="h-4 w-4" />
+                <span>{t("showcase.publicGardenPlants", { defaultValue: "12 plants" })}</span>
+              </div>
+              <p className="text-white/70 text-sm max-w-md">{t("showcase.publicGardenDescription", { defaultValue: "Create beautiful public gardens, showcase your plants, and inspire other gardeners in the community." })}</p>
+            </div>
+
+            {/* Hover glow effect like PublicGardenCard */}
+            <div 
+              className="absolute -inset-1 rounded-3xl transition-opacity duration-500 pointer-events-none -z-10 opacity-0 group-hover:opacity-100"
+              style={{
+                background: 'radial-gradient(circle at 50% 80%, rgba(16, 185, 129, 0.35) 0%, transparent 60%)',
+                filter: 'blur(12px)',
+              }}
+            />
           </div>
 
           {/* Tasks Card - Watering Reminder with Task List */}
@@ -1217,35 +1254,81 @@ const ShowcaseSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Analytics Card */}
-          <div className="group rounded-3xl bg-gradient-to-br from-purple-500/10 to-violet-500/10 border border-purple-500/20 p-6 hover:border-purple-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
-            <div className="flex items-center justify-between mb-4">
-              <div className="h-12 w-12 rounded-xl bg-purple-500 flex items-center justify-center shadow-lg shadow-purple-500/30 group-hover:scale-110 transition-transform">
-                <BarChart3 className="h-6 w-6 text-white" />
+          {/* Analytics Card - Realistic UI like GardenAnalyticsSection */}
+          <div className="group rounded-[28px] bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur border border-stone-200/70 dark:border-[#3e3e42]/70 p-5 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center gap-2 mb-4">
+              <BarChart3 className="w-5 h-5 text-emerald-500" />
+              <span className="font-semibold text-stone-900 dark:text-white text-sm">{t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</span>
+            </div>
+            
+            {/* Mini Stats Grid - mimicking GardenAnalyticsSection */}
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {/* Completion Rate Card */}
+              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-3 relative overflow-hidden">
+                <div className="absolute -right-2 -top-2 w-12 h-12 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-xl" />
+                <div className="relative">
+                  <div className="flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-300 mb-1">
+                    <Target className="w-3 h-3" />
+                    <span>Completion</span>
+                  </div>
+                  <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">92%</div>
+                  <div className="flex items-center gap-0.5 text-[9px] text-emerald-500">
+                    <TrendingUp className="w-2.5 h-2.5" />
+                    <span>+8%</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Streak Card */}
+              <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 p-3 relative overflow-hidden">
+                <div className="absolute -right-2 -top-2 w-12 h-12 bg-orange-200/30 dark:bg-orange-500/10 rounded-full blur-xl" />
+                <div className="relative">
+                  <div className="flex items-center gap-1 text-[10px] text-orange-700 dark:text-orange-300 mb-1">
+                    <Flame className="w-3 h-3" />
+                    <span>Streak</span>
+                  </div>
+                  <div className="text-xl font-bold text-orange-600 dark:text-orange-400">14</div>
+                  <div className="text-[9px] text-stone-500">Best: 21 days</div>
+                </div>
               </div>
             </div>
-            <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</p>
-            <p className="text-xs text-stone-600 dark:text-stone-400 mb-4">{t("showcase.analyticsText", { defaultValue: "Track your garden's health" })}</p>
-            
-            {/* Mini Chart Preview */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-stone-500 dark:text-stone-400">Completion</span>
-                <span className="text-sm font-bold text-purple-600 dark:text-purple-400">{t("showcase.analyticsCompletion", { defaultValue: "92%" })}</span>
+
+            {/* Mini Activity Chart Preview */}
+            <div className="rounded-2xl bg-stone-50 dark:bg-stone-800/50 p-3 mb-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] text-stone-500 dark:text-stone-400 flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  Activity
+                </span>
+                <span className="text-[9px] text-stone-400">Last 7 days</span>
               </div>
-              <div className="h-2 rounded-full bg-purple-500/20 overflow-hidden">
-                <div className="h-full w-[92%] rounded-full bg-gradient-to-r from-purple-500 to-violet-500" />
+              {/* Mini Bar Chart */}
+              <div className="flex items-end justify-between gap-1 h-12">
+                {[65, 80, 45, 90, 70, 85, 95].map((height, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <div 
+                      className="w-full rounded-sm bg-gradient-to-t from-emerald-500 to-teal-400"
+                      style={{ height: `${height}%` }}
+                    />
+                    <span className="text-[8px] text-stone-400">{['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}</span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center gap-4 pt-2">
-                <div className="flex items-center gap-1">
-                  <Flame className="h-3 w-3 text-orange-500" />
-                  <span className="text-xs text-stone-600 dark:text-stone-400">{t("showcase.analyticsStreak", { defaultValue: "14 day streak" })}</span>
+            </div>
+
+            {/* Task Type Legend */}
+            <div className="flex flex-wrap gap-2">
+              {[
+                { color: 'bg-blue-500', label: 'Water' },
+                { color: 'bg-emerald-500', label: 'Fertilize' },
+                { color: 'bg-amber-500', label: 'Harvest' },
+              ].map(({ color, label }) => (
+                <div key={label} className="flex items-center gap-1">
+                  <div className={`w-2 h-2 rounded-full ${color}`} />
+                  <span className="text-[9px] text-stone-500 dark:text-stone-400">{label}</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3 text-emerald-500" />
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400">+12%</span>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
