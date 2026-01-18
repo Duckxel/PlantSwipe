@@ -1114,7 +1114,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     })
   }
 
-    const savePlant = async (plantOverride?: Plant) => {
+    const savePlant = async (plantOverride?: Plant, options?: { skipOnSaved?: boolean }) => {
       const saveLanguage = language
       const plantToSave = plantOverride || plant
       const trimmedName = plantToSave.name && typeof plantToSave.name === 'string' ? plantToSave.name.trim() : ''
@@ -1423,7 +1423,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             setLoadedLanguages(prev => new Set(prev).add(saveLanguage))
           }
         if (isEnglish && !existingLoaded) setExistingLoaded(true)
-        onSaved?.(savedId)
+        // Only call onSaved if not explicitly skipped (e.g., during AI fill auto-save)
+        if (!options?.skipOnSaved) {
+          onSaved?.(savedId)
+        }
         } catch (e: any) {
           // Use parseSupabaseError for user-friendly messages
           const userFriendlyError = parseSupabaseError(e, 'Please check the plant details.')
@@ -1670,7 +1673,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         setAiSectionLog([])
       }
       const targetPlant = finalPlant || plant
-      if (targetPlant) await savePlant(targetPlant)
+      // Auto-save after AI fill but skip onSaved to prevent popup from closing
+      // User can review the AI-filled data and manually save/close when ready
+      if (targetPlant) await savePlant(targetPlant, { skipOnSaved: true })
     }
   }
 
