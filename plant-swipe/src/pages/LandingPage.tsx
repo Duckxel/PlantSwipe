@@ -1172,8 +1172,6 @@ const ShowcaseSection: React.FC = () => {
   const mainCard = showcaseCards.find(c => c.card_type === 'main' || c.card_type === 'garden')
   const analyticsCard = showcaseCards.find(c => c.card_type === 'analytics')
   const tasksCard = showcaseCards.find(c => c.card_type === 'tasks')
-  const smallCards = showcaseCards.filter(c => c.card_type === 'small' && c.is_active)
-  const largeCards = showcaseCards.filter(c => c.card_type === 'large' && c.is_active)
 
   // Helper to render a garden dashboard card
   const renderGardenCard = (card: ShowcaseCard | undefined) => {

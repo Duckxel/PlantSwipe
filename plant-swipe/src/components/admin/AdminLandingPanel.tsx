@@ -2675,7 +2675,6 @@ const ShowcaseTab: React.FC<{
         <div className="space-y-4">
           {cards.map((card) => {
             const isExpanded = expandedCardId === card.id
-            const isGardenType = card.card_type === "main" || card.card_type === "garden"
             
             return (
             <Card key={card.id} className="rounded-xl overflow-hidden">
