@@ -12,12 +12,16 @@ const GAP_OPTIONS: { value: GridGap; label: string }[] = [
 ]
 
 export function ImageGridNode({ node, updateAttributes, selected }: NodeViewProps) {
-  const { images, columns, gap, rounded } = node.attrs as {
-    images: ImageGridImage[]
+  const attrs = node.attrs as {
+    images: ImageGridImage[] | undefined
     columns: GridColumns
     gap: GridGap
     rounded: boolean
   }
+  
+  // Ensure images is always an array
+  const images = Array.isArray(attrs.images) ? attrs.images : []
+  const { columns = 2, gap = "md", rounded = true } = attrs
 
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)

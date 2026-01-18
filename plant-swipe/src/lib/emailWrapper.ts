@@ -357,13 +357,107 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
 }
 
 /**
+ * Helper to safely decode images array from a base64/JSON data attribute
+ */
+function decodeImagesAttr(encoded: string | null): Array<{src: string, alt?: string}> {
+  if (!encoded) return []
+  
+  try {
+    // First try base64 decoding (new format)
+    if (typeof atob === 'function') {
+      try {
+        const json = decodeURIComponent(atob(encoded))
+        return JSON.parse(json)
+      } catch {
+        // If base64 fails, try direct JSON parse (old format compatibility)
+      }
+    }
+    // Fallback: try direct JSON parse for backward compatibility
+    return JSON.parse(encoded)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Converts image grid divs to email-compatible table-based HTML
+ * CSS Grid doesn't work in most email clients, so we use tables instead
+ */
+function convertImageGridToEmailTable(html: string): string {
+  // Match image-grid divs - we need to handle both encoded (base64) and plain JSON data-images
+  const regex = /<div[^>]*data-type="image-grid"[^>]*>([\s\S]*?)<\/div>/gi
+  
+  return html.replace(regex, (match) => {
+    // Extract attributes from the match
+    const columnsMatch = match.match(/data-columns="(\d)"/)
+    const gapMatch = match.match(/data-gap="([^"]*)"/)
+    const roundedMatch = match.match(/data-rounded="([^"]*)"/)
+    const imagesMatch = match.match(/data-images="([^"]*)"/)
+    
+    const numCols = columnsMatch ? parseInt(columnsMatch[1], 10) : 2
+    const gap = gapMatch ? gapMatch[1] : 'md'
+    const isRounded = !roundedMatch || roundedMatch[1] !== "false"
+    
+    // Try to get images from data-images attribute
+    let images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
+    
+    // If no images from attribute, try to extract from img tags in the content
+    if (!images.length) {
+      const imgRegex = /<img[^>]*src="([^"]*)"[^>]*(?:alt="([^"]*)"|)[^>]*>/gi
+      let imgMatch
+      while ((imgMatch = imgRegex.exec(match)) !== null) {
+        images.push({ src: imgMatch[1], alt: imgMatch[2] || '' })
+      }
+    }
+    
+    if (!images.length) return match // Return original if no images found
+    
+    const gapMap: Record<string, number> = {
+      none: 0,
+      sm: 8,
+      md: 16,
+      lg: 24,
+    }
+    const gapPx = gapMap[gap] || 16
+    const cellWidth = Math.floor(100 / numCols)
+    
+    // Build table rows
+    const rows: string[] = []
+    for (let i = 0; i < images.length; i += numCols) {
+      const rowImages = images.slice(i, i + numCols)
+      const cells = rowImages.map(img => `
+        <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
+          <img src="${img.src}" alt="${img.alt || ''}" style="width: 100%; height: auto; display: block; ${isRounded ? 'border-radius: 16px;' : ''}" />
+        </td>
+      `).join('')
+      
+      // Pad with empty cells if needed
+      const emptyCells = numCols - rowImages.length
+      const emptyHtml = emptyCells > 0 ? `<td style="width: ${cellWidth}%; padding: ${gapPx / 2}px;"></td>`.repeat(emptyCells) : ''
+      
+      rows.push(`<tr>${cells}${emptyHtml}</tr>`)
+    }
+    
+    return `
+      <table role="presentation" data-type="image-grid" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
+        ${rows.join('')}
+      </table>
+    `.replace(/\s+/g, ' ').trim()
+  })
+}
+
+/**
  * Sanitizes email HTML for maximum compatibility
  * - Replaces SVG logo URLs with PNG for Gmail compatibility
  * - Fixes escaped divider HTML from TipTap
  * - Removes filter:brightness(0) invert(1) that was used for SVG workaround
+ * - Converts image grids to table-based layout for email clients
  */
 export function sanitizeEmailHtml(html: string): string {
   let result = html
+
+  // 0. Convert image grids to email-compatible tables (must be done early before other transformations)
+  result = convertImageGridToEmailTable(result)
 
   // 1. Replace all SVG logo URLs with PNG (Gmail doesn't support SVG)
   result = result.replace(
