@@ -23,6 +23,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: plant-swipe/package-lock.json
       
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      
       - name: Install dependencies
         working-directory: plant-swipe
         run: npm ci
