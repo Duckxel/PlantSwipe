@@ -1,6 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback, useRef, useMemo } from "react"
-import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical } from "lucide-react"
+import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Move, X, Check } from "lucide-react"
 import type { GridColumns, GridGap, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
@@ -58,9 +58,15 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   const [isUploading, setIsUploading] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  // Focal point editing state
+  const [editingFocalIndex, setEditingFocalIndex] = useState<number | null>(null)
+  const [tempFocalPoint, setTempFocalPoint] = useState<{ x: number; y: number } | null>(null)
+  const [isDraggingFocal, setIsDraggingFocal] = useState(false)
+  
   const fileInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
+  const focalImageRef = useRef<HTMLDivElement>(null)
   const startXRef = useRef(0)
   const startWidthRef = useRef(0)
 
@@ -132,6 +138,71 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     },
     [updateAttributes]
   )
+
+  // Start editing focal point for an image
+  const startFocalEdit = useCallback((index: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const img = images[index]
+    setEditingFocalIndex(index)
+    setTempFocalPoint({ x: img.focalX ?? 50, y: img.focalY ?? 50 })
+  }, [images])
+
+  // Handle focal point drag
+  const handleFocalMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingFocal(true)
+
+    const updateFocalFromEvent = (clientX: number, clientY: number) => {
+      if (!focalImageRef.current) return
+      const rect = focalImageRef.current.getBoundingClientRect()
+      const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100))
+      const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100))
+      setTempFocalPoint({ x: Math.round(x), y: Math.round(y) })
+    }
+
+    // Initial position from click
+    updateFocalFromEvent(e.clientX, e.clientY)
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      updateFocalFromEvent(moveEvent.clientX, moveEvent.clientY)
+    }
+
+    const handleMouseUp = () => {
+      setIsDraggingFocal(false)
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+    }
+
+    document.addEventListener("mousemove", handleMouseMove)
+    document.addEventListener("mouseup", handleMouseUp)
+  }, [])
+
+  // Save focal point changes
+  const saveFocalPoint = useCallback(() => {
+    if (editingFocalIndex === null || !tempFocalPoint) return
+    
+    const newImages = [...images]
+    newImages[editingFocalIndex] = {
+      ...newImages[editingFocalIndex],
+      focalX: tempFocalPoint.x,
+      focalY: tempFocalPoint.y,
+    }
+    updateAttributes({ images: newImages })
+    setEditingFocalIndex(null)
+    setTempFocalPoint(null)
+  }, [editingFocalIndex, tempFocalPoint, images, updateAttributes])
+
+  // Cancel focal point editing
+  const cancelFocalEdit = useCallback(() => {
+    setEditingFocalIndex(null)
+    setTempFocalPoint(null)
+  }, [])
+
+  // Reset focal point to center
+  const resetFocalPoint = useCallback(() => {
+    setTempFocalPoint({ x: 50, y: 50 })
+  }, [])
 
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -233,32 +304,164 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
               className={`grid ${gapClasses[gap]}`}
               style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
             >
-              {images.map((img, index) => (
-                <div
-                  key={`${img.src}-${index}`}
-                  className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""}`}
-                >
-                  <img
-                    src={img.src}
-                    alt={img.alt || ""}
-                    className="h-auto w-full object-cover"
-                    style={{ aspectRatio: "16/10" }}
-                    draggable={false}
-                  />
-                  {/* Overlay controls */}
-                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => removeImage(index)}
-                      className="rounded-full bg-red-500 p-2 text-white transition-colors hover:bg-red-600"
-                      title="Remove image"
+              {images.map((img, index) => {
+                const focalX = img.focalX ?? 50
+                const focalY = img.focalY ?? 50
+                const isNotCentered = focalX !== 50 || focalY !== 50
+                
+                return (
+                  <div
+                    key={`${img.src}-${index}`}
+                    className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""}`}
+                  >
+                    <img
+                      src={img.src}
+                      alt={img.alt || ""}
+                      className="h-auto w-full object-cover"
+                      style={{ 
+                        aspectRatio: "16/10",
+                        objectPosition: `${focalX}% ${focalY}%`
+                      }}
+                      draggable={false}
+                    />
+                    {/* Focal point indicator (shows when not centered) */}
+                    {isNotCentered && (
+                      <div 
+                        className="absolute w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-md pointer-events-none z-10 opacity-70"
+                        style={{
+                          left: `${focalX}%`,
+                          top: `${focalY}%`,
+                          transform: 'translate(-50%, -50%)'
+                        }}
+                      />
+                    )}
+                    {/* Overlay controls */}
+                    <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        type="button"
+                        onClick={(e) => startFocalEdit(index, e)}
+                        className="rounded-full bg-emerald-500 p-2 text-white transition-colors hover:bg-emerald-600"
+                        title="Adjust crop position"
+                      >
+                        <Move className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        className="rounded-full bg-red-500 p-2 text-white transition-colors hover:bg-red-600"
+                        title="Remove image"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Focal Point Editor Overlay */}
+            {editingFocalIndex !== null && tempFocalPoint && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                <div className="relative max-w-3xl w-full mx-4">
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <div className="flex items-center gap-2 text-white">
+                      <Move className="h-5 w-5" />
+                      <span className="font-medium">Adjust Crop Position</span>
+                      <span className="text-white/60 text-sm ml-2">
+                        Click or drag to set the focal point
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={resetFocalPoint}
+                        className="px-3 py-1.5 text-sm text-white/80 hover:text-white transition-colors"
+                      >
+                        Reset to Center
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelFocalEdit}
+                        className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                        title="Cancel"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveFocalPoint}
+                        className="p-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
+                        title="Save"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Image with focal point editor */}
+                  <div className="relative rounded-2xl overflow-hidden shadow-2xl">
+                    {/* Full uncropped image */}
+                    <div
+                      ref={focalImageRef}
+                      className="relative cursor-crosshair select-none"
+                      onMouseDown={handleFocalMouseDown}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                      <img
+                        src={images[editingFocalIndex]?.src}
+                        alt=""
+                        className="w-full h-auto"
+                        draggable={false}
+                      />
+                      
+                      {/* Crop preview overlay - shows what will be visible */}
+                      <div 
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          background: `
+                            linear-gradient(to right, rgba(0,0,0,0.5) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.5) 100%),
+                            linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.5) 100%)
+                          `
+                        }}
+                      />
+                      
+                      {/* Focal point crosshair */}
+                      <div
+                        className={`absolute w-8 h-8 pointer-events-none z-20 ${isDraggingFocal ? 'scale-110' : ''} transition-transform`}
+                        style={{
+                          left: `${tempFocalPoint.x}%`,
+                          top: `${tempFocalPoint.y}%`,
+                          transform: 'translate(-50%, -50%)'
+                        }}
+                      >
+                        {/* Outer ring */}
+                        <div className="absolute inset-0 rounded-full border-2 border-white shadow-lg" />
+                        {/* Inner dot */}
+                        <div className="absolute top-1/2 left-1/2 w-2 h-2 -translate-x-1/2 -translate-y-1/2 bg-emerald-500 rounded-full shadow-md" />
+                        {/* Crosshair lines */}
+                        <div className="absolute top-1/2 left-0 w-full h-px bg-white/50 -translate-y-1/2" />
+                        <div className="absolute top-0 left-1/2 h-full w-px bg-white/50 -translate-x-1/2" />
+                      </div>
+                    </div>
+
+                    {/* Preview strip - shows how the crop will look */}
+                    <div className="mt-3 p-3 bg-black/40 rounded-xl">
+                      <p className="text-white/60 text-xs mb-2">Preview (16:10 crop):</p>
+                      <div 
+                        className={`w-48 h-[120px] bg-cover ${rounded ? 'rounded-lg' : ''} mx-auto border border-white/20`}
+                        style={{
+                          backgroundImage: `url('${images[editingFocalIndex]?.src}')`,
+                          backgroundPosition: `${tempFocalPoint.x}% ${tempFocalPoint.y}%`
+                        }}
+                      />
+                      <p className="text-white/40 text-xs mt-2 text-center">
+                        Position: {tempFocalPoint.x}% × {tempFocalPoint.y}%
+                      </p>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
 
             {/* Resize handles - only when controls are shown */}
             {showControls && (

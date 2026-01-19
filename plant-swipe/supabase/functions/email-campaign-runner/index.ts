@@ -1038,7 +1038,7 @@ function stripHtml(input: string): string {
 /**
  * Helper to safely decode images array from a base64/JSON data attribute
  */
-function decodeImagesAttr(encoded: string | null): Array<{src: string, alt?: string}> {
+function decodeImagesAttr(encoded: string | null): Array<{src: string, alt?: string, focalX?: number, focalY?: number}> {
   if (!encoded) return []
   
   try {
@@ -1157,11 +1157,16 @@ function convertImageGridToEmailTable(html: string): string {
     const rows: string[] = []
     for (let i = 0; i < images.length; i += numCols) {
       const rowImages = images.slice(i, i + numCols)
-      const cells = rowImages.map(img => `
+      const cells = rowImages.map(img => {
+        const focalX = img.focalX ?? 50
+        const focalY = img.focalY ?? 50
+        // Use background-image div for email clients - supports focal point via background-position
+        // padding-bottom: 62.5% creates 16:10 aspect ratio (10/16 = 0.625)
+        return `
         <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <img src="${img.src}" alt="${img.alt || ''}" style="width: 100%; height: auto; display: block; ${isRounded ? 'border-radius: 16px;' : ''}" />
+          <div style="width: 100%; padding-bottom: 62.5%; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
         </td>
-      `).join('')
+      `}).join('')
       
       // Pad with empty cells if needed
       const emptyCells = numCols - rowImages.length

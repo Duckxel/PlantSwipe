@@ -18,6 +18,10 @@ export interface ImageGridImage {
   src: string
   alt?: string
   width?: string
+  /** Focal point X position (0-100, default 50 = center) */
+  focalX?: number
+  /** Focal point Y position (0-100, default 50 = center) */
+  focalY?: number
 }
 
 export type ImageGridAlign = "left" | "center" | "right"
@@ -89,10 +93,16 @@ function extractImagesFromChildren(element: HTMLElement): ImageGridImage[] {
   imgElements.forEach((img) => {
     const src = img.getAttribute('src')
     if (src) {
+      // Try to extract focal point from object-position style
+      const style = img.getAttribute('style') || ''
+      const objectPosMatch = style.match(/object-position:\s*(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/)
+      
       images.push({
         src,
         alt: img.getAttribute('alt') || '',
         width: img.getAttribute('width') || undefined,
+        focalX: objectPosMatch ? parseFloat(objectPosMatch[1]) : 50,
+        focalY: objectPosMatch ? parseFloat(objectPosMatch[2]) : 50,
       })
     }
   })
@@ -225,15 +235,21 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
       max-width: 100%;
     `.replace(/\s+/g, " ").trim()
 
-    const imageElements = (images || []).map((img: ImageGridImage) => [
-      "img",
-      {
-        src: img.src,
-        alt: img.alt || "",
-        style: `width: 100%; height: auto; object-fit: cover; aspect-ratio: 16/10; ${rounded ? "border-radius: 16px;" : ""}`,
-        "data-grid-image": "true",
-      },
-    ])
+    const imageElements = (images || []).map((img: ImageGridImage) => {
+      const focalX = img.focalX ?? 50
+      const focalY = img.focalY ?? 50
+      return [
+        "img",
+        {
+          src: img.src,
+          alt: img.alt || "",
+          style: `width: 100%; height: auto; object-fit: cover; object-position: ${focalX}% ${focalY}%; aspect-ratio: 16/10; ${rounded ? "border-radius: 16px;" : ""}`,
+          "data-grid-image": "true",
+          "data-focal-x": String(focalX),
+          "data-focal-y": String(focalY),
+        },
+      ]
+    })
 
     return [
       "div",
@@ -326,11 +342,16 @@ export function convertImageGridToEmailHtml(html: string): string {
     const rows: string[] = []
     for (let i = 0; i < images.length; i += numCols) {
       const rowImages = images.slice(i, i + numCols)
-      const cells = rowImages.map(img => `
+      const cells = rowImages.map(img => {
+        const focalX = img.focalX ?? 50
+        const focalY = img.focalY ?? 50
+        // Use a background-image div for email clients that don't support object-position
+        // This provides a cropped view with focal point support
+        return `
         <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <img src="${img.src}" alt="${img.alt || ''}" style="width: 100%; height: auto; display: block; ${isRounded ? 'border-radius: 16px;' : ''}" />
+          <div style="width: 100%; padding-bottom: 62.5%; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
         </td>
-      `).join('')
+      `}).join('')
       
       // Pad with empty cells if needed
       const emptyCells = numCols - rowImages.length
