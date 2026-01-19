@@ -397,9 +397,11 @@ export function convertImageGridToEmailHtml(html: string): string {
         const focalY = img.focalY ?? 50
         // Use a background-image div for email clients that don't support object-position
         // This provides a cropped view with focal point support
+        // height: 0 is essential for the padding-bottom aspect ratio trick
+        // position: relative and display: block ensure proper rendering
         return `
         <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <div style="width: 100%; padding-bottom: 62.5%; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
+          <div style="display: block; position: relative; width: 100%; height: 0; padding-bottom: 62.5%; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; background-repeat: no-repeat; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
         </td>
       `}).join('')
       

@@ -150,32 +150,44 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     setCropPosition({ x: img.focalX ?? 50, y: img.focalY ?? 50 })
   }, [images])
 
-  // Handle crop rectangle drag - simple percentage-based movement
+  // Handle crop rectangle drag - pan the image within the crop window
+  // Dragging RIGHT should show more of the LEFT side (decrease object-position x) - like moving a photo under a window
+  // Dragging DOWN should show more of the TOP side (decrease object-position y)
   const handleCropMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDraggingCrop(true)
     
+    // Store initial values in ref
+    const startX = e.clientX
+    const startY = e.clientY
+    const startCropX = cropPosition.x
+    const startCropY = cropPosition.y
+    
     dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      cropX: cropPosition.x,
-      cropY: cropPosition.y,
+      x: startX,
+      y: startY,
+      cropX: startCropX,
+      cropY: startCropY,
     }
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const handleMouseMove = (moveEvent: MouseEvent | TouchEvent) => {
       if (!cropContainerRef.current) return
+      
+      // Handle both mouse and touch events
+      const clientX = 'touches' in moveEvent ? moveEvent.touches[0]?.clientX ?? 0 : moveEvent.clientX
+      const clientY = 'touches' in moveEvent ? moveEvent.touches[0]?.clientY ?? 0 : moveEvent.clientY
       
       const containerRect = cropContainerRef.current.getBoundingClientRect()
       
-      const deltaX = moveEvent.clientX - dragStartRef.current.x
-      const deltaY = moveEvent.clientY - dragStartRef.current.y
+      const deltaX = clientX - dragStartRef.current.x
+      const deltaY = clientY - dragStartRef.current.y
       
-      // Convert pixel delta to percentage (scaled for better control)
-      // Moving 200px should change position by ~100%
-      const sensitivity = 0.5
-      const deltaXPercent = (deltaX / containerRect.width) * 100 * sensitivity
-      const deltaYPercent = (deltaY / containerRect.height) * 100 * sensitivity
+      // Moving mouse right = image appears to move right under the window = show more LEFT side = DECREASE object-position
+      // This creates an intuitive "dragging photo under magnifying glass" feel
+      const sensitivity = 1.2  // Increased for better responsiveness
+      const deltaXPercent = -(deltaX / containerRect.width) * 100 * sensitivity
+      const deltaYPercent = -(deltaY / containerRect.height) * 100 * sensitivity
       
       const newX = Math.max(0, Math.min(100, dragStartRef.current.cropX + deltaXPercent))
       const newY = Math.max(0, Math.min(100, dragStartRef.current.cropY + deltaYPercent))
@@ -187,10 +199,14 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
       setIsDraggingCrop(false)
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
+      document.removeEventListener("touchmove", handleMouseMove)
+      document.removeEventListener("touchend", handleMouseUp)
     }
 
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
+    document.addEventListener("touchmove", handleMouseMove, { passive: false })
+    document.addEventListener("touchend", handleMouseUp)
   }, [cropPosition])
 
   // Save crop changes
@@ -422,41 +438,58 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                       {/* Draggable crop preview - shows exact output */}
                       <div
                         ref={cropContainerRef}
-                        className={`absolute inset-4 cursor-move ${isDraggingCrop ? 'ring-2 ring-emerald-400' : 'ring-2 ring-white/50'} transition-all`}
+                        className={`absolute inset-4 cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} transition-all overflow-hidden`}
                         style={{ borderRadius: rounded ? '12px' : '0' }}
                         onMouseDown={handleCropMouseDown}
+                        onTouchStart={(e) => {
+                          // Handle touch events for mobile
+                          const touch = e.touches[0]
+                          if (touch) {
+                            const syntheticEvent = {
+                              preventDefault: () => e.preventDefault(),
+                              stopPropagation: () => e.stopPropagation(),
+                              clientX: touch.clientX,
+                              clientY: touch.clientY,
+                            } as React.MouseEvent
+                            handleCropMouseDown(syntheticEvent)
+                          }
+                        }}
                       >
                         {/* The actual crop preview using object-fit/position */}
                         <img
                           ref={cropImageRef}
                           src={images[editingCropIndex]?.src}
                           alt=""
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover pointer-events-none select-none"
                           style={{ 
                             objectPosition: `${cropPosition.x}% ${cropPosition.y}%`,
-                            borderRadius: rounded ? '12px' : '0'
+                            borderRadius: rounded ? '12px' : '0',
+                            willChange: 'object-position',
                           }}
                           draggable={false}
                         />
                         
                         {/* Corner handles */}
-                        <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md" />
-                        <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md" />
-                        <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md" />
-                        <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md" />
+                        <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
+                        <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
+                        <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
+                        <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
                         
                         {/* Rule of thirds grid */}
                         <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: rounded ? '12px' : '0', overflow: 'hidden' }}>
-                          <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/20" />
-                          <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/20" />
-                          <div className="absolute top-1/3 left-0 right-0 h-px bg-white/20" />
-                          <div className="absolute top-2/3 left-0 right-0 h-px bg-white/20" />
+                          <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/30" />
+                          <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/30" />
+                          <div className="absolute top-1/3 left-0 right-0 h-px bg-white/30" />
+                          <div className="absolute top-2/3 left-0 right-0 h-px bg-white/30" />
                         </div>
                         
                         {/* Drag hint */}
                         {!isDraggingCrop && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="bg-black/60 text-white text-xs px-2 py-1 rounded-full">
+                            <div className="bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                              </svg>
                               Drag to adjust
                             </div>
                           </div>

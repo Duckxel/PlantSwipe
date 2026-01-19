@@ -1041,10 +1041,18 @@ export const AdminEmailTemplatePage: React.FC = () => {
           display: block !important;
         }
         .email-preview-body table[data-type="image-grid"] td > div[role="img"] {
+          display: block !important;
+          position: relative !important;
           width: 100% !important;
+          height: 0 !important;
           padding-bottom: 62.5% !important;
           background-size: cover !important;
+          background-repeat: no-repeat !important;
           border-radius: 16px !important;
+        }
+        .email-preview-body table[data-type="image-grid"] td {
+          padding: 8px !important;
+          border: none !important;
         }
         /* Resizable Image Styles */
         .email-preview-body [data-type="resizable-image"] {
@@ -1842,10 +1850,18 @@ export const AdminEmailTemplatePage: React.FC = () => {
               display: block !important;
             }
             .email-preview-body table[data-type="image-grid"] td > div[role="img"] {
+              display: block !important;
+              position: relative !important;
               width: 100% !important;
+              height: 0 !important;
               padding-bottom: 62.5% !important;
               background-size: cover !important;
+              background-repeat: no-repeat !important;
               border-radius: 16px !important;
+            }
+            .email-preview-body table[data-type="image-grid"] td {
+              padding: 8px !important;
+              border: none !important;
             }
             /* Resizable Image Styles */
             .email-preview-body [data-type="resizable-image"] {
