@@ -32,6 +32,8 @@ import { getDiscoveryPageImageUrl } from "@/lib/photos"
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils"
 import { resolveColorValue, DEFAULT_PLANT_COLOR } from "@/lib/colors"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { DoubleTapHeartAnimation, useDoubleTapHeartAnimation } from "@/components/ui/DoubleTapHeartAnimation"
+import { useDoubleTap } from "@/hooks/use-double-tap"
 
 interface SwipePageProps {
   current: Plant | undefined
@@ -116,6 +118,35 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
   const seasons = (current?.seasons ?? []) as PlantSeason[]
   const displayImage = React.useMemo(() => getDiscoveryPageImageUrl(current), [current])
+
+  // Double-tap to like functionality (Instagram-style)
+  const { showHeart, heartPosition, triggerAnimation, hideAnimation } = useDoubleTapHeartAnimation()
+  const cardRef = React.useRef<HTMLDivElement>(null)
+
+  const handleDoubleTapLike = React.useCallback(() => {
+    // Only like if not already liked (don't toggle off on double-tap)
+    if (!liked && onToggleLike) {
+      onToggleLike()
+    }
+    // Always show heart animation, even if already liked
+    triggerAnimation()
+  }, [liked, onToggleLike, triggerAnimation])
+
+  const { handleTap } = useDoubleTap({
+    onDoubleTap: handleDoubleTapLike,
+  })
+
+  // Handle double-tap on the card, converting position to be relative to card
+  const handleCardDoubleTap = React.useCallback(
+    (event: React.MouseEvent | React.TouchEvent) => {
+      // Don't trigger on button clicks
+      if ((event.target as HTMLElement).closest('button')) {
+        return
+      }
+      handleTap(event)
+    },
+    [handleTap]
+  )
   const shouldPrioritizeImage = Boolean(boostImagePriority && displayImage)
   const highlightBadges = React.useMemo(() => {
     if (!current) return []
@@ -169,12 +200,14 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 {current ? (
                   <motion.div
                     key={`${current.id}-${index}`}
+                    ref={cardRef}
                     drag
                     dragElastic={{ left: 0.28, right: 0.28, top: 0.18, bottom: 0.08 }}
                     dragMomentum={false}
                     style={{ x, y }}
                     dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
                     onDragEnd={onDragEnd}
+                    onClick={handleCardDoubleTap}
                     initial={{ scale: 0.94, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.94, opacity: 0 }}
@@ -182,6 +215,12 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     className="relative h-full w-full cursor-grab active:cursor-grabbing select-none"
                   >
                         <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
+                          {/* Double-tap heart animation */}
+                          <DoubleTapHeartAnimation
+                            show={showHeart}
+                            position={heartPosition ?? undefined}
+                            onAnimationComplete={hideAnimation}
+                          />
                           {displayImage ? (
                             <img
                               src={displayImage}
