@@ -993,9 +993,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
           margin: 16px 0 !important;
           text-align: center !important;
           width: 100% !important;
-          /* Debug border - remove after fixing */
-          border: 3px solid red !important;
-          min-height: 100px !important;
         }
         .email-preview-body [data-type="image-grid"] > div,
         .email-preview-body div[data-type="image-grid"] > div {
@@ -1004,9 +1001,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
           width: 100% !important;
           max-width: 100% !important;
           grid-template-columns: repeat(2, 1fr) !important;
-          /* Debug border for inner div */
-          border: 2px solid blue !important;
-          min-height: 50px !important;
         }
         .email-preview-body [data-type="image-grid"][data-columns="2"] > div {
           grid-template-columns: repeat(2, 1fr) !important;
@@ -1034,10 +1028,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
           aspect-ratio: 16/10 !important;
           border-radius: 16px !important;
           display: block !important;
-          /* Debug border for images */
-          border: 2px solid green !important;
-          min-height: 80px !important;
-          background-color: #eee !important;
         }
         .email-preview-body [data-type="image-grid"][data-rounded="false"] img {
           border-radius: 0 !important;
@@ -1839,9 +1829,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
               margin: 16px 0 !important;
               text-align: center !important;
               width: 100% !important;
-              /* Debug border - remove after fixing */
-              border: 3px solid red !important;
-              min-height: 100px !important;
             }
             .email-preview-body [data-type="image-grid"] > div,
             .email-preview-body div[data-type="image-grid"] > div {
@@ -1850,9 +1837,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
               width: 100% !important;
               max-width: 100% !important;
               grid-template-columns: repeat(2, 1fr) !important;
-              /* Debug border for inner div */
-              border: 2px solid blue !important;
-              min-height: 50px !important;
             }
             .email-preview-body [data-type="image-grid"][data-columns="2"] > div {
               grid-template-columns: repeat(2, 1fr) !important;
@@ -1880,10 +1864,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
               aspect-ratio: 16/10 !important;
               border-radius: 16px !important;
               display: block !important;
-              /* Debug border for images */
-              border: 2px solid green !important;
-              min-height: 80px !important;
-              background-color: #eee !important;
             }
             .email-preview-body [data-type="image-grid"][data-rounded="false"] img {
               border-radius: 0 !important;
