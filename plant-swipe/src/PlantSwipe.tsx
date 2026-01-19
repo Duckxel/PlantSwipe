@@ -808,16 +808,44 @@ export default function PlantSwipe() {
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
+  
+  // Create a stable list of plant IDs for the swipe view (excludes liked filter changes)
+  // This prevents the list from re-shuffling when user likes a plant
+  const swipeListIds = useMemo(() => {
+    // Only recompute when the actual content of filtered changes (not just likedSet)
+    return (filtered as PreparedPlant[])
+      .filter((p) => p._hasImage)
+      .map((p) => p.id)
+  }, [filtered])
+  
+  // Store the previous list IDs to detect actual content changes
+  const prevSwipeListIdsRef = React.useRef<string[]>([])
+  const shuffledListRef = React.useRef<PreparedPlant[]>([])
+  
   const swipeList = useMemo(() => {
-    // shuffleEpoch is used to trigger a reshuffle when user completes a cycle
-    void shuffleEpoch
-    if (filtered.length === 0) return []
+    // Check if the list content actually changed (not just a re-render due to likedSet)
+    const idsChanged = swipeListIds.length !== prevSwipeListIdsRef.current.length ||
+      swipeListIds.some((id, i) => id !== prevSwipeListIdsRef.current[i])
     
-    // Filter out plants without images for Discovery page
-    // Using pre-computed _hasImage for O(1) check instead of re-computing
+    // Only reshuffle if IDs changed or explicit epoch change
+    if (!idsChanged && shuffledListRef.current.length > 0 && shuffleEpoch === 0) {
+      return shuffledListRef.current
+    }
+    
+    prevSwipeListIdsRef.current = swipeListIds
+    
+    if (swipeListIds.length === 0) {
+      shuffledListRef.current = []
+      return []
+    }
+    
+    // Get the actual plant objects
     const plantsWithImages = (filtered as PreparedPlant[]).filter((p) => p._hasImage)
     
-    if (plantsWithImages.length === 0) return []
+    if (plantsWithImages.length === 0) {
+      shuffledListRef.current = []
+      return []
+    }
     
     const shuffleList = (list: PreparedPlant[]) => {
       const arr = list.slice()
@@ -837,11 +865,17 @@ export default function PlantSwipe() {
         regular.push(plant)
       }
     })
+    
+    let result: PreparedPlant[]
     if (promoted.length === 0) {
-      return shuffleList(plantsWithImages)
+      result = shuffleList(plantsWithImages)
+    } else {
+      result = [...shuffleList(promoted), ...shuffleList(regular)]
     }
-    return [...shuffleList(promoted), ...shuffleList(regular)]
-  }, [filtered, shuffleEpoch])
+    
+    shuffledListRef.current = result
+    return result
+  }, [filtered, shuffleEpoch, swipeListIds])
 
   const sortedSearchResults = useMemo(() => {
     // Helper to check if a plant is "in progress"

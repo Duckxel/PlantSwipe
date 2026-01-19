@@ -78,34 +78,45 @@ const MobileButtonsOverlay: React.FC<MobileButtonsOverlayProps> = ({
   t,
 }) => {
   return (
-    <div className="absolute inset-x-2 inset-y-0 z-50 pointer-events-none rounded-[24px]">
-      {/* Like button - top right */}
-      <div className="absolute top-4 right-4 pointer-events-auto">
+    <div className="absolute inset-x-2 inset-y-0 z-[60] pointer-events-none rounded-[24px]">
+      {/* Like button - top right - higher z-index to ensure clickability */}
+      <div className="absolute top-4 right-4 z-[70] pointer-events-auto" style={{ touchAction: 'manipulation' }}>
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
             if (onToggleLike) {
               onToggleLike()
             }
           }}
+          onTouchEnd={(e) => {
+            e.stopPropagation()
+          }}
           aria-pressed={liked}
           aria-label={liked ? "Unlike" : "Like"}
-          className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition ${
-            liked ? "bg-rose-600 text-white border-rose-500" : "bg-white/90 text-black hover:bg-white"
+          className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition active:scale-95 ${
+            liked ? "bg-rose-600 text-white border-rose-500" : "bg-white text-black border-white hover:bg-gray-100"
           }`}
+          style={{ touchAction: 'manipulation' }}
         >
-          <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+          <Heart className={`h-6 w-6 ${liked ? "fill-current" : ""}`} />
         </button>
       </div>
       
       {/* Navigation buttons - bottom */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 pb-8 pointer-events-auto">
-        <div className="mt-5 grid w-full gap-2 grid-cols-3">
+      <div className="absolute bottom-0 left-0 right-0 p-6 pb-8 z-[70] pointer-events-auto" style={{ touchAction: 'manipulation' }}>
+        <div className="grid w-full gap-2 grid-cols-3">
           <button
             type="button"
-            className="rounded-2xl w-full h-10 text-white transition-colors bg-black/80 hover:bg-black flex items-center justify-center shadow border border-white/10"
-            onClick={() => onPrevious()}
+            className="rounded-2xl w-full h-11 text-white transition-colors bg-black/90 hover:bg-black active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
+            onClick={(e) => {
+              e.stopPropagation()
+              onPrevious()
+            }}
+            onTouchEnd={(e) => e.stopPropagation()}
             aria-label={t("plant.back")}
+            style={{ touchAction: 'manipulation' }}
           >
             {isDesktop ? (
               <>
@@ -118,17 +129,27 @@ const MobileButtonsOverlay: React.FC<MobileButtonsOverlayProps> = ({
           </button>
           <button
             type="button"
-            className="rounded-2xl w-full h-10 bg-white/95 text-black hover:bg-white flex items-center justify-center shadow border border-white/10"
-            onClick={() => onInfo()}
+            className="rounded-2xl w-full h-11 bg-white text-black hover:bg-gray-100 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
+            onClick={(e) => {
+              e.stopPropagation()
+              onInfo()
+            }}
+            onTouchEnd={(e) => e.stopPropagation()}
+            style={{ touchAction: 'manipulation' }}
           >
             {t("plant.info")}
             <ChevronUp className="h-4 w-4 ml-1" />
           </button>
           <button
             type="button"
-            className="rounded-2xl w-full h-10 text-white transition-colors bg-black/80 hover:bg-black flex items-center justify-center shadow border border-white/10"
-            onClick={() => onNext()}
+            className="rounded-2xl w-full h-11 text-white transition-colors bg-black/90 hover:bg-black active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
+            onClick={(e) => {
+              e.stopPropagation()
+              onNext()
+            }}
+            onTouchEnd={(e) => e.stopPropagation()}
             aria-label={t("plant.next")}
+            style={{ touchAction: 'manipulation' }}
           >
             {isDesktop ? (
               <>
@@ -230,10 +251,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       setHeartAnimations(prev => prev.filter(anim => anim.id !== id))
     }, [])
     
-    // Clear heart animations when plant changes
+    // Reset double-tap tracking when plant changes (but DON'T clear heart animations - let them complete)
     React.useEffect(() => {
-      setHeartAnimations([])
       lastTapPosRef.current = null
+      lastTapTimeRef.current = 0
     }, [current?.id])
     
     // Double-tap detection for mobile - using a simple tap counter approach
