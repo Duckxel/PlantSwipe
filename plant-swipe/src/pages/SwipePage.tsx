@@ -233,7 +233,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     // Clear heart animations when plant changes
     React.useEffect(() => {
       setHeartAnimations([])
-      lastTapRef.current = null
+      lastTapPosRef.current = null
     }, [current?.id])
     
     // Double-tap detection for mobile - using a simple tap counter approach
