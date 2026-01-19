@@ -992,8 +992,9 @@ export default function PlantSwipe() {
   // Swipe logic
   const x = useMotionValue(0)
   const y = useMotionValue(0)
+  // Minimum distance (in pixels) the card must travel to trigger a swipe action
+  // This prevents taps/clicks from being interpreted as swipes
   const threshold = 100
-  const velocityThreshold = 500
   
   // Reset motion values immediately when index changes
   React.useEffect(() => {
@@ -1005,50 +1006,38 @@ export default function PlantSwipe() {
   const onDragEnd = (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
     const dx = info.offset.x
     const dy = info.offset.y
-    const vx = info.velocity.x
-    const vy = info.velocity.y
     
-    // Minimum offset required before considering velocity (prevents taps from triggering actions)
-    // Set to 50px to ensure only intentional swipes trigger actions
-    const minOffsetForVelocity = 50
+    // Get absolute offset values - this is the actual distance the card traveled
     const absOffsetX = Math.abs(dx)
     const absOffsetY = Math.abs(dy)
     
-    // If the offset is too small, it's likely a tap, not a swipe - ignore velocity
-    const hasMinOffset = absOffsetX > minOffsetForVelocity || absOffsetY > minOffsetForVelocity
-    
-    // Calculate effective movement considering both offset and velocity (only if minimum offset met)
-    const effectiveX = hasMinOffset ? dx + vx * 0.1 : dx
-    const effectiveY = hasMinOffset ? dy + vy * 0.1 : dy
-    
-    // Check for significant movement or velocity (velocity only counts if minimum offset met)
-    const absX = Math.abs(effectiveX)
-    const absY = Math.abs(effectiveY)
-    const absVx = hasMinOffset ? Math.abs(vx) : 0
-    const absVy = hasMinOffset ? Math.abs(vy) : 0
-    
     let actionTaken = false
     
-    // Prioritize vertical swipe over horizontal if both are significant
-    if ((absY > absX && absY > threshold) || (hasMinOffset && absVy > absVx && absVy > velocityThreshold)) {
-      if (effectiveY < -threshold || (hasMinOffset && vy < -velocityThreshold)) {
+    // ONLY trigger actions based on actual distance traveled (threshold = 100px)
+    // Velocity is IGNORED to prevent taps/clicks from being interpreted as swipes
+    // The card must physically move at least 100px to trigger any action
+    
+    // Prioritize vertical swipe over horizontal if vertical movement is greater
+    if (absOffsetY > absOffsetX && absOffsetY > threshold) {
+      if (dy < -threshold) {
         // Swipe up (bottom to top) = open info
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
         handleInfo()
         actionTaken = true
       }
+      // Note: swipe down does nothing
     }
     
-    // Horizontal swipe detection
-    if (!actionTaken && ((absX > absY && absX > threshold) || (hasMinOffset && absVx > absVy && absVx > velocityThreshold))) {
-      if (effectiveX < -threshold || (hasMinOffset && vx < -velocityThreshold)) {
+    // Horizontal swipe detection - only if horizontal movement is greater than vertical
+    if (!actionTaken && absOffsetX > absOffsetY && absOffsetX > threshold) {
+      if (dx < -threshold) {
         // Swipe left (right to left) = next
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
         handlePass()
         actionTaken = true
-      } else if (effectiveX > threshold || (hasMinOffset && vx > velocityThreshold)) {
+      } else if (dx > threshold) {
         // Swipe right (left to right) = previous
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
@@ -1057,7 +1046,7 @@ export default function PlantSwipe() {
       }
     }
     
-    // No action, snap back to center smoothly
+    // No action taken - snap back to center smoothly
     if (!actionTaken) {
       animate(x, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
       animate(y, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
