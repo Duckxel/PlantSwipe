@@ -1154,106 +1154,97 @@ function findMatchingDivClose(html: string, startPos: number): number {
  */
 function convertImageGridToEmailTable(html: string): string {
   let result = html
-  let searchPos = 0
+  let iterations = 0
+  const maxIterations = 50 // Safety limit
   
-  // Find all image-grid divs and replace them
-  while (true) {
-    const openingTagMatch = result.slice(searchPos).match(/<div[^>]*data-type\s*=\s*["']image-grid["'][^>]*>/i)
-    if (!openingTagMatch || openingTagMatch.index === undefined) break
+  // Keep replacing until no more grids found
+  while (iterations < maxIterations) {
+    iterations++
     
-    const startPos = searchPos + openingTagMatch.index
-    const endPos = findMatchingDivClose(result, startPos)
-    
-    if (endPos === -1) {
-      searchPos = startPos + openingTagMatch[0].length
-      continue
+    // Find the opening tag of an image-grid div
+    const openTagMatch = result.match(/<div[^>]*data-type\s*=\s*["']image-grid["'][^>]*>/i)
+    if (!openTagMatch || openTagMatch.index === undefined) {
+      break // No more grids found
     }
     
-    const match = result.slice(startPos, endPos)
+    const startPos = openTagMatch.index
+    const openTag = openTagMatch[0]
     
-    // Extract attributes - handle various formats with flexible regex
-    const columnsMatch = match.match(/data-columns\s*=\s*["'](\d)["']/)
-    const gapMatch = match.match(/data-gap\s*=\s*["']([^"']*)["']/)
-    const roundedMatch = match.match(/data-rounded\s*=\s*["']([^"']*)["']/)
-    const imagesMatch = match.match(/data-images\s*=\s*["']([^"']*)["']/)
-    const widthMatch = match.match(/data-width\s*=\s*["']([^"']*)["']/)
-    const alignMatch = match.match(/data-align\s*=\s*["']([^"']*)["']/)
-    const aspectRatioMatch = match.match(/data-aspect-ratio\s*=\s*["']([^"']*)["']/)
+    // Find the matching closing div using depth counting
+    const endPos = findMatchingDivClose(result, startPos)
+    if (endPos === -1) {
+      console.log('[email-campaign-runner] Could not find closing div for image grid')
+      break
+    }
+    
+    const fullMatch = result.slice(startPos, endPos)
+    console.log(`[email-campaign-runner] Found image grid (${fullMatch.length} chars)`)
+    
+    // Extract attributes from the opening tag
+    const columnsMatch = openTag.match(/data-columns\s*=\s*["'](\d)["']/)
+    const gapMatch = openTag.match(/data-gap\s*=\s*["']([^"']*)["']/)
+    const roundedMatch = openTag.match(/data-rounded\s*=\s*["']([^"']*)["']/)
+    const imagesMatch = openTag.match(/data-images\s*=\s*["']([^"']*)["']/)
+    const widthMatch = openTag.match(/data-width\s*=\s*["']([^"']*)["']/)
+    const alignMatch = openTag.match(/data-align\s*=\s*["']([^"']*)["']/)
     
     const numCols = columnsMatch ? parseInt(columnsMatch[1], 10) : 2
     const gap = gapMatch ? gapMatch[1] : 'md'
     const isRounded = !roundedMatch || roundedMatch[1] !== "false"
     const gridWidth = widthMatch ? widthMatch[1] : '100%'
     const align = alignMatch ? alignMatch[1] : 'center'
-    const aspectRatio = aspectRatioMatch ? aspectRatioMatch[1] : 'square'
     
-    // Try to get images from data-images attribute first
+    // Get images - prefer data-images attribute, fallback to img tags
     let images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
     
-    // If no images from attribute, extract from img tags in the content
     if (!images.length) {
-      const imgRegex = /<img[^>]*>/gi
+      // Extract from img tags in the content
+      const imgTagRegex = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi
       let imgMatch
-      while ((imgMatch = imgRegex.exec(match)) !== null) {
-        const imgTag = imgMatch[0]
-        const srcMatch = imgTag.match(/src\s*=\s*["']([^"']*)["']/)
-        const altMatch = imgTag.match(/alt\s*=\s*["']([^"']*)["']/)
-        const focalXMatch = imgTag.match(/data-focal-x\s*=\s*["']([^"']*)["']/)
-        const focalYMatch = imgTag.match(/data-focal-y\s*=\s*["']([^"']*)["']/)
-        
-        if (srcMatch) {
-          images.push({
-            src: srcMatch[1],
-            alt: altMatch ? altMatch[1] : '',
-            focalX: focalXMatch ? parseFloat(focalXMatch[1]) : 50,
-            focalY: focalYMatch ? parseFloat(focalYMatch[1]) : 50,
-          })
-        }
+      while ((imgMatch = imgTagRegex.exec(fullMatch)) !== null) {
+        const src = imgMatch[1]
+        const altMatch = imgMatch[0].match(/alt\s*=\s*["']([^"']*)["']/)
+        images.push({ src, alt: altMatch ? altMatch[1] : '' })
       }
     }
     
+    console.log(`[email-campaign-runner] Grid has ${images.length} images, ${numCols} columns`)
+    
     if (!images.length) {
-      searchPos = endPos
+      // No images, remove the empty grid
+      result = result.slice(0, startPos) + result.slice(endPos)
       continue
     }
     
+    // Build the email-compatible table
     const gapMap: Record<string, number> = { none: 0, sm: 8, md: 16, lg: 24 }
     const gapPx = gapMap[gap] || 16
-    
-    // For email clients, we need very explicit table structure
-    const alignAttr = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
     const borderRadius = isRounded ? 'border-radius:16px;' : ''
     
-    // Use fixed pixel width for email (standard email width is ~600px)
-    const containerWidth = 580 // pixels, accounting for padding
+    const containerWidth = 560
     const widthPercent = gridWidth.endsWith('%') ? parseInt(gridWidth) : 100
     const tableWidth = Math.floor(containerWidth * (widthPercent / 100))
-    const cellWidth = Math.floor((tableWidth - (gapPx * (numCols - 1))) / numCols)
+    const cellWidth = Math.floor(tableWidth / numCols) - gapPx
     
-    // Build table rows - each row contains cells side by side
+    // Build table rows
     const rows: string[] = []
     for (let i = 0; i < images.length; i += numCols) {
       const rowImages = images.slice(i, i + numCols)
+      const cells = rowImages.map(img => 
+        `<td style="padding:${gapPx/2}px;text-align:center;vertical-align:top;"><img src="${img.src}" alt="${img.alt || ''}" width="${cellWidth}" height="auto" style="display:block;max-width:100%;${borderRadius}"></td>`
+      ).join('')
       
-      // Build cells for this row - use explicit pixel widths
-      const cells = rowImages.map((img, idx) => {
-        const paddingLeft = idx === 0 ? 0 : gapPx / 2
-        const paddingRight = idx === rowImages.length - 1 ? 0 : gapPx / 2
-        return `<td width="${cellWidth}" valign="top" align="center" style="width:${cellWidth}px;padding:${paddingLeft}px ${paddingRight}px ${gapPx}px ${paddingLeft}px;"><img src="${img.src}" alt="${img.alt || ''}" width="${cellWidth}" style="display:block;width:${cellWidth}px;max-width:100%;height:auto;${borderRadius}" /></td>`
-      }).join('')
-      
-      // Pad with empty cells if needed
       const emptyCells = numCols - rowImages.length
-      const emptyHtml = emptyCells > 0 ? `<td width="${cellWidth}" style="width:${cellWidth}px;"></td>`.repeat(emptyCells) : ''
+      const emptyHtml = emptyCells > 0 ? `<td style="padding:${gapPx/2}px;"></td>`.repeat(emptyCells) : ''
       
       rows.push(`<tr>${cells}${emptyHtml}</tr>`)
     }
     
-    // Build complete table - using explicit pixel width
-    const replacement = `<table role="presentation" align="${alignAttr}" width="${tableWidth}" cellpadding="0" cellspacing="0" border="0" style="margin:16px auto;width:${tableWidth}px;max-width:100%;border-collapse:separate;border-spacing:0;"><tbody>${rows.join('')}</tbody></table>`
+    const alignStyle = align === 'center' ? 'margin:16px auto;' : align === 'right' ? 'margin:16px 0 16px auto;' : 'margin:16px auto 16px 0;'
+    const replacement = `<table width="${tableWidth}" cellpadding="0" cellspacing="0" border="0" align="${align}" style="${alignStyle}max-width:100%;"><tbody>${rows.join('')}</tbody></table>`
     
+    // Replace the grid with the table
     result = result.slice(0, startPos) + replacement + result.slice(endPos)
-    searchPos = startPos + replacement.length
   }
   
   return result
