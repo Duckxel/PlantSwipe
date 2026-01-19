@@ -19,6 +19,43 @@ import {
   HeartPulse,
   Wind,
 } from "lucide-react"
+
+// Double-tap heart animation component
+interface DoubleTapHeartProps {
+  x: number
+  y: number
+  onComplete: () => void
+}
+
+const DoubleTapHeart: React.FC<DoubleTapHeartProps> = ({ x, y, onComplete }) => {
+  return (
+    <motion.div
+      className="pointer-events-none fixed z-[100]"
+      style={{
+        left: x,
+        top: y,
+        transform: 'translate(-50%, -50%)',
+      }}
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ 
+        scale: [0, 1.2, 1],
+        opacity: [0, 1, 1, 0],
+      }}
+      transition={{ 
+        duration: 0.8,
+        times: [0, 0.3, 0.5, 1],
+        ease: "easeOut"
+      }}
+      onAnimationComplete={onComplete}
+    >
+      <Heart 
+        className="h-24 w-24 text-rose-500 drop-shadow-lg" 
+        fill="currentColor"
+        strokeWidth={1.5}
+      />
+    </motion.div>
+  )
+}
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -71,6 +108,59 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       usePageMetadata({ title: seoTitle, description: seoDescription })
     const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
     
+    // Double-tap detection state
+    const lastTapRef = React.useRef<{ time: number; x: number; y: number } | null>(null)
+    const [heartAnimations, setHeartAnimations] = React.useState<Array<{ id: string; x: number; y: number }>>([])
+    
+    // Double-tap threshold in milliseconds
+    const DOUBLE_TAP_THRESHOLD = 300
+    const DOUBLE_TAP_DISTANCE_THRESHOLD = 50 // Max distance between taps in pixels
+    
+    // Handle double-tap to like
+    const handleDoubleTap = React.useCallback((clientX: number, clientY: number) => {
+      const now = Date.now()
+      const lastTap = lastTapRef.current
+      
+      if (lastTap) {
+        const timeDiff = now - lastTap.time
+        const distance = Math.sqrt(
+          Math.pow(clientX - lastTap.x, 2) + Math.pow(clientY - lastTap.y, 2)
+        )
+        
+        // Check if it's a valid double-tap (within time and distance threshold)
+        if (timeDiff < DOUBLE_TAP_THRESHOLD && distance < DOUBLE_TAP_DISTANCE_THRESHOLD) {
+          // Clear the last tap to prevent triple-tap triggering
+          lastTapRef.current = null
+          
+          // Add heart animation at tap position
+          const animationId = `heart-${now}`
+          setHeartAnimations(prev => [...prev, { id: animationId, x: clientX, y: clientY }])
+          
+          // Only like if not already liked (double-tap doesn't unlike)
+          if (!liked && onToggleLike) {
+            onToggleLike()
+          }
+          
+          return true // Double-tap detected
+        }
+      }
+      
+      // Store this tap for potential double-tap detection
+      lastTapRef.current = { time: now, x: clientX, y: clientY }
+      return false // Not a double-tap
+    }, [liked, onToggleLike])
+    
+    // Remove completed heart animations
+    const removeHeartAnimation = React.useCallback((id: string) => {
+      setHeartAnimations(prev => prev.filter(anim => anim.id !== id))
+    }, [])
+    
+    // Clear heart animations when plant changes
+    React.useEffect(() => {
+      setHeartAnimations([])
+      lastTapRef.current = null
+    }, [current?.id])
+    
     // Touch tracking for swipe-up gesture on mobile (to open info)
     const touchStartRef = React.useRef<{ x: number; y: number; time: number } | null>(null)
     
@@ -95,6 +185,16 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       const deltaY = touch.clientY - touchStartRef.current.y
       const deltaTime = Date.now() - touchStartRef.current.time
       
+      // Check if this is a tap (minimal movement) vs a swipe
+      const isTap = Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15 && deltaTime < 300
+      
+      if (isTap) {
+        // Check for double-tap
+        handleDoubleTap(touch.clientX, touch.clientY)
+        touchStartRef.current = null
+        return
+      }
+      
       // Swipe up detection: significant upward movement, more vertical than horizontal, quick gesture
       const isSwipeUp = deltaY < -80 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5 && deltaTime < 500
       
@@ -103,7 +203,16 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       }
       
       touchStartRef.current = null
-    }, [handleInfo])
+    }, [handleInfo, handleDoubleTap])
+    
+    // Handle mouse click for desktop double-click detection
+    const handleCardClick = React.useCallback((e: React.MouseEvent) => {
+      // Don't trigger on button clicks
+      if ((e.target as HTMLElement).closest('button')) {
+        return
+      }
+      handleDoubleTap(e.clientX, e.clientY)
+    }, [handleDoubleTap])
 
     React.useEffect(() => {
       if (typeof window === "undefined") return
@@ -328,6 +437,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 onDragEnd={onDragEnd}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
+                onClick={handleCardClick}
                 initial={false}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0 }}
@@ -342,6 +452,18 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 <EmptyState onReset={() => setIndex(0)} />
               </div>
             )}
+          </AnimatePresence>
+          
+          {/* Double-tap heart animations */}
+          <AnimatePresence>
+            {heartAnimations.map(anim => (
+              <DoubleTapHeart
+                key={anim.id}
+                x={anim.x}
+                y={anim.y}
+                onComplete={() => removeHeartAnimation(anim.id)}
+              />
+            ))}
           </AnimatePresence>
         </div>
       )
@@ -375,6 +497,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     style={{ x, y }}
                     dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
                     onDragEnd={onDragEnd}
+                    onClick={handleCardClick}
                     initial={false}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -389,6 +512,18 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     <EmptyState onReset={() => setIndex(0)} />
                   </div>
                 )}
+              </AnimatePresence>
+              
+              {/* Double-tap heart animations */}
+              <AnimatePresence>
+                {heartAnimations.map(anim => (
+                  <DoubleTapHeart
+                    key={anim.id}
+                    x={anim.x}
+                    y={anim.y}
+                    onComplete={() => removeHeartAnimation(anim.id)}
+                  />
+                ))}
               </AnimatePresence>
             </div>
 
