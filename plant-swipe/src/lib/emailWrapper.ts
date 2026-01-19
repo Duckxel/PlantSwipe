@@ -384,109 +384,65 @@ function decodeImagesAttr(encoded: string | null): Array<{src: string, alt?: str
  * For better alignment support across email clients
  */
 function convertResizableImageToEmailHtml(html: string): string {
-  // Match resizable-image divs
-  const regex = /<div[^>]*data-type="resizable-image"[^>]*>([\s\S]*?)<\/div>/gi
+  // Simple pattern to match resizable-image divs
+  const imagePattern = /<div[^>]*data-type="resizable-image"[^>]*>[\s\S]*?<\/div>/gi
   
-  return html.replace(regex, (match) => {
-    // Extract attributes from the match
+  return html.replace(imagePattern, (match) => {
+    // Extract attributes
     const alignMatch = match.match(/data-align="([^"]*)"/)
     const widthMatch = match.match(/data-width="([^"]*)"/)
     
     const align = alignMatch ? alignMatch[1] : 'center'
     const width = widthMatch ? widthMatch[1] : '100%'
     
-    // Extract img tag
-    const imgMatch = match.match(/<img[^>]*>/i)
-    if (!imgMatch) return match
+    // Extract img src
+    const srcMatch = match.match(/src="([^"]*)"/)
+    const altMatch = match.match(/alt="([^"]*)"/)
     
-    // Get the img tag and update its style
-    let imgTag = imgMatch[0]
+    if (!srcMatch) {
+      return match
+    }
     
-    // Extract existing src and alt
-    const srcMatch = imgTag.match(/src="([^"]*)"/)
-    const altMatch = imgTag.match(/alt="([^"]*)"/)
-    const titleMatch = imgTag.match(/title="([^"]*)"/)
-    
-    const src = srcMatch ? srcMatch[1] : ''
+    const src = srcMatch[1]
     const alt = altMatch ? altMatch[1] : ''
-    const title = titleMatch ? titleMatch[1] : ''
     
-    // Build email-compatible table structure
-    const alignAttr = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
+    // Calculate pixel width (assuming 540px container)
+    const widthPercent = width.endsWith('%') ? parseInt(width) : 100
+    const pixelWidth = Math.floor(540 * (widthPercent / 100))
     
-    return `
-      <table role="presentation" data-type="resizable-image" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
-        <tr>
-          <td align="${alignAttr}" style="padding: 0;">
-            <img src="${src}" alt="${alt}" title="${title}" style="max-width: 100%; width: ${width}; height: auto; border-radius: 16px; display: inline-block;" />
-          </td>
-        </tr>
-      </table>
-    `.replace(/\s+/g, ' ').trim()
+    return `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;"><tr><td align="${align}"><img src="${src}" alt="${alt}" width="${pixelWidth}" style="display:block;max-width:100%;border-radius:16px;"></td></tr></table>`
   })
 }
 
-/**
- * Finds the matching closing div tag for a div starting at the given position
- * Handles nested divs correctly by counting depth
- */
-function findMatchingDivClose(html: string, startPos: number): number {
-  let depth = 0
-  let pos = startPos
-  
-  while (pos < html.length) {
-    const openMatch = html.slice(pos).match(/^<div\b/i)
-    const closeMatch = html.slice(pos).match(/^<\/div>/i)
-    
-    if (openMatch) {
-      depth++
-      pos += openMatch[0].length
-    } else if (closeMatch) {
-      depth--
-      if (depth === 0) {
-        return pos + closeMatch[0].length
-      }
-      pos += closeMatch[0].length
-    } else {
-      pos++
-    }
-  }
-  
-  return -1 // Not found
-}
 
 /**
  * Converts image grid divs to email-compatible table-based HTML
  * CSS Grid doesn't work in most email clients, so we use tables instead
+ * 
+ * Note: This is exported for use in email sending pipelines.
+ * For web previews, the div-based structure with CSS grid works fine.
  */
-function convertImageGridToEmailTable(html: string): string {
-  let result = html
-  let searchPos = 0
+export function convertImageGridToEmailTable(html: string): string {
+  // Match pattern: <div...data-type="image-grid"...>...<div...>...</div></div>
+  const gridPattern = /(<div[^>]*data-type="image-grid"[^>]*>)([\s\S]*?)(<\/div>\s*<\/div>)/gi
   
-  // Find all image-grid divs and replace them
-  while (true) {
-    const openingTagMatch = result.slice(searchPos).match(/<div[^>]*data-type="image-grid"[^>]*>/i)
-    if (!openingTagMatch || openingTagMatch.index === undefined) break
+  let result = html
+  let match
+  
+  // Reset lastIndex for global regex
+  gridPattern.lastIndex = 0
+  
+  while ((match = gridPattern.exec(html)) !== null) {
+    const fullMatch = match[0]
+    const openTag = match[1]
     
-    const startPos = searchPos + openingTagMatch.index
-    const endPos = findMatchingDivClose(result, startPos)
-    
-    if (endPos === -1) {
-      // Couldn't find matching close, skip this one
-      searchPos = startPos + openingTagMatch[0].length
-      continue
-    }
-    
-    // Extract the full match
-    const match = result.slice(startPos, endPos)
-    
-    // Extract attributes from the opening tag
-    const columnsMatch = match.match(/data-columns="(\d)"/)
-    const gapMatch = match.match(/data-gap="([^"]*)"/)
-    const roundedMatch = match.match(/data-rounded="([^"]*)"/)
-    const imagesMatch = match.match(/data-images="([^"]*)"/)
-    const widthMatch = match.match(/data-width="([^"]*)"/)
-    const alignMatch = match.match(/data-align="([^"]*)"/)
+    // Extract attributes from opening tag
+    const columnsMatch = openTag.match(/data-columns="(\d)"/)
+    const gapMatch = openTag.match(/data-gap="([^"]*)"/)
+    const roundedMatch = openTag.match(/data-rounded="([^"]*)"/)
+    const imagesMatch = openTag.match(/data-images="([^"]*)"/)
+    const widthMatch = openTag.match(/data-width="([^"]*)"/)
+    const alignMatch = openTag.match(/data-align="([^"]*)"/)
     
     const numCols = columnsMatch ? parseInt(columnsMatch[1], 10) : 2
     const gap = gapMatch ? gapMatch[1] : 'md'
@@ -494,102 +450,70 @@ function convertImageGridToEmailTable(html: string): string {
     const gridWidth = widthMatch ? widthMatch[1] : '100%'
     const align = alignMatch ? alignMatch[1] : 'center'
     
-    // Try to get images from data-images attribute
-    let images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
+    // Decode images from data-images attribute
+    let images: Array<{src: string, alt?: string}> = []
+    if (imagesMatch && imagesMatch[1]) {
+      images = decodeImagesAttr(imagesMatch[1])
+    }
     
-    // If no images from attribute, try to extract from img tags in the content
+    // Fallback: extract from img tags
     if (!images.length) {
-      const imgRegex = /<img[^>]*src="([^"]*)"[^>]*(?:alt="([^"]*)"|)[^>]*>/gi
+      const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/gi
       let imgMatch
-      while ((imgMatch = imgRegex.exec(match)) !== null) {
-        images.push({ src: imgMatch[1], alt: imgMatch[2] || '' })
+      while ((imgMatch = imgRegex.exec(fullMatch)) !== null) {
+        const altMatch = imgMatch[0].match(/alt="([^"]*)"/)
+        images.push({ src: imgMatch[1], alt: altMatch ? altMatch[1] : '' })
       }
     }
     
     if (!images.length) {
-      // No images found, skip this one
-      searchPos = endPos
       continue
     }
     
-    const gapMap: Record<string, number> = {
-      none: 0,
-      sm: 8,
-      md: 16,
-      lg: 24,
-    }
+    // Build table
+    const gapMap: Record<string, number> = { none: 0, sm: 8, md: 16, lg: 24 }
     const gapPx = gapMap[gap] || 16
-    const cellWidth = Math.floor(100 / numCols)
+    const borderRadius = isRounded ? 'border-radius:16px;' : ''
     
-    // Determine alignment for the outer table
-    const alignAttr = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
+    const containerWidth = 540
+    const widthPercent = gridWidth.endsWith('%') ? parseInt(gridWidth) : 100
+    const tableWidth = Math.floor(containerWidth * (widthPercent / 100))
+    const cellWidth = Math.floor(tableWidth / numCols) - gapPx
     
-    // Build table rows
+    // Build rows
     const rows: string[] = []
     for (let i = 0; i < images.length; i += numCols) {
       const rowImages = images.slice(i, i + numCols)
-      const cells = rowImages.map(img => {
-        const focalX = img.focalX ?? 50
-        const focalY = img.focalY ?? 50
-        // Use background-image div for email clients - supports focal point via background-position
-        // padding-bottom: 62.5% creates 16:10 aspect ratio (10/16 = 0.625)
-        // height: 0 is essential for the padding-bottom aspect ratio trick
-        // position: relative and display: block ensure proper rendering
-        return `
-        <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <div style="display: block; position: relative; width: 100%; height: 0; padding-bottom: 62.5%; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; background-repeat: no-repeat; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
-        </td>
-      `}).join('')
+      const cells = rowImages.map(img => 
+        `<td style="padding:${gapPx/2}px;"><img src="${img.src}" alt="${img.alt || ''}" width="${cellWidth}" style="display:block;${borderRadius}"></td>`
+      ).join('')
       
-      // Pad with empty cells if needed
       const emptyCells = numCols - rowImages.length
-      const emptyHtml = emptyCells > 0 ? `<td style="width: ${cellWidth}%; padding: ${gapPx / 2}px;"></td>`.repeat(emptyCells) : ''
+      const emptyHtml = emptyCells > 0 ? `<td style="padding:${gapPx/2}px;"></td>`.repeat(emptyCells) : ''
       
       rows.push(`<tr>${cells}${emptyHtml}</tr>`)
     }
     
-    // Wrap in outer alignment table
-    const innerTable = `
-      <table role="presentation" cellpadding="0" cellspacing="0" style="width: ${gridWidth}; max-width: 100%; border-collapse: collapse;">
-        ${rows.join('')}
-      </table>
-    `
+    const replacement = `<table width="${tableWidth}" align="${align}" cellpadding="0" cellspacing="0" border="0" style="margin:16px auto;"><tbody>${rows.join('')}</tbody></table>`
     
-    const replacement = `
-      <table role="presentation" data-type="image-grid" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
-        <tr>
-          <td align="${alignAttr}" style="padding: 0;">
-            ${innerTable}
-          </td>
-        </tr>
-      </table>
-    `.replace(/\s+/g, ' ').trim()
-    
-    // Replace the match with the table
-    result = result.slice(0, startPos) + replacement + result.slice(endPos)
-    
-    // Continue searching after the replacement
-    searchPos = startPos + replacement.length
+    result = result.replace(fullMatch, replacement)
   }
   
   return result
 }
 
 /**
- * Sanitizes email HTML for maximum compatibility
+ * Sanitizes email HTML for web preview
  * - Replaces SVG logo URLs with PNG for Gmail compatibility
  * - Fixes escaped divider HTML from TipTap
  * - Removes filter:brightness(0) invert(1) that was used for SVG workaround
- * - Converts image grids to table-based layout for email clients
+ * - Keeps div-based image grids (CSS grid works in browsers)
  */
 export function sanitizeEmailHtml(html: string): string {
   let result = html
 
-  // 0a. Convert resizable images to email-compatible tables
-  result = convertResizableImageToEmailHtml(result)
-  
-  // 0b. Convert image grids to email-compatible tables (must be done early before other transformations)
-  result = convertImageGridToEmailTable(result)
+  // For web preview, keep the div-based structure for both resizable images and image grids
+  // CSS handles these properly in browsers. Only convert to tables when sending emails.
 
   // 1. Replace all SVG logo URLs with PNG (Gmail doesn't support SVG)
   result = result.replace(
@@ -632,5 +556,25 @@ export function sanitizeEmailHtml(html: string): string {
     }
   }
 
+  return result
+}
+
+/**
+ * Prepares email HTML for actual sending to email clients
+ * - Does everything sanitizeEmailHtml does
+ * - ALSO converts image grids to table-based layout (required for email clients)
+ * 
+ * Use this function when sending emails, not for web preview
+ */
+export function prepareEmailHtmlForSending(html: string): string {
+  // First apply all the standard sanitization
+  let result = sanitizeEmailHtml(html)
+  
+  // Convert resizable images to tables (for proper alignment in email clients)
+  result = convertResizableImageToEmailHtml(result)
+  
+  // Convert image grids to tables (email clients don't support CSS Grid)
+  result = convertImageGridToEmailTable(result)
+  
   return result
 }

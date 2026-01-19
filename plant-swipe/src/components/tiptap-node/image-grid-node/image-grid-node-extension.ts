@@ -93,16 +93,24 @@ function extractImagesFromChildren(element: HTMLElement): ImageGridImage[] {
   imgElements.forEach((img) => {
     const src = img.getAttribute('src')
     if (src) {
-      // Try to extract focal point from object-position style
+      // Try to extract focal point from data attributes first
+      const dataFocalX = img.getAttribute('data-focal-x')
+      const dataFocalY = img.getAttribute('data-focal-y')
+      
+      // Fallback to object-position style
       const style = img.getAttribute('style') || ''
       const objectPosMatch = style.match(/object-position:\s*(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/)
+      
+      // Use data attributes if available, otherwise use object-position, default to 50
+      const focalX = dataFocalX ? parseFloat(dataFocalX) : (objectPosMatch ? parseFloat(objectPosMatch[1]) : 50)
+      const focalY = dataFocalY ? parseFloat(dataFocalY) : (objectPosMatch ? parseFloat(objectPosMatch[2]) : 50)
       
       images.push({
         src,
         alt: img.getAttribute('alt') || '',
         width: img.getAttribute('width') || undefined,
-        focalX: objectPosMatch ? parseFloat(objectPosMatch[1]) : 50,
-        focalY: objectPosMatch ? parseFloat(objectPosMatch[2]) : 50,
+        focalX,
+        focalY,
       })
     }
   })
@@ -208,7 +216,17 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    const { images, columns, gap, rounded, width, align } = HTMLAttributes as ImageGridAttributes
+    // HTMLAttributes contains the merged HTML attributes from each attribute's renderHTML
+    // The images are encoded in data-images, so we need to decode them
+    const dataImages = HTMLAttributes["data-images"] as string | undefined
+    const images = dataImages ? decodeImagesAttr(dataImages) : []
+    
+    // Get other attributes (these are passed as data-* attributes too)
+    const columns = parseInt(HTMLAttributes["data-columns"] as string, 10) || 2
+    const gap = (HTMLAttributes["data-gap"] as GridGap) || "md"
+    const rounded = HTMLAttributes["data-rounded"] !== "false"
+    const width = (HTMLAttributes["data-width"] as string) || "100%"
+    const align = (HTMLAttributes["data-align"] as ImageGridAlign) || "center"
     
     const gapMap: Record<GridGap, string> = {
       none: "0",
@@ -243,7 +261,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
         {
           src: img.src,
           alt: img.alt || "",
-          style: `width: 100%; height: auto; object-fit: cover; object-position: ${focalX}% ${focalY}%; aspect-ratio: 16/10; ${rounded ? "border-radius: 16px;" : ""}`,
+          style: `width: 100%; height: auto; object-fit: cover; object-position: ${focalX}% ${focalY}%; ${rounded ? "border-radius: 16px;" : ""}`,
           "data-grid-image": "true",
           "data-focal-x": String(focalX),
           "data-focal-y": String(focalY),
