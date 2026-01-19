@@ -250,10 +250,10 @@ const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_
 const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_BADGE_CLASSES;
 
 const PLANT_STATUS_KEYS: NormalizedPlantStatus[] = [
-  "in progres",
-  "review",
-  "rework",
   "approved",
+  "rework",
+  "review",
+  "in progres",
   "other",
 ];
 
@@ -267,9 +267,10 @@ const PLANT_STATUS_FILTER_OPTIONS = PLANT_STATUS_KEYS.map((status) => ({
 
 const PRIORITIZED_STATUS_ORDER: Partial<Record<NormalizedPlantStatus, number>> =
   {
-    review: 0,
+    approved: 0,
     rework: 1,
-    "in progres": 2,
+    review: 2,
+    "in progres": 3,
   };
 const FALLBACK_STATUS_ORDER = PLANT_STATUS_KEYS.filter(
   (status) => PRIORITIZED_STATUS_ORDER[status] === undefined,
@@ -289,9 +290,10 @@ const getStatusSortPriority = (status: NormalizedPlantStatus): number => {
 };
 
 const STATUS_DONUT_SEGMENTS: NormalizedPlantStatus[] = [
-  "in progres",
-  "review",
+  "approved",
   "rework",
+  "review",
+  "in progres",
   "other",
 ];
 
@@ -334,7 +336,10 @@ type PlantDashboardRow = {
   promotionMonth: PromotionMonthSlug | null;
   primaryImage: string | null;
   updatedAt: number | null;
+  createdAt: number | null;
 };
+
+type PlantSortOption = "status" | "updated" | "created" | "name";
 
 const normalizePlantStatus = (
   status?: string | null,
@@ -1643,6 +1648,7 @@ export const AdminPage: React.FC = () => {
   >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
+  const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>("status");
   const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
   const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
   const [deletingPlant, setDeletingPlant] = React.useState(false);
@@ -2224,6 +2230,7 @@ export const AdminPage: React.FC = () => {
             status,
             promotion_month,
             updated_time,
+            created_time,
             plant_images (
               link,
               use
@@ -2258,6 +2265,16 @@ export const AdminPage: React.FC = () => {
                   row?.updated_time ??
                   row?.updated_at ??
                   row?.updatedTime ??
+                  null;
+                if (!timestamp) return null;
+                const parsed = Date.parse(timestamp);
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
+              createdAt: (() => {
+                const timestamp =
+                  row?.created_time ??
+                  row?.created_at ??
+                  row?.createdTime ??
                   null;
                 if (!timestamp) return null;
                 const parsed = Date.parse(timestamp);
@@ -2448,12 +2465,32 @@ export const AdminPage: React.FC = () => {
         return matchesSearch;
       })
       .sort((a, b) => {
-        const statusDiff =
-          getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
-        if (statusDiff !== 0) return statusDiff;
-        return a.name.localeCompare(b.name);
+        switch (plantSortOption) {
+          case "updated":
+            // Sort by most recently updated first (descending)
+            const updatedA = a.updatedAt ?? 0;
+            const updatedB = b.updatedAt ?? 0;
+            if (updatedB !== updatedA) return updatedB - updatedA;
+            return a.name.localeCompare(b.name);
+          case "created":
+            // Sort by most recently created first (descending)
+            const createdA = a.createdAt ?? 0;
+            const createdB = b.createdAt ?? 0;
+            if (createdB !== createdA) return createdB - createdA;
+            return a.name.localeCompare(b.name);
+          case "name":
+            // Sort alphabetically by name
+            return a.name.localeCompare(b.name);
+          case "status":
+          default:
+            // Sort by status priority, then alphabetically
+            const statusDiff =
+              getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
+            if (statusDiff !== 0) return statusDiff;
+            return a.name.localeCompare(b.name);
+        }
       });
-  }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery]);
+  }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery, plantSortOption]);
 
   const plantViewIsPlants = requestViewMode === "plants";
   const plantTableLoading =
@@ -7083,6 +7120,19 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
+                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
+                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                               <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:shadow-amber-500/5">
                                 <div className="flex items-center gap-3">
                                   <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
@@ -7105,19 +7155,6 @@ export const AdminPage: React.FC = () => {
                                     <div className="text-xs text-stone-500 dark:text-stone-400">In Progress</div>
                                     <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
                                       {plantStatusDonutData.find(d => d.key === "in progres")?.value || 0}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
-                                <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
-                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
-                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
-                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
                                     </div>
                                   </div>
                                 </div>
@@ -7430,6 +7467,20 @@ export const AdminPage: React.FC = () => {
                                             ))}
                                           </select>
                                         </div>
+                                        <div className="w-full md:w-44">
+                                          <select
+                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                            value={plantSortOption}
+                                            onChange={(e) =>
+                                              setPlantSortOption(e.target.value as PlantSortOption)
+                                            }
+                                          >
+                                            <option value="status">Sort by Status</option>
+                                            <option value="updated">Last Updated</option>
+                                            <option value="created">Last Created</option>
+                                            <option value="name">Name (A-Z)</option>
+                                          </select>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
@@ -7528,7 +7579,12 @@ export const AdminPage: React.FC = () => {
                                             <Calendar className="h-3 w-3" />
                                             {plant.promotionMonth ? PROMOTION_MONTH_LABELS[plant.promotionMonth] : "No month"}
                                           </span>
-                                          {plant.updatedAt && (
+                                          {plantSortOption === "created" && plant.createdAt && (
+                                            <span className="text-xs text-stone-400 dark:text-stone-500">
+                                              Created {formatTimeAgo(plant.createdAt)}
+                                            </span>
+                                          )}
+                                          {plantSortOption !== "created" && plant.updatedAt && (
                                             <span className="text-xs text-stone-400 dark:text-stone-500">
                                               Updated {formatTimeAgo(plant.updatedAt)}
                                             </span>
