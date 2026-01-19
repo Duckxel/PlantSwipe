@@ -1036,6 +1036,196 @@ function stripHtml(input: string): string {
 }
 
 /**
+ * Helper to safely decode images array from a base64/JSON data attribute
+ */
+function decodeImagesAttr(encoded: string | null): Array<{src: string, alt?: string, focalX?: number, focalY?: number}> {
+  if (!encoded) return []
+  
+  try {
+    // First try base64 decoding (new format)
+    try {
+      const json = decodeURIComponent(atob(encoded))
+      return JSON.parse(json)
+    } catch {
+      // If base64 fails, try direct JSON parse (old format compatibility)
+    }
+    // Fallback: try direct JSON parse for backward compatibility
+    return JSON.parse(encoded)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Converts resizable image divs to email-compatible table-based HTML
+ * For better alignment support across email clients
+ */
+function convertResizableImageToEmailHtml(html: string): string {
+  console.log('[email-campaign-runner] convertResizableImageToEmailHtml called')
+  
+  // Simple pattern to match resizable-image divs
+  const imagePattern = /<div[^>]*data-type="resizable-image"[^>]*>[\s\S]*?<\/div>/gi
+  
+  return html.replace(imagePattern, (match) => {
+    console.log(`[email-campaign-runner] Found resizable-image: ${match.substring(0, 80)}...`)
+    
+    // Extract attributes
+    const alignMatch = match.match(/data-align="([^"]*)"/)
+    const widthMatch = match.match(/data-width="([^"]*)"/)
+    
+    const align = alignMatch ? alignMatch[1] : 'center'
+    const width = widthMatch ? widthMatch[1] : '100%'
+    
+    // Extract img src
+    const srcMatch = match.match(/src="([^"]*)"/)
+    const altMatch = match.match(/alt="([^"]*)"/)
+    
+    if (!srcMatch) {
+      console.log('[email-campaign-runner] No src found, returning original')
+      return match
+    }
+    
+    const src = srcMatch[1]
+    const alt = altMatch ? altMatch[1] : ''
+    
+    // Calculate pixel width (assuming 540px container)
+    const widthPercent = width.endsWith('%') ? parseInt(width) : 100
+    const pixelWidth = Math.floor(540 * (widthPercent / 100))
+    
+    console.log(`[email-campaign-runner] Converting image: ${align}, ${width}, ${pixelWidth}px`)
+    
+    return `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;"><tr><td align="${align}"><img src="${src}" alt="${alt}" width="${pixelWidth}" style="display:block;max-width:100%;border-radius:16px;"></td></tr></table>`
+  })
+}
+
+/**
+ * Finds the matching closing div tag for a div starting at the given position
+ * Handles nested divs correctly by counting depth
+ */
+function findMatchingDivClose(html: string, startPos: number): number {
+  let depth = 0
+  let pos = startPos
+  
+  while (pos < html.length) {
+    const openMatch = html.slice(pos).match(/^<div\b/i)
+    const closeMatch = html.slice(pos).match(/^<\/div>/i)
+    
+    if (openMatch) {
+      depth++
+      pos += openMatch[0].length
+    } else if (closeMatch) {
+      depth--
+      if (depth === 0) {
+        return pos + closeMatch[0].length
+      }
+      pos += closeMatch[0].length
+    } else {
+      pos++
+    }
+  }
+  
+  return -1 // Not found
+}
+
+/**
+ * Converts image grid divs to email-compatible table-based HTML
+ * CSS Grid doesn't work in most email clients, so we use tables instead
+ */
+function convertImageGridToEmailTable(html: string): string {
+  console.log('[email-campaign-runner] convertImageGridToEmailTable called')
+  
+  // Simple approach: find data-type="image-grid" and extract data-images
+  // Then replace the entire block (outer div + inner div + content)
+  
+  // Match pattern: <div...data-type="image-grid"...>...<div...>...</div></div>
+  // Use a greedy match to find the full block
+  const gridPattern = /(<div[^>]*data-type="image-grid"[^>]*>)([\s\S]*?)(<\/div>\s*<\/div>)/gi
+  
+  let result = html
+  let match
+  
+  // Reset lastIndex for global regex
+  gridPattern.lastIndex = 0
+  
+  while ((match = gridPattern.exec(html)) !== null) {
+    const fullMatch = match[0]
+    const openTag = match[1]
+    
+    console.log(`[email-campaign-runner] Found image-grid block: ${fullMatch.substring(0, 100)}...`)
+    
+    // Extract attributes from opening tag
+    const columnsMatch = openTag.match(/data-columns="(\d)"/)
+    const gapMatch = openTag.match(/data-gap="([^"]*)"/)
+    const roundedMatch = openTag.match(/data-rounded="([^"]*)"/)
+    const imagesMatch = openTag.match(/data-images="([^"]*)"/)
+    const widthMatch = openTag.match(/data-width="([^"]*)"/)
+    const alignMatch = openTag.match(/data-align="([^"]*)"/)
+    
+    const numCols = columnsMatch ? parseInt(columnsMatch[1], 10) : 2
+    const gap = gapMatch ? gapMatch[1] : 'md'
+    const isRounded = !roundedMatch || roundedMatch[1] !== "false"
+    const gridWidth = widthMatch ? widthMatch[1] : '100%'
+    const align = alignMatch ? alignMatch[1] : 'center'
+    
+    // Decode images from data-images attribute
+    let images: Array<{src: string, alt?: string}> = []
+    if (imagesMatch && imagesMatch[1]) {
+      images = decodeImagesAttr(imagesMatch[1])
+      console.log(`[email-campaign-runner] Decoded ${images.length} images from data-images`)
+    }
+    
+    // Fallback: extract from img tags
+    if (!images.length) {
+      const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/gi
+      let imgMatch
+      while ((imgMatch = imgRegex.exec(fullMatch)) !== null) {
+        const altMatch = imgMatch[0].match(/alt="([^"]*)"/)
+        images.push({ src: imgMatch[1], alt: altMatch ? altMatch[1] : '' })
+      }
+      console.log(`[email-campaign-runner] Extracted ${images.length} images from img tags`)
+    }
+    
+    if (!images.length) {
+      console.log('[email-campaign-runner] No images found, skipping')
+      continue
+    }
+    
+    // Build table
+    const gapMap: Record<string, number> = { none: 0, sm: 8, md: 16, lg: 24 }
+    const gapPx = gapMap[gap] || 16
+    const borderRadius = isRounded ? 'border-radius:16px;' : ''
+    
+    const containerWidth = 540
+    const widthPercent = gridWidth.endsWith('%') ? parseInt(gridWidth) : 100
+    const tableWidth = Math.floor(containerWidth * (widthPercent / 100))
+    const cellWidth = Math.floor(tableWidth / numCols) - gapPx
+    
+    console.log(`[email-campaign-runner] Building ${numCols}-col table, ${tableWidth}px wide, cells ${cellWidth}px`)
+    
+    // Build rows
+    const rows: string[] = []
+    for (let i = 0; i < images.length; i += numCols) {
+      const rowImages = images.slice(i, i + numCols)
+      const cells = rowImages.map(img => 
+        `<td style="padding:${gapPx/2}px;"><img src="${img.src}" alt="${img.alt || ''}" width="${cellWidth}" style="display:block;${borderRadius}"></td>`
+      ).join('')
+      
+      const emptyCells = numCols - rowImages.length
+      const emptyHtml = emptyCells > 0 ? `<td style="padding:${gapPx/2}px;"></td>`.repeat(emptyCells) : ''
+      
+      rows.push(`<tr>${cells}${emptyHtml}</tr>`)
+    }
+    
+    const replacement = `<table width="${tableWidth}" align="${align}" cellpadding="0" cellspacing="0" border="0" style="margin:16px auto;"><tbody>${rows.join('')}</tbody></table>`
+    
+    console.log(`[email-campaign-runner] Replacing grid with table`)
+    result = result.replace(fullMatch, replacement)
+  }
+  
+  return result
+}
+
+/**
  * Sanitizes HTML content to make it email-client compatible
  * Replaces CSS properties that email clients don't support with compatible alternatives
  */
@@ -1043,6 +1233,12 @@ function sanitizeHtmlForEmail(html: string): string {
   if (!html) return html
   
   let result = html
+  
+  // 0a. Convert resizable images to email-compatible tables
+  result = convertResizableImageToEmailHtml(result)
+  
+  // 0b. Convert image grids to email-compatible tables (must be done early before other transformations)
+  result = convertImageGridToEmailTable(result)
   
   // 1. Replace CSS variables with hardcoded colors (Gmail doesn't support var())
   const cssVarMap: Record<string, string> = {
@@ -1099,24 +1295,35 @@ function sanitizeHtmlForEmail(html: string): string {
   // 6. Remove transition properties (not supported in email)
   result = result.replace(/transition:\s*[^;"}]+;?/gi, "")
   
-  // 7. Remove gap property (not supported in email)
-  result = result.replace(/gap:\s*[^;"}]+;?/gi, "")
+  // 7. Remove gap property (not supported in email) - but NOT for our new table-based image grids
+  result = result.replace(/(?<!table[^>]*style="[^"]*)gap:\s*[^;"}]+;?/gi, "")
   
-  // 8. Clean up any double semicolons or empty style artifacts
+  // 8. Replace display: grid/inline-grid with nothing (we've already converted grids to tables)
+  result = result.replace(/display:\s*(?:inline-)?grid\s*;?/gi, "")
+  result = result.replace(/grid-template-columns:\s*[^;"}]+;?/gi, "")
+  
+  // 8b. Remove aspect-ratio (not supported in email clients)
+  result = result.replace(/aspect-ratio:\s*[^;"}]+;?/gi, "")
+  
+  // 8c. Remove object-fit and object-position (not supported in email clients)
+  result = result.replace(/object-fit:\s*[^;"}]+;?/gi, "")
+  result = result.replace(/object-position:\s*[^;"}]+;?/gi, "")
+  
+  // 9. Clean up any double semicolons or empty style artifacts
   result = result.replace(/;\s*;/g, ";")
   result = result.replace(/style="\s*;/g, 'style="')
   result = result.replace(/;\s*"/g, '"')
   
-  // 9. Replace SVG logo URLs with PNG for Gmail compatibility (Gmail doesn't support SVG)
+  // 10. Replace SVG logo URLs with PNG for Gmail compatibility (Gmail doesn't support SVG)
   const SVG_LOGO_URL = "https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg"
   const PNG_LOGO_URL = "https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png"
   result = result.replace(new RegExp(SVG_LOGO_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), PNG_LOGO_URL)
   
-  // 10. Remove the old SVG filter workaround (filter:brightness(0) invert(1))
+  // 11. Remove the old SVG filter workaround (filter:brightness(0) invert(1))
   // This was used to make SVGs white, but PNG is already white
   result = result.replace(/filter:\s*brightness\(0\)\s*invert\(1\);?/g, "")
   
-  // 11. Fix escaped styled-divider HTML (TipTap escapes the inner HTML)
+  // 12. Fix escaped styled-divider HTML (TipTap escapes the inner HTML)
   // These patterns match common escaped divider content
   const escapedDividerReplacements = [
     // Solid emerald divider

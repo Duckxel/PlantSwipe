@@ -28,6 +28,7 @@ import {
 // --- Tiptap Node ---
 import { ImageUploadNode } from "@/components/tiptap-node/image-upload-node/image-upload-node-extension"
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
+import { ResizableImageNode } from "@/components/tiptap-node/resizable-image-node/resizable-image-node-extension"
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss"
 import "@/components/tiptap-node/code-block-node/code-block-node.scss"
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss"
@@ -241,7 +242,9 @@ export function SimpleEditor() {
       Superscript,
       Subscript,
       Selection,
+      ResizableImageNode,
       ImageUploadNode.configure({
+        type: "resizableImage", // Use resizable image for alignment & sizing controls
         accept: "image/*",
         maxSize: MAX_FILE_SIZE,
         limit: 3,
