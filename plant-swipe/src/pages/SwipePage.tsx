@@ -122,14 +122,19 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   // Double-tap to like functionality (Instagram-style)
   const { showHeart, heartPosition, triggerAnimation, hideAnimation } = useDoubleTapHeartAnimation()
   const cardRef = React.useRef<HTMLDivElement>(null)
+  const lastTapPositionRef = React.useRef<{ x: number; y: number } | null>(null)
 
   const handleDoubleTapLike = React.useCallback(() => {
     // Only like if not already liked (don't toggle off on double-tap)
     if (!liked && onToggleLike) {
       onToggleLike()
     }
-    // Always show heart animation, even if already liked
-    triggerAnimation()
+    // Always show heart animation at the tap position, even if already liked
+    if (lastTapPositionRef.current) {
+      triggerAnimation(lastTapPositionRef.current.x, lastTapPositionRef.current.y)
+    } else {
+      triggerAnimation()
+    }
   }, [liked, onToggleLike, triggerAnimation])
 
   const { handleTap } = useDoubleTap({
@@ -143,6 +148,30 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       if ((event.target as HTMLElement).closest('button')) {
         return
       }
+      
+      // Calculate position relative to the card for the heart animation
+      if (cardRef.current) {
+        const rect = cardRef.current.getBoundingClientRect()
+        let clientX: number, clientY: number
+        
+        if ('touches' in event && event.touches.length > 0) {
+          clientX = event.touches[0].clientX
+          clientY = event.touches[0].clientY
+        } else if ('clientX' in event) {
+          clientX = event.clientX
+          clientY = event.clientY
+        } else {
+          clientX = rect.left + rect.width / 2
+          clientY = rect.top + rect.height / 2
+        }
+        
+        // Store position relative to the card
+        lastTapPositionRef.current = {
+          x: clientX - rect.left,
+          y: clientY - rect.top,
+        }
+      }
+      
       handleTap(event)
     },
     [handleTap]
