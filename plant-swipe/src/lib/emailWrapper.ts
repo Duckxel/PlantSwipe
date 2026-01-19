@@ -384,46 +384,62 @@ function decodeImagesAttr(encoded: string | null): Array<{src: string, alt?: str
  * For better alignment support across email clients
  */
 function convertResizableImageToEmailHtml(html: string): string {
-  // Match resizable-image divs
-  const regex = /<div[^>]*data-type="resizable-image"[^>]*>([\s\S]*?)<\/div>/gi
+  let result = html
+  let searchPos = 0
   
-  return html.replace(regex, (match) => {
-    // Extract attributes from the match
-    const alignMatch = match.match(/data-align="([^"]*)"/)
-    const widthMatch = match.match(/data-width="([^"]*)"/)
+  // Find all resizable-image divs and replace them
+  while (true) {
+    const openingTagMatch = result.slice(searchPos).match(/<div[^>]*data-type\s*=\s*["']resizable-image["'][^>]*>/i)
+    if (!openingTagMatch || openingTagMatch.index === undefined) break
+    
+    const startPos = searchPos + openingTagMatch.index
+    const endPos = findMatchingDivClose(result, startPos)
+    
+    if (endPos === -1) {
+      searchPos = startPos + openingTagMatch[0].length
+      continue
+    }
+    
+    const match = result.slice(startPos, endPos)
+    
+    // Extract attributes - handle various formats
+    const alignMatch = match.match(/data-align\s*=\s*["']([^"']*)["']/)
+    const widthMatch = match.match(/data-width\s*=\s*["']([^"']*)["']/)
     
     const align = alignMatch ? alignMatch[1] : 'center'
     const width = widthMatch ? widthMatch[1] : '100%'
     
-    // Extract img tag
+    // Extract img tag and its attributes
     const imgMatch = match.match(/<img[^>]*>/i)
-    if (!imgMatch) return match
+    if (!imgMatch) {
+      searchPos = endPos
+      continue
+    }
     
-    // Get the img tag and update its style
-    let imgTag = imgMatch[0]
-    
-    // Extract existing src and alt
-    const srcMatch = imgTag.match(/src="([^"]*)"/)
-    const altMatch = imgTag.match(/alt="([^"]*)"/)
-    const titleMatch = imgTag.match(/title="([^"]*)"/)
+    const imgTag = imgMatch[0]
+    const srcMatch = imgTag.match(/src\s*=\s*["']([^"']*)["']/)
+    const altMatch = imgTag.match(/alt\s*=\s*["']([^"']*)["']/)
+    const titleMatch = imgTag.match(/title\s*=\s*["']([^"']*)["']/)
     
     const src = srcMatch ? srcMatch[1] : ''
     const alt = altMatch ? altMatch[1] : ''
     const title = titleMatch ? titleMatch[1] : ''
     
-    // Build email-compatible table structure
+    if (!src) {
+      searchPos = endPos
+      continue
+    }
+    
     const alignAttr = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
     
-    return `
-      <table role="presentation" data-type="resizable-image" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
-        <tr>
-          <td align="${alignAttr}" style="padding: 0;">
-            <img src="${src}" alt="${alt}" title="${title}" style="max-width: 100%; width: ${width}; height: auto; border-radius: 16px; display: inline-block;" />
-          </td>
-        </tr>
-      </table>
-    `.replace(/\s+/g, ' ').trim()
-  })
+    // Build email-compatible table structure
+    const replacement = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;"><tr><td align="${alignAttr}" style="padding:0;"><img src="${src}" alt="${alt}" title="${title}" width="${width.replace('%', '')}" style="max-width:100%;width:${width};height:auto;border-radius:16px;display:block;" /></td></tr></table>`
+    
+    result = result.slice(0, startPos) + replacement + result.slice(endPos)
+    searchPos = startPos + replacement.length
+  }
+  
+  return result
 }
 
 /**
@@ -468,146 +484,89 @@ export function convertImageGridToEmailTable(html: string): string {
   
   // Find all image-grid divs and replace them
   while (true) {
-    const openingTagMatch = result.slice(searchPos).match(/<div[^>]*data-type="image-grid"[^>]*>/i)
+    const openingTagMatch = result.slice(searchPos).match(/<div[^>]*data-type\s*=\s*["']image-grid["'][^>]*>/i)
     if (!openingTagMatch || openingTagMatch.index === undefined) break
     
     const startPos = searchPos + openingTagMatch.index
     const endPos = findMatchingDivClose(result, startPos)
     
     if (endPos === -1) {
-      // Couldn't find matching close, skip this one
       searchPos = startPos + openingTagMatch[0].length
       continue
     }
     
-    // Extract the full match
     const match = result.slice(startPos, endPos)
     
-    // Extract attributes from the opening tag
-    const columnsMatch = match.match(/data-columns="(\d)"/)
-    const gapMatch = match.match(/data-gap="([^"]*)"/)
-    const roundedMatch = match.match(/data-rounded="([^"]*)"/)
-    const imagesMatch = match.match(/data-images="([^"]*)"/)
-    const widthMatch = match.match(/data-width="([^"]*)"/)
-    const alignMatch = match.match(/data-align="([^"]*)"/)
-    const aspectRatioMatch = match.match(/data-aspect-ratio="([^"]*)"/)
+    // Extract attributes - handle various formats with flexible regex
+    const columnsMatch = match.match(/data-columns\s*=\s*["'](\d)["']/)
+    const gapMatch = match.match(/data-gap\s*=\s*["']([^"']*)["']/)
+    const roundedMatch = match.match(/data-rounded\s*=\s*["']([^"']*)["']/)
+    const imagesMatch = match.match(/data-images\s*=\s*["']([^"']*)["']/)
+    const widthMatch = match.match(/data-width\s*=\s*["']([^"']*)["']/)
+    const alignMatch = match.match(/data-align\s*=\s*["']([^"']*)["']/)
     
     const numCols = columnsMatch ? parseInt(columnsMatch[1], 10) : 2
     const gap = gapMatch ? gapMatch[1] : 'md'
     const isRounded = !roundedMatch || roundedMatch[1] !== "false"
     const gridWidth = widthMatch ? widthMatch[1] : '100%'
     const align = alignMatch ? alignMatch[1] : 'center'
-    const aspectRatio = aspectRatioMatch ? aspectRatioMatch[1] : 'square'
     
-    // Map aspect ratio to padding-bottom percentage for email compatibility
-    // padding-bottom trick: height = width * (height/width ratio)
-    const aspectRatioPaddingMap: Record<string, string> = {
-      square: '100%',      // 1:1 ratio
-      landscape: '62.5%',  // 10/16 = 0.625 (16:10 ratio)
-      portrait: '160%',    // 16/10 = 1.6 (10:16 ratio)
-    }
-    const paddingBottom = aspectRatioPaddingMap[aspectRatio] || '100%'
-    
-    // Try to get images from data-images attribute
+    // Try to get images from data-images attribute first
     let images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
     
-    // If no images from attribute, try to extract from img tags in the content
+    // If no images from attribute, extract from img tags in the content
     if (!images.length) {
       const imgRegex = /<img[^>]*>/gi
       let imgMatch
       while ((imgMatch = imgRegex.exec(match)) !== null) {
         const imgTag = imgMatch[0]
-        const srcMatch = imgTag.match(/src="([^"]*)"/)
-        const altMatch = imgTag.match(/alt="([^"]*)"/)
-        const focalXMatch = imgTag.match(/data-focal-x="([^"]*)"/)
-        const focalYMatch = imgTag.match(/data-focal-y="([^"]*)"/)
-        const objectPosMatch = imgTag.match(/object-position:\s*(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/)
+        const srcMatch = imgTag.match(/src\s*=\s*["']([^"']*)["']/)
+        const altMatch = imgTag.match(/alt\s*=\s*["']([^"']*)["']/)
         
         if (srcMatch) {
-          // Get focal point from data attributes or from object-position style
-          let focalX = focalXMatch ? parseFloat(focalXMatch[1]) : undefined
-          let focalY = focalYMatch ? parseFloat(focalYMatch[1]) : undefined
-          
-          // Fallback to object-position if data attributes not present
-          if (focalX === undefined && objectPosMatch) {
-            focalX = parseFloat(objectPosMatch[1])
-          }
-          if (focalY === undefined && objectPosMatch) {
-            focalY = parseFloat(objectPosMatch[2])
-          }
-          
-          images.push({ 
-            src: srcMatch[1], 
+          images.push({
+            src: srcMatch[1],
             alt: altMatch ? altMatch[1] : '',
-            focalX: focalX ?? 50,
-            focalY: focalY ?? 50
           })
         }
       }
     }
     
     if (!images.length) {
-      // No images found, skip this one
       searchPos = endPos
       continue
     }
     
-    const gapMap: Record<string, number> = {
-      none: 0,
-      sm: 8,
-      md: 16,
-      lg: 24,
-    }
+    const gapMap: Record<string, number> = { none: 0, sm: 8, md: 16, lg: 24 }
     const gapPx = gapMap[gap] || 16
-    const cellWidth = Math.floor(100 / numCols)
     
-    // Determine alignment for the outer table
+    // Calculate cell width as percentage
+    const cellWidthPercent = Math.floor(100 / numCols)
+    
     const alignAttr = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
+    const borderRadius = isRounded ? 'border-radius:16px;' : ''
     
-    // Build table rows
+    // Build table rows with actual img tags (more compatible than background-image)
     const rows: string[] = []
     for (let i = 0; i < images.length; i += numCols) {
       const rowImages = images.slice(i, i + numCols)
       const cells = rowImages.map(img => {
-        const focalX = img.focalX ?? 50
-        const focalY = img.focalY ?? 50
-        // Use background-image div for email clients - supports focal point via background-position
-        // padding-bottom creates the aspect ratio (height = 0 + padding-bottom %)
-        // height: 0 is essential for the padding-bottom aspect ratio trick
-        return `
-        <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <div style="display: block; position: relative; width: 100%; height: 0; padding-bottom: ${paddingBottom}; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; background-repeat: no-repeat; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
-        </td>
-      `}).join('')
+        return `<td width="${cellWidthPercent}%" style="padding:${gapPx/2}px;vertical-align:top;"><img src="${img.src}" alt="${img.alt || ''}" width="100%" style="display:block;width:100%;height:auto;${borderRadius}" /></td>`
+      }).join('')
       
       // Pad with empty cells if needed
       const emptyCells = numCols - rowImages.length
-      const emptyHtml = emptyCells > 0 ? `<td style="width: ${cellWidth}%; padding: ${gapPx / 2}px;"></td>`.repeat(emptyCells) : ''
+      const emptyHtml = emptyCells > 0 ? `<td width="${cellWidthPercent}%" style="padding:${gapPx/2}px;"></td>`.repeat(emptyCells) : ''
       
       rows.push(`<tr>${cells}${emptyHtml}</tr>`)
     }
     
-    // Wrap in outer alignment table
-    const innerTable = `
-      <table role="presentation" cellpadding="0" cellspacing="0" style="width: ${gridWidth}; max-width: 100%; border-collapse: collapse;">
-        ${rows.join('')}
-      </table>
-    `
+    // Build the complete table structure
+    const widthAttr = gridWidth.endsWith('%') ? `width="${gridWidth.replace('%', '')}%"` : `width="${gridWidth}"`
     
-    const replacement = `
-      <table role="presentation" data-type="image-grid" data-aspect-ratio="${aspectRatio}" data-width="${gridWidth}" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
-        <tr>
-          <td align="${alignAttr}" style="padding: 0;">
-            ${innerTable}
-          </td>
-        </tr>
-      </table>
-    `.replace(/\s+/g, ' ').trim()
+    const replacement = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;"><tr><td align="${alignAttr}" style="padding:0;"><table role="presentation" ${widthAttr} cellpadding="0" cellspacing="0" border="0" style="max-width:100%;">${rows.join('')}</table></td></tr></table>`
     
-    // Replace the match with the table
     result = result.slice(0, startPos) + replacement + result.slice(endPos)
-    
-    // Continue searching after the replacement
     searchPos = startPos + replacement.length
   }
   
