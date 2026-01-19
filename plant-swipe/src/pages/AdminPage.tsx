@@ -336,7 +336,10 @@ type PlantDashboardRow = {
   promotionMonth: PromotionMonthSlug | null;
   primaryImage: string | null;
   updatedAt: number | null;
+  createdAt: number | null;
 };
+
+type PlantSortOption = "status" | "updated" | "created" | "name";
 
 const normalizePlantStatus = (
   status?: string | null,
@@ -1645,6 +1648,7 @@ export const AdminPage: React.FC = () => {
   >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
+  const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>("status");
   const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
   const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
   const [deletingPlant, setDeletingPlant] = React.useState(false);
@@ -2226,6 +2230,7 @@ export const AdminPage: React.FC = () => {
             status,
             promotion_month,
             updated_time,
+            created_time,
             plant_images (
               link,
               use
@@ -2260,6 +2265,16 @@ export const AdminPage: React.FC = () => {
                   row?.updated_time ??
                   row?.updated_at ??
                   row?.updatedTime ??
+                  null;
+                if (!timestamp) return null;
+                const parsed = Date.parse(timestamp);
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
+              createdAt: (() => {
+                const timestamp =
+                  row?.created_time ??
+                  row?.created_at ??
+                  row?.createdTime ??
                   null;
                 if (!timestamp) return null;
                 const parsed = Date.parse(timestamp);
@@ -2450,12 +2465,32 @@ export const AdminPage: React.FC = () => {
         return matchesSearch;
       })
       .sort((a, b) => {
-        const statusDiff =
-          getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
-        if (statusDiff !== 0) return statusDiff;
-        return a.name.localeCompare(b.name);
+        switch (plantSortOption) {
+          case "updated":
+            // Sort by most recently updated first (descending)
+            const updatedA = a.updatedAt ?? 0;
+            const updatedB = b.updatedAt ?? 0;
+            if (updatedB !== updatedA) return updatedB - updatedA;
+            return a.name.localeCompare(b.name);
+          case "created":
+            // Sort by most recently created first (descending)
+            const createdA = a.createdAt ?? 0;
+            const createdB = b.createdAt ?? 0;
+            if (createdB !== createdA) return createdB - createdA;
+            return a.name.localeCompare(b.name);
+          case "name":
+            // Sort alphabetically by name
+            return a.name.localeCompare(b.name);
+          case "status":
+          default:
+            // Sort by status priority, then alphabetically
+            const statusDiff =
+              getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
+            if (statusDiff !== 0) return statusDiff;
+            return a.name.localeCompare(b.name);
+        }
       });
-  }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery]);
+  }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery, plantSortOption]);
 
   const plantViewIsPlants = requestViewMode === "plants";
   const plantTableLoading =
@@ -7432,6 +7467,20 @@ export const AdminPage: React.FC = () => {
                                             ))}
                                           </select>
                                         </div>
+                                        <div className="w-full md:w-44">
+                                          <select
+                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                            value={plantSortOption}
+                                            onChange={(e) =>
+                                              setPlantSortOption(e.target.value as PlantSortOption)
+                                            }
+                                          >
+                                            <option value="status">Sort by Status</option>
+                                            <option value="updated">Last Updated</option>
+                                            <option value="created">Last Created</option>
+                                            <option value="name">Name (A-Z)</option>
+                                          </select>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
@@ -7530,7 +7579,12 @@ export const AdminPage: React.FC = () => {
                                             <Calendar className="h-3 w-3" />
                                             {plant.promotionMonth ? PROMOTION_MONTH_LABELS[plant.promotionMonth] : "No month"}
                                           </span>
-                                          {plant.updatedAt && (
+                                          {plantSortOption === "created" && plant.createdAt && (
+                                            <span className="text-xs text-stone-400 dark:text-stone-500">
+                                              Created {formatTimeAgo(plant.createdAt)}
+                                            </span>
+                                          )}
+                                          {plantSortOption !== "created" && plant.updatedAt && (
                                             <span className="text-xs text-stone-400 dark:text-stone-500">
                                               Updated {formatTimeAgo(plant.updatedAt)}
                                             </span>
