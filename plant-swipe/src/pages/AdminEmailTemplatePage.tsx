@@ -1041,11 +1041,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
           border-radius: 16px !important;
           display: block !important;
         }
-        /* Aspect ratio */
-        .email-preview-body [data-type="image-grid"][data-aspect-ratio="square"] img { aspect-ratio: 1/1 !important; }
-        .email-preview-body [data-type="image-grid"][data-aspect-ratio="landscape"] img { aspect-ratio: 16/10 !important; }
-        .email-preview-body [data-type="image-grid"][data-aspect-ratio="portrait"] img { aspect-ratio: 10/16 !important; }
-        .email-preview-body [data-type="image-grid"]:not([data-aspect-ratio]) img { aspect-ratio: 1/1 !important; }
         .email-preview-body [data-type="image-grid"][data-rounded="false"] img {
           border-radius: 0 !important;
         }
@@ -1074,8 +1069,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
           background-repeat: no-repeat !important;
           border-radius: 16px !important;
         }
-        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="landscape"] div[role="img"] { padding-bottom: 62.5% !important; }
-        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="portrait"] div[role="img"] { padding-bottom: 160% !important; }
         .email-preview-body table[data-type="image-grid"] td > div {
           display: block !important;
           position: relative !important;
@@ -1083,10 +1076,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
           overflow: hidden !important;
           border-radius: 16px !important;
         }
-        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="square"] td > div { aspect-ratio: 1/1 !important; }
-        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="landscape"] td > div { aspect-ratio: 16/10 !important; }
-        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="portrait"] td > div { aspect-ratio: 10/16 !important; }
-        .email-preview-body table[data-type="image-grid"]:not([data-aspect-ratio]) td > div { aspect-ratio: 1/1 !important; }
         .email-preview-body table[data-type="image-grid"] td > div > img {
           width: 100% !important;
           height: 100% !important;
@@ -1904,11 +1893,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
               border-radius: 16px !important;
               display: block !important;
             }
-            /* Aspect ratio */
-            .email-preview-body [data-type="image-grid"][data-aspect-ratio="square"] img { aspect-ratio: 1/1 !important; }
-            .email-preview-body [data-type="image-grid"][data-aspect-ratio="landscape"] img { aspect-ratio: 16/10 !important; }
-            .email-preview-body [data-type="image-grid"][data-aspect-ratio="portrait"] img { aspect-ratio: 10/16 !important; }
-            .email-preview-body [data-type="image-grid"]:not([data-aspect-ratio]) img { aspect-ratio: 1/1 !important; }
             .email-preview-body [data-type="image-grid"][data-rounded="false"] img {
               border-radius: 0 !important;
             }
@@ -1937,8 +1921,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
               background-repeat: no-repeat !important;
               border-radius: 16px !important;
             }
-            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="landscape"] div[role="img"] { padding-bottom: 62.5% !important; }
-            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="portrait"] div[role="img"] { padding-bottom: 160% !important; }
             .email-preview-body table[data-type="image-grid"] td > div {
               display: block !important;
               position: relative !important;
@@ -1946,10 +1928,6 @@ export const AdminEmailTemplatePage: React.FC = () => {
               overflow: hidden !important;
               border-radius: 16px !important;
             }
-            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="square"] td > div { aspect-ratio: 1/1 !important; }
-            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="landscape"] td > div { aspect-ratio: 16/10 !important; }
-            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="portrait"] td > div { aspect-ratio: 10/16 !important; }
-            .email-preview-body table[data-type="image-grid"]:not([data-aspect-ratio]) td > div { aspect-ratio: 1/1 !important; }
             .email-preview-body table[data-type="image-grid"] td > div > img {
               width: 100% !important;
               height: 100% !important;
