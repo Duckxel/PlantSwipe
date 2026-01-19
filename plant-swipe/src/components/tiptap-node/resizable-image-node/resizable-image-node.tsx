@@ -109,11 +109,13 @@ export function ResizableImageNode({ node, updateAttributes, selected }: NodeVie
   return (
     <NodeViewWrapper
       data-type="resizable-image"
-      className="my-6"
+      data-align={align || "center"}
+      className="my-6 w-full"
       ref={containerRef}
     >
       <div
-        className={`flex ${getAlignClass()}`}
+        className={`flex w-full ${getAlignClass()}`}
+        style={{ textAlign: align || "center" }}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => !isResizing && setIsHovering(false)}
       >

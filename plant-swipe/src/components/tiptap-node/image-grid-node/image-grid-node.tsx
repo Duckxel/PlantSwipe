@@ -1,7 +1,7 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback, useRef, useMemo } from "react"
-import { Plus, Trash2, Image as ImageIcon } from "lucide-react"
-import type { GridColumns, GridGap, ImageGridImage } from "./image-grid-node-extension"
+import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical } from "lucide-react"
+import type { GridColumns, GridGap, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
 // Default upload folder if not configured
@@ -14,17 +14,34 @@ const GAP_OPTIONS: { value: GridGap; label: string }[] = [
   { value: "lg", label: "Large" },
 ]
 
+// Size presets
+const SIZE_PRESETS = [
+  { label: "Small", shortLabel: "S", value: "50%", percent: 50 },
+  { label: "Medium", shortLabel: "M", value: "75%", percent: 75 },
+  { label: "Large", shortLabel: "L", value: "90%", percent: 90 },
+  { label: "Full", shortLabel: "Full", value: "100%", percent: 100 },
+]
+
+// Alignment options
+const ALIGN_OPTIONS: { value: ImageGridAlign; label: string; Icon: typeof AlignLeft }[] = [
+  { value: "left", label: "Left", Icon: AlignLeft },
+  { value: "center", label: "Center", Icon: AlignCenter },
+  { value: "right", label: "Right", Icon: AlignRight },
+]
+
 export function ImageGridNode({ node, updateAttributes, selected, editor }: NodeViewProps) {
   const attrs = node.attrs as {
     images: ImageGridImage[] | undefined
     columns: GridColumns
     gap: GridGap
     rounded: boolean
+    width?: string
+    align?: ImageGridAlign
   }
   
   // Ensure images is always an array
   const images = Array.isArray(attrs.images) ? attrs.images : []
-  const { columns = 2, gap = "md", rounded = true } = attrs
+  const { columns = 2, gap = "md", rounded = true, width = "100%", align = "center" } = attrs
 
   // Get upload folder from extension storage, fallback to default
   const uploadFolder = useMemo(() => {
@@ -39,7 +56,24 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   }, [editor])
 
   const [isUploading, setIsUploading] = useState(false)
+  const [isHovering, setIsHovering] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const startXRef = useRef(0)
+  const startWidthRef = useRef(0)
+
+  // Show controls when selected OR hovering
+  const showControls = selected || isHovering
+
+  // Parse current width percentage
+  const currentWidthPercent = useMemo(() => {
+    if (typeof width === "string" && width.endsWith("%")) {
+      return parseInt(width, 10)
+    }
+    return 100
+  }, [width])
 
   const gapClasses: Record<GridGap, string> = {
     none: "gap-0",
@@ -47,6 +81,57 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     md: "gap-4",
     lg: "gap-6",
   }
+
+  const getAlignClass = () => {
+    switch (align) {
+      case "left":
+        return "justify-start"
+      case "right":
+        return "justify-end"
+      default:
+        return "justify-center"
+    }
+  }
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent, direction: "left" | "right") => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsResizing(true)
+      startXRef.current = e.clientX
+      startWidthRef.current = gridRef.current?.offsetWidth || 0
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const delta = direction === "right" 
+          ? moveEvent.clientX - startXRef.current 
+          : startXRef.current - moveEvent.clientX
+        
+        const newWidth = Math.max(200, startWidthRef.current + delta)
+        const containerWidth = containerRef.current?.offsetWidth || 600
+        const widthPercent = Math.min(100, Math.max(30, Math.round((newWidth / containerWidth) * 100)))
+        
+        updateAttributes({ width: `${widthPercent}%` })
+      }
+
+      const handleMouseUp = () => {
+        setIsResizing(false)
+        document.removeEventListener("mousemove", handleMouseMove)
+        document.removeEventListener("mouseup", handleMouseUp)
+      }
+
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("mouseup", handleMouseUp)
+    },
+    [updateAttributes]
+  )
+
+  const handleSliderChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = parseInt(e.target.value, 10)
+      updateAttributes({ width: `${value}%` })
+    },
+    [updateAttributes]
+  )
 
   const handleFileSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,7 +182,10 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   return (
     <NodeViewWrapper
       data-type="image-grid"
-      className={`my-6 ${selected ? "ring-2 ring-emerald-500 ring-offset-4 rounded-2xl" : ""}`}
+      data-align={align}
+      data-width={width}
+      className="my-6 w-full"
+      ref={containerRef}
     >
       <input
         type="file"
@@ -127,95 +215,212 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
-          {/* Image Grid */}
-          <div
-            className={`grid ${gapClasses[gap]}`}
-            style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
+        <div 
+          className={`flex w-full ${getAlignClass()}`}
+          style={{ textAlign: align }}
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => !isResizing && setIsHovering(false)}
+        >
+          <div 
+            className={`relative inline-block transition-all ${
+              showControls ? "ring-2 ring-emerald-500/50 ring-offset-2 rounded-2xl" : ""
+            }`}
+            style={{ width, maxWidth: "100%" }}
+            ref={gridRef}
           >
-            {images.map((img, index) => (
-              <div
-                key={`${img.src}-${index}`}
-                className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""}`}
-              >
-                <img
-                  src={img.src}
-                  alt={img.alt || ""}
-                  className="h-auto w-full object-cover"
-                  style={{ aspectRatio: "16/10" }}
-                />
-                {/* Overlay controls */}
-                <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                  <button
-                    type="button"
-                    onClick={() => removeImage(index)}
-                    className="rounded-full bg-red-500 p-2 text-white transition-colors hover:bg-red-600"
-                    title="Remove image"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+            {/* Image Grid */}
+            <div
+              className={`grid ${gapClasses[gap]}`}
+              style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
+            >
+              {images.map((img, index) => (
+                <div
+                  key={`${img.src}-${index}`}
+                  className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""}`}
+                >
+                  <img
+                    src={img.src}
+                    alt={img.alt || ""}
+                    className="h-auto w-full object-cover"
+                    style={{ aspectRatio: "16/10" }}
+                    draggable={false}
+                  />
+                  {/* Overlay controls */}
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="rounded-full bg-red-500 p-2 text-white transition-colors hover:bg-red-600"
+                      title="Remove image"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
-            <div className="flex items-center gap-3">
-              {/* Add more images */}
-              <button
-                type="button"
-                onClick={openFileDialog}
-                disabled={isUploading}
-                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
-              >
-                <Plus className="h-4 w-4" />
-                {isUploading ? "Uploading..." : "Add"}
-              </button>
-
-              {/* Columns */}
-              <div className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white p-1 dark:border-[#3e3e42] dark:bg-[#0f0f11]">
-                {([2, 3, 4] as GridColumns[]).map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => updateAttributes({ columns: c })}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
-                      columns === c
-                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                        : "text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
-                    }`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
+              ))}
             </div>
 
-            <div className="flex items-center gap-3">
-              {/* Gap */}
-              <select
-                value={gap}
-                onChange={(e) => updateAttributes({ gap: e.target.value as GridGap })}
-                className="rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs dark:border-[#3e3e42] dark:bg-[#0f0f11] dark:text-white"
-              >
-                {GAP_OPTIONS.map((g) => (
-                  <option key={g.value} value={g.value}>
-                    Gap: {g.label}
-                  </option>
-                ))}
-              </select>
+            {/* Resize handles - only when controls are shown */}
+            {showControls && (
+              <>
+                {/* Left resize handle */}
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-6 flex items-center justify-center cursor-ew-resize group/handle -translate-x-1/2 z-10"
+                  onMouseDown={(e) => handleMouseDown(e, "left")}
+                >
+                  <div className="flex flex-col items-center gap-0.5 p-1.5 rounded-lg bg-white/95 shadow-lg border border-stone-200/50 dark:bg-[#1a1a1d]/95 dark:border-[#3e3e42] transition-transform group-hover/handle:scale-110">
+                    <GripVertical className="h-4 w-4 text-stone-400 dark:text-stone-500" />
+                  </div>
+                </div>
 
-              {/* Rounded */}
-              <label className="flex cursor-pointer items-center gap-2 text-xs text-stone-600 dark:text-stone-400">
+                {/* Right resize handle */}
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-6 flex items-center justify-center cursor-ew-resize group/handle translate-x-1/2 z-10"
+                  onMouseDown={(e) => handleMouseDown(e, "right")}
+                >
+                  <div className="flex flex-col items-center gap-0.5 p-1.5 rounded-lg bg-white/95 shadow-lg border border-stone-200/50 dark:bg-[#1a1a1d]/95 dark:border-[#3e3e42] transition-transform group-hover/handle:scale-110">
+                    <GripVertical className="h-4 w-4 text-stone-400 dark:text-stone-500" />
+                  </div>
+                </div>
+
+                {/* Size indicator badge */}
+                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px] font-medium backdrop-blur-sm z-10">
+                  {currentWidthPercent}%
+                </div>
+              </>
+            )}
+
+            {/* Controls toolbar */}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 p-2 dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
+              {/* Left section: Add & Columns */}
+              <div className="flex items-center gap-2">
+                {/* Add more images */}
+                <button
+                  type="button"
+                  onClick={openFileDialog}
+                  disabled={isUploading}
+                  className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {isUploading ? "..." : "Add"}
+                </button>
+
+                <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
+
+                {/* Columns */}
+                <div className="flex items-center gap-0.5 rounded-lg bg-stone-100/80 p-0.5 dark:bg-[#2a2a2d]">
+                  {([2, 3, 4] as GridColumns[]).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => updateAttributes({ columns: c })}
+                      title={`${c} columns`}
+                      className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-all ${
+                        columns === c
+                          ? "bg-emerald-500 text-white shadow-sm"
+                          : "text-stone-500 hover:text-stone-700 hover:bg-white/60 dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-white/10"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Middle section: Size controls */}
+              <div className="flex items-center gap-2">
+                <Maximize2 className="h-3 w-3 text-stone-400" />
+                
+                {/* Size preset buttons */}
+                <div className="flex items-center gap-0.5 rounded-lg bg-stone-100/80 p-0.5 dark:bg-[#2a2a2d]">
+                  {SIZE_PRESETS.map((preset) => {
+                    const isActive = currentWidthPercent === preset.percent
+                    return (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        onClick={() => updateAttributes({ width: preset.value })}
+                        title={preset.label}
+                        className={`rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all ${
+                          isActive
+                            ? "bg-emerald-500 text-white shadow-sm"
+                            : "text-stone-500 hover:text-stone-700 hover:bg-white/60 dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        {preset.shortLabel}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Slider */}
                 <input
-                  type="checkbox"
-                  checked={rounded}
-                  onChange={(e) => updateAttributes({ rounded: e.target.checked })}
-                  className="h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                  type="range"
+                  min="30"
+                  max="100"
+                  value={currentWidthPercent}
+                  onChange={handleSliderChange}
+                  className="w-12 h-1 bg-stone-200 rounded-full appearance-none cursor-pointer dark:bg-stone-700 
+                    [&::-webkit-slider-thumb]:appearance-none 
+                    [&::-webkit-slider-thumb]:w-2.5 
+                    [&::-webkit-slider-thumb]:h-2.5 
+                    [&::-webkit-slider-thumb]:rounded-full 
+                    [&::-webkit-slider-thumb]:bg-emerald-500 
+                    [&::-webkit-slider-thumb]:cursor-pointer"
+                  title="Drag to resize"
                 />
-                Rounded
-              </label>
+              </div>
+
+              {/* Right section: Alignment & Options */}
+              <div className="flex items-center gap-2">
+                {/* Alignment */}
+                <div className="flex items-center gap-0.5 rounded-lg bg-stone-100/80 p-0.5 dark:bg-[#2a2a2d]">
+                  {ALIGN_OPTIONS.map(({ value, label, Icon }) => {
+                    const isActive = align === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => updateAttributes({ align: value })}
+                        title={`Align ${label}`}
+                        className={`rounded-md p-1 transition-all ${
+                          isActive
+                            ? "bg-emerald-500 text-white shadow-sm"
+                            : "text-stone-500 hover:text-stone-700 hover:bg-white/60 dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        <Icon className="h-3 w-3" />
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
+
+                {/* Gap */}
+                <select
+                  value={gap}
+                  onChange={(e) => updateAttributes({ gap: e.target.value as GridGap })}
+                  className="rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] dark:border-[#3e3e42] dark:bg-[#0f0f11] dark:text-white"
+                >
+                  {GAP_OPTIONS.map((g) => (
+                    <option key={g.value} value={g.value}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Rounded */}
+                <label className="flex cursor-pointer items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
+                  <input
+                    type="checkbox"
+                    checked={rounded}
+                    onChange={(e) => updateAttributes({ rounded: e.target.checked })}
+                    className="h-3 w-3 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  Round
+                </label>
+              </div>
             </div>
           </div>
         </div>

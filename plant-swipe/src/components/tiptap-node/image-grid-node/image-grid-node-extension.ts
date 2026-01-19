@@ -20,11 +20,15 @@ export interface ImageGridImage {
   width?: string
 }
 
+export type ImageGridAlign = "left" | "center" | "right"
+
 export interface ImageGridAttributes {
   images: ImageGridImage[]
   columns: GridColumns
   gap: GridGap
   rounded: boolean
+  width: string
+  align: ImageGridAlign
 }
 
 declare module "@tiptap/react" {
@@ -168,6 +172,24 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
           "data-rounded": String(attributes.rounded),
         }),
       },
+      width: {
+        default: "100%",
+        parseHTML: (element: HTMLElement) => {
+          return element.getAttribute("data-width") || "100%"
+        },
+        renderHTML: (attributes) => ({
+          "data-width": attributes.width || "100%",
+        }),
+      },
+      align: {
+        default: "center" as ImageGridAlign,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-align") as ImageGridAlign) || "center"
+        },
+        renderHTML: (attributes) => ({
+          "data-align": attributes.align || "center",
+        }),
+      },
     }
   },
 
@@ -176,7 +198,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    const { images, columns, gap, rounded } = HTMLAttributes as ImageGridAttributes
+    const { images, columns, gap, rounded, width, align } = HTMLAttributes as ImageGridAttributes
     
     const gapMap: Record<GridGap, string> = {
       none: "0",
@@ -185,13 +207,22 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
       lg: "24px",
     }
 
-    // Use table-based layout for better email compatibility
-    // CSS Grid doesn't work well in email clients
+    const widthValue = width || "100%"
+    const alignValue = align || "center"
+    
+    // Container style for alignment
+    const containerStyle = `
+      text-align: ${alignValue};
+      padding: 16px 0;
+    `.replace(/\s+/g, " ").trim()
+
+    // Grid style
     const gridStyle = `
-      display: grid;
+      display: inline-grid;
       grid-template-columns: repeat(${columns}, 1fr);
       gap: ${gapMap[gap]};
-      padding: 16px 0;
+      width: ${widthValue};
+      max-width: 100%;
     `.replace(/\s+/g, " ").trim()
 
     const imageElements = (images || []).map((img: ImageGridImage) => [
@@ -212,12 +243,18 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
           "data-columns": String(columns),
           "data-gap": gap,
           "data-rounded": String(rounded),
+          "data-width": widthValue,
+          "data-align": alignValue,
           "data-images": encodeImagesAttr(images),
-          style: gridStyle,
+          style: containerStyle,
         },
         this.options.HTMLAttributes
       ),
-      ...imageElements,
+      [
+        "div",
+        { style: gridStyle },
+        ...imageElements,
+      ],
     ]
   },
 
@@ -237,6 +274,8 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
               columns: options?.columns ?? 2,
               gap: options?.gap ?? "md",
               rounded: options?.rounded ?? true,
+              width: options?.width ?? "100%",
+              align: options?.align ?? "center",
             },
           })
         },
@@ -249,15 +288,27 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
  * Call this function when preparing HTML for email sending
  */
 export function convertImageGridToEmailHtml(html: string): string {
-  // Match image-grid divs and convert them to table-based layout
-  const regex = /<div[^>]*data-type="image-grid"[^>]*data-columns="(\d)"[^>]*data-gap="([^"]*)"[^>]*data-rounded="([^"]*)"[^>]*data-images="([^"]*)"[^>]*>[\s\S]*?<\/div>/gi
+  // Match image-grid divs - handle nested structure with inner grid div
+  const regex = /<div[^>]*data-type="image-grid"[^>]*>[\s\S]*?(?:<\/div>\s*<\/div>|<\/div>)/gi
   
-  return html.replace(regex, (match, columns, gap, rounded, imagesEncoded) => {
-    const images = decodeImagesAttr(imagesEncoded)
-    if (!images.length) return match
+  return html.replace(regex, (match) => {
+    // Extract attributes from the match
+    const columnsMatch = match.match(/data-columns="(\d)"/)
+    const gapMatch = match.match(/data-gap="([^"]*)"/)
+    const roundedMatch = match.match(/data-rounded="([^"]*)"/)
+    const imagesMatch = match.match(/data-images="([^"]*)"/)
+    const widthMatch = match.match(/data-width="([^"]*)"/)
+    const alignMatch = match.match(/data-align="([^"]*)"/)
     
-    const numCols = parseInt(columns, 10) || 2
-    const isRounded = rounded !== "false"
+    const numCols = columnsMatch ? parseInt(columnsMatch[1], 10) : 2
+    const gap = gapMatch ? gapMatch[1] : 'md'
+    const isRounded = !roundedMatch || roundedMatch[1] !== "false"
+    const gridWidth = widthMatch ? widthMatch[1] : '100%'
+    const align = alignMatch ? alignMatch[1] : 'center'
+    
+    // Try to get images from data-images attribute
+    const images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
+    if (!images.length) return match
     
     const gapMap: Record<string, number> = {
       none: 0,
@@ -267,6 +318,9 @@ export function convertImageGridToEmailHtml(html: string): string {
     }
     const gapPx = gapMap[gap] || 16
     const cellWidth = Math.floor(100 / numCols)
+    
+    // Determine alignment for the outer table
+    const alignAttr = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
     
     // Build table rows
     const rows: string[] = []
@@ -285,9 +339,20 @@ export function convertImageGridToEmailHtml(html: string): string {
       rows.push(`<tr>${cells}${emptyHtml}</tr>`)
     }
     
+    // Wrap in outer alignment table
+    const innerTable = `
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width: ${gridWidth}; max-width: 100%; border-collapse: collapse;">
+        ${rows.join('')}
+      </table>
+    `
+    
     return `
       <table role="presentation" data-type="image-grid" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
-        ${rows.join('')}
+        <tr>
+          <td align="${alignAttr}" style="padding: 0;">
+            ${innerTable}
+          </td>
+        </tr>
       </table>
     `.replace(/\s+/g, ' ').trim()
   })

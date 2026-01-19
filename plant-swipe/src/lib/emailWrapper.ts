@@ -431,8 +431,9 @@ function convertResizableImageToEmailHtml(html: string): string {
  * CSS Grid doesn't work in most email clients, so we use tables instead
  */
 function convertImageGridToEmailTable(html: string): string {
-  // Match image-grid divs - we need to handle both encoded (base64) and plain JSON data-images
-  const regex = /<div[^>]*data-type="image-grid"[^>]*>([\s\S]*?)<\/div>/gi
+  // Match image-grid divs - handle nested structure with inner grid div
+  // Use a more flexible regex that can match nested divs
+  const regex = /<div[^>]*data-type="image-grid"[^>]*>[\s\S]*?(?:<\/div>\s*<\/div>|<\/div>)/gi
   
   return html.replace(regex, (match) => {
     // Extract attributes from the match
@@ -440,10 +441,14 @@ function convertImageGridToEmailTable(html: string): string {
     const gapMatch = match.match(/data-gap="([^"]*)"/)
     const roundedMatch = match.match(/data-rounded="([^"]*)"/)
     const imagesMatch = match.match(/data-images="([^"]*)"/)
+    const widthMatch = match.match(/data-width="([^"]*)"/)
+    const alignMatch = match.match(/data-align="([^"]*)"/)
     
     const numCols = columnsMatch ? parseInt(columnsMatch[1], 10) : 2
     const gap = gapMatch ? gapMatch[1] : 'md'
     const isRounded = !roundedMatch || roundedMatch[1] !== "false"
+    const gridWidth = widthMatch ? widthMatch[1] : '100%'
+    const align = alignMatch ? alignMatch[1] : 'center'
     
     // Try to get images from data-images attribute
     let images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
@@ -468,6 +473,9 @@ function convertImageGridToEmailTable(html: string): string {
     const gapPx = gapMap[gap] || 16
     const cellWidth = Math.floor(100 / numCols)
     
+    // Determine alignment for the outer table
+    const alignAttr = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
+    
     // Build table rows
     const rows: string[] = []
     for (let i = 0; i < images.length; i += numCols) {
@@ -485,9 +493,20 @@ function convertImageGridToEmailTable(html: string): string {
       rows.push(`<tr>${cells}${emptyHtml}</tr>`)
     }
     
+    // Wrap in outer alignment table if not 100% width
+    const innerTable = `
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width: ${gridWidth}; max-width: 100%; border-collapse: collapse;">
+        ${rows.join('')}
+      </table>
+    `
+    
     return `
       <table role="presentation" data-type="image-grid" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
-        ${rows.join('')}
+        <tr>
+          <td align="${alignAttr}" style="padding: 0;">
+            ${innerTable}
+          </td>
+        </tr>
       </table>
     `.replace(/\s+/g, ' ').trim()
   })
