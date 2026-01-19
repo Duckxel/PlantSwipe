@@ -993,6 +993,9 @@ export const AdminEmailTemplatePage: React.FC = () => {
           margin: 16px 0 !important;
           text-align: center !important;
           width: 100% !important;
+          /* Debug border - remove after fixing */
+          border: 3px solid red !important;
+          min-height: 100px !important;
         }
         .email-preview-body [data-type="image-grid"] > div,
         .email-preview-body div[data-type="image-grid"] > div {
@@ -1829,6 +1832,9 @@ export const AdminEmailTemplatePage: React.FC = () => {
               margin: 16px 0 !important;
               text-align: center !important;
               width: 100% !important;
+              /* Debug border - remove after fixing */
+              border: 3px solid red !important;
+              min-height: 100px !important;
             }
             .email-preview-body [data-type="image-grid"] > div,
             .email-preview-body div[data-type="image-grid"] > div {
