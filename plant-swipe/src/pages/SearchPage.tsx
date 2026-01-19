@@ -201,6 +201,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                       ))}
                     </div>
                   )}
+                  {isInProgress && (
+                    <div className="absolute bottom-3 right-3 z-10">
+                      <Badge className="rounded-full p-2 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
+                        <HardHat className="h-5 w-5" />
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 <div className="p-4 space-y-2 flex flex-col h-full min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -216,12 +223,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                     })}
                     {likedIds.includes(p.id) && (
                       <Badge className="rounded-xl bg-rose-600 dark:bg-rose-500 text-white">{t("plant.liked")}</Badge>
-                    )}
-                    {isInProgress && (
-                      <Badge className="rounded-xl bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100 flex items-center gap-1">
-                        <HardHat className="h-3 w-3" />
-                        {t("plantInfo.inConstruction.badge", { defaultValue: "In Progress" })}
-                      </Badge>
                     )}
                   </div>
                   <div className="overflow-hidden">
