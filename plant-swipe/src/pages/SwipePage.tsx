@@ -58,121 +58,6 @@ const DoubleTapHeart: React.FC<DoubleTapHeartProps> = ({ x, y, onComplete }) => 
   )
 }
 
-// Mobile buttons overlay - rendered OUTSIDE the draggable area so buttons are always clickable
-interface MobileButtonsOverlayProps {
-  liked: boolean
-  onToggleLike?: () => void
-  onPrevious: () => void
-  onInfo: () => void
-  onNext: () => void
-  isDesktop: boolean
-  t: (key: string, options?: Record<string, string>) => string
-}
-
-const MobileButtonsOverlay: React.FC<MobileButtonsOverlayProps> = ({
-  liked,
-  onToggleLike,
-  onPrevious,
-  onInfo,
-  onNext,
-  isDesktop,
-  t,
-}) => {
-  return (
-    <div className="absolute inset-x-2 inset-y-0 z-[60] pointer-events-none rounded-[24px]">
-      {/* Like button - top right - MUST have pointer-events-auto to be clickable */}
-      <div className="absolute top-4 right-4 z-[70] pointer-events-auto">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            e.preventDefault()
-            if (onToggleLike) {
-              onToggleLike()
-            }
-          }}
-          onTouchStart={(e) => {
-            e.stopPropagation()
-          }}
-          onTouchEnd={(e) => {
-            e.stopPropagation()
-          }}
-          onPointerDown={(e) => {
-            e.stopPropagation()
-          }}
-          aria-pressed={liked}
-          aria-label={liked ? "Unlike" : "Like"}
-          className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 select-none cursor-pointer ${
-            liked ? "bg-rose-600 text-white border-rose-500 hover:bg-rose-700" : "bg-white text-black border-white hover:bg-gray-100"
-          }`}
-          style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-        >
-          <Heart className={`h-6 w-6 ${liked ? "fill-current" : ""}`} />
-        </button>
-      </div>
-      
-      {/* Navigation buttons - bottom */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 pb-8 z-[70] pointer-events-auto" style={{ touchAction: 'manipulation' }}>
-        <div className="grid w-full gap-2 grid-cols-3">
-          <button
-            type="button"
-            className="rounded-2xl w-full h-11 text-white transition-colors bg-black/90 hover:bg-black active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
-            onClick={(e) => {
-              e.stopPropagation()
-              onPrevious()
-            }}
-            onTouchEnd={(e) => e.stopPropagation()}
-            aria-label={t("plant.back")}
-            style={{ touchAction: 'manipulation' }}
-          >
-            {isDesktop ? (
-              <>
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                {t("plant.back")}
-              </>
-            ) : (
-              <ChevronLeft className="h-5 w-5" />
-            )}
-          </button>
-          <button
-            type="button"
-            className="rounded-2xl w-full h-11 bg-white text-black hover:bg-gray-100 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
-            onClick={(e) => {
-              e.stopPropagation()
-              onInfo()
-            }}
-            onTouchEnd={(e) => e.stopPropagation()}
-            style={{ touchAction: 'manipulation' }}
-          >
-            {t("plant.info")}
-            <ChevronUp className="h-4 w-4 ml-1" />
-          </button>
-          <button
-            type="button"
-            className="rounded-2xl w-full h-11 text-white transition-colors bg-black/90 hover:bg-black active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
-            onClick={(e) => {
-              e.stopPropagation()
-              onNext()
-            }}
-            onTouchEnd={(e) => e.stopPropagation()}
-            aria-label={t("plant.next")}
-            style={{ touchAction: 'manipulation' }}
-          >
-            {isDesktop ? (
-              <>
-                {t("plant.next")}
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </>
-            ) : (
-              <ChevronRight className="h-5 w-5" />
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -390,65 +275,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     return badges
   }, [current, t])
 
-    // Card content WITHOUT interactive buttons (for mobile - buttons are rendered as overlay)
-    const cardContentWithoutButtons = current ? (
-      <Card className="relative h-full w-full overflow-hidden bg-black text-white shadow-2xl rounded-[24px] border border-white/20 dark:border-white/10">
-        {displayImage ? (
-          <img
-            src={displayImage}
-            alt={current?.name ? `${current.name} preview` : 'Plant preview'}
-            className="absolute inset-0 z-0 h-full w-full object-cover"
-            loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
-            fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
-            decoding="async"
-            width={960}
-            height={1280}
-            sizes="(max-width: 768px) 100vw, 70vw"
-          />
-        ) : (
-          <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
-        )}
-        <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
-        <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
-        {highlightBadges.length > 0 && (
-          <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
-            {highlightBadges.map((badge) => (
-              <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center backdrop-blur ${badge.className}`}>
-                {badge.icon}
-                {badge.label}
-              </Badge>
-            ))}
-          </div>
-        )}
-        {/* Like button placeholder space - actual button rendered in overlay */}
-        {current && (
-          <PlantMetaRail
-            plant={current}
-            variant="sidebar"
-            disableHoverActivation={prefersCoarsePointer}
-          />
-        )}
-        <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white pointer-events-none">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
-            {seasons.map((s) => {
-              const badgeClass = seasonBadge[s] ?? "bg-stone-200/70 dark:bg-stone-700/70 text-stone-900 dark:text-stone-100"
-              return (
-                <span key={s} className={`text-[11px] px-2.5 py-1 rounded-full shadow ${badgeClass}`}>
-                  {s}
-                </span>
-              )
-            })}
-          </div>
-          <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
-          {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
-          {/* Button placeholder space - actual buttons rendered in overlay */}
-          <div className="mt-5 h-10" />
-        </div>
-      </Card>
-    ) : null
-
-    // Card content WITH interactive buttons (for desktop - buttons work fine with drag)
+    // Card content WITH interactive buttons (for desktop)
     const cardContent = current ? (
       <Card className="relative h-full w-full overflow-hidden bg-black text-white shadow-2xl rounded-[24px] border border-white/20 dark:border-white/10">
         {displayImage ? (
@@ -574,21 +401,126 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             {current ? (
               <motion.div
                 key={current.id}
-                drag="x"
-                dragElastic={0.25}
+                drag
+                dragElastic={{ left: 0.25, right: 0.25, top: 0.15, bottom: 0.05 }}
                 dragMomentum={false}
-                style={{ x }}
-                dragConstraints={{ left: -250, right: 250 }}
+                style={{ x, y }}
+                dragConstraints={{ left: -250, right: 250, top: -200, bottom: 0 }}
                 onDragEnd={onDragEnd}
                 initial={false}
-                animate={{ opacity: 1, x: 0 }}
+                animate={{ opacity: 1, x: 0, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0 }}
                 className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
                 layout={false}
                 onTap={(e) => handleCardTap(e as unknown as React.MouseEvent)}
               >
-                {cardContentWithoutButtons}
+                {/* Card content with buttons INSIDE so they move together */}
+                <Card className="relative h-full w-full overflow-hidden bg-black text-white shadow-2xl rounded-[24px] border border-white/20 dark:border-white/10">
+                  {displayImage ? (
+                    <img
+                      src={displayImage}
+                      alt={current?.name ? `${current.name} preview` : 'Plant preview'}
+                      className="absolute inset-0 z-0 h-full w-full object-cover"
+                      loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
+                      fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
+                      decoding="async"
+                      width={960}
+                      height={1280}
+                      sizes="(max-width: 768px) 100vw, 70vw"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
+                  )}
+                  <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
+                  <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
+                  {highlightBadges.length > 0 && (
+                    <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
+                      {highlightBadges.map((badge) => (
+                        <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center backdrop-blur ${badge.className}`}>
+                          {badge.icon}
+                          {badge.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Like button - inside card so it moves with swipe */}
+                  <div className="absolute top-4 right-4 z-30">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (onToggleLike) onToggleLike()
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      aria-pressed={liked}
+                      aria-label={liked ? "Unlike" : "Like"}
+                      className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition-all active:scale-90 ${
+                        liked ? "bg-rose-600 text-white border-rose-500" : "bg-white text-black border-white"
+                      }`}
+                    >
+                      <Heart className={`h-6 w-6 ${liked ? "fill-current" : ""}`} />
+                    </button>
+                  </div>
+                  
+                  {current && (
+                    <PlantMetaRail
+                      plant={current}
+                      variant="sidebar"
+                      disableHoverActivation={prefersCoarsePointer}
+                    />
+                  )}
+                  
+                  <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
+                      {seasons.map((s) => {
+                        const badgeClass = seasonBadge[s] ?? "bg-stone-200/70 dark:bg-stone-700/70 text-stone-900 dark:text-stone-100"
+                        return (
+                          <span key={s} className={`text-[11px] px-2.5 py-1 rounded-full shadow ${badgeClass}`}>
+                            {s}
+                          </span>
+                        )
+                      })}
+                    </div>
+                    <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
+                    {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
+                    
+                    {/* Navigation buttons - inside card so they move with swipe */}
+                    <div className="mt-5 grid w-full gap-2 grid-cols-3">
+                      <button
+                        type="button"
+                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
+                        onClick={(e) => { e.stopPropagation(); handlePrevious() }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-2xl h-11 bg-white text-black active:scale-95 flex items-center justify-center shadow-lg"
+                        onClick={(e) => { e.stopPropagation(); handleInfo() }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        {t("plant.info")}
+                        <ChevronUp className="h-4 w-4 ml-1" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
+                        onClick={(e) => { e.stopPropagation(); handlePass() }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                </Card>
               </motion.div>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center bg-stone-100 dark:bg-[#1e1e1e] rounded-[24px]">
@@ -596,19 +528,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               </div>
             )}
           </AnimatePresence>
-          
-          {/* Interactive buttons overlay - OUTSIDE the draggable area */}
-          {current && (
-            <MobileButtonsOverlay
-              liked={liked}
-              onToggleLike={onToggleLike}
-              onPrevious={handlePrevious}
-              onInfo={handleInfo}
-              onNext={handlePass}
-              isDesktop={isDesktop}
-              t={t}
-            />
-          )}
           
           {/* Double-tap heart animations */}
           <AnimatePresence>
