@@ -197,10 +197,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       usePageMetadata({ title: seoTitle, description: seoDescription })
     const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
     
-    // Double-tap detection state (for mobile touch events)
-    const lastTapRef = React.useRef<{ time: number; x: number; y: number } | null>(null)
+    // Heart animation state
     const [heartAnimations, setHeartAnimations] = React.useState<Array<{ id: string; x: number; y: number }>>([])
-
     
     // Double-tap threshold in milliseconds
     const DOUBLE_TAP_THRESHOLD = 300
@@ -217,31 +215,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         onToggleLike()
       }
     }, [liked, onToggleLike])
-    
-    // Handle mobile double-tap detection
-    const handleMobileDoubleTap = React.useCallback((clientX: number, clientY: number) => {
-      const now = Date.now()
-      const lastTap = lastTapRef.current
-      
-      if (lastTap) {
-        const timeDiff = now - lastTap.time
-        const distance = Math.sqrt(
-          Math.pow(clientX - lastTap.x, 2) + Math.pow(clientY - lastTap.y, 2)
-        )
-        
-        // Check if it's a valid double-tap (within time and distance threshold)
-        if (timeDiff < DOUBLE_TAP_THRESHOLD && distance < DOUBLE_TAP_DISTANCE_THRESHOLD) {
-          // Clear the last tap to prevent triple-tap triggering
-          lastTapRef.current = null
-          triggerDoubleTapLike(clientX, clientY)
-          return true // Double-tap detected
-        }
-      }
-      
-      // Store this tap for potential double-tap detection
-      lastTapRef.current = { time: now, x: clientX, y: clientY }
-      return false // Not a double-tap
-    }, [triggerDoubleTapLike])
     
     // Handle desktop double-click (native event)
     const handleDesktopDoubleClick = React.useCallback((e: React.MouseEvent) => {
@@ -263,52 +236,54 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       lastTapRef.current = null
     }, [current?.id])
     
-    // Touch tracking for swipe-up gesture on mobile (to open info)
-    const touchStartRef = React.useRef<{ x: number; y: number; time: number } | null>(null)
+    // Double-tap detection for mobile - using a simple tap counter approach
+    const lastTapTimeRef = React.useRef<number>(0)
+    const lastTapPosRef = React.useRef<{ x: number; y: number } | null>(null)
     
-    const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
-      if (e.touches.length === 1) {
-        touchStartRef.current = {
-          x: e.touches[0].clientX,
-          y: e.touches[0].clientY,
-          time: Date.now()
-        }
-      }
-    }, [])
-    
-    const handleTouchEnd = React.useCallback((e: React.TouchEvent) => {
-      if (!touchStartRef.current || e.changedTouches.length !== 1) {
-        touchStartRef.current = null
+    // Handle tap on the card area (for double-tap detection only)
+    const handleCardTap = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
+      // Don't trigger on button clicks
+      if ((e.target as HTMLElement).closest('button')) {
         return
       }
       
-      const touch = e.changedTouches[0]
-      const deltaX = touch.clientX - touchStartRef.current.x
-      const deltaY = touch.clientY - touchStartRef.current.y
-      const deltaTime = Date.now() - touchStartRef.current.time
+      // Get tap position
+      let clientX: number, clientY: number
+      if ('touches' in e) {
+        // Touch event - use changedTouches for touchend
+        const touch = e.changedTouches?.[0] || e.touches?.[0]
+        if (!touch) return
+        clientX = touch.clientX
+        clientY = touch.clientY
+      } else {
+        // Mouse event
+        clientX = e.clientX
+        clientY = e.clientY
+      }
       
-      // Check if this is a tap (minimal movement) vs a swipe
-      const isTap = Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15 && deltaTime < 300
+      const now = Date.now()
+      const timeSinceLastTap = now - lastTapTimeRef.current
+      const lastPos = lastTapPosRef.current
       
-      if (isTap) {
-        // Don't trigger double-tap on button clicks
-        if (!(e.target as HTMLElement).closest('button')) {
-          // Check for double-tap
-          handleMobileDoubleTap(touch.clientX, touch.clientY)
+      // Check if this is a double-tap
+      if (lastPos && timeSinceLastTap < DOUBLE_TAP_THRESHOLD) {
+        const distance = Math.sqrt(
+          Math.pow(clientX - lastPos.x, 2) + Math.pow(clientY - lastPos.y, 2)
+        )
+        
+        if (distance < DOUBLE_TAP_DISTANCE_THRESHOLD) {
+          // Double-tap detected!
+          triggerDoubleTapLike(clientX, clientY)
+          lastTapTimeRef.current = 0
+          lastTapPosRef.current = null
+          return
         }
-        touchStartRef.current = null
-        return
       }
       
-      // Swipe up detection: significant upward movement, more vertical than horizontal, quick gesture
-      const isSwipeUp = deltaY < -80 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5 && deltaTime < 500
-      
-      if (isSwipeUp) {
-        handleInfo()
-      }
-      
-      touchStartRef.current = null
-    }, [handleInfo, handleMobileDoubleTap])
+      // Store this tap for potential double-tap
+      lastTapTimeRef.current = now
+      lastTapPosRef.current = { x: clientX, y: clientY }
+    }, [triggerDoubleTapLike, DOUBLE_TAP_THRESHOLD, DOUBLE_TAP_DISTANCE_THRESHOLD])
 
     React.useEffect(() => {
       if (typeof window === "undefined") return
@@ -576,14 +551,13 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 style={{ x }}
                 dragConstraints={{ left: -250, right: 250 }}
                 onDragEnd={onDragEnd}
-                onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
                 initial={false}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0 }}
                 className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
                 layout={false}
+                onTap={(e) => handleCardTap(e as unknown as React.MouseEvent)}
               >
                 {cardContentWithoutButtons}
               </motion.div>
