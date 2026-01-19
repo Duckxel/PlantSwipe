@@ -458,8 +458,11 @@ function findMatchingDivClose(html: string, startPos: number): number {
 /**
  * Converts image grid divs to email-compatible table-based HTML
  * CSS Grid doesn't work in most email clients, so we use tables instead
+ * 
+ * Note: This is exported for use in email sending pipelines.
+ * For web previews, the div-based structure with CSS grid works fine.
  */
-function convertImageGridToEmailTable(html: string): string {
+export function convertImageGridToEmailTable(html: string): string {
   let result = html
   let searchPos = 0
   
