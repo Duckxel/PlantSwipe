@@ -216,7 +216,17 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    const { images, columns, gap, rounded, width, align } = HTMLAttributes as ImageGridAttributes
+    // HTMLAttributes contains the merged HTML attributes from each attribute's renderHTML
+    // The images are encoded in data-images, so we need to decode them
+    const dataImages = HTMLAttributes["data-images"] as string | undefined
+    const images = dataImages ? decodeImagesAttr(dataImages) : []
+    
+    // Get other attributes (these are passed as data-* attributes too)
+    const columns = parseInt(HTMLAttributes["data-columns"] as string, 10) || 2
+    const gap = (HTMLAttributes["data-gap"] as GridGap) || "md"
+    const rounded = HTMLAttributes["data-rounded"] !== "false"
+    const width = (HTMLAttributes["data-width"] as string) || "100%"
+    const align = (HTMLAttributes["data-align"] as ImageGridAlign) || "center"
     
     const gapMap: Record<GridGap, string> = {
       none: "0",
