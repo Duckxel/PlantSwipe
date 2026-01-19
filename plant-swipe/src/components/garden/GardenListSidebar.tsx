@@ -317,6 +317,7 @@ const GardenListSidebarComponent: React.FC<GardenListSidebarProps> = ({
                               onProgressOccurrence(o.id, remaining)
                             }
                             disabled={progressingOccIds.has(o.id)}
+                            aria-label={`${t("garden.complete", "Complete")} ${t(`garden.taskTypes.${tt}`)} ${t("garden.activity.plant")} ${gp.nickname || gp.plant?.name || t("garden.activity.plant")}`}
                           >
                             {progressingOccIds.has(o.id) ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
