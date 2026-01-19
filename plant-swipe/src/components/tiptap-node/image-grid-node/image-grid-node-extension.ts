@@ -93,16 +93,24 @@ function extractImagesFromChildren(element: HTMLElement): ImageGridImage[] {
   imgElements.forEach((img) => {
     const src = img.getAttribute('src')
     if (src) {
-      // Try to extract focal point from object-position style
+      // Try to extract focal point from data attributes first
+      const dataFocalX = img.getAttribute('data-focal-x')
+      const dataFocalY = img.getAttribute('data-focal-y')
+      
+      // Fallback to object-position style
       const style = img.getAttribute('style') || ''
       const objectPosMatch = style.match(/object-position:\s*(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/)
+      
+      // Use data attributes if available, otherwise use object-position, default to 50
+      const focalX = dataFocalX ? parseFloat(dataFocalX) : (objectPosMatch ? parseFloat(objectPosMatch[1]) : 50)
+      const focalY = dataFocalY ? parseFloat(dataFocalY) : (objectPosMatch ? parseFloat(objectPosMatch[2]) : 50)
       
       images.push({
         src,
         alt: img.getAttribute('alt') || '',
         width: img.getAttribute('width') || undefined,
-        focalX: objectPosMatch ? parseFloat(objectPosMatch[1]) : 50,
-        focalY: objectPosMatch ? parseFloat(objectPosMatch[2]) : 50,
+        focalX,
+        focalY,
       })
     }
   })

@@ -334,29 +334,31 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
               style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
             >
               {images.map((img, index) => {
-                const focalX = img.focalX ?? 50
-                const focalY = img.focalY ?? 50
+                // Use live cropPosition when this image is being edited, otherwise use saved values
+                const isBeingEdited = editingCropIndex === index
+                const focalX = isBeingEdited ? cropPosition.x : (img.focalX ?? 50)
+                const focalY = isBeingEdited ? cropPosition.y : (img.focalY ?? 50)
                 const isNotCentered = focalX !== 50 || focalY !== 50
                 
                 return (
                   <div
                     key={`${img.src}-${index}`}
-                    className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""}`}
+                    className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""} ${isBeingEdited ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
                   >
                     <img
                       src={img.src}
                       alt={img.alt || ""}
-                      className="h-auto w-full object-cover"
+                      className="h-auto w-full object-cover transition-all duration-75"
                       style={{ 
                         aspectRatio: "16/10",
                         objectPosition: `${focalX}% ${focalY}%`
                       }}
                       draggable={false}
                     />
-                    {/* Focal point indicator (shows when not centered) */}
-                    {isNotCentered && (
+                    {/* Focal point indicator (shows when not centered or when being edited) */}
+                    {(isNotCentered || isBeingEdited) && (
                       <div 
-                        className="absolute w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-md pointer-events-none z-10 opacity-70"
+                        className={`absolute w-3 h-3 border-2 border-white rounded-full shadow-md pointer-events-none z-10 transition-all duration-75 ${isBeingEdited ? "bg-emerald-400 opacity-100 w-4 h-4" : "bg-emerald-500 opacity-70"}`}
                         style={{
                           left: `${focalX}%`,
                           top: `${focalY}%`,
@@ -365,7 +367,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                       />
                     )}
                     {/* Overlay controls */}
-                    <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                    <div className={`absolute inset-0 flex items-center justify-center gap-2 bg-black/50 transition-opacity ${isBeingEdited ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"}`}>
                       <button
                         type="button"
                         onClick={(e) => startCropEdit(index, e)}

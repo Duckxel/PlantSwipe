@@ -499,10 +499,36 @@ function convertImageGridToEmailTable(html: string): string {
     
     // If no images from attribute, try to extract from img tags in the content
     if (!images.length) {
-      const imgRegex = /<img[^>]*src="([^"]*)"[^>]*(?:alt="([^"]*)"|)[^>]*>/gi
+      const imgRegex = /<img[^>]*>/gi
       let imgMatch
       while ((imgMatch = imgRegex.exec(match)) !== null) {
-        images.push({ src: imgMatch[1], alt: imgMatch[2] || '' })
+        const imgTag = imgMatch[0]
+        const srcMatch = imgTag.match(/src="([^"]*)"/)
+        const altMatch = imgTag.match(/alt="([^"]*)"/)
+        const focalXMatch = imgTag.match(/data-focal-x="([^"]*)"/)
+        const focalYMatch = imgTag.match(/data-focal-y="([^"]*)"/)
+        const objectPosMatch = imgTag.match(/object-position:\s*(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/)
+        
+        if (srcMatch) {
+          // Get focal point from data attributes or from object-position style
+          let focalX = focalXMatch ? parseFloat(focalXMatch[1]) : undefined
+          let focalY = focalYMatch ? parseFloat(focalYMatch[1]) : undefined
+          
+          // Fallback to object-position if data attributes not present
+          if (focalX === undefined && objectPosMatch) {
+            focalX = parseFloat(objectPosMatch[1])
+          }
+          if (focalY === undefined && objectPosMatch) {
+            focalY = parseFloat(objectPosMatch[2])
+          }
+          
+          images.push({ 
+            src: srcMatch[1], 
+            alt: altMatch ? altMatch[1] : '',
+            focalX: focalX ?? 50,
+            focalY: focalY ?? 50
+          })
+        }
       }
     }
     
