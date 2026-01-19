@@ -29,7 +29,9 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   // Get upload folder from extension storage, fallback to default
   const uploadFolder = useMemo(() => {
     try {
-      return editor?.storage?.imageGrid?.uploadFolder || DEFAULT_UPLOAD_FOLDER
+      // Access storage with type assertion since TipTap's storage is dynamically typed
+      const storage = editor?.storage as Record<string, { uploadFolder?: string }> | undefined
+      return storage?.imageGrid?.uploadFolder || DEFAULT_UPLOAD_FOLDER
     } catch {
       return DEFAULT_UPLOAD_FOLDER
     }
