@@ -257,6 +257,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
                           className={`rounded-lg h-6 md:h-7 px-2 md:px-2.5 text-[10px] md:text-xs font-semibold flex-shrink-0 border-2 transition-all ${config.buttonOutline}`}
                           onClick={() => onProgressOccurrence(occ.id, remaining)}
                           disabled={isProgressing}
+                          aria-label={`${t("garden.complete", "Complete")} ${t(`garden.taskTypes.${taskType}`)} ${t("garden.activity.plant")} ${plant.nickname || plant.plant?.name || "Plant"}`}
                         >
                           {isProgressing ? (
                             <Loader2 className="w-3 h-3 md:w-3.5 md:h-3.5 animate-spin" />
