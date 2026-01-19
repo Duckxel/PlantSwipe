@@ -439,10 +439,17 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                       />
                       
                       {/* Draggable crop preview - shows exact output */}
+                      {/* Using background-image for more reliable position updates */}
                       <div
                         ref={cropContainerRef}
                         className={`absolute inset-4 cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden`}
-                        style={{ borderRadius: rounded ? '12px' : '0' }}
+                        style={{ 
+                          borderRadius: rounded ? '12px' : '0',
+                          backgroundImage: `url('${images[editingCropIndex]?.src}')`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: `${cropPosition.x}% ${cropPosition.y}%`,
+                          backgroundRepeat: 'no-repeat',
+                        }}
                         onMouseDown={handleCropMouseDown}
                         onTouchStart={(e) => {
                           // Handle touch events for mobile
@@ -458,19 +465,12 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                           }
                         }}
                       >
-                        {/* The actual crop preview using object-fit/position - explicit inline styles to ensure they apply */}
+                        {/* Hidden img for reference - keeping ref for potential future use */}
                         <img
                           ref={cropImageRef}
                           src={images[editingCropIndex]?.src}
                           alt=""
-                          className="pointer-events-none select-none"
-                          style={{ 
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            objectPosition: `${cropPosition.x}% ${cropPosition.y}%`,
-                            borderRadius: rounded ? '12px' : '0',
-                          }}
+                          className="sr-only"
                           draggable={false}
                         />
                         
