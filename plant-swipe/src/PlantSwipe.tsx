@@ -1008,21 +1008,29 @@ export default function PlantSwipe() {
     const vx = info.velocity.x
     const vy = info.velocity.y
     
-    // Calculate effective movement considering both offset and velocity
-    const effectiveX = dx + vx * 0.1
-    const effectiveY = dy + vy * 0.1
+    // Minimum offset required before considering velocity (prevents taps from triggering actions)
+    const minOffsetForVelocity = 20
+    const absOffsetX = Math.abs(dx)
+    const absOffsetY = Math.abs(dy)
     
-    // Check for significant movement or velocity
+    // If the offset is too small, it's likely a tap, not a swipe - ignore velocity
+    const hasMinOffset = absOffsetX > minOffsetForVelocity || absOffsetY > minOffsetForVelocity
+    
+    // Calculate effective movement considering both offset and velocity (only if minimum offset met)
+    const effectiveX = hasMinOffset ? dx + vx * 0.1 : dx
+    const effectiveY = hasMinOffset ? dy + vy * 0.1 : dy
+    
+    // Check for significant movement or velocity (velocity only counts if minimum offset met)
     const absX = Math.abs(effectiveX)
     const absY = Math.abs(effectiveY)
-    const absVx = Math.abs(vx)
-    const absVy = Math.abs(vy)
+    const absVx = hasMinOffset ? Math.abs(vx) : 0
+    const absVy = hasMinOffset ? Math.abs(vy) : 0
     
     let actionTaken = false
     
     // Prioritize vertical swipe over horizontal if both are significant
-    if ((absY > absX && absY > threshold) || (absVy > absVx && absVy > velocityThreshold)) {
-      if (effectiveY < -threshold || vy < -velocityThreshold) {
+    if ((absY > absX && absY > threshold) || (hasMinOffset && absVy > absVx && absVy > velocityThreshold)) {
+      if (effectiveY < -threshold || (hasMinOffset && vy < -velocityThreshold)) {
         // Swipe up (bottom to top) = open info
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
@@ -1032,14 +1040,14 @@ export default function PlantSwipe() {
     }
     
     // Horizontal swipe detection
-    if (!actionTaken && ((absX > absY && absX > threshold) || (absVx > absVy && absVx > velocityThreshold))) {
-      if (effectiveX < -threshold || vx < -velocityThreshold) {
+    if (!actionTaken && ((absX > absY && absX > threshold) || (hasMinOffset && absVx > absVy && absVx > velocityThreshold))) {
+      if (effectiveX < -threshold || (hasMinOffset && vx < -velocityThreshold)) {
         // Swipe left (right to left) = next
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
         handlePass()
         actionTaken = true
-      } else if (effectiveX > threshold || vx > velocityThreshold) {
+      } else if (effectiveX > threshold || (hasMinOffset && vx > velocityThreshold)) {
         // Swipe right (left to right) = previous
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })

@@ -327,20 +327,37 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             ))}
           </div>
         )}
-        <div className="absolute top-4 right-4 z-20">
+        <div className="absolute top-4 right-4 z-30">
           <button
+            type="button"
             onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
               e.stopPropagation()
+              e.preventDefault()
               if (onToggleLike) {
                 onToggleLike()
               }
             }}
-            onPointerDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+            }}
+            onPointerUp={(e) => {
+              e.stopPropagation()
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation()
+            }}
+            onTouchEnd={(e) => {
+              e.stopPropagation()
+            }}
+            onMouseDown={(e) => {
+              e.stopPropagation()
+            }}
             aria-pressed={liked}
             aria-label={liked ? "Unlike" : "Like"}
-            className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition ${
+            className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition pointer-events-auto ${
               liked ? "bg-rose-600 text-white border-rose-500" : "bg-white/90 text-black hover:bg-white"
             }`}
+            style={{ touchAction: 'manipulation' }}
           >
             <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
           </button>
@@ -366,14 +383,18 @@ export const SwipePage: React.FC<SwipePageProps> = ({
           </div>
           <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
           {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
-          <div className="mt-5 grid w-full gap-2 grid-cols-3">
+          <div className="mt-5 grid w-full gap-2 grid-cols-3 pointer-events-auto" style={{ touchAction: 'manipulation' }}>
             <Button
               className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
               onClick={(e) => {
                 e.stopPropagation()
+                e.preventDefault()
                 handlePrevious()
               }}
               onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
               aria-label={t("plant.back")}
               title={`${t("plant.back")} (Left Arrow)`}
             >
@@ -390,9 +411,13 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
               onClick={(e) => {
                 e.stopPropagation()
+                e.preventDefault()
                 handleInfo()
               }}
               onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
             >
               {t("plant.info")}
               <ChevronUp className="h-4 w-4 ml-1" />
@@ -401,9 +426,13 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
               onClick={(e) => {
                 e.stopPropagation()
+                e.preventDefault()
                 handlePass()
               }}
               onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
               aria-label={t("plant.next")}
               title={`${t("plant.next")} (Right Arrow)`}
             >
