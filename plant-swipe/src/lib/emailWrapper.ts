@@ -512,11 +512,8 @@ export function convertImageGridToEmailTable(html: string): string {
 export function sanitizeEmailHtml(html: string): string {
   let result = html
 
-  // 0a. Convert resizable images to email-compatible tables
-  result = convertResizableImageToEmailHtml(result)
-  
-  // 0b. For web preview, keep the div-based structure (CSS grid works in browsers)
-  // The div structure from TipTap's renderHTML already has proper inline styles
+  // For web preview, keep the div-based structure for both resizable images and image grids
+  // CSS handles these properly in browsers. Only convert to tables when sending emails.
 
   // 1. Replace all SVG logo URLs with PNG (Gmail doesn't support SVG)
   result = result.replace(
@@ -573,7 +570,10 @@ export function prepareEmailHtmlForSending(html: string): string {
   // First apply all the standard sanitization
   let result = sanitizeEmailHtml(html)
   
-  // Then convert image grids to tables (email clients don't support CSS Grid)
+  // Convert resizable images to tables (for proper alignment in email clients)
+  result = convertResizableImageToEmailHtml(result)
+  
+  // Convert image grids to tables (email clients don't support CSS Grid)
   result = convertImageGridToEmailTable(result)
   
   return result
