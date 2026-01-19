@@ -1040,7 +1040,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
           height: auto !important;
           display: block !important;
         }
-        .email-preview-body table[data-type="image-grid"] td > div[role="img"] {
+        .email-preview-body table[data-type="image-grid"] div[role="img"] {
           display: block !important;
           position: relative !important;
           width: 100% !important;
@@ -1050,9 +1050,15 @@ export const AdminEmailTemplatePage: React.FC = () => {
           background-repeat: no-repeat !important;
           border-radius: 16px !important;
         }
-        .email-preview-body table[data-type="image-grid"] td {
+        .email-preview-body table[data-type="image-grid"] table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+          border: none !important;
+        }
+        .email-preview-body table[data-type="image-grid"] table td {
           padding: 8px !important;
           border: none !important;
+          vertical-align: top !important;
         }
         /* Resizable Image Styles */
         .email-preview-body [data-type="resizable-image"] {
@@ -1849,7 +1855,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
               height: auto !important;
               display: block !important;
             }
-            .email-preview-body table[data-type="image-grid"] td > div[role="img"] {
+            .email-preview-body table[data-type="image-grid"] div[role="img"] {
               display: block !important;
               position: relative !important;
               width: 100% !important;
@@ -1859,9 +1865,15 @@ export const AdminEmailTemplatePage: React.FC = () => {
               background-repeat: no-repeat !important;
               border-radius: 16px !important;
             }
-            .email-preview-body table[data-type="image-grid"] td {
+            .email-preview-body table[data-type="image-grid"] table {
+              width: 100% !important;
+              border-collapse: collapse !important;
+              border: none !important;
+            }
+            .email-preview-body table[data-type="image-grid"] table td {
               padding: 8px !important;
               border: none !important;
+              vertical-align: top !important;
             }
             /* Resizable Image Styles */
             .email-preview-body [data-type="resizable-image"] {
