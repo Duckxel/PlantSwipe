@@ -614,8 +614,15 @@ export function sanitizeEmailHtml(html: string): string {
   // 0a. Convert resizable images to email-compatible tables
   result = convertResizableImageToEmailHtml(result)
   
-  // 0b. Convert image grids to email-compatible tables (must be done early before other transformations)
-  result = convertImageGridToEmailTable(result)
+  // 0b. Convert image grids to email-compatible tables
+  // Note: For web preview, the div-based structure works fine with CSS grid
+  // The table conversion is mainly needed for email clients that don't support CSS grid
+  try {
+    result = convertImageGridToEmailTable(result)
+  } catch (e) {
+    console.error('Image grid conversion failed:', e)
+    // Keep original div-based HTML if conversion fails
+  }
 
   // 1. Replace all SVG logo URLs with PNG (Gmail doesn't support SVG)
   result = result.replace(

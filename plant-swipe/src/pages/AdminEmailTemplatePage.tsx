@@ -985,17 +985,22 @@ export const AdminEmailTemplatePage: React.FC = () => {
           border: none !important;
           border: none !important;
         }
-        /* Image Grid Styles */
-        .email-preview-body [data-type="image-grid"] {
+        /* Image Grid Styles - Div-based structure from TipTap */
+        .email-preview-body [data-type="image-grid"],
+        .email-preview-body div[data-type="image-grid"] {
+          display: block !important;
           padding: 16px 0 !important;
           margin: 16px 0 !important;
           text-align: center !important;
+          width: 100% !important;
         }
-        .email-preview-body [data-type="image-grid"] > div {
-          display: inline-grid !important;
+        .email-preview-body [data-type="image-grid"] > div,
+        .email-preview-body div[data-type="image-grid"] > div {
+          display: grid !important;
           gap: 16px !important;
           width: 100% !important;
           max-width: 100% !important;
+          grid-template-columns: repeat(2, 1fr) !important;
         }
         .email-preview-body [data-type="image-grid"][data-columns="2"] > div {
           grid-template-columns: repeat(2, 1fr) !important;
@@ -1015,12 +1020,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
         .email-preview-body [data-type="image-grid"][data-gap="lg"] > div {
           gap: 24px !important;
         }
-        .email-preview-body [data-type="image-grid"] img {
+        .email-preview-body [data-type="image-grid"] img,
+        .email-preview-body div[data-type="image-grid"] img {
           width: 100% !important;
           height: auto !important;
           object-fit: cover !important;
           aspect-ratio: 16/10 !important;
           border-radius: 16px !important;
+          display: block !important;
         }
         .email-preview-body [data-type="image-grid"][data-rounded="false"] img {
           border-radius: 0 !important;
@@ -1814,17 +1821,22 @@ export const AdminEmailTemplatePage: React.FC = () => {
               padding: 0 !important;
               border: none !important;
             }
-            /* Image Grid Styles */
-            .email-preview-body [data-type="image-grid"] {
+            /* Image Grid Styles - Div-based structure from TipTap */
+            .email-preview-body [data-type="image-grid"],
+            .email-preview-body div[data-type="image-grid"] {
+              display: block !important;
               padding: 16px 0 !important;
               margin: 16px 0 !important;
               text-align: center !important;
+              width: 100% !important;
             }
-            .email-preview-body [data-type="image-grid"] > div {
-              display: inline-grid !important;
+            .email-preview-body [data-type="image-grid"] > div,
+            .email-preview-body div[data-type="image-grid"] > div {
+              display: grid !important;
               gap: 16px !important;
               width: 100% !important;
               max-width: 100% !important;
+              grid-template-columns: repeat(2, 1fr) !important;
             }
             .email-preview-body [data-type="image-grid"][data-columns="2"] > div {
               grid-template-columns: repeat(2, 1fr) !important;
@@ -1844,12 +1856,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
             .email-preview-body [data-type="image-grid"][data-gap="lg"] > div {
               gap: 24px !important;
             }
-            .email-preview-body [data-type="image-grid"] img {
+            .email-preview-body [data-type="image-grid"] img,
+            .email-preview-body div[data-type="image-grid"] img {
               width: 100% !important;
               height: auto !important;
               object-fit: cover !important;
               aspect-ratio: 16/10 !important;
               border-radius: 16px !important;
+              display: block !important;
             }
             .email-preview-body [data-type="image-grid"][data-rounded="false"] img {
               border-radius: 0 !important;
