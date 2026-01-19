@@ -987,15 +987,18 @@ export const AdminEmailTemplatePage: React.FC = () => {
         }
         /* Image Grid Styles */
         .email-preview-body [data-type="image-grid"] {
-          display: grid !important;
           padding: 16px 0 !important;
           margin: 16px 0 !important;
+        }
+        .email-preview-body [data-type="image-grid"] > div {
+          display: inline-grid !important;
         }
         .email-preview-body [data-type="image-grid"] img {
           width: 100% !important;
           height: auto !important;
           object-fit: cover !important;
           aspect-ratio: 16/10 !important;
+          border-radius: 16px !important;
         }
         .email-preview-body table[data-type="image-grid"] {
           width: 100% !important;
@@ -1760,15 +1763,18 @@ export const AdminEmailTemplatePage: React.FC = () => {
             }
             /* Image Grid Styles */
             .email-preview-body [data-type="image-grid"] {
-              display: grid !important;
               padding: 16px 0 !important;
               margin: 16px 0 !important;
+            }
+            .email-preview-body [data-type="image-grid"] > div {
+              display: inline-grid !important;
             }
             .email-preview-body [data-type="image-grid"] img {
               width: 100% !important;
               height: auto !important;
               object-fit: cover !important;
               aspect-ratio: 16/10 !important;
+              border-radius: 16px !important;
             }
             .email-preview-body table[data-type="image-grid"] {
               width: 100% !important;

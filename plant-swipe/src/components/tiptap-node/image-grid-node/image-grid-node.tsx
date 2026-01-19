@@ -1,11 +1,14 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
-import { useState, useCallback, useRef, useMemo } from "react"
-import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Move, X, Check } from "lucide-react"
+import { useState, useCallback, useRef, useMemo, useEffect } from "react"
+import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, ZoomIn, ZoomOut, RotateCcw } from "lucide-react"
 import type { GridColumns, GridGap, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
 // Default upload folder if not configured
 const DEFAULT_UPLOAD_FOLDER = "image-grids"
+
+// Crop aspect ratio (16:10)
+const CROP_ASPECT_RATIO = 16 / 10
 
 const GAP_OPTIONS: { value: GridGap; label: string }[] = [
   { value: "none", label: "None" },
@@ -58,17 +61,22 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   const [isUploading, setIsUploading] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
-  // Focal point editing state
-  const [editingFocalIndex, setEditingFocalIndex] = useState<number | null>(null)
-  const [tempFocalPoint, setTempFocalPoint] = useState<{ x: number; y: number } | null>(null)
-  const [isDraggingFocal, setIsDraggingFocal] = useState(false)
+  
+  // Crop editor state
+  const [editingCropIndex, setEditingCropIndex] = useState<number | null>(null)
+  const [cropZoom, setCropZoom] = useState(1) // 1 = 100%, 1.5 = 150% zoom
+  const [cropPosition, setCropPosition] = useState({ x: 50, y: 50 }) // Center position as percentage
+  const [isDraggingCrop, setIsDraggingCrop] = useState(false)
+  const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 })
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
-  const focalImageRef = useRef<HTMLDivElement>(null)
+  const cropContainerRef = useRef<HTMLDivElement>(null)
+  const cropImageRef = useRef<HTMLImageElement>(null)
   const startXRef = useRef(0)
   const startWidthRef = useRef(0)
+  const dragStartRef = useRef({ x: 0, y: 0, cropX: 0, cropY: 0 })
 
   // Show controls when selected OR hovering
   const showControls = selected || isHovering
@@ -139,69 +147,160 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     [updateAttributes]
   )
 
-  // Start editing focal point for an image
-  const startFocalEdit = useCallback((index: number, e: React.MouseEvent) => {
+  // Start editing crop for an image
+  const startCropEdit = useCallback((index: number, e: React.MouseEvent) => {
     e.stopPropagation()
     const img = images[index]
-    setEditingFocalIndex(index)
-    setTempFocalPoint({ x: img.focalX ?? 50, y: img.focalY ?? 50 })
+    setEditingCropIndex(index)
+    setCropPosition({ x: img.focalX ?? 50, y: img.focalY ?? 50 })
+    setCropZoom(1)
   }, [images])
 
-  // Handle focal point drag
-  const handleFocalMouseDown = useCallback((e: React.MouseEvent) => {
+  // Load image natural size when crop editor opens
+  useEffect(() => {
+    if (editingCropIndex !== null && cropImageRef.current) {
+      const img = cropImageRef.current
+      if (img.complete) {
+        setImageNaturalSize({ width: img.naturalWidth, height: img.naturalHeight })
+      } else {
+        img.onload = () => {
+          setImageNaturalSize({ width: img.naturalWidth, height: img.naturalHeight })
+        }
+      }
+    }
+  }, [editingCropIndex])
+
+  // Calculate crop rectangle dimensions and position
+  const cropRectStyle = useMemo(() => {
+    if (!cropContainerRef.current || imageNaturalSize.width === 0) return null
+    
+    const containerRect = cropContainerRef.current.getBoundingClientRect()
+    const containerW = containerRect.width
+    const containerH = containerRect.height
+    
+    // The crop rectangle maintains 16:10 aspect ratio
+    // At zoom 1.0, the crop rect covers the maximum area while maintaining aspect ratio
+    // At higher zoom, the crop rect is smaller (showing a smaller portion of the image)
+    
+    const imageAspect = imageNaturalSize.width / imageNaturalSize.height
+    
+    // Calculate the crop rectangle size based on zoom
+    // At zoom 1.0: crop rect fits inside the container
+    // At zoom 2.0: crop rect is half the size (showing 50% of the image)
+    let cropW: number, cropH: number
+    
+    if (imageAspect > CROP_ASPECT_RATIO) {
+      // Image is wider than crop ratio - crop height is limited by image height
+      cropH = containerH / cropZoom
+      cropW = cropH * CROP_ASPECT_RATIO
+    } else {
+      // Image is taller than crop ratio - crop width is limited by image width
+      cropW = containerW / cropZoom
+      cropH = cropW / CROP_ASPECT_RATIO
+    }
+    
+    // Ensure crop doesn't exceed container
+    if (cropW > containerW) {
+      cropW = containerW
+      cropH = cropW / CROP_ASPECT_RATIO
+    }
+    if (cropH > containerH) {
+      cropH = containerH
+      cropW = cropH * CROP_ASPECT_RATIO
+    }
+    
+    // Calculate position based on cropPosition (0-100)
+    // The crop position represents where the center of the crop is
+    const maxX = containerW - cropW
+    const maxY = containerH - cropH
+    const x = (cropPosition.x / 100) * maxX
+    const y = (cropPosition.y / 100) * maxY
+    
+    return {
+      width: cropW,
+      height: cropH,
+      left: x,
+      top: y,
+    }
+  }, [cropPosition, cropZoom, imageNaturalSize])
+
+  // Handle crop rectangle drag
+  const handleCropMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDraggingFocal(true)
-
-    const updateFocalFromEvent = (clientX: number, clientY: number) => {
-      if (!focalImageRef.current) return
-      const rect = focalImageRef.current.getBoundingClientRect()
-      const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100))
-      const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100))
-      setTempFocalPoint({ x: Math.round(x), y: Math.round(y) })
+    setIsDraggingCrop(true)
+    
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      cropX: cropPosition.x,
+      cropY: cropPosition.y,
     }
 
-    // Initial position from click
-    updateFocalFromEvent(e.clientX, e.clientY)
-
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      updateFocalFromEvent(moveEvent.clientX, moveEvent.clientY)
+      if (!cropContainerRef.current || !cropRectStyle) return
+      
+      const containerRect = cropContainerRef.current.getBoundingClientRect()
+      const maxX = containerRect.width - cropRectStyle.width
+      const maxY = containerRect.height - cropRectStyle.height
+      
+      const deltaX = moveEvent.clientX - dragStartRef.current.x
+      const deltaY = moveEvent.clientY - dragStartRef.current.y
+      
+      // Convert pixel delta to percentage
+      const deltaXPercent = maxX > 0 ? (deltaX / maxX) * 100 : 0
+      const deltaYPercent = maxY > 0 ? (deltaY / maxY) * 100 : 0
+      
+      const newX = Math.max(0, Math.min(100, dragStartRef.current.cropX + deltaXPercent))
+      const newY = Math.max(0, Math.min(100, dragStartRef.current.cropY + deltaYPercent))
+      
+      setCropPosition({ x: Math.round(newX), y: Math.round(newY) })
     }
 
     const handleMouseUp = () => {
-      setIsDraggingFocal(false)
+      setIsDraggingCrop(false)
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
     }
 
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
-  }, [])
+  }, [cropPosition, cropRectStyle])
 
-  // Save focal point changes
-  const saveFocalPoint = useCallback(() => {
-    if (editingFocalIndex === null || !tempFocalPoint) return
+  // Save crop changes
+  const saveCrop = useCallback(() => {
+    if (editingCropIndex === null) return
     
     const newImages = [...images]
-    newImages[editingFocalIndex] = {
-      ...newImages[editingFocalIndex],
-      focalX: tempFocalPoint.x,
-      focalY: tempFocalPoint.y,
+    newImages[editingCropIndex] = {
+      ...newImages[editingCropIndex],
+      focalX: cropPosition.x,
+      focalY: cropPosition.y,
     }
     updateAttributes({ images: newImages })
-    setEditingFocalIndex(null)
-    setTempFocalPoint(null)
-  }, [editingFocalIndex, tempFocalPoint, images, updateAttributes])
+    setEditingCropIndex(null)
+    setCropZoom(1)
+  }, [editingCropIndex, cropPosition, images, updateAttributes])
 
-  // Cancel focal point editing
-  const cancelFocalEdit = useCallback(() => {
-    setEditingFocalIndex(null)
-    setTempFocalPoint(null)
+  // Cancel crop editing
+  const cancelCropEdit = useCallback(() => {
+    setEditingCropIndex(null)
+    setCropZoom(1)
   }, [])
 
-  // Reset focal point to center
-  const resetFocalPoint = useCallback(() => {
-    setTempFocalPoint({ x: 50, y: 50 })
+  // Reset crop to center
+  const resetCrop = useCallback(() => {
+    setCropPosition({ x: 50, y: 50 })
+    setCropZoom(1)
+  }, [])
+
+  // Zoom handlers
+  const zoomIn = useCallback(() => {
+    setCropZoom(z => Math.min(3, z + 0.25))
+  }, [])
+
+  const zoomOut = useCallback(() => {
+    setCropZoom(z => Math.max(1, z - 0.25))
   }, [])
 
   const handleFileSelect = useCallback(
@@ -339,11 +438,11 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
                         type="button"
-                        onClick={(e) => startFocalEdit(index, e)}
+                        onClick={(e) => startCropEdit(index, e)}
                         className="rounded-full bg-emerald-500 p-2 text-white transition-colors hover:bg-emerald-600"
-                        title="Adjust crop position"
+                        title="Adjust crop area"
                       >
-                        <Move className="h-4 w-4" />
+                        <Crop className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
@@ -359,30 +458,53 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
               })}
             </div>
 
-            {/* Focal Point Editor Overlay */}
-            {editingFocalIndex !== null && tempFocalPoint && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                <div className="relative max-w-3xl w-full mx-4">
+            {/* YouTube-style Crop Editor Overlay */}
+            {editingCropIndex !== null && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                <div className="relative max-w-4xl w-full mx-4">
                   {/* Header */}
-                  <div className="flex items-center justify-between mb-3 px-1">
-                    <div className="flex items-center gap-2 text-white">
-                      <Move className="h-5 w-5" />
-                      <span className="font-medium">Adjust Crop Position</span>
-                      <span className="text-white/60 text-sm ml-2">
-                        Click or drag to set the focal point
-                      </span>
+                  <div className="flex items-center justify-between mb-4 px-1">
+                    <div className="flex items-center gap-3 text-white">
+                      <Crop className="h-5 w-5 text-emerald-400" />
+                      <span className="font-semibold text-lg">Adjust Crop Area</span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {/* Zoom controls */}
+                      <div className="flex items-center gap-1 mr-4 bg-white/10 rounded-full px-2 py-1">
+                        <button
+                          type="button"
+                          onClick={zoomOut}
+                          disabled={cropZoom <= 1}
+                          className="p-1.5 rounded-full hover:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          title="Zoom out"
+                        >
+                          <ZoomOut className="h-4 w-4" />
+                        </button>
+                        <span className="text-white/80 text-sm font-medium w-12 text-center">
+                          {Math.round(cropZoom * 100)}%
+                        </span>
+                        <button
+                          type="button"
+                          onClick={zoomIn}
+                          disabled={cropZoom >= 3}
+                          className="p-1.5 rounded-full hover:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          title="Zoom in"
+                        >
+                          <ZoomIn className="h-4 w-4" />
+                        </button>
+                      </div>
+                      
                       <button
                         type="button"
-                        onClick={resetFocalPoint}
-                        className="px-3 py-1.5 text-sm text-white/80 hover:text-white transition-colors"
+                        onClick={resetCrop}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                       >
-                        Reset to Center
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Reset
                       </button>
                       <button
                         type="button"
-                        onClick={cancelFocalEdit}
+                        onClick={cancelCropEdit}
                         className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
                         title="Cancel"
                       >
@@ -390,73 +512,121 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                       </button>
                       <button
                         type="button"
-                        onClick={saveFocalPoint}
-                        className="p-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
-                        title="Save"
+                        onClick={saveCrop}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium transition-colors"
                       >
                         <Check className="h-4 w-4" />
+                        Apply
                       </button>
                     </div>
                   </div>
 
-                  {/* Image with focal point editor */}
-                  <div className="relative rounded-2xl overflow-hidden shadow-2xl">
-                    {/* Full uncropped image */}
+                  {/* Crop Editor */}
+                  <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-black">
+                    {/* Image container with dark overlay */}
                     <div
-                      ref={focalImageRef}
-                      className="relative cursor-crosshair select-none"
-                      onMouseDown={handleFocalMouseDown}
+                      ref={cropContainerRef}
+                      className="relative select-none"
+                      style={{ maxHeight: '70vh' }}
                     >
+                      {/* The actual image */}
                       <img
-                        src={images[editingFocalIndex]?.src}
+                        ref={cropImageRef}
+                        src={images[editingCropIndex]?.src}
                         alt=""
                         className="w-full h-auto"
+                        style={{ maxHeight: '70vh', objectFit: 'contain' }}
                         draggable={false}
                       />
                       
-                      {/* Crop preview overlay - shows what will be visible */}
-                      <div 
-                        className="absolute inset-0 pointer-events-none"
-                        style={{
-                          background: `
-                            linear-gradient(to right, rgba(0,0,0,0.5) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.5) 100%),
-                            linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.5) 100%)
-                          `
-                        }}
-                      />
+                      {/* Dark overlay covering the entire image */}
+                      <div className="absolute inset-0 bg-black/60 pointer-events-none" />
                       
-                      {/* Focal point crosshair */}
-                      <div
-                        className={`absolute w-8 h-8 pointer-events-none z-20 ${isDraggingFocal ? 'scale-110' : ''} transition-transform`}
-                        style={{
-                          left: `${tempFocalPoint.x}%`,
-                          top: `${tempFocalPoint.y}%`,
-                          transform: 'translate(-50%, -50%)'
-                        }}
-                      >
-                        {/* Outer ring */}
-                        <div className="absolute inset-0 rounded-full border-2 border-white shadow-lg" />
-                        {/* Inner dot */}
-                        <div className="absolute top-1/2 left-1/2 w-2 h-2 -translate-x-1/2 -translate-y-1/2 bg-emerald-500 rounded-full shadow-md" />
-                        {/* Crosshair lines */}
-                        <div className="absolute top-1/2 left-0 w-full h-px bg-white/50 -translate-y-1/2" />
-                        <div className="absolute top-0 left-1/2 h-full w-px bg-white/50 -translate-x-1/2" />
-                      </div>
+                      {/* Crop rectangle - the visible area */}
+                      {cropRectStyle && (
+                        <>
+                          {/* Clear window showing the crop area */}
+                          <div
+                            className={`absolute cursor-move transition-shadow ${isDraggingCrop ? 'shadow-2xl' : 'shadow-xl'}`}
+                            style={{
+                              left: cropRectStyle.left,
+                              top: cropRectStyle.top,
+                              width: cropRectStyle.width,
+                              height: cropRectStyle.height,
+                            }}
+                            onMouseDown={handleCropMouseDown}
+                          >
+                            {/* The visible portion of the image */}
+                            <div 
+                              className="absolute inset-0 overflow-hidden"
+                              style={{ borderRadius: rounded ? '16px' : '0' }}
+                            >
+                              <img
+                                src={images[editingCropIndex]?.src}
+                                alt=""
+                                className="absolute"
+                                style={{
+                                  left: -cropRectStyle.left,
+                                  top: -cropRectStyle.top,
+                                  width: cropContainerRef.current?.offsetWidth || 'auto',
+                                  height: cropContainerRef.current?.offsetHeight || 'auto',
+                                  maxWidth: 'none',
+                                }}
+                                draggable={false}
+                              />
+                            </div>
+                            
+                            {/* Border around crop area */}
+                            <div 
+                              className={`absolute inset-0 border-2 border-white pointer-events-none ${isDraggingCrop ? 'border-emerald-400' : ''}`}
+                              style={{ borderRadius: rounded ? '16px' : '0' }}
+                            />
+                            
+                            {/* Corner handles */}
+                            <div className="absolute -top-1 -left-1 w-3 h-3 bg-white rounded-sm shadow" />
+                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-white rounded-sm shadow" />
+                            <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-white rounded-sm shadow" />
+                            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-white rounded-sm shadow" />
+                            
+                            {/* Rule of thirds grid (subtle) */}
+                            <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: rounded ? '16px' : '0', overflow: 'hidden' }}>
+                              <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/20" />
+                              <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/20" />
+                              <div className="absolute top-1/3 left-0 right-0 h-px bg-white/20" />
+                              <div className="absolute top-2/3 left-0 right-0 h-px bg-white/20" />
+                            </div>
+                            
+                            {/* Drag hint */}
+                            {!isDraggingCrop && (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div className="bg-black/50 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm">
+                                  Drag to reposition
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
 
-                    {/* Preview strip - shows how the crop will look */}
-                    <div className="mt-3 p-3 bg-black/40 rounded-xl">
-                      <p className="text-white/60 text-xs mb-2">Preview (16:10 crop):</p>
-                      <div 
-                        className={`w-48 h-[120px] bg-cover ${rounded ? 'rounded-lg' : ''} mx-auto border border-white/20`}
-                        style={{
-                          backgroundImage: `url('${images[editingFocalIndex]?.src}')`,
-                          backgroundPosition: `${tempFocalPoint.x}% ${tempFocalPoint.y}%`
-                        }}
-                      />
-                      <p className="text-white/40 text-xs mt-2 text-center">
-                        Position: {tempFocalPoint.x}% × {tempFocalPoint.y}%
-                      </p>
+                    {/* Footer with preview and info */}
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-t from-black/80 to-transparent absolute bottom-0 left-0 right-0">
+                      <div className="flex items-center gap-4">
+                        {/* Mini preview */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-white/60 text-xs">Preview:</span>
+                          <div 
+                            className={`w-20 h-[50px] bg-cover ${rounded ? 'rounded-lg' : ''} border border-white/30`}
+                            style={{
+                              backgroundImage: `url('${images[editingCropIndex]?.src}')`,
+                              backgroundPosition: `${cropPosition.x}% ${cropPosition.y}%`
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="text-white/50 text-xs">
+                        Position: {cropPosition.x}% × {cropPosition.y}% • Aspect ratio: 16:10
+                      </div>
                     </div>
                   </div>
                 </div>
