@@ -4,6 +4,7 @@ import { ImageGridNode as ImageGridNodeComponent } from "./image-grid-node"
 
 export type GridColumns = 2 | 3 | 4
 export type GridGap = "none" | "sm" | "md" | "lg"
+export type GridAspectRatio = "square" | "landscape" | "portrait"
 
 export interface ImageGridNodeOptions {
   HTMLAttributes: Record<string, unknown>
@@ -33,6 +34,7 @@ export interface ImageGridAttributes {
   rounded: boolean
   width: string
   align: ImageGridAlign
+  aspectRatio: GridAspectRatio
 }
 
 declare module "@tiptap/react" {
@@ -208,6 +210,15 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
           "data-align": attributes.align || "center",
         }),
       },
+      aspectRatio: {
+        default: "square" as GridAspectRatio,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-aspect-ratio") as GridAspectRatio) || "square"
+        },
+        renderHTML: (attributes) => ({
+          "data-aspect-ratio": attributes.aspectRatio || "square",
+        }),
+      },
     }
   },
 
@@ -227,6 +238,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
     const rounded = HTMLAttributes["data-rounded"] !== "false"
     const width = (HTMLAttributes["data-width"] as string) || "100%"
     const align = (HTMLAttributes["data-align"] as ImageGridAlign) || "center"
+    const aspectRatio = (HTMLAttributes["data-aspect-ratio"] as GridAspectRatio) || "square"
     
     const gapMap: Record<GridGap, string> = {
       none: "0",
@@ -235,8 +247,16 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
       lg: "24px",
     }
 
+    // Aspect ratio CSS values
+    const aspectRatioMap: Record<GridAspectRatio, string> = {
+      square: "1/1",
+      landscape: "16/10",
+      portrait: "10/16",
+    }
+
     const widthValue = width || "100%"
     const alignValue = align || "center"
+    const aspectRatioValue = aspectRatioMap[aspectRatio] || "1/1"
     
     // Container style for alignment
     const containerStyle = `
@@ -261,7 +281,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
         {
           src: img.src,
           alt: img.alt || "",
-          style: `width: 100%; height: auto; object-fit: cover; object-position: ${focalX}% ${focalY}%; aspect-ratio: 16/10; ${rounded ? "border-radius: 16px;" : ""}`,
+          style: `width: 100%; height: auto; object-fit: cover; object-position: ${focalX}% ${focalY}%; aspect-ratio: ${aspectRatioValue}; ${rounded ? "border-radius: 16px;" : ""}`,
           "data-grid-image": "true",
           "data-focal-x": String(focalX),
           "data-focal-y": String(focalY),

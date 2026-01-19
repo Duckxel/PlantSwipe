@@ -490,12 +490,22 @@ export function convertImageGridToEmailTable(html: string): string {
     const imagesMatch = match.match(/data-images="([^"]*)"/)
     const widthMatch = match.match(/data-width="([^"]*)"/)
     const alignMatch = match.match(/data-align="([^"]*)"/)
+    const aspectRatioMatch = match.match(/data-aspect-ratio="([^"]*)"/)
     
     const numCols = columnsMatch ? parseInt(columnsMatch[1], 10) : 2
     const gap = gapMatch ? gapMatch[1] : 'md'
     const isRounded = !roundedMatch || roundedMatch[1] !== "false"
     const gridWidth = widthMatch ? widthMatch[1] : '100%'
     const align = alignMatch ? alignMatch[1] : 'center'
+    const aspectRatio = aspectRatioMatch ? aspectRatioMatch[1] : 'square'
+    
+    // Map aspect ratio values to CSS
+    const aspectRatioMap: Record<string, string> = {
+      square: '1/1',
+      landscape: '16/10',
+      portrait: '10/16',
+    }
+    const aspectRatioCss = aspectRatioMap[aspectRatio] || '1/1'
     
     // Try to get images from data-images attribute
     let images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
@@ -564,7 +574,7 @@ export function convertImageGridToEmailTable(html: string): string {
         // Wrap in a div with overflow:hidden and aspect-ratio for proper cropping
         return `
         <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <div style="display: block; position: relative; width: 100%; overflow: hidden; aspect-ratio: 16/10; ${isRounded ? 'border-radius: 16px;' : ''}">
+          <div style="display: block; position: relative; width: 100%; overflow: hidden; aspect-ratio: ${aspectRatioCss}; ${isRounded ? 'border-radius: 16px;' : ''}">
             <img src="${img.src}" alt="${img.alt || ''}" style="width: 100%; height: 100%; object-fit: cover; object-position: ${focalX}% ${focalY}%; display: block;" />
           </div>
         </td>

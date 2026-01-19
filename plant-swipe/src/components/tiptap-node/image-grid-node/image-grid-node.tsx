@@ -1,7 +1,7 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback, useRef, useMemo } from "react"
-import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw } from "lucide-react"
-import type { GridColumns, GridGap, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
+import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw, Square, RectangleHorizontal, RectangleVertical } from "lucide-react"
+import type { GridColumns, GridGap, ImageGridImage, ImageGridAlign, GridAspectRatio } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
 // Default upload folder if not configured
@@ -29,6 +29,13 @@ const ALIGN_OPTIONS: { value: ImageGridAlign; label: string; Icon: typeof AlignL
   { value: "right", label: "Right", Icon: AlignRight },
 ]
 
+// Aspect ratio options
+const ASPECT_RATIO_OPTIONS: { value: GridAspectRatio; label: string; Icon: typeof Square; cssValue: string }[] = [
+  { value: "square", label: "Square (1:1)", Icon: Square, cssValue: "1/1" },
+  { value: "landscape", label: "Landscape (16:10)", Icon: RectangleHorizontal, cssValue: "16/10" },
+  { value: "portrait", label: "Portrait (10:16)", Icon: RectangleVertical, cssValue: "10/16" },
+]
+
 export function ImageGridNode({ node, updateAttributes, selected, editor }: NodeViewProps) {
   const attrs = node.attrs as {
     images: ImageGridImage[] | undefined
@@ -37,11 +44,15 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     rounded: boolean
     width?: string
     align?: ImageGridAlign
+    aspectRatio?: GridAspectRatio
   }
   
   // Ensure images is always an array
   const images = Array.isArray(attrs.images) ? attrs.images : []
-  const { columns = 2, gap = "md", rounded = true, width = "100%", align = "center" } = attrs
+  const { columns = 2, gap = "md", rounded = true, width = "100%", align = "center", aspectRatio = "square" } = attrs
+  
+  // Get the CSS value for the current aspect ratio
+  const currentAspectRatioCss = ASPECT_RATIO_OPTIONS.find(opt => opt.value === aspectRatio)?.cssValue || "1/1"
 
   // Get upload folder from extension storage, fallback to default
   const uploadFolder = useMemo(() => {
@@ -349,7 +360,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                       alt={img.alt || ""}
                       className="h-auto w-full"
                       style={{ 
-                        aspectRatio: "16/10",
+                        aspectRatio: currentAspectRatioCss,
                         objectFit: 'cover',
                         objectPosition: `${focalX}% ${focalY}%`
                       }}
@@ -432,7 +443,8 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                   <div className="p-4">
                     <div 
                       ref={cropContainerRef}
-                      className={`relative w-full aspect-[16/10] cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden`}
+                      className={`relative w-full cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden`}
+                      style={{ aspectRatio: currentAspectRatioCss }}
                       style={{ 
                         borderRadius: rounded ? '12px' : '0',
                         backgroundImage: `url('${images[editingCropIndex]?.src}')`,
@@ -523,7 +535,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
 
             {/* Controls toolbar */}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 p-2 dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
-              {/* Left section: Add & Columns */}
+              {/* Left section: Add & Columns & Aspect Ratio */}
               <div className="flex items-center gap-2">
                 {/* Add more images */}
                 <button
@@ -555,6 +567,30 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                       {c}
                     </button>
                   ))}
+                </div>
+
+                <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
+
+                {/* Aspect Ratio */}
+                <div className="flex items-center gap-0.5 rounded-lg bg-stone-100/80 p-0.5 dark:bg-[#2a2a2d]">
+                  {ASPECT_RATIO_OPTIONS.map(({ value, label, Icon }) => {
+                    const isActive = aspectRatio === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => updateAttributes({ aspectRatio: value })}
+                        title={label}
+                        className={`rounded-md p-1 transition-all ${
+                          isActive
+                            ? "bg-emerald-500 text-white shadow-sm"
+                            : "text-stone-500 hover:text-stone-700 hover:bg-white/60 dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
