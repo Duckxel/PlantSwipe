@@ -5,9 +5,15 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Flame, PartyPopper, Sparkles, Loader2, Sprout } from "lucide-react";
+import { Flame, PartyPopper, Sparkles, Loader2, Sprout, Construction } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
+
+// Helper to check if a plant is "In Progress" status
+const isPlantInProgress = (plant: Plant): boolean => {
+  const status = (plant.meta?.status || '').toLowerCase().replace(/\s+/g, ' ').trim()
+  return status === 'in progres' || status === 'in progress'
+}
 
 interface SearchPageProps {
   plants: Plant[];
@@ -84,6 +90,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6 items-stretch">
         {visiblePlants.map((p) => {
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
+          const inProgress = isPlantInProgress(p)
           if (isPlantOfTheMonth(p)) {
             highlightBadges.push({
               key: `${p.id}-promotion`,
@@ -145,17 +152,27 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                       ))}
                     </div>
                   )}
-                  {likedIds.includes(p.id) && (
-                    <div className="absolute top-2 right-2 z-10">
+                  <div className="absolute top-2 right-2 z-10 flex flex-col gap-1">
+                    {inProgress && (
+                      <Badge className="rounded-full p-1.5 bg-orange-500/90 text-white" title={t("plant.inProgress", { defaultValue: "In Progress" })}>
+                        <Construction className="h-3 w-3" />
+                      </Badge>
+                    )}
+                    {likedIds.includes(p.id) && (
                       <Badge className="rounded-full p-1.5 bg-rose-600 dark:bg-rose-500 text-white">
                         <Flame className="h-3 w-3" />
                       </Badge>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
                 <div className="p-3 space-y-1.5 flex flex-col flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-lg text-[9px] px-1.5 py-0.5`}>{p.rarity}</Badge>
+                    {inProgress && (
+                      <Badge className="rounded-lg text-[9px] px-1.5 py-0.5 bg-orange-500/90 text-white flex items-center gap-0.5">
+                        <Construction className="h-3 w-3" />
+                      </Badge>
+                    )}
                   </div>
                   <div className="overflow-hidden">
                     <div className="font-semibold truncate text-sm">{p.name}</div>
@@ -195,6 +212,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 <div className="p-4 space-y-2 flex flex-col h-full min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-xl`}>{p.rarity}</Badge>
+                    {inProgress && (
+                      <Badge className="rounded-xl bg-orange-500/90 text-white flex items-center gap-1">
+                        <Construction className="h-3.5 w-3.5" />
+                        {t("plant.inProgress", { defaultValue: "In Progress" })}
+                      </Badge>
+                    )}
                     {(p.seasons ?? []).map((s: PlantSeason) => {
                       const badgeClass =
                         seasonBadge[s] ?? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100"
