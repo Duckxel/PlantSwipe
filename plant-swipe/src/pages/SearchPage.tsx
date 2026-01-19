@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Flame, PartyPopper, Sparkles, Loader2, Sprout } from "lucide-react";
+import { Flame, PartyPopper, Sparkles, Loader2, Sprout, HardHat } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 
@@ -83,6 +83,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       {/* 2-column grid on mobile, 2-column on desktop */}
       <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6 items-stretch">
         {visiblePlants.map((p) => {
+          // Check if plant is "in progress"
+          const isInProgress = p.meta?.status?.toLowerCase() === 'in progres' || p.meta?.status?.toLowerCase() === 'in progress'
+
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
           if (isPlantOfTheMonth(p)) {
             highlightBadges.push({
@@ -152,6 +155,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                       </Badge>
                     </div>
                   )}
+                  {isInProgress && (
+                    <div className="absolute bottom-2 right-2 z-10">
+                      <Badge className="rounded-full p-1.5 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
+                        <HardHat className="h-3 w-3" />
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 <div className="p-3 space-y-1.5 flex flex-col flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -189,6 +199,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                           {badge.label}
                         </Badge>
                       ))}
+                    </div>
+                  )}
+                  {isInProgress && (
+                    <div className="absolute bottom-3 right-3 z-10">
+                      <Badge className="rounded-full p-2 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
+                        <HardHat className="h-5 w-5" />
+                      </Badge>
                     </div>
                   )}
                 </div>

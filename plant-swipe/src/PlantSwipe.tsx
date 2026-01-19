@@ -844,7 +844,24 @@ export default function PlantSwipe() {
   }, [filtered, shuffleEpoch])
 
   const sortedSearchResults = useMemo(() => {
-    if (searchSort === "default") return filtered
+    // Helper to check if a plant is "in progress"
+    const isPlantInProgress = (p: Plant) => {
+      const status = p.meta?.status?.toLowerCase()
+      return status === 'in progres' || status === 'in progress'
+    }
+
+    // For default sort, push "in progress" plants to the bottom
+    if (searchSort === "default") {
+      const arr = filtered.slice() as PreparedPlant[]
+      arr.sort((a, b) => {
+        const aInProgress = isPlantInProgress(a) ? 1 : 0
+        const bInProgress = isPlantInProgress(b) ? 1 : 0
+        if (aInProgress !== bInProgress) return aInProgress - bInProgress
+        // Maintain original order for same status
+        return 0
+      })
+      return arr
+    }
     
     // Cast to PreparedPlant[] since filtered comes from preparedPlants
     const arr = filtered.slice() as PreparedPlant[]
