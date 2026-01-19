@@ -300,15 +300,60 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
 })
 
 /**
+ * Finds the matching closing div tag for a div starting at the given position
+ * Handles nested divs correctly by counting depth
+ */
+function findMatchingDivClose(html: string, startPos: number): number {
+  let depth = 0
+  let pos = startPos
+  
+  while (pos < html.length) {
+    const openMatch = html.slice(pos).match(/^<div\b/i)
+    const closeMatch = html.slice(pos).match(/^<\/div>/i)
+    
+    if (openMatch) {
+      depth++
+      pos += openMatch[0].length
+    } else if (closeMatch) {
+      depth--
+      if (depth === 0) {
+        return pos + closeMatch[0].length
+      }
+      pos += closeMatch[0].length
+    } else {
+      pos++
+    }
+  }
+  
+  return -1 // Not found
+}
+
+/**
  * Converts an image grid HTML to email-compatible table-based HTML
  * Call this function when preparing HTML for email sending
  */
 export function convertImageGridToEmailHtml(html: string): string {
-  // Match image-grid divs - handle nested structure with inner grid div
-  const regex = /<div[^>]*data-type="image-grid"[^>]*>[\s\S]*?(?:<\/div>\s*<\/div>|<\/div>)/gi
+  let result = html
+  let searchPos = 0
   
-  return html.replace(regex, (match) => {
-    // Extract attributes from the match
+  // Find all image-grid divs and replace them
+  while (true) {
+    const openingTagMatch = result.slice(searchPos).match(/<div[^>]*data-type="image-grid"[^>]*>/i)
+    if (!openingTagMatch || openingTagMatch.index === undefined) break
+    
+    const startPos = searchPos + openingTagMatch.index
+    const endPos = findMatchingDivClose(result, startPos)
+    
+    if (endPos === -1) {
+      // Couldn't find matching close, skip this one
+      searchPos = startPos + openingTagMatch[0].length
+      continue
+    }
+    
+    // Extract the full match
+    const match = result.slice(startPos, endPos)
+    
+    // Extract attributes from the opening tag
     const columnsMatch = match.match(/data-columns="(\d)"/)
     const gapMatch = match.match(/data-gap="([^"]*)"/)
     const roundedMatch = match.match(/data-rounded="([^"]*)"/)
@@ -324,7 +369,12 @@ export function convertImageGridToEmailHtml(html: string): string {
     
     // Try to get images from data-images attribute
     const images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
-    if (!images.length) return match
+    
+    if (!images.length) {
+      // No images found, skip this one
+      searchPos = endPos
+      continue
+    }
     
     const gapMap: Record<string, number> = {
       none: 0,
@@ -367,7 +417,7 @@ export function convertImageGridToEmailHtml(html: string): string {
       </table>
     `
     
-    return `
+    const replacement = `
       <table role="presentation" data-type="image-grid" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
         <tr>
           <td align="${alignAttr}" style="padding: 0;">
@@ -376,7 +426,15 @@ export function convertImageGridToEmailHtml(html: string): string {
         </tr>
       </table>
     `.replace(/\s+/g, ' ').trim()
-  })
+    
+    // Replace the match with the table
+    result = result.slice(0, startPos) + replacement + result.slice(endPos)
+    
+    // Continue searching after the replacement
+    searchPos = startPos + replacement.length
+  }
+  
+  return result
 }
 
 export default ImageGridNode

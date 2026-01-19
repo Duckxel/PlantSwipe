@@ -1012,6 +1012,12 @@ export const AdminEmailTemplatePage: React.FC = () => {
           height: auto !important;
           display: block !important;
         }
+        .email-preview-body table[data-type="image-grid"] td > div[role="img"] {
+          width: 100% !important;
+          padding-bottom: 62.5% !important;
+          background-size: cover !important;
+          border-radius: 16px !important;
+        }
         /* Resizable Image Styles */
         .email-preview-body [data-type="resizable-image"] {
           padding: 16px 0 !important;
@@ -1778,6 +1784,12 @@ export const AdminEmailTemplatePage: React.FC = () => {
               width: 100% !important;
               height: auto !important;
               display: block !important;
+            }
+            .email-preview-body table[data-type="image-grid"] td > div[role="img"] {
+              width: 100% !important;
+              padding-bottom: 62.5% !important;
+              background-size: cover !important;
+              border-radius: 16px !important;
             }
             /* Resizable Image Styles */
             .email-preview-body [data-type="resizable-image"] {

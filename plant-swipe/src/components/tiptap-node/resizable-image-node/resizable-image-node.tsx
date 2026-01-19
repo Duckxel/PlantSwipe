@@ -110,34 +110,37 @@ export function ResizableImageNode({ node, updateAttributes, selected }: NodeVie
     <NodeViewWrapper
       data-type="resizable-image"
       data-align={align || "center"}
+      data-width={getWidthValue()}
       className="my-6 w-full"
       ref={containerRef}
     >
       <div
         className={`flex w-full ${getAlignClass()}`}
-        style={{ textAlign: align || "center" }}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => !isResizing && setIsHovering(false)}
       >
+        {/* Container with the actual width - this is what gets sized and aligned */}
         <div 
-          className={`relative inline-block transition-all duration-200 ${
+          className={`relative transition-all duration-200 ${
             showControls ? "ring-2 ring-emerald-500/50 ring-offset-2 rounded-2xl" : ""
           }`}
+          style={{
+            width: getWidthValue(),
+            maxWidth: "100%",
+            minWidth: "80px",
+          }}
         >
-          {/* Image */}
+          {/* Image - always 100% of its container */}
           <img
             ref={imageRef}
             src={src}
             alt={alt || ""}
             title={title || ""}
-            className={`rounded-2xl transition-all duration-200 ${
+            className={`w-full rounded-2xl transition-all duration-200 ${
               isResizing ? "opacity-90" : ""
             }`}
             style={{
-              width: getWidthValue(),
               height: height === "auto" || !height ? "auto" : height,
-              maxWidth: "100%",
-              minWidth: "80px",
             }}
             draggable={false}
           />
