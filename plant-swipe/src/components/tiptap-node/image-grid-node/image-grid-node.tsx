@@ -444,8 +444,8 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     <div 
                       ref={cropContainerRef}
                       className={`relative w-full cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden`}
-                      style={{ aspectRatio: currentAspectRatioCss }}
                       style={{ 
+                        aspectRatio: currentAspectRatioCss,
                         borderRadius: rounded ? '12px' : '0',
                         backgroundImage: `url('${images[editingCropIndex]?.src}')`,
                         backgroundSize: 'cover',
