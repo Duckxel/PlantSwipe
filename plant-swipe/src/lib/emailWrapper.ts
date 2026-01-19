@@ -544,32 +544,33 @@ export function convertImageGridToEmailTable(html: string): string {
     const alignAttr = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
     const borderRadius = isRounded ? 'border-radius:16px;' : ''
     
-    // Calculate width percentage as integer (email clients prefer integers)
-    const cellWidthPercent = Math.floor(100 / numCols)
+    // Use fixed pixel width for email (standard email width is ~600px)
+    const containerWidth = 580 // pixels, accounting for padding
+    const widthPercent = gridWidth.endsWith('%') ? parseInt(gridWidth) : 100
+    const tableWidth = Math.floor(containerWidth * (widthPercent / 100))
+    const cellWidth = Math.floor((tableWidth - (gapPx * (numCols - 1))) / numCols)
     
     // Build table rows - each row contains cells side by side
     const rows: string[] = []
     for (let i = 0; i < images.length; i += numCols) {
       const rowImages = images.slice(i, i + numCols)
       
-      // Build cells for this row
-      const cells = rowImages.map(img => {
-        // Use explicit width attribute AND style for maximum compatibility
-        return `<td width="${cellWidthPercent}%" valign="top" style="width:${cellWidthPercent}%;padding:${gapPx/2}px;vertical-align:top;"><img src="${img.src}" alt="${img.alt || ''}" width="100%" style="display:block;width:100%;max-width:100%;height:auto;${borderRadius}" /></td>`
+      // Build cells for this row - use explicit pixel widths
+      const cells = rowImages.map((img, idx) => {
+        const paddingLeft = idx === 0 ? 0 : gapPx / 2
+        const paddingRight = idx === rowImages.length - 1 ? 0 : gapPx / 2
+        return `<td width="${cellWidth}" valign="top" align="center" style="width:${cellWidth}px;padding:${paddingLeft}px ${paddingRight}px ${gapPx}px ${paddingLeft}px;"><img src="${img.src}" alt="${img.alt || ''}" width="${cellWidth}" style="display:block;width:${cellWidth}px;max-width:100%;height:auto;${borderRadius}" /></td>`
       }).join('')
       
-      // Pad with empty cells if needed to maintain grid structure
+      // Pad with empty cells if needed
       const emptyCells = numCols - rowImages.length
-      const emptyHtml = emptyCells > 0 ? `<td width="${cellWidthPercent}%" style="width:${cellWidthPercent}%;padding:${gapPx/2}px;"></td>`.repeat(emptyCells) : ''
+      const emptyHtml = emptyCells > 0 ? `<td width="${cellWidth}" style="width:${cellWidth}px;"></td>`.repeat(emptyCells) : ''
       
       rows.push(`<tr>${cells}${emptyHtml}</tr>`)
     }
     
-    // Get grid width as integer percentage
-    const widthPercent = gridWidth.endsWith('%') ? parseInt(gridWidth) : 100
-    
-    // Build complete table structure with explicit widths everywhere
-    const replacement = `<!--[if mso]><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="${alignAttr}"><![endif]--><table role="presentation" align="${alignAttr}" width="${widthPercent}%" cellpadding="0" cellspacing="0" border="0" style="margin:16px auto;max-width:${widthPercent}%;table-layout:fixed;border-collapse:collapse;">${rows.join('')}</table><!--[if mso]></td></tr></table><![endif]-->`
+    // Build complete table - using explicit pixel width
+    const replacement = `<table role="presentation" align="${alignAttr}" width="${tableWidth}" cellpadding="0" cellspacing="0" border="0" style="margin:16px auto;width:${tableWidth}px;max-width:100%;border-collapse:separate;border-spacing:0;"><tbody>${rows.join('')}</tbody></table>`
     
     result = result.slice(0, startPos) + replacement + result.slice(endPos)
     searchPos = startPos + replacement.length
