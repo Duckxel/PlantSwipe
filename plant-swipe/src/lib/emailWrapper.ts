@@ -557,13 +557,13 @@ function convertImageGridToEmailTable(html: string): string {
       const cells = rowImages.map(img => {
         const focalX = img.focalX ?? 50
         const focalY = img.focalY ?? 50
-        // Use background-image div for email clients - supports focal point via background-position
-        // padding-bottom: 62.5% creates 16:10 aspect ratio (10/16 = 0.625)
-        // height: 0 is essential for the padding-bottom aspect ratio trick
-        // position: relative and display: block ensure proper rendering
+        // Use actual img tags with object-fit for reliable preview display
+        // Wrap in a div with overflow:hidden and aspect-ratio for proper cropping
         return `
         <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <div style="display: block; position: relative; width: 100%; height: 0; padding-bottom: 62.5%; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; background-repeat: no-repeat; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
+          <div style="display: block; position: relative; width: 100%; overflow: hidden; aspect-ratio: 16/10; ${isRounded ? 'border-radius: 16px;' : ''}">
+            <img src="${img.src}" alt="${img.alt || ''}" style="width: 100%; height: 100%; object-fit: cover; object-position: ${focalX}% ${focalY}%; display: block;" />
+          </div>
         </td>
       `}).join('')
       

@@ -1050,6 +1050,20 @@ export const AdminEmailTemplatePage: React.FC = () => {
           background-repeat: no-repeat !important;
           border-radius: 16px !important;
         }
+        .email-preview-body table[data-type="image-grid"] td > div {
+          display: block !important;
+          position: relative !important;
+          width: 100% !important;
+          overflow: hidden !important;
+          aspect-ratio: 16/10 !important;
+          border-radius: 16px !important;
+        }
+        .email-preview-body table[data-type="image-grid"] td > div > img {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: cover !important;
+          display: block !important;
+        }
         .email-preview-body table[data-type="image-grid"] table {
           width: 100% !important;
           border-collapse: collapse !important;
@@ -1864,6 +1878,20 @@ export const AdminEmailTemplatePage: React.FC = () => {
               background-size: cover !important;
               background-repeat: no-repeat !important;
               border-radius: 16px !important;
+            }
+            .email-preview-body table[data-type="image-grid"] td > div {
+              display: block !important;
+              position: relative !important;
+              width: 100% !important;
+              overflow: hidden !important;
+              aspect-ratio: 16/10 !important;
+              border-radius: 16px !important;
+            }
+            .email-preview-body table[data-type="image-grid"] td > div > img {
+              width: 100% !important;
+              height: 100% !important;
+              object-fit: cover !important;
+              display: block !important;
             }
             .email-preview-body table[data-type="image-grid"] table {
               width: 100% !important;
