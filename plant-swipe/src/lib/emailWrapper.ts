@@ -414,34 +414,6 @@ function convertResizableImageToEmailHtml(html: string): string {
   })
 }
 
-/**
- * Finds the matching closing div tag for a div starting at the given position
- * Handles nested divs correctly by counting depth
- */
-function findMatchingDivClose(html: string, startPos: number): number {
-  let depth = 0
-  let pos = startPos
-  
-  while (pos < html.length) {
-    const openMatch = html.slice(pos).match(/^<div\b/i)
-    const closeMatch = html.slice(pos).match(/^<\/div>/i)
-    
-    if (openMatch) {
-      depth++
-      pos += openMatch[0].length
-    } else if (closeMatch) {
-      depth--
-      if (depth === 0) {
-        return pos + closeMatch[0].length
-      }
-      pos += closeMatch[0].length
-    } else {
-      pos++
-    }
-  }
-  
-  return -1 // Not found
-}
 
 /**
  * Converts image grid divs to email-compatible table-based HTML
