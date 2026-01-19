@@ -1009,7 +1009,8 @@ export default function PlantSwipe() {
     const vy = info.velocity.y
     
     // Minimum offset required before considering velocity (prevents taps from triggering actions)
-    const minOffsetForVelocity = 20
+    // Set to 50px to ensure only intentional swipes trigger actions
+    const minOffsetForVelocity = 50
     const absOffsetX = Math.abs(dx)
     const absOffsetY = Math.abs(dy)
     
