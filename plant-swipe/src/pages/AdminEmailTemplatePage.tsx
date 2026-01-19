@@ -902,22 +902,27 @@ export const AdminEmailTemplatePage: React.FC = () => {
           box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35) !important;
           transition: all 0.2s ease !important;
         }
-        /* Table styling - exclude special components */
-        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) {
+        /* Table styling - exclude special components and presentation tables */
+        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]):not([data-type="image-grid"]):not([data-type="resizable-image"]) {
           width: 100% !important;
           border-collapse: collapse !important;
           margin: 20px 0 !important;
         }
-        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th,
-        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) td {
+        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]):not([data-type="image-grid"]):not([data-type="resizable-image"]) th,
+        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]):not([data-type="image-grid"]):not([data-type="resizable-image"]) td {
           padding: 12px 16px !important;
           border: 1px solid #e5e7eb !important;
           text-align: left !important;
         }
-        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th {
+        .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]):not([data-type="image-grid"]):not([data-type="resizable-image"]) th {
           background: #f9fafb !important;
           font-weight: 600 !important;
           color: #111827 !important;
+        }
+        /* Converted image/grid tables should have no borders */
+        .email-preview-body table[align] td {
+          border: none !important;
+          padding: 8px !important;
         }
         @keyframes fadeInUp {
           from {
@@ -1762,22 +1767,27 @@ export const AdminEmailTemplatePage: React.FC = () => {
               box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35) !important;
               transition: all 0.2s ease !important;
             }
-            /* Table styling - exclude special components */
-            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) {
+            /* Table styling - exclude special components and presentation tables */
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]):not([data-type="image-grid"]):not([data-type="resizable-image"]) {
               width: 100% !important;
               border-collapse: collapse !important;
               margin: 20px 0 !important;
             }
-            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th,
-            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) td {
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]):not([data-type="image-grid"]):not([data-type="resizable-image"]) th,
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]):not([data-type="image-grid"]):not([data-type="resizable-image"]) td {
               padding: 12px 16px !important;
               border: 1px solid #e5e7eb !important;
               text-align: left !important;
             }
-            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]) th {
+            .email-preview-body table:not([data-type="sensitive-code"]):not([role="presentation"]):not([data-type="image-grid"]):not([data-type="resizable-image"]) th {
               background: #f9fafb !important;
               font-weight: 600 !important;
               color: #111827 !important;
+            }
+            /* Converted image/grid tables should have no borders */
+            .email-preview-body table[align] td {
+              border: none !important;
+              padding: 8px !important;
             }
             @keyframes fadeInUp {
               from {
