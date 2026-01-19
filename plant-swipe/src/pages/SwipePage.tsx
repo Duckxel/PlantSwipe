@@ -80,8 +80,8 @@ const MobileButtonsOverlay: React.FC<MobileButtonsOverlayProps> = ({
 }) => {
   return (
     <div className="absolute inset-x-2 inset-y-0 z-[60] pointer-events-none rounded-[24px]">
-      {/* Like button - top right - higher z-index to ensure clickability */}
-      <div className="absolute top-4 right-4 z-[70]" style={{ touchAction: 'manipulation' }}>
+      {/* Like button - top right - MUST have pointer-events-auto to be clickable */}
+      <div className="absolute top-4 right-4 z-[70] pointer-events-auto">
         <button
           type="button"
           onClick={(e) => {
@@ -92,11 +92,9 @@ const MobileButtonsOverlay: React.FC<MobileButtonsOverlayProps> = ({
             }
           }}
           onTouchStart={(e) => {
-            // Stop propagation to prevent drag from starting
             e.stopPropagation()
           }}
           onTouchEnd={(e) => {
-            // Stop propagation but let click handle the action
             e.stopPropagation()
           }}
           onPointerDown={(e) => {
@@ -104,8 +102,8 @@ const MobileButtonsOverlay: React.FC<MobileButtonsOverlayProps> = ({
           }}
           aria-pressed={liked}
           aria-label={liked ? "Unlike" : "Like"}
-          className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition active:scale-95 select-none ${
-            liked ? "bg-rose-600 text-white border-rose-500" : "bg-white text-black border-white hover:bg-gray-100"
+          className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 select-none cursor-pointer ${
+            liked ? "bg-rose-600 text-white border-rose-500 hover:bg-rose-700" : "bg-white text-black border-white hover:bg-gray-100"
           }`}
           style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
         >
