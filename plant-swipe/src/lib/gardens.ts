@@ -3314,6 +3314,259 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
   })
 }
 
+/**
+ * Get all public gardens (for admin selection)
+ * Returns a list of public gardens with basic info
+ */
+export async function getAllPublicGardens(limit = 50): Promise<PublicGardenWithPreview[]> {
+  // Fetch public gardens
+  const { data: gardens, error: gerr } = await supabase
+    .from('gardens')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
+    .eq('privacy', 'public')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  
+  if (gerr) throw new Error(gerr.message)
+  if (!gardens || gardens.length === 0) return []
+  
+  const publicGardenIds = gardens.map((g: any) => String(g.id))
+  
+  // Fetch plant counts and preview plants for each garden
+  const { data: gardenPlants, error: gpErr } = await supabase
+    .from('garden_plants')
+    .select('id, garden_id, plant_id, nickname, sort_index')
+    .in('garden_id', publicGardenIds)
+    .order('sort_index', { ascending: true })
+  
+  if (gpErr) console.error('Error fetching garden plants:', gpErr)
+  
+  // Group plants by garden
+  const plantsByGarden: Record<string, any[]> = {}
+  for (const gp of gardenPlants || []) {
+    const gid = String(gp.garden_id)
+    if (!plantsByGarden[gid]) plantsByGarden[gid] = []
+    plantsByGarden[gid].push(gp)
+  }
+  
+  // Collect unique plant IDs for image fetching
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const numericIdRegex = /^\d+$/
+  const isValidPlantId = (id: string): boolean => uuidRegex.test(id) || numericIdRegex.test(id)
+  
+  const allPlantIds = new Set<string>()
+  for (const plants of Object.values(plantsByGarden)) {
+    for (const p of plants) {
+      if (p.plant_id) {
+        const plantId = String(p.plant_id).trim()
+        if (plantId && isValidPlantId(plantId)) {
+          allPlantIds.add(plantId)
+        }
+      }
+    }
+  }
+  
+  // Fetch plant details with images
+  const plantsMap: Record<string, { name: string; imageUrl: string | null }> = {}
+  if (allPlantIds.size > 0) {
+    const { data: plantRows, error: pErr } = await supabase
+      .from('plants')
+      .select('id, common_name, plant_images(link, use)')
+      .in('id', Array.from(allPlantIds))
+    
+    if (!pErr && plantRows) {
+      for (const p of plantRows) {
+        const images = Array.isArray((p as any).plant_images) ? (p as any).plant_images : []
+        const photos = images.map((img: any) => ({
+          url: img.link || '',
+          isPrimary: img.use === 'primary',
+          isVertical: false
+        }))
+        const primaryUrl = getPrimaryPhotoUrl(photos) || (photos[0]?.url || null)
+        plantsMap[String(p.id)] = {
+          name: (p as any).common_name || '',
+          imageUrl: primaryUrl
+        }
+      }
+    }
+  }
+  
+  // Fetch owner display names
+  const ownerIds = [...new Set(gardens.map((g: any) => String(g.created_by)))]
+  const ownerNamesMap: Record<string, string | null> = {}
+  if (ownerIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', ownerIds)
+    
+    if (profiles) {
+      for (const p of profiles) {
+        ownerNamesMap[String(p.id)] = p.display_name || null
+      }
+    }
+  }
+  
+  // Build result with preview data
+  return gardens.map((g: any) => {
+    const gid = String(g.id)
+    const gardenPlantsList = plantsByGarden[gid] || []
+    
+    const previewPlants = gardenPlantsList.slice(0, 6).map((gp: any) => {
+      const plantId = String(gp.plant_id)
+      const plantData = plantsMap[plantId] || { name: '', imageUrl: null }
+      return {
+        id: String(gp.id),
+        name: plantData.name,
+        nickname: gp.nickname || null,
+        imageUrl: plantData.imageUrl
+      }
+    })
+    
+    return {
+      id: gid,
+      name: String(g.name),
+      coverImageUrl: g.cover_image_url || null,
+      createdBy: String(g.created_by),
+      createdAt: String(g.created_at),
+      streak: Number(g.streak ?? 0),
+      privacy: 'public' as GardenPrivacy,
+      plantCount: gardenPlantsList.length,
+      previewPlants,
+      ownerDisplayName: ownerNamesMap[String(g.created_by)] || null
+    }
+  })
+}
+
+/**
+ * Get specific gardens by their IDs with full preview data
+ * Used for landing page showcase
+ */
+export async function getGardensByIds(gardenIds: string[]): Promise<PublicGardenWithPreview[]> {
+  if (gardenIds.length === 0) return []
+  
+  // Fetch gardens by IDs
+  const { data: gardens, error: gerr } = await supabase
+    .from('gardens')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
+    .in('id', gardenIds)
+  
+  if (gerr) throw new Error(gerr.message)
+  if (!gardens || gardens.length === 0) return []
+  
+  const fetchedGardenIds = gardens.map((g: any) => String(g.id))
+  
+  // Fetch plant counts and preview plants for each garden
+  const { data: gardenPlants, error: gpErr } = await supabase
+    .from('garden_plants')
+    .select('id, garden_id, plant_id, nickname, sort_index')
+    .in('garden_id', fetchedGardenIds)
+    .order('sort_index', { ascending: true })
+  
+  if (gpErr) console.error('Error fetching garden plants:', gpErr)
+  
+  // Group plants by garden
+  const plantsByGarden: Record<string, any[]> = {}
+  for (const gp of gardenPlants || []) {
+    const gid = String(gp.garden_id)
+    if (!plantsByGarden[gid]) plantsByGarden[gid] = []
+    plantsByGarden[gid].push(gp)
+  }
+  
+  // Collect unique plant IDs for image fetching
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const numericIdRegex = /^\d+$/
+  const isValidPlantId = (id: string): boolean => uuidRegex.test(id) || numericIdRegex.test(id)
+  
+  const allPlantIds = new Set<string>()
+  for (const plants of Object.values(plantsByGarden)) {
+    for (const p of plants) {
+      if (p.plant_id) {
+        const plantId = String(p.plant_id).trim()
+        if (plantId && isValidPlantId(plantId)) {
+          allPlantIds.add(plantId)
+        }
+      }
+    }
+  }
+  
+  // Fetch plant details with images
+  const plantsMap: Record<string, { name: string; imageUrl: string | null }> = {}
+  if (allPlantIds.size > 0) {
+    const { data: plantRows, error: pErr } = await supabase
+      .from('plants')
+      .select('id, common_name, plant_images(link, use)')
+      .in('id', Array.from(allPlantIds))
+    
+    if (!pErr && plantRows) {
+      for (const p of plantRows) {
+        const images = Array.isArray((p as any).plant_images) ? (p as any).plant_images : []
+        const photos = images.map((img: any) => ({
+          url: img.link || '',
+          isPrimary: img.use === 'primary',
+          isVertical: false
+        }))
+        const primaryUrl = getPrimaryPhotoUrl(photos) || (photos[0]?.url || null)
+        plantsMap[String(p.id)] = {
+          name: (p as any).common_name || '',
+          imageUrl: primaryUrl
+        }
+      }
+    }
+  }
+  
+  // Fetch owner display names
+  const ownerIds = [...new Set(gardens.map((g: any) => String(g.created_by)))]
+  const ownerNamesMap: Record<string, string | null> = {}
+  if (ownerIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', ownerIds)
+    
+    if (profiles) {
+      for (const p of profiles) {
+        ownerNamesMap[String(p.id)] = p.display_name || null
+      }
+    }
+  }
+  
+  // Build result with preview data - maintain original order
+  const gardensById = new Map(gardens.map((g: any) => [String(g.id), g]))
+  
+  return gardenIds
+    .filter(id => gardensById.has(id))
+    .map(id => {
+      const g = gardensById.get(id)!
+      const gid = String(g.id)
+      const gardenPlantsList = plantsByGarden[gid] || []
+      
+      const previewPlants = gardenPlantsList.slice(0, 6).map((gp: any) => {
+        const plantId = String(gp.plant_id)
+        const plantData = plantsMap[plantId] || { name: '', imageUrl: null }
+        return {
+          id: String(gp.id),
+          name: plantData.name,
+          nickname: gp.nickname || null,
+          imageUrl: plantData.imageUrl
+        }
+      })
+      
+      return {
+        id: gid,
+        name: String(g.name),
+        coverImageUrl: g.cover_image_url || null,
+        createdBy: String(g.created_by),
+        createdAt: String(g.created_at),
+        streak: Number(g.streak ?? 0),
+        privacy: (g.privacy || 'public') as GardenPrivacy,
+        plantCount: gardenPlantsList.length,
+        previewPlants,
+        ownerDisplayName: ownerNamesMap[String(g.created_by)] || null
+      }
+    })
+}
+
 
 // ----- Garden Analytics Types and Functions -----
 
