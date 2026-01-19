@@ -151,7 +151,7 @@ export default function PlantSwipe() {
     </div>
   )
   const [query, setQuery] = useState("")
-  const debouncedQuery = useDebounce(query, 300)
+  const debouncedQuery = useDebounce(query, 100)
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string[]>([])
   const [onlySeeds, setOnlySeeds] = useState(false)
