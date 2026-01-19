@@ -250,10 +250,10 @@ const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_
 const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_BADGE_CLASSES;
 
 const PLANT_STATUS_KEYS: NormalizedPlantStatus[] = [
-  "in progres",
-  "review",
-  "rework",
   "approved",
+  "rework",
+  "review",
+  "in progres",
   "other",
 ];
 
@@ -267,9 +267,10 @@ const PLANT_STATUS_FILTER_OPTIONS = PLANT_STATUS_KEYS.map((status) => ({
 
 const PRIORITIZED_STATUS_ORDER: Partial<Record<NormalizedPlantStatus, number>> =
   {
-    review: 0,
+    approved: 0,
     rework: 1,
-    "in progres": 2,
+    review: 2,
+    "in progres": 3,
   };
 const FALLBACK_STATUS_ORDER = PLANT_STATUS_KEYS.filter(
   (status) => PRIORITIZED_STATUS_ORDER[status] === undefined,
@@ -289,9 +290,10 @@ const getStatusSortPriority = (status: NormalizedPlantStatus): number => {
 };
 
 const STATUS_DONUT_SEGMENTS: NormalizedPlantStatus[] = [
-  "in progres",
-  "review",
+  "approved",
   "rework",
+  "review",
+  "in progres",
   "other",
 ];
 
@@ -7083,6 +7085,19 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
+                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
+                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                               <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:shadow-amber-500/5">
                                 <div className="flex items-center gap-3">
                                   <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
@@ -7105,19 +7120,6 @@ export const AdminPage: React.FC = () => {
                                     <div className="text-xs text-stone-500 dark:text-stone-400">In Progress</div>
                                     <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
                                       {plantStatusDonutData.find(d => d.key === "in progres")?.value || 0}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
-                                <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
-                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
-                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
-                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
                                     </div>
                                   </div>
                                 </div>

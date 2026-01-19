@@ -803,7 +803,7 @@ const miscFields: FieldConfig[] = [
 ]
 
 const metaFields: FieldConfig[] = [
-  { key: "meta.status", label: "Status", description: "Editorial status", type: "select", options: ["In Progres","Rework","Review","Approved"] },
+  { key: "meta.status", label: "Status", description: "Editorial status", type: "select", options: ["Approved","Rework","Review","In Progres"] },
   { key: "meta.adminCommentary", label: "Admin Commentary", description: "Moderator feedback", type: "textarea" },
 ]
 
