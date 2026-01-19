@@ -832,7 +832,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
         .email-preview-body hr {
           border: none !important;
           height: 2px !important;
-          background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%) !important;
+          background: #10b981 !important;
+          opacity: 0.4 !important;
           margin: 32px 0 !important;
         }
         .email-preview-body strong, .email-preview-body b {
@@ -846,6 +847,12 @@ export const AdminEmailTemplatePage: React.FC = () => {
           max-width: 100% !important;
           height: auto !important;
           border-radius: 12px !important;
+        }
+        /* Styled Divider - Override inline gradient with cleaner look */
+        .email-preview-body [data-type="styled-divider"] > div {
+          background: #10b981 !important;
+          opacity: 0.3 !important;
+          height: 2px !important;
         }
         /* Email Card Styles - Override general table styles */
         .email-preview-body [data-type="email-card"] {
@@ -1687,7 +1694,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
             .email-preview-body hr {
               border: none !important;
               height: 2px !important;
-              background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%) !important;
+              background: #10b981 !important;
+              opacity: 0.4 !important;
               margin: 32px 0 !important;
             }
             .email-preview-body strong, .email-preview-body b {
@@ -1701,6 +1709,12 @@ export const AdminEmailTemplatePage: React.FC = () => {
               max-width: 100% !important;
               height: auto !important;
               border-radius: 12px !important;
+            }
+            /* Styled Divider - Override inline gradient with cleaner look */
+            .email-preview-body [data-type="styled-divider"] > div {
+              background: #10b981 !important;
+              opacity: 0.3 !important;
+              height: 2px !important;
             }
             /* Email Card Styles - Override general table styles */
             .email-preview-body [data-type="email-card"] {
