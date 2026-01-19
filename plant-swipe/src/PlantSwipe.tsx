@@ -93,6 +93,8 @@ type PreparedPlant = Plant & {
   _createdAtTs: number             // Pre-parsed timestamp for sorting
   _popularityLikes: number         // Pre-extracted popularity for sorting
   _hasImage: boolean               // Pre-computed image availability
+  _status: string                  // Pre-extracted status for sorting (lowercase)
+  _isInProgress: boolean           // Pre-computed flag for "in progress" status
 }
 
 type ExtendedWindow = Window & {
@@ -666,6 +668,11 @@ export default function PlantSwipe() {
       const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
       const hasImage = hasLegacyImage || hasImagesArray
 
+      // Pre-compute status for sorting - "in progres" (note: typo in DB) plants should sort to bottom
+      const status = (p.meta?.status || '').toLowerCase().replace(/\s+/g, ' ').trim()
+      // Check if status is "in progres" or "in progress" (handle both spellings)
+      const isInProgress = status === 'in progres' || status === 'in progress'
+
       return {
         ...p,
         _searchString: searchString,
@@ -684,7 +691,9 @@ export default function PlantSwipe() {
         _seasonsSet: seasonsSet,
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
-        _hasImage: hasImage
+        _hasImage: hasImage,
+        _status: status,
+        _isInProgress: isInProgress
       } as PreparedPlant
     })
   }, [plants])
@@ -844,10 +853,21 @@ export default function PlantSwipe() {
   }, [filtered, shuffleEpoch])
 
   const sortedSearchResults = useMemo(() => {
-    if (searchSort === "default") return filtered
-    
     // Cast to PreparedPlant[] since filtered comes from preparedPlants
     const arr = filtered.slice() as PreparedPlant[]
+    
+    if (searchSort === "default") {
+      // Default sort: Approved, Review, and Rework first (same priority), then "In Progress" at bottom
+      // This ensures plants being worked on don't clutter the main results while still being searchable
+      arr.sort((a, b) => {
+        // Sort "in progress" plants to the bottom
+        if (a._isInProgress && !b._isInProgress) return 1
+        if (!a._isInProgress && b._isInProgress) return -1
+        // For plants with same priority tier, sort alphabetically by name
+        return a.name.localeCompare(b.name)
+      })
+      return arr
+    }
     
     if (searchSort === "newest") {
       // Use pre-computed timestamp - no Date.parse on each comparison
