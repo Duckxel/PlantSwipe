@@ -6,6 +6,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
 import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X } from "lucide-react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -150,6 +151,7 @@ export default function PlantSwipe() {
     </div>
   )
   const [query, setQuery] = useState("")
+  const debouncedQuery = useDebounce(query, 300)
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string[]>([])
   const [onlySeeds, setOnlySeeds] = useState(false)
@@ -715,13 +717,18 @@ export default function PlantSwipe() {
 
   // Pre-normalize filter values to avoid repeated lowercasing during filtering
   const normalizedFilters = useMemo(() => ({
-    query: query.toLowerCase(),
+    query: debouncedQuery.toLowerCase(),
     type: typeFilter?.toLowerCase() ?? null,
     usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
     habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
     maintenance: maintenanceFilter?.toLowerCase() ?? null,
     livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase()))
-  }), [query, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters])
+  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters])
+
+  // Reset index when search query changes
+  React.useEffect(() => {
+    setIndex(0)
+  }, [debouncedQuery])
 
   const filtered = useMemo(() => {
     const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet } = normalizedFilters
@@ -1792,7 +1799,6 @@ export default function PlantSwipe() {
                         value={query}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           setQuery(e.target.value)
-                          setIndex(0)
                         }}
                       />
                     </div>
