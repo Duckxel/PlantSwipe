@@ -108,16 +108,29 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       usePageMetadata({ title: seoTitle, description: seoDescription })
     const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
     
-    // Double-tap detection state
+    // Double-tap detection state (for mobile touch events)
     const lastTapRef = React.useRef<{ time: number; x: number; y: number } | null>(null)
     const [heartAnimations, setHeartAnimations] = React.useState<Array<{ id: string; x: number; y: number }>>([])
+
     
     // Double-tap threshold in milliseconds
     const DOUBLE_TAP_THRESHOLD = 300
     const DOUBLE_TAP_DISTANCE_THRESHOLD = 50 // Max distance between taps in pixels
     
-    // Handle double-tap to like
-    const handleDoubleTap = React.useCallback((clientX: number, clientY: number) => {
+    // Trigger heart animation and like action
+    const triggerDoubleTapLike = React.useCallback((clientX: number, clientY: number) => {
+      // Add heart animation at tap position
+      const animationId = `heart-${Date.now()}`
+      setHeartAnimations(prev => [...prev, { id: animationId, x: clientX, y: clientY }])
+      
+      // Only like if not already liked (double-tap doesn't unlike)
+      if (!liked && onToggleLike) {
+        onToggleLike()
+      }
+    }, [liked, onToggleLike])
+    
+    // Handle mobile double-tap detection
+    const handleMobileDoubleTap = React.useCallback((clientX: number, clientY: number) => {
       const now = Date.now()
       const lastTap = lastTapRef.current
       
@@ -131,16 +144,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         if (timeDiff < DOUBLE_TAP_THRESHOLD && distance < DOUBLE_TAP_DISTANCE_THRESHOLD) {
           // Clear the last tap to prevent triple-tap triggering
           lastTapRef.current = null
-          
-          // Add heart animation at tap position
-          const animationId = `heart-${now}`
-          setHeartAnimations(prev => [...prev, { id: animationId, x: clientX, y: clientY }])
-          
-          // Only like if not already liked (double-tap doesn't unlike)
-          if (!liked && onToggleLike) {
-            onToggleLike()
-          }
-          
+          triggerDoubleTapLike(clientX, clientY)
           return true // Double-tap detected
         }
       }
@@ -148,7 +152,16 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       // Store this tap for potential double-tap detection
       lastTapRef.current = { time: now, x: clientX, y: clientY }
       return false // Not a double-tap
-    }, [liked, onToggleLike])
+    }, [triggerDoubleTapLike])
+    
+    // Handle desktop double-click (native event)
+    const handleDesktopDoubleClick = React.useCallback((e: React.MouseEvent) => {
+      // Don't trigger on button clicks
+      if ((e.target as HTMLElement).closest('button')) {
+        return
+      }
+      triggerDoubleTapLike(e.clientX, e.clientY)
+    }, [triggerDoubleTapLike])
     
     // Remove completed heart animations
     const removeHeartAnimation = React.useCallback((id: string) => {
@@ -189,8 +202,11 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       const isTap = Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15 && deltaTime < 300
       
       if (isTap) {
-        // Check for double-tap
-        handleDoubleTap(touch.clientX, touch.clientY)
+        // Don't trigger double-tap on button clicks
+        if (!(e.target as HTMLElement).closest('button')) {
+          // Check for double-tap
+          handleMobileDoubleTap(touch.clientX, touch.clientY)
+        }
         touchStartRef.current = null
         return
       }
@@ -203,16 +219,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       }
       
       touchStartRef.current = null
-    }, [handleInfo, handleDoubleTap])
-    
-    // Handle mouse click for desktop double-click detection
-    const handleCardClick = React.useCallback((e: React.MouseEvent) => {
-      // Don't trigger on button clicks
-      if ((e.target as HTMLElement).closest('button')) {
-        return
-      }
-      handleDoubleTap(e.clientX, e.clientY)
-    }, [handleDoubleTap])
+    }, [handleInfo, handleMobileDoubleTap])
 
     React.useEffect(() => {
       if (typeof window === "undefined") return
@@ -437,7 +444,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 onDragEnd={onDragEnd}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
-                onClick={handleCardClick}
                 initial={false}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0 }}
@@ -497,7 +503,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     style={{ x, y }}
                     dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
                     onDragEnd={onDragEnd}
-                    onClick={handleCardClick}
+                    onDoubleClick={handleDesktopDoubleClick}
                     initial={false}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ opacity: 0 }}
