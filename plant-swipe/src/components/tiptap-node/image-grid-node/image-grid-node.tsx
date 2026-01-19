@@ -30,7 +30,8 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   const uploadFolder = useMemo(() => {
     try {
       // Access storage with type assertion since TipTap's storage is dynamically typed
-      const storage = editor?.storage as Record<string, { uploadFolder?: string }> | undefined
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const storage = editor?.storage as any
       return storage?.imageGrid?.uploadFolder || DEFAULT_UPLOAD_FOLDER
     } catch {
       return DEFAULT_UPLOAD_FOLDER
