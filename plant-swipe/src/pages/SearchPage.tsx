@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Flame, PartyPopper, Sparkles, Loader2 } from "lucide-react";
+import { Flame, PartyPopper, Sparkles, Loader2, ArrowUp } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 
@@ -28,8 +28,23 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   usePageMetadata({ title: seoTitle, description: seoDescription });
 
   const [visibleCount, setVisibleCount] = useState(20);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to top button visibility
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   // Reset visible count when filters change (plants array changes)
   useEffect(() => {
@@ -197,6 +212,20 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           {t("plant.noResults")}
         </div>
       )}
+
+      {/* Scroll to top button */}
+      <Button
+        onClick={scrollToTop}
+        aria-label={t("common.scrollToTop", { defaultValue: "Scroll to top" })}
+        className={`fixed bottom-24 right-6 z-50 h-12 w-12 rounded-full shadow-lg bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white transition-all duration-300 ${
+          showScrollTop
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 translate-y-4 pointer-events-none"
+        }`}
+        size="icon"
+      >
+        <ArrowUp className="h-5 w-5" />
+      </Button>
     </div>
   );
 };
