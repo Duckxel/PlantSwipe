@@ -1164,12 +1164,23 @@ function convertImageGridToEmailTable(html: string): string {
     const imagesMatch = match.match(/data-images="([^"]*)"/)
     const widthMatch = match.match(/data-width="([^"]*)"/)
     const alignMatch = match.match(/data-align="([^"]*)"/)
+    const aspectRatioMatch = match.match(/data-aspect-ratio="([^"]*)"/)
     
     const numCols = columnsMatch ? parseInt(columnsMatch[1], 10) : 2
     const gap = gapMatch ? gapMatch[1] : 'md'
     const isRounded = !roundedMatch || roundedMatch[1] !== "false"
     const gridWidth = widthMatch ? widthMatch[1] : '100%'
     const align = alignMatch ? alignMatch[1] : 'center'
+    const aspectRatio = aspectRatioMatch ? aspectRatioMatch[1] : 'square'
+    
+    // Map aspect ratio to padding-bottom percentage for email compatibility
+    // padding-bottom trick: height = width * (height/width ratio)
+    const aspectRatioPaddingMap: Record<string, string> = {
+      square: '100%',      // 1:1 ratio
+      landscape: '62.5%',  // 10/16 = 0.625 (16:10 ratio)
+      portrait: '160%',    // 16/10 = 1.6 (10:16 ratio)
+    }
+    const paddingBottom = aspectRatioPaddingMap[aspectRatio] || '100%'
     
     // Try to get images from data-images attribute
     let images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
@@ -1209,12 +1220,12 @@ function convertImageGridToEmailTable(html: string): string {
         const focalX = img.focalX ?? 50
         const focalY = img.focalY ?? 50
         // Use background-image div for email clients - supports focal point via background-position
-        // padding-bottom: 62.5% creates 16:10 aspect ratio (10/16 = 0.625)
+        // padding-bottom creates the aspect ratio (height = 0 + padding-bottom %)
         // height: 0 is essential for the padding-bottom aspect ratio trick
         // position: relative and display: block ensure proper rendering
         return `
         <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <div style="display: block; position: relative; width: 100%; height: 0; padding-bottom: 62.5%; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; background-repeat: no-repeat; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
+          <div style="display: block; position: relative; width: 100%; height: 0; padding-bottom: ${paddingBottom}; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; background-repeat: no-repeat; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
         </td>
       `}).join('')
       

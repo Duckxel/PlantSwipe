@@ -499,13 +499,14 @@ export function convertImageGridToEmailTable(html: string): string {
     const align = alignMatch ? alignMatch[1] : 'center'
     const aspectRatio = aspectRatioMatch ? aspectRatioMatch[1] : 'square'
     
-    // Map aspect ratio values to CSS
-    const aspectRatioMap: Record<string, string> = {
-      square: '1/1',
-      landscape: '16/10',
-      portrait: '10/16',
+    // Map aspect ratio to padding-bottom percentage for email compatibility
+    // padding-bottom trick: height = width * (height/width ratio)
+    const aspectRatioPaddingMap: Record<string, string> = {
+      square: '100%',      // 1:1 ratio
+      landscape: '62.5%',  // 10/16 = 0.625 (16:10 ratio)
+      portrait: '160%',    // 16/10 = 1.6 (10:16 ratio)
     }
-    const aspectRatioCss = aspectRatioMap[aspectRatio] || '1/1'
+    const paddingBottom = aspectRatioPaddingMap[aspectRatio] || '100%'
     
     // Try to get images from data-images attribute
     let images = imagesMatch ? decodeImagesAttr(imagesMatch[1]) : []
@@ -570,13 +571,12 @@ export function convertImageGridToEmailTable(html: string): string {
       const cells = rowImages.map(img => {
         const focalX = img.focalX ?? 50
         const focalY = img.focalY ?? 50
-        // Use actual img tags with object-fit for reliable preview display
-        // Wrap in a div with overflow:hidden and aspect-ratio for proper cropping
+        // Use background-image div for email clients - supports focal point via background-position
+        // padding-bottom creates the aspect ratio (height = 0 + padding-bottom %)
+        // height: 0 is essential for the padding-bottom aspect ratio trick
         return `
         <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <div style="display: block; position: relative; width: 100%; overflow: hidden; aspect-ratio: ${aspectRatioCss}; ${isRounded ? 'border-radius: 16px;' : ''}">
-            <img src="${img.src}" alt="${img.alt || ''}" style="width: 100%; height: 100%; object-fit: cover; object-position: ${focalX}% ${focalY}%; display: block;" />
-          </div>
+          <div style="display: block; position: relative; width: 100%; height: 0; padding-bottom: ${paddingBottom}; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; background-repeat: no-repeat; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
         </td>
       `}).join('')
       
@@ -615,11 +615,11 @@ export function convertImageGridToEmailTable(html: string): string {
 }
 
 /**
- * Sanitizes email HTML for maximum compatibility
+ * Sanitizes email HTML for web preview
  * - Replaces SVG logo URLs with PNG for Gmail compatibility
  * - Fixes escaped divider HTML from TipTap
  * - Removes filter:brightness(0) invert(1) that was used for SVG workaround
- * - Converts image grids to table-based layout for email clients
+ * - Keeps div-based image grids (CSS grid works in browsers)
  */
 export function sanitizeEmailHtml(html: string): string {
   let result = html
@@ -671,5 +671,22 @@ export function sanitizeEmailHtml(html: string): string {
     }
   }
 
+  return result
+}
+
+/**
+ * Prepares email HTML for actual sending to email clients
+ * - Does everything sanitizeEmailHtml does
+ * - ALSO converts image grids to table-based layout (required for email clients)
+ * 
+ * Use this function when sending emails, not for web preview
+ */
+export function prepareEmailHtmlForSending(html: string): string {
+  // First apply all the standard sanitization
+  let result = sanitizeEmailHtml(html)
+  
+  // Then convert image grids to tables (email clients don't support CSS Grid)
+  result = convertImageGridToEmailTable(result)
+  
   return result
 }
