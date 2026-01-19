@@ -68,7 +68,6 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const cropContainerRef = useRef<HTMLDivElement>(null)
-  const cropImageRef = useRef<HTMLImageElement>(null)
   const startXRef = useRef(0)
   const startWidthRef = useRef(0)
   const dragStartRef = useRef({ x: 0, y: 0, cropX: 0, cropY: 0 })
@@ -429,77 +428,58 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     </div>
                   </div>
 
-                  {/* Crop Editor - Using background-image approach */}
+                  {/* Crop Editor - Single image with drag to adjust position */}
                   <div className="p-4">
-                    <div className="relative">
-                      {/* Background: Full image with dark overlay */}
-                      <div 
-                        className="w-full aspect-[4/3] bg-cover bg-center rounded-xl opacity-30"
-                        style={{ backgroundImage: `url('${images[editingCropIndex]?.src}')` }}
-                      />
+                    <div 
+                      ref={cropContainerRef}
+                      className={`relative w-full aspect-[16/10] cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden`}
+                      style={{ 
+                        borderRadius: rounded ? '12px' : '0',
+                        backgroundImage: `url('${images[editingCropIndex]?.src}')`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: `${cropPosition.x}% ${cropPosition.y}%`,
+                        backgroundRepeat: 'no-repeat',
+                      }}
+                      onMouseDown={handleCropMouseDown}
+                      onTouchStart={(e) => {
+                        // Handle touch events for mobile
+                        const touch = e.touches[0]
+                        if (touch) {
+                          const syntheticEvent = {
+                            preventDefault: () => e.preventDefault(),
+                            stopPropagation: () => e.stopPropagation(),
+                            clientX: touch.clientX,
+                            clientY: touch.clientY,
+                          } as React.MouseEvent
+                          handleCropMouseDown(syntheticEvent)
+                        }
+                      }}
+                    >
+                      {/* Corner handles */}
+                      <div className="absolute top-1 left-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
+                      <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
+                      <div className="absolute bottom-1 left-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
+                      <div className="absolute bottom-1 right-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
                       
-                      {/* Draggable crop preview - shows exact output */}
-                      {/* Using background-image for more reliable position updates */}
-                      <div
-                        ref={cropContainerRef}
-                        className={`absolute inset-4 cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden`}
-                        style={{ 
-                          borderRadius: rounded ? '12px' : '0',
-                          backgroundImage: `url('${images[editingCropIndex]?.src}')`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: `${cropPosition.x}% ${cropPosition.y}%`,
-                          backgroundRepeat: 'no-repeat',
-                        }}
-                        onMouseDown={handleCropMouseDown}
-                        onTouchStart={(e) => {
-                          // Handle touch events for mobile
-                          const touch = e.touches[0]
-                          if (touch) {
-                            const syntheticEvent = {
-                              preventDefault: () => e.preventDefault(),
-                              stopPropagation: () => e.stopPropagation(),
-                              clientX: touch.clientX,
-                              clientY: touch.clientY,
-                            } as React.MouseEvent
-                            handleCropMouseDown(syntheticEvent)
-                          }
-                        }}
-                      >
-                        {/* Hidden img for reference - keeping ref for potential future use */}
-                        <img
-                          ref={cropImageRef}
-                          src={images[editingCropIndex]?.src}
-                          alt=""
-                          className="sr-only"
-                          draggable={false}
-                        />
-                        
-                        {/* Corner handles */}
-                        <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
-                        <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
-                        <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
-                        <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-white rounded-sm shadow-md pointer-events-none" />
-                        
-                        {/* Rule of thirds grid */}
-                        <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: rounded ? '12px' : '0', overflow: 'hidden' }}>
-                          <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/30" />
-                          <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/30" />
-                          <div className="absolute top-1/3 left-0 right-0 h-px bg-white/30" />
-                          <div className="absolute top-2/3 left-0 right-0 h-px bg-white/30" />
-                        </div>
-                        
-                        {/* Drag hint */}
-                        {!isDraggingCrop && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                              </svg>
-                              Drag to adjust
-                            </div>
-                          </div>
-                        )}
+                      {/* Rule of thirds grid */}
+                      <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: rounded ? '12px' : '0', overflow: 'hidden' }}>
+                        <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/30" />
+                        <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/30" />
+                        <div className="absolute top-1/3 left-0 right-0 h-px bg-white/30" />
+                        <div className="absolute top-2/3 left-0 right-0 h-px bg-white/30" />
                       </div>
+                      
+                      {/* Drag hint */}
+                      {!isDraggingCrop && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                            </svg>
+                            Drag to adjust
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Position info */}
