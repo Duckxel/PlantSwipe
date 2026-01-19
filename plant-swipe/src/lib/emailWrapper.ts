@@ -595,7 +595,7 @@ export function convertImageGridToEmailTable(html: string): string {
     `
     
     const replacement = `
-      <table role="presentation" data-type="image-grid" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
+      <table role="presentation" data-type="image-grid" data-aspect-ratio="${aspectRatio}" data-width="${gridWidth}" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0; border-collapse: collapse;">
         <tr>
           <td align="${alignAttr}" style="padding: 0;">
             ${innerTable}

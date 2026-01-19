@@ -991,17 +991,25 @@ export const AdminEmailTemplatePage: React.FC = () => {
           display: block !important;
           padding: 16px 0 !important;
           margin: 16px 0 !important;
-          text-align: center !important;
           width: 100% !important;
         }
+        /* Alignment */
+        .email-preview-body [data-type="image-grid"][data-align="left"] { text-align: left !important; }
+        .email-preview-body [data-type="image-grid"][data-align="center"] { text-align: center !important; }
+        .email-preview-body [data-type="image-grid"][data-align="right"] { text-align: right !important; }
         .email-preview-body [data-type="image-grid"] > div,
         .email-preview-body div[data-type="image-grid"] > div {
-          display: grid !important;
+          display: inline-grid !important;
           gap: 16px !important;
-          width: 100% !important;
           max-width: 100% !important;
           grid-template-columns: repeat(2, 1fr) !important;
         }
+        /* Width presets */
+        .email-preview-body [data-type="image-grid"][data-width="50%"] > div { width: 50% !important; }
+        .email-preview-body [data-type="image-grid"][data-width="75%"] > div { width: 75% !important; }
+        .email-preview-body [data-type="image-grid"][data-width="90%"] > div { width: 90% !important; }
+        .email-preview-body [data-type="image-grid"][data-width="100%"] > div { width: 100% !important; }
+        .email-preview-body [data-type="image-grid"]:not([data-width]) > div { width: 100% !important; }
         .email-preview-body [data-type="image-grid"][data-columns="2"] > div {
           grid-template-columns: repeat(2, 1fr) !important;
         }
@@ -1025,10 +1033,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
           width: 100% !important;
           height: auto !important;
           object-fit: cover !important;
-          aspect-ratio: 16/10 !important;
           border-radius: 16px !important;
           display: block !important;
         }
+        /* Aspect ratio */
+        .email-preview-body [data-type="image-grid"][data-aspect-ratio="square"] img { aspect-ratio: 1/1 !important; }
+        .email-preview-body [data-type="image-grid"][data-aspect-ratio="landscape"] img { aspect-ratio: 16/10 !important; }
+        .email-preview-body [data-type="image-grid"][data-aspect-ratio="portrait"] img { aspect-ratio: 10/16 !important; }
+        .email-preview-body [data-type="image-grid"]:not([data-aspect-ratio]) img { aspect-ratio: 1/1 !important; }
         .email-preview-body [data-type="image-grid"][data-rounded="false"] img {
           border-radius: 0 !important;
         }
@@ -1052,19 +1064,24 @@ export const AdminEmailTemplatePage: React.FC = () => {
           position: relative !important;
           width: 100% !important;
           height: 0 !important;
-          padding-bottom: 62.5% !important;
+          padding-bottom: 100% !important;
           background-size: cover !important;
           background-repeat: no-repeat !important;
           border-radius: 16px !important;
         }
+        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="landscape"] div[role="img"] { padding-bottom: 62.5% !important; }
+        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="portrait"] div[role="img"] { padding-bottom: 160% !important; }
         .email-preview-body table[data-type="image-grid"] td > div {
           display: block !important;
           position: relative !important;
           width: 100% !important;
           overflow: hidden !important;
-          aspect-ratio: 16/10 !important;
           border-radius: 16px !important;
         }
+        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="square"] td > div { aspect-ratio: 1/1 !important; }
+        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="landscape"] td > div { aspect-ratio: 16/10 !important; }
+        .email-preview-body table[data-type="image-grid"][data-aspect-ratio="portrait"] td > div { aspect-ratio: 10/16 !important; }
+        .email-preview-body table[data-type="image-grid"]:not([data-aspect-ratio]) td > div { aspect-ratio: 1/1 !important; }
         .email-preview-body table[data-type="image-grid"] td > div > img {
           width: 100% !important;
           height: 100% !important;
@@ -1072,10 +1089,15 @@ export const AdminEmailTemplatePage: React.FC = () => {
           display: block !important;
         }
         .email-preview-body table[data-type="image-grid"] table {
-          width: 100% !important;
           border-collapse: collapse !important;
           border: none !important;
         }
+        /* Table width presets */
+        .email-preview-body table[data-type="image-grid"][data-width="50%"] table { width: 50% !important; }
+        .email-preview-body table[data-type="image-grid"][data-width="75%"] table { width: 75% !important; }
+        .email-preview-body table[data-type="image-grid"][data-width="90%"] table { width: 90% !important; }
+        .email-preview-body table[data-type="image-grid"][data-width="100%"] table { width: 100% !important; }
+        .email-preview-body table[data-type="image-grid"]:not([data-width]) table { width: 100% !important; }
         .email-preview-body table[data-type="image-grid"] table td {
           padding: 8px !important;
           border: none !important;
@@ -1827,17 +1849,25 @@ export const AdminEmailTemplatePage: React.FC = () => {
               display: block !important;
               padding: 16px 0 !important;
               margin: 16px 0 !important;
-              text-align: center !important;
               width: 100% !important;
             }
+            /* Alignment */
+            .email-preview-body [data-type="image-grid"][data-align="left"] { text-align: left !important; }
+            .email-preview-body [data-type="image-grid"][data-align="center"] { text-align: center !important; }
+            .email-preview-body [data-type="image-grid"][data-align="right"] { text-align: right !important; }
             .email-preview-body [data-type="image-grid"] > div,
             .email-preview-body div[data-type="image-grid"] > div {
-              display: grid !important;
+              display: inline-grid !important;
               gap: 16px !important;
-              width: 100% !important;
               max-width: 100% !important;
               grid-template-columns: repeat(2, 1fr) !important;
             }
+            /* Width presets */
+            .email-preview-body [data-type="image-grid"][data-width="50%"] > div { width: 50% !important; }
+            .email-preview-body [data-type="image-grid"][data-width="75%"] > div { width: 75% !important; }
+            .email-preview-body [data-type="image-grid"][data-width="90%"] > div { width: 90% !important; }
+            .email-preview-body [data-type="image-grid"][data-width="100%"] > div { width: 100% !important; }
+            .email-preview-body [data-type="image-grid"]:not([data-width]) > div { width: 100% !important; }
             .email-preview-body [data-type="image-grid"][data-columns="2"] > div {
               grid-template-columns: repeat(2, 1fr) !important;
             }
@@ -1861,10 +1891,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
               width: 100% !important;
               height: auto !important;
               object-fit: cover !important;
-              aspect-ratio: 16/10 !important;
               border-radius: 16px !important;
               display: block !important;
             }
+            /* Aspect ratio */
+            .email-preview-body [data-type="image-grid"][data-aspect-ratio="square"] img { aspect-ratio: 1/1 !important; }
+            .email-preview-body [data-type="image-grid"][data-aspect-ratio="landscape"] img { aspect-ratio: 16/10 !important; }
+            .email-preview-body [data-type="image-grid"][data-aspect-ratio="portrait"] img { aspect-ratio: 10/16 !important; }
+            .email-preview-body [data-type="image-grid"]:not([data-aspect-ratio]) img { aspect-ratio: 1/1 !important; }
             .email-preview-body [data-type="image-grid"][data-rounded="false"] img {
               border-radius: 0 !important;
             }
@@ -1888,19 +1922,24 @@ export const AdminEmailTemplatePage: React.FC = () => {
               position: relative !important;
               width: 100% !important;
               height: 0 !important;
-              padding-bottom: 62.5% !important;
+              padding-bottom: 100% !important;
               background-size: cover !important;
               background-repeat: no-repeat !important;
               border-radius: 16px !important;
             }
+            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="landscape"] div[role="img"] { padding-bottom: 62.5% !important; }
+            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="portrait"] div[role="img"] { padding-bottom: 160% !important; }
             .email-preview-body table[data-type="image-grid"] td > div {
               display: block !important;
               position: relative !important;
               width: 100% !important;
               overflow: hidden !important;
-              aspect-ratio: 16/10 !important;
               border-radius: 16px !important;
             }
+            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="square"] td > div { aspect-ratio: 1/1 !important; }
+            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="landscape"] td > div { aspect-ratio: 16/10 !important; }
+            .email-preview-body table[data-type="image-grid"][data-aspect-ratio="portrait"] td > div { aspect-ratio: 10/16 !important; }
+            .email-preview-body table[data-type="image-grid"]:not([data-aspect-ratio]) td > div { aspect-ratio: 1/1 !important; }
             .email-preview-body table[data-type="image-grid"] td > div > img {
               width: 100% !important;
               height: 100% !important;
@@ -1908,10 +1947,15 @@ export const AdminEmailTemplatePage: React.FC = () => {
               display: block !important;
             }
             .email-preview-body table[data-type="image-grid"] table {
-              width: 100% !important;
               border-collapse: collapse !important;
               border: none !important;
             }
+            /* Table width presets */
+            .email-preview-body table[data-type="image-grid"][data-width="50%"] table { width: 50% !important; }
+            .email-preview-body table[data-type="image-grid"][data-width="75%"] table { width: 75% !important; }
+            .email-preview-body table[data-type="image-grid"][data-width="90%"] table { width: 90% !important; }
+            .email-preview-body table[data-type="image-grid"][data-width="100%"] table { width: 100% !important; }
+            .email-preview-body table[data-type="image-grid"]:not([data-width]) table { width: 100% !important; }
             .email-preview-body table[data-type="image-grid"] table td {
               padding: 8px !important;
               border: none !important;
