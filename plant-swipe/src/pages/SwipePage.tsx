@@ -28,28 +28,29 @@ interface DoubleTapHeartProps {
 }
 
 const DoubleTapHeart: React.FC<DoubleTapHeartProps> = ({ x, y, onComplete }) => {
+  // Center the heart on the tap position using negative margin (more reliable than transform)
+  const heartSize = 96 // 24 * 4 = 96px (h-24 w-24)
   return (
     <motion.div
       className="pointer-events-none fixed z-[100]"
       style={{
-        left: x,
-        top: y,
-        transform: 'translate(-50%, -50%)',
+        left: x - heartSize / 2,
+        top: y - heartSize / 2,
       }}
       initial={{ scale: 0, opacity: 0 }}
       animate={{ 
-        scale: [0, 1.2, 1],
-        opacity: [0, 1, 1, 0],
+        scale: [0, 1.3, 1, 1.1, 1],
+        opacity: [0, 1, 1, 1, 0],
       }}
       transition={{ 
-        duration: 0.8,
-        times: [0, 0.3, 0.5, 1],
+        duration: 1.5,
+        times: [0, 0.15, 0.3, 0.7, 1],
         ease: "easeOut"
       }}
       onAnimationComplete={onComplete}
     >
       <Heart 
-        className="h-24 w-24 text-rose-500 drop-shadow-lg" 
+        className="h-24 w-24 text-rose-500 drop-shadow-[0_0_20px_rgba(244,63,94,0.5)]" 
         fill="currentColor"
         strokeWidth={1.5}
       />
@@ -80,7 +81,7 @@ const MobileButtonsOverlay: React.FC<MobileButtonsOverlayProps> = ({
   return (
     <div className="absolute inset-x-2 inset-y-0 z-[60] pointer-events-none rounded-[24px]">
       {/* Like button - top right - higher z-index to ensure clickability */}
-      <div className="absolute top-4 right-4 z-[70] pointer-events-auto" style={{ touchAction: 'manipulation' }}>
+      <div className="absolute top-4 right-4 z-[70]" style={{ touchAction: 'manipulation' }}>
         <button
           type="button"
           onClick={(e) => {
@@ -90,15 +91,23 @@ const MobileButtonsOverlay: React.FC<MobileButtonsOverlayProps> = ({
               onToggleLike()
             }
           }}
+          onTouchStart={(e) => {
+            // Stop propagation to prevent drag from starting
+            e.stopPropagation()
+          }}
           onTouchEnd={(e) => {
+            // Stop propagation but let click handle the action
+            e.stopPropagation()
+          }}
+          onPointerDown={(e) => {
             e.stopPropagation()
           }}
           aria-pressed={liked}
           aria-label={liked ? "Unlike" : "Like"}
-          className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition active:scale-95 ${
+          className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition active:scale-95 select-none ${
             liked ? "bg-rose-600 text-white border-rose-500" : "bg-white text-black border-white hover:bg-gray-100"
           }`}
-          style={{ touchAction: 'manipulation' }}
+          style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
         >
           <Heart className={`h-6 w-6 ${liked ? "fill-current" : ""}`} />
         </button>
@@ -261,7 +270,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     const lastTapTimeRef = React.useRef<number>(0)
     const lastTapPosRef = React.useRef<{ x: number; y: number } | null>(null)
     
-    // Handle tap on the card area (for double-tap detection only)
+    // Handle tap on the card area (for double-tap detection and heart spam)
     const handleCardTap = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
       // Don't trigger on button clicks
       if ((e.target as HTMLElement).closest('button')) {
@@ -286,17 +295,18 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       const timeSinceLastTap = now - lastTapTimeRef.current
       const lastPos = lastTapPosRef.current
       
-      // Check if this is a double-tap
+      // Check if this is a rapid tap (within threshold of last tap)
       if (lastPos && timeSinceLastTap < DOUBLE_TAP_THRESHOLD) {
         const distance = Math.sqrt(
           Math.pow(clientX - lastPos.x, 2) + Math.pow(clientY - lastPos.y, 2)
         )
         
         if (distance < DOUBLE_TAP_DISTANCE_THRESHOLD) {
-          // Double-tap detected!
+          // Rapid tap detected - spawn heart! (allows spam)
           triggerDoubleTapLike(clientX, clientY)
-          lastTapTimeRef.current = 0
-          lastTapPosRef.current = null
+          // Keep tracking for more spam - don't reset, just update position
+          lastTapTimeRef.current = now
+          lastTapPosRef.current = { x: clientX, y: clientY }
           return
         }
       }
