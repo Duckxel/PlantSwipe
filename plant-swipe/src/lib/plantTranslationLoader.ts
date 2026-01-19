@@ -616,6 +616,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       'composition', 'maintenance_level',
       'multicolor', 'bicolor', 'spiked', 'scent',
       'created_time', 'updated_time',
+      'status',
       'aromatherapy',
       'plant_images (link,use)',
       'plant_colors (colors (id,name,hex_code))',
@@ -784,6 +785,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         
         popularity: popularityMap.get(String(basePlant.id)),
         meta: {
+            status: basePlant.status || undefined,
             createdAt: basePlant.created_time,
             updatedAt: basePlant.updated_time,
         },
