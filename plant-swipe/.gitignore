@@ -14,6 +14,13 @@ dist-ssr
 /.npm-cache
 .npm-lock-hash
 .bun-lock-hash
+
+# Package manager lock files (uncomment ONE based on your primary package manager)
+# Since this project uses bun, you may want to ignore npm's lock file:
+# package-lock.json
+# Or if you prefer npm, ignore bun's lock file:
+# bun.lock
+# bun.lockb
 *.local
 .env
 .env.*
