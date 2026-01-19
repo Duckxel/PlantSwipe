@@ -305,21 +305,24 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             ))}
           </div>
         )}
-        <div className="absolute top-4 right-4 z-30">
+        {/* Like button - desktop */}
+        <div className="absolute top-4 right-4 z-40">
           <button
             type="button"
-            onClick={() => {
-              if (onToggleLike) {
-                onToggleLike()
-              }
+            onClick={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              if (onToggleLike) onToggleLike()
             }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             aria-pressed={liked}
             aria-label={liked ? "Unlike" : "Like"}
-            className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition ${
-              liked ? "bg-rose-600 text-white border-rose-500" : "bg-white/90 text-black hover:bg-white"
+            className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 cursor-pointer select-none ${
+              liked ? "bg-rose-600 text-white border-rose-500 hover:bg-rose-700" : "bg-white text-black border-white hover:bg-gray-100"
             }`}
           >
-            <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+            <Heart className={`h-6 w-6 ${liked ? "fill-current" : ""}`} />
           </button>
         </div>
         {current && (
@@ -446,22 +449,38 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                   )}
                   
                   {/* Like button - inside card so it moves with swipe */}
-                  <div className="absolute top-4 right-4 z-30">
+                  <div className="absolute top-4 right-4 z-[100]">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
+                        e.preventDefault()
                         if (onToggleLike) onToggleLike()
                       }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onTouchStart={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                      }}
+                      onPointerUp={(e) => {
+                        e.stopPropagation()
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation()
+                      }}
+                      onTouchEnd={(e) => {
+                        e.stopPropagation()
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation()
+                      }}
                       aria-pressed={liked}
                       aria-label={liked ? "Unlike" : "Like"}
-                      className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition-all active:scale-90 ${
+                      className={`h-14 w-14 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 cursor-pointer select-none ${
                         liked ? "bg-rose-600 text-white border-rose-500" : "bg-white text-black border-white"
                       }`}
+                      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
                     >
-                      <Heart className={`h-6 w-6 ${liked ? "fill-current" : ""}`} />
+                      <Heart className={`h-7 w-7 ${liked ? "fill-current" : ""}`} />
                     </button>
                   </div>
                   
