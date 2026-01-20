@@ -573,6 +573,10 @@ export async function processPlantRequest(
       source_name: primarySource?.name || null,
       source_url: primarySource?.url || null,
       tags: plant.miscellaneous?.tags || [],
+      // Translatable array fields
+      spice_mixes: plant.usage?.spiceMixes || [],
+      pests: plant.danger?.pests || [],
+      diseases: plant.danger?.diseases || [],
     }
     
     const { error: translationError } = await supabase
@@ -629,6 +633,9 @@ export async function processPlantRequest(
           advice_infusion,
           ground_effect,
           tags,
+          spice_mixes,
+          pests,
+          diseases,
         ] = await Promise.all([
           translateText(String(plant.name || trimmedName || ''), target, 'en'),
           translateArray(plant.identity?.givenNames || [], target, 'en'),
@@ -649,6 +656,9 @@ export async function processPlantRequest(
           translateStringSafe(plant.usage?.adviceInfusion),
           translateStringSafe(plant.ecology?.groundEffect),
           translateArraySafe(plant.miscellaneous?.tags),
+          translateArraySafe(plant.usage?.spiceMixes),
+          translateArraySafe(plant.danger?.pests),
+          translateArraySafe(plant.danger?.diseases),
         ])
         
         return {
@@ -674,6 +684,9 @@ export async function processPlantRequest(
           source_name: translatedSourceName || null,
           source_url: primarySource?.url ? String(primarySource.url) : null,
           tags,
+          spice_mixes,
+          pests,
+          diseases,
         }
       })
     )
