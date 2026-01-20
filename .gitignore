@@ -1,10 +1,9 @@
 # dependencies
 node_modules/
 
-# Package manager lock files (uncomment ONE based on your primary package manager)
-# If using bun as primary, ignore npm's lock file:
-# package-lock.json
-# If using npm as primary, ignore bun's lock file:
+# Package manager lock files (bun is primary)
+# Ignore npm's lock file since we use bun:
+package-lock.json
 # bun.lock
 # bun.lockb
 
