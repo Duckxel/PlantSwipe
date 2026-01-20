@@ -2062,7 +2062,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     <img
                       src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png"
                       alt="Aphylia"
-                      style={{ display: 'block', height: '32px', width: 'auto', filter: 'brightness(0) invert(1)' }}
+                      style={{ display: 'block', height: '48px', width: 'auto', filter: 'brightness(0) invert(1)' }}
                     />
                   </div>
                 </div>
