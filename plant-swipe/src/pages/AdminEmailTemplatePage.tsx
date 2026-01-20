@@ -2047,14 +2047,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 <div
                   style={{
                     background: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%)',
-                    padding: '24px 32px',
+                    padding: '20px 24px',
                     textAlign: 'center',
                   }}
                 >
                   <img
                     src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png"
                     alt="Aphylia"
-                    style={{ display: 'block', margin: '0 auto', maxWidth: '280px', width: '100%', height: 'auto' }}
+                    style={{ display: 'block', margin: '0 auto', maxWidth: '160px', width: '100%', height: 'auto', filter: 'brightness(0) invert(1)' }}
                   />
                 </div>
 
