@@ -21685,6 +21685,7 @@ function isCrawler(userAgent) {
 
 // Generate pre-rendered HTML for crawlers
 // Note: Uses existing escapeHtml function defined earlier in this file
+// Returns: { html: string, statusCode: number } - statusCode is 200 for found pages, 404 for not-found
 async function generateCrawlerHtml(req, pagePath) {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
   const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
@@ -21738,6 +21739,12 @@ async function generateCrawlerHtml(req, pagePath) {
   let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
   let image = `${siteUrl}/icons/icon-512x512.png`
   let pageContent = ''
+  
+  // Track whether the requested resource was found (for proper 404 handling)
+  // Default to true for static pages, set to false when a dynamic resource is not found
+  let resourceFound = true
+  // Flag to indicate if this route expects a dynamic resource
+  let isDynamicRoute = false
 
   // Parse language from path BEFORE try block so it's always available for HTML template
   const pathParts = pagePath.split('/').filter(Boolean)
@@ -22150,6 +22157,7 @@ async function generateCrawlerHtml(req, pagePath) {
     })
     console.log(`[ssr] Route detection: plant=${isPlantRoute}, garden=${isGardenRoute}, blog=${isBlogRoute}, profile=${isProfileRoute}, bookmark=${isBookmarkRoute}`)
     if (isPlantRoute) {
+      isDynamicRoute = true
       req._ssrDebug.matchedRoute = 'plant'
       const plantId = decodeURIComponent(effectivePath[1])
       ssrDebug('plant_route_matched', { plantId, supabaseAvailable: !!supabaseServer })
@@ -22157,6 +22165,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (!supabaseServer) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
+        resourceFound = false
       } else {
         // Query base plant data (non-translatable fields now include scientific_name, family, level_sun, maintenance_level, season)
         const { data: basePlant, error: plantError } = await ssrQuery(
@@ -22227,9 +22236,11 @@ async function generateCrawlerHtml(req, pagePath) {
         if (plantError) {
           req._ssrDebug.errors.push({ type: 'plant_query', error: plantError.message || JSON.stringify(plantError) })
           console.log(`[ssr] ✗ Plant query error: ${plantError.message || JSON.stringify(plantError)}`)
+          resourceFound = false
         } else if (!plant) {
           req._ssrDebug.errors.push({ type: 'plant_not_found', plantId })
           console.log(`[ssr] ✗ Plant not found in database: ${plantId}`)
+          resourceFound = false
         }
 
         if (plant) {
@@ -22374,6 +22385,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Blog post page: /blog/:slug
     else if (isBlogRoute && supabaseServer) {
+      isDynamicRoute = true
       const slugOrId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up blog post: ${slugOrId}`)
       req._ssrDebug.matchedRoute = 'blog_post'
@@ -22419,7 +22431,13 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (postError) {
         console.log(`[ssr] Blog query error: ${postError.message}`)
-      } else if (post) {
+        resourceFound = false
+      } else if (!post) {
+        console.log(`[ssr] ✗ Blog post not found: ${slugOrId}`)
+        resourceFound = false
+      }
+      
+      if (post) {
         console.log(`[ssr] ✓ Found blog post: ${post.title}`)
 
         // Estimate read time from body_html content
@@ -22469,6 +22487,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // User profile page: /u/:username
     else if (isProfileRoute && supabaseServer) {
+      isDynamicRoute = true
       const username = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'profile'
       ssrDebug('profile_route_matched', { username, supabaseAvailable: !!supabaseServer })
@@ -22525,7 +22544,13 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (profileError) {
         console.log(`[ssr] Profile query error: ${profileError.message}`)
-      } else if (profile) {
+        resourceFound = false
+      } else if (!profile) {
+        console.log(`[ssr] ✗ Profile not found: ${username}`)
+        resourceFound = false
+      }
+      
+      if (profile) {
         const isPrivate = Boolean(profile.is_private)
         const displayName = profile.display_name || profile.username || username
         console.log(`[ssr] ✓ Found profile: ${displayName} (private: ${isPrivate})`)
@@ -22617,6 +22642,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Garden page: /garden/:id or /gardens/:id or /garden/:id/overview etc.
     else if (isGardenRoute && supabaseServer) {
+      isDynamicRoute = true
       const gardenId = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'garden'
       ssrDebug('garden_route_matched', { gardenId, supabaseAvailable: !!supabaseServer, serviceClientAvailable: !!supabaseServiceClient })
@@ -22638,7 +22664,13 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (gardenError) {
         console.log(`[ssr] Garden query error: ${gardenError.message}`)
-      } else if (garden) {
+        resourceFound = false
+      } else if (!garden) {
+        console.log(`[ssr] ✗ Garden not found: ${gardenId}`)
+        resourceFound = false
+      }
+      
+      if (garden) {
         const isPrivate = garden.privacy === 'private'
         const gardenName = garden.name || tr.gardenBeautiful
         console.log(`[ssr] ✓ Found garden: ${gardenName} (privacy: ${garden.privacy || 'public'})`)
@@ -23016,11 +23048,12 @@ async function generateCrawlerHtml(req, pagePath) {
     // Bookmarks page
     // Bookmark list page: /bookmarks/:id
     else if (isBookmarkRoute && supabaseServer) {
+      isDynamicRoute = true
       const listId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
 
       // Try to get the bookmark list info (using correct table name 'bookmarks')
-      const { data: bookmarkList } = await ssrQuery(
+      const { data: bookmarkList, error: bookmarkError } = await ssrQuery(
         supabaseServer
           .from('bookmarks')
           .select('id, name, user_id, visibility, created_at')
@@ -23029,6 +23062,14 @@ async function generateCrawlerHtml(req, pagePath) {
           .maybeSingle(),
         'bookmark_lookup'
       )
+
+      if (bookmarkError) {
+        console.log(`[ssr] Bookmark list query error: ${bookmarkError.message}`)
+        resourceFound = false
+      } else if (!bookmarkList) {
+        console.log(`[ssr] ✗ Bookmark list not found or private: ${listId}`)
+        resourceFound = false
+      }
 
       if (bookmarkList) {
         console.log(`[ssr] ✓ Found bookmark list: ${bookmarkList.name}`)
@@ -23167,7 +23208,7 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(description)}">
-  <meta name="robots" content="index, follow">
+  <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
   <!-- Open Graph / Facebook -->
@@ -23345,7 +23386,12 @@ async function generateCrawlerHtml(req, pagePath) {
 </body>
 </html>`
 
-  return html
+  // Determine HTTP status code:
+  // - 200 for static pages and found dynamic resources
+  // - 404 for dynamic routes where the resource wasn't found
+  const statusCode = (isDynamicRoute && !resourceFound) ? 404 : 200
+  
+  return { html, statusCode }
 }
 
 // Debug endpoint to test crawler detection and SSR
@@ -23420,7 +23466,7 @@ app.get('/api/force-ssr', async (req, res) => {
     }
 
     const ssrStartTime = Date.now()
-    const html = await generateCrawlerHtml(fakeReq, testPath)
+    const { html, statusCode } = await generateCrawlerHtml(fakeReq, testPath)
     const ssrDuration = Date.now() - ssrStartTime
 
     if (jsonMode) {
@@ -23432,6 +23478,7 @@ app.get('/api/force-ssr', async (req, res) => {
 
       res.json({
         path: testPath,
+        statusCode,
         title: titleMatch?.[1] || null,
         ogTitle: ogTitleMatch?.[1] || null,
         ogDescription: ogDescMatch?.[1] || null,
@@ -23453,7 +23500,8 @@ app.get('/api/force-ssr', async (req, res) => {
     } else {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
       res.setHeader('X-SSR-Test', 'force-ssr')
-      res.send(html)
+      res.setHeader('X-SSR-Status', String(statusCode))
+      res.status(statusCode).send(html)
     }
   } catch (err) {
     console.error('[force-ssr] Error:', err)
@@ -23476,9 +23524,10 @@ app.get('/api/preview-ssr', async (req, res) => {
   }
 
   try {
-    const html = await generateCrawlerHtml(fakeReq, testPath)
+    const { html, statusCode } = await generateCrawlerHtml(fakeReq, testPath)
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
-    res.send(html)
+    res.setHeader('X-SSR-Status', String(statusCode))
+    res.status(statusCode).send(html)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -23513,14 +23562,21 @@ app.get('*', async (req, res) => {
     const ssrStartTime = Date.now()
     try {
       // Use path without query params for SSR
-      const html = await generateCrawlerHtml(req, pathWithoutQuery)
+      const { html, statusCode } = await generateCrawlerHtml(req, pathWithoutQuery)
       const ssrDuration = Date.now() - ssrStartTime
-      console.log(`[ssr] ✓ Generated HTML for ${pathWithoutQuery} in ${ssrDuration}ms (${html.length} bytes)`)
+      console.log(`[ssr] ✓ Generated HTML for ${pathWithoutQuery} in ${ssrDuration}ms (${html.length} bytes) [status: ${statusCode}]`)
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
-      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
-      res.setHeader('X-Robots-Tag', 'index, follow')
+      // Use shorter cache for 404 pages
+      if (statusCode === 404) {
+        res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
+        res.setHeader('X-Robots-Tag', 'noindex, follow')
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+        res.setHeader('X-Robots-Tag', 'index, follow')
+      }
       res.setHeader('X-SSR-Duration', String(ssrDuration))
-      return res.send(html)
+      res.setHeader('X-SSR-Status', String(statusCode))
+      return res.status(statusCode).send(html)
     } catch (err) {
       const ssrDuration = Date.now() - ssrStartTime
       console.error(`[ssr] ✗ Crawler render FAILED after ${ssrDuration}ms, falling back to SPA:`, err?.message || err)

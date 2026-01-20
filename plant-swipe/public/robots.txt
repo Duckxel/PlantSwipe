@@ -1,12 +1,35 @@
 # robots.txt for Aphylia
+# https://aphylia.app
 
 User-agent: *
+
+# Allow crawling of public content
 Allow: /
+
+# Block admin and internal pages
 Disallow: /admin
-Disallow: /create
-Disallow: /settings
-Disallow: /friends
-Disallow: /profile
 Disallow: /api/
 
+# Block authenticated/private user pages
+Disallow: /settings
+Disallow: /friends
+Disallow: /messages
+Disallow: /profile
+Disallow: /scan
+Disallow: /bug-catcher
+
+# Block editor pages (creating/editing content requires auth)
+Disallow: /create
+Disallow: /*/edit
+
+# Block error pages
+Disallow: /error
+
+# Allow language-prefixed public pages (en, fr)
+# Note: Disallow rules above also block /<lang>/admin, /<lang>/settings, etc.
+
+# Sitemap location
 Sitemap: https://aphylia.app/sitemap.xml
+
+# Crawl-delay for polite crawling (in seconds)
+Crawl-delay: 1

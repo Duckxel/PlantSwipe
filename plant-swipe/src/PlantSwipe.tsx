@@ -808,40 +808,70 @@ export default function PlantSwipe() {
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
+  
+  // Store shuffled plant IDs separately - this is the stable order
+  const [shuffledPlantIds, setShuffledPlantIds] = useState<string[]>([])
+  
+  // Get plants with images for swipe view (doesn't depend on likedSet for filtering)
+  const swipeablePlants = useMemo(() => {
+    return preparedPlants.filter((p) => p._hasImage)
+  }, [preparedPlants])
+  
+  // Track if we've done initial shuffle
+  const hasInitialShuffleRef = React.useRef(false)
+  
+  // Create/update shuffled order only when plants change or explicit reshuffle
+  React.useEffect(() => {
+    if (swipeablePlants.length === 0) {
+      setShuffledPlantIds([])
+      hasInitialShuffleRef.current = false
+      return
+    }
+    
+    // Only shuffle if we haven't done initial shuffle yet, or explicit epoch triggered
+    if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
+      const shuffleArray = <T,>(arr: T[]): T[] => {
+        const result = arr.slice()
+        for (let i = result.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[result[i], result[j]] = [result[j], result[i]]
+        }
+        return result
+      }
+      
+      const now = new Date()
+      const promoted: string[] = []
+      const regular: string[] = []
+      
+      swipeablePlants.forEach((plant) => {
+        if (isPlantOfTheMonth(plant, now)) {
+          promoted.push(plant.id)
+        } else {
+          regular.push(plant.id)
+        }
+      })
+      
+      const newOrder = promoted.length === 0
+        ? shuffleArray(swipeablePlants.map(p => p.id))
+        : [...shuffleArray(promoted), ...shuffleArray(regular)]
+      
+      setShuffledPlantIds(newOrder)
+      hasInitialShuffleRef.current = true
+    }
+  }, [swipeablePlants, shuffleEpoch])
+  
+  // Build the actual swipe list from the stable shuffled IDs
   const swipeList = useMemo(() => {
-    // shuffleEpoch is used to trigger a reshuffle when user completes a cycle
-    void shuffleEpoch
-    if (filtered.length === 0) return []
+    if (shuffledPlantIds.length === 0) return []
     
-    // Filter out plants without images for Discovery page
-    // Using pre-computed _hasImage for O(1) check instead of re-computing
-    const plantsWithImages = (filtered as PreparedPlant[]).filter((p) => p._hasImage)
+    // Create a map for O(1) lookups
+    const plantMap = new Map(swipeablePlants.map(p => [p.id, p]))
     
-    if (plantsWithImages.length === 0) return []
-    
-    const shuffleList = (list: PreparedPlant[]) => {
-      const arr = list.slice()
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[arr[i], arr[j]] = [arr[j], arr[i]]
-      }
-      return arr
-    }
-    const now = new Date()
-    const promoted: PreparedPlant[] = []
-    const regular: PreparedPlant[] = []
-    plantsWithImages.forEach((plant) => {
-      if (isPlantOfTheMonth(plant, now)) {
-        promoted.push(plant)
-      } else {
-        regular.push(plant)
-      }
-    })
-    if (promoted.length === 0) {
-      return shuffleList(plantsWithImages)
-    }
-    return [...shuffleList(promoted), ...shuffleList(regular)]
-  }, [filtered, shuffleEpoch])
+    // Return plants in shuffled order, filtering out any that no longer exist
+    return shuffledPlantIds
+      .map(id => plantMap.get(id))
+      .filter((p): p is PreparedPlant => p !== undefined)
+  }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
     // Helper to check if a plant is "in progress"
@@ -992,8 +1022,9 @@ export default function PlantSwipe() {
   // Swipe logic
   const x = useMotionValue(0)
   const y = useMotionValue(0)
+  // Minimum distance (in pixels) the card must travel to trigger a swipe action
+  // This prevents taps/clicks from being interpreted as swipes
   const threshold = 100
-  const velocityThreshold = 500
   
   // Reset motion values immediately when index changes
   React.useEffect(() => {
@@ -1005,41 +1036,38 @@ export default function PlantSwipe() {
   const onDragEnd = (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
     const dx = info.offset.x
     const dy = info.offset.y
-    const vx = info.velocity.x
-    const vy = info.velocity.y
     
-    // Calculate effective movement considering both offset and velocity
-    const effectiveX = dx + vx * 0.1
-    const effectiveY = dy + vy * 0.1
-    
-    // Check for significant movement or velocity
-    const absX = Math.abs(effectiveX)
-    const absY = Math.abs(effectiveY)
-    const absVx = Math.abs(vx)
-    const absVy = Math.abs(vy)
+    // Get absolute offset values - this is the actual distance the card traveled
+    const absOffsetX = Math.abs(dx)
+    const absOffsetY = Math.abs(dy)
     
     let actionTaken = false
     
-    // Prioritize vertical swipe over horizontal if both are significant
-    if ((absY > absX && absY > threshold) || (absVy > absVx && absVy > velocityThreshold)) {
-      if (effectiveY < -threshold || vy < -velocityThreshold) {
+    // ONLY trigger actions based on actual distance traveled (threshold = 100px)
+    // Velocity is IGNORED to prevent taps/clicks from being interpreted as swipes
+    // The card must physically move at least 100px to trigger any action
+    
+    // Prioritize vertical swipe over horizontal if vertical movement is greater
+    if (absOffsetY > absOffsetX && absOffsetY > threshold) {
+      if (dy < -threshold) {
         // Swipe up (bottom to top) = open info
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
         handleInfo()
         actionTaken = true
       }
+      // Note: swipe down does nothing
     }
     
-    // Horizontal swipe detection
-    if (!actionTaken && ((absX > absY && absX > threshold) || (absVx > absVy && absVx > velocityThreshold))) {
-      if (effectiveX < -threshold || vx < -velocityThreshold) {
+    // Horizontal swipe detection - only if horizontal movement is greater than vertical
+    if (!actionTaken && absOffsetX > absOffsetY && absOffsetX > threshold) {
+      if (dx < -threshold) {
         // Swipe left (right to left) = next
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
         handlePass()
         actionTaken = true
-      } else if (effectiveX > threshold || vx > velocityThreshold) {
+      } else if (dx > threshold) {
         // Swipe right (left to right) = previous
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
@@ -1048,7 +1076,7 @@ export default function PlantSwipe() {
       }
     }
     
-    // No action, snap back to center smoothly
+    // No action taken - snap back to center smoothly
     if (!actionTaken) {
       animate(x, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
       animate(y, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })

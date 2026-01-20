@@ -432,12 +432,13 @@ async function loadProfileRoutes() {
   while (results.length < maxProfiles) {
     const limit = Math.min(batchSize, maxProfiles - results.length)
     const to = offset + limit - 1
-    // Fetch ALL profiles (public and private) - public profiles listed first
+    // Only fetch PUBLIC profiles - private profiles should NOT be in sitemap
+    // as they return 404 to crawlers and shouldn't be indexed
     const { data, error } = await client
       .from('profiles')
-      .select('display_name, is_private')
+      .select('display_name')
       .not('display_name', 'is', null)
-      .order('is_private', { ascending: true }) // public (false) first, then private (true)
+      .eq('is_private', false) // Only public profiles
       .order('display_name', { ascending: true })
       .range(offset, to)
 
@@ -453,12 +454,10 @@ async function loadProfileRoutes() {
       if (!row?.display_name) continue
       const normalizedName = encodeURIComponent(String(row.display_name).trim())
       if (!normalizedName) continue
-      // Public profiles get higher priority (0.5), private profiles get lower priority (0.3)
-      const isPrivate = row.is_private === true
       const route = {
         path: `/u/${normalizedName}`,
         changefreq: 'weekly',
-        priority: isPrivate ? 0.3 : 0.5,
+        priority: 0.5,
       }
       results.push(route)
       if (results.length >= maxProfiles) break
@@ -488,10 +487,13 @@ async function loadGardenRoutes() {
   while (results.length < maxGardens) {
     const limit = Math.min(batchSize, maxGardens - results.length)
     const to = offset + limit - 1
-    // Fetch ALL gardens (public and private) with privacy info
+    // Only fetch PUBLIC gardens - private gardens should NOT be in sitemap
+    // as they return 404 to crawlers and shouldn't be indexed
+    // Include gardens where privacy is 'public' or null (default to public)
     const { data, error } = await client
       .from('gardens')
-      .select('id, created_at, privacy')
+      .select('id, created_at')
+      .or('privacy.eq.public,privacy.is.null')
       .order('created_at', { ascending: false })
       .range(offset, to)
 
@@ -506,13 +508,10 @@ async function loadGardenRoutes() {
     for (const row of data) {
       if (!row?.id) continue
       const normalizedId = encodeURIComponent(String(row.id))
-      // Public gardens (privacy = 'public' or null) get higher priority (0.6)
-      // Private gardens get lower priority (0.4)
-      const isPrivate = row.privacy === 'private'
       const route = {
         path: `/garden/${normalizedId}`,
         changefreq: 'weekly',
-        priority: isPrivate ? 0.4 : 0.6,
+        priority: 0.6,
         lastmod: toIsoString(row.created_at),
       }
       results.push(route)
@@ -543,10 +542,12 @@ async function loadBookmarkRoutes() {
   while (results.length < maxBookmarks) {
     const limit = Math.min(batchSize, maxBookmarks - results.length)
     const to = offset + limit - 1
-    // Fetch ALL bookmarks (public and private) with visibility info
+    // Only fetch PUBLIC bookmarks - private bookmarks should NOT be in sitemap
+    // as they return 404 to crawlers and shouldn't be indexed
     const { data, error } = await client
       .from('bookmarks')
-      .select('id, created_at, visibility')
+      .select('id, created_at')
+      .eq('visibility', 'public')
       .order('created_at', { ascending: false })
       .range(offset, to)
 
@@ -561,13 +562,10 @@ async function loadBookmarkRoutes() {
     for (const row of data) {
       if (!row?.id) continue
       const normalizedId = encodeURIComponent(String(row.id))
-      // Public bookmarks get higher priority (0.5)
-      // Private bookmarks get lower priority (0.3)
-      const isPrivate = row.visibility === 'private'
       const route = {
         path: `/bookmarks/${normalizedId}`,
         changefreq: 'weekly',
-        priority: isPrivate ? 0.3 : 0.5,
+        priority: 0.5,
         lastmod: toIsoString(row.created_at),
       }
       results.push(route)

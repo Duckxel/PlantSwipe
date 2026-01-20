@@ -8302,8 +8302,18 @@ create table if not exists public.landing_showcase_cards (
   description text,
   badge_text text,
   image_url text,
+  cover_image_url text,
+  plant_images jsonb default '[]'::jsonb,
+  garden_name text,
+  plants_count integer default 12,
+  species_count integer default 8,
+  streak_count integer default 7,
+  progress_percent integer default 85,
+  link_url text,
   color text not null default 'emerald',
   is_active boolean not null default true,
+  -- Selected public gardens to showcase (array of garden IDs)
+  selected_garden_ids uuid[] default array[]::uuid[],
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

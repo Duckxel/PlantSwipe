@@ -33,7 +33,7 @@ export function ErrorPage({ code: providedCode }: ErrorPageProps) {
   const seoDescription = description || t("seo.error.description", {
     defaultValue: "We couldn't load this route. Try the recovery tips or head back home.",
   })
-  usePageMetadata({ title: seoTitle, description: seoDescription })
+  usePageMetadata({ title: seoTitle, description: seoDescription, noCanonical: true })
 
   const tips = TIP_KEYS.map((key) => t(key))
 

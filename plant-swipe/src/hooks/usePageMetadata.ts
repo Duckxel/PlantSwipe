@@ -34,6 +34,72 @@ const URL_TARGETS: MetaTarget[] = [
   { attr: 'name', key: 'twitter:url' },
 ]
 
+/**
+ * Compute the canonical URL for the current page
+ * This removes language prefixes if they exist (e.g., /fr/plants/123 -> /plants/123)
+ * to ensure a single canonical URL regardless of language
+ */
+const computeCanonicalUrl = (url?: string | null): string => {
+  if (!url) {
+    // Use current path from window.location
+    if (typeof window === 'undefined') return SEO_DEFAULT_URL
+    const path = window.location.pathname
+    return normalizeCanonicalPath(path)
+  }
+  
+  // If it's a full URL, extract the path
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    try {
+      const parsed = new URL(url)
+      return normalizeCanonicalPath(parsed.pathname)
+    } catch {
+      return SEO_DEFAULT_URL
+    }
+  }
+  
+  // It's a path
+  return normalizeCanonicalPath(url)
+}
+
+/**
+ * Normalize a path to create a canonical URL:
+ * - Remove language prefix (/en/, /fr/) to get the base path
+ * - Ensure proper trailing slash handling
+ * - Prepend the site URL
+ */
+const normalizeCanonicalPath = (path: string): string => {
+  let normalizedPath = path
+  
+  // Remove language prefixes (e.g., /en, /fr, /de)
+  // Match 2-letter language codes at the start of the path
+  const langPrefixMatch = normalizedPath.match(/^\/([a-z]{2})(\/|$)/)
+  if (langPrefixMatch) {
+    normalizedPath = normalizedPath.slice(langPrefixMatch[0].length - 1) || '/'
+  }
+  
+  // Ensure path starts with /
+  if (!normalizedPath.startsWith('/')) {
+    normalizedPath = '/' + normalizedPath
+  }
+  
+  // Remove trailing slash for non-root paths
+  if (normalizedPath !== '/' && normalizedPath.endsWith('/')) {
+    normalizedPath = normalizedPath.slice(0, -1)
+  }
+  
+  // Remove query parameters and hash for canonical
+  const queryIndex = normalizedPath.indexOf('?')
+  if (queryIndex !== -1) {
+    normalizedPath = normalizedPath.slice(0, queryIndex)
+  }
+  const hashIndex = normalizedPath.indexOf('#')
+  if (hashIndex !== -1) {
+    normalizedPath = normalizedPath.slice(0, hashIndex)
+  }
+  
+  return `${SEO_DEFAULT_URL}${normalizedPath}`
+}
+
 const collapseWhitespace = (value?: string | null) => {
   if (!value) return ''
   return value.replace(/\s+/g, ' ').trim()
@@ -92,9 +158,41 @@ const setMetaContent = (element: HTMLMetaElement | null, content: string) => {
   element.setAttribute('content', content)
 }
 
+/**
+ * Ensure a canonical link element exists in the document head
+ * Returns the element and whether it was created
+ */
+const ensureCanonicalLink = () => {
+  if (typeof document === 'undefined') {
+    return { element: null as HTMLLinkElement | null, created: false }
+  }
+  const selector = 'link[rel="canonical"]'
+  let element = document.head?.querySelector(selector) as HTMLLinkElement | null
+  let created = false
+  if (!element && document.head) {
+    element = document.createElement('link')
+    element.setAttribute('rel', 'canonical')
+    document.head.appendChild(element)
+    created = true
+  }
+  return { element, created }
+}
+
+const setCanonicalHref = (element: HTMLLinkElement | null, href: string) => {
+  if (!element) return
+  if (element.getAttribute('href') === href) return
+  element.setAttribute('href', href)
+}
+
 type Snapshot = {
   element: HTMLMetaElement
   previousContent: string | null
+  created: boolean
+}
+
+type CanonicalSnapshot = {
+  element: HTMLLinkElement
+  previousHref: string | null
   created: boolean
 }
 
@@ -103,9 +201,18 @@ export type PageMetadata = {
   description?: string | null
   image?: string | null
   url?: string | null
+  /** 
+   * Override canonical URL. If not provided, it's computed automatically 
+   * by removing the language prefix from the current URL.
+   */
+  canonicalUrl?: string | null
+  /**
+   * If true, skip setting canonical URL (useful for error pages)
+   */
+  noCanonical?: boolean
 }
 
-export function usePageMetadata({ title, description, image, url }: PageMetadata) {
+export function usePageMetadata({ title, description, image, url, canonicalUrl, noCanonical }: PageMetadata) {
   React.useEffect(() => {
     if (typeof document === 'undefined') return
 
@@ -113,8 +220,10 @@ export function usePageMetadata({ title, description, image, url }: PageMetadata
     const resolvedDescription = normalizeDescription(description)
     const resolvedImage = normalizeImage(image)
     const resolvedUrl = normalizeUrl(url)
+    const resolvedCanonical = noCanonical ? null : computeCanonicalUrl(canonicalUrl || url)
     const previousTitle = document.title
     const snapshots = new Map<string, Snapshot>()
+    let canonicalSnapshot: CanonicalSnapshot | null = null
 
     const applyTarget = (target: MetaTarget, content: string) => {
       const id = `${target.attr}:${target.key}`
@@ -139,6 +248,19 @@ export function usePageMetadata({ title, description, image, url }: PageMetadata
     IMAGE_TARGETS.forEach((target) => applyTarget(target, resolvedImage))
     URL_TARGETS.forEach((target) => applyTarget(target, resolvedUrl))
 
+    // Set canonical URL
+    if (resolvedCanonical) {
+      const { element, created } = ensureCanonicalLink()
+      if (element) {
+        canonicalSnapshot = {
+          element,
+          previousHref: element.getAttribute('href'),
+          created,
+        }
+        setCanonicalHref(element, resolvedCanonical)
+      }
+    }
+
     return () => {
       document.title = previousTitle
       snapshots.forEach(({ element, previousContent, created }) => {
@@ -152,6 +274,19 @@ export function usePageMetadata({ title, description, image, url }: PageMetadata
           element.setAttribute('content', previousContent)
         }
       })
+      // Restore canonical link
+      if (canonicalSnapshot) {
+        const { element, previousHref, created } = canonicalSnapshot
+        if (previousHref == null) {
+          if (created) {
+            element.remove()
+          } else {
+            element.removeAttribute('href')
+          }
+        } else {
+          element.setAttribute('href', previousHref)
+        }
+      }
     }
-  }, [title, description, image, url])
+  }, [title, description, image, url, canonicalUrl, noCanonical])
 }

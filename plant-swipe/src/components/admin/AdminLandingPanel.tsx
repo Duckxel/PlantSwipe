@@ -154,8 +154,26 @@ type ShowcaseCard = {
   description: string | null
   badge_text: string | null
   image_url: string | null
+  cover_image_url: string | null
+  plant_images: Array<{ url: string; name: string }> | null
+  garden_name: string | null
+  plants_count: number | null
+  species_count: number | null
+  streak_count: number | null
+  progress_percent: number | null
+  link_url: string | null
   color: string
   is_active: boolean
+  selected_garden_ids: string[] | null
+}
+
+type PublicGardenOption = {
+  id: string
+  name: string
+  coverImageUrl: string | null
+  plantCount: number
+  streak: number
+  ownerDisplayName: string | null
 }
 
 type Testimonial = {
@@ -929,9 +947,31 @@ export const AdminLandingPanel: React.FC = () => {
         supabase.from("landing_faq").select("*").order("position"),
       ])
 
-      if (settingsRes.data) setSettings(settingsRes.data)
+      // Auto-initialize settings if table exists but no row
+      if (!settingsRes.data && !settingsRes.error) {
+        const { data: newSettings } = await supabase
+          .from("landing_page_settings")
+          .insert({})
+          .select()
+          .single()
+        if (newSettings) setSettings(newSettings)
+      } else if (settingsRes.data) {
+        setSettings(settingsRes.data)
+      }
+
+      // Auto-initialize stats if table exists but no row
+      if (!statsRes.data && !statsRes.error) {
+        const { data: newStats } = await supabase
+          .from("landing_stats")
+          .insert({})
+          .select()
+          .single()
+        if (newStats) setStats(newStats)
+      } else if (statsRes.data) {
+        setStats(statsRes.data)
+      }
+
       if (heroRes.data) setHeroCards(heroRes.data)
-      if (statsRes.data) setStats(statsRes.data)
       if (featuresRes.data) setFeatures(featuresRes.data)
       if (showcaseRes.data) setShowcaseCards(showcaseRes.data)
       if (testimonialsRes.data) setTestimonials(testimonialsRes.data)
@@ -1128,35 +1168,6 @@ const GlobalSettingsTab: React.FC<{
     setLocalSettings(settings)
   }, [settings])
 
-  const [initError, setInitError] = React.useState<string | null>(null)
-
-  const createDefaultSettings = async () => {
-    setSaving(true)
-    setInitError(null)
-    try {
-      const { data, error } = await supabase
-        .from("landing_page_settings")
-        .insert({})
-        .select()
-        .single()
-
-      if (error) {
-        console.error("Failed to create settings:", error)
-        setInitError(error.message || "Failed to initialize settings. Please ensure you have admin permissions.")
-        return
-      }
-
-      if (data) {
-        setSettings(data)
-        setLocalSettings(data)
-      }
-    } catch (e) {
-      console.error("Failed to create settings:", e)
-      setInitError("An unexpected error occurred. Please try again.")
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const saveSettings = async () => {
     if (!localSettings) return
@@ -1189,25 +1200,9 @@ const GlobalSettingsTab: React.FC<{
     return (
       <Card className="rounded-xl">
         <CardContent className="py-16 text-center">
-          <Settings className="h-12 w-12 mx-auto mb-4 text-stone-300" />
-          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">No global settings configured</h3>
-          <p className="text-sm text-stone-500 mb-4">Initialize your landing page settings to customize content and visibility</p>
-          
-          {initError && (
-            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
-              <AlertCircle className="h-4 w-4 inline mr-2" />
-              {initError}
-            </div>
-          )}
-          
-          <Button onClick={createDefaultSettings} disabled={saving} className="rounded-xl">
-            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-            Initialize Settings
-          </Button>
-          
-          <p className="text-xs text-stone-400 mt-4">
-            Note: The database table must exist. Run the migration first if you haven't already.
-          </p>
+          <Loader2 className="h-12 w-12 mx-auto mb-4 text-stone-300 animate-spin" />
+          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">Loading settings...</h3>
+          <p className="text-sm text-stone-500">Settings will be auto-initialized if needed</p>
         </CardContent>
       </Card>
     )
@@ -2189,30 +2184,6 @@ const StatsTab: React.FC<{
     setLocalStats(stats)
   }, [stats])
 
-  const createStats = async () => {
-    const newStats: Partial<LandingStats> = {
-      plants_count: "10K+",
-      plants_label: "Plant Species",
-      users_count: "50K+",
-      users_label: "Happy Gardeners",
-      tasks_count: "100K+",
-      tasks_label: "Care Tasks Done",
-      rating_value: "4.9",
-      rating_label: "App Store Rating",
-    }
-
-    const { data, error } = await supabase
-      .from("landing_stats")
-      .insert(newStats)
-      .select()
-      .single()
-
-    if (data && !error) {
-      setStats(data)
-      setLocalStats(data)
-    }
-  }
-
   const saveStats = async () => {
     if (!localStats) return
     setSaving(true)
@@ -2235,13 +2206,9 @@ const StatsTab: React.FC<{
     return (
       <Card className="rounded-xl">
         <CardContent className="py-16 text-center">
-          <BarChart3 className="h-12 w-12 mx-auto mb-4 text-stone-300" />
-          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">No stats configured</h3>
-          <p className="text-sm text-stone-500 mb-4">Initialize your landing page statistics</p>
-          <Button onClick={createStats} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
-            Initialize Stats
-          </Button>
+          <Loader2 className="h-12 w-12 mx-auto mb-4 text-stone-300 animate-spin" />
+          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">Loading stats...</h3>
+          <p className="text-sm text-stone-500">Stats will be auto-initialized if needed</p>
         </CardContent>
       </Card>
     )
@@ -2569,6 +2536,65 @@ const ShowcaseTab: React.FC<{
 }> = ({ cards, setCards, setSaving, sectionVisible }) => {
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
+  const [imagePickerTarget, setImagePickerTarget] = React.useState<"image" | "cover" | "plant">("image")
+  const [expandedCardId, setExpandedCardId] = React.useState<string | null>(null)
+  const [publicGardens, setPublicGardens] = React.useState<PublicGardenOption[]>([])
+  const [loadingGardens, setLoadingGardens] = React.useState(false)
+  const [gardenSelectorOpen, setGardenSelectorOpen] = React.useState<string | null>(null)
+
+  // Fetch public gardens when component mounts
+  React.useEffect(() => {
+    const fetchPublicGardens = async () => {
+      setLoadingGardens(true)
+      try {
+        const { data, error } = await supabase
+          .from('gardens')
+          .select('id, name, cover_image_url, streak, created_by')
+          .eq('privacy', 'public')
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        if (!error && data) {
+          // Fetch plant counts
+          const gardenIds = data.map((g: any) => g.id)
+          const { data: plantCounts } = await supabase
+            .from('garden_plants')
+            .select('garden_id')
+            .in('garden_id', gardenIds)
+          
+          const countByGarden: Record<string, number> = {}
+          for (const p of plantCounts || []) {
+            countByGarden[p.garden_id] = (countByGarden[p.garden_id] || 0) + 1
+          }
+          
+          // Fetch owner names
+          const ownerIds = [...new Set(data.map((g: any) => g.created_by))]
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, display_name')
+            .in('id', ownerIds)
+          
+          const ownerNames: Record<string, string> = {}
+          for (const p of profiles || []) {
+            ownerNames[p.id] = p.display_name || ''
+          }
+          
+          setPublicGardens(data.map((g: any) => ({
+            id: g.id,
+            name: g.name,
+            coverImageUrl: g.cover_image_url,
+            plantCount: countByGarden[g.id] || 0,
+            streak: g.streak || 0,
+            ownerDisplayName: ownerNames[g.created_by] || null
+          })))
+        }
+      } catch (e) {
+        console.error('Failed to fetch public gardens:', e)
+      }
+      setLoadingGardens(false)
+    }
+    fetchPublicGardens()
+  }, [])
 
   const addCard = async () => {
     const newCard: Partial<ShowcaseCard> = {
@@ -2579,6 +2605,12 @@ const ShowcaseTab: React.FC<{
       description: "Card description",
       color: "emerald",
       is_active: true,
+      plants_count: 12,
+      species_count: 8,
+      streak_count: 7,
+      progress_percent: 85,
+      plant_images: [],
+      selected_garden_ids: [],
     }
 
     const { data, error } = await supabase
@@ -2617,6 +2649,37 @@ const ShowcaseTab: React.FC<{
     }
   }
 
+  const addPlantImage = (cardId: string, url: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const currentImages = card.plant_images || []
+    const newImages = [...currentImages, { url, name: `Plant ${currentImages.length + 1}` }]
+    updateCard(cardId, { plant_images: newImages })
+  }
+
+  const removePlantImage = (cardId: string, index: number) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const currentImages = card.plant_images || []
+    const newImages = currentImages.filter((_, i) => i !== index)
+    updateCard(cardId, { plant_images: newImages })
+  }
+
+  const toggleGardenSelection = (cardId: string, gardenId: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (!card) return
+    const currentIds = card.selected_garden_ids || []
+    const newIds = currentIds.includes(gardenId)
+      ? currentIds.filter(id => id !== gardenId)
+      : [...currentIds, gardenId]
+    updateCard(cardId, { selected_garden_ids: newIds })
+  }
+
+  const getSelectedGardensInfo = (selectedIds: string[] | null) => {
+    if (!selectedIds || selectedIds.length === 0) return []
+    return publicGardens.filter(g => selectedIds.includes(g.id))
+  }
+
   const editingCard = cards.find(c => c.id === editingCardId)
 
   return (
@@ -2642,8 +2705,11 @@ const ShowcaseTab: React.FC<{
         </Card>
       ) : (
         <div className="space-y-4">
-          {cards.map((card) => (
-            <Card key={card.id} className="rounded-xl">
+          {cards.map((card) => {
+            const isExpanded = expandedCardId === card.id
+            
+            return (
+            <Card key={card.id} className="rounded-xl overflow-hidden">
               <CardContent className="p-4">
                 <div className="flex items-start gap-4">
                   {/* Icon Picker */}
@@ -2673,7 +2739,9 @@ const ShowcaseTab: React.FC<{
                         >
                           <option value="small">Small</option>
                           <option value="large">Large (2-column)</option>
-                          <option value="main">Main (Dashboard)</option>
+                          <option value="main">Main (Garden Dashboard)</option>
+                          <option value="analytics">Analytics</option>
+                          <option value="tasks">Tasks List</option>
                         </select>
                       </div>
                       <div className="space-y-1.5">
@@ -2695,17 +2763,18 @@ const ShowcaseTab: React.FC<{
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs text-stone-500">Image</Label>
+                        <Label className="text-xs text-stone-500">Icon Image</Label>
                         <Button
                           variant="outline"
                           className="w-full rounded-xl justify-start"
                           onClick={() => {
                             setEditingCardId(card.id)
+                            setImagePickerTarget("image")
                             setImagePickerOpen(true)
                           }}
                         >
                           <ImageIcon className="h-4 w-4 mr-2" />
-                          {card.image_url ? "Change Image" : "Add Image"}
+                          {card.image_url ? "Change" : "Add"}
                         </Button>
                       </div>
                     </div>
@@ -2718,6 +2787,260 @@ const ShowcaseTab: React.FC<{
                         rows={2}
                       />
                     </div>
+
+                    {/* Expand button for garden/main type */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedCardId(isExpanded ? null : card.id)}
+                      className="rounded-xl text-xs"
+                    >
+                      {isExpanded ? "Hide Advanced Options" : "Show Advanced Options (Images, Stats)"}
+                    </Button>
+
+                    {/* Expanded options for garden-type cards */}
+                    {isExpanded && (
+                      <div className="space-y-4 pt-4 border-t border-stone-200 dark:border-stone-700">
+                        {/* Select Public Gardens */}
+                        {card.card_type === "main" && (
+                          <div className="space-y-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <Label className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                                  Select Public Gardens to Showcase
+                                </Label>
+                                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                  Choose real gardens to display on the landing page
+                                </p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="rounded-xl border-emerald-300"
+                                onClick={() => setGardenSelectorOpen(gardenSelectorOpen === card.id ? null : card.id)}
+                              >
+                                {gardenSelectorOpen === card.id ? "Close" : "Select Gardens"}
+                              </Button>
+                            </div>
+
+                            {/* Selected Gardens Preview */}
+                            {(card.selected_garden_ids && card.selected_garden_ids.length > 0) && (
+                              <div className="flex flex-wrap gap-2">
+                                {getSelectedGardensInfo(card.selected_garden_ids).map(g => (
+                                  <div 
+                                    key={g.id} 
+                                    className="flex items-center gap-2 bg-white dark:bg-stone-800 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-700"
+                                  >
+                                    {g.coverImageUrl ? (
+                                      <img src={g.coverImageUrl} alt={g.name} className="w-6 h-6 rounded object-cover" />
+                                    ) : (
+                                      <div className="w-6 h-6 rounded bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center">
+                                        <Leaf className="h-3 w-3 text-emerald-600" />
+                                      </div>
+                                    )}
+                                    <span className="text-sm font-medium text-stone-700 dark:text-stone-200">{g.name}</span>
+                                    <span className="text-xs text-stone-500">{g.plantCount} plants</span>
+                                    <button
+                                      onClick={() => toggleGardenSelection(card.id, g.id)}
+                                      className="text-red-500 hover:text-red-600 ml-1"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Garden Selector Dropdown */}
+                            {gardenSelectorOpen === card.id && (
+                              <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 max-h-64 overflow-y-auto">
+                                {loadingGardens ? (
+                                  <div className="p-4 text-center text-stone-500">Loading gardens...</div>
+                                ) : publicGardens.length === 0 ? (
+                                  <div className="p-4 text-center text-stone-500">No public gardens found</div>
+                                ) : (
+                                  publicGardens.map(garden => {
+                                    const isSelected = card.selected_garden_ids?.includes(garden.id)
+                                    return (
+                                      <button
+                                        key={garden.id}
+                                        onClick={() => toggleGardenSelection(card.id, garden.id)}
+                                        className={`w-full flex items-center gap-3 p-3 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors border-b border-stone-100 dark:border-stone-700 last:border-0 ${
+                                          isSelected ? "bg-emerald-50 dark:bg-emerald-900/30" : ""
+                                        }`}
+                                      >
+                                        {garden.coverImageUrl ? (
+                                          <img src={garden.coverImageUrl} alt={garden.name} className="w-12 h-12 rounded-lg object-cover" />
+                                        ) : (
+                                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-800 dark:to-emerald-900 flex items-center justify-center">
+                                            <Leaf className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                          </div>
+                                        )}
+                                        <div className="flex-1 text-left">
+                                          <div className="font-medium text-stone-800 dark:text-stone-200">{garden.name}</div>
+                                          <div className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-2">
+                                            <span>{garden.plantCount} plants</span>
+                                            {garden.streak > 0 && <span>🔥 {garden.streak} streak</span>}
+                                            {garden.ownerDisplayName && <span>by {garden.ownerDisplayName}</span>}
+                                          </div>
+                                        </div>
+                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                          isSelected 
+                                            ? "bg-emerald-500 border-emerald-500 text-white" 
+                                            : "border-stone-300 dark:border-stone-600"
+                                        }`}>
+                                          {isSelected && <Check className="h-3 w-3" />}
+                                        </div>
+                                      </button>
+                                    )
+                                  })
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Manual Override Section */}
+                        <div className="text-xs text-stone-500 dark:text-stone-400">
+                          {card.card_type === "main" 
+                            ? "If no gardens selected above, these manual settings will be used:"
+                            : "Manual settings for this card:"
+                          }
+                        </div>
+
+                        {/* Cover Image */}
+                        <div className="space-y-2">
+                          <Label className="text-xs text-stone-500 font-medium">Cover Image (Background)</Label>
+                          <div className="flex items-center gap-3">
+                            {card.cover_image_url && (
+                              <div className="relative w-24 h-16 rounded-lg overflow-hidden">
+                                <img src={card.cover_image_url} alt="Cover" className="w-full h-full object-cover" />
+                                <button
+                                  onClick={() => updateCard(card.id, { cover_image_url: null })}
+                                  className="absolute top-1 right-1 h-5 w-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl"
+                              onClick={() => {
+                                setEditingCardId(card.id)
+                                setImagePickerTarget("cover")
+                                setImagePickerOpen(true)
+                              }}
+                            >
+                              <ImageIcon className="h-4 w-4 mr-2" />
+                              {card.cover_image_url ? "Change Cover" : "Add Cover Image"}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Garden Name */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-stone-500">Garden Name (for preview)</Label>
+                          <Input
+                            value={card.garden_name || ""}
+                            onChange={(e) => updateCard(card.id, { garden_name: e.target.value })}
+                            className="rounded-xl"
+                            placeholder="My Indoor Jungle"
+                          />
+                        </div>
+
+                        {/* Garden Stats */}
+                        <div className="grid grid-cols-4 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-stone-500">Plants</Label>
+                            <Input
+                              type="number"
+                              value={card.plants_count || 12}
+                              onChange={(e) => updateCard(card.id, { plants_count: parseInt(e.target.value) || 0 })}
+                              className="rounded-xl"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-stone-500">Species</Label>
+                            <Input
+                              type="number"
+                              value={card.species_count || 8}
+                              onChange={(e) => updateCard(card.id, { species_count: parseInt(e.target.value) || 0 })}
+                              className="rounded-xl"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-stone-500">Streak</Label>
+                            <Input
+                              type="number"
+                              value={card.streak_count || 7}
+                              onChange={(e) => updateCard(card.id, { streak_count: parseInt(e.target.value) || 0 })}
+                              className="rounded-xl"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-stone-500">Progress %</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={card.progress_percent || 85}
+                              onChange={(e) => updateCard(card.id, { progress_percent: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                              className="rounded-xl"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Plant Images Gallery */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-stone-500 font-medium">Plant Images Gallery</Label>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl"
+                              onClick={() => {
+                                setEditingCardId(card.id)
+                                setImagePickerTarget("plant")
+                                setImagePickerOpen(true)
+                              }}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add Plant
+                            </Button>
+                          </div>
+                          {(card.plant_images && card.plant_images.length > 0) ? (
+                            <div className="flex flex-wrap gap-2">
+                              {card.plant_images.map((img, idx) => (
+                                <div key={idx} className="relative w-16 h-16 rounded-xl overflow-hidden group">
+                                  <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                                  <button
+                                    onClick={() => removePlantImage(card.id, idx)}
+                                    className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-stone-400">No plant images yet. Add some to show in the garden preview.</p>
+                          )}
+                        </div>
+
+                        {/* Link URL */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-stone-500">Link URL (optional)</Label>
+                          <Input
+                            value={card.link_url || ""}
+                            onChange={(e) => updateCard(card.id, { link_url: e.target.value })}
+                            className="rounded-xl"
+                            placeholder="/garden/example"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -2745,7 +3068,7 @@ const ShowcaseTab: React.FC<{
                 </div>
               </CardContent>
             </Card>
-          ))}
+          )})}
         </div>
       )}
 
@@ -2757,10 +3080,22 @@ const ShowcaseTab: React.FC<{
         }}
         onSelect={(url) => {
           if (editingCardId) {
-            updateCard(editingCardId, { image_url: url })
+            if (imagePickerTarget === "cover") {
+              updateCard(editingCardId, { cover_image_url: url })
+            } else if (imagePickerTarget === "plant") {
+              addPlantImage(editingCardId, url)
+            } else {
+              updateCard(editingCardId, { image_url: url })
+            }
           }
         }}
-        currentImage={editingCard?.image_url}
+        currentImage={
+          imagePickerTarget === "cover" 
+            ? editingCard?.cover_image_url 
+            : imagePickerTarget === "plant" 
+              ? null 
+              : editingCard?.image_url
+        }
       />
     </div>
   )

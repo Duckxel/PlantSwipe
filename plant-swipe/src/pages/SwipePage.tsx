@@ -19,6 +19,45 @@ import {
   HeartPulse,
   Wind,
 } from "lucide-react"
+
+// Double-tap heart animation component
+interface DoubleTapHeartProps {
+  x: number
+  y: number
+  onComplete: () => void
+}
+
+const DoubleTapHeart: React.FC<DoubleTapHeartProps> = ({ x, y, onComplete }) => {
+  // Center the heart on the tap position using negative margin (more reliable than transform)
+  const heartSize = 96 // 24 * 4 = 96px (h-24 w-24)
+  return (
+    <motion.div
+      className="pointer-events-none fixed z-[100]"
+      style={{
+        left: x - heartSize / 2,
+        top: y - heartSize / 2,
+      }}
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ 
+        scale: [0, 1.3, 1, 1.1, 1],
+        opacity: [0, 1, 1, 1, 0],
+      }}
+      transition={{ 
+        duration: 1.5,
+        times: [0, 0.15, 0.3, 0.7, 1],
+        ease: "easeOut"
+      }}
+      onAnimationComplete={onComplete}
+    >
+      <Heart 
+        className="h-24 w-24 text-rose-500 drop-shadow-[0_0_20px_rgba(244,63,94,0.5)]" 
+        fill="currentColor"
+        strokeWidth={1.5}
+      />
+    </motion.div>
+  )
+}
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -71,39 +110,94 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       usePageMetadata({ title: seoTitle, description: seoDescription })
     const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
     
-    // Touch tracking for swipe-up gesture on mobile (to open info)
-    const touchStartRef = React.useRef<{ x: number; y: number; time: number } | null>(null)
+    // Heart animation state
+    const [heartAnimations, setHeartAnimations] = React.useState<Array<{ id: string; x: number; y: number }>>([])
     
-    const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
-      if (e.touches.length === 1) {
-        touchStartRef.current = {
-          x: e.touches[0].clientX,
-          y: e.touches[0].clientY,
-          time: Date.now()
-        }
+    // Double-tap threshold in milliseconds
+    const DOUBLE_TAP_THRESHOLD = 300
+    const DOUBLE_TAP_DISTANCE_THRESHOLD = 50 // Max distance between taps in pixels
+    
+    // Trigger heart animation and like action
+    const triggerDoubleTapLike = React.useCallback((clientX: number, clientY: number) => {
+      // Add heart animation at tap position
+      const animationId = `heart-${Date.now()}`
+      setHeartAnimations(prev => [...prev, { id: animationId, x: clientX, y: clientY }])
+      
+      // Only like if not already liked (double-tap doesn't unlike)
+      if (!liked && onToggleLike) {
+        onToggleLike()
       }
+    }, [liked, onToggleLike])
+    
+    // Handle desktop double-click (native event)
+    const handleDesktopDoubleClick = React.useCallback((e: React.MouseEvent) => {
+      // Don't trigger on button clicks
+      if ((e.target as HTMLElement).closest('button')) {
+        return
+      }
+      triggerDoubleTapLike(e.clientX, e.clientY)
+    }, [triggerDoubleTapLike])
+    
+    // Remove completed heart animations
+    const removeHeartAnimation = React.useCallback((id: string) => {
+      setHeartAnimations(prev => prev.filter(anim => anim.id !== id))
     }, [])
     
-    const handleTouchEnd = React.useCallback((e: React.TouchEvent) => {
-      if (!touchStartRef.current || e.changedTouches.length !== 1) {
-        touchStartRef.current = null
+    // Reset double-tap tracking when plant changes (but DON'T clear heart animations - let them complete)
+    React.useEffect(() => {
+      lastTapPosRef.current = null
+      lastTapTimeRef.current = 0
+    }, [current?.id])
+    
+    // Double-tap detection for mobile - using a simple tap counter approach
+    const lastTapTimeRef = React.useRef<number>(0)
+    const lastTapPosRef = React.useRef<{ x: number; y: number } | null>(null)
+    
+    // Handle tap on the card area (for double-tap detection and heart spam)
+    const handleCardTap = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
+      // Don't trigger on button clicks
+      if ((e.target as HTMLElement).closest('button')) {
         return
       }
       
-      const touch = e.changedTouches[0]
-      const deltaX = touch.clientX - touchStartRef.current.x
-      const deltaY = touch.clientY - touchStartRef.current.y
-      const deltaTime = Date.now() - touchStartRef.current.time
-      
-      // Swipe up detection: significant upward movement, more vertical than horizontal, quick gesture
-      const isSwipeUp = deltaY < -80 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5 && deltaTime < 500
-      
-      if (isSwipeUp) {
-        handleInfo()
+      // Get tap position
+      let clientX: number, clientY: number
+      if ('touches' in e) {
+        // Touch event - use changedTouches for touchend
+        const touch = e.changedTouches?.[0] || e.touches?.[0]
+        if (!touch) return
+        clientX = touch.clientX
+        clientY = touch.clientY
+      } else {
+        // Mouse event
+        clientX = e.clientX
+        clientY = e.clientY
       }
       
-      touchStartRef.current = null
-    }, [handleInfo])
+      const now = Date.now()
+      const timeSinceLastTap = now - lastTapTimeRef.current
+      const lastPos = lastTapPosRef.current
+      
+      // Check if this is a rapid tap (within threshold of last tap)
+      if (lastPos && timeSinceLastTap < DOUBLE_TAP_THRESHOLD) {
+        const distance = Math.sqrt(
+          Math.pow(clientX - lastPos.x, 2) + Math.pow(clientY - lastPos.y, 2)
+        )
+        
+        if (distance < DOUBLE_TAP_DISTANCE_THRESHOLD) {
+          // Rapid tap detected - spawn heart! (allows spam)
+          triggerDoubleTapLike(clientX, clientY)
+          // Keep tracking for more spam - don't reset, just update position
+          lastTapTimeRef.current = now
+          lastTapPosRef.current = { x: clientX, y: clientY }
+          return
+        }
+      }
+      
+      // Store this tap for potential double-tap
+      lastTapTimeRef.current = now
+      lastTapPosRef.current = { x: clientX, y: clientY }
+    }, [triggerDoubleTapLike, DOUBLE_TAP_THRESHOLD, DOUBLE_TAP_DISTANCE_THRESHOLD])
 
     React.useEffect(() => {
       if (typeof window === "undefined") return
@@ -181,7 +275,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     return badges
   }, [current, t])
 
-    // Card content component to avoid duplication
+    // Card content WITH interactive buttons (for desktop)
     const cardContent = current ? (
       <Card className="relative h-full w-full overflow-hidden bg-black text-white shadow-2xl rounded-[24px] border border-white/20 dark:border-white/10">
         {displayImage ? (
@@ -211,22 +305,24 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             ))}
           </div>
         )}
-        <div className="absolute top-4 right-4 z-20">
+        {/* Like button - desktop */}
+        <div className="absolute top-4 right-4 z-40">
           <button
-            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+            type="button"
+            onClick={(e) => {
               e.stopPropagation()
-              if (onToggleLike) {
-                onToggleLike()
-              }
+              e.preventDefault()
+              if (onToggleLike) onToggleLike()
             }}
             onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             aria-pressed={liked}
             aria-label={liked ? "Unlike" : "Like"}
-            className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition ${
-              liked ? "bg-rose-600 text-white border-rose-500" : "bg-white/90 text-black hover:bg-white"
+            className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 cursor-pointer select-none ${
+              liked ? "bg-rose-600 text-white border-rose-500 hover:bg-rose-700" : "bg-white text-black border-white hover:bg-gray-100"
             }`}
           >
-            <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+            <Heart className={`h-6 w-6 ${liked ? "fill-current" : ""}`} />
           </button>
         </div>
         {current && (
@@ -253,11 +349,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
           <div className="mt-5 grid w-full gap-2 grid-cols-3">
             <Button
               className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
-              onClick={(e) => {
-                e.stopPropagation()
-                handlePrevious()
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => handlePrevious()}
               aria-label={t("plant.back")}
               title={`${t("plant.back")} (Left Arrow)`}
             >
@@ -272,22 +364,14 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             </Button>
             <Button
               className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleInfo()
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => handleInfo()}
             >
               {t("plant.info")}
               <ChevronUp className="h-4 w-4 ml-1" />
             </Button>
             <Button
               className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
-              onClick={(e) => {
-                e.stopPropagation()
-                handlePass()
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => handlePass()}
               aria-label={t("plant.next")}
               title={`${t("plant.next")} (Right Arrow)`}
             >
@@ -320,28 +404,160 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             {current ? (
               <motion.div
                 key={current.id}
-                drag="x"
-                dragElastic={0.25}
+                drag
+                dragElastic={{ left: 0.25, right: 0.25, top: 0.15, bottom: 0.05 }}
                 dragMomentum={false}
-                style={{ x }}
-                dragConstraints={{ left: -250, right: 250 }}
+                style={{ x, y }}
+                dragConstraints={{ left: -250, right: 250, top: -200, bottom: 0 }}
                 onDragEnd={onDragEnd}
-                onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
                 initial={false}
-                animate={{ opacity: 1, x: 0 }}
+                animate={{ opacity: 1, x: 0, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0 }}
                 className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
                 layout={false}
+                onTap={(e) => handleCardTap(e as unknown as React.MouseEvent)}
               >
-                {cardContent}
+                {/* Card content with buttons INSIDE so they move together */}
+                <Card className="relative h-full w-full overflow-hidden bg-black text-white shadow-2xl rounded-[24px] border border-white/20 dark:border-white/10">
+                  {displayImage ? (
+                    <img
+                      src={displayImage}
+                      alt={current?.name ? `${current.name} preview` : 'Plant preview'}
+                      className="absolute inset-0 z-0 h-full w-full object-cover"
+                      loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
+                      fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
+                      decoding="async"
+                      width={960}
+                      height={1280}
+                      sizes="(max-width: 768px) 100vw, 70vw"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
+                  )}
+                  <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
+                  <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
+                  {highlightBadges.length > 0 && (
+                    <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
+                      {highlightBadges.map((badge) => (
+                        <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center backdrop-blur ${badge.className}`}>
+                          {badge.icon}
+                          {badge.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Like button - inside card so it moves with swipe */}
+                  <div className="absolute top-4 right-4 z-[100]">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        if (onToggleLike) onToggleLike()
+                      }}
+                      onPointerDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                      }}
+                      onPointerUp={(e) => {
+                        e.stopPropagation()
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation()
+                      }}
+                      onTouchEnd={(e) => {
+                        e.stopPropagation()
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation()
+                      }}
+                      aria-pressed={liked}
+                      aria-label={liked ? "Unlike" : "Like"}
+                      className={`h-14 w-14 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 cursor-pointer select-none ${
+                        liked ? "bg-rose-600 text-white border-rose-500" : "bg-white text-black border-white"
+                      }`}
+                      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                    >
+                      <Heart className={`h-7 w-7 ${liked ? "fill-current" : ""}`} />
+                    </button>
+                  </div>
+                  
+                  {current && (
+                    <PlantMetaRail
+                      plant={current}
+                      variant="sidebar"
+                      disableHoverActivation={prefersCoarsePointer}
+                    />
+                  )}
+                  
+                  <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
+                      {seasons.map((s) => {
+                        const badgeClass = seasonBadge[s] ?? "bg-stone-200/70 dark:bg-stone-700/70 text-stone-900 dark:text-stone-100"
+                        return (
+                          <span key={s} className={`text-[11px] px-2.5 py-1 rounded-full shadow ${badgeClass}`}>
+                            {s}
+                          </span>
+                        )
+                      })}
+                    </div>
+                    <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
+                    {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
+                    
+                    {/* Navigation buttons - inside card so they move with swipe */}
+                    <div className="mt-5 grid w-full gap-2 grid-cols-3">
+                      <button
+                        type="button"
+                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
+                        onClick={(e) => { e.stopPropagation(); handlePrevious() }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-2xl h-11 bg-white text-black active:scale-95 flex items-center justify-center shadow-lg"
+                        onClick={(e) => { e.stopPropagation(); handleInfo() }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        {t("plant.info")}
+                        <ChevronUp className="h-4 w-4 ml-1" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
+                        onClick={(e) => { e.stopPropagation(); handlePass() }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                </Card>
               </motion.div>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center bg-stone-100 dark:bg-[#1e1e1e] rounded-[24px]">
                 <EmptyState onReset={() => setIndex(0)} />
               </div>
             )}
+          </AnimatePresence>
+          
+          {/* Double-tap heart animations */}
+          <AnimatePresence>
+            {heartAnimations.map(anim => (
+              <DoubleTapHeart
+                key={anim.id}
+                x={anim.x}
+                y={anim.y}
+                onComplete={() => removeHeartAnimation(anim.id)}
+              />
+            ))}
           </AnimatePresence>
         </div>
       )
@@ -375,6 +591,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     style={{ x, y }}
                     dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
                     onDragEnd={onDragEnd}
+                    onDoubleClick={handleDesktopDoubleClick}
                     initial={false}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -389,6 +606,18 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     <EmptyState onReset={() => setIndex(0)} />
                   </div>
                 )}
+              </AnimatePresence>
+              
+              {/* Double-tap heart animations */}
+              <AnimatePresence>
+                {heartAnimations.map(anim => (
+                  <DoubleTapHeart
+                    key={anim.id}
+                    x={anim.x}
+                    y={anim.y}
+                    onComplete={() => removeHeartAnimation(anim.id)}
+                  />
+                ))}
               </AnimatePresence>
             </div>
 
