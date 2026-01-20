@@ -1027,8 +1027,12 @@ async function handleScopedImageUpload(req, res, options = {}) {
           ? prefixBuilder({ req, file })
           : adminUploadPrefix
 
-      // Determine if file should be optimized (only JPEG, PNG, WebP)
-      const shouldOptimize = optimizableMimeTypes.has(mime)
+      // Check if optimization is requested (defaults to true if not specified)
+      const optimizeParam = req.body?.optimize
+      const userWantsOptimization = optimizeParam !== 'false'
+      
+      // Determine if file should be optimized (only JPEG, PNG, WebP when user wants optimization)
+      const shouldOptimize = userWantsOptimization && optimizableMimeTypes.has(mime)
 
       let finalBuffer
       let finalMimeType
@@ -1066,11 +1070,14 @@ async function handleScopedImageUpload(req, res, options = {}) {
           return
         }
       } else {
-        // Upload as-is without optimization (SVG, GIF, AVIF, HEIC, etc.)
+        // Upload as-is without optimization (SVG, GIF, AVIF, HEIC, etc., or when user skips optimization)
         finalBuffer = file.buffer
         finalMimeType = mime
         // Derive extension from mime type
         const extMap = {
+          'image/jpeg': 'jpg',
+          'image/png': 'png',
+          'image/webp': 'webp',
           'image/svg+xml': 'svg',
           'image/gif': 'gif',
           'image/avif': 'avif',
