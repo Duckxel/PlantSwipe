@@ -256,6 +256,10 @@ const animationStyles = `
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
+  @keyframes counter-spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(-360deg); }
+  }
   @keyframes bounce-subtle {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-5px); }
@@ -269,6 +273,7 @@ const animationStyles = `
   .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
   .animate-scale-in { animation: scale-in 0.5s ease-out forwards; }
   .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+  .animate-counter-spin-slow { animation: counter-spin-slow 20s linear infinite; }
   .animate-bounce-subtle { animation: bounce-subtle 2s ease-in-out infinite; }
   .plant-icon-theme { filter: brightness(0) saturate(100%); }
   .dark .plant-icon-theme { filter: brightness(0) saturate(100%) invert(100%); }
@@ -1156,7 +1161,7 @@ const InteractiveDemoSection: React.FC = () => {
                 </div>
               </div>
               
-              {/* Orbiting Elements */}
+              {/* Orbiting Elements - Ferris wheel style: icons stay upright */}
               <div className="absolute inset-0 animate-spin-slow">
                 {features.map((feature, i) => {
                   const angleStep = 360 / features.length
@@ -1170,7 +1175,7 @@ const InteractiveDemoSection: React.FC = () => {
                       key={i}
                       onClick={() => setActiveFeature(i)}
                       style={{ left: `${x}%`, top: `${y}%` }}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-all duration-300 animate-counter-spin-slow ${
                         activeFeature === i 
                           ? `${colorClass} scale-110 shadow-lg` 
                           : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:scale-105'

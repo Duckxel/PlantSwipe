@@ -926,6 +926,7 @@ export const AdminLandingPanel: React.FC = () => {
 
   // Data states
   const [settings, setSettings] = React.useState<LandingPageSettings | null>(null)
+  const [settingsError, setSettingsError] = React.useState<string | null>(null)
   const [heroCards, setHeroCards] = React.useState<HeroCard[]>([])
   const [stats, setStats] = React.useState<LandingStats | null>(null)
   const [features, setFeatures] = React.useState<LandingFeature[]>([])
@@ -936,6 +937,7 @@ export const AdminLandingPanel: React.FC = () => {
   // Load all data
   const loadData = React.useCallback(async () => {
     setLoading(true)
+    setSettingsError(null)
     try {
       const [settingsRes, heroRes, statsRes, featuresRes, showcaseRes, testimonialsRes, faqRes] = await Promise.all([
         supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
@@ -947,27 +949,41 @@ export const AdminLandingPanel: React.FC = () => {
         supabase.from("landing_faq").select("*").order("position"),
       ])
 
-      // Auto-initialize settings if table exists but no row
-      if (!settingsRes.data && !settingsRes.error) {
-        const { data: newSettings } = await supabase
+      // Handle settings - check for table not found error (404)
+      if (settingsRes.error) {
+        // Table doesn't exist or other error - show error state instead of infinite spinner
+        console.error("Settings table error:", settingsRes.error)
+        setSettingsError(`Settings table not available: ${settingsRes.error.message}. Please run the landing_page_settings migration.`)
+        setSettings(null)
+      } else if (!settingsRes.data) {
+        // Table exists but no row - try to auto-initialize
+        const { data: newSettings, error: insertError } = await supabase
           .from("landing_page_settings")
           .insert({})
           .select()
           .single()
-        if (newSettings) setSettings(newSettings)
-      } else if (settingsRes.data) {
+        if (insertError) {
+          setSettingsError(`Failed to initialize settings: ${insertError.message}`)
+        } else if (newSettings) {
+          setSettings(newSettings)
+        }
+      } else {
         setSettings(settingsRes.data)
       }
 
-      // Auto-initialize stats if table exists but no row
-      if (!statsRes.data && !statsRes.error) {
+      // Handle stats - check for table not found error
+      if (statsRes.error) {
+        console.error("Stats table error:", statsRes.error)
+        // Don't block on stats error, just leave as null
+      } else if (!statsRes.data) {
+        // Table exists but no row - try to auto-initialize
         const { data: newStats } = await supabase
           .from("landing_stats")
           .insert({})
           .select()
           .single()
         if (newStats) setStats(newStats)
-      } else if (statsRes.data) {
+      } else {
         setStats(statsRes.data)
       }
 
@@ -978,6 +994,7 @@ export const AdminLandingPanel: React.FC = () => {
       if (faqRes.data) setFaqItems(faqRes.data)
     } catch (e) {
       console.error("Failed to load landing data:", e)
+      setSettingsError("Failed to load landing data. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -1084,6 +1101,7 @@ export const AdminLandingPanel: React.FC = () => {
               setSettings={setSettings}
               saving={saving}
               setSaving={setSaving}
+              settingsError={settingsError}
             />
           )}
           {activeTab === "hero" && (
@@ -1160,7 +1178,8 @@ const GlobalSettingsTab: React.FC<{
   setSettings: React.Dispatch<React.SetStateAction<LandingPageSettings | null>>
   saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
-}> = ({ settings, setSettings, saving, setSaving }) => {
+  settingsError?: string | null
+}> = ({ settings, setSettings, saving, setSaving, settingsError }) => {
   const [localSettings, setLocalSettings] = React.useState<LandingPageSettings | null>(settings)
   const [activeSection, setActiveSection] = React.useState<"visibility" | "hero" | "beginner" | "cta" | "social" | "meta">("visibility")
 
@@ -1194,6 +1213,22 @@ const GlobalSettingsTab: React.FC<{
   const updateSetting = <K extends keyof LandingPageSettings>(key: K, value: LandingPageSettings[K]) => {
     if (!localSettings) return
     setLocalSettings({ ...localSettings, [key]: value })
+  }
+
+  // Show error state if settings table is not available
+  if (settingsError) {
+    return (
+      <Card className="rounded-xl border-rose-200 dark:border-rose-800">
+        <CardContent className="py-16 text-center">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-rose-500" />
+          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">Settings Unavailable</h3>
+          <p className="text-sm text-stone-500 dark:text-stone-400 max-w-md mx-auto mb-4">{settingsError}</p>
+          <p className="text-xs text-stone-400 dark:text-stone-500">
+            The landing page will use default values from translation files until the database table is created.
+          </p>
+        </CardContent>
+      </Card>
+    )
   }
 
   if (!localSettings) {
