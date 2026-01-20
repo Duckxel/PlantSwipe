@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 
 type UploadResult = {
   ok?: boolean
@@ -41,6 +42,7 @@ export const AdminUploadPanel: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<UploadResult | null>(null)
   const [copiedField, setCopiedField] = React.useState<"url" | "path" | null>(null)
+  const [optimize, setOptimize] = React.useState(true)
   const inputRef = React.useRef<HTMLInputElement | null>(null)
   const runtimeEnv = (globalThis as typeof globalThis & RuntimeEnv).__ENV__
   const adminToken =
@@ -96,6 +98,7 @@ export const AdminUploadPanel: React.FC = () => {
         }
         const form = new FormData()
         form.append("file", file)
+        form.append("optimize", optimize ? "true" : "false")
         const headers: Record<string, string> = {}
         if (token) headers["Authorization"] = `Bearer ${token}`
         if (adminToken) headers["X-Admin-Token"] = String(adminToken)
@@ -119,7 +122,7 @@ export const AdminUploadPanel: React.FC = () => {
         if (inputRef.current) inputRef.current.value = ""
       }
     },
-    [adminToken],
+    [adminToken, optimize],
   )
 
   const handleDrop = React.useCallback(
@@ -154,8 +157,42 @@ export const AdminUploadPanel: React.FC = () => {
           Upload Media
         </h2>
         <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-          Drop an image to optimize and store it in the <span className="font-medium text-emerald-600">UTILITY</span> bucket
+          Drop an image to {optimize ? "optimize and " : ""}store it in the <span className="font-medium text-emerald-600">UTILITY</span> bucket
         </p>
+      </div>
+
+      {/* Optimization Toggle */}
+      <div className="flex items-center justify-between rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4">
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "w-10 h-10 rounded-lg flex items-center justify-center",
+            optimize 
+              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+              : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400"
+          )}>
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div>
+            <label 
+              htmlFor="optimize-toggle" 
+              className="text-sm font-medium text-stone-900 dark:text-white cursor-pointer"
+            >
+              Optimize file
+            </label>
+            <p className="text-xs text-stone-500 dark:text-stone-400">
+              {optimize 
+                ? "PNG, JPG, WebP will be compressed and converted to WebP"
+                : "File will be uploaded as-is without optimization"
+              }
+            </p>
+          </div>
+        </div>
+        <Switch 
+          id="optimize-toggle"
+          checked={optimize}
+          onCheckedChange={setOptimize}
+          disabled={uploading}
+        />
       </div>
 
       {/* Drop Zone */}
@@ -223,8 +260,12 @@ export const AdminUploadPanel: React.FC = () => {
         
         <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm mx-auto">
           PNG, JPG, WebP, HEIC, AVIF, GIF, SVG. Max {DEFAULT_MAX_MB} MB.
-          <br />
-          <span className="text-emerald-600 dark:text-emerald-400">PNG, JPG, WebP optimized automatically</span>
+          {optimize && (
+            <>
+              <br />
+              <span className="text-emerald-600 dark:text-emerald-400">PNG, JPG, WebP optimized automatically</span>
+            </>
+          )}
         </p>
       </div>
 
@@ -240,7 +281,7 @@ export const AdminUploadPanel: React.FC = () => {
         <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4">
           <div className="flex items-center gap-3 text-sm text-stone-600 dark:text-stone-400">
             <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
-            Optimizing and uploading... This usually takes a few seconds.
+            {optimize ? "Optimizing and uploading..." : "Uploading..."} This usually takes a few seconds.
           </div>
         </div>
       )}
