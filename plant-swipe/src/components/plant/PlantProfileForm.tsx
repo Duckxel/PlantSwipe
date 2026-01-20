@@ -226,15 +226,24 @@ const CompanionSelector: React.FC<{
           })
         }
         
-        setCompanions((prev) => [...prev, ...plantNames.map((p) => ({ 
-          id: p.id, 
-          name: p.name,
-          imageUrl: imageMap.get(p.id)
-        }))])
+        setCompanions((prev) => {
+          // Filter out duplicates - only add companions not already in the list
+          const existingIds = new Set(prev.map(c => c.id))
+          const newCompanions = plantNames
+            .filter(p => !existingIds.has(p.id))
+            .map((p) => ({ 
+              id: p.id, 
+              name: p.name,
+              imageUrl: imageMap.get(p.id)
+            }))
+          return [...prev, ...newCompanions]
+        })
       }
     }
     loadMissing()
-  }, [companions, value, language])
+    // Note: companions intentionally excluded from deps to prevent infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, language])
 
   // Search plants - use translations for non-English languages
   const searchPlants = async (searchTerm?: string) => {

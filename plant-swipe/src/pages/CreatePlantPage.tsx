@@ -756,7 +756,8 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       recipesIdeas: translation?.recipes_ideas || [],
       // Non-translatable fields from plants table
       aromatherapy: data.aromatherapy || false,
-      spiceMixes: data.spice_mixes || [],
+      // Translatable field from plant_translations, fallback to plants table
+      spiceMixes: translation?.spice_mixes || data.spice_mixes || [],
     },
     ecology: {
       // Non-translatable fields from plants table
@@ -768,7 +769,11 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       // Non-translatable fields from plants table
       conservationStatus: (conservationStatusEnum.toUi(data.conservation_status) as PlantEcologyData["conservationStatus"]) || undefined,
     },
-    danger: { pests: data.pests || [], diseases: data.diseases || [] },
+    danger: { 
+      // Translatable fields from plant_translations, fallback to plants table
+      pests: translation?.pests || data.pests || [], 
+      diseases: translation?.diseases || data.diseases || [] 
+    },
     miscellaneous: {
       companions: data.companions || [],
       // Translatable fields from plant_translations only
@@ -1373,6 +1378,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           source_name: primarySource?.name || null,
           source_url: primarySource?.url || null,
           tags: plantToSave.miscellaneous?.tags || [],
+          // Translatable array fields (spice mixes, pests, diseases)
+          spice_mixes: plantToSave.usage?.spiceMixes || [],
+          pests: plantToSave.danger?.pests || [],
+          diseases: plantToSave.danger?.diseases || [],
         }
         const { error: translationError } = await supabase
           .from('plant_translations')
@@ -1763,6 +1772,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           source_name: translatedSource.name || null,
           source_url: translatedSource.url || null,
           tags: await translateArraySafe(plant.miscellaneous?.tags),
+          // Translatable array fields (formerly non-translatable)
+          spice_mixes: await translateArraySafe(plant.usage?.spiceMixes),
+          pests: await translateArraySafe(plant.danger?.pests),
+          diseases: await translateArraySafe(plant.danger?.diseases),
         })
       }
 
