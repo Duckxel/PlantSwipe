@@ -4,6 +4,10 @@ import {
   createClient,
   type SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2.45.0"
+import {
+  wrapEmailHtmlShared,
+  type SupportedLanguage as SharedSupportedLanguage,
+} from "../_shared/emailTemplateShared.ts"
 
 type CampaignRow = {
   id: string
