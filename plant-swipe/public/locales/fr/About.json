@@ -122,15 +122,24 @@
   },
   "meet": {
     "title": "Rencontrez l'équipe",
-    "subtitle": "Deux amis, un bracelet d'amitié en forme d'Aphyllante.",
+    "subtitle": "Une équipe dévouée, un bracelet d'amitié en forme d'Aphyllante.",
     "badge": "Aphyllante squad",
     "ritualLabel": "Rituel de lancement",
-    "order": ["xavier", "five"],
+    "order": ["lauryne", "xavier", "five"],
     "members": {
+      "lauryne": {
+        "name": "Lauryne",
+        "role": "CEO",
+        "adjectives": [],
+        "description": "Dirige Aphylia avec vision et passion.",
+        "ritual": "",
+        "placeholder": "Espace photo — Lauryne",
+        "placeholderCta": "Photo à venir"
+      },
       "xavier": {
         "name": "Xavier",
-        "role": "Créatif chaotique · Amoureux des plantes",
-        "adjectives": ["Créatif chaotique", "Chasseur de soleil"],
+        "role": "Co-Fondateur · Amoureux des plantes",
+        "adjectives": ["Psychokwak", "Chasseur de soleil"],
         "description": "Tient un carnet des microclimats de balcon, peint les idées UI à l'aquarelle et voyage toujours avec un sécateur.",
         "ritual": "Café dans une main, cigarette dans l'autre, il murmure aux semis avant chaque déploiement.",
         "placeholder": "Espace photo — Xavier dans la jungle de balcon",
@@ -138,8 +147,8 @@
       },
       "five": {
         "name": "FIVE",
-        "role": "Optimiste insomniaque · Amoureux du code",
-        "adjectives": ["Insomniaque réfléchi", "Bricoleur de pixels"],
+        "role": "Co-Fondateur · Amoureux du code",
+        "adjectives": ["Five", "Bricoleur de pixels"],
         "description": "Écrit des migrations à minuit, étiquette chaque plante en latin et peut déboguer tout en arrosant un basilic.",
         "ritual": "Mango Monster, prière chuchotée, doigts croisés pendant que la build bar avance.",
         "placeholder": "Espace photo — FIVE face au terminal",

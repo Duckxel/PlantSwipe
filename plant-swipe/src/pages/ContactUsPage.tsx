@@ -592,7 +592,9 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
                       <button
                         type="button"
                         onClick={handleCleanupScreenshot}
-                        className="absolute -top-2 -right-2 bg-stone-100 hover:bg-red-100 text-stone-500 hover:text-red-500 rounded-full p-1 border shadow-sm transition-colors"
+                        aria-label={t('contactUs.form.removeScreenshot')}
+                        title={t('contactUs.form.removeScreenshot')}
+                        className="absolute -top-2 -right-2 bg-stone-100 hover:bg-red-100 text-stone-500 hover:text-red-500 rounded-full p-1 border shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
                          <X className="h-3 w-3" />
                       </button>
@@ -640,9 +642,14 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
                 className="rounded-2xl"
                 disabled={formStatus === "loading" || formStatus === "success"}
               >
-                {formStatus === "loading"
-                  ? t('contactUs.form.submitSending')
-                  : t('contactUs.form.submitButton')}
+                {formStatus === "loading" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    {t('contactUs.form.submitSending')}
+                  </>
+                ) : (
+                  t('contactUs.form.submitButton')
+                )}
               </Button>
             </DialogFooter>
           </form>

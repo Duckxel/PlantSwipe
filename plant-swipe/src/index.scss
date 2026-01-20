@@ -50,6 +50,20 @@
       }
     }
 
+    /* Hide mobile nav bar when Aphylia chat is open (full-screen on mobile) */
+    body.aphylia-chat-open {
+      /* No bottom padding needed when chat covers the screen */
+      padding-bottom: 0 !important;
+      /* Prevent background scrolling while chat is open */
+      overflow: hidden;
+    }
+    
+    body.aphylia-chat-open #mobile-nav-root,
+    body.aphylia-chat-open [data-mobile-nav-root="true"] {
+      /* Hide the mobile nav when chat is full-screen */
+      display: none !important;
+    }
+
   #root {
     min-height: 100vh;
     min-height: 100dvh;
@@ -165,6 +179,22 @@
 
   .animate-float-slow {
     animation: float-slow 4s ease-in-out infinite;
+  }
+}
+
+/* Mobile nav bar stability - prevent flashing during Discovery card swipes */
+@media (max-width: 767px) {
+  /* Force mobile nav to its own compositor layer for smoother animations */
+  nav[aria-label="Primary"] {
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+  
+  /* Isolate the swipe card container from affecting nav layout */
+  .swipe-card-container {
+    contain: layout paint;
   }
 }
 

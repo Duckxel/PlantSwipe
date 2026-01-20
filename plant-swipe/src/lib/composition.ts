@@ -60,7 +60,9 @@ export function expandCompositionFromDb(values?: string[] | null): CompositionUi
   if (!values?.length) return []
   const result: CompositionUiValue[] = []
   for (const raw of values) {
-    const trimmed = raw?.trim().toLowerCase()
+    // Ensure raw is a string before calling trim() - AI might return objects
+    if (typeof raw !== 'string') continue
+    const trimmed = raw.trim().toLowerCase()
     if (!trimmed) continue
     const uiValue = DB_TO_UI_MAP[trimmed as CompositionDbValue]
     if (uiValue && !result.includes(uiValue)) {
@@ -198,13 +200,13 @@ function createEnumTools(configs: readonly EnumConfig[]): EnumTools {
 }
 
 export const plantTypeEnum = createEnumTools([
-  { dbValue: 'plant', uiValue: 'plant' },
-  { dbValue: 'flower', uiValue: 'flower' },
-  { dbValue: 'bamboo', uiValue: 'bamboo' },
-  { dbValue: 'shrub', uiValue: 'shrub' },
-  { dbValue: 'tree', uiValue: 'tree' },
-  { dbValue: 'cactus', uiValue: 'cactus' },
-  { dbValue: 'succulent', uiValue: 'succulent' },
+  { dbValue: 'plant', uiValue: 'plant', aliases: ['herb', 'grass', 'fern', 'vine', 'bulb', 'perennial', 'annual', 'herbaceous', 'foliage', 'groundcover', 'ground cover', 'climber', 'creeper', 'aquatic', 'tropical', 'tropical plant', 'indoor', 'indoor plant', 'outdoor plant', 'ornamental plant', 'herbaceous plant', 'perennial plant', 'annual plant', 'houseplant', 'house plant', 'vegetable', 'vegetables', 'leafy', 'leafy plant', 'moss', 'mosses', 'lichen', 'lichens', 'epiphyte', 'epiphytes'] },
+  { dbValue: 'flower', uiValue: 'flower', aliases: ['flowering plant', 'flowering', 'blooming', 'blossom', 'flowers', 'ornamental flower', 'wildflower', 'wild flower'] },
+  { dbValue: 'bamboo', uiValue: 'bamboo', aliases: ['bamboos', 'bamboo plant'] },
+  { dbValue: 'shrub', uiValue: 'shrub', aliases: ['bush', 'bushes', 'shrubs', 'subshrub', 'sub-shrub', 'woody shrub', 'flowering shrub'] },
+  { dbValue: 'tree', uiValue: 'tree', aliases: ['trees', 'palm', 'palms', 'conifer', 'conifers', 'evergreen', 'deciduous', 'evergreen tree', 'deciduous tree', 'fruit tree', 'flowering tree', 'shade tree', 'ornamental tree'] },
+  { dbValue: 'cactus', uiValue: 'cactus', aliases: ['cacti', 'cactuses', 'desert plant', 'desert cactus'] },
+  { dbValue: 'succulent', uiValue: 'succulent', aliases: ['succulents', 'succulent plant', 'fat plant', 'fat plants'] },
 ])
 
 export const utilityEnum = createEnumTools([

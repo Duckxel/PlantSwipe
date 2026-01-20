@@ -92,6 +92,25 @@ const sanitizeDeep = <T>(value: T): T => {
 }
 
 /**
+ * Safely parse JSON string, returning the value as-is if not a string or null on error
+ * This prevents JSON.parse errors from crashing the application
+ */
+const safeJsonParse = (value: unknown): any => {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string') return value
+  if (!value.trim()) return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    // Log only in development to help debugging, avoid noise in production
+    if (import.meta.env.DEV) {
+      console.warn('[plantTranslationLoader] Failed to parse JSON:', value.slice(0, 100))
+    }
+    return null
+  }
+}
+
+/**
  * Merge translation data with base plant data
  * Handles both new JSONB structure and legacy flat fields
  */
@@ -99,75 +118,31 @@ export function mergePlantWithTranslation(
   basePlant: any,
   translation: any | null
 ): Plant {
-  // Parse JSONB fields if they're strings
-  const identifiers = typeof basePlant.identifiers === 'string' 
-    ? JSON.parse(basePlant.identifiers) 
-    : basePlant.identifiers
-  const traits = typeof basePlant.traits === 'string' 
-    ? JSON.parse(basePlant.traits) 
-    : basePlant.traits
-  const dimensions = typeof basePlant.dimensions === 'string' 
-    ? JSON.parse(basePlant.dimensions) 
-    : basePlant.dimensions
-  const phenology = typeof basePlant.phenology === 'string' 
-    ? JSON.parse(basePlant.phenology) 
-    : basePlant.phenology
-  const environment = typeof basePlant.environment === 'string' 
-    ? JSON.parse(basePlant.environment) 
-    : basePlant.environment
-  const care = typeof basePlant.care === 'string' 
-    ? JSON.parse(basePlant.care) 
-    : basePlant.care
-  const propagation = typeof basePlant.propagation === 'string' 
-    ? JSON.parse(basePlant.propagation) 
-    : basePlant.propagation
-  const usage = typeof basePlant.usage === 'string' 
-    ? JSON.parse(basePlant.usage) 
-    : basePlant.usage
-  const ecology = typeof basePlant.ecology === 'string' 
-    ? JSON.parse(basePlant.ecology) 
-    : basePlant.ecology
-  const commerce = typeof basePlant.commerce === 'string' 
-    ? JSON.parse(basePlant.commerce) 
-    : basePlant.commerce
-  const problems = typeof basePlant.problems === 'string' 
-    ? JSON.parse(basePlant.problems) 
-    : basePlant.problems
-  const planting = typeof basePlant.planting === 'string' 
-    ? JSON.parse(basePlant.planting) 
-    : basePlant.planting
-    const meta = typeof basePlant.meta === 'string' 
-      ? JSON.parse(basePlant.meta) 
-      : basePlant.meta
-    const classification = typeof basePlant.classification === 'string'
-      ? JSON.parse(basePlant.classification)
-      : basePlant.classification
+  // Parse JSONB fields if they're strings (using safe parsing to avoid crashes)
+  const identifiers = safeJsonParse(basePlant.identifiers)
+  const traits = safeJsonParse(basePlant.traits)
+  const dimensions = safeJsonParse(basePlant.dimensions)
+  const phenology = safeJsonParse(basePlant.phenology)
+  const environment = safeJsonParse(basePlant.environment)
+  const care = safeJsonParse(basePlant.care)
+  const propagation = safeJsonParse(basePlant.propagation)
+  const usage = safeJsonParse(basePlant.usage)
+  const ecology = safeJsonParse(basePlant.ecology)
+  const commerce = safeJsonParse(basePlant.commerce)
+  const problems = safeJsonParse(basePlant.problems)
+  const planting = safeJsonParse(basePlant.planting)
+  const meta = safeJsonParse(basePlant.meta)
+  const classification = safeJsonParse(basePlant.classification)
 
-    // Parse translation JSONB if present
-    const translationIdentifiers = translation?.identifiers
-      ? (typeof translation.identifiers === 'string' ? JSON.parse(translation.identifiers) : translation.identifiers)
-      : null
-    const translationEcology = translation?.ecology
-      ? (typeof translation.ecology === 'string' ? JSON.parse(translation.ecology) : translation.ecology)
-      : null
-    const translationUsage = translation?.usage
-      ? (typeof translation.usage === 'string' ? JSON.parse(translation.usage) : translation.usage)
-      : null
-    const translationMeta = translation?.meta
-      ? (typeof translation.meta === 'string' ? JSON.parse(translation.meta) : translation.meta)
-      : null
-    const translationPhenology = translation?.phenology
-      ? (typeof translation.phenology === 'string' ? JSON.parse(translation.phenology) : translation.phenology)
-      : null
-    const translationCare = translation?.care
-      ? (typeof translation.care === 'string' ? JSON.parse(translation.care) : translation.care)
-      : null
-    const translationPlanting = translation?.planting
-      ? (typeof translation.planting === 'string' ? JSON.parse(translation.planting) : translation.planting)
-      : null
-    const translationProblems = translation?.problems
-      ? (typeof translation.problems === 'string' ? JSON.parse(translation.problems) : translation.problems)
-      : null
+  // Parse translation JSONB if present (using safe parsing)
+  const translationIdentifiers = safeJsonParse(translation?.identifiers)
+  const translationEcology = safeJsonParse(translation?.ecology)
+  const translationUsage = safeJsonParse(translation?.usage)
+  const translationMeta = safeJsonParse(translation?.meta)
+  const translationPhenology = safeJsonParse(translation?.phenology)
+  const translationCare = safeJsonParse(translation?.care)
+  const translationPlanting = safeJsonParse(translation?.planting)
+  const translationProblems = safeJsonParse(translation?.problems)
     const normalizedPhotos = normalizePlantPhotos(basePlant.photos, basePlant.image_url || basePlant.image)
 
     const mergedPlant: Plant = {
@@ -432,9 +407,12 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
 
         const infusionMixRows = ((basePlant.plant_infusion_mixes as any[]) || [])
         const infusionMix = infusionMixRows.reduce((acc: Record<string, string>, row) => {
-          const key = row?.mix_name?.trim()
+          // Ensure mix_name is a string before calling trim()
+          if (typeof row?.mix_name !== 'string') return acc
+          const key = row.mix_name.trim()
           if (!key) return acc
-          acc[key] = row?.benefit?.trim() || ''
+          // Ensure benefit is a string before calling trim()
+          acc[key] = typeof row?.benefit === 'string' ? row.benefit.trim() : ''
           return acc
         }, {} as Record<string, string>)
 
@@ -638,6 +616,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       'composition', 'maintenance_level',
       'multicolor', 'bicolor', 'spiked', 'scent',
       'created_time', 'updated_time',
+      'status',
       'aromatherapy',
       'plant_images (link,use)',
       'plant_colors (colors (id,name,hex_code))',
@@ -699,12 +678,11 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       // Translation contains translated data, fallback to plants table if not found
       const translation = translationMap.get(basePlant.id) || {}
       
-      const parseIfNeeded = (val: any) => (typeof val === 'string' ? JSON.parse(val) : val)
-      
       // Try to get JSONB fields if they exist, otherwise fallback to empty
-      const transIdentity = parseIfNeeded(translation.identity) || {}
-      const transUsage = parseIfNeeded(translation.usage) || {}
-      const transEcology = parseIfNeeded(translation.ecology) || {}
+      // Using safeJsonParse to avoid crashes on malformed JSON
+      const transIdentity = safeJsonParse(translation.identity) || {}
+      const transUsage = safeJsonParse(translation.usage) || {}
+      const transEcology = safeJsonParse(translation.ecology) || {}
       
       const colorObjects = ((basePlant.plant_colors as any[]) || []).map((pc) => ({
         id: pc?.colors?.id,
@@ -807,6 +785,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         
         popularity: popularityMap.get(String(basePlant.id)),
         meta: {
+            status: basePlant.status || undefined,
             createdAt: basePlant.created_time,
             updatedAt: basePlant.updated_time,
         },

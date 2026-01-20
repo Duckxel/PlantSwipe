@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Flame, PartyPopper, Sparkles, Loader2 } from "lucide-react";
+import { Flame, PartyPopper, Sparkles, Loader2, Sprout, HardHat, ArrowUp } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 
@@ -28,6 +28,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   usePageMetadata({ title: seoTitle, description: seoDescription });
 
   const [visibleCount, setVisibleCount] = useState(20);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -35,6 +36,21 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   useEffect(() => {
     setVisibleCount(20);
   }, [plants]);
+
+  // Show/hide scroll-to-top button based on scroll position
+  useEffect(() => {
+    const handleScroll = () => {
+      // Show button after scrolling down 300px
+      setShowScrollTop(window.scrollY > 300);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }, []);
 
   const showMore = useCallback(() => {
     setVisibleCount((prev) => Math.min(prev + 20, plants.length));
@@ -79,9 +95,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   const hasMore = visibleCount < plants.length;
 
   return (
-    <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+    <div className="max-w-6xl mx-auto mt-8 px-2 md:px-4 pb-16 space-y-6">
+      {/* 2-column grid on mobile, 2-column on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6 items-stretch">
         {visiblePlants.map((p) => {
+          // Check if plant is "in progress"
+          const isInProgress = p.meta?.status?.toLowerCase() === 'in progres' || p.meta?.status?.toLowerCase() === 'in progress'
+
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
           if (isPlantOfTheMonth(p)) {
             highlightBadges.push({
@@ -110,7 +130,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           return (
             <Card
               key={p.id}
-              className={`${cardSurface} h-full min-h-[200px]`}
+              className={`${cardSurface} h-full`}
               onClick={() => openInfo(p)}
               role="button"
               tabIndex={0}
@@ -118,8 +138,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 if (e.key === "Enter") openInfo(p);
               }}
             >
-              <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] items-stretch h-full">
-                <div className="relative w-full h-52 sm:w-40 sm:h-full flex-shrink-0 rounded-t-[28px] sm:rounded-l-[28px] sm:rounded-tr-none overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
+              {/* Mobile: Compact vertical card */}
+              <div className="flex flex-col h-full md:hidden">
+                <div className="relative w-full aspect-square flex-shrink-0 rounded-t-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                   {p.image ? (
                     <img
                       src={p.image}
@@ -129,7 +150,63 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                       decoding="async"
                       className="absolute inset-0 h-full w-full object-cover object-center select-none transition-transform duration-300 group-hover:scale-105"
                     />
-                  ) : null}
+                  ) : (
+                    <div className="absolute inset-0 w-full h-full flex items-center justify-center">
+                      <Sprout className="h-10 w-10 text-emerald-400/50 dark:text-emerald-500/40" />
+                    </div>
+                  )}
+                  {highlightBadges.length > 0 && (
+                    <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
+                      {highlightBadges.slice(0, 1).map((badge) => (
+                        <Badge key={badge.key} className={`rounded-xl px-2 py-0.5 text-[9px] font-semibold flex items-center ${badge.className}`}>
+                          {badge.icon}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  {likedIds.includes(p.id) && (
+                    <div className="absolute top-2 right-2 z-10">
+                      <Badge className="rounded-full p-1.5 bg-rose-600 dark:bg-rose-500 text-white">
+                        <Flame className="h-3 w-3" />
+                      </Badge>
+                    </div>
+                  )}
+                  {isInProgress && (
+                    <div className="absolute bottom-2 right-2 z-10">
+                      <Badge className="rounded-full p-1.5 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
+                        <HardHat className="h-3 w-3" />
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+                <div className="p-3 space-y-1.5 flex flex-col flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-lg text-[9px] px-1.5 py-0.5`}>{p.rarity}</Badge>
+                  </div>
+                  <div className="overflow-hidden">
+                    <div className="font-semibold truncate text-sm">{p.name}</div>
+                    <div className="text-[10px] italic opacity-60 truncate">{p.scientificName}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Desktop: Detailed horizontal card */}
+              <div className="hidden md:grid md:grid-cols-[160px_1fr] items-stretch h-full min-h-[200px]">
+                <div className="relative w-40 h-full flex-shrink-0 rounded-l-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
+                  {p.image ? (
+                    <img
+                      src={p.image}
+                      alt={p.name}
+                      loading="lazy"
+                      draggable={false}
+                      decoding="async"
+                      className="absolute inset-0 h-full w-full object-cover object-center select-none transition-transform duration-300 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 w-full h-full flex items-center justify-center">
+                      <Sprout className="h-12 w-12 text-emerald-400/50 dark:text-emerald-500/40" />
+                    </div>
+                  )}
                   {highlightBadges.length > 0 && (
                     <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
                       {highlightBadges.map((badge) => (
@@ -138,6 +215,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                           {badge.label}
                         </Badge>
                       ))}
+                    </div>
+                  )}
+                  {isInProgress && (
+                    <div className="absolute bottom-3 right-3 z-10">
+                      <Badge className="rounded-full p-2 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
+                        <HardHat className="h-5 w-5" />
+                      </Badge>
                     </div>
                   )}
                 </div>
@@ -197,6 +281,20 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           {t("plant.noResults")}
         </div>
       )}
+
+      {/* Scroll to top button */}
+      <Button
+        onClick={scrollToTop}
+        size="icon"
+        aria-label={t("common.scrollToTop", { defaultValue: "Scroll to top" })}
+        className={`fixed bottom-20 right-4 z-50 h-12 w-12 rounded-full shadow-lg bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white transition-all duration-300 ${
+          showScrollTop
+            ? "opacity-100 translate-y-0"
+            : "opacity-0 translate-y-4 pointer-events-none"
+        }`}
+      >
+        <ArrowUp className="h-5 w-5" />
+      </Button>
     </div>
   );
 };

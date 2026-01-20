@@ -1,15 +1,15 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, Loader2, Sparkles } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, Loader2, Sparkles, Leaf } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
-import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
-import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
@@ -190,6 +190,23 @@ function parseSupabaseError(error: any, context?: string): string {
     return 'A referenced record does not exist. Please ensure all related data is saved first.'
   }
   
+  // Handle check constraint violations
+  if (code === '23514' || message.includes('check constraint') || message.includes('violates check constraint')) {
+    if (message.includes('plant_type')) {
+      return 'Invalid plant type. Please select a valid plant type (plant, flower, bamboo, shrub, tree, cactus, or succulent).'
+    }
+    if (message.includes('utility')) {
+      return 'Invalid utility value. Please check the selected utility options.'
+    }
+    if (message.includes('life_cycle')) {
+      return 'Invalid life cycle. Please select a valid life cycle option.'
+    }
+    if (message.includes('conservation_status')) {
+      return 'Invalid conservation status. Please select a valid conservation status.'
+    }
+    return 'Invalid field value. Please check the entered data matches the expected format.'
+  }
+  
   // Handle network/timeout errors
   if (message.includes('network') || message.includes('timeout') || message.includes('ERR_CONNECTION')) {
     return 'Network error. Please check your connection and try again.'
@@ -280,7 +297,7 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
       return {
         ...entry,
         quantity: Number.isFinite(parsedQuantity as number) ? Number(parsedQuantity) : undefined,
-        season: entry.season?.trim() || undefined,
+        season: entry.season && typeof entry.season === 'string' ? entry.season.trim() : undefined,
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
@@ -307,9 +324,9 @@ async function upsertColors(colors: PlantColor[]) {
   if (!colors?.length) return [] as string[]
   const normalized = colors
     .map((c) => {
-      const name = c.name?.trim()
+      const name = c.name && typeof c.name === 'string' ? c.name.trim() : null
       if (!name) return null
-      const hex = c.hexCode?.trim()
+      const hex = c.hexCode && typeof c.hexCode === 'string' ? c.hexCode.trim() : null
       return {
         name,
         hex_code: hex && hex.length ? (hex.startsWith("#") ? hex : `#${hex}`) : null,
@@ -346,7 +363,7 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   
   // First pass: filter and deduplicate by normalized link (case-insensitive, trimmed)
   const filtered = list.filter((img) => {
-    const link = img.link?.trim()
+    const link = img.link && typeof img.link === 'string' ? img.link.trim() : null
     if (!link) return false
     const linkLower = link.toLowerCase()
     if (seenLinks.has(linkLower)) {
@@ -486,8 +503,12 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   await supabase.from('plant_sources').delete().eq('plant_id', plantId)
   if (!sources?.length) return
   const rows = sources
-    .filter((s) => s.name?.trim())
-    .map((s) => ({ plant_id: plantId, name: s.name.trim(), url: s.url?.trim() || null }))
+    .filter((s) => s.name && typeof s.name === 'string' && s.name.trim())
+    .map((s) => ({ 
+      plant_id: plantId, 
+      name: String(s.name).trim(), 
+      url: s.url && typeof s.url === 'string' ? s.url.trim() : null 
+    }))
   if (!rows.length) return
   const { error } = await supabase.from('plant_sources').insert(rows)
   if (error) throw new Error(error.message)
@@ -497,9 +518,9 @@ function mapInfusionMixRows(rows?: Array<{ mix_name?: string | null; benefit?: s
   const result: Record<string, string> = {}
   if (!rows) return result
   for (const row of rows) {
-    const key = row?.mix_name?.trim()
+    const key = row?.mix_name && typeof row.mix_name === 'string' ? row.mix_name.trim() : null
     if (!key) continue
-    const value = row?.benefit?.trim()
+    const value = row?.benefit && typeof row.benefit === 'string' ? row.benefit.trim() : null
     result[key] = value || ''
   }
   return result
@@ -516,9 +537,9 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
   if (!infusionMix) return
   const rows = Object.entries(infusionMix)
     .map(([mix, benefit]) => {
-      const trimmedName = mix?.trim()
+      const trimmedName = mix && typeof mix === 'string' ? mix.trim() : null
       if (!trimmedName) return null
-      const trimmedBenefit = benefit?.trim()
+      const trimmedBenefit = benefit && typeof benefit === 'string' ? benefit.trim() : null
       return {
         plant_id: plantId,
         mix_name: trimmedName,
@@ -735,7 +756,8 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       recipesIdeas: translation?.recipes_ideas || [],
       // Non-translatable fields from plants table
       aromatherapy: data.aromatherapy || false,
-      spiceMixes: data.spice_mixes || [],
+      // Translatable field from plant_translations only
+      spiceMixes: translation?.spice_mixes || [],
     },
     ecology: {
       // Non-translatable fields from plants table
@@ -747,7 +769,11 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       // Non-translatable fields from plants table
       conservationStatus: (conservationStatusEnum.toUi(data.conservation_status) as PlantEcologyData["conservationStatus"]) || undefined,
     },
-    danger: { pests: data.pests || [], diseases: data.diseases || [] },
+    danger: { 
+      // Translatable fields from plant_translations only
+      pests: translation?.pests || [], 
+      diseases: translation?.diseases || [] 
+    },
     miscellaneous: {
       companions: data.companions || [],
       // Translatable fields from plant_translations only
@@ -781,9 +807,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const duplicatedFromName = searchParams.get('duplicatedFrom')
   const languageNavigate = useLanguageNavigate()
   const { profile } = useAuth()
-  const initialLanguage: SupportedLanguage = 'en'
-  const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
-  const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
+  // Get the language from the URL path (e.g., /fr/admin/plants/create -> 'fr')
+  const urlLanguage = useLanguage()
+  const [language, setLanguage] = React.useState<SupportedLanguage>(urlLanguage)
+  const languageRef = React.useRef<SupportedLanguage>(urlLanguage)
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
   // Cache of plant data per language to preserve edits when switching languages
   const [plantByLanguage, setPlantByLanguage] = React.useState<Partial<Record<SupportedLanguage, Plant>>>({})
@@ -800,6 +827,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [translating, setTranslating] = React.useState(false)
   const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
   const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
+  const [aiCurrentField, setAiCurrentField] = React.useState<string | null>(null)
+  const [aiFieldProgress, setAiFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 })
+  const [aiStatus, setAiStatus] = React.useState<'idle' | 'translating_name' | 'filling' | 'saving'>('idle')
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
@@ -848,10 +878,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       languageRef.current = language
     }, [language])
 
+    // Sync language state with URL when it changes (e.g., user navigates to /fr version)
+    React.useEffect(() => {
+      if (urlLanguage !== language) {
+        setLanguage(urlLanguage)
+      }
+    }, [urlLanguage])
+
     // Track if initial load is complete
     const initialLoadCompleteRef = React.useRef(false)
     // Track the previous language to save edits before switching
-    const previousLanguageRef = React.useRef<SupportedLanguage>(initialLanguage)
+    const previousLanguageRef = React.useRef<SupportedLanguage>(urlLanguage)
     
     // Handle language changes - save current edits and load new language data
     React.useEffect(() => {
@@ -1090,10 +1127,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     })
   }
 
-    const savePlant = async (plantOverride?: Plant) => {
+    const savePlant = async (plantOverride?: Plant, options?: { skipOnSaved?: boolean }) => {
       const saveLanguage = language
       const plantToSave = plantOverride || plant
-      const trimmedName = plantToSave.name.trim()
+      const trimmedName = plantToSave.name && typeof plantToSave.name === 'string' ? plantToSave.name.trim() : ''
       if (!trimmedName) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
       const isEnglish = saveLanguage === 'en'
       const existingPlantId = plantToSave.id || id
@@ -1165,7 +1202,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
-        const normalizedPlantType = plantTypeEnum.toDb(plantToSave.plantType)
+        // Normalize plantType - if toDb returns null but plantType has a value, default to 'plant'
+        // This prevents constraint violations when AI returns unrecognized plant types
+        let normalizedPlantType = plantTypeEnum.toDb(plantToSave.plantType)
+        if (normalizedPlantType === null && plantToSave.plantType && typeof plantToSave.plantType === 'string' && plantToSave.plantType.trim()) {
+          console.warn(`[savePlant] Unrecognized plantType "${plantToSave.plantType}", defaulting to "plant"`)
+          normalizedPlantType = 'plant'
+        }
         const normalizedUtility = utilityEnum.toDbArray(plantToSave.utility)
         const normalizedComestible = comestiblePartEnum.toDbArray(plantToSave.comestiblePart)
         const normalizedFruit = fruitTypeEnum.toDbArray(plantToSave.fruitType)
@@ -1242,13 +1285,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
             infusion: coerceBoolean(plantToSave.usage?.infusion, false),
             aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
-            spice_mixes: plantToSave.usage?.spiceMixes || [],
+            // spice_mixes moved to plant_translations (translatable)
             melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
             polenizer: normalizedPolenizer,
             be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
             conservation_status: normalizedConservationStatus || null,
-            pests: plantToSave.danger?.pests || [],
-            diseases: plantToSave.danger?.diseases || [],
+            // pests and diseases moved to plant_translations (translatable)
             companions: plantToSave.miscellaneous?.companions || [],
             status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
@@ -1275,11 +1317,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             admin_commentary: plantToSave.meta?.adminCommentary || null,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
-            // Also save non-translatable fields that can be edited in any language
-            pests: plantToSave.danger?.pests || [],
-            diseases: plantToSave.danger?.diseases || [],
+            // Non-translatable fields that can be edited in any language
             companions: plantToSave.miscellaneous?.companions || [],
-            spice_mixes: plantToSave.usage?.spiceMixes || [],
+            // Note: pests, diseases, spice_mixes are now in plant_translations (translatable)
           }
           const { error: metaUpdateError } = await supabase
             .from('plants')
@@ -1335,6 +1375,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           source_name: primarySource?.name || null,
           source_url: primarySource?.url || null,
           tags: plantToSave.miscellaneous?.tags || [],
+          // Translatable array fields (spice mixes, pests, diseases)
+          spice_mixes: plantToSave.usage?.spiceMixes || [],
+          pests: plantToSave.danger?.pests || [],
+          diseases: plantToSave.danger?.diseases || [],
         }
         const { error: translationError } = await supabase
           .from('plant_translations')
@@ -1393,7 +1437,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             setLoadedLanguages(prev => new Set(prev).add(saveLanguage))
           }
         if (isEnglish && !existingLoaded) setExistingLoaded(true)
-        onSaved?.(savedId)
+        // Only call onSaved if not explicitly skipped (e.g., during AI fill auto-save)
+        if (!options?.skipOnSaved) {
+          onSaved?.(savedId)
+        }
         } catch (e: any) {
           // Use parseSupabaseError for user-friendly messages
           const userFriendlyError = parseSupabaseError(e, 'Please check the plant details.')
@@ -1413,7 +1460,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     }
 
   const runAiFill = async () => {
-    const trimmedName = plant.name.trim()
+    const trimmedName = plant.name && typeof plant.name === 'string' ? plant.name.trim() : ''
     if (!trimmedName) {
       setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.'))
       return
@@ -1424,12 +1471,36 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     setAiWorking(true)
     setColorSuggestions([])
     setError(null)
+    setAiCurrentField(null)
+    setAiFieldProgress({ completed: 0, total: targetFields.length })
+    setAiStatus('translating_name')
 
     let aiSucceeded = false
     let finalPlant: Plant | null = null
+    let fieldsCompleted = 0
     // Capture current images at the start to preserve them throughout AI fill
     const currentImages = plant.images || []
-    const plantNameForAi = trimmedName
+    
+    // First, get the English name of the plant (it might be in any language)
+    let plantNameForAi = trimmedName
+    try {
+      const nameResult = await getEnglishPlantName(trimmedName)
+      plantNameForAi = nameResult.englishName
+      if (nameResult.wasTranslated) {
+        console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"`)
+        // Update the plant name to the English version
+        setPlant((prev) => ({
+          ...prev,
+          name: plantNameForAi,
+        }))
+      }
+    } catch (err) {
+      console.warn(`[CreatePlantPage] Failed to get English name for "${trimmedName}", using original:`, err)
+      // Continue with original name if translation fails
+    }
+    
+    setAiStatus('filling')
+    
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
       // Always preserve images from the current state
@@ -1445,6 +1516,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     }
 
     const fillFieldWithRetries = async (fieldKey: string, existingField?: unknown) => {
+      setAiCurrentField(fieldKey)
       let lastError: Error | null = null
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
@@ -1469,6 +1541,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             markFieldComplete(fieldKey)
             return withImages
           })
+          fieldsCompleted++
+          setAiFieldProgress({ completed: fieldsCompleted, total: targetFields.length })
           return true
         } catch (err: any) {
             lastError = err instanceof Error ? err : new Error(String(err || 'AI field fill failed'))
@@ -1503,6 +1577,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             fields: aiFieldOrder,
             // AI always uses English regardless of current editing language
             language: 'en',
+            onProgress: ({ field, completed, total }) => {
+              if (field !== 'init' && field !== 'complete') {
+                setAiCurrentField(field)
+                setAiFieldProgress({ completed, total })
+              }
+            },
             onFieldComplete: ({ field, data }) => {
               if (field === 'complete') return
               if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
@@ -1521,6 +1601,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 return withImages
               })
               markFieldComplete(field)
+              fieldsCompleted++
+              setAiFieldProgress({ completed: fieldsCompleted, total: targetFields.length })
             },
           })
           lastError = null
@@ -1597,13 +1679,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         setError(e?.message || t('plantAdmin.errors.aiFill', 'AI fill failed'))
     } finally {
       setAiWorking(false)
+      setAiCurrentField(null)
+      setAiStatus('idle')
       if (aiSucceeded) {
         setAiCompleted(true)
         setAiProgress(createEmptyCategoryProgress())
         setAiSectionLog([])
       }
       const targetPlant = finalPlant || plant
-      if (targetPlant) await savePlant(targetPlant)
+      // Auto-save after AI fill but skip onSaved to prevent popup from closing
+      // User can review the AI-filled data and manually save/close when ready
+      if (targetPlant) await savePlant(targetPlant, { skipOnSaved: true })
     }
   }
 
@@ -1614,7 +1700,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       setError(t('plantAdmin.translationNoTargets', 'No other languages configured for translation.'))
       return
     }
-    if (!plant.name.trim()) {
+    if (!(plant.name && typeof plant.name === 'string' && plant.name.trim())) {
       setError(t('plantAdmin.nameRequired', 'Name is required'))
       return
     }
@@ -1683,6 +1769,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           source_name: translatedSource.name || null,
           source_url: translatedSource.url || null,
           tags: await translateArraySafe(plant.miscellaneous?.tags),
+          // Translatable array fields (formerly non-translatable)
+          spice_mixes: await translateArraySafe(plant.usage?.spiceMixes),
+          pests: await translateArraySafe(plant.danger?.pests),
+          diseases: await translateArraySafe(plant.danger?.diseases),
         })
       }
 
@@ -1842,87 +1932,148 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               <Button
                 type="button"
                 onClick={aiCompleted ? undefined : runAiFill}
-                disabled={aiWorking || !plant.name.trim() || aiCompleted}
+                disabled={aiWorking || !(plant.name && typeof plant.name === 'string' && plant.name.trim()) || aiCompleted}
               >
                 {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 {aiCompleted ? t('plantAdmin.aiFilled', 'AI Filled') : t('plantAdmin.aiFill', 'AI fill all fields')}
               </Button>
-              {!plant.name.trim() && (
+              {!(plant.name && typeof plant.name === 'string' && plant.name.trim()) && (
                 <span className="text-xs text-muted-foreground self-center">{t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')}</span>
               )}
             </div>
           )}
         </div>
           {showAiProgressCard && (
-          <Card>
-            <CardContent className="space-y-4 pt-4">
-              <div className="flex items-center justify-between text-sm font-medium">
-                <span>
+          <div className="rounded-xl border border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30 p-4 space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {aiWorking ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-purple-600 dark:text-purple-400" />
+                ) : aiCompleted ? (
+                  <Check className="h-4 w-4 text-emerald-500" />
+                ) : null}
+                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
                   {aiWorking
-                    ? t('plantAdmin.categoryProgressTitle', 'Category fill progress')
-                    : t('plantAdmin.categoryProgressSummary', 'Latest AI fill summary')}
+                    ? t('plantAdmin.categoryProgressTitle', 'AI Fill in Progress')
+                    : aiCompleted
+                      ? t('plantAdmin.categoryProgressComplete', 'AI Fill Complete')
+                      : t('plantAdmin.categoryProgressSummary', 'AI Fill Summary')}
                 </span>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  {aiWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="h-4 w-4 text-emerald-500" /> : null}
-                </div>
               </div>
-              <div className="grid gap-2">
-                {plantFormCategoryOrder.map((cat) => {
-                  const info = aiProgress[cat]
-                  if (!info?.total) return null
-                  const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0
-                  return (
-                    <div key={cat} className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <span>{categoryLabels[cat]}</span>
-                          <span
-                            className={`text-xs font-medium ${
-                              info.status === 'done' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300'
-                            }`}
-                          >
-                            {info.status === 'done'
-                              ? t('plantAdmin.sectionFilled', 'Filled')
-                              : t('plantAdmin.sectionInProgress', 'Filling')}
-                          </span>
-                        </div>
-                        <span className="text-muted-foreground">{info.completed}/{info.total}</span>
-                      </div>
-                      <div className="h-2 w-full rounded bg-muted overflow-hidden">
-                        <div
-                          className={`h-2 transition-all ${info.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'}`}
-                          style={{ width: `${Math.min(100, Math.max(percent, info.status === 'done' ? 100 : percent))}%` }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-              {recentSectionLog.length > 0 && (
-                <div className="border-t border-dashed pt-3 space-y-2">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {t('plantAdmin.sectionLogTitle', 'Sections completed')}
-                  </div>
-                  <div className="space-y-1.5">
-                    {recentSectionLog.map((entry) => (
-                      <div
-                        key={`${entry.category}-${entry.timestamp}`}
-                        className="flex items-center justify-between rounded-xl bg-emerald-50/80 dark:bg-emerald-500/10 px-3 py-2 text-sm"
-                      >
-                        <span className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-200">
-                          <Check className="h-4 w-4" />
-                          {entry.label}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {aiWorking && aiFieldProgress.total > 0 && (
+                <span className="text-sm text-purple-600 dark:text-purple-400">
+                  {Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%
+                </span>
               )}
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Current plant info when filling */}
+            {aiWorking && (
+              <div className="rounded-lg bg-white/50 dark:bg-black/20 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="font-medium text-sm">{plant.name || 'Plant'}</span>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300">
+                    {aiStatus === 'translating_name' ? 'Getting English Name...' : 
+                     aiStatus === 'filling' ? 'AI Filling...' : 
+                     aiStatus === 'saving' ? 'Saving...' : 'Processing...'}
+                  </span>
+                </div>
+
+                {/* Current field being filled */}
+                {aiStatus === 'filling' && aiCurrentField && (
+                  <div className="text-xs text-muted-foreground">
+                    <span>Filling: </span>
+                    <span className="font-medium text-purple-700 dark:text-purple-300">{aiCurrentField}</span>
+                    <span className="ml-2 opacity-70">
+                      ({aiFieldProgress.completed}/{aiFieldProgress.total} fields)
+                    </span>
+                  </div>
+                )}
+
+                {/* Field progress bar */}
+                {aiStatus === 'filling' && aiFieldProgress.total > 0 && (
+                  <div className="h-1.5 w-full rounded-full bg-emerald-200 dark:bg-emerald-900/50 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-300"
+                      style={{
+                        width: `${Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%`
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Category progress grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
+                const info = aiProgress[cat]
+                if (!info?.total) return null
+                const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0
+                const isDone = info.status === 'done'
+                const isFilling = info.status === 'filling'
+                return (
+                  <div 
+                    key={cat} 
+                    className={`rounded-lg p-2.5 transition-all ${
+                      isDone 
+                        ? 'bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800' 
+                        : isFilling
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+                          : 'bg-white/50 dark:bg-black/20 border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`text-xs font-medium truncate ${
+                        isDone ? 'text-emerald-700 dark:text-emerald-300' : 
+                        isFilling ? 'text-blue-700 dark:text-blue-300' : 
+                        'text-muted-foreground'
+                      }`}>
+                        {categoryLabels[cat]}
+                      </span>
+                      {isDone && <Check className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />}
+                      {isFilling && <Loader2 className="h-3 w-3 animate-spin text-blue-500 flex-shrink-0" />}
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          isDone ? 'bg-emerald-500' : isFilling ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'
+                        }`}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1 text-right">
+                      {info.completed}/{info.total}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Sections completed log */}
+            {recentSectionLog.length > 0 && (
+              <div className="border-t border-purple-200 dark:border-purple-800 pt-3 space-y-2">
+                <div className="text-xs uppercase tracking-wide text-purple-600 dark:text-purple-400 opacity-70">
+                  {t('plantAdmin.sectionLogTitle', 'Recently Completed')}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {recentSectionLog.map((entry) => (
+                    <span
+                      key={`${entry.category}-${entry.timestamp}`}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs"
+                    >
+                      <Check className="h-3 w-3" />
+                      {entry.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
       {loading ? (
@@ -1939,6 +2090,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             colorSuggestions={colorSuggestions}
             companionSuggestions={companionSuggestions}
             categoryProgress={hasAiProgress ? aiProgress : undefined}
+            language={language}
           />
         )}
     </div>

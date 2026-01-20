@@ -759,7 +759,8 @@ const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
   : null
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
-const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
+const openaiModel = process.env.OPENAI_MODEL || 'gpt-5.2-2025-12-11'
+const openaiModelNano = process.env.OPENAI_MODEL_NANO || 'gpt-5-nano'
 let openaiClient = null
 let openai = null // Alias for garden advice endpoints
 if (openaiApiKey) {
@@ -835,11 +836,15 @@ if (vapidPublicKey && vapidPrivateKey) {
 const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
 const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || process.env.VITE_ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true'
 
-const adminUploadBucket = (process.env.ADMIN_UPLOAD_BUCKET || process.env.SUPABASE_UTILITY_BUCKET || 'UTILITY').trim() || 'UTILITY'
+const adminUploadBucket = 'UTILITY' // Admin uploads go to UTILITY bucket
 const adminUploadPrefixRaw = (process.env.ADMIN_UPLOAD_PREFIX || 'admin/uploads').trim()
 const adminUploadPrefix = adminUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'admin/uploads'
 const blogUploadPrefixRaw = (process.env.BLOG_UPLOAD_PREFIX || 'blog').trim()
 const blogUploadPrefix = blogUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'blog'
+const proAdviceUploadPrefixRaw = (process.env.PRO_ADVICE_UPLOAD_PREFIX || 'pro-advice').trim()
+const proAdviceUploadPrefix = proAdviceUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'pro-advice'
+const messagesUploadPrefixRaw = (process.env.MESSAGES_UPLOAD_PREFIX || 'messages').trim()
+const messagesUploadPrefix = messagesUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'messages'
 const adminUploadMaxBytes = (() => {
   const raw = Number(process.env.ADMIN_UPLOAD_MAX_BYTES)
   if (Number.isFinite(raw) && raw > 0) return raw
@@ -850,11 +855,7 @@ const adminUploadMaxDimension = (() => {
   if (Number.isFinite(raw) && raw >= 256 && raw <= 8000) return Math.round(raw)
   return 2000
 })()
-const adminUploadWebpQuality = (() => {
-  const raw = Number(process.env.ADMIN_UPLOAD_WEBP_QUALITY)
-  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
-  return 82
-})()
+const adminUploadWebpQuality = 90 // Admin uploads get highest quality (90%)
 const adminUploadMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: adminUploadMaxBytes },
@@ -923,16 +924,50 @@ const gardenCoverMaxDimension = (() => {
   if (Number.isFinite(raw) && raw >= 128 && raw <= 4000) return Math.round(raw)
   return 1000
 })()
-const gardenCoverWebpQuality = (() => {
-  const raw = Number(process.env.GARDEN_UPLOAD_WEBP_QUALITY)
-  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
-  return adminUploadWebpQuality
-})()
+const gardenCoverWebpQuality = 50 // Standard quality for all non-admin uploads (50%)
 const gardenCoverMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: gardenCoverMaxBytes },
 })
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
+
+// === Messaging Image Upload Settings ===
+const messageImageUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
+const messageImageUploadPrefix = 'messages'
+const messageImageMaxBytes = 10 * 1024 * 1024 // 10MB
+const messageImageMaxDimension = 1200 // Slightly smaller than cover images
+const messageImageWebpQuality = 50 // Standard quality for all non-admin uploads (50%)
+const messageImageMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: messageImageMaxBytes },
+})
+const singleMessageImageUpload = messageImageMulter.single('file')
+
+// === Plant Scan Image Upload Settings ===
+const scanImageUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
+const scanImageUploadPrefix = 'scans' // Organize under scans/ folder
+const scanImageMaxBytes = 10 * 1024 * 1024 // 10MB
+const scanImageMaxDimension = 1920 // Higher resolution for better identification
+const scanImageWebpQuality = 50 // Standard quality for all non-admin uploads (50%)
+const scanImageMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: scanImageMaxBytes },
+})
+const singleScanImageUpload = scanImageMulter.single('file')
+// Kindwise API key from environment
+const KINDWISE_API_KEY = process.env.KINDWISE || process.env.KINDWISE_API_KEY || ''
+
+// === Bug Screenshot Upload Settings ===
+const bugScreenshotUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
+const bugScreenshotUploadPrefix = 'bug-reports' // Organize under bug-reports/ folder
+const bugScreenshotMaxBytes = 10 * 1024 * 1024 // 10MB
+const bugScreenshotMaxDimension = 1920 // High resolution to capture bug details
+const bugScreenshotWebpQuality = 60 // Slightly higher quality to preserve bug details
+const bugScreenshotMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: bugScreenshotMaxBytes },
+})
+const singleBugScreenshotUpload = bugScreenshotMulter.single('file')
 
 // Mime types that should be optimized and converted to WebP
 const optimizableMimeTypes = new Set([
@@ -941,8 +976,20 @@ const optimizableMimeTypes = new Set([
   'image/webp',
 ])
 
+// Standard quality for non-admin uploads
+const standardUploadWebpQuality = 50
+
 async function handleScopedImageUpload(req, res, options = {}) {
-  const { prefixBuilder, auditLabel = 'admin', actorId = null, uploaderInfo = null } = options
+  const { 
+    prefixBuilder, 
+    auditLabel = 'admin', 
+    actorId = null, 
+    uploaderInfo = null,
+    // Allow overriding bucket, quality, and dimension per endpoint
+    bucket = adminUploadBucket,
+    webpQuality = adminUploadWebpQuality,
+    maxDimension = adminUploadMaxDimension,
+  } = options
 
   singleAdminImageUpload(req, res, (err) => {
     if (err) {
@@ -995,21 +1042,21 @@ async function handleScopedImageUpload(req, res, options = {}) {
           finalBuffer = await sharp(file.buffer)
             .rotate()
             .resize({
-              width: adminUploadMaxDimension,
-              height: adminUploadMaxDimension,
+              width: maxDimension,
+              height: maxDimension,
               fit: 'inside',
               withoutEnlargement: true,
               fastShrinkOnLoad: true,
             })
             .webp({
-              quality: adminUploadWebpQuality,
+              quality: webpQuality,
               effort: 5,
               smartSubsample: true,
             })
             .toBuffer()
           finalMimeType = 'image/webp'
           finalTypeSegment = sanitizePathSegment('webp', 'webp')
-          quality = adminUploadWebpQuality
+          quality = webpQuality
           compressionPercent = file.size > 0
             ? Math.max(0, Math.round(100 - (finalBuffer.length / file.size) * 100))
             : 0
@@ -1039,7 +1086,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
       const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix)
 
       try {
-        const { error: uploadError } = await supabaseServiceClient.storage.from(adminUploadBucket).upload(objectPath, finalBuffer, {
+        const { error: uploadError } = await supabaseServiceClient.storage.from(bucket).upload(objectPath, finalBuffer, {
           cacheControl: '31536000',
           contentType: finalMimeType,
           upsert: false,
@@ -1053,7 +1100,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         return
       }
 
-      const { data: publicData } = supabaseServiceClient.storage.from(adminUploadBucket).getPublicUrl(objectPath)
+      const { data: publicData } = supabaseServiceClient.storage.from(bucket).getPublicUrl(objectPath)
       const publicUrl = publicData?.publicUrl || null
       // Transform URL to use media proxy (hides Supabase project URL)
       const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
@@ -1061,7 +1108,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
 
       const payload = {
         ok: true,
-        bucket: adminUploadBucket,
+        bucket: bucket,
         path: objectPath,
         url: proxyUrl,
         mimeType: finalMimeType,
@@ -1081,7 +1128,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         adminId: uploaderInfo?.id || null,
         adminEmail: uploaderInfo?.email || null,
         adminName: uploaderInfo?.name || null,
-        bucket: adminUploadBucket,
+        bucket: bucket,
         path: objectPath,
         publicUrl: proxyUrl,
         mimeType: finalMimeType,
@@ -1102,7 +1149,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
       if (actorId) {
         try {
           const detail = {
-            bucket: adminUploadBucket,
+            bucket: bucket,
             path: objectPath,
             url: proxyUrl,
             originalMimeType: mime,
@@ -1535,6 +1582,66 @@ async function isEditorFromRequest(req) {
   }
 }
 
+// Determine whether a user has pro-level access (pro, editor, or admin)
+async function isProOrEditorFromRequest(req) {
+  try {
+    // Editors/admins are already allowed
+    if (await isEditorFromRequest(req)) return true
+    if (adminPublicMode === true) return true
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return true
+
+    const user = await getUserFromRequest(req)
+    if (!user?.id) return false
+    let hasAccess = false
+
+    if (sql) {
+      try {
+        const exists = await sql`select 1 from information_schema.tables where table_schema='public' and table_name='profiles'`
+        if (exists?.length) {
+          const rows = await sql`select is_admin, roles from public.profiles where id = ${user.id} limit 1`
+          if (rows?.[0]) {
+            if (rows[0].is_admin === true) hasAccess = true
+            const roles = Array.isArray(rows[0].roles) ? rows[0].roles : []
+            if (roles.includes('admin') || roles.includes('editor') || roles.includes('pro')) hasAccess = true
+          }
+        }
+      } catch { }
+    }
+
+    if (!hasAccess && supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const bearer = getBearerTokenFromRequest(req)
+        if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
+        const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin,roles&limit=1`
+        const resp = await fetch(url, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          if (Array.isArray(arr) && arr[0]) {
+            if (arr[0].is_admin === true) hasAccess = true
+            const roles = Array.isArray(arr[0].roles) ? arr[0].roles : []
+            if (roles.includes('admin') || roles.includes('editor') || roles.includes('pro')) hasAccess = true
+          }
+        }
+      } catch { }
+    }
+
+    if (!hasAccess) {
+      const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      const allowedUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+      const email = (user.email || '').toLowerCase()
+      if ((email && allowedEmails.includes(email)) || allowedUserIds.includes(user.id)) {
+        hasAccess = true
+      }
+    }
+
+    return hasAccess
+  } catch {
+    return false
+  }
+}
+
 // Helper function to ensure editor access (admin OR editor role)
 async function ensureEditor(req, res) {
   try {
@@ -1553,6 +1660,31 @@ async function ensureEditor(req, res) {
     const hasAccess = await isEditorFromRequest(req)
     if (!hasAccess) {
       res.status(403).json({ error: 'Editor privileges required' })
+      return null
+    }
+    return user.id
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Authorization check failed' })
+    return null
+  }
+}
+
+// Helper to ensure pro/editor/admin access (used for professional advice uploads)
+async function ensureProOrEditor(req, res) {
+  try {
+    if (adminPublicMode === true) return 'public'
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return 'static-admin'
+
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return null
+    }
+
+    const hasAccess = await isProOrEditorFromRequest(req)
+    if (!hasAccess) {
+      res.status(403).json({ error: 'Pro, editor, or admin privileges required' })
       return null
     }
     return user.id
@@ -2137,11 +2269,11 @@ async function generateFieldData(options) {
   const response = await openaiClient.responses.create(
     {
       model: openaiModel,
-      reasoning: { effort: 'low' },
+      reasoning: { effort: 'medium' },
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) }
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) }
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -2198,12 +2330,12 @@ async function verifyPlantNameCandidate(plantName) {
 
   const response = await openaiClient.responses.create(
     {
-      model: openaiModel,
+      model: openaiModelNano,
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -2377,14 +2509,22 @@ async function ensureAdminMediaUploadsTable() {
       quality integer,
       compression_percent integer,
       metadata jsonb,
+      upload_source text,
       created_at timestamptz not null default now()
     );
     create index if not exists admin_media_uploads_created_idx on public.admin_media_uploads (created_at desc);
     create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
     create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
+    create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
+  `
+  // Add column if it doesn't exist (for existing installations)
+  const addColumnDdl = `
+    alter table public.admin_media_uploads add column if not exists upload_source text;
+    create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
   `
   try {
     await sql.unsafe(ddl, [], { simple: true })
+    await sql.unsafe(addColumnDdl, [], { simple: true })
     adminMediaUploadsEnsured = true
   } catch (err) {
     console.error('[schema] failed to ensure admin_media_uploads table', err)
@@ -2429,6 +2569,13 @@ function normalizeAdminMediaRow(row) {
   // Transform any Supabase URLs to proxy URLs for backward compatibility
   const rawUrl = row.public_url || row.publicUrl || null
   const url = rawUrl ? supabaseStorageToMediaProxy(rawUrl) : null
+  // Derive upload source from column, metadata.scope, or metadata.source
+  const uploadSource = 
+    row.upload_source || 
+    row.uploadSource || 
+    row.metadata?.scope || 
+    row.metadata?.source || 
+    'admin'
   return {
     id: row.id || null,
     adminId: row.admin_id || row.adminId || null,
@@ -2451,6 +2598,7 @@ function normalizeAdminMediaRow(row) {
         ? row.compression_percent
         : row.compressionPercent ?? null,
     metadata: row.metadata || null,
+    uploadSource,
     createdAt: row.created_at || row.createdAt || null,
   }
 }
@@ -2485,13 +2633,15 @@ async function recordAdminMediaUpload(row) {
       }
       return base
     })()
+    // Derive upload_source from metadata.scope, metadata.source, or row.uploadSource
+    const uploadSource = row.uploadSource || row.metadata?.scope || row.metadata?.source || 'admin'
 
     if (sql) {
       const inserted = await sql`
         insert into public.admin_media_uploads
-          (admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at)
+          (admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at)
         values
-          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(metadataPayload || null)}, ${createdAtValue})
+          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(metadataPayload || null)}, ${uploadSource}, ${createdAtValue})
         on conflict (bucket, path) do update set
           admin_id = excluded.admin_id,
           admin_email = excluded.admin_email,
@@ -2503,9 +2653,10 @@ async function recordAdminMediaUpload(row) {
           original_size_bytes = excluded.original_size_bytes,
           quality = excluded.quality,
           compression_percent = excluded.compression_percent,
-            metadata = excluded.metadata,
+          metadata = excluded.metadata,
+          upload_source = excluded.upload_source,
           created_at = excluded.created_at
-        returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at
+        returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at
       `
       return Array.isArray(inserted) && inserted.length > 0
         ? normalizeAdminMediaRow(inserted[0])
@@ -2529,12 +2680,13 @@ async function recordAdminMediaUpload(row) {
             quality: row.quality,
             compression_percent: row.compressionPercent,
             metadata: metadataPayload || null,
+            upload_source: uploadSource,
             created_at: createdAtValue,
           },
           { onConflict: 'bucket,path' }
         )
         .select(
-          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at'
+          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at'
         )
         .maybeSingle()
       if (error) throw error
@@ -2630,6 +2782,7 @@ async function syncGardenCoverMedia(existingKeys, limit = 200) {
       originalSizeBytes: null,
       quality: gardenCoverWebpQuality,
       compressionPercent: null,
+      uploadSource: 'garden_cover',
       metadata: {
         source: 'garden_cover',
         gardenId: row.id || null,
@@ -2685,7 +2838,8 @@ function getVisitsTableIdentifierParts() {
 const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch { }
-app.use(express.json())
+// Increase JSON body limit to handle base64 encoded images (e.g. for plant scan identification)
+app.use(express.json({ limit: '15mb' }))
 
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
@@ -2924,6 +3078,73 @@ app.options('/api/admin/ai/plant-fill/verify-name', (_req, res) => {
   res.status(204).end()
 })
 
+// Admin/Editor: Get English plant name from any language
+app.post('/api/admin/ai/plant-fill/english-name', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    
+    // Ask AI to identify the English common name of the plant
+    const instructions = `You are a botanist expert. Your task is to identify plants and provide their common English name.
+Given a plant name in ANY language (scientific name, common name in French, Spanish, German, etc.), 
+return the most common ENGLISH name for that plant.
+
+Rules:
+1. If the input is already a common English name, return it as-is (possibly corrected for spelling)
+2. If the input is a scientific/Latin name, return the most common English name
+3. If the input is a name in another language, translate/identify the English equivalent
+4. Always return a single, commonly used English name (not scientific name)
+5. If you cannot identify the plant, return the original name
+6. Return ONLY the plant name, nothing else - no explanations, no quotes, no JSON`
+
+    const prompt = `What is the common English name for this plant: "${plantName}"?`
+    
+    const response = await openaiClient.responses.create({
+      model: openaiModelNano,
+      reasoning: { effort: 'low' },
+      instructions,
+      input: prompt,
+    })
+    
+    const englishName = (response.output_text || plantName).trim()
+    
+    // Clean up the response - remove quotes, periods, etc.
+    const cleanedName = englishName
+      .replace(/^["']|["']$/g, '')  // Remove surrounding quotes
+      .replace(/\.$/, '')           // Remove trailing period
+      .trim()
+    
+    console.log(`[server] English name lookup: "${plantName}" -> "${cleanedName}"`)
+    
+    res.json({ 
+      success: true, 
+      originalName: plantName,
+      englishName: cleanedName,
+      wasTranslated: plantName.toLowerCase() !== cleanedName.toLowerCase()
+    })
+  } catch (err) {
+    console.error('[server] AI English name lookup failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to get English plant name' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-fill/english-name', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
 // Admin/Editor: AI-assisted plant data fill
 app.post('/api/admin/ai/plant-fill', async (req, res) => {
   try {
@@ -2960,32 +3181,40 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
 
     const aggregated = {}
 
-    for (const fieldKey of Object.keys(schemaBlueprint)) {
-      const fieldSchema = sanitizedSchema[fieldKey]
-      if (!fieldSchema) {
-        continue
-      }
-
-      const existingFieldRaw =
-        existingDataRaw && typeof existingDataRaw === 'object'
-          ? existingDataRaw[fieldKey]
-          : undefined
-      const existingFieldClean =
-        existingFieldRaw !== undefined ? removeNullValues(existingFieldRaw) : undefined
-
-      const fieldValue = await generateFieldData({
-        plantName,
-        fieldKey,
-        fieldSchema,
-        existingField: existingFieldClean,
+    // Prepare all field tasks
+    const fieldTasks = Object.keys(schemaBlueprint)
+      .filter((fieldKey) => sanitizedSchema[fieldKey])
+      .map((fieldKey) => {
+        const fieldSchema = sanitizedSchema[fieldKey]
+        const existingFieldRaw =
+          existingDataRaw && typeof existingDataRaw === 'object'
+            ? existingDataRaw[fieldKey]
+            : undefined
+        const existingFieldClean =
+          existingFieldRaw !== undefined ? removeNullValues(existingFieldRaw) : undefined
+        return { fieldKey, fieldSchema, existingFieldClean }
       })
 
-      const cleanedField =
-        fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
-      if (cleanedField !== undefined) {
-        aggregated[fieldKey] = removeExternalIds(cleanedField)
-      } else {
-        delete aggregated[fieldKey]
+    // Process fields one by one (sequential)
+    for (const { fieldKey, fieldSchema, existingFieldClean } of fieldTasks) {
+      try {
+        const fieldValue = await generateFieldData({
+          plantName,
+          fieldKey,
+          fieldSchema,
+          existingField: existingFieldClean,
+        })
+
+        const cleanedField =
+          fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+        if (cleanedField !== undefined) {
+          aggregated[fieldKey] = removeExternalIds(cleanedField)
+        } else {
+          delete aggregated[fieldKey]
+        }
+      } catch (err) {
+        console.error(`[server] AI fill failed for field "${fieldKey}":`, err?.message || err)
+        // Continue with next field on error
       }
     }
 
@@ -3205,12 +3434,13 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
           return
         }
 
-        // Optimize
+        // Optimize - use standard 50% quality for non-admin uploads
+        const contactScreenshotQuality = 50
         let buffer
         try {
           buffer = await sharp(file.buffer)
             .resize({ width: 1920, height: 1080, fit: 'inside', withoutEnlargement: true })
-            .webp({ quality: 80 })
+            .webp({ quality: contactScreenshotQuality })
             .toBuffer()
         } catch (e) {
           res.status(400).json({ error: 'Invalid image file' })
@@ -3221,8 +3451,9 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
         const path = `${contactScreenshotPrefix}/${user.id}/${unique}.webp`
 
         try {
+          // Contact screenshots go to PHOTOS bucket (not UTILITY)
           const { error: uploadError } = await supabaseServiceClient.storage
-            .from(adminUploadBucket)
+            .from('PHOTOS')
             .upload(path, buffer, {
               contentType: 'image/webp',
               cacheControl: '3600',
@@ -3232,11 +3463,43 @@ app.post('/api/contact/upload-screenshot', async (req, res) => {
           if (uploadError) throw uploadError
 
           const { data: publicData } = supabaseServiceClient.storage
-            .from(adminUploadBucket)
+            .from('PHOTOS')
             .getPublicUrl(path)
 
           // Use media proxy
           const proxyUrl = supabaseStorageToMediaProxy(publicData.publicUrl)
+
+          // Record to global image database
+          let uploaderDisplayName = null
+          try {
+            uploaderDisplayName = await getAdminProfileName(user.id)
+          } catch { }
+          
+          try {
+            await recordAdminMediaUpload({
+              adminId: user.id,
+              adminEmail: user.email || null,
+              adminName: uploaderDisplayName,
+              bucket: 'PHOTOS',
+              path: path,
+              publicUrl: proxyUrl,
+              mimeType: 'image/webp',
+              originalMimeType: file.mimetype || 'image/unknown',
+              sizeBytes: buffer.length,
+              originalSizeBytes: file.size,
+              quality: contactScreenshotQuality,
+              compressionPercent: file.size > 0 ? Math.max(0, Math.round(100 - (buffer.length / file.size) * 100)) : 0,
+              uploadSource: 'contact_screenshot',
+              metadata: {
+                source: 'contact_screenshot',
+                originalName: file.originalname,
+                userId: user.id,
+              },
+              createdAt: new Date().toISOString(),
+            })
+          } catch (recordErr) {
+            console.error('[contact-upload] failed to record media upload', recordErr)
+          }
 
           res.json({ url: proxyUrl })
         } catch (e) {
@@ -3268,7 +3531,7 @@ app.post('/api/contact/delete-screenshot', async (req, res) => {
     }
 
     const info = parseStoragePublicUrl(url)
-    if (!info || info.bucket !== adminUploadBucket) {
+    if (!info || info.bucket !== 'PHOTOS') {
       // Just ignore if it doesn't match our bucket, claim success
       res.json({ ok: true })
       return
@@ -3281,7 +3544,7 @@ app.post('/api/contact/delete-screenshot', async (req, res) => {
     }
 
     const { error } = await supabaseServiceClient.storage
-      .from(adminUploadBucket)
+      .from('PHOTOS')
       .remove([info.path])
 
     if (error) {
@@ -4903,6 +5166,9 @@ app.post('/api/admin/upload-image', async (req, res) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [adminUploadPrefix, folder].filter(Boolean).join('/')
     },
+    // Admin uploads: UTILITY bucket, 90% quality (highest)
+    bucket: 'UTILITY',
+    webpQuality: 90,
   })
 })
 
@@ -4939,6 +5205,94 @@ app.post('/api/blog/upload-image', async (req, res) => {
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [blogUploadPrefix, folder].filter(Boolean).join('/')
     },
+    // Blog uploads: UTILITY bucket, 90% quality (same as admin)
+    bucket: 'UTILITY',
+    webpQuality: 90,
+  })
+})
+
+app.post('/api/pro-advice/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const principal = await ensureProOrEditor(req, res)
+  if (!principal) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  let uploader = null
+  try {
+    uploader = await getUserFromRequest(req)
+  } catch { }
+  let uploaderDisplayName = null
+  if (uploader?.id) {
+    uploaderDisplayName = await getAdminProfileName(uploader.id)
+  }
+
+  await handleScopedImageUpload(req, res, {
+    actorId: principal,
+    auditLabel: 'pro-advice',
+    uploaderInfo: {
+      id: uploader?.id || null,
+      email: uploader?.email || null,
+      name: uploaderDisplayName || null,
+    },
+    prefixBuilder: ({ req }) => {
+      const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
+      return [proAdviceUploadPrefix, folder].filter(Boolean).join('/')
+    },
+    // Pro advice uploads: PHOTOS bucket, 50% quality (standard)
+    bucket: 'PHOTOS',
+    webpQuality: 50,
+  })
+})
+
+// Messages image upload - for chat images
+app.post('/api/messages/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  
+  // Require authenticated user
+  let uploader = null
+  try {
+    uploader = await getUserFromRequest(req)
+  } catch { }
+  
+  if (!uploader?.id) {
+    res.status(401).json({ error: 'You must be signed in to upload images' })
+    return
+  }
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  let uploaderDisplayName = null
+  try {
+    uploaderDisplayName = await getAdminProfileName(uploader.id)
+  } catch { }
+
+  await handleScopedImageUpload(req, res, {
+    actorId: uploader.id,
+    auditLabel: 'messages',
+    uploaderInfo: {
+      id: uploader.id,
+      email: uploader.email || null,
+      name: uploaderDisplayName || null,
+    },
+    prefixBuilder: ({ req }) => {
+      // Organize by user ID for easier management
+      const userId = uploader?.id || 'anonymous'
+      return `${messagesUploadPrefix}/${userId}`
+    },
+    // Messages uploads: PHOTOS bucket, 50% quality (standard)
+    bucket: 'PHOTOS',
+    webpQuality: 50,
   })
 })
 
@@ -4983,7 +5337,7 @@ app.post('/api/blog/summarize', async (req, res) => {
         input: promptSections.join('\n\n'),
         max_output_tokens: 150,
       },
-      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
     )
     const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
     res.json({ summary })
@@ -5014,11 +5368,24 @@ app.get('/api/admin/media', async (req, res) => {
   const admin = await ensureEditor(req, res)
   if (!admin) return
 
+  // Ensure table schema is up to date (adds upload_source column if missing)
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
   const limitParam = Number.parseInt(String(req.query?.limit || ''), 10)
-  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 50
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 100
   const bucketParamRaw =
     typeof req.query?.bucket === 'string'
       ? String(req.query.bucket).trim().toLowerCase()
+      : null
+  const sourceParam =
+    typeof req.query?.source === 'string'
+      ? String(req.query.source).trim().toLowerCase()
+      : null
+  const userIdParam =
+    typeof req.query?.userId === 'string'
+      ? String(req.query.userId).trim()
       : null
   const gardenBucketName = gardenCoverUploadBucket
     ? gardenCoverUploadBucket.toLowerCase()
@@ -5030,15 +5397,15 @@ app.get('/api/admin/media', async (req, res) => {
     let rows = []
     if (sql) {
       rows =
-        await sql`select id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at from public.admin_media_uploads order by created_at desc limit ${limit}`
+        await sql`select id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at from public.admin_media_uploads order by created_at desc limit ${limit * 2}`
     } else if (supabaseServiceClient) {
       const { data, error } = await supabaseServiceClient
         .from('admin_media_uploads')
         .select(
-          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at',
+          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at',
         )
         .order('created_at', { ascending: false })
-        .limit(limit)
+        .limit(limit * 2)
       if (error) throw error
       rows = data || []
     } else {
@@ -5049,9 +5416,25 @@ app.get('/api/admin/media', async (req, res) => {
     let media = (rows || [])
       .map((row) => normalizeAdminMediaRow(row))
       .filter(Boolean)
+    
+    // Filter by bucket if specified
     if (bucketParamRaw) {
       media = media.filter(
         (item) => (item?.bucket || '').toLowerCase() === bucketParamRaw,
+      )
+    }
+    
+    // Filter by source/function if specified
+    if (sourceParam) {
+      media = media.filter(
+        (item) => (item?.uploadSource || '').toLowerCase() === sourceParam,
+      )
+    }
+    
+    // Filter by user ID if specified
+    if (userIdParam) {
+      media = media.filter(
+        (item) => item?.adminId === userIdParam,
       )
     }
 
@@ -5062,7 +5445,7 @@ app.get('/api/admin/media', async (req, res) => {
     )
 
     let combined = [...media]
-    if (includeGardenCovers) {
+    if (includeGardenCovers && !sourceParam) {
       try {
         const gardenMedia = await syncGardenCoverMedia(seenKeys, limit)
         combined = combined.concat(gardenMedia.filter(Boolean))
@@ -5079,7 +5462,30 @@ app.get('/api/admin/media', async (req, res) => {
       return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0)
     })
 
-    res.json({ ok: true, media: combined.slice(0, limit) })
+    // Collect unique sources for filter dropdown
+    const availableSources = [...new Set(combined.map(item => item?.uploadSource).filter(Boolean))].sort()
+    
+    // Collect stats
+    const totalSize = combined.reduce((sum, item) => sum + (item?.sizeBytes || 0), 0)
+    const stats = {
+      totalCount: combined.length,
+      totalSize,
+      bySource: availableSources.reduce((acc, src) => {
+        const items = combined.filter(item => item?.uploadSource === src)
+        acc[src] = {
+          count: items.length,
+          size: items.reduce((sum, item) => sum + (item?.sizeBytes || 0), 0),
+        }
+        return acc
+      }, {}),
+    }
+
+    res.json({ 
+      ok: true, 
+      media: combined.slice(0, limit),
+      availableSources,
+      stats,
+    })
   } catch (err) {
     console.error('[media] failed to load admin media uploads', err)
     res.status(500).json({ error: 'Failed to load media uploads' })
@@ -7282,6 +7688,37 @@ function normalizeEmailCampaignRow(row) {
 }
 
 // ---- Admin email triggers (automatic emails) ----
+const DEFAULT_EMAIL_TRIGGERS = [
+  {
+    triggerType: 'WELCOME_EMAIL',
+    displayName: 'New User Welcome Email',
+    description: 'Automatically sent when a new user creates an account',
+  },
+  {
+    triggerType: 'BAN_USER',
+    displayName: 'User Ban Notification',
+    description: 'Sent when a user is marked as threat level 3 (ban)',
+  },
+]
+
+async function ensureDefaultEmailTriggers() {
+  if (!sql) return
+  for (const trigger of DEFAULT_EMAIL_TRIGGERS) {
+    try {
+      await sql`
+        insert into public.admin_email_triggers (trigger_type, display_name, description)
+        values (${trigger.triggerType}, ${trigger.displayName}, ${trigger.description})
+        on conflict (trigger_type) do update
+          set display_name = excluded.display_name,
+              description = excluded.description,
+              updated_at = now()
+      `
+    } catch (err) {
+      console.error('[email-triggers] failed to upsert default trigger', trigger.triggerType, err)
+    }
+  }
+}
+
 function normalizeEmailTriggerRow(row) {
   if (!row) return null
   return {
@@ -7305,6 +7742,7 @@ app.get('/api/admin/email-triggers', async (req, res) => {
     return
   }
   try {
+    await ensureDefaultEmailTriggers()
     const rows = await sql`
       select t.*, tpl.title as template_title
       from public.admin_email_triggers t
@@ -7332,6 +7770,7 @@ app.get('/api/admin/email-triggers/:id', async (req, res) => {
     return
   }
   try {
+    await ensureDefaultEmailTriggers()
     const rows = await sql`
       select t.*, tpl.title as template_title
       from public.admin_email_triggers t
@@ -7429,33 +7868,22 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
   }
 })
 
-// Public endpoint to send automatic email (called from auth flow)
-// Uses the same method as campaign emails: direct Resend API call with wrapper
-app.post('/api/send-automatic-email', async (req, res) => {
+async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayName, userLanguage }) {
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
   if (!apiKey) {
-    console.error('[send-automatic-email] No Resend API key configured')
-    res.status(500).json({ error: 'Email service not configured' })
-    return
+    console.error('[sendAutomaticEmail] No Resend API key configured')
+    return { sent: false, reason: 'Email service not configured' }
   }
 
   if (!sql) {
-    console.error('[send-automatic-email] Database connection not available')
-    res.status(500).json({ error: 'Database not configured' })
-    return
-  }
-
-  const { triggerType, userId, userEmail, userDisplayName, userLanguage } = req.body || {}
-
-  if (!triggerType || !userId || !userEmail || !userDisplayName) {
-    res.status(400).json({ error: 'Missing required fields: triggerType, userId, userEmail, userDisplayName' })
-    return
+    console.error('[sendAutomaticEmail] Database connection not available')
+    return { sent: false, reason: 'Database not configured' }
   }
 
   const lang = userLanguage || 'en'
 
   try {
-    // 1. Load trigger configuration
+    await ensureDefaultEmailTriggers()
     const triggerRows = await sql`
       select t.*, tpl.title as template_title, tpl.subject, tpl.body_html
       from public.admin_email_triggers t
@@ -7465,27 +7893,22 @@ app.post('/api/send-automatic-email', async (req, res) => {
     `
 
     if (!triggerRows || !triggerRows.length) {
-      console.log(`[send-automatic-email] Trigger type "${triggerType}" not found`)
-      res.json({ sent: false, reason: 'Trigger not configured' })
-      return
+      console.log(`[sendAutomaticEmail] Trigger type "${triggerType}" not found`)
+      return { sent: false, reason: 'Trigger not configured' }
     }
 
     const trigger = triggerRows[0]
 
-    // 2. Check if enabled and has a template
     if (!trigger.is_enabled) {
-      console.log(`[send-automatic-email] Trigger "${triggerType}" is disabled`)
-      res.json({ sent: false, reason: 'Trigger is disabled' })
-      return
+      console.log(`[sendAutomaticEmail] Trigger "${triggerType}" is disabled`)
+      return { sent: false, reason: 'Trigger is disabled' }
     }
 
     if (!trigger.template_id) {
-      console.log(`[send-automatic-email] Trigger "${triggerType}" has no template configured`)
-      res.json({ sent: false, reason: 'No template configured' })
-      return
+      console.log(`[sendAutomaticEmail] Trigger "${triggerType}" has no template configured`)
+      return { sent: false, reason: 'No template configured' }
     }
 
-    // 3. Check if we've already sent this automatic email to this user
     const existingSend = await sql`
       select id from public.admin_automatic_email_sends
       where trigger_type = ${triggerType} and user_id = ${userId}
@@ -7493,30 +7916,23 @@ app.post('/api/send-automatic-email', async (req, res) => {
     `
 
     if (existingSend && existingSend.length > 0) {
-      console.log(`[send-automatic-email] Already sent "${triggerType}" to user ${userId}`)
-      res.json({ sent: false, reason: 'Already sent to this user' })
-      return
+      console.log(`[sendAutomaticEmail] Already sent "${triggerType}" to user ${userId}`)
+      return { sent: false, reason: 'Already sent to this user' }
     }
 
-    // 4. Load translations for the template (for multi-language support)
     const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
-
-    // 5. Get user's language-specific content (fallback to template's default content)
     const translation = emailTranslations.get(lang)
     const rawSubject = translation?.subject || trigger.subject
     const rawBodyHtml = translation?.bodyHtml || trigger.body_html
 
     if (!rawSubject || !rawBodyHtml) {
-      console.error(`[send-automatic-email] Template "${trigger.template_id}" has no content`)
-      res.status(500).json({ error: 'Template has no content' })
-      return
+      console.error(`[sendAutomaticEmail] Template "${trigger.template_id}" has no content`)
+      return { sent: false, reason: 'Template has no content' }
     }
 
-    // 6. Prepare variable replacement context (same as campaign emails)
     const userRaw = userDisplayName || 'User'
     const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
 
-    // Generate random 10-character string (uppercase, lowercase, numbers)
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     let randomStr = ''
     for (let i = 0; i < 10; i++) {
@@ -7525,28 +7941,21 @@ app.post('/api/send-automatic-email', async (req, res) => {
 
     const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
 
-    // Variables available for replacement in email templates
     const context = {
-      user: userCap,                                     // User's display name (capitalized)
-      email: userEmail,                                  // User's email address
-      random: randomStr,                                 // 10 random characters (unique per email)
-      url: websiteUrl.replace(/^https?:\/\//, ''),       // Website URL without protocol (e.g., "aphylia.app")
-      code: 'XXXXXX'                                     // Placeholder (real codes are for transactional emails)
+      user: userCap,
+      email: userEmail,
+      random: randomStr,
+      url: websiteUrl.replace(/^https?:\/\//, ''),
+      code: 'XXXXXX',
     }
     const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
 
-    // 7. Render the email content
     const subject = replaceVars(rawSubject)
     const bodyHtmlRaw = replaceVars(rawBodyHtml)
-
-    // 8. Sanitize HTML for email client compatibility (same as campaigns)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
-
-    // 9. Wrap with the beautiful email wrapper (same as campaigns)
     const html = wrapEmailHtml(bodyHtml, subject, lang)
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
 
-    // 10. Send via Resend API (same method as campaigns)
     const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
 
     const resendResponse = await fetch('https://api.resend.com/emails', {
@@ -7568,30 +7977,44 @@ app.post('/api/send-automatic-email', async (req, res) => {
 
     if (!resendResponse.ok) {
       const errorText = await resendResponse.text().catch(() => '')
-      console.error(`[send-automatic-email] Resend API error (${resendResponse.status}):`, errorText)
-      res.status(500).json({ error: `Failed to send email: ${errorText || resendResponse.status}` })
-      return
+      console.error(`[sendAutomaticEmail] Resend API error (${resendResponse.status}):`, errorText)
+      return { sent: false, reason: errorText || 'Failed to send email' }
     }
 
     const resendData = await resendResponse.json().catch(() => ({}))
-    console.log(`[send-automatic-email] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
+    console.log(`[sendAutomaticEmail] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
 
-    // 11. Record the send to prevent duplicates
     try {
       await sql`
         insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
         values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
       `
     } catch (logErr) {
-      // Don't fail the request if logging fails, email was already sent
-      console.warn('[send-automatic-email] Failed to log send:', logErr?.message || logErr)
+      console.warn('[sendAutomaticEmail] Failed to log send:', logErr?.message || logErr)
     }
 
-    res.json({ sent: true, resendId: resendData.id })
+    return { sent: true, resendId: resendData.id || null, trigger }
   } catch (err) {
-    console.error('[send-automatic-email] Error:', err)
-    res.status(500).json({ error: err?.message || 'Failed to send email' })
+    console.error('[sendAutomaticEmail] Error:', err)
+    return { sent: false, error: err?.message || 'Failed to send email' }
   }
+}
+
+// Public endpoint to send automatic email (called from auth flow)
+// Uses the same method as campaign emails: direct Resend API call with wrapper
+app.post('/api/send-automatic-email', async (req, res) => {
+  const { triggerType, userId, userEmail, userDisplayName, userLanguage } = req.body || {}
+  if (!triggerType || !userId || !userEmail || !userDisplayName) {
+    res.status(400).json({ error: 'Missing required fields: triggerType, userId, userEmail, userDisplayName' })
+    return
+  }
+  const result = await sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayName, userLanguage })
+  if (result.sent) {
+    res.json({ sent: true, resendId: result.resendId })
+    return
+  }
+  const status = result?.reason === 'Trigger not configured' ? 404 : result?.reason === 'Email service not configured' ? 500 : 200
+  res.status(status).json(result)
 })
 
 // Admin: global stats (bypass RLS via server connection)
@@ -7736,7 +8159,7 @@ app.get('/api/admin/member', async (req, res) => {
       // Profile (best-effort; may be null without Authorization due to RLS)
       let profile = null
       try {
-        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin,roles`, {
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin,roles,threat_level`, {
           headers: baseHeaders,
         })
         if (pr.ok) {
@@ -7801,10 +8224,13 @@ app.get('/api/admin/member', async (req, res) => {
       let isBannedEmail = false
       let bannedReason = null
       let bannedAt = null
+      let bannedById = null
+      let bannedByName = null
       let bannedIps = []
+      let userFiles = []
       try {
         const emailForBan = (resolvedEmail || emailParam || '').toLowerCase()
-        const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(emailForBan)}&select=reason,banned_at&order=banned_at.desc&limit=1`, {
+        const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(emailForBan)}&select=reason,banned_at,banned_by&order=banned_at.desc&limit=1`, {
           headers: baseHeaders,
         })
         if (br.ok) {
@@ -7813,6 +8239,16 @@ app.get('/api/admin/member', async (req, res) => {
             isBannedEmail = true
             bannedReason = arr[0].reason || null
             bannedAt = arr[0].banned_at || null
+            bannedById = arr[0].banned_by || null
+            if (bannedById) {
+              try {
+                const ba = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(bannedById)}&select=display_name&limit=1`, { headers: baseHeaders })
+                if (ba.ok) {
+                  const bArr = await ba.json().catch(() => [])
+                  bannedByName = Array.isArray(bArr) && bArr[0] ? bArr[0].display_name || null : null
+                }
+              } catch { }
+            }
           }
         }
       } catch { }
@@ -7856,6 +8292,26 @@ app.get('/api/admin/member', async (req, res) => {
             const arr = await gpResp.json().catch(() => [])
             plantsTotal = Array.isArray(arr) ? arr.reduce((acc, r) => acc + Number(r?.plants_on_hand ?? 0), 0) : undefined
           }
+        }
+      } catch { }
+
+      try {
+        const fr = await fetch(`${supabaseUrlEnv}/rest/v1/garden_plant_images?uploaded_by=eq.${encodeURIComponent(targetId)}&select=id,image_url,caption,uploaded_at,garden_plant_id,garden_plants(plant_id,plants(name,admin_commentary))&order=uploaded_at.desc&limit=25`, {
+          headers: baseHeaders,
+        })
+        if (fr.ok) {
+          const arr = await fr.json().catch(() => [])
+          userFiles = Array.isArray(arr)
+            ? arr.map((r) => ({
+                id: String(r.id),
+                imageUrl: r.image_url || null,
+                caption: r.caption || null,
+                uploadedAt: r.uploaded_at || null,
+                gardenPlantId: r?.garden_plant_id || null,
+                plantName: r?.garden_plants?.plants?.name || null,
+                adminCommentary: r?.garden_plants?.plants?.admin_commentary || null,
+              }))
+            : []
         }
       } catch { }
 
@@ -7913,6 +8369,84 @@ app.get('/api/admin/member', async (req, res) => {
         const adminName = null
         if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
       } catch { }
+
+      // Fetch media uploads from global image database (REST fallback)
+      let mediaUploads = []
+      let mediaTotalSize = 0
+      let mediaTotalCount = 0
+      try {
+        const mr = await fetch(`${supabaseUrlEnv}/rest/v1/admin_media_uploads?admin_id=eq.${encodeURIComponent(targetId)}&select=id,bucket,path,public_url,mime_type,size_bytes,upload_source,metadata,created_at&order=created_at.desc&limit=12`, {
+          headers: baseHeaders,
+        })
+        if (mr.ok) {
+          const arr = await mr.json().catch(() => [])
+          mediaUploads = Array.isArray(arr) ? arr.map(r => ({
+            id: String(r.id),
+            url: r.public_url || null,
+            bucket: r.bucket || null,
+            path: r.path || null,
+            mimeType: r.mime_type || null,
+            sizeBytes: typeof r.size_bytes === 'number' ? r.size_bytes : null,
+            uploadSource: r.upload_source || r.metadata?.scope || r.metadata?.source || 'unknown',
+            createdAt: r.created_at || null,
+          })) : []
+        }
+        // Get totals via count header
+        const countR = await fetch(`${supabaseUrlEnv}/rest/v1/admin_media_uploads?admin_id=eq.${encodeURIComponent(targetId)}&select=size_bytes`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact' },
+        })
+        if (countR.ok) {
+          const cr = countR.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) mediaTotalCount = Number(m[1])
+          const sizeArr = await countR.json().catch(() => [])
+          if (Array.isArray(sizeArr)) {
+            mediaTotalSize = sizeArr.reduce((sum, r) => sum + (r.size_bytes || 0), 0)
+          }
+        }
+      } catch { }
+
+      // Fetch user reports (REST fallback)
+      let userReports = []
+      let reportsAgainstCount = 0
+      let reportsByCount = 0
+      try {
+        const reportsResp = await fetch(`${supabaseUrlEnv}/rest/v1/user_reports?reported_user_id=eq.${encodeURIComponent(targetId)}&select=id,reason,status,created_at,classified_at,reporter:profiles!user_reports_reporter_id_fkey(display_name),classifier:profiles!user_reports_classified_by_fkey(display_name)&order=created_at.desc&limit=20`, {
+          headers: baseHeaders,
+        })
+        if (reportsResp.ok) {
+          const arr = await reportsResp.json().catch(() => [])
+          userReports = Array.isArray(arr) ? arr.map(r => ({
+            id: String(r.id),
+            reason: r.reason || null,
+            status: r.status || 'review',
+            createdAt: r.created_at || null,
+            classifiedAt: r.classified_at || null,
+            reporterName: r.reporter?.display_name || 'Unknown',
+            classifierName: r.classifier?.display_name || null,
+            type: 'against'
+          })) : []
+        }
+        // Get counts
+        const againstCountResp = await fetch(`${supabaseUrlEnv}/rest/v1/user_reports?reported_user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+        })
+        if (againstCountResp.ok) {
+          const cr = againstCountResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) reportsAgainstCount = Number(m[1])
+        }
+        const byCountResp = await fetch(`${supabaseUrlEnv}/rest/v1/user_reports?reporter_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+        })
+        if (byCountResp.ok) {
+          const cr = byCountResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) reportsByCount = Number(m[1])
+        }
+      } catch { }
+
+      const threatLevel = typeof profile?.threat_level === 'number' ? profile.threat_level : null
       res.json({
         ok: true,
         user: { id: targetId, email: resolvedEmail || emailParam || null, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
@@ -7928,7 +8462,17 @@ app.get('/api/admin/member', async (req, res) => {
         isBannedEmail,
         bannedReason,
         bannedAt,
+        bannedById,
+        bannedByName,
         bannedIps,
+        threatLevel,
+        files: userFiles,
+        mediaUploads,
+        mediaTotalCount,
+        mediaTotalSize,
+        userReports,
+        reportsAgainstCount,
+        reportsByCount,
         topReferrers: memberTopReferrers.slice(0, 5),
         topCountries: memberTopCountries.slice(0, 5),
         topDevices: memberTopDevices.slice(0, 5),
@@ -7966,8 +8510,9 @@ app.get('/api/admin/member', async (req, res) => {
     }
     let profile = null
     try {
-      const rows = await sql`select id, display_name, is_admin, roles from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin, roles, threat_level from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
+      threatLevel = profile?.threat_level ?? null
     } catch { }
     // Load latest admin notes for this profile (DB or REST)
     let adminNotes = []
@@ -8000,7 +8545,11 @@ app.get('/api/admin/member', async (req, res) => {
     let isBannedEmail = false
     let bannedReason = null
     let bannedAt = null
+    let bannedById = null
+    let bannedByName = null
     let bannedIps = []
+    let threatLevel = profile?.threat_level ?? null
+    let userFiles = []
     let plantsTotal = 0
     try {
       const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null order by ip asc`, [user.id])
@@ -8052,8 +8601,8 @@ app.get('/api/admin/member', async (req, res) => {
       plantsTotal = rows?.[0]?.c ?? 0
     } catch { }
     try {
-      const br = await sql`
-        select reason, banned_at
+        const br = await sql`
+        select reason, banned_at, banned_by
         from public.banned_accounts
         where lower(email) = ${email ? email : (user.email ? user.email.toLowerCase() : '')}
         order by banned_at desc
@@ -8063,6 +8612,13 @@ app.get('/api/admin/member', async (req, res) => {
         isBannedEmail = true
         bannedReason = br[0].reason || null
         bannedAt = br[0].banned_at || null
+        bannedById = br[0].banned_by || null
+        if (bannedById) {
+          try {
+            const bn = await sql`select display_name from public.profiles where id = ${bannedById} limit 1`
+            bannedByName = bn?.[0]?.display_name || null
+          } catch { }
+        }
       }
     } catch { }
     try {
@@ -8072,6 +8628,34 @@ app.get('/api/admin/member', async (req, res) => {
         where user_id = ${user.id} or lower(email) = ${email ? email : (user.email ? user.email.toLowerCase() : '')}
       `
       bannedIps = Array.isArray(bi) ? bi.map(r => String(r.ip)).filter(Boolean) : []
+    } catch { }
+    try {
+      const fileRows = await sql`
+        select gpi.id,
+               gpi.image_url,
+               gpi.caption,
+               gpi.uploaded_at,
+               gp.id as garden_plant_id,
+               p.name as plant_name,
+               p.admin_commentary
+        from public.garden_plant_images gpi
+        left join public.garden_plants gp on gp.id = gpi.garden_plant_id
+        left join public.plants p on p.id = gp.plant_id
+        where gpi.uploaded_by = ${user.id}
+        order by gpi.uploaded_at desc
+        limit 25
+      `
+      userFiles = Array.isArray(fileRows)
+        ? fileRows.map((r) => ({
+            id: String(r.id),
+            imageUrl: r.image_url || null,
+            caption: r.caption || null,
+            uploadedAt: r.uploaded_at || null,
+            gardenPlantId: r.garden_plant_id || null,
+            plantName: r.plant_name || null,
+            adminCommentary: r.admin_commentary || null,
+          }))
+        : []
     } catch { }
     // Aggregates (SQL path)
     let topReferrers = []
@@ -8135,6 +8719,257 @@ app.get('/api/admin/member', async (req, res) => {
       const adminName = null
       if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || qLower || null}, ${sql.json({ via: 'db' })})`
     } catch { }
+
+    // Fetch media uploads from global image database for this user
+    let mediaUploads = []
+    let mediaTotalSize = 0
+    let mediaTotalCount = 0
+    try {
+      // Ensure table schema is up to date (adds upload_source column if missing)
+      await ensureAdminMediaUploadsTable()
+    } catch { }
+    try {
+      if (sql) {
+        const mediaRows = await sql`
+          select id, bucket, path, public_url, mime_type, size_bytes, upload_source, metadata, created_at
+          from public.admin_media_uploads
+          where admin_id = ${user.id}
+          order by created_at desc
+          limit 12
+        `
+        mediaUploads = Array.isArray(mediaRows) ? mediaRows.map(r => ({
+          id: String(r.id),
+          url: r.public_url || null,
+          bucket: r.bucket || null,
+          path: r.path || null,
+          mimeType: r.mime_type || null,
+          sizeBytes: typeof r.size_bytes === 'number' ? r.size_bytes : null,
+          uploadSource: r.upload_source || r.metadata?.scope || r.metadata?.source || 'unknown',
+          createdAt: r.created_at || null,
+        })) : []
+        
+        // Get total count and size
+        const statsRows = await sql`
+          select count(*)::int as total_count, coalesce(sum(size_bytes), 0)::bigint as total_size
+          from public.admin_media_uploads
+          where admin_id = ${user.id}
+        `
+        if (Array.isArray(statsRows) && statsRows[0]) {
+          mediaTotalCount = statsRows[0].total_count || 0
+          mediaTotalSize = Number(statsRows[0].total_size || 0)
+        }
+      } else if (supabaseServiceClient) {
+        const { data, error } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .select('id, bucket, path, public_url, mime_type, size_bytes, upload_source, metadata, created_at')
+          .eq('admin_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(12)
+        if (!error && data) {
+          mediaUploads = data.map(r => ({
+            id: String(r.id),
+            url: r.public_url || null,
+            bucket: r.bucket || null,
+            path: r.path || null,
+            mimeType: r.mime_type || null,
+            sizeBytes: typeof r.size_bytes === 'number' ? r.size_bytes : null,
+            uploadSource: r.upload_source || r.metadata?.scope || r.metadata?.source || 'unknown',
+            createdAt: r.created_at || null,
+          }))
+        }
+        // Get totals
+        const { count } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .select('*', { count: 'exact', head: true })
+          .eq('admin_id', user.id)
+        mediaTotalCount = count || 0
+        
+        const { data: sizeData } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .select('size_bytes')
+          .eq('admin_id', user.id)
+        if (sizeData) {
+          mediaTotalSize = sizeData.reduce((sum, r) => sum + (r.size_bytes || 0), 0)
+        }
+      }
+    } catch (mediaErr) {
+      console.error('[member-lookup] failed to fetch media uploads', mediaErr)
+    }
+
+    // Fetch user reports (reports against this user)
+    let userReports = []
+    let reportsAgainstCount = 0
+    let reportsByCount = 0
+    try {
+      if (sql) {
+        // Reports against this user
+        const reportsAgainst = await sql`
+          select r.id, r.reason, r.status, r.created_at, r.classified_at,
+                 rp.display_name as reporter_name,
+                 cp.display_name as classifier_name
+          from public.user_reports r
+          left join public.profiles rp on rp.id = r.reporter_id
+          left join public.profiles cp on cp.id = r.classified_by
+          where r.reported_user_id = ${user.id}
+          order by r.created_at desc
+          limit 20
+        `
+        userReports = Array.isArray(reportsAgainst) ? reportsAgainst.map(r => ({
+          id: String(r.id),
+          reason: r.reason || null,
+          status: r.status || 'review',
+          createdAt: r.created_at || null,
+          classifiedAt: r.classified_at || null,
+          reporterName: r.reporter_name || 'Unknown',
+          classifierName: r.classifier_name || null,
+          type: 'against'
+        })) : []
+        
+        // Get counts
+        const countResult = await sql`
+          select
+            (select count(*)::int from public.user_reports where reported_user_id = ${user.id}) as against,
+            (select count(*)::int from public.user_reports where reporter_id = ${user.id}) as by_user
+        `
+        if (Array.isArray(countResult) && countResult[0]) {
+          reportsAgainstCount = countResult[0].against || 0
+          reportsByCount = countResult[0].by_user || 0
+        }
+      } else if (supabaseServiceClient) {
+        const { data: reportsData, error } = await supabaseServiceClient
+          .from('user_reports')
+          .select('id, reason, status, created_at, classified_at, reporter:profiles!user_reports_reporter_id_fkey(display_name), classifier:profiles!user_reports_classified_by_fkey(display_name)')
+          .eq('reported_user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(20)
+        if (!error && reportsData) {
+          userReports = reportsData.map(r => ({
+            id: String(r.id),
+            reason: r.reason || null,
+            status: r.status || 'review',
+            createdAt: r.created_at || null,
+            classifiedAt: r.classified_at || null,
+            reporterName: r.reporter?.display_name || 'Unknown',
+            classifierName: r.classifier?.display_name || null,
+            type: 'against'
+          }))
+        }
+        // Get counts
+        const { count: againstCount } = await supabaseServiceClient
+          .from('user_reports')
+          .select('*', { count: 'exact', head: true })
+          .eq('reported_user_id', user.id)
+        reportsAgainstCount = againstCount || 0
+        
+        const { count: byCount } = await supabaseServiceClient
+          .from('user_reports')
+          .select('*', { count: 'exact', head: true })
+          .eq('reporter_id', user.id)
+        reportsByCount = byCount || 0
+      }
+    } catch (reportsErr) {
+      console.error('[member-lookup] failed to fetch user reports', reportsErr)
+    }
+
+    // Bug Catcher stats (if user has bug_catcher role)
+    let bugPoints = null
+    let bugCatcherRank = null
+    let bugActionsCompleted = null
+    let bugCompletedActions = []
+    try {
+      const userRoles = Array.isArray(profile?.roles) ? profile.roles : []
+      if (userRoles.includes('bug_catcher')) {
+        // Get bug points from profile
+        bugPoints = typeof profile?.bug_points === 'number' ? profile.bug_points : 0
+        
+        // Get rank using RPC function
+        if (supabaseServiceClient) {
+          const { data: rankData } = await supabaseServiceClient.rpc('get_bug_catcher_rank', { _user_id: user.id })
+          if (typeof rankData === 'number') {
+            bugCatcherRank = rankData
+          }
+          
+          // Get actions completed with details
+          const { data: actionsData, count: actionsCount } = await supabaseServiceClient
+            .from('bug_action_responses')
+            .select(`
+              id,
+              action_id,
+              answers,
+              points_earned,
+              completed_at,
+              bug_actions (
+                id,
+                title,
+                description,
+                questions,
+                status
+              )
+            `, { count: 'exact' })
+            .eq('user_id', user.id)
+            .order('completed_at', { ascending: false })
+          bugActionsCompleted = actionsCount || 0
+          
+          // Format completed actions for response
+          if (actionsData && actionsData.length > 0) {
+            bugCompletedActions = actionsData.map(action => ({
+              id: action.id,
+              actionId: action.action_id,
+              title: action.bug_actions?.title || 'Unknown Action',
+              description: action.bug_actions?.description || null,
+              questions: action.bug_actions?.questions || [],
+              answers: action.answers || {},
+              pointsEarned: action.points_earned || 0,
+              completedAt: action.completed_at,
+              actionStatus: action.bug_actions?.status || 'unknown'
+            }))
+          }
+        } else if (sql) {
+          // Fallback to direct SQL
+          const rankResult = await sql`SELECT get_bug_catcher_rank(${user.id}::uuid) as rank`
+          if (rankResult?.[0]?.rank) {
+            bugCatcherRank = rankResult[0].rank
+          }
+          
+          // Get completed actions with details via SQL
+          const actionsResult = await sql`
+            SELECT 
+              bar.id,
+              bar.action_id,
+              bar.answers,
+              bar.points_earned,
+              bar.completed_at,
+              ba.title,
+              ba.description,
+              ba.questions,
+              ba.status as action_status
+            FROM public.bug_action_responses bar
+            JOIN public.bug_actions ba ON ba.id = bar.action_id
+            WHERE bar.user_id = ${user.id}::uuid
+            ORDER BY bar.completed_at DESC
+          `
+          bugActionsCompleted = actionsResult?.length || 0
+          
+          if (actionsResult && actionsResult.length > 0) {
+            bugCompletedActions = actionsResult.map(action => ({
+              id: action.id,
+              actionId: action.action_id,
+              title: action.title || 'Unknown Action',
+              description: action.description || null,
+              questions: action.questions || [],
+              answers: action.answers || {},
+              pointsEarned: action.points_earned || 0,
+              completedAt: action.completed_at,
+              actionStatus: action.action_status || 'unknown'
+            }))
+          }
+        }
+      }
+    } catch (bugCatcherErr) {
+      console.error('[member-lookup] failed to fetch bug catcher stats', bugCatcherErr)
+    }
+
+    const currentThreatLevel = typeof threatLevel === 'number' ? threatLevel : (typeof profile?.threat_level === 'number' ? profile.threat_level : null)
     res.json({
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at, email_confirmed_at: user.email_confirmed_at || null, last_sign_in_at: user.last_sign_in_at || null },
@@ -8150,17 +8985,803 @@ app.get('/api/admin/member', async (req, res) => {
       isBannedEmail,
       bannedReason,
       bannedAt,
+      bannedById,
+      bannedByName,
       bannedIps,
+      threatLevel: currentThreatLevel,
+      files: userFiles,
+      mediaUploads,
+      mediaTotalCount,
+      mediaTotalSize,
+      userReports,
+      reportsAgainstCount,
+      reportsByCount,
       topReferrers: topReferrers.slice(0, 5),
       topCountries: topCountries.slice(0, 5),
       topDevices: topDevices.slice(0, 5),
       meanRpm5m,
       adminNotes,
+      bugPoints,
+      bugCatcherRank,
+      bugActionsCompleted,
+      bugCompletedActions,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })
   }
 })
+
+// Admin: fetch user messages for moderation/report verification
+app.get('/api/admin/member-messages', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    
+    const userId = (req.query.userId || req.query.user_id || '').toString().trim()
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId parameter' })
+      return
+    }
+    
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+    const offset = Math.max(Number(req.query.offset) || 0, 0)
+    
+    // Get all conversations the user is part of with participant details
+    let conversations = []
+    let messages = []
+    let totalConversations = 0
+    let totalMessages = 0
+    
+    if (sql) {
+      // Get conversations with other participant info
+      const convRows = await sql`
+        SELECT 
+          c.id,
+          c.participant_1,
+          c.participant_2,
+          c.created_at,
+          c.last_message_at,
+          p1.display_name as participant_1_name,
+          p2.display_name as participant_2_name,
+          (SELECT COUNT(*) FROM public.messages m WHERE m.conversation_id = c.id) as message_count
+        FROM public.conversations c
+        LEFT JOIN public.profiles p1 ON p1.id = c.participant_1
+        LEFT JOIN public.profiles p2 ON p2.id = c.participant_2
+        WHERE c.participant_1 = ${userId}::uuid OR c.participant_2 = ${userId}::uuid
+        ORDER BY c.last_message_at DESC NULLS LAST
+      `
+      conversations = convRows || []
+      totalConversations = conversations.length
+      
+      // Get messages sent BY this user (for report verification)
+      const msgRows = await sql`
+        SELECT 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.link_type,
+          m.link_url,
+          m.created_at,
+          m.edited_at,
+          m.deleted_at,
+          m.reply_to_id,
+          ps.display_name as sender_name,
+          -- Get the other participant in the conversation
+          CASE 
+            WHEN c.participant_1 = m.sender_id THEN c.participant_2 
+            ELSE c.participant_1 
+          END as recipient_id,
+          CASE 
+            WHEN c.participant_1 = m.sender_id THEN pr2.display_name 
+            ELSE pr1.display_name 
+          END as recipient_name
+        FROM public.messages m
+        JOIN public.conversations c ON c.id = m.conversation_id
+        LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+        LEFT JOIN public.profiles pr1 ON pr1.id = c.participant_1
+        LEFT JOIN public.profiles pr2 ON pr2.id = c.participant_2
+        WHERE m.sender_id = ${userId}::uuid
+        ORDER BY m.created_at DESC
+        LIMIT ${limit}
+        OFFSET ${offset}
+      `
+      messages = msgRows || []
+      
+      // Get total count of messages sent by user
+      const countRows = await sql`
+        SELECT COUNT(*) as count FROM public.messages WHERE sender_id = ${userId}::uuid
+      `
+      totalMessages = Number(countRows?.[0]?.count) || 0
+      
+      // Log admin action
+      try {
+        let adminName = null
+        const nameRows = await sql`SELECT display_name FROM public.profiles WHERE id = ${adminUserId} LIMIT 1`
+        adminName = nameRows?.[0]?.display_name || null
+        await sql`
+          INSERT INTO public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          VALUES (${adminUserId}, ${adminName}, 'view_user_messages', ${userId}, ${sql.json({ limit, offset, totalMessages })})
+        `
+      } catch { }
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      // REST fallback
+      const token = getBearerTokenFromRequest(req)
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      if (token) baseHeaders['Authorization'] = `Bearer ${token}`
+      
+      // Get conversations
+      const convResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/conversations?or=(participant_1.eq.${encodeURIComponent(userId)},participant_2.eq.${encodeURIComponent(userId)})&select=id,participant_1,participant_2,created_at,last_message_at&order=last_message_at.desc.nullslast`,
+        { headers: baseHeaders }
+      )
+      if (convResp.ok) {
+        const convArr = await convResp.json().catch(() => [])
+        conversations = Array.isArray(convArr) ? convArr : []
+        totalConversations = conversations.length
+        
+        // Fetch participant names
+        const participantIds = new Set()
+        conversations.forEach(c => {
+          participantIds.add(c.participant_1)
+          participantIds.add(c.participant_2)
+        })
+        
+        if (participantIds.size > 0) {
+          const profileResp = await fetch(
+            `${supabaseUrlEnv}/rest/v1/profiles?id=in.(${Array.from(participantIds).join(',')})&select=id,display_name`,
+            { headers: baseHeaders }
+          )
+          if (profileResp.ok) {
+            const profiles = await profileResp.json().catch(() => [])
+            const profileMap = new Map(profiles.map(p => [p.id, p.display_name]))
+            conversations = conversations.map(c => ({
+              ...c,
+              participant_1_name: profileMap.get(c.participant_1) || null,
+              participant_2_name: profileMap.get(c.participant_2) || null,
+            }))
+          }
+        }
+      }
+      
+      // Get messages sent by user
+      const msgResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/messages?sender_id=eq.${encodeURIComponent(userId)}&select=id,conversation_id,sender_id,content,link_type,link_url,created_at,edited_at,deleted_at,reply_to_id&order=created_at.desc&limit=${limit}&offset=${offset}`,
+        { headers: { ...baseHeaders, 'Prefer': 'count=exact' } }
+      )
+      if (msgResp.ok) {
+        messages = await msgResp.json().catch(() => [])
+        const cr = msgResp.headers.get('content-range') || ''
+        const m = cr.match(/\/(\d+)$/)
+        if (m) totalMessages = Number(m[1])
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    
+    res.json({
+      ok: true,
+      userId,
+      conversations: conversations.map(c => ({
+        id: c.id,
+        participant1: c.participant_1,
+        participant2: c.participant_2,
+        participant1Name: c.participant_1_name || null,
+        participant2Name: c.participant_2_name || null,
+        createdAt: c.created_at,
+        lastMessageAt: c.last_message_at,
+        messageCount: c.message_count || 0,
+      })),
+      messages: messages.map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name || null,
+        recipientId: m.recipient_id || null,
+        recipientName: m.recipient_name || null,
+        content: m.content,
+        linkType: m.link_type || null,
+        linkUrl: m.link_url || null,
+        createdAt: m.created_at,
+        editedAt: m.edited_at || null,
+        deletedAt: m.deleted_at || null,
+        replyToId: m.reply_to_id || null,
+      })),
+      totalConversations,
+      totalMessages,
+      limit,
+      offset,
+      hasMore: offset + messages.length < totalMessages,
+    })
+  } catch (e) {
+    console.error('[admin/member-messages] Error:', e)
+    res.status(500).json({ error: e?.message || 'Failed to fetch user messages' })
+  }
+})
+
+// Admin: fetch all messages in a specific conversation (for admin moderation)
+app.get('/api/admin/conversation-messages', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    
+    const conversationId = (req.query.conversationId || req.query.conversation_id || '').toString().trim()
+    if (!conversationId) {
+      res.status(400).json({ error: 'Missing conversationId parameter' })
+      return
+    }
+    
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const before = (req.query.before || '').toString().trim() // Message ID cursor for pagination
+    
+    let conversation = null
+    let messages = []
+    let hasMore = false
+    
+    if (sql) {
+      // Get conversation details with participant info
+      const convRows = await sql`
+        SELECT 
+          c.id,
+          c.participant_1,
+          c.participant_2,
+          c.created_at,
+          c.last_message_at,
+          p1.display_name as participant_1_name,
+          p1.avatar_url as participant_1_avatar,
+          p2.display_name as participant_2_name,
+          p2.avatar_url as participant_2_avatar
+        FROM public.conversations c
+        LEFT JOIN public.profiles p1 ON p1.id = c.participant_1
+        LEFT JOIN public.profiles p2 ON p2.id = c.participant_2
+        WHERE c.id = ${conversationId}::uuid
+      `
+      if (!convRows || convRows.length === 0) {
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+      conversation = convRows[0]
+      
+      // Get messages with cursor-based pagination
+      let msgQuery
+      if (before) {
+        // Get the created_at of the cursor message
+        const cursorRows = await sql`SELECT created_at FROM public.messages WHERE id = ${before}::uuid`
+        const cursorTime = cursorRows?.[0]?.created_at
+        if (cursorTime) {
+          msgQuery = await sql`
+            SELECT 
+              m.id,
+              m.conversation_id,
+              m.sender_id,
+              m.content,
+              m.link_type,
+              m.link_url,
+              m.link_preview,
+              m.reply_to_id,
+              m.created_at,
+              m.edited_at,
+              m.deleted_at,
+              m.read_at,
+              ps.display_name as sender_name,
+              ps.avatar_url as sender_avatar
+            FROM public.messages m
+            LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+            WHERE m.conversation_id = ${conversationId}::uuid
+              AND m.created_at < ${cursorTime}
+            ORDER BY m.created_at DESC
+            LIMIT ${limit + 1}
+          `
+        } else {
+          msgQuery = []
+        }
+      } else {
+        msgQuery = await sql`
+          SELECT 
+            m.id,
+            m.conversation_id,
+            m.sender_id,
+            m.content,
+            m.link_type,
+            m.link_url,
+            m.link_preview,
+            m.reply_to_id,
+            m.created_at,
+            m.edited_at,
+            m.deleted_at,
+            m.read_at,
+            ps.display_name as sender_name,
+            ps.avatar_url as sender_avatar
+          FROM public.messages m
+          LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+          WHERE m.conversation_id = ${conversationId}::uuid
+          ORDER BY m.created_at DESC
+          LIMIT ${limit + 1}
+        `
+      }
+      
+      messages = msgQuery || []
+      hasMore = messages.length > limit
+      if (hasMore) messages = messages.slice(0, limit)
+      
+      // Reverse to get chronological order
+      messages = messages.reverse()
+      
+      // Get reply-to messages if any
+      const replyToIds = messages.filter(m => m.reply_to_id).map(m => m.reply_to_id)
+      const replyToMap = new Map()
+      if (replyToIds.length > 0) {
+        const replyRows = await sql`
+          SELECT m.id, m.sender_id, m.content, m.created_at, p.display_name as sender_name
+          FROM public.messages m
+          LEFT JOIN public.profiles p ON p.id = m.sender_id
+          WHERE m.id = ANY(${replyToIds}::uuid[])
+        `
+        for (const r of replyRows || []) {
+          replyToMap.set(r.id, {
+            id: r.id,
+            senderId: r.sender_id,
+            senderName: r.sender_name,
+            content: r.content,
+            createdAt: r.created_at,
+          })
+        }
+      }
+      
+      // Get reactions for messages
+      const messageIds = messages.map(m => m.id)
+      const reactionMap = new Map()
+      if (messageIds.length > 0) {
+        const reactionRows = await sql`
+          SELECT r.id, r.message_id, r.user_id, r.emoji, r.created_at, p.display_name as user_name
+          FROM public.message_reactions r
+          LEFT JOIN public.profiles p ON p.id = r.user_id
+          WHERE r.message_id = ANY(${messageIds}::uuid[])
+        `
+        for (const r of reactionRows || []) {
+          if (!reactionMap.has(r.message_id)) reactionMap.set(r.message_id, [])
+          reactionMap.get(r.message_id).push({
+            id: r.id,
+            userId: r.user_id,
+            userName: r.user_name,
+            emoji: r.emoji,
+            createdAt: r.created_at,
+          })
+        }
+      }
+      
+      // Attach replies and reactions to messages
+      messages = messages.map(m => ({
+        ...m,
+        replyTo: m.reply_to_id ? replyToMap.get(m.reply_to_id) || null : null,
+        reactions: reactionMap.get(m.id) || [],
+      }))
+      
+      // Log admin action
+      try {
+        let adminName = null
+        const nameRows = await sql`SELECT display_name FROM public.profiles WHERE id = ${adminUserId} LIMIT 1`
+        adminName = nameRows?.[0]?.display_name || null
+        await sql`
+          INSERT INTO public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          VALUES (${adminUserId}, ${adminName}, 'view_conversation', ${conversationId}, ${sql.json({ messageCount: messages.length })})
+        `
+      } catch { }
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      // REST fallback - simplified version
+      const token = getBearerTokenFromRequest(req)
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      if (token) baseHeaders['Authorization'] = `Bearer ${token}`
+      
+      // Get conversation
+      const convResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/conversations?id=eq.${encodeURIComponent(conversationId)}&select=id,participant_1,participant_2,created_at,last_message_at`,
+        { headers: baseHeaders }
+      )
+      if (convResp.ok) {
+        const convArr = await convResp.json().catch(() => [])
+        conversation = Array.isArray(convArr) && convArr[0] ? convArr[0] : null
+      }
+      
+      if (!conversation) {
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+      
+      // Get messages
+      const msgResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/messages?conversation_id=eq.${encodeURIComponent(conversationId)}&select=id,conversation_id,sender_id,content,link_type,link_url,link_preview,reply_to_id,created_at,edited_at,deleted_at,read_at&order=created_at.desc&limit=${limit}`,
+        { headers: baseHeaders }
+      )
+      if (msgResp.ok) {
+        messages = await msgResp.json().catch(() => [])
+        messages = messages.reverse()
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    
+    res.json({
+      ok: true,
+      conversation: {
+        id: conversation.id,
+        participant1: conversation.participant_1,
+        participant2: conversation.participant_2,
+        participant1Name: conversation.participant_1_name || null,
+        participant1Avatar: conversation.participant_1_avatar || null,
+        participant2Name: conversation.participant_2_name || null,
+        participant2Avatar: conversation.participant_2_avatar || null,
+        createdAt: conversation.created_at,
+        lastMessageAt: conversation.last_message_at,
+      },
+      messages: messages.map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name || null,
+        senderAvatar: m.sender_avatar || null,
+        content: m.content,
+        linkType: m.link_type || null,
+        linkUrl: m.link_url || null,
+        linkPreview: m.link_preview || null,
+        replyToId: m.reply_to_id || null,
+        replyTo: m.replyTo || null,
+        createdAt: m.created_at,
+        editedAt: m.edited_at || null,
+        deletedAt: m.deleted_at || null,
+        readAt: m.read_at || null,
+        reactions: m.reactions || [],
+      })),
+      hasMore,
+    })
+  } catch (e) {
+    console.error('[admin/conversation-messages] Error:', e)
+    res.status(500).json({ error: e?.message || 'Failed to fetch conversation messages' })
+  }
+})
+
+// Admin: search all messages involving a user (for moderation)
+app.get('/api/admin/search-user-messages', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    
+    const userId = (req.query.userId || req.query.user_id || '').toString().trim()
+    const query = (req.query.query || req.query.q || '').toString().trim()
+    
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId parameter' })
+      return
+    }
+    
+    if (!query || query.length < 2) {
+      res.status(400).json({ error: 'Search query must be at least 2 characters' })
+      return
+    }
+    
+    const limit = Math.min(Number(req.query.limit) || 50, 100)
+    const searchPattern = `%${query}%`
+    
+    let messages = []
+    
+    if (sql) {
+      // Search all messages where user is either sender or recipient
+      const msgRows = await sql`
+        SELECT 
+          m.id,
+          m.conversation_id,
+          m.sender_id,
+          m.content,
+          m.link_type,
+          m.link_url,
+          m.created_at,
+          m.edited_at,
+          m.deleted_at,
+          m.reply_to_id,
+          ps.display_name as sender_name,
+          ps.avatar_url as sender_avatar,
+          -- Get the other participant in the conversation
+          CASE 
+            WHEN c.participant_1 = m.sender_id THEN c.participant_2 
+            ELSE c.participant_1 
+          END as other_user_id,
+          CASE 
+            WHEN c.participant_1 = m.sender_id THEN po.display_name 
+            ELSE po2.display_name 
+          END as other_user_name
+        FROM public.messages m
+        JOIN public.conversations c ON c.id = m.conversation_id
+        LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+        LEFT JOIN public.profiles po ON po.id = c.participant_2
+        LEFT JOIN public.profiles po2 ON po2.id = c.participant_1
+        WHERE (c.participant_1 = ${userId}::uuid OR c.participant_2 = ${userId}::uuid)
+          AND m.content ILIKE ${searchPattern}
+          AND m.deleted_at IS NULL
+        ORDER BY m.created_at DESC
+        LIMIT ${limit}
+      `
+      messages = msgRows || []
+      
+      // Log admin action
+      try {
+        let adminName = null
+        const nameRows = await sql`SELECT display_name FROM public.profiles WHERE id = ${adminUserId} LIMIT 1`
+        adminName = nameRows?.[0]?.display_name || null
+        await sql`
+          INSERT INTO public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          VALUES (${adminUserId}, ${adminName}, 'search_user_messages', ${userId}, ${sql.json({ query, resultCount: messages.length })})
+        `
+      } catch { }
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      // REST fallback - limited functionality (no ILIKE in REST)
+      // Get conversations first
+      const token = getBearerTokenFromRequest(req)
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      if (token) baseHeaders['Authorization'] = `Bearer ${token}`
+      
+      const convResp = await fetch(
+        `${supabaseUrlEnv}/rest/v1/conversations?or=(participant_1.eq.${encodeURIComponent(userId)},participant_2.eq.${encodeURIComponent(userId)})&select=id`,
+        { headers: baseHeaders }
+      )
+      if (convResp.ok) {
+        const convArr = await convResp.json().catch(() => [])
+        const conversationIds = (Array.isArray(convArr) ? convArr : []).map(c => c.id)
+        
+        if (conversationIds.length > 0) {
+          // Get messages from those conversations
+          const msgResp = await fetch(
+            `${supabaseUrlEnv}/rest/v1/messages?conversation_id=in.(${conversationIds.join(',')})&content=ilike.*${encodeURIComponent(query)}*&deleted_at=is.null&select=id,conversation_id,sender_id,content,link_type,link_url,created_at,edited_at,deleted_at,reply_to_id&order=created_at.desc&limit=${limit}`,
+            { headers: baseHeaders }
+          )
+          if (msgResp.ok) {
+            messages = await msgResp.json().catch(() => [])
+          }
+        }
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    
+    res.json({
+      ok: true,
+      userId,
+      query,
+      messages: messages.map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name || null,
+        senderAvatar: m.sender_avatar || null,
+        otherUserId: m.other_user_id || null,
+        otherUserName: m.other_user_name || null,
+        content: m.content,
+        linkType: m.link_type || null,
+        linkUrl: m.link_url || null,
+        createdAt: m.created_at,
+        editedAt: m.edited_at || null,
+        deletedAt: m.deleted_at || null,
+        replyToId: m.reply_to_id || null,
+      })),
+      resultCount: messages.length,
+      limit,
+    })
+  } catch (e) {
+    console.error('[admin/search-user-messages] Error:', e)
+    res.status(500).json({ error: e?.message || 'Failed to search user messages' })
+  }
+})
+
+// Admin: get all images from conversations involving a user (for moderation)
+app.get('/api/admin/user-images', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    
+    const userId = (req.query.userId || req.query.user_id || '').toString().trim()
+    if (!userId) {
+      res.status(400).json({ error: 'Missing userId parameter' })
+      return
+    }
+    
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+    const offset = Math.max(Number(req.query.offset) || 0, 0)
+    const sentOnly = req.query.sentOnly === 'true' // Only images sent BY the user (not received)
+    
+    let images = []
+    let totalCount = 0
+    
+    if (sql) {
+      // Get all image messages from conversations involving this user
+      // Images are stored as content starting with [image:URL]
+      let query
+      if (sentOnly) {
+        // Only images sent BY this user
+        query = await sql`
+          SELECT 
+            m.id,
+            m.conversation_id,
+            m.sender_id,
+            m.content,
+            m.created_at,
+            ps.display_name as sender_name,
+            ps.avatar_url as sender_avatar,
+            CASE 
+              WHEN c.participant_1 = ${userId}::uuid THEN c.participant_2 
+              ELSE c.participant_1 
+            END as other_user_id,
+            CASE 
+              WHEN c.participant_1 = ${userId}::uuid THEN po2.display_name 
+              ELSE po1.display_name 
+            END as other_user_name
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+          LEFT JOIN public.profiles po1 ON po1.id = c.participant_1
+          LEFT JOIN public.profiles po2 ON po2.id = c.participant_2
+          WHERE m.sender_id = ${userId}::uuid
+            AND m.content LIKE '[image:%'
+            AND m.deleted_at IS NULL
+          ORDER BY m.created_at DESC
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+        // Get total count
+        const countRows = await sql`
+          SELECT COUNT(*) as count 
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          WHERE m.sender_id = ${userId}::uuid
+            AND m.content LIKE '[image:%'
+            AND m.deleted_at IS NULL
+        `
+        totalCount = Number(countRows?.[0]?.count) || 0
+      } else {
+        // All images in conversations where user is participant
+        query = await sql`
+          SELECT 
+            m.id,
+            m.conversation_id,
+            m.sender_id,
+            m.content,
+            m.created_at,
+            ps.display_name as sender_name,
+            ps.avatar_url as sender_avatar,
+            CASE 
+              WHEN c.participant_1 = ${userId}::uuid THEN c.participant_2 
+              ELSE c.participant_1 
+            END as other_user_id,
+            CASE 
+              WHEN c.participant_1 = ${userId}::uuid THEN po2.display_name 
+              ELSE po1.display_name 
+            END as other_user_name
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          LEFT JOIN public.profiles ps ON ps.id = m.sender_id
+          LEFT JOIN public.profiles po1 ON po1.id = c.participant_1
+          LEFT JOIN public.profiles po2 ON po2.id = c.participant_2
+          WHERE (c.participant_1 = ${userId}::uuid OR c.participant_2 = ${userId}::uuid)
+            AND m.content LIKE '[image:%'
+            AND m.deleted_at IS NULL
+          ORDER BY m.created_at DESC
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+        // Get total count
+        const countRows = await sql`
+          SELECT COUNT(*) as count 
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          WHERE (c.participant_1 = ${userId}::uuid OR c.participant_2 = ${userId}::uuid)
+            AND m.content LIKE '[image:%'
+            AND m.deleted_at IS NULL
+        `
+        totalCount = Number(countRows?.[0]?.count) || 0
+      }
+      images = query || []
+      
+      // Log admin action
+      try {
+        let adminName = null
+        const nameRows = await sql`SELECT display_name FROM public.profiles WHERE id = ${adminUserId} LIMIT 1`
+        adminName = nameRows?.[0]?.display_name || null
+        await sql`
+          INSERT INTO public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          VALUES (${adminUserId}, ${adminName}, 'view_user_images', ${userId}, ${sql.json({ sentOnly, resultCount: images.length, totalCount })})
+        `
+      } catch { }
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      // REST fallback
+      const token = getBearerTokenFromRequest(req)
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      if (token) baseHeaders['Authorization'] = `Bearer ${token}`
+      
+      if (sentOnly) {
+        // Get images sent by user
+        const msgResp = await fetch(
+          `${supabaseUrlEnv}/rest/v1/messages?sender_id=eq.${encodeURIComponent(userId)}&content=like.[image:*&deleted_at=is.null&select=id,conversation_id,sender_id,content,created_at&order=created_at.desc&limit=${limit}&offset=${offset}`,
+          { headers: { ...baseHeaders, 'Prefer': 'count=exact' } }
+        )
+        if (msgResp.ok) {
+          images = await msgResp.json().catch(() => [])
+          const cr = msgResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) totalCount = Number(m[1])
+        }
+      } else {
+        // Get conversations first, then images
+        const convResp = await fetch(
+          `${supabaseUrlEnv}/rest/v1/conversations?or=(participant_1.eq.${encodeURIComponent(userId)},participant_2.eq.${encodeURIComponent(userId)})&select=id`,
+          { headers: baseHeaders }
+        )
+        if (convResp.ok) {
+          const convArr = await convResp.json().catch(() => [])
+          const conversationIds = (Array.isArray(convArr) ? convArr : []).map(c => c.id)
+          
+          if (conversationIds.length > 0) {
+            const msgResp = await fetch(
+              `${supabaseUrlEnv}/rest/v1/messages?conversation_id=in.(${conversationIds.join(',')})&content=like.[image:*&deleted_at=is.null&select=id,conversation_id,sender_id,content,created_at&order=created_at.desc&limit=${limit}&offset=${offset}`,
+              { headers: { ...baseHeaders, 'Prefer': 'count=exact' } }
+            )
+            if (msgResp.ok) {
+              images = await msgResp.json().catch(() => [])
+              const cr = msgResp.headers.get('content-range') || ''
+              const m = cr.match(/\/(\d+)$/)
+              if (m) totalCount = Number(m[1])
+            }
+          }
+        }
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    
+    // Parse image content to extract URL and caption
+    const parseImageContent = (content) => {
+      const match = content.match(/^\[image:(.*?)\](.*)$/)
+      if (match) {
+        return {
+          imageUrl: match[1],
+          caption: match[2]?.trim() || null
+        }
+      }
+      return { imageUrl: null, caption: null }
+    }
+    
+    res.json({
+      ok: true,
+      userId,
+      images: images.map(img => {
+        const parsed = parseImageContent(img.content || '')
+        return {
+          id: img.id,
+          conversationId: img.conversation_id,
+          senderId: img.sender_id,
+          senderName: img.sender_name || null,
+          senderAvatar: img.sender_avatar || null,
+          otherUserId: img.other_user_id || null,
+          otherUserName: img.other_user_name || null,
+          imageUrl: parsed.imageUrl,
+          caption: parsed.caption,
+          createdAt: img.created_at,
+          isSentByUser: img.sender_id === userId,
+        }
+      }),
+      totalCount,
+      limit,
+      offset,
+      hasMore: offset + images.length < totalCount,
+      sentOnly,
+    })
+  } catch (e) {
+    console.error('[admin/user-images] Error:', e)
+    res.status(500).json({ error: e?.message || 'Failed to fetch user images' })
+  }
+})
+
 // Admin: add a note on a profile
 app.post('/api/admin/member-note', async (req, res) => {
   try {
@@ -9135,7 +10756,7 @@ app.options('/api/admin/demote-admin', (_req, res) => {
 })
 
 // Valid user roles (excluding 'plus' which is payment-based)
-const ADMIN_ASSIGNABLE_ROLES = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip']
+const ADMIN_ASSIGNABLE_ROLES = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip', 'bug_catcher']
 const ALL_USER_ROLES = [...ADMIN_ASSIGNABLE_ROLES, 'plus']
 
 // Admin: add a role to a user
@@ -9399,6 +11020,22 @@ app.get('/api/banned/check', async (req, res) => {
           return
         }
       } catch { }
+      
+      // Also check threat_level in profiles for users with this email
+      try {
+        const profileRows = await sql`
+          select p.threat_level 
+          from public.profiles p
+          join auth.users u on u.id = p.id
+          where lower(u.email) = ${emailParam.toLowerCase()}
+          and p.threat_level = 3
+          limit 1
+        `
+        if (Array.isArray(profileRows) && profileRows.length > 0) {
+          res.json({ banned: true, source: 'threat_level', reason: 'Your account has been banned from the platform.' })
+          return
+        }
+      } catch { }
     }
     res.json({ banned: false })
   } catch (e) {
@@ -9565,6 +11202,150 @@ app.post('/api/admin/ban', async (req, res) => {
   }
 })
 
+// Admin: set user threat level (records bans and triggers ban email when level is 3)
+app.post('/api/admin/threat-level', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const { userId, threatLevel, reason } = req.body || {}
+    const uid = typeof userId === 'string' ? userId.trim() : ''
+    const level = Number.isFinite(Number(threatLevel)) ? Number(threatLevel) : NaN
+    if (!uid || !Number.isInteger(level) || level < 0 || level > 3) {
+      res.status(400).json({ error: 'Invalid userId or threatLevel' })
+      return
+    }
+
+    let existingLevel = null
+    let userEmail = null
+    let userDisplayName = null
+    let userLanguage = 'en'
+    try {
+      const rows = await sql`
+        select p.threat_level, p.display_name, coalesce(p.language, 'en') as language, u.email
+        from public.profiles p
+        left join auth.users u on u.id = p.id
+        where p.id = ${uid}
+        limit 1
+      `
+      if (!rows || !rows.length) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      existingLevel = rows[0].threat_level
+      userEmail = rows[0].email || null
+      userDisplayName = rows[0].display_name || rows[0].email || 'User'
+      userLanguage = rows[0].language || 'en'
+    } catch (lookupErr) {
+      console.error('[threat-level] failed to load user', lookupErr)
+      res.status(500).json({ error: 'Failed to load user' })
+      return
+    }
+
+    try {
+      await sql`update public.profiles set threat_level = ${level} where id = ${uid}`
+    } catch (err) {
+      console.error('[threat-level] failed to update level', err)
+      res.status(500).json({ error: 'Failed to update threat level' })
+      return
+    }
+
+    let bannedIps = []
+    let bannedAt = null
+    let bannedByName = null
+    let emailResult = null
+
+    if (level === 3) {
+      try {
+        const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [uid])
+        bannedIps = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
+      } catch { }
+
+      try {
+        const adminNameRows = await sql`select display_name from public.profiles where id = ${adminUserId} limit 1`
+        bannedByName = adminNameRows?.[0]?.display_name || null
+      } catch { }
+
+      const normalizedEmail = userEmail ? userEmail.toLowerCase() : null
+      try {
+        const existingBan = await sql`
+          select id from public.banned_accounts
+          where (user_id = ${uid} or lower(email) = ${normalizedEmail || null})
+          order by banned_at desc
+          limit 1
+        `
+        if (existingBan && existingBan[0]) {
+          const updateRows = await sql`
+            update public.banned_accounts
+            set banned_by = ${adminUserId},
+                reason = coalesce(${reason || null}, reason),
+                ip_addresses = ${sql.array(bannedIps, 'text')},
+                banned_at = now()
+            where id = ${existingBan[0].id}
+            returning banned_at
+          `
+          bannedAt = updateRows?.[0]?.banned_at || null
+        } else {
+          const insertRows = await sql`
+            insert into public.banned_accounts (user_id, email, ip_addresses, reason, banned_by)
+            values (${uid}, ${normalizedEmail}, ${sql.array(bannedIps, 'text')}, ${reason || null}, ${adminUserId})
+            returning banned_at
+          `
+          bannedAt = insertRows?.[0]?.banned_at || null
+        }
+      } catch (banErr) {
+        console.warn('[threat-level] failed to persist banned_accounts record', banErr)
+      }
+
+      for (const ip of bannedIps) {
+        try {
+          await sql`
+            insert into public.banned_ips (ip_address, reason, banned_by, user_id, email)
+            values (${ip}::inet, ${reason || null}, ${adminUserId}, ${uid}, ${normalizedEmail})
+            on conflict (ip_address) do update set
+              reason = coalesce(excluded.reason, public.banned_ips.reason),
+              banned_by = coalesce(excluded.banned_by, public.banned_ips.banned_by),
+              banned_at = excluded.banned_at,
+              user_id = coalesce(excluded.user_id, public.banned_ips.user_id),
+              email = coalesce(excluded.email, public.banned_ips.email)
+          `
+        } catch (ipErr) {
+          console.warn('[threat-level] failed to upsert banned_ip', ipErr)
+        }
+      }
+
+      if (existingLevel !== 3 && normalizedEmail) {
+        emailResult = await sendAutomaticEmail('BAN_USER', {
+          userId: uid,
+          userEmail: normalizedEmail,
+          userDisplayName,
+          userLanguage,
+        })
+      }
+    }
+
+    try {
+      await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUserId}, 'set_threat_level', ${uid}, ${sql.json({ previous: existingLevel, level, reason })})`
+    } catch { }
+
+    res.json({
+      ok: true,
+      threatLevel: level,
+      previousLevel: existingLevel,
+      bannedIps,
+      bannedAt,
+      bannedById: level === 3 ? adminUserId : null,
+      bannedByName: level === 3 ? bannedByName : null,
+      email: emailResult,
+    })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to update threat level' })
+  }
+})
+
 // Helper: load plants via Supabase anon client when SQL is unavailable
 async function loadPlantsViaSupabase() {
   if (!supabaseServer) return null
@@ -9689,6 +11470,115 @@ app.post('/api/translate', async (req, res) => {
     res.json({ translatedText })
   } catch (error) {
     console.error('[translate] Translation error:', error)
+    res.status(500).json({ error: 'Translation service error: ' + (error?.message || 'Unknown error') })
+  }
+})
+
+// DeepL Language Detection API endpoint
+// Uses DeepL's translation API with auto-detect (omitting source_lang)
+app.post('/api/detect-language', async (req, res) => {
+  try {
+    const { text } = req.body
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid text field' })
+    }
+
+    // Get DeepL API key from environment
+    const deeplApiKey = process.env.DEEPL_API_KEY
+    if (!deeplApiKey) {
+      console.error('[detect-language] DeepL API key not configured')
+      return res.status(500).json({ error: 'Language detection service not configured' })
+    }
+
+    // Use DeepL API (Pro: https://api.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+
+    // DeepL detects source language when source_lang is omitted
+    // We translate to EN as a dummy target just to get the detection
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text.substring(0, 500), // Use first 500 chars for detection efficiency
+        target_lang: 'EN', // Dummy target, we just want the detection
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[detect-language] DeepL API error:', response.status, errorText)
+      return res.status(response.status).json({ error: 'Language detection failed: ' + (errorText || response.statusText) })
+    }
+
+    const data = await response.json()
+    const detectedLanguage = data.translations?.[0]?.detected_source_language?.toLowerCase() || null
+
+    res.json({ detectedLanguage })
+  } catch (error) {
+    console.error('[detect-language] Detection error:', error)
+    res.status(500).json({ error: 'Language detection service error: ' + (error?.message || 'Unknown error') })
+  }
+})
+
+// DeepL Translation with Language Detection API endpoint
+// Translates text AND returns the detected source language
+app.post('/api/translate-detect', async (req, res) => {
+  try {
+    const { text, target_lang } = req.body
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid text field' })
+    }
+
+    if (!target_lang) {
+      return res.status(400).json({ error: 'Missing target_lang' })
+    }
+
+    // Get DeepL API key from environment
+    const deeplApiKey = process.env.DEEPL_API_KEY
+    if (!deeplApiKey) {
+      console.error('[translate-detect] DeepL API key not configured')
+      return res.status(500).json({ error: 'Translation service not configured' })
+    }
+
+    // Use DeepL API (Pro: https://api.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+
+    // Omit source_lang to let DeepL auto-detect
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        target_lang: target_lang.toUpperCase(),
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[translate-detect] DeepL API error:', response.status, errorText)
+      return res.status(response.status).json({ error: 'Translation failed: ' + (errorText || response.statusText) })
+    }
+
+    const data = await response.json()
+    const translatedText = data.translations?.[0]?.text || text
+    const detectedLanguage = data.translations?.[0]?.detected_source_language?.toLowerCase() || null
+
+    // If detected language equals target language, return original text
+    if (detectedLanguage === target_lang.toLowerCase()) {
+      return res.json({ translatedText: text, detectedLanguage, skipped: true })
+    }
+
+    res.json({ translatedText, detectedLanguage })
+  } catch (error) {
+    console.error('[translate-detect] Translation error:', error)
     res.status(500).json({ error: 'Translation service error: ' + (error?.message || 'Unknown error') })
   }
 })
@@ -10802,7 +12692,7 @@ async function getActiveBroadcastRow() {
       const row = Array.isArray(rows) && rows[0] ? rows[0] : null
       if (row && row.created_by) {
         try {
-          const p = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+          const p = await sql`select coalesce(display_name, username, '') as name from public.profiles where id = ${row.created_by} limit 1`
           if (p && p[0]) row.admin_name = p[0].name
         } catch { /* ignore profile fetch error */ }
       }
@@ -11411,6 +13301,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
           originalSizeBytes: file.size,
           quality: gardenCoverWebpQuality,
           compressionPercent,
+          uploadSource: 'garden_cover',
           metadata: {
             source: 'garden_cover',
             gardenId,
@@ -11479,6 +13370,448 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err?.message || 'Failed to delete cover image' })
   }
+})
+
+// === Plant Scan API Endpoints ===
+
+// Combined upload + identify endpoint
+// Uses the same upload pattern as Admin/Garden Cover/Messages uploads
+// Optimizes image, uploads to storage, calls Kindwise API, returns everything
+app.post('/api/scan/upload-and-identify', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'You must be signed in to scan plants' })
+    return
+  }
+
+  if (!KINDWISE_API_KEY) {
+    console.error('[scan] KINDWISE API key not configured')
+    res.status(503).json({ error: 'Plant identification service is not configured' })
+    return
+  }
+
+  // Ensure admin_media_uploads table exists for tracking
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  singleScanImageUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(scanImageMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      const allowedMimes = new Set([
+        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+        'image/heic', 'image/heif', 'image/avif'
+      ])
+      if (!allowedMimes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      // Parse optional location from form data
+      const latitude = req.body?.latitude ? parseFloat(req.body.latitude) : undefined
+      const longitude = req.body?.longitude ? parseFloat(req.body.longitude) : undefined
+
+      let optimizedBuffer
+      let finalMimeType = 'image/webp'
+
+      // GIFs are kept as-is
+      if (mime === 'image/gif') {
+        optimizedBuffer = file.buffer
+        finalMimeType = 'image/gif'
+      } else {
+        try {
+          optimizedBuffer = await sharp(file.buffer)
+            .rotate()
+            .resize({
+              width: scanImageMaxDimension,
+              height: scanImageMaxDimension,
+              fit: 'inside',
+              withoutEnlargement: true,
+              fastShrinkOnLoad: true,
+            })
+            .webp({
+              quality: scanImageWebpQuality,
+              effort: 5,
+              smartSubsample: true,
+            })
+            .toBuffer()
+        } catch (sharpErr) {
+          console.error('[scan] failed to convert image to webp', sharpErr)
+          res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+          return
+        }
+      }
+
+      // Convert optimized buffer to base64 for Kindwise API
+      const optimizedBase64 = `data:${finalMimeType};base64,${optimizedBuffer.toString('base64')}`
+
+      // Call Kindwise API with the optimized image
+      let identificationResult = null
+      try {
+        const requestBody = {
+          images: [optimizedBase64],
+          similar_images: true,
+        }
+        if (latitude !== undefined && longitude !== undefined && !isNaN(latitude) && !isNaN(longitude)) {
+          requestBody.latitude = latitude
+          requestBody.longitude = longitude
+        }
+
+        console.log('[scan] Calling Kindwise API for user:', user.id)
+
+        const apiResponse = await fetch('https://plant.id/api/v3/identification', {
+          method: 'POST',
+          headers: {
+            'Api-Key': KINDWISE_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        })
+
+        if (!apiResponse.ok) {
+          const errorText = await apiResponse.text()
+          console.error('[scan] Kindwise API error:', apiResponse.status, errorText)
+          res.status(502).json({ 
+            error: 'Plant identification service error', 
+            details: `API returned ${apiResponse.status}` 
+          })
+          return
+        }
+
+        identificationResult = await apiResponse.json()
+        console.log('[scan] Kindwise API success, status:', identificationResult.status)
+      } catch (apiErr) {
+        console.error('[scan] Error calling Kindwise API:', apiErr?.message || apiErr)
+        res.status(500).json({ error: 'Failed to identify plant', details: apiErr?.message })
+        return
+      }
+
+      // Upload optimized image to storage
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const timestamp = Date.now()
+      const randomId = Math.random().toString(36).substring(2, 10)
+      const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
+      const objectPath = `${scanImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(scanImageUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: finalMimeType,
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[scan] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(scanImageUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+      if (!proxyUrl) {
+        res.status(500).json({ error: 'Failed to generate public URL for scan image' })
+        return
+      }
+
+      const compressionPercent =
+        file.size > 0 && finalMimeType !== 'image/gif'
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+      // Record to global image database
+      let uploaderDisplayName = null
+      try {
+        uploaderDisplayName = await getAdminProfileName(user.id)
+      } catch { }
+      
+      try {
+        await recordAdminMediaUpload({
+          adminId: user.id,
+          adminEmail: user.email || null,
+          adminName: uploaderDisplayName,
+          bucket: scanImageUploadBucket,
+          path: objectPath,
+          publicUrl: proxyUrl,
+          mimeType: finalMimeType,
+          originalMimeType: mime,
+          sizeBytes: optimizedBuffer.length,
+          originalSizeBytes: file.size,
+          quality: finalMimeType === 'image/gif' ? null : scanImageWebpQuality,
+          compressionPercent,
+          uploadSource: 'plant_scan',
+          metadata: {
+            source: 'plant_scan',
+            originalName: file.originalname,
+            userId: user.id,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      } catch (recordErr) {
+        console.error('[scan] failed to record media upload', recordErr)
+      }
+
+      // Return combined result
+      res.json({
+        ok: true,
+        upload: {
+          url: proxyUrl,
+          bucket: scanImageUploadBucket,
+          path: objectPath,
+          mimeType: finalMimeType,
+          size: optimizedBuffer.length,
+          originalMimeType: mime,
+          originalSize: file.size,
+          compressionPercent,
+        },
+        identification: identificationResult,
+      })
+    })().catch((err) => {
+      console.error('[scan] unexpected failure', err)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected failure during scan' })
+      }
+    })
+  })
+})
+
+// Upload bug screenshot for bug reports
+// Endpoint: POST /api/bug-report/upload-screenshot
+app.post('/api/bug-report/upload-screenshot', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'You must be signed in to upload bug screenshots' })
+    return
+  }
+
+  // Verify user has bug_catcher role
+  let hasBugCatcherRole = false
+  try {
+    const { data: profileData } = await supabaseServiceClient
+      .from('profiles')
+      .select('roles')
+      .eq('id', user.id)
+      .single()
+    if (profileData?.roles && Array.isArray(profileData.roles)) {
+      hasBugCatcherRole = profileData.roles.includes('bug_catcher')
+    }
+  } catch (err) {
+    console.error('[bug-screenshot] failed to check user role', err)
+  }
+
+  if (!hasBugCatcherRole) {
+    res.status(403).json({ error: 'Only Bug Catchers can upload bug screenshots' })
+    return
+  }
+
+  singleBugScreenshotUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(bugScreenshotMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+
+      const mime = (file.mimetype || '').toLowerCase()
+      const allowedMimes = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'image/heic',
+        'image/heif',
+        'image/avif',
+      ]
+      if (!allowedMimes.includes(mime)) {
+        res.status(400).json({
+          error: `Unsupported image type: ${mime}. Allowed: JPEG, PNG, WebP, GIF, HEIC, AVIF`,
+        })
+        return
+      }
+
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      let finalMimeType = 'image/webp'
+
+      // GIFs are kept as-is to preserve animation
+      if (mime === 'image/gif') {
+        optimizedBuffer = file.buffer
+        finalMimeType = 'image/gif'
+      } else {
+        try {
+          optimizedBuffer = await sharp(file.buffer)
+            .rotate()
+            .resize({
+              width: bugScreenshotMaxDimension,
+              height: bugScreenshotMaxDimension,
+              fit: 'inside',
+              withoutEnlargement: true,
+              fastShrinkOnLoad: true,
+            })
+            .webp({
+              quality: bugScreenshotWebpQuality,
+              effort: 5,
+              smartSubsample: true,
+            })
+            .toBuffer()
+        } catch (sharpErr) {
+          console.error('[bug-screenshot] failed to convert image to webp', sharpErr)
+          res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+          return
+        }
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const userSegment = sanitizePathSegment(`user-${user.id}`, 'user')
+      const timestamp = Date.now()
+      const typeSegment = userSegment ? `bug-${userSegment}-${timestamp}` : `bug-${timestamp}`
+      const objectPath = buildUploadObjectPath(baseName, typeSegment, bugScreenshotUploadPrefix)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(bugScreenshotUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: finalMimeType,
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[bug-screenshot] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(bugScreenshotUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      // Transform URL to use media proxy (hides Supabase project URL)
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+      if (!proxyUrl) {
+        res.status(500).json({ error: 'Failed to generate public URL for screenshot' })
+        return
+      }
+
+      const compressionPercent =
+        file.size > 0
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+      // Get user display name for media tracking
+      let uploaderDisplayName = 'Unknown'
+      try {
+        const { data: pdata } = await supabaseServiceClient
+          .from('profiles')
+          .select('display_name')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (pdata?.display_name) {
+          uploaderDisplayName = pdata.display_name
+        }
+      } catch {
+        /* ignore */
+      }
+
+      // Record in admin media uploads for tracking
+      try {
+        await recordAdminMediaUpload({
+          adminId: user.id,
+          adminEmail: user.email || null,
+          adminName: uploaderDisplayName,
+          bucket: bugScreenshotUploadBucket,
+          path: objectPath,
+          publicUrl: proxyUrl,
+          mimeType: finalMimeType,
+          originalMimeType: mime,
+          sizeBytes: optimizedBuffer.length,
+          originalSizeBytes: file.size,
+          quality: finalMimeType === 'image/gif' ? null : bugScreenshotWebpQuality,
+          compressionPercent,
+          uploadSource: 'bug_screenshot',
+          metadata: {
+            source: 'bug_screenshot',
+            originalName: file.originalname,
+            userId: user.id,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      } catch (recordErr) {
+        console.error('[bug-screenshot] failed to record media upload', recordErr)
+      }
+
+      res.json({
+        ok: true,
+        url: proxyUrl,
+        bucket: bugScreenshotUploadBucket,
+        path: objectPath,
+        mimeType: finalMimeType,
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        compressionPercent,
+      })
+    })().catch((err) => {
+      console.error('[bug-screenshot] unexpected failure', err)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected failure during upload' })
+      }
+    })
+  })
 })
 
 // DELETE a garden (and its cover image from storage)
@@ -12086,7 +14419,53 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       res.status(403).json({ ok: false, error: 'This garden is private' })
       return
     }
-    // TODO: For friends_only, would need to check friend status with members
+
+    // Check friends_only access: user must be friends with at least one garden member
+    if (!isMember && gardenPrivacy === 'friends_only') {
+      if (!user || !user.id) {
+        res.status(403).json({ ok: false, error: 'This garden is for friends only' })
+        return
+      }
+      // Check if user is friend with ANY member
+      const memberIds = members.map((m) => m.userId).filter(Boolean)
+      let isFriend = false
+
+      if (memberIds.length > 0) {
+        if (sql) {
+          try {
+            const rows = await sql`
+              select 1 from public.friends 
+              where user_id = ${user.id} 
+              and friend_id = any(${sql.array(memberIds)}::uuid[])
+              limit 1
+            `
+            if (rows && rows.length > 0) isFriend = true
+          } catch (e) {
+            console.error('[overview] Friend check failed (SQL)', e)
+          }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          // REST fallback
+          try {
+            const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+            const bearer = getAuthTokenFromRequest(req)
+            if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+            const idsStr = memberIds.join(',')
+            const resp = await fetch(`${supabaseUrlEnv}/rest/v1/friends?user_id=eq.${encodeURIComponent(user.id)}&friend_id=in.(${idsStr})&limit=1`, { headers })
+            if (resp.ok) {
+              const data = await resp.json().catch(() => [])
+              if (Array.isArray(data) && data.length > 0) isFriend = true
+            }
+          } catch (e) {
+            console.error('[overview] Friend check failed (REST)', e)
+          }
+        }
+      }
+
+      if (!isFriend) {
+        res.status(403).json({ ok: false, error: 'This garden is visible only to friends of members' })
+        return
+      }
+    }
 
     // Calculate today's progress and stats server-side to avoid round-trips
     const today = new Date().toISOString().slice(0, 10)
@@ -12106,7 +14485,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
     }
     speciesCount = seenSpecies.size
 
-    // Calculate today's task progress
+    // Calculate today's task progress and task counts per plant
+    let taskCountsByPlant = {}
     if (sql && gardenId) {
       try {
         const progressRows = await sql`
@@ -12128,6 +14508,35 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       } catch (progressErr) {
         console.warn('[overview] Progress query failed:', progressErr?.message || progressErr)
       }
+
+      // Fetch task counts per plant (total tasks and due today)
+      try {
+        const taskCountRows = await sql`
+          SELECT 
+            t.garden_plant_id::text as garden_plant_id,
+            COUNT(DISTINCT t.id)::int as total_tasks,
+            COALESCE(SUM(CASE 
+              WHEN o.due_at >= ${startIso}::timestamptz AND o.due_at <= ${endIso}::timestamptz 
+                   AND GREATEST(1, o.required_count) - o.completed_count > 0
+              THEN GREATEST(1, o.required_count) - o.completed_count
+              ELSE 0
+            END), 0)::int as due_today
+          FROM garden_plant_tasks t
+          LEFT JOIN garden_plant_task_occurrences o ON o.task_id = t.id
+          WHERE t.garden_id = ${gardenId}
+          GROUP BY t.garden_plant_id
+        `
+        if (taskCountRows && taskCountRows.length > 0) {
+          for (const row of taskCountRows) {
+            taskCountsByPlant[row.garden_plant_id] = {
+              totalTasks: Number(row.total_tasks || 0),
+              dueToday: Number(row.due_today || 0),
+            }
+          }
+        }
+      } catch (taskCountErr) {
+        console.warn('[overview] Task counts query failed:', taskCountErr?.message || taskCountErr)
+      }
     }
 
     res.json({
@@ -12139,6 +14548,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       todayProgress,
       totalOnHand,
       speciesCount,
+      taskCountsByPlant,
     })
   } catch (e) {
     console.error('[overview] Error for garden', req.params.id, ':', e?.message || e)
@@ -12687,23 +15097,111 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       }
     }
 
-    // Gather comprehensive garden data for advice generation
+    // Gather COMPREHENSIVE garden data for advice generation - ALL plant and garden info
     const plants = await sql`
-      select gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes,
-             p.name as plant_name, p.scientific_name,
-             p.watering_type, p.level_sun, p.maintenance_level
+      select 
+        gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes,
+        gp.seeds_planted, gp.planted_at, gp.expected_bloom_date, gp.last_health_update,
+        gp.override_water_freq_unit, gp.override_water_freq_value,
+        gp.created_at as added_at,
+        -- Base plant info
+        p.name as plant_name, p.scientific_name, p.plant_type,
+        p.utility as plant_utility, p.comestible_part,
+        -- Care requirements
+        p.watering_type, p.water_freq_amount, p.water_freq_period,
+        p.light_level, p.hardiness_min, p.hardiness_max,
+        p.temperature_min, p.temperature_max, p.temperature_ideal,
+        p.hygrometry, p.soil, p.nutrition_need, p.fertilizer,
+        -- Growing info
+        p.sowing_month, p.flowering_month, p.fruiting_month,
+        p.height_cm, p.wingspan_cm, p.separation_cm,
+        p.tutoring, p.transplanting, p.sow_type, p.division,
+        -- Characteristics
+        p.is_edible, p.is_poisonous, p.spiked, p.scent, p.multicolor,
+        p.melliferous, p.conservation_status,
+        -- Problems and companions
+        p.pests, p.diseases, p.companions, p.tags,
+        -- Translated overview
+        (
+          select pt.overview 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as plant_overview
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
-      limit 50
+      limit 100
     `
 
-    // Get garden location for context
+    // Get FULL garden info for context
     const gardenFull = await sql`
-      select location_city, location_country, location_timezone, location_lat, location_lon
+      select 
+        location_city, location_country, location_timezone, location_lat, location_lon,
+        privacy, created_at as garden_created_at,
+        (select count(*)::int from public.garden_plants where garden_id = ${gardenId}) as plant_count,
+        (select count(*)::int from public.garden_members where garden_id = ${gardenId}) as member_count
       from public.gardens where id = ${gardenId} limit 1
     `
     const gardenLocation = gardenFull[0] || {}
+    
+    // Get garden members with their contributions
+    let gardenMembers = []
+    try {
+      const memberRows = await sql`
+        select 
+          gm.role, gm.joined_at,
+          p.display_name, p.experience_years,
+          (
+            select count(*)::int 
+            from public.garden_task_user_completions c
+            join public.garden_plant_task_occurrences o on o.id = c.occurrence_id
+            join public.garden_plant_tasks t on t.id = o.task_id
+            where t.garden_id = ${gardenId} 
+              and c.user_id = gm.user_id 
+              and c.occurred_at > now() - interval '30 days'
+          ) as tasks_completed_30d
+        from public.garden_members gm
+        left join public.profiles p on p.id = gm.user_id
+        where gm.garden_id = ${gardenId}
+        order by gm.role desc, gm.joined_at asc
+      `
+      gardenMembers = memberRows || []
+    } catch { }
+    
+    // Get garden streak info
+    let gardenStreak = null
+    try {
+      const streakRows = await sql`
+        select current_streak, longest_streak, last_streak_date
+        from public.garden_streaks
+        where garden_id = ${gardenId}
+      `
+      if (streakRows[0]) gardenStreak = streakRows[0]
+    } catch { }
+    
+    // Get analytics - health distribution and activity summary
+    let analyticsContext = null
+    try {
+      const healthRows = await sql`
+        select health_status, count(*)::int as count
+        from public.garden_plants
+        where garden_id = ${gardenId} and health_status is not null
+        group by health_status
+      `
+      const activityRows = await sql`
+        select kind, count(*)::int as count
+        from public.garden_activity_logs
+        where garden_id = ${gardenId}
+          and created_at > now() - interval '14 days'
+        group by kind
+        order by count desc
+      `
+      analyticsContext = {
+        healthDistribution: healthRows.reduce((acc, h) => { acc[h.health_status] = h.count; return acc }, {}),
+        activitySummary: activityRows.reduce((acc, a) => { acc[a.kind] = a.count; return acc }, {})
+      }
+    } catch { }
 
     // Get weather data for the location
     let weatherData = null
@@ -12818,17 +15316,73 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       }
     } catch { }
 
-    // Build comprehensive plant list
+    // Build COMPREHENSIVE plant list with ALL details for AI advice
     const plantList = plants.map(p => {
-      const details = []
-      if (p.plants_on_hand) details.push(`${p.plants_on_hand} on hand`)
-      if (p.level_sun) details.push(`sun: ${p.level_sun}`)
-      if (p.maintenance_level) details.push(`maintenance: ${p.maintenance_level}`)
-      if (p.watering_type) details.push(`watering: ${p.watering_type}`)
-      if (p.health_status) details.push(`health: ${p.health_status}`)
-      if (p.notes) details.push(`notes: ${p.notes}`)
-      return `- ${p.nickname || p.plant_name || 'Unknown'} (${p.plant_name || 'N/A'}): ${details.join(', ') || 'no details'}`
-    }).join('\n')
+      const lines = []
+      const displayName = p.nickname || p.plant_name || 'Unknown'
+      lines.push(`### ${displayName}${p.scientific_name ? ` (${p.scientific_name})` : ''}`)
+      
+      // Basic info
+      const basicInfo = []
+      if (p.plant_type) basicInfo.push(`Type: ${p.plant_type}`)
+      if (p.plants_on_hand) basicInfo.push(`Quantity: ${p.plants_on_hand}`)
+      if (p.seeds_planted) basicInfo.push(`Seeds planted: ${p.seeds_planted}`)
+      if (p.health_status) {
+        let healthInfo = `Health: ${p.health_status}`
+        if (p.last_health_update) healthInfo += ` (updated ${new Date(p.last_health_update).toLocaleDateString()})`
+        basicInfo.push(healthInfo)
+      }
+      if (basicInfo.length > 0) lines.push(`- ${basicInfo.join(' | ')}`)
+      
+      // Care requirements
+      const careInfo = []
+      if (p.override_water_freq_value) {
+        careInfo.push(`Watering: ${p.override_water_freq_value}x per ${p.override_water_freq_unit || 'week'} (custom)`)
+      } else if (p.water_freq_amount) {
+        careInfo.push(`Watering: ${p.water_freq_amount}x per ${p.water_freq_period || 'week'}`)
+      }
+      if (p.light_level) careInfo.push(`Light: ${p.light_level}`)
+      if (p.temperature_min && p.temperature_max) {
+        careInfo.push(`Temp: ${p.temperature_min}°C-${p.temperature_max}°C${p.temperature_ideal ? ` (ideal: ${p.temperature_ideal}°C)` : ''}`)
+      }
+      if (p.hygrometry) careInfo.push(`Humidity: ${p.hygrometry}%`)
+      if (careInfo.length > 0) lines.push(`- Care: ${careInfo.join(' | ')}`)
+      
+      // Growing info
+      const growingInfo = []
+      if (p.sowing_month && p.sowing_month.length > 0) growingInfo.push(`Sow: ${p.sowing_month.join(', ')}`)
+      if (p.flowering_month && p.flowering_month.length > 0) growingInfo.push(`Flowers: ${p.flowering_month.join(', ')}`)
+      if (p.fruiting_month && p.fruiting_month.length > 0) growingInfo.push(`Fruits: ${p.fruiting_month.join(', ')}`)
+      if (growingInfo.length > 0) lines.push(`- Growing: ${growingInfo.join(' | ')}`)
+      
+      // Characteristics
+      const chars = []
+      if (p.is_edible) chars.push('Edible')
+      if (p.is_poisonous) chars.push('⚠️ Poisonous')
+      if (p.melliferous) chars.push('Melliferous')
+      if (chars.length > 0) lines.push(`- Traits: ${chars.join(', ')}`)
+      
+      // Problems
+      if ((p.pests && p.pests.length > 0) || (p.diseases && p.diseases.length > 0)) {
+        const problems = []
+        if (p.pests && p.pests.length > 0) problems.push(`Pests: ${p.pests.slice(0, 5).join(', ')}`)
+        if (p.diseases && p.diseases.length > 0) problems.push(`Diseases: ${p.diseases.slice(0, 5).join(', ')}`)
+        lines.push(`- Watch for: ${problems.join(' | ')}`)
+      }
+      
+      // Dates
+      if (p.planted_at || p.expected_bloom_date) {
+        const dates = []
+        if (p.planted_at) dates.push(`Planted: ${new Date(p.planted_at).toLocaleDateString()}`)
+        if (p.expected_bloom_date) dates.push(`Expected bloom: ${new Date(p.expected_bloom_date).toLocaleDateString()}`)
+        lines.push(`- ${dates.join(' | ')}`)
+      }
+      
+      // User notes
+      if (p.notes) lines.push(`- Notes: ${p.notes}`)
+      
+      return lines.join('\n')
+    }).join('\n\n')
 
     // Calculate task statistics for this week and last week
     const thisWeekTasks = taskData.filter(t => t.due_at >= weekAgo)
@@ -12894,6 +15448,47 @@ ${photoObservations.map(p => `- ${p.nickname || p.plant_name || 'Plant'}: ${p.pl
     const dayOfWeekName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()]
     const currentDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
+    // Build member context
+    let memberContext = ''
+    if (gardenMembers.length > 0) {
+      memberContext = `
+═══════════════════════════════════════════════════════════════
+👥 GARDEN MEMBERS (${gardenMembers.length} total)
+═══════════════════════════════════════════════════════════════
+${gardenMembers.map(m => {
+        const info = [`${m.display_name || 'Member'} (${m.role})`]
+        if (m.experience_years) info.push(`${m.experience_years} years experience`)
+        info.push(`${m.tasks_completed_30d || 0} tasks completed this month`)
+        return `- ${info.join(' | ')}`
+      }).join('\n')}`
+    }
+    
+    // Build streak and analytics context
+    let statsContext = ''
+    if (gardenStreak || analyticsContext) {
+      statsContext = `
+═══════════════════════════════════════════════════════════════
+📈 GARDEN STATISTICS
+═══════════════════════════════════════════════════════════════`
+      if (gardenStreak) {
+        statsContext += `
+Current streak: ${gardenStreak.current_streak || 0} days
+Longest streak: ${gardenStreak.longest_streak || 0} days`
+      }
+      if (analyticsContext?.healthDistribution && Object.keys(analyticsContext.healthDistribution).length > 0) {
+        statsContext += `
+
+Plant Health Distribution:
+${Object.entries(analyticsContext.healthDistribution).map(([status, count]) => `- ${status}: ${count} plants`).join('\n')}`
+      }
+      if (analyticsContext?.activitySummary && Object.keys(analyticsContext.activitySummary).length > 0) {
+        statsContext += `
+
+Recent Activity (14 days):
+${Object.entries(analyticsContext.activitySummary).map(([kind, count]) => `- ${kind}: ${count}`).join('\n')}`
+      }
+    }
+
     const prompt = `You are an expert gardener and plant care specialist providing personalized weekly advice. Analyze all the data below and provide comprehensive, actionable advice.
 
 ═══════════════════════════════════════════════════════════════
@@ -12901,13 +15496,22 @@ ${photoObservations.map(p => `- ${p.nickname || p.plant_name || 'Plant'}: ${p.pl
 ═══════════════════════════════════════════════════════════════
 Today: ${dayOfWeekName}, ${currentDate}
 Location: ${gardenLocation.location_city || 'Unknown'}${gardenLocation.location_country ? `, ${gardenLocation.location_country}` : ''}
+Coordinates: ${gardenLocation.location_lat ? `${gardenLocation.location_lat}, ${gardenLocation.location_lon}` : 'Not set'}
 Timezone: ${gardenLocation.location_timezone || 'Unknown'}
 Average task completion time: ${avgCompletionTime}
 
 ═══════════════════════════════════════════════════════════════
 🌱 GARDEN: "${garden.name}"
 ═══════════════════════════════════════════════════════════════
-Plants (${plants.length} total):
+Total Plants: ${gardenLocation.plant_count || plants.length}
+Total Members: ${gardenLocation.member_count || 1}
+Garden Age: ${gardenAge} days
+${memberContext}
+${statsContext}
+
+═══════════════════════════════════════════════════════════════
+🌿 DETAILED PLANT INFORMATION
+═══════════════════════════════════════════════════════════════
 ${plantList || 'No plants yet'}
 
 ═══════════════════════════════════════════════════════════════
@@ -14578,16 +17182,43 @@ app.post('/api/garden/:id/upload', async (req, res) => {
         return
       }
 
+      const originalSize = fileBuffer.length
+      let finalBuffer = fileBuffer
+      let finalMimeType = mimeType
+      let finalExt = fileName.split('.').pop() || 'jpg'
+      const gardenUploadQuality = 50 // Standard 50% quality for non-admin uploads
+
+      // Optimize images (convert to WebP)
+      const isOptimizableImage = ['image/jpeg', 'image/png', 'image/webp'].includes(mimeType.toLowerCase())
+      if (isOptimizableImage) {
+        try {
+          finalBuffer = await sharp(fileBuffer)
+            .rotate()
+            .resize({
+              width: 1920,
+              height: 1920,
+              fit: 'inside',
+              withoutEnlargement: true,
+            })
+            .webp({ quality: gardenUploadQuality })
+            .toBuffer()
+          finalMimeType = 'image/webp'
+          finalExt = 'webp'
+        } catch (sharpErr) {
+          console.error('[garden-upload] sharp optimization failed, using original', sharpErr)
+          // Fall back to original if optimization fails
+        }
+      }
+
       // Generate unique filename
-      const ext = fileName.split('.').pop() || 'jpg'
-      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${finalExt}`
       const storagePath = `gardens/${gardenId}/${folder}/${uniqueName}`
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('photos')
-        .upload(storagePath, fileBuffer, {
-          contentType: mimeType,
+      // Upload to Supabase Storage (PHOTOS bucket)
+      const { data, error } = await supabaseServiceClient.storage
+        .from('PHOTOS')
+        .upload(storagePath, finalBuffer, {
+          contentType: finalMimeType,
           upsert: false,
         })
 
@@ -14598,8 +17229,46 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       }
 
       // Get public URL and transform to media proxy
-      const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath)
+      const { data: urlData } = supabaseServiceClient.storage.from('PHOTOS').getPublicUrl(storagePath)
       const proxyUrl = supabaseStorageToMediaProxy(urlData?.publicUrl) || urlData?.publicUrl || ''
+
+      // Record to global image database
+      let uploaderDisplayName = null
+      try {
+        uploaderDisplayName = await getAdminProfileName(user.id)
+      } catch { }
+      
+      const compressionPercent = originalSize > 0 && isOptimizableImage
+        ? Math.max(0, Math.round(100 - (finalBuffer.length / originalSize) * 100))
+        : 0
+
+      try {
+        await recordAdminMediaUpload({
+          adminId: user.id,
+          adminEmail: user.email || null,
+          adminName: uploaderDisplayName,
+          bucket: 'PHOTOS',
+          path: storagePath,
+          publicUrl: proxyUrl,
+          mimeType: finalMimeType,
+          originalMimeType: mimeType || 'image/jpeg',
+          sizeBytes: finalBuffer.length,
+          originalSizeBytes: originalSize,
+          quality: isOptimizableImage ? gardenUploadQuality : null,
+          compressionPercent,
+          uploadSource: folder === 'journal' ? 'garden_journal' : 'garden_photo',
+          metadata: {
+            source: folder === 'journal' ? 'garden_journal' : 'garden_photo',
+            originalName: fileName,
+            gardenId: gardenId,
+            folder: folder,
+            userId: user.id,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      } catch (recordErr) {
+        console.error('[upload] failed to record media upload', recordErr)
+      }
 
       res.json({ ok: true, url: proxyUrl, path: storagePath })
     })
@@ -14769,7 +17438,7 @@ app.post('/api/admin/broadcast', async (req, res) => {
     let adminName = null
     if (row?.created_by && sql) {
       try {
-        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        const nameRows = await sql`select coalesce(display_name, username, '') as name from public.profiles where id = ${row.created_by} limit 1`
         adminName = nameRows?.[0]?.name || null
       } catch { }
     }
@@ -14835,7 +17504,7 @@ app.put('/api/admin/broadcast', async (req, res) => {
     let adminName = null
     if (row?.created_by && sql) {
       try {
-        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        const nameRows = await sql`select coalesce(display_name, username, '') as name from public.profiles where id = ${row.created_by} limit 1`
         adminName = nameRows?.[0]?.name || null
       } catch { }
     }
@@ -15024,6 +17693,2367 @@ app.delete('/api/push/subscribe', async (req, res) => {
   } catch (err) {
     console.error('[notifications] failed to remove subscription', err)
     res.status(500).json({ error: err?.message || 'Failed to remove subscription' })
+  }
+})
+
+// ========== Instant Push Notification API ==========
+// Sends an immediate push notification for social events (friend requests, garden invites)
+// This is called internally when creating these events
+app.post('/api/push/instant', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  const { recipientId, type, title, body, data } = req.body || {}
+  
+  if (!recipientId || !type || !title || !body) {
+    res.status(400).json({ error: 'Missing required fields: recipientId, type, title, body' })
+    return
+  }
+  
+  // Validate notification type
+  const validTypes = ['friend_request', 'garden_invite', 'friend_request_accepted', 'garden_invite_accepted', 'new_message']
+  if (!validTypes.includes(type)) {
+    res.status(400).json({ error: `Invalid notification type. Must be one of: ${validTypes.join(', ')}` })
+    return
+  }
+  
+  try {
+    // Check if push notifications are enabled
+    if (!pushNotificationsEnabled) {
+      console.warn('[push/instant] Push notifications disabled (VAPID keys not configured)')
+      res.json({ ok: true, sent: false, reason: 'PUSH_DISABLED' })
+      return
+    }
+    
+    // Get recipient's push subscriptions
+    const subscriptions = await sql`
+      select id::text as id, user_id::text as user_id, endpoint, subscription
+      from public.user_push_subscriptions
+      where user_id = ${recipientId}::uuid
+    `
+    
+    if (!subscriptions || subscriptions.length === 0) {
+      console.log(`[push/instant] No push subscriptions found for user ${recipientId}`)
+      res.json({ ok: true, sent: false, reason: 'NO_SUBSCRIPTION' })
+      return
+    }
+    
+    // Send notification to all of recipient's subscriptions
+    let sent = false
+    const staleSubscriptionIds = []
+    
+    for (const sub of subscriptions) {
+      try {
+        const payload = sub.subscription && typeof sub.subscription === 'string'
+          ? JSON.parse(sub.subscription)
+          : sub.subscription
+          
+        await webpush.sendNotification(
+          payload,
+          JSON.stringify({
+            title,
+            body,
+            tag: `${type}-${user.id}`,
+            data: {
+              type,
+              senderId: user.id,
+              ...data,
+            },
+          })
+        )
+        sent = true
+        
+        // Update last_used_at
+        await sql`
+          update public.user_push_subscriptions
+          set last_used_at = now()
+          where id = ${sub.id}::uuid
+        `
+      } catch (err) {
+        const statusCode = err?.statusCode || err?.statuscode
+        if (statusCode === 404 || statusCode === 410) {
+          // Subscription expired, mark for cleanup
+          staleSubscriptionIds.push(sub.id)
+        } else {
+          console.warn('[push/instant] Push delivery failed:', err?.message || err)
+        }
+      }
+    }
+    
+    // Clean up stale subscriptions
+    if (staleSubscriptionIds.length > 0) {
+      await sql`
+        delete from public.user_push_subscriptions
+        where id = any(${staleSubscriptionIds}::uuid[])
+      `
+      console.log(`[push/instant] Cleaned up ${staleSubscriptionIds.length} expired subscription(s)`)
+    }
+    
+    if (sent) {
+      console.log(`[push/instant] Successfully sent ${type} notification to user ${recipientId}`)
+    }
+    
+    res.json({ ok: true, sent, type })
+  } catch (err) {
+    console.error('[push/instant] Failed to send notification:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// ========== Aphylia Garden Chat AI ==========
+// Streaming AI chat endpoint for in-app gardening assistant
+
+// Ensure to_delete folder exists for ephemeral image uploads
+const chatUploadDir = path.join(__dirname, 'uploads', 'to_delete')
+try {
+  if (!fsSync.existsSync(chatUploadDir)) {
+    fsSync.mkdirSync(chatUploadDir, { recursive: true })
+    console.log('[aphylia-chat] Created to_delete upload directory')
+  }
+} catch (err) {
+  console.warn('[aphylia-chat] Failed to create to_delete directory:', err?.message)
+}
+
+// Multer storage for chat image uploads
+const chatImageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, chatUploadDir)
+  },
+  filename: (_req, file, cb) => {
+    const timestamp = Date.now()
+    const randomId = crypto.randomBytes(8).toString('hex')
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg'
+    cb(null, `chat_${timestamp}_${randomId}${ext}`)
+  }
+})
+
+const chatImageUpload = multer({
+  storage: chatImageStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.'))
+    }
+  }
+})
+
+// Hourly cleanup of to_delete folder
+cron.schedule('0 * * * *', async () => {
+  try {
+    const files = await fs.readdir(chatUploadDir)
+    const now = Date.now()
+    const oneHourMs = 60 * 60 * 1000
+    let deletedCount = 0
+    
+    for (const file of files) {
+      const filePath = path.join(chatUploadDir, file)
+      try {
+        const stats = await fs.stat(filePath)
+        if (now - stats.mtimeMs > oneHourMs) {
+          await fs.unlink(filePath)
+          deletedCount++
+        }
+      } catch { }
+    }
+    
+    if (deletedCount > 0) {
+      console.log(`[aphylia-chat] Cleanup: deleted ${deletedCount} old file(s) from to_delete`)
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Cleanup error:', err?.message)
+  }
+})
+
+// Upload image for chat (ephemeral, stored in to_delete folder)
+app.post('/api/ai/garden-chat/upload', chatImageUpload.single('image'), async (req, res) => {
+  try {
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    if (!req.file) {
+      res.status(400).json({ error: 'No image uploaded' })
+      return
+    }
+    
+    // Build URL for the uploaded file
+    const baseUrl = process.env.WEBSITE_URL || `http://localhost:${process.env.PORT || 3000}`
+    const imageUrl = `${baseUrl}/api/ai/garden-chat/image/${req.file.filename}`
+    
+    res.json({
+      success: true,
+      url: imageUrl,
+      filename: req.file.filename
+    })
+  } catch (err) {
+    console.error('[aphylia-chat] Upload error:', err)
+    res.status(500).json({ error: err?.message || 'Upload failed' })
+  }
+})
+
+// Serve uploaded chat images
+app.get('/api/ai/garden-chat/image/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename
+    // Sanitize filename to prevent path traversal
+    if (!filename || filename.includes('..') || filename.includes('/')) {
+      res.status(400).json({ error: 'Invalid filename' })
+      return
+    }
+    
+    const filePath = path.join(chatUploadDir, filename)
+    if (!fsSync.existsSync(filePath)) {
+      res.status(404).json({ error: 'Image not found' })
+      return
+    }
+    
+    // Determine content type
+    const ext = path.extname(filename).toLowerCase()
+    const contentTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    }
+    
+    res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream')
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    res.sendFile(filePath)
+  } catch (err) {
+    console.error('[aphylia-chat] Image serve error:', err)
+    res.status(500).json({ error: 'Failed to serve image' })
+  }
+})
+
+// System prompt for Aphylia gardening assistant
+const APHYLIA_SYSTEM_PROMPT = `You are Aphylia, a friendly and knowledgeable AI gardening assistant built into the Aphylia plant care app.
+
+Your role is to provide expert, personalized gardening advice based on the user's specific garden, plants, and growing conditions.
+
+## Key Capabilities:
+- Plant diagnosis (pests, diseases, nutrient deficiencies)
+- Watering and care schedules
+- Seasonal gardening tips
+- Companion planting advice
+- Task planning and garden management
+- Plant identification from photos
+- Growing tips based on local climate
+- **UPDATE plant health status** when you diagnose issues or improvements
+- **CREATE and MODIFY tasks** for plant care routines
+- **ADD journal entries** to record observations
+- **UPDATE plant notes** with care instructions or observations
+
+## ACTION CAPABILITIES - You Can Modify Garden Data!
+You have the ability to take actions in the user's garden. When appropriate, USE THESE TOOLS:
+
+1. **update_plant_health** - Update a plant's health status (thriving, healthy, okay, struggling, critical)
+   - Use after diagnosing plant issues
+   - Use when user reports improvements
+   
+2. **update_plant_notes** - Add or update notes on a plant
+   - Use to record care instructions, observations, or diagnoses
+   
+3. **create_task** - Create a new care task for a plant
+   - Use to set up watering schedules, fertilizing reminders, etc.
+   
+4. **complete_task** - Mark a task as complete
+   - Use when user confirms they've done a task
+   
+5. **add_journal_entry** - Add a journal entry to the garden
+   - Use to record significant observations, diagnoses, or milestones
+
+IMPORTANT: When you recommend changes (like updating health status or creating tasks), ACTUALLY DO IT using the tools. Don't just suggest - take action!
+
+## Communication Style:
+- Warm, encouraging, and supportive
+- Use emojis sparingly to add personality (🌱 🪴 💧 🌸 etc.)
+- Provide practical, actionable advice
+- Break down complex topics into simple steps
+- Celebrate gardening successes with the user
+- When you take actions, confirm what you did ("I've updated the health status to..." or "I've created a watering task for...")
+
+## Important Guidelines:
+- Base recommendations on the user's specific garden context (location, climate zone, existing plants)
+- Consider seasonal timing when giving advice
+- If you're unsure about something, say so and suggest how they might find more info
+- When analyzing plant photos, be thorough but honest about uncertainty
+- TAKE ACTION when appropriate - update statuses, create tasks, add notes
+
+## When Helping with Tasks:
+- Be specific about timing and frequency
+- Consider the user's existing task load
+- Prioritize based on plant health needs
+- CREATE the tasks directly, don't just suggest them
+
+Always aim to help the user become a more confident and successful gardener!`
+
+// Define tools that the AI can use to modify garden data
+const APHYLIA_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'update_plant_health',
+      description: 'Update the health status of a plant in the garden. Use this after diagnosing plant issues or when the user reports changes in plant health.',
+      parameters: {
+        type: 'object',
+        properties: {
+          garden_plant_id: {
+            type: 'string',
+            description: 'The ID of the garden plant to update (from the context provided)'
+          },
+          health_status: {
+            type: 'string',
+            enum: ['thriving', 'healthy', 'okay', 'struggling', 'critical'],
+            description: 'The new health status for the plant'
+          },
+          reason: {
+            type: 'string',
+            description: 'Brief explanation for the health status change'
+          }
+        },
+        required: ['garden_plant_id', 'health_status']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_plant_notes',
+      description: 'Update or append notes for a plant. Use this to record observations, care instructions, or diagnoses.',
+      parameters: {
+        type: 'object',
+        properties: {
+          garden_plant_id: {
+            type: 'string',
+            description: 'The ID of the garden plant to update'
+          },
+          notes: {
+            type: 'string',
+            description: 'The notes to add or update for this plant'
+          },
+          append: {
+            type: 'boolean',
+            description: 'If true, append to existing notes. If false, replace notes.',
+            default: true
+          }
+        },
+        required: ['garden_plant_id', 'notes']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_task',
+      description: 'Create a new care task for a plant. Use this to set up watering schedules, fertilizing reminders, pruning tasks, etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          garden_plant_id: {
+            type: 'string',
+            description: 'The ID of the garden plant this task is for'
+          },
+          task_type: {
+            type: 'string',
+            enum: ['water', 'fertilize', 'harvest', 'cut', 'custom'],
+            description: 'The type of task'
+          },
+          custom_name: {
+            type: 'string',
+            description: 'Custom name for the task (required if task_type is custom)'
+          },
+          schedule_type: {
+            type: 'string',
+            enum: ['once', 'daily', 'weekly', 'biweekly', 'monthly'],
+            description: 'How often this task should repeat'
+          },
+          due_date: {
+            type: 'string',
+            description: 'When the task is first due (ISO date string)'
+          }
+        },
+        required: ['garden_plant_id', 'task_type', 'schedule_type']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'complete_task',
+      description: 'Mark a task occurrence as complete. Use when user confirms they have completed a task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'The ID of the task to complete'
+          },
+          notes: {
+            type: 'string',
+            description: 'Optional notes about completing this task'
+          }
+        },
+        required: ['task_id']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_journal_entry',
+      description: 'Add a journal entry to the garden. Use to record significant observations, diagnoses, milestones, or summaries.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Title for the journal entry'
+          },
+          content: {
+            type: 'string',
+            description: 'The content/body of the journal entry'
+          },
+          mood: {
+            type: 'string',
+            enum: ['blooming', 'thriving', 'sprouting', 'resting', 'wilting'],
+            description: 'The mood/sentiment for this entry'
+          },
+          plants_mentioned: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of garden_plant_ids mentioned in this entry'
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags for this journal entry (e.g., diagnosis, milestone, observation)'
+          }
+        },
+        required: ['title', 'content']
+      }
+    }
+  }
+]
+
+// Execute a tool call from the AI
+async function executeAphyliaTool(toolName, args, gardenId, userId) {
+  if (!sql) return { success: false, error: 'Database not available' }
+  
+  try {
+    switch (toolName) {
+      case 'update_plant_health': {
+        const { garden_plant_id, health_status, reason } = args
+        
+        // Verify the plant belongs to this garden and user has access
+        const checkRows = await sql`
+          select gp.id from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        // Update the health status
+        await sql`
+          update public.garden_plants
+          set health_status = ${health_status},
+              last_health_update = now()
+          where id = ${garden_plant_id}
+        `
+        
+        // Log the activity
+        const logMsg = 'Health status updated to ' + health_status + (reason ? ': ' + reason : '')
+        await sql`
+          insert into public.garden_activity_logs (garden_id, actor_id, kind, message, plant_name)
+          select ${gardenId}, ${userId}, 'plant_updated', 
+                 ${logMsg},
+                 coalesce(gp.nickname, p.name)
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.id = ${garden_plant_id}
+        `
+        
+        return { success: true, message: 'Updated plant health to ' + health_status }
+      }
+      
+      case 'update_plant_notes': {
+        const { garden_plant_id, notes, append = true } = args
+        
+        // Verify access
+        const checkRows = await sql`
+          select gp.id, gp.notes as existing_notes from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        const existingNotes = checkRows[0].existing_notes || ''
+        const newNotes = append && existingNotes 
+          ? existingNotes + '\n\n' + notes 
+          : notes
+        
+        await sql`
+          update public.garden_plants
+          set notes = ${newNotes}
+          where id = ${garden_plant_id}
+        `
+        
+        return { success: true, message: 'Plant notes updated' }
+      }
+      
+      case 'create_task': {
+        const { garden_plant_id, task_type, custom_name, schedule_type, due_date } = args
+        
+        // Verify access
+        const checkRows = await sql`
+          select gp.id from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        // Map schedule type to interval
+        const intervalMap = {
+          'once': { kind: 'one_time_date', amount: null, unit: null },
+          'daily': { kind: 'repeat_duration', amount: 1, unit: 'day' },
+          'weekly': { kind: 'repeat_duration', amount: 1, unit: 'week' },
+          'biweekly': { kind: 'repeat_duration', amount: 2, unit: 'week' },
+          'monthly': { kind: 'repeat_duration', amount: 1, unit: 'month' }
+        }
+        const schedule = intervalMap[schedule_type] || intervalMap['weekly']
+        
+        const dueAt = due_date ? new Date(due_date) : new Date()
+        
+        // Create the task
+        const taskRows = await sql`
+          insert into public.garden_plant_tasks 
+            (garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit)
+          values 
+            (${gardenId}, ${garden_plant_id}, ${task_type}, ${custom_name || null}, 
+             ${schedule.kind}, ${dueAt}, ${schedule.amount}, ${schedule.unit})
+          returning id
+        `
+        
+        // Create first occurrence
+        await sql`
+          insert into public.garden_plant_task_occurrences (task_id, garden_plant_id, due_at)
+          values (${taskRows[0].id}, ${garden_plant_id}, ${dueAt})
+        `
+        
+        return { success: true, message: 'Created ' + task_type + ' task', taskId: taskRows[0].id }
+      }
+      
+      case 'complete_task': {
+        const { task_id } = args
+        
+        // Find the latest uncompleted occurrence for this task
+        const occRows = await sql`
+          select o.id, o.completed_count, o.required_count
+          from public.garden_plant_task_occurrences o
+          join public.garden_plant_tasks t on t.id = o.task_id
+          join public.garden_members gm on gm.garden_id = t.garden_id
+          where t.id = ${task_id}
+            and t.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+            and o.completed_at is null
+          order by o.due_at asc
+          limit 1
+        `
+        
+        if (occRows.length === 0) {
+          return { success: false, error: 'No pending occurrence found for this task' }
+        }
+        
+        const occ = occRows[0]
+        const newCount = (occ.completed_count || 0) + 1
+        const isComplete = newCount >= (occ.required_count || 1)
+        
+        await sql`
+          update public.garden_plant_task_occurrences
+          set completed_count = ${newCount},
+              completed_at = ${isComplete ? new Date() : null}
+          where id = ${occ.id}
+        `
+        
+        // Record who completed it
+        await sql`
+          insert into public.garden_task_user_completions (occurrence_id, user_id, increment)
+          values (${occ.id}, ${userId}, 1)
+        `
+        
+        return { success: true, message: isComplete ? 'Task completed!' : 'Task progress: ' + newCount + '/' + (occ.required_count || 1) }
+      }
+      
+      case 'add_journal_entry': {
+        const { title, content, mood, plants_mentioned, tags } = args
+        
+        // Verify user has access to this garden
+        const checkRows = await sql`
+          select 1 from public.garden_members
+          where garden_id = ${gardenId} and user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Access denied' }
+        }
+        
+        await sql`
+          insert into public.garden_journal_entries 
+            (garden_id, user_id, entry_date, title, content, mood, plants_mentioned, tags)
+          values 
+            (${gardenId}, ${userId}, current_date, ${title}, ${content}, 
+             ${mood || null}, ${plants_mentioned || []}, ${tags || []})
+        `
+        
+        return { success: true, message: 'Journal entry added' }
+      }
+      
+      default:
+        return { success: false, error: 'Unknown tool: ' + toolName }
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Tool execution error (' + toolName + '):', err)
+    return { success: false, error: err.message || 'Tool execution failed' }
+  }
+}
+
+// Build COMPREHENSIVE context string for the AI from ALL garden data
+async function buildGardenContextString(context) {
+  const parts = []
+  
+  // User context
+  if (context.user) {
+    parts.push(`## User Information`)
+    if (context.user.displayName) parts.push(`- Name: ${context.user.displayName}`)
+    if (context.user.language) parts.push(`- Preferred language: ${context.user.language}`)
+    if (context.user.timezone) parts.push(`- Timezone: ${context.user.timezone}`)
+    if (context.user.experienceYears) parts.push(`- Gardening experience: ${context.user.experienceYears} years`)
+  }
+  
+  // Garden context with FULL details
+  if (context.garden) {
+    parts.push(`\n## Current Garden: "${context.garden.gardenName}"`)
+    parts.push(`- Garden ID: ${context.garden.gardenId}`)
+    if (context.garden.locationCity) {
+      let location = context.garden.locationCity
+      if (context.garden.locationCountry) location += `, ${context.garden.locationCountry}`
+      parts.push(`- Location: ${location}`)
+      if (context.garden.locationLat && context.garden.locationLon) {
+        parts.push(`- Coordinates: ${context.garden.locationLat}, ${context.garden.locationLon}`)
+      }
+    }
+    if (context.garden.locationTimezone) parts.push(`- Timezone: ${context.garden.locationTimezone}`)
+    if (context.garden.adviceLanguage) parts.push(`- Advice language preference: ${context.garden.adviceLanguage}`)
+    parts.push(`- Privacy setting: ${context.garden.privacy || 'public'}`)
+    if (context.garden.createdAt) {
+      const createdDate = new Date(context.garden.createdAt)
+      const ageInDays = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
+      parts.push(`- Garden created: ${createdDate.toLocaleDateString()} (${ageInDays} days ago)`)
+    }
+    
+    // Garden summary counts - use frontend values as they're always up-to-date
+    parts.push(`\n### Garden Summary`)
+    parts.push(`- Total plant species: ${context.garden.plantCount || 0}`)
+    parts.push(`- Total plants on hand: ${context.garden.totalPlantsOnHand || 0}`)
+    parts.push(`- Total seeds planted: ${context.garden.totalSeedsPlanted || 0}`)
+    parts.push(`- Total members: ${context.garden.memberCount || 0}`)
+    
+    // Calculate health distribution from frontend plants if available
+    if (context.garden.plants && context.garden.plants.length > 0) {
+      const healthCounts = {}
+      for (const plant of context.garden.plants) {
+        if (plant.healthStatus) {
+          healthCounts[plant.healthStatus] = (healthCounts[plant.healthStatus] || 0) + 1
+        }
+      }
+      if (Object.keys(healthCounts).length > 0) {
+        const healthSummary = Object.entries(healthCounts)
+          .map(([status, count]) => `${status}: ${count}`)
+          .join(', ')
+        parts.push(`- Plant health overview: ${healthSummary}`)
+      }
+    }
+    
+    // Garden streak info - handle both object (from DB) and number (from frontend) formats
+    if (context.garden.streak) {
+      if (typeof context.garden.streak === 'object') {
+        parts.push(`- Current streak: ${context.garden.streak.currentStreak} days`)
+        parts.push(`- Longest streak: ${context.garden.streak.longestStreak} days`)
+        if (context.garden.streak.lastStreakDate) {
+          parts.push(`- Last streak activity: ${new Date(context.garden.streak.lastStreakDate).toLocaleDateString()}`)
+        }
+      } else if (typeof context.garden.streak === 'number' && context.garden.streak > 0) {
+        parts.push(`- Current streak: ${context.garden.streak} days`)
+      }
+    }
+    
+    // Task statistics from frontend context
+    if (context.garden.taskStats) {
+      const ts = context.garden.taskStats
+      parts.push(`\n### Task Overview`)
+      parts.push(`- Tasks due today: ${ts.totalTasksToday} (${ts.completedTasksToday} completed, ${ts.pendingTasksToday} pending)`)
+      parts.push(`- Tasks this week: ${ts.totalTasksThisWeek} (${ts.completedTasksThisWeek} completed)`)
+      if (ts.tasksByType && Object.keys(ts.tasksByType).length > 0) {
+        const typeBreakdown = Object.entries(ts.tasksByType)
+          .map(([type, count]) => `${type}: ${count}`)
+          .join(', ')
+        parts.push(`- Task types this week: ${typeBreakdown}`)
+      }
+    }
+    
+    // Today's tasks from frontend context
+    if (context.garden.todayTasks && context.garden.todayTasks.length > 0) {
+      parts.push(`\n### Today's Tasks (${context.garden.todayTasks.length} total)`)
+      const pending = context.garden.todayTasks.filter(t => !t.isCompleted)
+      const completed = context.garden.todayTasks.filter(t => t.isCompleted)
+      
+      if (pending.length > 0) {
+        parts.push(`\n#### Pending Tasks:`)
+        for (const task of pending) {
+          let taskInfo = `- ${task.plantName}`
+          if (task.requiredCount && task.requiredCount > 1) {
+            taskInfo += ` (${task.completedCount || 0}/${task.requiredCount} done)`
+          }
+          parts.push(taskInfo)
+        }
+      }
+      
+      if (completed.length > 0) {
+        parts.push(`\n#### ✅ Completed Today:`)
+        for (const task of completed) {
+          parts.push(`- ${task.plantName}`)
+        }
+      }
+    }
+    
+    // Inventory summary
+    if (context.garden.inventory) {
+      parts.push(`\n### Inventory`)
+      parts.push(`- Unique species in inventory: ${context.garden.inventory.uniqueSpecies || 0}`)
+      parts.push(`- Total seeds in inventory: ${context.garden.inventory.totalSeedsInventory || 0}`)
+      parts.push(`- Total plants in inventory: ${context.garden.inventory.totalPlantsInventory || 0}`)
+    }
+    
+    // Garden members with FULL details
+    if (context.garden.members && context.garden.members.length > 0) {
+      parts.push(`\n### Garden Members (${context.garden.members.length} total)`)
+      for (const member of context.garden.members) {
+        parts.push(`\n#### ${member.displayName} (${member.role})`)
+        if (member.experienceYears) parts.push(`- Gardening experience: ${member.experienceYears} years`)
+        if (member.language) parts.push(`- Language: ${member.language}`)
+        if (member.timezone) parts.push(`- Timezone: ${member.timezone}`)
+        if (member.bio) parts.push(`- Bio: ${member.bio}`)
+        if (member.joinedAt) {
+          const joinDate = new Date(member.joinedAt)
+          parts.push(`- Joined garden: ${joinDate.toLocaleDateString()}`)
+        }
+        parts.push(`- Tasks completed (last 30 days): ${member.tasksCompletedLast30Days || 0}`)
+        parts.push(`- Journal entries (last 30 days): ${member.journalEntriesLast30Days || 0}`)
+      }
+    }
+    
+    // Recent activity with more detail
+    if (context.garden.recentActivity && context.garden.recentActivity.length > 0) {
+      parts.push(`\n### Recent Activity (last 14 days)`)
+      const activitySummary = {}
+      for (const activity of context.garden.recentActivity) {
+        activitySummary[activity.kind] = (activitySummary[activity.kind] || 0) + 1
+      }
+      for (const [kind, count] of Object.entries(activitySummary)) {
+        parts.push(`- ${kind}: ${count} occurrences`)
+      }
+      
+      // Show last 10 specific activities
+      parts.push(`\n#### Last 10 Activities:`)
+      for (const activity of context.garden.recentActivity.slice(0, 10)) {
+        let activityInfo = `- ${activity.kind}`
+        if (activity.plantName) activityInfo += ` (${activity.plantName})`
+        if (activity.taskName) activityInfo += `: ${activity.taskName}`
+        if (activity.actorName) activityInfo += ` by ${activity.actorName}`
+        if (activity.createdAt) {
+          const actDate = new Date(activity.createdAt)
+          activityInfo += ` - ${actDate.toLocaleDateString()}`
+        }
+        parts.push(activityInfo)
+      }
+    }
+  }
+  
+  // ALL Plants with FULL details
+  if (context.plants && context.plants.length > 0) {
+    parts.push(`\n## Plants in Garden (${context.plants.length} total)`)
+    for (const plant of context.plants) {
+      let plantInfo = `\n### ${plant.plantName}`
+      if (plant.nickname && plant.nickname !== plant.plantName) plantInfo += ` (nicknamed "${plant.nickname}")`
+      parts.push(plantInfo)
+      
+      // Basic info
+      parts.push(`- Plant ID: ${plant.gardenPlantId}`)
+      if (plant.scientificName) parts.push(`- Scientific name: _${plant.scientificName}_`)
+      if (plant.plantType) parts.push(`- Type: ${plant.plantType}`)
+      if (plant.overview) parts.push(`- Overview: ${plant.overview.substring(0, 300)}${plant.overview.length > 300 ? '...' : ''}`)
+      
+      // Quantities
+      if (plant.plantsOnHand > 0) parts.push(`- Plants on hand: ${plant.plantsOnHand}`)
+      if (plant.seedsPlanted > 0) parts.push(`- Seeds planted: ${plant.seedsPlanted}`)
+      
+      // Health and status
+      if (plant.healthStatus) {
+        let healthInfo = `- Health status: ${plant.healthStatus}`
+        if (plant.lastHealthUpdate) {
+          const healthDate = new Date(plant.lastHealthUpdate)
+          healthInfo += ` (updated ${healthDate.toLocaleDateString()})`
+        }
+        parts.push(healthInfo)
+      }
+      if (plant.notes) parts.push(`- User notes: ${plant.notes}`)
+      
+      // Dates
+      if (plant.plantedAt) {
+        const plantedDate = new Date(plant.plantedAt)
+        parts.push(`- Planted: ${plantedDate.toLocaleDateString()}`)
+      }
+      if (plant.expectedBloomDate) {
+        const bloomDate = new Date(plant.expectedBloomDate)
+        parts.push(`- Expected bloom: ${bloomDate.toLocaleDateString()}`)
+      }
+      if (plant.addedAt) {
+        const addedDate = new Date(plant.addedAt)
+        parts.push(`- Added to garden: ${addedDate.toLocaleDateString()}`)
+      }
+      
+      // Care requirements - only show section if there's care data
+      const careRequirements = []
+      if (plant.waterFrequency) careRequirements.push(`- Water frequency: ${plant.waterFrequency}`)
+      if (plant.wateringType && plant.wateringType.length > 0) careRequirements.push(`- Watering methods: ${plant.wateringType.join(', ')}`)
+      if (plant.lightLevel) careRequirements.push(`- Light needs: ${plant.lightLevel}`)
+      if (plant.temperatureRange) {
+        careRequirements.push(`- Temperature range: ${plant.temperatureRange.min}°C to ${plant.temperatureRange.max}°C (ideal: ${plant.temperatureRange.ideal}°C)`)
+      }
+      if (plant.humidity) careRequirements.push(`- Humidity needs: ${plant.humidity}%`)
+      if (plant.hardinessZone) careRequirements.push(`- Hardiness zone: ${plant.hardinessZone}`)
+      if (plant.soilType && plant.soilType.length > 0) careRequirements.push(`- Soil types: ${plant.soilType.join(', ')}`)
+      if (plant.nutritionNeeds && plant.nutritionNeeds.length > 0) careRequirements.push(`- Nutrition needs: ${plant.nutritionNeeds.join(', ')}`)
+      if (plant.fertilizerTypes && plant.fertilizerTypes.length > 0) careRequirements.push(`- Fertilizer types: ${plant.fertilizerTypes.join(', ')}`)
+      
+      if (careRequirements.length > 0) {
+        parts.push(`\n#### Care Requirements:`)
+        parts.push(...careRequirements)
+      }
+      
+      // Growing info
+      if (plant.sowingMonths && plant.sowingMonths.length > 0) parts.push(`- Sowing months: ${plant.sowingMonths.join(', ')}`)
+      if (plant.floweringMonths && plant.floweringMonths.length > 0) parts.push(`- Flowering months: ${plant.floweringMonths.join(', ')}`)
+      if (plant.fruitingMonths && plant.fruitingMonths.length > 0) parts.push(`- Fruiting months: ${plant.fruitingMonths.join(', ')}`)
+      if (plant.heightCm) parts.push(`- Expected height: ${plant.heightCm}cm`)
+      if (plant.wingspanCm) parts.push(`- Expected wingspan: ${plant.wingspanCm}cm`)
+      if (plant.separationCm) parts.push(`- Plant separation: ${plant.separationCm}cm`)
+      if (plant.needsTutoring) parts.push(`- Needs tutoring/staking: Yes`)
+      if (plant.canTransplant) parts.push(`- Can be transplanted: Yes`)
+      if (plant.sowType && plant.sowType.length > 0) parts.push(`- Sowing methods: ${plant.sowType.join(', ')}`)
+      if (plant.propagationMethods && plant.propagationMethods.length > 0) parts.push(`- Propagation methods: ${plant.propagationMethods.join(', ')}`)
+      
+      // Characteristics
+      const characteristics = []
+      if (plant.isEdible) characteristics.push('Edible')
+      if (plant.isPoisonous) characteristics.push('⚠️ Poisonous')
+      if (plant.hasSpikes) characteristics.push('Has spikes')
+      if (plant.hasScent) characteristics.push('Fragrant')
+      if (plant.isMulticolor) characteristics.push('Multicolor')
+      if (plant.isMelliferous) characteristics.push('Melliferous (attracts bees)')
+      if (characteristics.length > 0) parts.push(`- Characteristics: ${characteristics.join(', ')}`)
+      
+      if (plant.edibleParts && plant.edibleParts.length > 0) parts.push(`- Edible parts: ${plant.edibleParts.join(', ')}`)
+      if (plant.utility && plant.utility.length > 0) parts.push(`- Uses: ${plant.utility.join(', ')}`)
+      if (plant.conservationStatus) parts.push(`- Conservation status: ${plant.conservationStatus}`)
+      
+      // Problems and companions
+      if (plant.commonPests && plant.commonPests.length > 0) parts.push(`- Common pests: ${plant.commonPests.join(', ')}`)
+      if (plant.commonDiseases && plant.commonDiseases.length > 0) parts.push(`- Common diseases: ${plant.commonDiseases.join(', ')}`)
+      if (plant.companionPlants && plant.companionPlants.length > 0) parts.push(`- Companion plants: ${plant.companionPlants.join(', ')}`)
+      
+      // Tags
+      if (plant.tags && plant.tags.length > 0) parts.push(`- Tags: ${plant.tags.join(', ')}`)
+      
+      // Schedule and tasks
+      if (plant.schedule) {
+        parts.push(`- Custom watering schedule: ${plant.schedule.amount}x per ${plant.schedule.period}`)
+      }
+      if (plant.taskCount > 0) {
+        parts.push(`- Active tasks: ${plant.taskCount}`)
+      }
+      
+      // Recent events
+      if (plant.recentEvents && plant.recentEvents.length > 0) {
+        parts.push(`- Recent events:`)
+        for (const event of plant.recentEvents) {
+          const eventDate = new Date(event.occurredAt)
+          let eventInfo = `  - ${event.type} on ${eventDate.toLocaleDateString()}`
+          if (event.notes) eventInfo += `: ${event.notes}`
+          parts.push(eventInfo)
+        }
+      }
+    }
+  }
+  
+  // ALL Tasks with full details
+  if (context.tasks && context.tasks.length > 0) {
+    parts.push(`\n## Garden Tasks (${context.tasks.length} total)`)
+    
+    // Group by status
+    const overdueTasks = []
+    const dueTodayTasks = []
+    const upcomingTasks = []
+    const now = new Date()
+    const todayStr = now.toISOString().split('T')[0]
+    
+    for (const task of context.tasks) {
+      if (!task.occurrences || task.occurrences.length === 0) continue
+      
+      for (const occ of task.occurrences) {
+        if (occ.completedAt) continue // Skip completed
+        
+        const dueDate = new Date(occ.dueAt)
+        const dueDateStr = dueDate.toISOString().split('T')[0]
+        
+        const taskEntry = {
+          ...task,
+          dueAt: occ.dueAt,
+          requiredCount: occ.requiredCount,
+          completedCount: occ.completedCount
+        }
+        
+        if (dueDate < now && dueDateStr !== todayStr) {
+          overdueTasks.push(taskEntry)
+        } else if (dueDateStr === todayStr) {
+          dueTodayTasks.push(taskEntry)
+        } else {
+          upcomingTasks.push(taskEntry)
+        }
+      }
+    }
+    
+    if (overdueTasks.length > 0) {
+      parts.push(`\n### ⚠️ Overdue Tasks (${overdueTasks.length})`)
+      for (const task of overdueTasks.slice(0, 10)) {
+        let taskInfo = `- ${task.customName || task.taskType}`
+        if (task.plantName) taskInfo += ` for "${task.plantName}"`
+        const dueDate = new Date(task.dueAt)
+        taskInfo += ` (was due: ${dueDate.toLocaleDateString()})`
+        parts.push(taskInfo)
+      }
+    }
+    
+    if (dueTodayTasks.length > 0) {
+      parts.push(`\n### 📅 Due Today (${dueTodayTasks.length})`)
+      for (const task of dueTodayTasks) {
+        let taskInfo = `- ${task.customName || task.taskType}`
+        if (task.plantName) taskInfo += ` for "${task.plantName}"`
+        if (task.requiredCount > 1) {
+          taskInfo += ` (${task.completedCount || 0}/${task.requiredCount} done)`
+        }
+        parts.push(taskInfo)
+      }
+    }
+    
+    if (upcomingTasks.length > 0) {
+      parts.push(`\n### 🗓️ Upcoming Tasks (${upcomingTasks.length})`)
+      for (const task of upcomingTasks.slice(0, 15)) {
+        let taskInfo = `- ${task.customName || task.taskType}`
+        if (task.plantName) taskInfo += ` for "${task.plantName}"`
+        const dueDate = new Date(task.dueAt)
+        taskInfo += ` (due: ${dueDate.toLocaleDateString()})`
+        parts.push(taskInfo)
+      }
+    }
+  }
+  
+  // ALL Journal entries
+  if (context.journal && context.journal.length > 0) {
+    parts.push(`\n## Garden Journal (${context.journal.length} entries)`)
+    for (const entry of context.journal.slice(0, 20)) {
+      const createdDate = new Date(entry.createdAt)
+      parts.push(`\n### ${entry.title || 'Journal Entry'} - ${createdDate.toLocaleDateString()}`)
+      if (entry.authorName) parts.push(`- Author: ${entry.authorName}`)
+      if (entry.mood) parts.push(`- Mood: ${entry.mood}`)
+      if (entry.weather) parts.push(`- Weather: ${entry.weather}`)
+      if (entry.temperature) parts.push(`- Temperature: ${entry.temperature}`)
+      if (entry.content) {
+        // Truncate very long entries
+        const content = entry.content.length > 500 
+          ? entry.content.substring(0, 500) + '...' 
+          : entry.content
+        parts.push(`- Content: ${content}`)
+      }
+      if (entry.plantsMentioned && entry.plantsMentioned.length > 0) {
+        const plantNames = entry.plantsMentioned.map(p => p.plantName).filter(Boolean)
+        if (plantNames.length > 0) {
+          parts.push(`- Plants mentioned: ${plantNames.join(', ')}`)
+        }
+      }
+    }
+  }
+  
+  // COMPREHENSIVE Analytics and Statistics
+  if (context.analytics) {
+    parts.push(`\n## Garden Analytics & Statistics`)
+    
+    // Totals
+    if (context.analytics.totals) {
+      parts.push(`### Garden Totals`)
+      parts.push(`- Total plants: ${context.analytics.totals.plants || 0}`)
+      parts.push(`- Total tasks: ${context.analytics.totals.tasks || 0}`)
+      parts.push(`- Total journal entries: ${context.analytics.totals.journalEntries || 0}`)
+    }
+    
+    // Task completion stats
+    if (context.analytics.taskStats) {
+      const stats = context.analytics.taskStats
+      parts.push(`\n### Task Completion (last 30 days)`)
+      parts.push(`- Completed tasks: ${stats.completed_tasks || 0}`)
+      parts.push(`- Overdue tasks: ${stats.overdue_tasks || 0}`)
+      parts.push(`- Upcoming tasks (next 7 days): ${stats.upcoming_tasks || 0}`)
+      parts.push(`- Future tasks (7-30 days): ${stats.future_tasks || 0}`)
+      
+      // Completion rate calculation
+      const total = (stats.completed_tasks || 0) + (stats.overdue_tasks || 0)
+      if (total > 0) {
+        const completionRate = ((stats.completed_tasks || 0) / total * 100).toFixed(1)
+        parts.push(`- Completion rate: ${completionRate}%`)
+      }
+    }
+    
+    // Task breakdown by type
+    if (context.analytics.tasksByType && Object.keys(context.analytics.tasksByType).length > 0) {
+      parts.push(`\n### Tasks by Type`)
+      for (const [type, data] of Object.entries(context.analytics.tasksByType)) {
+        parts.push(`- ${type}: ${data.total} total (${data.completed} completed, ${data.overdue} overdue)`)
+      }
+    }
+    
+    // Plant health distribution
+    if (context.analytics.healthDistribution && Object.keys(context.analytics.healthDistribution).length > 0) {
+      parts.push(`\n### Plant Health Distribution`)
+      for (const [status, count] of Object.entries(context.analytics.healthDistribution)) {
+        parts.push(`- ${status}: ${count} plants`)
+      }
+    }
+    
+    // Plant type distribution
+    if (context.analytics.plantTypeDistribution && Object.keys(context.analytics.plantTypeDistribution).length > 0) {
+      parts.push(`\n### Plant Types`)
+      for (const [type, count] of Object.entries(context.analytics.plantTypeDistribution)) {
+        parts.push(`- ${type || 'Unknown'}: ${count} plants`)
+      }
+    }
+    
+    // Daily activity
+    if (context.analytics.dailyActivity && context.analytics.dailyActivity.length > 0) {
+      const totalActivity = context.analytics.dailyActivity.reduce((sum, d) => sum + d.count, 0)
+      const avgActivity = (totalActivity / context.analytics.dailyActivity.length).toFixed(1)
+      parts.push(`\n### Activity (last 14 days)`)
+      parts.push(`- Total activities: ${totalActivity}`)
+      parts.push(`- Average per day: ${avgActivity}`)
+      
+      // Most active day
+      const maxActivity = Math.max(...context.analytics.dailyActivity.map(d => d.count))
+      const mostActiveDay = context.analytics.dailyActivity.find(d => d.count === maxActivity)
+      if (mostActiveDay) {
+        parts.push(`- Most active day: ${new Date(mostActiveDay.date).toLocaleDateString()} (${maxActivity} activities)`)
+      }
+    }
+    
+    // Activity breakdown by kind
+    if (context.analytics.activityByKind && Object.keys(context.analytics.activityByKind).length > 0) {
+      parts.push(`\n### Activity Types (last 30 days)`)
+      for (const [kind, count] of Object.entries(context.analytics.activityByKind)) {
+        parts.push(`- ${kind}: ${count}`)
+      }
+    }
+    
+    // Member contributions
+    if (context.analytics.memberContributions && context.analytics.memberContributions.length > 0) {
+      parts.push(`\n### Member Contributions (last 30 days)`)
+      for (const member of context.analytics.memberContributions) {
+        parts.push(`- ${member.displayName} (${member.role}): ${member.tasksCompleted} tasks completed, ${member.journalEntries} journal entries`)
+      }
+    }
+    
+    // Mood distribution
+    if (context.analytics.moodDistribution && Object.keys(context.analytics.moodDistribution).length > 0) {
+      parts.push(`\n### Journal Mood Distribution (last 30 days)`)
+      for (const [mood, count] of Object.entries(context.analytics.moodDistribution)) {
+        parts.push(`- ${mood}: ${count} entries`)
+      }
+    }
+  }
+  
+  // Completed tasks with attribution (who did what)
+  if (context.completedTasks && context.completedTasks.length > 0) {
+    parts.push(`\n## Recently Completed Tasks (last 30 days)`)
+    
+    // Group by date
+    const tasksByDate = {}
+    for (const task of context.completedTasks) {
+      const dateStr = new Date(task.completedAt).toLocaleDateString()
+      if (!tasksByDate[dateStr]) tasksByDate[dateStr] = []
+      tasksByDate[dateStr].push(task)
+    }
+    
+    for (const [date, tasks] of Object.entries(tasksByDate).slice(0, 7)) {
+      parts.push(`\n### ${date}`)
+      for (const task of tasks.slice(0, 10)) {
+        let taskInfo = `- ✅ ${task.customName || task.taskType}`
+        if (task.plantName) taskInfo += ` for "${task.plantName}"`
+        
+        // Who completed it
+        if (task.completedBy && task.completedBy.length > 0) {
+          const names = task.completedBy.map(c => c.userName).filter(Boolean)
+          if (names.length > 0) {
+            taskInfo += ` (by ${names.join(', ')})`
+          }
+        }
+        parts.push(taskInfo)
+      }
+    }
+  }
+  
+  // Weekly AI gardening advice history
+  if (context.weeklyAdvice && context.weeklyAdvice.length > 0) {
+    parts.push(`\n## Weekly Gardening Advice History`)
+    
+    for (const advice of context.weeklyAdvice.slice(0, 4)) {
+      const weekDate = new Date(advice.weekStart)
+      parts.push(`\n### Week of ${weekDate.toLocaleDateString()}`)
+      
+      if (advice.summary) {
+        parts.push(`**Summary:** ${advice.summary}`)
+      }
+      
+      if (advice.focusAreas && advice.focusAreas.length > 0) {
+        parts.push(`**Focus areas:** ${advice.focusAreas.join(', ')}`)
+      }
+      
+      if (advice.improvementScore !== null && advice.improvementScore !== undefined) {
+        parts.push(`**Improvement score:** ${advice.improvementScore}/100`)
+      }
+      
+      if (advice.adviceText) {
+        // Truncate very long advice
+        const text = advice.adviceText.length > 600 
+          ? advice.adviceText.substring(0, 600) + '...'
+          : advice.adviceText
+        parts.push(`**Advice:** ${text}`)
+      }
+      
+      if (advice.plantTips && advice.plantTips.length > 0) {
+        parts.push(`**Plant-specific tips:**`)
+        for (const tip of advice.plantTips.slice(0, 5)) {
+          if (tip.plantName && tip.tip) {
+            parts.push(`  - ${tip.plantName}: ${tip.tip}`)
+          }
+        }
+      }
+    }
+  }
+  
+  // Current date/time context
+  const now = new Date()
+  const month = now.toLocaleString('en', { month: 'long' })
+  const season = getSeasonForMonth(now.getMonth())
+  parts.push(`\n## Current Date & Time`)
+  parts.push(`- Date: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`)
+  parts.push(`- Month: ${month}`)
+  parts.push(`- Season: ${season} (Northern Hemisphere)`)
+  
+  return parts.join('\n')
+}
+
+function getSeasonForMonth(month) {
+  // Northern hemisphere seasons
+  if (month >= 2 && month <= 4) return 'Spring'
+  if (month >= 5 && month <= 7) return 'Summer'
+  if (month >= 8 && month <= 10) return 'Autumn/Fall'
+  return 'Winter'
+}
+
+// Fetch COMPREHENSIVE garden context from database - ALL DATA for AI
+async function fetchGardenContext(gardenId, userId) {
+  if (!sql || !gardenId) return null
+  
+  try {
+    // Fetch garden details with ALL fields
+    const gardenRows = await sql`
+      select 
+        g.id, g.name, g.location_city, g.location_country, 
+        g.location_timezone, g.location_lat, g.location_lon,
+        g.privacy, g.cover_image_url, g.created_at,
+        g.advice_language, g.streak as base_streak,
+        g.hide_ai_chat,
+        -- Get plant count
+        (select count(*)::int from public.garden_plants where garden_id = g.id) as plant_count,
+        -- Get total seeds planted
+        (select coalesce(sum(seeds_planted), 0)::int from public.garden_plants where garden_id = g.id) as total_seeds,
+        -- Get total plants on hand
+        (select coalesce(sum(plants_on_hand), 0)::int from public.garden_plants where garden_id = g.id) as total_plants_on_hand
+      from public.gardens g
+      join public.garden_members gm on gm.garden_id = g.id
+      where g.id = ${gardenId} and gm.user_id = ${userId}
+    `
+    
+    if (!gardenRows || gardenRows.length === 0) return null
+    
+    const garden = gardenRows[0]
+    
+    // Fetch ALL garden members with their FULL details
+    const memberRows = await sql`
+      select 
+        gm.user_id, gm.role, gm.joined_at,
+        p.display_name, p.experience_years, p.language, p.timezone,
+        p.bio, p.avatar_url,
+        -- Count tasks completed by this member in this garden (last 30 days)
+        (
+          select count(*)::int 
+          from public.garden_task_user_completions c
+          join public.garden_plant_task_occurrences o on o.id = c.occurrence_id
+          join public.garden_plant_tasks t on t.id = o.task_id
+          where t.garden_id = ${gardenId} 
+            and c.user_id = gm.user_id 
+            and c.occurred_at > now() - interval '30 days'
+        ) as tasks_completed_30d,
+        -- Count journal entries by this member (last 30 days)
+        (
+          select count(*)::int 
+          from public.garden_journal_entries j
+          where j.garden_id = ${gardenId} 
+            and j.user_id = gm.user_id 
+            and j.created_at > now() - interval '30 days'
+        ) as journal_entries_30d
+      from public.garden_members gm
+      left join public.profiles p on p.id = gm.user_id
+      where gm.garden_id = ${gardenId}
+      order by gm.role desc, gm.joined_at asc
+    `
+    
+    const members = memberRows.map(m => ({
+      userId: m.user_id,
+      role: m.role,
+      displayName: m.display_name || 'Member',
+      experienceYears: m.experience_years,
+      language: m.language,
+      timezone: m.timezone,
+      bio: m.bio,
+      avatarUrl: m.avatar_url,
+      joinedAt: m.joined_at,
+      tasksCompletedLast30Days: m.tasks_completed_30d || 0,
+      journalEntriesLast30Days: m.journal_entries_30d || 0
+    }))
+    
+    // Fetch garden streak and stats from dedicated table
+    let streakInfo = null
+    try {
+      const streakRows = await sql`
+        select current_streak, longest_streak, last_streak_date
+        from public.garden_streaks
+        where garden_id = ${gardenId}
+      `
+      if (streakRows[0]) {
+        streakInfo = {
+          currentStreak: streakRows[0].current_streak || 0,
+          longestStreak: streakRows[0].longest_streak || 0,
+          lastStreakDate: streakRows[0].last_streak_date
+        }
+      }
+    } catch { }
+    
+    // Fetch recent activity logs (last 14 days for more context)
+    let recentActivity = []
+    try {
+      const activityRows = await sql`
+        select kind, message, plant_name, task_name, created_at, 
+               user_id, actor_name
+        from public.garden_activity_logs
+        where garden_id = ${gardenId}
+          and created_at > now() - interval '14 days'
+        order by created_at desc
+        limit 50
+      `
+      recentActivity = activityRows.map(a => ({
+        kind: a.kind,
+        message: a.message,
+        plantName: a.plant_name,
+        taskName: a.task_name,
+        actorName: a.actor_name,
+        createdAt: a.created_at
+      }))
+    } catch { }
+    
+    // Fetch inventory counts
+    let inventorySummary = null
+    try {
+      const invRows = await sql`
+        select 
+          count(*)::int as unique_species,
+          coalesce(sum(seeds_on_hand), 0)::int as total_seeds_inventory,
+          coalesce(sum(plants_on_hand), 0)::int as total_plants_inventory
+        from public.garden_inventory
+        where garden_id = ${gardenId}
+      `
+      if (invRows[0]) {
+        inventorySummary = {
+          uniqueSpecies: invRows[0].unique_species || 0,
+          totalSeedsInventory: invRows[0].total_seeds_inventory || 0,
+          totalPlantsInventory: invRows[0].total_plants_inventory || 0
+        }
+      }
+    } catch { }
+    
+    return {
+      gardenId: garden.id,
+      gardenName: garden.name,
+      locationCity: garden.location_city,
+      locationCountry: garden.location_country,
+      locationTimezone: garden.location_timezone,
+      locationLat: garden.location_lat,
+      locationLon: garden.location_lon,
+      privacy: garden.privacy,
+      adviceLanguage: garden.advice_language,
+      createdAt: garden.created_at,
+      coverImageUrl: garden.cover_image_url,
+      // Counts
+      plantCount: garden.plant_count || 0,
+      totalSeedsPlanted: garden.total_seeds || 0,
+      totalPlantsOnHand: garden.total_plants_on_hand || 0,
+      // Members
+      members,
+      memberCount: members.length,
+      // Streaks
+      streak: streakInfo,
+      // Activity
+      recentActivity,
+      // Inventory
+      inventory: inventorySummary
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching garden context:', err)
+    return null
+  }
+}
+
+// Fetch ALL plants for a garden with FULL details - COMPREHENSIVE for AI context
+async function fetchPlantsContext(gardenId, plantIds = null) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    // Fetch ALL plants with COMPLETE info - base plant data, care requirements, and instance data
+    const rows = await sql`
+      select 
+        gp.id as garden_plant_id, 
+        gp.plant_id, 
+        gp.nickname, 
+        gp.health_status, 
+        gp.notes,
+        gp.plants_on_hand,
+        gp.seeds_planted,
+        gp.planted_at,
+        gp.expected_bloom_date,
+        gp.override_water_freq_unit,
+        gp.override_water_freq_value,
+        gp.last_health_update,
+        gp.created_at as added_at,
+        gp.sort_index as display_order,
+        -- Base plant info
+        p.name as plant_name,
+        p.scientific_name,
+        p.plant_type,
+        p.utility as plant_utility,
+        p.comestible_part,
+        -- Care requirements
+        p.water_freq_amount,
+        p.water_freq_period,
+        p.light_level,
+        p.hardiness_min,
+        p.hardiness_max,
+        p.temperature_min,
+        p.temperature_max,
+        p.temperature_ideal,
+        p.hygrometry,
+        p.watering_type,
+        p.soil,
+        p.nutrition_need,
+        p.fertilizer,
+        -- Growing info
+        p.sowing_month,
+        p.flowering_month,
+        p.fruiting_month,
+        p.height_cm,
+        p.wingspan_cm,
+        p.separation_cm,
+        p.tutoring,
+        p.transplanting,
+        p.sow_type,
+        p.division,
+        -- Characteristics
+        p.is_edible,
+        p.is_poisonous,
+        p.spiked,
+        p.scent,
+        p.multicolor,
+        p.melliferous,
+        p.conservation_status,
+        -- Problems and companions
+        p.pests,
+        p.diseases,
+        p.companions,
+        p.tags as plant_tags,
+        -- Get translated overview if available
+        (
+          select pt.overview 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as plant_overview
+      from public.garden_plants gp
+      left join public.plants p on p.id = gp.plant_id
+      where gp.garden_id = ${gardenId}
+      order by gp.sort_index asc nulls last, gp.created_at asc
+      limit 150
+    `
+    
+    // Fetch task counts, schedules, and recent events for each plant
+    const plantIds2 = rows.map(r => r.garden_plant_id)
+    let taskCounts = {}
+    let schedules = {}
+    let recentEvents = {}
+    
+    if (plantIds2.length > 0) {
+      try {
+        // Get active task counts per plant
+        const taskCountRows = await sql`
+          select garden_plant_id, count(*)::int as task_count
+          from public.garden_plant_tasks
+          where garden_plant_id = any(${plantIds2}::uuid[])
+          group by garden_plant_id
+        `
+        for (const tc of taskCountRows) {
+          taskCounts[tc.garden_plant_id] = tc.task_count
+        }
+        
+        // Get schedules
+        const scheduleRows = await sql`
+          select garden_plant_id, period, amount
+          from public.garden_plant_schedules
+          where garden_plant_id = any(${plantIds2}::uuid[])
+        `
+        for (const s of scheduleRows) {
+          schedules[s.garden_plant_id] = { period: s.period, amount: s.amount }
+        }
+        
+        // Get recent events (last 30 days) for each plant
+        const eventRows = await sql`
+          select garden_plant_id, event_type, occurred_at, notes
+          from public.garden_plant_events
+          where garden_plant_id = any(${plantIds2}::uuid[])
+            and occurred_at > now() - interval '30 days'
+          order by occurred_at desc
+        `
+        for (const e of eventRows) {
+          if (!recentEvents[e.garden_plant_id]) recentEvents[e.garden_plant_id] = []
+          if (recentEvents[e.garden_plant_id].length < 5) {
+            recentEvents[e.garden_plant_id].push({
+              type: e.event_type,
+              occurredAt: e.occurred_at,
+              notes: e.notes
+            })
+          }
+        }
+      } catch { }
+    }
+    
+    return rows.map(row => ({
+      gardenPlantId: row.garden_plant_id,
+      plantId: row.plant_id,
+      plantName: row.plant_name || 'Unknown plant',
+      scientificName: row.scientific_name,
+      nickname: row.nickname,
+      healthStatus: row.health_status,
+      lastHealthUpdate: row.last_health_update,
+      notes: row.notes,
+      overview: row.plant_overview,
+      plantsOnHand: row.plants_on_hand || 0,
+      seedsPlanted: row.seeds_planted || 0,
+      plantedAt: row.planted_at,
+      expectedBloomDate: row.expected_bloom_date,
+      addedAt: row.added_at,
+      displayOrder: row.display_order,
+      // Care info - including overrides
+      waterFrequency: row.override_water_freq_value 
+        ? `${row.override_water_freq_value}x per ${row.override_water_freq_unit || 'week'} (custom)`
+        : (row.water_freq_amount ? `${row.water_freq_amount}x per ${row.water_freq_period || 'week'}` : null),
+      lightLevel: row.light_level,
+      hardinessZone: row.hardiness_min && row.hardiness_max ? `${row.hardiness_min}-${row.hardiness_max}` : null,
+      temperatureRange: row.temperature_min && row.temperature_max 
+        ? { min: row.temperature_min, max: row.temperature_max, ideal: row.temperature_ideal }
+        : null,
+      humidity: row.hygrometry,
+      wateringType: row.watering_type,
+      soilType: row.soil,
+      nutritionNeeds: row.nutrition_need,
+      fertilizerTypes: row.fertilizer,
+      // Growing info
+      sowingMonths: row.sowing_month,
+      floweringMonths: row.flowering_month,
+      fruitingMonths: row.fruiting_month,
+      heightCm: row.height_cm,
+      wingspanCm: row.wingspan_cm,
+      separationCm: row.separation_cm,
+      needsTutoring: row.tutoring,
+      canTransplant: row.transplanting,
+      sowType: row.sow_type,
+      propagationMethods: row.division,
+      // Characteristics
+      isEdible: row.is_edible,
+      isPoisonous: row.is_poisonous,
+      hasSpikes: row.spiked,
+      hasScent: row.scent,
+      isMulticolor: row.multicolor,
+      isMelliferous: row.melliferous,
+      conservationStatus: row.conservation_status,
+      plantType: row.plant_type,
+      utility: row.plant_utility,
+      edibleParts: row.comestible_part,
+      // Problems and companions
+      commonPests: row.pests,
+      commonDiseases: row.diseases,
+      companionPlants: row.companions,
+      tags: row.plant_tags,
+      // Instance data
+      taskCount: taskCounts[row.garden_plant_id] || 0,
+      schedule: schedules[row.garden_plant_id] || null,
+      recentEvents: recentEvents[row.garden_plant_id] || []
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching plants context:', err)
+    return []
+  }
+}
+
+// Fetch ALL tasks for a garden with full details
+async function fetchTasksContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    // Fetch all tasks with their occurrences
+    const rows = await sql`
+      select 
+        t.id, 
+        t.type, 
+        t.custom_name, 
+        t.garden_plant_id,
+        t.freq_amount,
+        t.freq_period,
+        t.enabled,
+        t.created_at,
+        gp.nickname as plant_nickname,
+        p.name as plant_name,
+        (
+          select json_agg(json_build_object(
+            'dueAt', o.due_at,
+            'completedAt', o.completed_at,
+            'requiredCount', o.required_count,
+            'completedCount', o.completed_count
+          ) order by o.due_at)
+          from public.garden_plant_task_occurrences o
+          where o.task_id = t.id 
+            and o.due_at > now() - interval '7 days'
+            and o.due_at < now() + interval '14 days'
+        ) as occurrences
+      from public.garden_plant_tasks t
+      left join public.garden_plants gp on gp.id = t.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where t.garden_id = ${gardenId}
+      order by t.created_at desc
+      limit 100
+    `
+    
+    return rows.map(row => ({
+      taskId: row.id,
+      taskType: row.type,
+      customName: row.custom_name,
+      plantName: row.plant_nickname || row.plant_name,
+      frequency: row.freq_amount ? `${row.freq_amount}x per ${row.freq_period || 'week'}` : null,
+      enabled: row.enabled,
+      occurrences: row.occurrences || []
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching tasks context:', err)
+    return []
+  }
+}
+
+// Fetch ALL journal entries for a garden (using correct table name)
+async function fetchJournalContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    const rows = await sql`
+      select 
+        j.id,
+        j.title,
+        j.content,
+        j.mood,
+        j.weather_snapshot,
+        j.entry_date,
+        j.tags,
+        j.ai_feedback,
+        j.created_at,
+        j.updated_at,
+        j.plants_mentioned,
+        p.display_name as author_name
+      from public.garden_journal_entries j
+      left join public.profiles p on p.id = j.user_id
+      where j.garden_id = ${gardenId}
+        and j.is_private = false
+      order by j.entry_date desc, j.created_at desc
+      limit 50
+    `
+    
+    // Fetch plant names for mentioned plants
+    const allPlantIds = rows.flatMap(r => r.plants_mentioned || []).filter(Boolean)
+    let plantNameMap = {}
+    if (allPlantIds.length > 0) {
+      try {
+        const plantRows = await sql`
+          select gp.id, coalesce(gp.nickname, p.name) as name
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.id = any(${allPlantIds}::uuid[])
+        `
+        for (const pr of plantRows) {
+          plantNameMap[pr.id] = pr.name
+        }
+      } catch { }
+    }
+    
+    return rows.map(row => {
+      const weather = row.weather_snapshot || {}
+      return {
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        mood: row.mood,
+        weather: weather.description || weather.main,
+        temperature: weather.temp_c ? `${weather.temp_c}°C` : null,
+        entryDate: row.entry_date,
+        tags: row.tags || [],
+        aiFeedback: row.ai_feedback,
+        authorName: row.author_name,
+        createdAt: row.created_at,
+        plantsMentioned: (row.plants_mentioned || []).map(id => ({
+          plantId: id,
+          plantName: plantNameMap[id] || 'Unknown plant'
+        }))
+      }
+    })
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching journal context:', err)
+    return []
+  }
+}
+
+// Fetch weekly AI advice history for a garden
+async function fetchWeeklyAdviceContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    const rows = await sql`
+      select 
+        week_start,
+        advice_text,
+        advice_summary,
+        focus_areas,
+        plant_specific_tips,
+        improvement_score,
+        generated_at
+      from public.garden_ai_advice
+      where garden_id = ${gardenId}
+      order by week_start desc
+      limit 8
+    `
+    
+    return rows.map(row => ({
+      weekStart: row.week_start,
+      adviceText: row.advice_text,
+      summary: row.advice_summary,
+      focusAreas: row.focus_areas || [],
+      plantTips: row.plant_specific_tips || [],
+      improvementScore: row.improvement_score,
+      generatedAt: row.generated_at
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching weekly advice:', err)
+    return []
+  }
+}
+
+// Fetch completed tasks with who completed them
+async function fetchCompletedTasksContext(gardenId) {
+  if (!sql || !gardenId) return []
+  
+  try {
+    const rows = await sql`
+      select 
+        t.type as task_type,
+        t.custom_name,
+        o.completed_at,
+        o.completed_count,
+        o.required_count,
+        coalesce(gp.nickname, p.name) as plant_name,
+        (
+          select json_agg(json_build_object(
+            'userName', pr.display_name,
+            'increment', c.increment,
+            'occurredAt', c.occurred_at
+          ) order by c.occurred_at desc)
+          from public.garden_task_user_completions c
+          left join public.profiles pr on pr.id = c.user_id
+          where c.occurrence_id = o.id
+        ) as completions
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      left join public.garden_plants gp on gp.id = t.garden_plant_id
+      left join public.plants p on p.id = gp.plant_id
+      where t.garden_id = ${gardenId}
+        and o.completed_at is not null
+        and o.completed_at > now() - interval '30 days'
+      order by o.completed_at desc
+      limit 50
+    `
+    
+    return rows.map(row => ({
+      taskType: row.task_type,
+      customName: row.custom_name,
+      plantName: row.plant_name,
+      completedAt: row.completed_at,
+      completedCount: row.completed_count,
+      requiredCount: row.required_count,
+      completedBy: row.completions || []
+    }))
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching completed tasks:', err)
+    return []
+  }
+}
+
+// Fetch COMPREHENSIVE analytics/stats for a garden - ALL STATISTICS for AI
+async function fetchAnalyticsContext(gardenId) {
+  if (!sql || !gardenId) return null
+  
+  try {
+    // Task completion stats for last 30 days
+    const taskStatsRows = await sql`
+      select 
+        count(*) filter (where completed_at is not null)::int as completed_tasks,
+        count(*) filter (where completed_at is null and due_at < now())::int as overdue_tasks,
+        count(*) filter (where completed_at is null and due_at >= now() and due_at < now() + interval '7 days')::int as upcoming_tasks,
+        count(*) filter (where completed_at is null and due_at >= now() + interval '7 days' and due_at < now() + interval '30 days')::int as future_tasks
+      from public.garden_plant_task_occurrences o
+      join public.garden_plant_tasks t on t.id = o.task_id
+      where t.garden_id = ${gardenId}
+        and o.due_at > now() - interval '30 days'
+    `
+    
+    // Task breakdown by type
+    const taskTypeRows = await sql`
+      select 
+        t.type as task_type,
+        count(*)::int as total_tasks,
+        count(*) filter (where o.completed_at is not null)::int as completed,
+        count(*) filter (where o.completed_at is null and o.due_at < now())::int as overdue
+      from public.garden_plant_tasks t
+      left join public.garden_plant_task_occurrences o on o.task_id = t.id 
+        and o.due_at > now() - interval '30 days'
+      where t.garden_id = ${gardenId}
+      group by t.type
+    `
+    
+    // Plant health distribution
+    const healthRows = await sql`
+      select 
+        health_status,
+        count(*)::int as count
+      from public.garden_plants
+      where garden_id = ${gardenId} and health_status is not null
+      group by health_status
+    `
+    
+    // Plant type distribution
+    const plantTypeRows = await sql`
+      select 
+        p.plant_type,
+        count(*)::int as count
+      from public.garden_plants gp
+      left join public.plants p on p.id = gp.plant_id
+      where gp.garden_id = ${gardenId}
+      group by p.plant_type
+    `
+    
+    // Activity frequency
+    const activityRows = await sql`
+      select 
+        date_trunc('day', created_at)::date as day,
+        count(*)::int as activity_count
+      from public.garden_activity_logs
+      where garden_id = ${gardenId}
+        and created_at > now() - interval '14 days'
+      group by date_trunc('day', created_at)
+      order by day desc
+    `
+    
+    // Activity breakdown by kind
+    const activityByKindRows = await sql`
+      select 
+        kind,
+        count(*)::int as count
+      from public.garden_activity_logs
+      where garden_id = ${gardenId}
+        and created_at > now() - interval '30 days'
+      group by kind
+      order by count desc
+    `
+    
+    // Member contribution stats
+    const memberStatsRows = await sql`
+      select 
+        p.display_name,
+        gm.role,
+        count(distinct c.id)::int as tasks_completed,
+        count(distinct j.id)::int as journal_entries
+      from public.garden_members gm
+      left join public.profiles p on p.id = gm.user_id
+      left join public.garden_task_user_completions c on c.user_id = gm.user_id
+      left join public.garden_plant_task_occurrences o on o.id = c.occurrence_id
+      left join public.garden_plant_tasks t on t.id = o.task_id and t.garden_id = ${gardenId}
+      left join public.garden_journal_entries j on j.user_id = gm.user_id 
+        and j.garden_id = ${gardenId}
+        and j.created_at > now() - interval '30 days'
+      where gm.garden_id = ${gardenId}
+        and (c.occurred_at is null or c.occurred_at > now() - interval '30 days')
+      group by p.display_name, gm.role
+    `
+    
+    // Journal mood distribution (last 30 days)
+    const moodRows = await sql`
+      select 
+        mood,
+        count(*)::int as count
+      from public.garden_journal_entries
+      where garden_id = ${gardenId}
+        and created_at > now() - interval '30 days'
+        and mood is not null
+      group by mood
+    `
+    
+    // Calculate totals
+    const totalPlantCount = await sql`
+      select count(*)::int as total from public.garden_plants where garden_id = ${gardenId}
+    `
+    
+    const totalTaskCount = await sql`
+      select count(*)::int as total from public.garden_plant_tasks where garden_id = ${gardenId}
+    `
+    
+    const totalJournalCount = await sql`
+      select count(*)::int as total from public.garden_journal_entries where garden_id = ${gardenId}
+    `
+    
+    return {
+      taskStats: taskStatsRows[0] || { completed_tasks: 0, overdue_tasks: 0, upcoming_tasks: 0, future_tasks: 0 },
+      tasksByType: taskTypeRows.reduce((acc, t) => {
+        acc[t.task_type] = { total: t.total_tasks, completed: t.completed, overdue: t.overdue }
+        return acc
+      }, {}),
+      healthDistribution: healthRows.reduce((acc, h) => {
+        acc[h.health_status] = h.count
+        return acc
+      }, {}),
+      plantTypeDistribution: plantTypeRows.reduce((acc, p) => {
+        acc[p.plant_type || 'unknown'] = p.count
+        return acc
+      }, {}),
+      dailyActivity: activityRows.map(a => ({
+        date: a.day,
+        count: a.activity_count
+      })),
+      activityByKind: activityByKindRows.reduce((acc, a) => {
+        acc[a.kind] = a.count
+        return acc
+      }, {}),
+      memberContributions: memberStatsRows.map(m => ({
+        displayName: m.display_name || 'Member',
+        role: m.role,
+        tasksCompleted: m.tasks_completed,
+        journalEntries: m.journal_entries
+      })),
+      moodDistribution: moodRows.reduce((acc, m) => {
+        acc[m.mood] = m.count
+        return acc
+      }, {}),
+      totals: {
+        plants: totalPlantCount[0]?.total || 0,
+        tasks: totalTaskCount[0]?.total || 0,
+        journalEntries: totalJournalCount[0]?.total || 0
+      }
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Error fetching analytics context:', err)
+    return null
+  }
+}
+
+// Main streaming chat endpoint
+app.post('/api/ai/garden-chat', async (req, res) => {
+  try {
+    // Authenticate user
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    // Check if OpenAI is configured
+    if (!openai) {
+      res.status(503).json({ error: 'AI service not configured' })
+      return
+    }
+    
+    const body = req.body || {}
+    const { messages = [], context = {}, quickAction, stream = true } = body
+    
+    if (!messages || messages.length === 0) {
+      res.status(400).json({ error: 'Messages are required' })
+      return
+    }
+    
+    // Get user profile for context
+    let userProfile = null
+    if (sql) {
+      try {
+        const profileRows = await sql`
+          select display_name, language, timezone, experience_years
+          from public.profiles where id = ${user.id}
+        `
+        userProfile = profileRows[0] || null
+      } catch { }
+    }
+    
+    // Build user context
+    const userContext = {
+      userId: user.id,
+      displayName: userProfile?.display_name || 'Gardener',
+      language: context.user?.language || userProfile?.language || 'en',
+      timezone: context.user?.timezone || userProfile?.timezone,
+      experienceYears: context.user?.experienceYears || userProfile?.experience_years
+    }
+    
+    // ALWAYS fetch COMPREHENSIVE garden context when gardenId is provided
+    // Context is REQUIRED for the AI to provide accurate, personalized advice
+    let gardenContext = context.garden || null
+    let plantsContext = []
+    let tasksContext = []
+    let journalContext = []
+    let analyticsContext = null
+    let weeklyAdviceContext = []
+    let completedTasksContext = []
+    let contextLoadedSuccessfully = false
+    
+    if (context.garden?.gardenId) {
+      // Fetch ALL data in parallel for performance - this is REQUIRED for good AI responses
+      const gardenId = context.garden.gardenId
+      
+      console.log(`[aphylia-chat] Loading FULL context for garden ${gardenId}...`)
+      
+      const [
+        fetchedGarden,
+        fetchedPlants,
+        fetchedTasks,
+        fetchedJournal,
+        fetchedAnalytics,
+        fetchedWeeklyAdvice,
+        fetchedCompletedTasks
+      ] = await Promise.all([
+        fetchGardenContext(gardenId, user.id),
+        fetchPlantsContext(gardenId),
+        fetchTasksContext(gardenId),
+        fetchJournalContext(gardenId),
+        fetchAnalyticsContext(gardenId),
+        fetchWeeklyAdviceContext(gardenId),
+        fetchCompletedTasksContext(gardenId)
+      ])
+      
+      gardenContext = fetchedGarden || gardenContext
+      plantsContext = fetchedPlants
+      tasksContext = fetchedTasks
+      journalContext = fetchedJournal
+      analyticsContext = fetchedAnalytics
+      weeklyAdviceContext = fetchedWeeklyAdvice
+      completedTasksContext = fetchedCompletedTasks
+      contextLoadedSuccessfully = !!fetchedGarden
+      
+      // Log comprehensive context summary
+      console.log(`[aphylia-chat] ✅ Loaded FULL context for garden "${gardenContext?.gardenName || gardenId}":`)
+      console.log(`  - Garden info: ${gardenContext ? 'YES' : 'NO'} (members: ${gardenContext?.members?.length || 0}, location: ${gardenContext?.locationCity || 'not set'})`)
+      console.log(`  - Plants: ${plantsContext.length} (with full care info, health status, growing requirements)`)
+      console.log(`  - Tasks: ${tasksContext.length} (with occurrences and schedules)`)
+      console.log(`  - Journal entries: ${journalContext.length} (with mood, weather, plants mentioned)`)
+      console.log(`  - Analytics: ${analyticsContext ? 'YES' : 'NO'} (task stats, health distribution, member contributions)`)
+      console.log(`  - Weekly advice history: ${weeklyAdviceContext.length}`)
+      console.log(`  - Completed tasks (30d): ${completedTasksContext.length}`)
+    } else {
+      // No garden context provided - warn in logs
+      console.warn('[aphylia-chat] ⚠️ No garden context provided! AI responses will be generic without garden-specific information.')
+    }
+    
+    // Use frontend-provided plant summaries as fallback if backend fetch returned empty
+    // This ensures the AI always has some plant context even if database queries fail
+    let effectivePlantsContext = plantsContext
+    if ((!plantsContext || plantsContext.length === 0) && gardenContext?.plants && gardenContext.plants.length > 0) {
+      console.log(`[aphylia-chat] Using ${gardenContext.plants.length} plants from frontend context as fallback`)
+      effectivePlantsContext = gardenContext.plants.map(p => ({
+        gardenPlantId: p.gardenPlantId,
+        plantId: p.plantId,
+        plantName: p.plantName,
+        nickname: p.nickname,
+        healthStatus: p.healthStatus,
+        plantsOnHand: p.plantsOnHand,
+        seedsPlanted: p.seedsPlanted
+      }))
+    }
+    
+    // Build full context with ALL data
+    const fullContext = {
+      user: userContext,
+      garden: gardenContext,
+      plants: effectivePlantsContext,
+      tasks: tasksContext,
+      journal: journalContext,
+      analytics: analyticsContext,
+      weeklyAdvice: weeklyAdviceContext,
+      completedTasks: completedTasksContext
+    }
+    
+    // Build context string for AI - this MUST include ALL garden data
+    const contextString = await buildGardenContextString(fullContext)
+    
+    // Build system prompt with context
+    let systemPrompt = APHYLIA_SYSTEM_PROMPT
+    if (contextString) {
+      systemPrompt += `\n\n# Current Garden Context\n${contextString}`
+    }
+    
+    // Add note about context availability to help AI respond appropriately
+    if (!context.garden?.gardenId) {
+      systemPrompt += `\n\n# Important Note\nNo garden context was provided for this conversation. The user may be asking a general gardening question. If they ask about specific plants, tasks, or garden details, politely ask them to make sure they are in a garden context or to provide more details.`
+    } else if (!contextLoadedSuccessfully) {
+      systemPrompt += `\n\n# Important Note\nGarden context could not be fully loaded. Some garden-specific information may be missing. Provide the best advice you can with the available information.`
+    }
+    
+    // Add quick action specific instructions
+    if (quickAction) {
+      const quickActionPrompts = {
+        'diagnose': '\n\n## Quick Action: Plant Diagnosis\nThe user wants help diagnosing a plant issue. Look carefully at any provided images and ask clarifying questions if needed. Focus on identifying the problem and providing treatment options.',
+        'watering-schedule': '\n\n## Quick Action: Watering Schedule\nThe user wants help creating or optimizing a watering schedule. Consider the plants in their garden, local climate, and seasonal factors.',
+        'weekly-plan': '\n\n## Quick Action: Weekly Garden Plan\nThe user wants a weekly plan for their garden tasks. Prioritize tasks by urgency and create a practical schedule.',
+        'summarize-journal': '\n\n## Quick Action: Summarize Journal\nThe user wants a summary of their garden journal entries. Analyze all journal entries above and highlight: key observations, patterns over time, mood trends, weather correlations, plant health changes, and any notable events or achievements.',
+        'plant-care': '\n\n## Quick Action: Plant Care Guide\nThe user wants comprehensive care advice for a specific plant. Cover watering, light, feeding, and seasonal care.',
+        'pest-help': '\n\n## Quick Action: Pest & Disease Help\nThe user needs help with pest or disease issues. Help identify the problem and provide organic/natural solutions when possible.',
+        'seasonal-tips': '\n\n## Quick Action: Seasonal Tips\nThe user wants seasonal gardening advice. Focus on what to plant, what tasks to prioritize, and how to prepare for the next season.',
+        'companion-plants': '\n\n## Quick Action: Companion Planting\nThe user wants companion planting suggestions. Recommend plants that grow well together and explain the benefits.'
+      }
+      if (quickActionPrompts[quickAction]) {
+        systemPrompt += quickActionPrompts[quickAction]
+      }
+    }
+    
+    // Format messages for OpenAI
+    const openaiMessages = [
+      { role: 'system', content: systemPrompt }
+    ]
+    
+    for (const msg of messages) {
+      const content = []
+      
+      // Add text content
+      if (msg.content) {
+        content.push({ type: 'text', text: msg.content })
+      }
+      
+      // Add images if present
+      if (msg.imageUrls && msg.imageUrls.length > 0) {
+        for (const imageUrl of msg.imageUrls) {
+          // For local images, we need to read and base64 encode them
+          if (imageUrl.includes('/api/ai/garden-chat/image/')) {
+            const filename = imageUrl.split('/').pop()
+            const imagePath = path.join(chatUploadDir, filename)
+            if (fsSync.existsSync(imagePath)) {
+              try {
+                const imageBuffer = await fs.readFile(imagePath)
+                const base64 = imageBuffer.toString('base64')
+                const ext = path.extname(filename).toLowerCase()
+                const mimeTypes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }
+                const mimeType = mimeTypes[ext] || 'image/jpeg'
+                content.push({
+                  type: 'image_url',
+                  image_url: { url: `data:${mimeType};base64,${base64}` }
+                })
+              } catch (imgErr) {
+                console.warn('[aphylia-chat] Failed to read image:', imgErr?.message)
+              }
+            }
+          } else {
+            // External URL
+            content.push({
+              type: 'image_url',
+              image_url: { url: imageUrl }
+            })
+          }
+        }
+      }
+      
+      openaiMessages.push({
+        role: msg.role,
+        content: content.length === 1 && content[0].type === 'text' ? content[0].text : content
+      })
+    }
+    
+    // Get garden ID for tool execution
+    const gardenIdForTools = gardenContext?.gardenId || context.garden?.gardenId
+    
+    if (stream) {
+      // Streaming response using SSE
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.setHeader('X-Accel-Buffering', 'no')
+      
+      // Send start event
+      res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`)
+      
+      try {
+        // First, make a non-streaming call with tools to check if AI wants to use any
+        let messagesWithTools = [...openaiMessages]
+        let toolResults = []
+        let toolCallsExecuted = []
+        
+        if (gardenIdForTools) {
+          // Only enable tools if we have a garden context
+          const initialResponse = await openai.chat.completions.create({
+            model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+            messages: messagesWithTools,
+            tools: APHYLIA_TOOLS,
+            tool_choice: 'auto',
+            max_tokens: 2048,
+            temperature: 0.7
+          })
+          
+          const initialMessage = initialResponse.choices?.[0]?.message
+          
+          // Check if AI wants to use tools
+          if (initialMessage?.tool_calls && initialMessage.tool_calls.length > 0) {
+            // Notify client that tools are being executed
+            res.write(`data: ${JSON.stringify({ type: 'tool_start', tools: initialMessage.tool_calls.map(t => t.function.name) })}\n\n`)
+            
+            // Add assistant message with tool calls to conversation
+            messagesWithTools.push({
+              role: 'assistant',
+              content: initialMessage.content || null,
+              tool_calls: initialMessage.tool_calls
+            })
+            
+            // Execute each tool call
+            for (const toolCall of initialMessage.tool_calls) {
+              const toolName = toolCall.function.name
+              let toolArgs = {}
+              try {
+                toolArgs = JSON.parse(toolCall.function.arguments || '{}')
+              } catch (e) {
+                console.warn('[aphylia-chat] Failed to parse tool arguments:', e)
+              }
+              
+              console.log(`[aphylia-chat] Executing tool: ${toolName}`, toolArgs)
+              
+              const result = await executeAphyliaTool(toolName, toolArgs, gardenIdForTools, user.id)
+              
+              toolCallsExecuted.push({
+                tool: toolName,
+                args: toolArgs,
+                result: result
+              })
+              
+              // Add tool result to conversation
+              messagesWithTools.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(result)
+              })
+              
+              toolResults.push(result)
+            }
+            
+            // Notify client that tools are done
+            res.write(`data: ${JSON.stringify({ type: 'tool_end', results: toolCallsExecuted })}\n\n`)
+          }
+        }
+        
+        // Now stream the final response (with tool results if any)
+        const streamResponse = await openai.chat.completions.create({
+          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          messages: messagesWithTools,
+          stream: true,
+          max_tokens: 2048,
+          temperature: 0.7
+        })
+        
+        let fullContent = ''
+        let totalTokens = 0
+        
+        for await (const chunk of streamResponse) {
+          const delta = chunk.choices?.[0]?.delta
+          if (delta?.content) {
+            fullContent += delta.content
+            res.write(`data: ${JSON.stringify({ type: 'token', token: delta.content })}\n\n`)
+          }
+          
+          // Track usage if available
+          if (chunk.usage) {
+            totalTokens = chunk.usage.total_tokens || 0
+          }
+        }
+        
+        // Send done event with complete message
+        const messageId = crypto.randomUUID()
+        res.write(`data: ${JSON.stringify({
+          type: 'done',
+          message: {
+            id: messageId,
+            role: 'assistant',
+            content: fullContent,
+            createdAt: new Date().toISOString(),
+            toolCalls: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined
+          },
+          usage: {
+            totalTokens
+          }
+        })}\n\n`)
+        
+      } catch (streamErr) {
+        console.error('[aphylia-chat] Stream error:', streamErr)
+        res.write(`data: ${JSON.stringify({ type: 'error', error: streamErr?.message || 'Stream failed' })}\n\n`)
+      }
+      
+      res.end()
+    } else {
+      // Non-streaming response with tools
+      let messagesWithTools = [...openaiMessages]
+      let toolCallsExecuted = []
+      
+      if (gardenIdForTools) {
+        const initialResponse = await openai.chat.completions.create({
+          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          messages: messagesWithTools,
+          tools: APHYLIA_TOOLS,
+          tool_choice: 'auto',
+          max_tokens: 2048,
+          temperature: 0.7
+        })
+        
+        const initialMessage = initialResponse.choices?.[0]?.message
+        
+        if (initialMessage?.tool_calls && initialMessage.tool_calls.length > 0) {
+          messagesWithTools.push({
+            role: 'assistant',
+            content: initialMessage.content || null,
+            tool_calls: initialMessage.tool_calls
+          })
+          
+          for (const toolCall of initialMessage.tool_calls) {
+            const toolName = toolCall.function.name
+            let toolArgs = {}
+            try {
+              toolArgs = JSON.parse(toolCall.function.arguments || '{}')
+            } catch (e) { }
+            
+            const result = await executeAphyliaTool(toolName, toolArgs, gardenIdForTools, user.id)
+            
+            toolCallsExecuted.push({
+              tool: toolName,
+              args: toolArgs,
+              result: result
+            })
+            
+            messagesWithTools.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result)
+            })
+          }
+        }
+      }
+      
+      // Final response
+      const response = await openai.chat.completions.create({
+        model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+        messages: messagesWithTools,
+        max_tokens: 2048,
+        temperature: 0.7
+      })
+      
+      const assistantMessage = response.choices?.[0]?.message
+      const messageId = crypto.randomUUID()
+      
+      res.json({
+        message: {
+          id: messageId,
+          role: 'assistant',
+          content: assistantMessage?.content || '',
+          createdAt: new Date().toISOString(),
+          toolCalls: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined
+        },
+        usage: {
+          promptTokens: response.usage?.prompt_tokens || 0,
+          completionTokens: response.usage?.completion_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0
+        }
+      })
+    }
+  } catch (err) {
+    console.error('[aphylia-chat] Error:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Chat failed' })
+    }
   }
 })
 
@@ -15603,7 +20633,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
   for (const chunk of chunks) {
     // Fetch user display names, language preferences, and timezones for this chunk
     const userProfiles = await sql`
-      select id::text as id, display_name, username, email, timezone
+      select id::text as id, display_name, username, timezone
       from public.profiles
       where id = any(${sql.array(chunk)}::uuid[])
     `
@@ -15613,7 +20643,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
 
     // Get display names and timezones
     for (const profile of userProfiles || []) {
-      const displayName = profile.display_name || profile.username || profile.email || 'User'
+      const displayName = profile.display_name || profile.username || 'User'
       userDisplayNames.set(profile.id, displayName)
       if (profile.timezone) {
         userTimezones.set(profile.id, String(profile.timezone))
@@ -15992,6 +21022,7 @@ async function processDueNotificationCampaigns() {
 
   // First, recover any campaigns stuck in 'processing' for more than 5 minutes
   try {
+    const resetAt = new Date().toISOString()
     const stuckCampaigns = await sql`
       update public.notification_campaigns
       set state = case 
@@ -16001,7 +21032,7 @@ async function processDueNotificationCampaigns() {
           end,
           last_run_summary = jsonb_build_object(
             'error', 'Campaign was stuck in processing state and has been reset',
-            'resetAt', ${new Date().toISOString()}
+            'resetAt', ${resetAt}::text
           ),
           updated_at = now()
       where deleted_at is null
@@ -16654,6 +21685,7 @@ function isCrawler(userAgent) {
 
 // Generate pre-rendered HTML for crawlers
 // Note: Uses existing escapeHtml function defined earlier in this file
+// Returns: { html: string, statusCode: number } - statusCode is 200 for found pages, 404 for not-found
 async function generateCrawlerHtml(req, pagePath) {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
   const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
@@ -16707,6 +21739,12 @@ async function generateCrawlerHtml(req, pagePath) {
   let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
   let image = `${siteUrl}/icons/icon-512x512.png`
   let pageContent = ''
+  
+  // Track whether the requested resource was found (for proper 404 handling)
+  // Default to true for static pages, set to false when a dynamic resource is not found
+  let resourceFound = true
+  // Flag to indicate if this route expects a dynamic resource
+  let isDynamicRoute = false
 
   // Parse language from path BEFORE try block so it's always available for HTML template
   const pathParts = pagePath.split('/').filter(Boolean)
@@ -17119,6 +22157,7 @@ async function generateCrawlerHtml(req, pagePath) {
     })
     console.log(`[ssr] Route detection: plant=${isPlantRoute}, garden=${isGardenRoute}, blog=${isBlogRoute}, profile=${isProfileRoute}, bookmark=${isBookmarkRoute}`)
     if (isPlantRoute) {
+      isDynamicRoute = true
       req._ssrDebug.matchedRoute = 'plant'
       const plantId = decodeURIComponent(effectivePath[1])
       ssrDebug('plant_route_matched', { plantId, supabaseAvailable: !!supabaseServer })
@@ -17126,6 +22165,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (!supabaseServer) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
+        resourceFound = false
       } else {
         // Query base plant data (non-translatable fields now include scientific_name, family, level_sun, maintenance_level, season)
         const { data: basePlant, error: plantError } = await ssrQuery(
@@ -17196,9 +22236,11 @@ async function generateCrawlerHtml(req, pagePath) {
         if (plantError) {
           req._ssrDebug.errors.push({ type: 'plant_query', error: plantError.message || JSON.stringify(plantError) })
           console.log(`[ssr] ✗ Plant query error: ${plantError.message || JSON.stringify(plantError)}`)
+          resourceFound = false
         } else if (!plant) {
           req._ssrDebug.errors.push({ type: 'plant_not_found', plantId })
           console.log(`[ssr] ✗ Plant not found in database: ${plantId}`)
+          resourceFound = false
         }
 
         if (plant) {
@@ -17343,6 +22385,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Blog post page: /blog/:slug
     else if (isBlogRoute && supabaseServer) {
+      isDynamicRoute = true
       const slugOrId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up blog post: ${slugOrId}`)
       req._ssrDebug.matchedRoute = 'blog_post'
@@ -17388,7 +22431,13 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (postError) {
         console.log(`[ssr] Blog query error: ${postError.message}`)
-      } else if (post) {
+        resourceFound = false
+      } else if (!post) {
+        console.log(`[ssr] ✗ Blog post not found: ${slugOrId}`)
+        resourceFound = false
+      }
+      
+      if (post) {
         console.log(`[ssr] ✓ Found blog post: ${post.title}`)
 
         // Estimate read time from body_html content
@@ -17438,6 +22487,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // User profile page: /u/:username
     else if (isProfileRoute && supabaseServer) {
+      isDynamicRoute = true
       const username = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'profile'
       ssrDebug('profile_route_matched', { username, supabaseAvailable: !!supabaseServer })
@@ -17494,7 +22544,13 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (profileError) {
         console.log(`[ssr] Profile query error: ${profileError.message}`)
-      } else if (profile) {
+        resourceFound = false
+      } else if (!profile) {
+        console.log(`[ssr] ✗ Profile not found: ${username}`)
+        resourceFound = false
+      }
+      
+      if (profile) {
         const isPrivate = Boolean(profile.is_private)
         const displayName = profile.display_name || profile.username || username
         console.log(`[ssr] ✓ Found profile: ${displayName} (private: ${isPrivate})`)
@@ -17586,6 +22642,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Garden page: /garden/:id or /gardens/:id or /garden/:id/overview etc.
     else if (isGardenRoute && supabaseServer) {
+      isDynamicRoute = true
       const gardenId = decodeURIComponent(effectivePath[1])
       req._ssrDebug.matchedRoute = 'garden'
       ssrDebug('garden_route_matched', { gardenId, supabaseAvailable: !!supabaseServer, serviceClientAvailable: !!supabaseServiceClient })
@@ -17607,7 +22664,13 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (gardenError) {
         console.log(`[ssr] Garden query error: ${gardenError.message}`)
-      } else if (garden) {
+        resourceFound = false
+      } else if (!garden) {
+        console.log(`[ssr] ✗ Garden not found: ${gardenId}`)
+        resourceFound = false
+      }
+      
+      if (garden) {
         const isPrivate = garden.privacy === 'private'
         const gardenName = garden.name || tr.gardenBeautiful
         console.log(`[ssr] ✓ Found garden: ${gardenName} (privacy: ${garden.privacy || 'public'})`)
@@ -17985,11 +23048,12 @@ async function generateCrawlerHtml(req, pagePath) {
     // Bookmarks page
     // Bookmark list page: /bookmarks/:id
     else if (isBookmarkRoute && supabaseServer) {
+      isDynamicRoute = true
       const listId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
 
       // Try to get the bookmark list info (using correct table name 'bookmarks')
-      const { data: bookmarkList } = await ssrQuery(
+      const { data: bookmarkList, error: bookmarkError } = await ssrQuery(
         supabaseServer
           .from('bookmarks')
           .select('id, name, user_id, visibility, created_at')
@@ -17998,6 +23062,14 @@ async function generateCrawlerHtml(req, pagePath) {
           .maybeSingle(),
         'bookmark_lookup'
       )
+
+      if (bookmarkError) {
+        console.log(`[ssr] Bookmark list query error: ${bookmarkError.message}`)
+        resourceFound = false
+      } else if (!bookmarkList) {
+        console.log(`[ssr] ✗ Bookmark list not found or private: ${listId}`)
+        resourceFound = false
+      }
 
       if (bookmarkList) {
         console.log(`[ssr] ✓ Found bookmark list: ${bookmarkList.name}`)
@@ -18136,7 +23208,7 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(description)}">
-  <meta name="robots" content="index, follow">
+  <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
   <!-- Open Graph / Facebook -->
@@ -18314,7 +23386,12 @@ async function generateCrawlerHtml(req, pagePath) {
 </body>
 </html>`
 
-  return html
+  // Determine HTTP status code:
+  // - 200 for static pages and found dynamic resources
+  // - 404 for dynamic routes where the resource wasn't found
+  const statusCode = (isDynamicRoute && !resourceFound) ? 404 : 200
+  
+  return { html, statusCode }
 }
 
 // Debug endpoint to test crawler detection and SSR
@@ -18389,7 +23466,7 @@ app.get('/api/force-ssr', async (req, res) => {
     }
 
     const ssrStartTime = Date.now()
-    const html = await generateCrawlerHtml(fakeReq, testPath)
+    const { html, statusCode } = await generateCrawlerHtml(fakeReq, testPath)
     const ssrDuration = Date.now() - ssrStartTime
 
     if (jsonMode) {
@@ -18401,6 +23478,7 @@ app.get('/api/force-ssr', async (req, res) => {
 
       res.json({
         path: testPath,
+        statusCode,
         title: titleMatch?.[1] || null,
         ogTitle: ogTitleMatch?.[1] || null,
         ogDescription: ogDescMatch?.[1] || null,
@@ -18422,7 +23500,8 @@ app.get('/api/force-ssr', async (req, res) => {
     } else {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
       res.setHeader('X-SSR-Test', 'force-ssr')
-      res.send(html)
+      res.setHeader('X-SSR-Status', String(statusCode))
+      res.status(statusCode).send(html)
     }
   } catch (err) {
     console.error('[force-ssr] Error:', err)
@@ -18445,9 +23524,10 @@ app.get('/api/preview-ssr', async (req, res) => {
   }
 
   try {
-    const html = await generateCrawlerHtml(fakeReq, testPath)
+    const { html, statusCode } = await generateCrawlerHtml(fakeReq, testPath)
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
-    res.send(html)
+    res.setHeader('X-SSR-Status', String(statusCode))
+    res.status(statusCode).send(html)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -18482,14 +23562,21 @@ app.get('*', async (req, res) => {
     const ssrStartTime = Date.now()
     try {
       // Use path without query params for SSR
-      const html = await generateCrawlerHtml(req, pathWithoutQuery)
+      const { html, statusCode } = await generateCrawlerHtml(req, pathWithoutQuery)
       const ssrDuration = Date.now() - ssrStartTime
-      console.log(`[ssr] ✓ Generated HTML for ${pathWithoutQuery} in ${ssrDuration}ms (${html.length} bytes)`)
+      console.log(`[ssr] ✓ Generated HTML for ${pathWithoutQuery} in ${ssrDuration}ms (${html.length} bytes) [status: ${statusCode}]`)
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
-      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
-      res.setHeader('X-Robots-Tag', 'index, follow')
+      // Use shorter cache for 404 pages
+      if (statusCode === 404) {
+        res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
+        res.setHeader('X-Robots-Tag', 'noindex, follow')
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+        res.setHeader('X-Robots-Tag', 'index, follow')
+      }
       res.setHeader('X-SSR-Duration', String(ssrDuration))
-      return res.send(html)
+      res.setHeader('X-SSR-Status', String(statusCode))
+      return res.status(statusCode).send(html)
     } catch (err) {
       const ssrDuration = Date.now() - ssrStartTime
       console.error(`[ssr] ✗ Crawler render FAILED after ${ssrDuration}ms, falling back to SPA:`, err?.message || err)
@@ -18537,4 +23624,3 @@ if (shouldListen) {
 
 // Export app for testing and tooling
 export { app }
-

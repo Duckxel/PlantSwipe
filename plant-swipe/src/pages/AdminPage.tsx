@@ -13,6 +13,9 @@ import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPa
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
 import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
+import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
+import { AdminBugsPanel } from "@/components/admin/AdminBugsPanel";
+import { AdminUserMessagesDialog } from "@/components/admin/AdminUserMessagesDialog";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -64,15 +67,48 @@ import {
   Pencil,
   Shield,
   Store,
+  ShieldAlert,
+  Ban,
+  X,
+  Image,
+  CircleCheck,
+  Loader2,
+  Square,
+  FolderOpen,
+  HardDrive,
+  ArrowRight,
+  FileImage,
+  MessageSquare as MessageSquareIcon,
+  MessageSquareText,
+  BookOpen,
+  Flower2,
+  Bug,
+  Zap,
+  Trophy,
+  CheckCircle2,
 } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
+import { cn } from "@/lib/utils";
+import { setUserThreatLevel, getReportCounts } from "@/lib/moderation";
+import { type ThreatLevel } from "@/types/moderation";
 import {
   loadPersistedBroadcast,
   savePersistedBroadcast,
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
+import { processAllPlantRequests } from "@/lib/aiPrefillService";
+import { getEnglishPlantName } from "@/lib/aiPlantFill";
+import { Languages } from "lucide-react";
+import { 
+  buildCategoryProgress, 
+  createEmptyCategoryProgress, 
+  plantFormCategoryOrder, 
+  mapFieldToCategory,
+  type CategoryProgress, 
+  type PlantFormCategory 
+} from "@/lib/plantFormCategories";
 import {
   Dialog,
   DialogTrigger,
@@ -106,7 +142,8 @@ const {
 type AdminTab =
   | "overview"
   | "members"
-  | "requests"
+  | "plants"
+  | "bugs"
   | "stocks"
   | "upload"
   | "notifications"
@@ -132,6 +169,48 @@ type RoleStats = {
 
 const MEMBER_LIST_PAGE_SIZE = 20;
 
+const THREAT_LEVEL_META: Record<number, { 
+  label: string; 
+  badge: string; 
+  text: string;
+  cardBg: string;
+  cardBorder: string;
+  iconColor: string;
+}> = {
+  0: {
+    label: "Safe",
+    badge: "bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800",
+    text: "User is in good standing with no incidents.",
+    cardBg: "bg-emerald-50 dark:bg-emerald-950/30",
+    cardBorder: "border-emerald-300 dark:border-emerald-700",
+    iconColor: "text-emerald-600 dark:text-emerald-400",
+  },
+  1: {
+    label: "Suspicious",
+    badge: "bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800",
+    text: "User has had minor incidents. Monitor activity.",
+    cardBg: "bg-amber-50 dark:bg-amber-950/30",
+    cardBorder: "border-amber-300 dark:border-amber-700",
+    iconColor: "text-amber-600 dark:text-amber-400",
+  },
+  2: {
+    label: "Danger",
+    badge: "bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800",
+    text: "High risk user with multiple incidents. Consider restrictions.",
+    cardBg: "bg-red-50 dark:bg-red-950/30",
+    cardBorder: "border-red-300 dark:border-red-700",
+    iconColor: "text-red-600 dark:text-red-400",
+  },
+  3: {
+    label: "Banned",
+    badge: "bg-black text-white border border-black/60 dark:bg-black dark:text-white",
+    text: "User is permanently banned from the platform.",
+    cardBg: "bg-stone-900 dark:bg-black",
+    cardBorder: "border-stone-800 dark:border-stone-700",
+    iconColor: "text-white",
+  },
+};
+
 type RequestViewMode = "requests" | "plants";
 type NormalizedPlantStatus =
   | "in progres"
@@ -140,8 +219,8 @@ type NormalizedPlantStatus =
   | "approved"
   | "other";
 const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
-  { key: "requests", label: "Requests" },
   { key: "plants", label: "Plants" },
+  { key: "requests", label: "Requests" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -171,10 +250,10 @@ const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_
 const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_BADGE_CLASSES;
 
 const PLANT_STATUS_KEYS: NormalizedPlantStatus[] = [
-  "in progres",
-  "review",
-  "rework",
   "approved",
+  "rework",
+  "review",
+  "in progres",
   "other",
 ];
 
@@ -188,9 +267,10 @@ const PLANT_STATUS_FILTER_OPTIONS = PLANT_STATUS_KEYS.map((status) => ({
 
 const PRIORITIZED_STATUS_ORDER: Partial<Record<NormalizedPlantStatus, number>> =
   {
-    review: 0,
+    approved: 0,
     rework: 1,
-    "in progres": 2,
+    review: 2,
+    "in progres": 3,
   };
 const FALLBACK_STATUS_ORDER = PLANT_STATUS_KEYS.filter(
   (status) => PRIORITIZED_STATUS_ORDER[status] === undefined,
@@ -210,9 +290,10 @@ const getStatusSortPriority = (status: NormalizedPlantStatus): number => {
 };
 
 const STATUS_DONUT_SEGMENTS: NormalizedPlantStatus[] = [
-  "in progres",
-  "review",
+  "approved",
   "rework",
+  "review",
+  "in progres",
   "other",
 ];
 
@@ -255,7 +336,10 @@ type PlantDashboardRow = {
   promotionMonth: PromotionMonthSlug | null;
   primaryImage: string | null;
   updatedAt: number | null;
+  createdAt: number | null;
 };
+
+type PlantSortOption = "status" | "updated" | "created" | "name";
 
 const normalizePlantStatus = (
   status?: string | null,
@@ -1536,9 +1620,15 @@ export const AdminPage: React.FC = () => {
     string | null
   >(null);
   const [createPlantName, setCreatePlantName] = React.useState<string>("");
+  
+  // Plant request editing state
+  const [editingRequestId, setEditingRequestId] = React.useState<string | null>(null);
+  const [editingRequestName, setEditingRequestName] = React.useState<string>("");
+  const [savingRequestName, setSavingRequestName] = React.useState<boolean>(false);
+  const [translatingRequestId, setTranslatingRequestId] = React.useState<string | null>(null);
   const requestViewMode: RequestViewMode = React.useMemo(() => {
-    if (currentPath.includes("/admin/requests/plants")) return "plants";
-    return "requests";
+    if (currentPath.includes("/admin/plants/requests")) return "requests";
+    return "plants";
   }, [currentPath]);
   const [plantDashboardRows, setPlantDashboardRows] = React.useState<
     PlantDashboardRow[]
@@ -1558,6 +1648,7 @@ export const AdminPage: React.FC = () => {
   >("all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>("");
+  const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>("status");
   const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
   const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
   const [deletingPlant, setDeletingPlant] = React.useState(false);
@@ -1573,6 +1664,59 @@ export const AdminPage: React.FC = () => {
   const [addFromDuplicating, setAddFromDuplicating] = React.useState(false);
   const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
   const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
+
+  // AI Prefill All state
+  const [aiPrefillRunning, setAiPrefillRunning] = React.useState<boolean>(false);
+  const [aiPrefillAbortController, setAiPrefillAbortController] = React.useState<AbortController | null>(null);
+  const [aiPrefillCurrentPlant, setAiPrefillCurrentPlant] = React.useState<string | null>(null);
+  const [aiPrefillProgress, setAiPrefillProgress] = React.useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const [aiPrefillError, setAiPrefillError] = React.useState<string | null>(null);
+  const [aiPrefillStatus, setAiPrefillStatus] = React.useState<'idle' | 'filling' | 'saving' | 'translating' | 'translating_name'>('idle');
+  const [aiPrefillCurrentField, setAiPrefillCurrentField] = React.useState<string | null>(null);
+  const [aiPrefillFieldProgress, setAiPrefillFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 });
+  const [aiPrefillCategoryProgress, setAiPrefillCategoryProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress());
+  const [aiPrefillCompletedPlants, setAiPrefillCompletedPlants] = React.useState<Array<{ name: string; success: boolean; error?: string; durationMs?: number }>>([]);
+  const [aiPrefillStartTime, setAiPrefillStartTime] = React.useState<number | null>(null);
+  const [aiPrefillElapsedTime, setAiPrefillElapsedTime] = React.useState<number>(0);
+  const [aiPrefillPlantStartTime, setAiPrefillPlantStartTime] = React.useState<number | null>(null);
+
+  // Timer effect for elapsed time
+  React.useEffect(() => {
+    if (!aiPrefillRunning || !aiPrefillStartTime) {
+      return;
+    }
+    const interval = setInterval(() => {
+      setAiPrefillElapsedTime(Date.now() - aiPrefillStartTime);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [aiPrefillRunning, aiPrefillStartTime]);
+
+  // Helper to format duration
+  const formatDuration = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    }
+    if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    }
+    return `${seconds}s`;
+  };
+
+  // Category labels for display
+  const aiPrefillCategoryLabels: Record<PlantFormCategory, string> = {
+    basics: 'Basics',
+    identity: 'Identity',
+    plantCare: 'Plant Care',
+    growth: 'Growth',
+    usage: 'Usage',
+    ecology: 'Ecology',
+    danger: 'Danger',
+    miscellaneous: 'Miscellaneous',
+    meta: 'Meta',
+  };
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -1771,6 +1915,94 @@ export const AdminPage: React.FC = () => {
     },
     [],
   );
+
+  // Start editing a plant request name
+  const handleStartEditRequest = React.useCallback((req: PlantRequestRow) => {
+    setEditingRequestId(req.id);
+    setEditingRequestName(req.plant_name);
+  }, []);
+
+  // Cancel editing
+  const handleCancelEditRequest = React.useCallback(() => {
+    setEditingRequestId(null);
+    setEditingRequestName("");
+  }, []);
+
+  // Save edited plant request name
+  const handleSaveRequestName = React.useCallback(async (requestId: string) => {
+    const trimmedName = editingRequestName.trim();
+    if (!trimmedName) return;
+    
+    setSavingRequestName(true);
+    try {
+      const { error } = await supabase
+        .from("requested_plants")
+        .update({ 
+          plant_name: trimmedName,
+          plant_name_normalized: trimmedName.toLowerCase().trim(),
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", requestId);
+      
+      if (error) throw new Error(error.message);
+      
+      // Update local state
+      setPlantRequests((prev) => 
+        prev.map((req) => 
+          req.id === requestId 
+            ? { ...req, plant_name: trimmedName, plant_name_normalized: trimmedName.toLowerCase().trim() }
+            : req
+        )
+      );
+      
+      setEditingRequestId(null);
+      setEditingRequestName("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPlantRequestsError(`Failed to update name: ${msg}`);
+    } finally {
+      setSavingRequestName(false);
+    }
+  }, [editingRequestName, supabase]);
+
+  // Translate plant request name to English using AI (auto-detects language)
+  const handleTranslateRequestName = React.useCallback(async (req: PlantRequestRow) => {
+    setTranslatingRequestId(req.id);
+    try {
+      // Use AI to get the English common name (auto-detects source language)
+      const result = await getEnglishPlantName(req.plant_name);
+      const translatedName = result.englishName;
+      
+      // If translation is different, update the database
+      if (translatedName && translatedName.toLowerCase() !== req.plant_name.toLowerCase()) {
+        const { error } = await supabase
+          .from("requested_plants")
+          .update({ 
+            plant_name: translatedName,
+            plant_name_normalized: translatedName.toLowerCase().trim(),
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", req.id);
+        
+        if (error) throw new Error(error.message);
+        
+        // Update local state
+        setPlantRequests((prev) => 
+          prev.map((r) => 
+            r.id === req.id 
+              ? { ...r, plant_name: translatedName, plant_name_normalized: translatedName.toLowerCase().trim() }
+              : r
+          )
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPlantRequestsError(`Failed to translate: ${msg}`);
+    } finally {
+      setTranslatingRequestId(null);
+    }
+  }, [supabase]);
+
   const handleOpenPlantEditor = React.useCallback(
     (plantId: string) => {
       if (!plantId) return;
@@ -1998,6 +2230,7 @@ export const AdminPage: React.FC = () => {
             status,
             promotion_month,
             updated_time,
+            created_time,
             plant_images (
               link,
               use
@@ -2032,6 +2265,16 @@ export const AdminPage: React.FC = () => {
                   row?.updated_time ??
                   row?.updated_at ??
                   row?.updatedTime ??
+                  null;
+                if (!timestamp) return null;
+                const parsed = Date.parse(timestamp);
+                return Number.isFinite(parsed) ? parsed : null;
+              })(),
+              createdAt: (() => {
+                const timestamp =
+                  row?.created_time ??
+                  row?.created_at ??
+                  row?.createdTime ??
                   null;
                 if (!timestamp) return null;
                 const parsed = Date.parse(timestamp);
@@ -2222,12 +2465,32 @@ export const AdminPage: React.FC = () => {
         return matchesSearch;
       })
       .sort((a, b) => {
-        const statusDiff =
-          getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
-        if (statusDiff !== 0) return statusDiff;
-        return a.name.localeCompare(b.name);
+        switch (plantSortOption) {
+          case "updated":
+            // Sort by most recently updated first (descending)
+            const updatedA = a.updatedAt ?? 0;
+            const updatedB = b.updatedAt ?? 0;
+            if (updatedB !== updatedA) return updatedB - updatedA;
+            return a.name.localeCompare(b.name);
+          case "created":
+            // Sort by most recently created first (descending)
+            const createdA = a.createdAt ?? 0;
+            const createdB = b.createdAt ?? 0;
+            if (createdB !== createdA) return createdB - createdA;
+            return a.name.localeCompare(b.name);
+          case "name":
+            // Sort alphabetically by name
+            return a.name.localeCompare(b.name);
+          case "status":
+          default:
+            // Sort by status priority, then alphabetically
+            const statusDiff =
+              getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
+            if (statusDiff !== 0) return statusDiff;
+            return a.name.localeCompare(b.name);
+        }
       });
-  }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery]);
+  }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery, plantSortOption]);
 
   const plantViewIsPlants = requestViewMode === "plants";
   const plantTableLoading =
@@ -2253,6 +2516,128 @@ export const AdminPage: React.FC = () => {
     // Refresh the requests list
     await loadPlantRequests({ initial: false });
   }, [createPlantRequestId, completePlantRequest, loadPlantRequests]);
+
+  // AI Prefill All functionality
+  const aiFieldOrder = React.useMemo(() => [
+    'plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description',
+    'identity', 'plantCare', 'growth', 'usage', 'ecology', 'danger', 'miscellaneous'
+  ], []);
+
+  const initAiPrefillCategoryProgress = React.useCallback(() => {
+    const progress = buildCategoryProgress(aiFieldOrder);
+    setAiPrefillCategoryProgress(progress);
+  }, [aiFieldOrder]);
+
+  const markAiPrefillFieldComplete = React.useCallback((fieldKey: string) => {
+    const category = mapFieldToCategory(fieldKey);
+    setAiPrefillCategoryProgress((prev) => {
+      const current = prev[category] || { total: 0, completed: 0, status: 'idle' };
+      const total = current.total || 1;
+      const completed = Math.min((current.completed || 0) + 1, total);
+      const nextStatus = completed >= total ? 'done' : 'filling';
+      return {
+        ...prev,
+        [category]: { total, completed, status: nextStatus },
+      };
+    });
+  }, []);
+
+  const runAiPrefillAll = React.useCallback(async () => {
+    if (aiPrefillRunning || plantRequests.length === 0) return;
+    
+    const abortController = new AbortController();
+    const overallStartTime = Date.now();
+    let plantStartTime = Date.now();
+    
+    setAiPrefillAbortController(abortController);
+    setAiPrefillRunning(true);
+    setAiPrefillError(null);
+    setAiPrefillProgress({ current: 0, total: plantRequests.length });
+    setAiPrefillStatus('idle');
+    setAiPrefillCurrentField(null);
+    setAiPrefillFieldProgress({ completed: 0, total: 0 });
+    setAiPrefillCompletedPlants([]);
+    setAiPrefillStartTime(overallStartTime);
+    setAiPrefillElapsedTime(0);
+    setAiPrefillPlantStartTime(plantStartTime);
+    initAiPrefillCategoryProgress();
+    
+    try {
+      await processAllPlantRequests(
+        plantRequests.map((req) => ({ id: req.id, plant_name: req.plant_name })),
+        profile?.display_name || undefined,
+        {
+          signal: abortController.signal,
+          onProgress: ({ stage, plantName }) => {
+            setAiPrefillCurrentPlant(plantName);
+            setAiPrefillStatus(stage);
+            // Reset category progress for new plant
+            if (stage === 'filling' || stage === 'translating_name') {
+              initAiPrefillCategoryProgress();
+              setAiPrefillCurrentField(null);
+              setAiPrefillFieldProgress({ completed: 0, total: 0 });
+            }
+          },
+          onFieldStart: ({ field, fieldsCompleted, totalFields }) => {
+            setAiPrefillCurrentField(field);
+            setAiPrefillFieldProgress({ completed: fieldsCompleted, total: totalFields });
+          },
+          onFieldComplete: ({ field, fieldsCompleted, totalFields }) => {
+            markAiPrefillFieldComplete(field);
+            setAiPrefillFieldProgress({ completed: fieldsCompleted, total: totalFields });
+          },
+          onPlantProgress: ({ current, total, plantName }) => {
+            setAiPrefillProgress({ current, total });
+            setAiPrefillCurrentPlant(plantName);
+            // Track start time for new plant
+            plantStartTime = Date.now();
+            setAiPrefillPlantStartTime(plantStartTime);
+          },
+          onPlantComplete: ({ plantName, requestId, success, error }) => {
+            const durationMs = Date.now() - plantStartTime;
+            setAiPrefillCompletedPlants((prev) => [...prev.slice(-4), { name: plantName, success, error, durationMs }]);
+            if (success) {
+              // Remove completed plant from the local list immediately for visual feedback
+              setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
+            } else if (error) {
+              console.error(`Failed to process ${plantName}:`, error);
+            }
+          },
+          onError: (error) => {
+            if (!abortController.signal.aborted) {
+              setAiPrefillError(error);
+            }
+          },
+        }
+      );
+      
+      // Refresh the requests list after completion
+      await loadPlantRequests({ initial: false });
+      
+    } catch (err) {
+      if (!abortController.signal.aborted) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setAiPrefillError(msg);
+      }
+    } finally {
+      setAiPrefillRunning(false);
+      setAiPrefillAbortController(null);
+      setAiPrefillCurrentPlant(null);
+      setAiPrefillProgress({ current: 0, total: 0 });
+      setAiPrefillStatus('idle');
+      setAiPrefillCurrentField(null);
+      setAiPrefillFieldProgress({ completed: 0, total: 0 });
+      setAiPrefillStartTime(null);
+      setAiPrefillPlantStartTime(null);
+    }
+  }, [aiPrefillRunning, plantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
+
+  const stopAiPrefill = React.useCallback(() => {
+    if (aiPrefillAbortController) {
+      aiPrefillAbortController.abort();
+      setAiPrefillError('AI Prefill was cancelled by user');
+    }
+  }, [aiPrefillAbortController]);
 
   // Presence fallback removed by request: rely on DB-backed API only
 
@@ -3419,7 +3804,8 @@ export const AdminPage: React.FC = () => {
   }> = [
     { key: "overview", label: "Overview", Icon: LayoutDashboard, path: "/admin", adminOnly: true },
     { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
-    { key: "requests", label: "Requests", Icon: Leaf, path: "/admin/requests" },
+    { key: "plants", label: "Plants", Icon: Leaf, path: "/admin/plants" },
+    { key: "bugs", label: "Bugs", Icon: Bug, path: "/admin/bugs", adminOnly: true },
     { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
@@ -3435,7 +3821,8 @@ export const AdminPage: React.FC = () => {
 
   const activeTab: AdminTab = React.useMemo(() => {
     if (currentPath.includes("/admin/members")) return "members";
-    if (currentPath.includes("/admin/requests")) return "requests";
+    if (currentPath.includes("/admin/plants")) return "plants";
+    if (currentPath.includes("/admin/bugs")) return "bugs";
     if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
@@ -3449,8 +3836,8 @@ export const AdminPage: React.FC = () => {
     if (isFullAdmin) return; // Admins can access everything
     const adminOnlyTabs: AdminTab[] = ["overview", "members", "stocks", "admin_logs"];
     if (adminOnlyTabs.includes(activeTab)) {
-      // Redirect to requests tab (default for editors)
-      navigate("/admin/requests", { replace: true });
+      // Redirect to plants tab (default for editors)
+      navigate("/admin/plants", { replace: true });
     }
   }, [activeTab, isFullAdmin, navigate]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
@@ -3467,13 +3854,13 @@ export const AdminPage: React.FC = () => {
   }, [plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
-    if (activeTab !== "requests" || plantRequestsInitialized) return;
+    if (activeTab !== "plants" || plantRequestsInitialized) return;
     loadPlantRequests({ initial: true });
   }, [activeTab, plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
     if (
-      activeTab !== "requests" ||
+      activeTab !== "plants" ||
       !plantViewIsPlants ||
       plantDashboardInitialized ||
       plantDashboardLoading
@@ -3488,10 +3875,51 @@ export const AdminPage: React.FC = () => {
     plantDashboardLoading,
     loadPlantDashboard,
   ]);
-  const membersView: "search" | "list" = React.useMemo(() => {
+  const membersView: "search" | "list" | "reports" = React.useMemo(() => {
+    if (currentPath.includes("/admin/members/reports")) return "reports";
     if (currentPath.includes("/admin/members/list")) return "list";
     return "search";
   }, [currentPath]);
+  
+  // Active reports count for showing danger indicator on Members nav
+  const [activeReportsCount, setActiveReportsCount] = React.useState(0);
+  
+  // Pending bug reports count for showing indicator on Bugs nav
+  const [pendingBugReportsCount, setPendingBugReportsCount] = React.useState(0);
+  
+  // Load active reports count on mount (for full admins only)
+  React.useEffect(() => {
+    if (!isFullAdmin) return;
+    const loadReportCounts = async () => {
+      try {
+        const counts = await getReportCounts();
+        setActiveReportsCount(counts.review);
+      } catch (e) {
+        console.warn('[AdminPage] Failed to load report counts:', e);
+      }
+    };
+    loadReportCounts();
+  }, [isFullAdmin]);
+  
+  // Load pending bug reports count on mount (for full admins only)
+  React.useEffect(() => {
+    if (!isFullAdmin) return;
+    const loadPendingBugReports = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('bug_reports')
+          .select('*', { count: 'exact', head: true })
+          .in('status', ['pending', 'reviewing']);
+        if (!error && count !== null) {
+          setPendingBugReportsCount(count);
+        }
+      } catch (e) {
+        console.warn('[AdminPage] Failed to load pending bug reports count:', e);
+      }
+    };
+    loadPendingBugReports();
+  }, [isFullAdmin]);
+  
   const [memberList, setMemberList] = React.useState<ListedMember[]>([]);
   const [memberListLoading, setMemberListLoading] = React.useState(false);
   const [memberListError, setMemberListError] = React.useState<string | null>(
@@ -3513,6 +3941,7 @@ export const AdminPage: React.FC = () => {
     user: { id: string; email: string; created_at?: string } | null;
     profile: any;
     ips: string[];
+    threatLevel?: number | null;
     lastOnlineAt?: string | null;
     lastIp?: string | null;
     visitsCount?: number;
@@ -3521,6 +3950,8 @@ export const AdminPage: React.FC = () => {
     isBannedEmail?: boolean;
     bannedReason?: string | null;
     bannedAt?: string | null;
+    bannedById?: string | null;
+    bannedByName?: string | null;
     bannedIps?: string[];
     topReferrers?: Array<{ source: string; visits: number }>;
     topCountries?: Array<{ country: string; visits: number }>;
@@ -3533,6 +3964,53 @@ export const AdminPage: React.FC = () => {
       message: string;
       created_at: string | null;
     }>;
+    files?: Array<{
+      id: string;
+      imageUrl: string | null;
+      caption: string | null;
+      uploadedAt: string | null;
+      gardenPlantId: string | null;
+      plantName: string | null;
+      adminCommentary: string | null;
+    }>;
+    mediaUploads?: Array<{
+      id: string;
+      url: string | null;
+      bucket: string | null;
+      path: string | null;
+      mimeType: string | null;
+      sizeBytes: number | null;
+      uploadSource: string;
+      createdAt: string | null;
+    }>;
+    mediaTotalCount?: number;
+    mediaTotalSize?: number;
+    userReports?: Array<{
+      id: string;
+      reason: string | null;
+      status: string;
+      createdAt: string | null;
+      classifiedAt: string | null;
+      reporterName: string;
+      classifierName: string | null;
+      type: string;
+    }>;
+    reportsAgainstCount?: number;
+    reportsByCount?: number;
+    bugPoints?: number | null;
+    bugCatcherRank?: number | null;
+    bugActionsCompleted?: number | null;
+    bugCompletedActions?: Array<{
+      id: string;
+      actionId: string;
+      title: string;
+      description: string | null;
+      questions: Array<{ id: string; title: string; required: boolean; type: string }>;
+      answers: Record<string, string | boolean>;
+      pointsEarned: number;
+      completedAt: string;
+      actionStatus: string;
+    }>;
   } | null>(null);
   const [banReason, setBanReason] = React.useState("");
   const [banSubmitting, setBanSubmitting] = React.useState(false);
@@ -3541,12 +4019,29 @@ export const AdminPage: React.FC = () => {
   const [promoteSubmitting, setPromoteSubmitting] = React.useState(false);
   const [demoteOpen, setDemoteOpen] = React.useState(false);
   const [demoteSubmitting, setDemoteSubmitting] = React.useState(false);
+  const [threatLevelSelection, setThreatLevelSelection] = React.useState<number>(0);
+  const [threatLevelUpdating, setThreatLevelUpdating] = React.useState(false);
+  const [threatLevelConfirmOpen, setThreatLevelConfirmOpen] = React.useState(false);
+  const [pendingThreatLevel, setPendingThreatLevel] = React.useState<number | null>(null);
+  
+
+  React.useEffect(() => {
+    if (typeof memberData?.threatLevel === "number") {
+      setThreatLevelSelection(memberData.threatLevel);
+    } else {
+      setThreatLevelSelection(0);
+    }
+  }, [memberData?.threatLevel]);
+
+  // Threat level panel visibility
+  const [threatLevelOpen, setThreatLevelOpen] = React.useState(false);
 
   // Roles management state
   const [memberRoles, setMemberRoles] = React.useState<UserRole[]>([]);
   const [roleSubmitting, setRoleSubmitting] = React.useState<string | null>(null);
   const [rolesOpen, setRolesOpen] = React.useState(false); // Default to collapsed
   const [confirmAdminOpen, setConfirmAdminOpen] = React.useState(false); // Confirmation dialog for admin role
+  const [bugActionsDialogOpen, setBugActionsDialogOpen] = React.useState(false); // Bug catcher actions dialog
 
   // Container ref for Members tab to run form-field validation logs
   const membersContainerRef = React.useRef<HTMLDivElement | null>(null);
@@ -3603,6 +4098,49 @@ export const AdminPage: React.FC = () => {
   const [memberVisitsWarning, setMemberVisitsWarning] = React.useState<
     string | null
   >(null);
+
+  // Member messages dialog state
+  const [memberMessagesOpen, setMemberMessagesOpen] = React.useState(false);
+  const [memberMessagesStats, setMemberMessagesStats] = React.useState<{
+    conversationCount: number;
+    messageCount: number;
+    loading: boolean;
+  }>({ conversationCount: 0, messageCount: 0, loading: false });
+
+  const loadMemberMessagesStats = React.useCallback(
+    async (userId: string) => {
+      if (!userId) return;
+      setMemberMessagesStats((prev) => ({ ...prev, loading: true }));
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const token = session?.access_token;
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+        } catch {}
+        const resp = await fetch(
+          `/api/admin/member-messages?userId=${encodeURIComponent(userId)}&limit=1`,
+          { headers, credentials: "same-origin" },
+        );
+        const data = await safeJson(resp);
+        if (resp.ok) {
+          setMemberMessagesStats({
+            conversationCount: data?.totalConversations || 0,
+            messageCount: data?.totalMessages || 0,
+            loading: false,
+          });
+        } else {
+          setMemberMessagesStats({ conversationCount: 0, messageCount: 0, loading: false });
+        }
+      } catch (e: unknown) {
+        console.error("Failed to load member messages stats:", e);
+        setMemberMessagesStats({ conversationCount: 0, messageCount: 0, loading: false });
+      }
+    },
+    [safeJson],
+  );
 
   const loadMemberVisitsSeries = React.useCallback(
     async (userId: string, opts?: { initial?: boolean }) => {
@@ -3863,6 +4401,12 @@ export const AdminPage: React.FC = () => {
           user: data?.user || null,
           profile: data?.profile || null,
           ips: Array.isArray(data?.ips) ? data.ips : [],
+          threatLevel:
+            typeof data?.threatLevel === "number"
+              ? data.threatLevel
+              : typeof data?.profile?.threat_level === "number"
+                ? data.profile.threat_level
+                : null,
           lastOnlineAt: data?.lastOnlineAt ?? null,
           lastIp: data?.lastIp ?? null,
           visitsCount:
@@ -3880,6 +4424,8 @@ export const AdminPage: React.FC = () => {
           isBannedEmail: !!data?.isBannedEmail,
           bannedReason: data?.bannedReason ?? null,
           bannedAt: data?.bannedAt ?? null,
+          bannedById: data?.bannedById ?? null,
+          bannedByName: data?.bannedByName ?? null,
           bannedIps: Array.isArray(data?.bannedIps) ? data.bannedIps : [],
           topReferrers: Array.isArray(data?.topReferrers)
             ? data.topReferrers
@@ -3897,6 +4443,61 @@ export const AdminPage: React.FC = () => {
                 admin_name: n?.admin_name || null,
                 message: String(n?.message || ""),
                 created_at: n?.created_at || null,
+              }))
+            : [],
+          files: Array.isArray(data?.files)
+            ? data.files.map((file: any) => ({
+                id: String(file.id),
+                imageUrl: file?.imageUrl || file?.image_url || null,
+                caption: file?.caption || null,
+                uploadedAt: file?.uploadedAt || file?.uploaded_at || null,
+                gardenPlantId: file?.gardenPlantId || file?.garden_plant_id || null,
+                plantName: file?.plantName || file?.plant_name || null,
+                adminCommentary: file?.adminCommentary || file?.admin_commentary || null,
+              }))
+            : [],
+          mediaUploads: Array.isArray(data?.mediaUploads)
+            ? data.mediaUploads.map((media: any) => ({
+                id: String(media.id),
+                url: media?.url || media?.public_url || null,
+                bucket: media?.bucket || null,
+                path: media?.path || null,
+                mimeType: media?.mimeType || media?.mime_type || null,
+                sizeBytes: typeof media?.sizeBytes === "number" ? media.sizeBytes : (typeof media?.size_bytes === "number" ? media.size_bytes : null),
+                uploadSource: media?.uploadSource || media?.upload_source || "unknown",
+                createdAt: media?.createdAt || media?.created_at || null,
+              }))
+            : [],
+          mediaTotalCount: typeof data?.mediaTotalCount === "number" ? data.mediaTotalCount : 0,
+          mediaTotalSize: typeof data?.mediaTotalSize === "number" ? data.mediaTotalSize : 0,
+          userReports: Array.isArray(data?.userReports)
+            ? data.userReports.map((report: any) => ({
+                id: String(report.id),
+                reason: report?.reason || null,
+                status: report?.status || "review",
+                createdAt: report?.createdAt || report?.created_at || null,
+                classifiedAt: report?.classifiedAt || report?.classified_at || null,
+                reporterName: report?.reporterName || "Unknown",
+                classifierName: report?.classifierName || null,
+                type: report?.type || "against",
+              }))
+            : [],
+          reportsAgainstCount: typeof data?.reportsAgainstCount === "number" ? data.reportsAgainstCount : 0,
+          reportsByCount: typeof data?.reportsByCount === "number" ? data.reportsByCount : 0,
+          bugPoints: typeof data?.bugPoints === "number" ? data.bugPoints : null,
+          bugCatcherRank: typeof data?.bugCatcherRank === "number" ? data.bugCatcherRank : null,
+          bugActionsCompleted: typeof data?.bugActionsCompleted === "number" ? data.bugActionsCompleted : null,
+          bugCompletedActions: Array.isArray(data?.bugCompletedActions) 
+            ? data.bugCompletedActions.map((action: any) => ({
+                id: String(action.id || ''),
+                actionId: String(action.actionId || ''),
+                title: String(action.title || 'Unknown Action'),
+                description: action.description || null,
+                questions: Array.isArray(action.questions) ? action.questions : [],
+                answers: action.answers || {},
+                pointsEarned: typeof action.pointsEarned === 'number' ? action.pointsEarned : 0,
+                completedAt: action.completedAt || null,
+                actionStatus: action.actionStatus || 'unknown',
               }))
             : [],
         });
@@ -3965,6 +4566,45 @@ export const AdminPage: React.FC = () => {
     },
     [lookupEmail, memberLoading, safeJson],
   );
+
+  const handleSetThreatLevel = React.useCallback(async () => {
+    if (!memberData?.user?.id) return;
+    setThreatLevelUpdating(true);
+    setMemberError(null);
+    try {
+      const result = await setUserThreatLevel(
+        memberData.user.id,
+        threatLevelSelection as ThreatLevel,
+      );
+      setMemberData((prev) => {
+        if (!prev) return prev;
+        const updatedLevel =
+          typeof result?.threatLevel === "number"
+            ? result.threatLevel
+            : threatLevelSelection;
+        return {
+          ...prev,
+          threatLevel: updatedLevel,
+          profile: {
+            ...(prev.profile || {}),
+            threat_level: updatedLevel,
+          },
+          bannedAt: result?.bannedAt ?? prev.bannedAt ?? null,
+          bannedIps: Array.isArray(result?.bannedIps)
+            ? result.bannedIps
+            : prev.bannedIps,
+          bannedById: result?.bannedById ?? prev.bannedById ?? null,
+          bannedByName: result?.bannedByName ?? prev.bannedByName ?? null,
+        };
+      });
+      await lookupMember(memberData.user.id);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setMemberError(msg || "Failed to update threat level");
+    } finally {
+      setThreatLevelUpdating(false);
+    }
+  }, [lookupMember, memberData?.user?.id, threatLevelSelection]);
 
   const lookupByIp = React.useCallback(
     async (overrideIp?: string) => {
@@ -4149,18 +4789,22 @@ export const AdminPage: React.FC = () => {
     [roleFilter, loadMemberList],
   );
 
-  // Auto-load visits series when a member is selected
+  // Auto-load visits series and messages stats when a member is selected
   React.useEffect(() => {
     const uid = memberData?.user?.id;
     if (uid) {
       loadMemberVisitsSeries(uid, { initial: true });
+      loadMemberMessagesStats(uid);
     } else {
       setMemberVisitsSeries([]);
       setMemberVisitsTotal30d(0);
       setMemberVisitsUpdatedAt(null);
       setMemberVisitsWarning(null);
+      setMemberMessagesStats({ conversationCount: 0, messageCount: 0, loading: false });
     }
-  }, [memberData?.user?.id, loadMemberVisitsSeries]);
+    // Close messages dialog when member changes
+    setMemberMessagesOpen(false);
+  }, [memberData?.user?.id, loadMemberVisitsSeries, loadMemberMessagesStats]);
 
   // Refresh member list every time the list view is opened
   React.useEffect(() => {
@@ -4526,9 +5170,17 @@ export const AdminPage: React.FC = () => {
                     >
                       <Icon className="h-4 w-4" />
                       <span>{label}</span>
-                      {key === "requests" && uniqueRequestedPlantsCount > 0 && (
+                      {key === "members" && activeReportsCount > 0 && (
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" title={`${activeReportsCount} active reports`} />
+                      )}
+                      {key === "plants" && uniqueRequestedPlantsCount > 0 && (
                         <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
                           {uniqueRequestedPlantsCount}
+                        </span>
+                      )}
+                      {key === "bugs" && pendingBugReportsCount > 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
+                          {pendingBugReportsCount}
                         </span>
                       )}
                     </Link>
@@ -4604,13 +5256,28 @@ export const AdminPage: React.FC = () => {
                           className={`h-5 w-5 ${isActive ? "text-emerald-600 dark:text-emerald-400" : "opacity-80"}`}
                         />
                         {!sidebarCollapsed && <span className="font-medium">{label}</span>}
-                        {key === "requests" && uniqueRequestedPlantsCount > 0 && (
+                        {key === "members" && activeReportsCount > 0 && (
+                          <AlertTriangle 
+                            className={`${sidebarCollapsed ? "h-3 w-3" : "h-4 w-4 ml-auto"} text-red-500`}
+                            title={`${activeReportsCount} active reports`}
+                          />
+                        )}
+                        {key === "plants" && uniqueRequestedPlantsCount > 0 && (
                           <span
                             className={`${
                               sidebarCollapsed ? "text-[10px]" : "ml-auto text-xs"
                             } font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100 px-2 py-0.5`}
                           >
                             {uniqueRequestedPlantsCount}
+                          </span>
+                        )}
+                        {key === "bugs" && pendingBugReportsCount > 0 && (
+                          <span
+                            className={`${
+                              sidebarCollapsed ? "text-[10px]" : "ml-auto text-xs"
+                            } font-semibold rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-2 py-0.5`}
+                          >
+                            {pendingBugReportsCount}
                           </span>
                         )}
                       </Link>
@@ -5585,7 +6252,10 @@ export const AdminPage: React.FC = () => {
                           </div>
 
                           {visitorsLoading ? (
-                            <div className="text-sm opacity-60">Loading...</div>
+                            <div className="flex items-center gap-2 text-sm opacity-60">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Loading...</span>
+                            </div>
                           ) : visitorsSeries.length === 0 ? (
                             <div className="text-sm opacity-60">
                               No data yet.
@@ -6388,14 +7058,19 @@ export const AdminPage: React.FC = () => {
                   <AdminStocksPanel />
                 )}
 
-                {/* Requests Tab */}
-                  {activeTab === "requests" && (
+                {/* Bugs Tab */}
+                {activeTab === "bugs" && (
+                  <AdminBugsPanel />
+                )}
+
+                {/* Plants Tab */}
+                  {activeTab === "plants" && (
                     <div className="space-y-4">
                       <div className="flex justify-center">
                         <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
                           {REQUEST_VIEW_TABS.map((tab) => {
                             const isActive = requestViewMode === tab.key;
-                            const tabPath = tab.key === "plants" ? "/admin/requests/plants" : "/admin/requests";
+                            const tabPath = tab.key === "requests" ? "/admin/plants/requests" : "/admin/plants";
                             return (
                               <Link
                                 key={tab.key}
@@ -6445,6 +7120,19 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
+                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
+                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                               <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:shadow-amber-500/5">
                                 <div className="flex items-center gap-3">
                                   <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
@@ -6467,19 +7155,6 @@ export const AdminPage: React.FC = () => {
                                     <div className="text-xs text-stone-500 dark:text-stone-400">In Progress</div>
                                     <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
                                       {plantStatusDonutData.find(d => d.key === "in progres")?.value || 0}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:shadow-rose-500/5">
-                                <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
-                                    <AlertTriangle className="h-5 w-5 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-stone-500 dark:text-stone-400">Rework</div>
-                                    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
-                                      {plantStatusDonutData.find(d => d.key === "rework")?.value || 0}
                                     </div>
                                   </div>
                                 </div>
@@ -6792,6 +7467,20 @@ export const AdminPage: React.FC = () => {
                                             ))}
                                           </select>
                                         </div>
+                                        <div className="w-full md:w-44">
+                                          <select
+                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                            value={plantSortOption}
+                                            onChange={(e) =>
+                                              setPlantSortOption(e.target.value as PlantSortOption)
+                                            }
+                                          >
+                                            <option value="status">Sort by Status</option>
+                                            <option value="updated">Last Updated</option>
+                                            <option value="created">Last Created</option>
+                                            <option value="name">Name (A-Z)</option>
+                                          </select>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
@@ -6890,7 +7579,12 @@ export const AdminPage: React.FC = () => {
                                             <Calendar className="h-3 w-3" />
                                             {plant.promotionMonth ? PROMOTION_MONTH_LABELS[plant.promotionMonth] : "No month"}
                                           </span>
-                                          {plant.updatedAt && (
+                                          {plantSortOption === "created" && plant.createdAt && (
+                                            <span className="text-xs text-stone-400 dark:text-stone-500">
+                                              Created {formatTimeAgo(plant.createdAt)}
+                                            </span>
+                                          )}
+                                          {plantSortOption !== "created" && plant.updatedAt && (
                                             <span className="text-xs text-stone-400 dark:text-stone-500">
                                               Updated {formatTimeAgo(plant.updatedAt)}
                                             </span>
@@ -6949,7 +7643,7 @@ export const AdminPage: React.FC = () => {
                                 loadPlantRequests({ initial: false })
                               }
                               disabled={
-                                plantRequestsLoading || plantRequestsRefreshing
+                                plantRequestsLoading || plantRequestsRefreshing || aiPrefillRunning
                               }
                             >
                               <RefreshCw
@@ -6958,6 +7652,32 @@ export const AdminPage: React.FC = () => {
                               <span className="hidden sm:inline">Refresh</span>
                               <span className="sm:hidden inline">Reload</span>
                             </Button>
+                            {/* AI Prefill Button */}
+                            {aiPrefillRunning ? (
+                              <Button
+                                variant="destructive"
+                                className="rounded-xl"
+                                onClick={stopAiPrefill}
+                              >
+                                <Square className="h-4 w-4 mr-2" />
+                                <span className="hidden sm:inline">Stop AI Prefill</span>
+                                <span className="sm:hidden inline">Stop</span>
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                className="rounded-xl border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-300 dark:hover:bg-purple-950/30"
+                                onClick={runAiPrefillAll}
+                                disabled={
+                                  plantRequestsLoading || plantRequests.length === 0
+                                }
+                                title="Automatically AI fill, save, and translate all plant requests"
+                              >
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                <span className="hidden sm:inline">AI Prefill All</span>
+                                <span className="sm:hidden inline">AI Fill</span>
+                              </Button>
+                            )}
                             <div className="relative">
                               <div className="flex">
                                 <Button
@@ -7014,6 +7734,164 @@ export const AdminPage: React.FC = () => {
                                 {plantRequests.length}
                               </span>
                             </div>
+                          </div>
+                        )}
+
+                        {/* AI Prefill Progress */}
+                        {aiPrefillRunning && (
+                          <div className="rounded-xl border border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30 p-4 space-y-4">
+                            {/* Header with overall progress */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin text-purple-600 dark:text-purple-400" />
+                                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                                  AI Prefill in Progress
+                                </span>
+                                <span className="text-xs bg-purple-200 dark:bg-purple-800 px-2 py-0.5 rounded-full text-purple-700 dark:text-purple-300 font-mono">
+                                  {formatDuration(aiPrefillElapsedTime)}
+                                </span>
+                              </div>
+                              <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                                Plant {aiPrefillProgress.current + 1} of {aiPrefillProgress.total}
+                              </span>
+                            </div>
+
+                            {/* Overall progress bar */}
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-xs text-purple-600 dark:text-purple-400">
+                                <span>Overall Progress</span>
+                                <span>{aiPrefillProgress.total > 0 ? Math.round((aiPrefillProgress.current / aiPrefillProgress.total) * 100) : 0}%</span>
+                              </div>
+                              <div className="h-2 w-full rounded-full bg-purple-200 dark:bg-purple-900/50 overflow-hidden">
+                                <div
+                                  className="h-full bg-purple-500 transition-all duration-300"
+                                  style={{
+                                    width: aiPrefillProgress.total > 0
+                                      ? `${Math.round((aiPrefillProgress.current / aiPrefillProgress.total) * 100)}%`
+                                      : '0%'
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Current plant info */}
+                            {aiPrefillCurrentPlant && (
+                              <div className="rounded-lg bg-white/50 dark:bg-black/20 p-3 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                    <span className="font-medium text-sm">{aiPrefillCurrentPlant}</span>
+                                  </div>
+                                  <Badge variant="outline" className="text-xs">
+                                    {aiPrefillStatus === 'translating_name' ? 'Getting English Name...' : 
+                                     aiPrefillStatus === 'filling' ? 'AI Filling...' : 
+                                     aiPrefillStatus === 'saving' ? 'Saving...' : 
+                                     aiPrefillStatus === 'translating' ? 'Translating...' : 'Processing...'}
+                                  </Badge>
+                                </div>
+
+                                {/* Current field being filled */}
+                                {aiPrefillStatus === 'filling' && aiPrefillCurrentField && (
+                                  <div className="text-xs text-muted-foreground">
+                                    <span>Filling: </span>
+                                    <span className="font-medium text-purple-700 dark:text-purple-300">{aiPrefillCurrentField}</span>
+                                    <span className="ml-2 opacity-70">
+                                      ({aiPrefillFieldProgress.completed}/{aiPrefillFieldProgress.total} fields)
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Field progress bar */}
+                                {aiPrefillStatus === 'filling' && aiPrefillFieldProgress.total > 0 && (
+                                  <div className="h-1.5 w-full rounded-full bg-emerald-200 dark:bg-emerald-900/50 overflow-hidden">
+                                    <div
+                                      className="h-full bg-emerald-500 transition-all duration-300"
+                                      style={{
+                                        width: `${Math.round((aiPrefillFieldProgress.completed / aiPrefillFieldProgress.total) * 100)}%`
+                                      }}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Category progress */}
+                                {aiPrefillStatus === 'filling' && (
+                                  <div className="grid grid-cols-3 gap-2 mt-2">
+                                    {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
+                                      const info = aiPrefillCategoryProgress[cat];
+                                      if (!info?.total) return null;
+                                      const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0;
+                                      const isDone = info.status === 'done';
+                                      return (
+                                        <div key={cat} className="text-xs">
+                                          <div className="flex items-center justify-between mb-0.5">
+                                            <span className={`truncate ${isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                                              {aiPrefillCategoryLabels[cat]}
+                                            </span>
+                                            {isDone && <Check className="h-3 w-3 text-emerald-500" />}
+                                          </div>
+                                          <div className="h-1 w-full rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">
+                                            <div
+                                              className={`h-full transition-all ${isDone ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                                              style={{ width: `${percent}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Recently completed plants */}
+                            {aiPrefillCompletedPlants.length > 0 && (
+                              <div className="border-t border-purple-200 dark:border-purple-800 pt-3 space-y-1.5">
+                                <div className="text-xs uppercase tracking-wide text-purple-600 dark:text-purple-400 opacity-70">
+                                  Recently Completed
+                                </div>
+                                <div className="space-y-1">
+                                  {aiPrefillCompletedPlants.slice().reverse().map((plant, idx) => (
+                                    <div
+                                      key={`${plant.name}-${idx}`}
+                                      className={`flex items-center gap-2 text-xs rounded px-2 py-1 ${
+                                        plant.success 
+                                          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                      }`}
+                                    >
+                                      {plant.success ? (
+                                        <Check className="h-3 w-3 flex-shrink-0" />
+                                      ) : (
+                                        <X className="h-3 w-3 flex-shrink-0" />
+                                      )}
+                                      <span className="truncate">{plant.name}</span>
+                                      {plant.durationMs && (
+                                        <span className="ml-auto text-[10px] font-mono opacity-70">
+                                          {formatDuration(plant.durationMs)}
+                                        </span>
+                                      )}
+                                      {!plant.success && plant.error && (
+                                        <span className="truncate opacity-70 text-[10px]">{plant.error}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* AI Prefill Error */}
+                        {aiPrefillError && !aiPrefillRunning && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/30 dark:text-amber-200 flex items-center justify-between">
+                            <span>{aiPrefillError}</span>
+                            <button
+                              type="button"
+                              className="ml-2 opacity-60 hover:opacity-100"
+                              onClick={() => setAiPrefillError(null)}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
                           </div>
                         )}
 
@@ -7077,9 +7955,73 @@ export const AdminPage: React.FC = () => {
                                     >
                                       <div className="flex items-start gap-2 flex-1">
                                         <div className="flex-1">
-                                          <div className="text-sm font-medium">
-                                            {req.plant_name}
-                                          </div>
+                                          {editingRequestId === req.id ? (
+                                            <div className="flex items-center gap-2">
+                                              <Input
+                                                value={editingRequestName}
+                                                onChange={(e) => setEditingRequestName(e.target.value)}
+                                                className="h-8 text-sm"
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                  if (e.key === 'Enter') {
+                                                    handleSaveRequestName(req.id);
+                                                  } else if (e.key === 'Escape') {
+                                                    handleCancelEditRequest();
+                                                  }
+                                                }}
+                                              />
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                                onClick={() => handleSaveRequestName(req.id)}
+                                                disabled={savingRequestName}
+                                              >
+                                                {savingRequestName ? (
+                                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                  <Check className="h-4 w-4 text-green-600" />
+                                                )}
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                                onClick={handleCancelEditRequest}
+                                              >
+                                                <X className="h-4 w-4 text-red-600" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-1">
+                                              <div className="text-sm font-medium">
+                                                {req.plant_name}
+                                              </div>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 opacity-40 hover:opacity-100"
+                                                onClick={() => handleStartEditRequest(req)}
+                                                title="Edit name"
+                                              >
+                                                <Pencil className="h-3 w-3" />
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 opacity-40 hover:opacity-100"
+                                                onClick={() => handleTranslateRequestName(req)}
+                                                disabled={translatingRequestId === req.id}
+                                                title="Translate to English (DeepL)"
+                                              >
+                                                {translatingRequestId === req.id ? (
+                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                  <Languages className="h-3 w-3" />
+                                                )}
+                                              </Button>
+                                            </div>
+                                          )}
                                           <div
                                             className="text-xs opacity-60"
                                             title={updatedTitle}
@@ -7273,6 +8215,18 @@ export const AdminPage: React.FC = () => {
                           className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "list" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
                         >
                           List
+                        </Link>
+                        <span className="text-xs opacity-50">|</span>
+                        <Link
+                          to="/admin/members/reports"
+                          className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1.5 ${membersView === "reports" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                        >
+                          Reports
+                          {activeReportsCount > 0 && (
+                            <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${membersView === "reports" ? "bg-white/20 text-white" : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"}`}>
+                              {activeReportsCount}
+                            </span>
+                          )}
                         </Link>
                       </div>
                       {membersView === "list" && (
@@ -7479,20 +8433,59 @@ export const AdminPage: React.FC = () => {
                                           </span>
                                         ) : null}
                                       </div>
-                                      <div className="flex flex-wrap gap-1 mt-1">
+                                      <div className="flex flex-wrap gap-1 mt-1 items-center">
                                         {/* Role Badges */}
-                                        {memberRoles.map((role) => (
-                                          <UserRoleBadge
-                                            key={role}
-                                            role={role}
-                                            size="sm"
-                                            showLabel
-                                          />
-                                        ))}
-                                        {memberData.isBannedEmail && (
-                                          <Badge
-                                            variant="destructive"
-                                            className="rounded-full px-2 py-0.5"
+                                      {memberRoles.map((role) => (
+                                        <UserRoleBadge
+                                          key={role}
+                                          role={role}
+                                          size="sm"
+                                          showLabel
+                                        />
+                                      ))}
+                                      {/* Add/Manage Roles Button */}
+                                      <button
+                                        type="button"
+                                        onClick={() => setRolesOpen(!rolesOpen)}
+                                        className={cn(
+                                          "inline-flex items-center justify-center h-5 w-5 rounded-full border-2 border-dashed transition-all",
+                                          rolesOpen 
+                                            ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" 
+                                            : "border-stone-300 dark:border-stone-600 text-stone-400 dark:text-stone-500 hover:border-stone-400 dark:hover:border-stone-500 hover:text-stone-500 dark:hover:text-stone-400"
+                                        )}
+                                        title={rolesOpen ? "Close role management" : "Manage roles"}
+                                      >
+                                        <Plus className={cn("h-3 w-3 transition-transform", rolesOpen && "rotate-45")} />
+                                      </button>
+                                      {(() => {
+                                        const level =
+                                          typeof memberData.threatLevel ===
+                                          "number"
+                                            ? memberData.threatLevel
+                                            : 0;
+                                        const meta =
+                                          THREAT_LEVEL_META[level] ||
+                                          THREAT_LEVEL_META[0];
+                                        return (
+                                          <button
+                                            type="button"
+                                            onClick={() => setThreatLevelOpen(!threatLevelOpen)}
+                                            className={cn(
+                                              "rounded-full px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer hover:ring-2 hover:ring-offset-1 transition-all",
+                                              meta.badge,
+                                              threatLevelOpen && "ring-2 ring-offset-1"
+                                            )}
+                                            title="Click to modify threat level"
+                                          >
+                                            <Shield className="h-3 w-3" />
+                                            Lvl {level} - {meta.label}
+                                          </button>
+                                        );
+                                      })()}
+                                      {memberData.isBannedEmail && (
+                                        <Badge
+                                          variant="destructive"
+                                          className="rounded-full px-2 py-0.5"
                                           >
                                             Banned
                                           </Badge>
@@ -7725,25 +8718,384 @@ export const AdminPage: React.FC = () => {
                               );
                             })()}
 
-                            {/* Roles Management Section - Redesigned */}
-                            <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e]">
-                              {/* Header */}
-                              <div 
-                                className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
-                                onClick={() => setRolesOpen(!rolesOpen)}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                                  <span className="text-sm font-medium">User Roles</span>
-                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
-                                    {memberRoles.length} active
-                                  </span>
+                            {/* Threat Level Section - Collapsible, opens on badge click */}
+                            {threatLevelOpen && (
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                {/* Header */}
+                                <div 
+                                  className="px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] border-b border-stone-200 dark:border-[#3e3e42] cursor-pointer"
+                                  onClick={() => setThreatLevelOpen(false)}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Shield className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                      <span className="text-sm font-semibold">Change Threat Level</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {(() => {
+                                        const currentLevel = typeof memberData.threatLevel === "number" ? memberData.threatLevel : 0;
+                                        const meta = THREAT_LEVEL_META[currentLevel] || THREAT_LEVEL_META[0];
+                                        return (
+                                          <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", meta.badge)}>
+                                            Level {currentLevel} – {meta.label}
+                                          </span>
+                                        );
+                                      })()}
+                                      <ChevronDown className="h-4 w-4 text-stone-500 rotate-180" />
+                                    </div>
+                                  </div>
+                                  {memberData.threatLevel === 3 && (memberData.bannedByName || memberData.bannedAt) && (
+                                    <div className="mt-2 text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1.5">
+                                      <Ban className="h-3 w-3" />
+                                      Banned by {memberData.bannedByName || "admin"}
+                                      {memberData.bannedAt ? ` on ${new Date(memberData.bannedAt).toLocaleString()}` : ""}
+                                    </div>
+                                  )}
                                 </div>
-                                <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${rolesOpen ? "rotate-180" : ""}`} />
+                                
+                                {/* Threat Level Cards */}
+                                <div className="p-4 space-y-3">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {([0, 1, 2, 3] as const).map((level) => {
+                                      const meta = THREAT_LEVEL_META[level];
+                                      const isSelected = threatLevelSelection === level;
+                                      const isCurrent = memberData.threatLevel === level;
+                                      const ThreatIcon = level === 0 ? CircleCheck : level === 1 ? AlertTriangle : level === 2 ? ShieldAlert : Ban;
+                                      
+                                      return (
+                                        <button
+                                          key={level}
+                                          type="button"
+                                          onClick={() => {
+                                            if (level === 3 && level !== threatLevelSelection) {
+                                              setPendingThreatLevel(3);
+                                              setThreatLevelConfirmOpen(true);
+                                            } else {
+                                              setThreatLevelSelection(level);
+                                            }
+                                          }}
+                                          className={cn(
+                                            "relative p-3 rounded-xl border-2 text-left transition-all",
+                                            isSelected 
+                                              ? `${meta.cardBg} ${meta.cardBorder} ring-2 ring-offset-1 ring-offset-white dark:ring-offset-[#1e1e20]`
+                                              : "border-stone-200 dark:border-[#3e3e42] hover:border-stone-300 dark:hover:border-[#4e4e52] bg-white dark:bg-[#252526]",
+                                            isSelected && level === 0 && "ring-emerald-400",
+                                            isSelected && level === 1 && "ring-amber-400",
+                                            isSelected && level === 2 && "ring-red-400",
+                                            isSelected && level === 3 && "ring-stone-600"
+                                          )}
+                                        >
+                                          {isCurrent && (
+                                            <div className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                                              Current
+                                            </div>
+                                          )}
+                                          <div className="flex items-start gap-2">
+                                            <div className={cn(
+                                              "p-1.5 rounded-lg",
+                                              isSelected ? meta.cardBg : "bg-stone-100 dark:bg-[#2d2d30]"
+                                            )}>
+                                              <ThreatIcon className={cn("h-4 w-4", isSelected ? meta.iconColor : "text-stone-500 dark:text-stone-400")} />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className={cn(
+                                                  "text-sm font-semibold",
+                                                  level === 3 && isSelected && "text-white"
+                                                )}>
+                                                  {meta.label}
+                                                </span>
+                                                <span className={cn(
+                                                  "text-[10px] opacity-60 font-medium",
+                                                  level === 3 && isSelected && "text-white/70"
+                                                )}>
+                                                  Lvl {level}
+                                                </span>
+                                              </div>
+                                              <p className={cn(
+                                                "text-[11px] leading-tight mt-0.5 line-clamp-2",
+                                                level === 3 && isSelected ? "text-white/80" : "text-stone-500 dark:text-stone-400"
+                                              )}>
+                                                {meta.text}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          {isSelected && (
+                                            <div className="absolute bottom-2 right-2">
+                                              <Check className={cn("h-4 w-4", level === 3 ? "text-white" : meta.iconColor)} />
+                                            </div>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {/* Update Button */}
+                                  <div className="flex items-center gap-2 pt-2 border-t border-stone-100 dark:border-[#3e3e42]">
+                                    <Button
+                                      onClick={handleSetThreatLevel}
+                                      disabled={threatLevelUpdating || !memberData?.user?.id || threatLevelSelection === memberData.threatLevel}
+                                      className={cn(
+                                        "flex-1 rounded-xl transition-all",
+                                        threatLevelSelection === 3 
+                                          ? "bg-red-600 hover:bg-red-700 text-white" 
+                                          : threatLevelSelection === memberData.threatLevel 
+                                            ? "bg-stone-200 text-stone-500 dark:bg-stone-700 dark:text-stone-400"
+                                            : ""
+                                      )}
+                                    >
+                                      {threatLevelUpdating ? (
+                                        <>
+                                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                          Updating...
+                                        </>
+                                      ) : threatLevelSelection === memberData.threatLevel ? (
+                                        "No changes"
+                                      ) : threatLevelSelection === 3 ? (
+                                        <>
+                                          <Ban className="h-4 w-4 mr-2" />
+                                          Set to Banned
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Shield className="h-4 w-4 mr-2" />
+                                          Update Threat Level
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
+                                </div>
                               </div>
-                              
-                              {/* Role Cards Grid */}
-                              {rolesOpen && (
+                            )}
+                            
+                            {/* Ban Confirmation Dialog */}
+                            <Dialog open={threatLevelConfirmOpen} onOpenChange={setThreatLevelConfirmOpen}>
+                              <DialogContent className="max-w-md">
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                                    <Ban className="h-5 w-5" />
+                                    Confirm Ban Level
+                                  </DialogTitle>
+                                  <DialogDescription className="space-y-3 pt-2">
+                                    <p>
+                                      You are about to set the threat level to <strong className="text-red-600">Banned</strong> for{" "}
+                                      <span className="font-medium text-stone-900 dark:text-stone-100">
+                                        {memberData?.profile?.display_name || memberData?.user?.email || "this user"}
+                                      </span>.
+                                    </p>
+                                    <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
+                                      <div className="flex items-start gap-2">
+                                        <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                                        <div className="text-xs text-red-800 dark:text-red-200">
+                                          <strong>This action will:</strong>
+                                          <ul className="mt-1 ml-3 list-disc space-y-0.5">
+                                            <li>Mark the user as permanently banned</li>
+                                            <li>Restrict their access to platform features</li>
+                                            <li>Record this action in admin logs</li>
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter className="gap-2 sm:gap-0">
+                                  <DialogClose asChild>
+                                    <Button variant="secondary" className="rounded-xl">
+                                      Cancel
+                                    </Button>
+                                  </DialogClose>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={() => {
+                                      if (pendingThreatLevel !== null) {
+                                        setThreatLevelSelection(pendingThreatLevel);
+                                      }
+                                      setThreatLevelConfirmOpen(false);
+                                      setPendingThreatLevel(null);
+                                    }}
+                                    className="rounded-xl"
+                                  >
+                                    <Ban className="h-4 w-4 mr-2" />
+                                    Confirm Ban Level
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+
+                            {/* Bug Catcher Stats Card - Only shown for bug_catcher role */}
+                            {memberRoles.includes('bug_catcher' as UserRole) && (
+                              <div className="rounded-xl border-2 border-orange-200 dark:border-orange-800/50 overflow-hidden bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20">
+                                <div className="px-4 py-3 flex items-center gap-2 border-b border-orange-200/50 dark:border-orange-800/30">
+                                  <Bug className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                  <span className="text-sm font-semibold text-orange-800 dark:text-orange-200">Bug Catcher Stats</span>
+                                </div>
+                                <div className="p-4 flex items-center justify-around gap-4">
+                                  {/* Bug Points */}
+                                  <div className="text-center">
+                                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                                      <Zap className="h-5 w-5 text-orange-500" />
+                                      <span className="text-2xl font-bold text-orange-700 dark:text-orange-300 tabular-nums">
+                                        {typeof memberData.bugPoints === 'number' ? memberData.bugPoints : 0}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-orange-600/70 dark:text-orange-400/70 font-medium">Bug Points</div>
+                                  </div>
+                                  
+                                  {/* Divider */}
+                                  <div className="h-10 w-px bg-orange-200 dark:bg-orange-700/50" />
+                                  
+                                  {/* Rank */}
+                                  <div className="text-center">
+                                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                                      <Trophy className="h-5 w-5 text-amber-500" />
+                                      <span className="text-2xl font-bold text-amber-700 dark:text-amber-300 tabular-nums">
+                                        {typeof memberData.bugCatcherRank === 'number' && memberData.bugCatcherRank > 0 ? `#${memberData.bugCatcherRank}` : '-'}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-amber-600/70 dark:text-amber-400/70 font-medium">Rank</div>
+                                  </div>
+                                  
+                                  {/* Divider */}
+                                  <div className="h-10 w-px bg-orange-200 dark:bg-orange-700/50" />
+                                  
+                                  {/* Actions Completed - Clickable */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setBugActionsDialogOpen(true)}
+                                    className="text-center p-2 -m-2 rounded-xl hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-colors cursor-pointer"
+                                    disabled={!memberData.bugActionsCompleted}
+                                  >
+                                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                      <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                                        {typeof memberData.bugActionsCompleted === 'number' ? memberData.bugActionsCompleted : 0}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70 font-medium">
+                                      Actions
+                                      {(memberData.bugActionsCompleted || 0) > 0 && (
+                                        <span className="ml-1 opacity-60">(click to view)</span>
+                                      )}
+                                    </div>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Bug Catcher Completed Actions Dialog */}
+                            <Dialog open={bugActionsDialogOpen} onOpenChange={setBugActionsDialogOpen}>
+                              <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2">
+                                    <Bug className="h-5 w-5 text-orange-500" />
+                                    Completed Actions
+                                    <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                      {memberData?.bugCompletedActions?.length || 0}
+                                    </Badge>
+                                  </DialogTitle>
+                                  <DialogDescription>
+                                    Actions completed by {memberData?.profile?.display_name || 'this user'}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                
+                                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                                  {(!memberData?.bugCompletedActions || memberData.bugCompletedActions.length === 0) ? (
+                                    <div className="text-center py-8 text-stone-500">
+                                      <CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                                      <p>No completed actions yet</p>
+                                    </div>
+                                  ) : (
+                                    memberData.bugCompletedActions.map((action) => (
+                                      <div
+                                        key={action.id}
+                                        className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden"
+                                      >
+                                        {/* Action Header */}
+                                        <div className="px-4 py-3 bg-stone-50 dark:bg-[#252526] border-b border-stone-200 dark:border-[#3e3e42]">
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div className="flex-1 min-w-0">
+                                              <h4 className="font-semibold text-sm truncate">{action.title}</h4>
+                                              {action.description && (
+                                                <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5 line-clamp-2">{action.description}</p>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                              <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                                +{action.pointsEarned} pts
+                                              </Badge>
+                                              {action.actionStatus === 'closed' && (
+                                                <Badge variant="secondary" className="text-stone-500">Closed</Badge>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="text-xs text-stone-400 mt-2">
+                                            Completed {action.completedAt ? new Date(action.completedAt).toLocaleString() : 'Unknown date'}
+                                          </div>
+                                        </div>
+                                        
+                                        {/* Action Answers */}
+                                        {action.questions && action.questions.length > 0 && (
+                                          <div className="p-4 space-y-3">
+                                            <div className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wide">
+                                              Answers
+                                            </div>
+                                            {action.questions.map((question) => {
+                                              const answer = action.answers[question.id];
+                                              return (
+                                                <div key={question.id} className="space-y-1">
+                                                  <div className="text-sm font-medium flex items-center gap-1.5">
+                                                    {question.title}
+                                                    {question.required && <span className="text-red-500 text-xs">*</span>}
+                                                  </div>
+                                                  <div className="text-sm bg-stone-100 dark:bg-[#1e1e1e] rounded-lg px-3 py-2 break-words">
+                                                    {answer === undefined || answer === null || answer === '' ? (
+                                                      <span className="text-stone-400 italic">No answer provided</span>
+                                                    ) : typeof answer === 'boolean' ? (
+                                                      <span className={answer ? 'text-emerald-600' : 'text-red-500'}>
+                                                        {answer ? 'Yes' : 'No'}
+                                                      </span>
+                                                    ) : (
+                                                      String(answer)
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                        
+                                        {/* No questions case */}
+                                        {(!action.questions || action.questions.length === 0) && (
+                                          <div className="p-4 text-sm text-stone-500 italic">
+                                            This action had no questions to answer
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+
+                            {/* Roles Management Section - Only shown when rolesOpen is true */}
+                            {rolesOpen && (
+                              <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] overflow-hidden bg-white dark:bg-[#1e1e1e] animate-in fade-in slide-in-from-top-2 duration-200">
+                                {/* Header */}
+                                <div 
+                                  className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-stone-50 to-stone-100 dark:from-[#252526] dark:to-[#2d2d30] cursor-pointer"
+                                  onClick={() => setRolesOpen(false)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <ShieldCheck className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                                    <span className="text-sm font-medium">Manage User Roles</span>
+                                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                                      {memberRoles.length} active
+                                    </span>
+                                  </div>
+                                  <ChevronDown className="h-4 w-4 text-stone-500 rotate-180" />
+                                </div>
+                                
+                                {/* Role Cards Grid */}
                                 <div className="p-4 space-y-3">
                                   {/* Active Roles Summary */}
                                   {memberRoles.length > 0 && (
@@ -7826,8 +9178,8 @@ export const AdminPage: React.FC = () => {
                                     </span>
                                   </div>
                                 </div>
-                              )}
-                            </div>
+                              </div>
+                            )}
                             
                             {/* Confirm Admin Role Dialog */}
                             <Dialog open={confirmAdminOpen} onOpenChange={setConfirmAdminOpen}>
@@ -8308,38 +9660,302 @@ export const AdminPage: React.FC = () => {
                                     );
                                   })()
                                 )}
-                              </CardContent>
-                            </Card>
+                            </CardContent>
+                          </Card>
 
-                            <Card className="rounded-2xl">
-                              <CardContent className="p-4 space-y-2">
-                                <div className="flex items-start justify-between">
-                                  <div className="text-sm font-medium">
-                                    Admin notes
+                            {/* Uploaded Media Files Section - Global Image Database */}
+                            <Card className="rounded-2xl overflow-hidden">
+                              <CardContent className="p-0">
+                                {/* Header */}
+                                <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-b border-emerald-200 dark:border-emerald-800/50">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <FolderOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                      <span className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Uploaded Media Files</span>
+                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-200">
+                                        {memberData.mediaTotalCount || 0}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      {(memberData.mediaTotalSize || 0) > 0 && (
+                                        <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+                                          <HardDrive className="h-3 w-3" />
+                                          <span className="font-medium">
+                                            {memberData.mediaTotalSize && memberData.mediaTotalSize > 1024 * 1024 * 1024 
+                                              ? `${(memberData.mediaTotalSize / (1024 * 1024 * 1024)).toFixed(2)} GB`
+                                              : memberData.mediaTotalSize && memberData.mediaTotalSize > 1024 * 1024
+                                                ? `${(memberData.mediaTotalSize / (1024 * 1024)).toFixed(2)} MB`
+                                                : memberData.mediaTotalSize && memberData.mediaTotalSize > 1024
+                                                  ? `${(memberData.mediaTotalSize / 1024).toFixed(1)} KB`
+                                                  : `${memberData.mediaTotalSize || 0} B`
+                                            }
+                                          </span>
+                                          <span className="text-emerald-600 dark:text-emerald-400">total</span>
+                                        </div>
+                                      )}
+                                      {memberData.user?.id && (
+                                        <Link
+                                          to={`/admin/upload/library?userId=${memberData.user.id}`}
+                                          className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:underline"
+                                        >
+                                          View all
+                                          <ArrowRight className="h-3 w-3" />
+                                        </Link>
+                                      )}
+                                    </div>
                                   </div>
-                                  <AddAdminNote
-                                    profileId={memberData.user?.id || ""}
-                                    onAdded={() => lookupMember()}
-                                  />
                                 </div>
-                                <div className="space-y-2">
-                                  {(memberData.adminNotes || []).length ===
-                                  0 ? (
-                                    <div className="text-sm opacity-60">
-                                      No notes yet.
+                                
+                                {/* Media Files Content */}
+                                <div className="p-4">
+                                  {(!memberData.mediaUploads || memberData.mediaUploads.length === 0) ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                      <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3">
+                                        <FileImage className="h-6 w-6 text-emerald-400" />
+                                      </div>
+                                      <p className="text-sm text-stone-500 dark:text-stone-400">No media files uploaded by this user</p>
+                                      <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+                                        Media includes: blog images, messages, garden covers, etc.
+                                      </p>
                                     </div>
                                   ) : (
-                                    (memberData.adminNotes || []).map((n) => (
-                                      <NoteRow
-                                        key={n.id}
-                                        note={n}
-                                        onRemoved={() => lookupMember()}
-                                      />
-                                    ))
+                                    <>
+                                      {/* Media Grid */}
+                                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                                        {memberData.mediaUploads.slice(0, 5).map((media) => {
+                                          const isImage = (media.mimeType || "").startsWith("image/");
+                                          // Source badge config
+                                          const sourceConfig: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
+                                            admin: { label: "Admin", color: "bg-purple-500", icon: Shield },
+                                            blog: { label: "Blog", color: "bg-blue-500", icon: BookOpen },
+                                            messages: { label: "Chat", color: "bg-green-500", icon: MessageSquareIcon },
+                                            garden_cover: { label: "Garden", color: "bg-emerald-500", icon: Flower2 },
+                                            garden_journal: { label: "Journal", color: "bg-teal-500", icon: BookOpen },
+                                            garden_photo: { label: "Photo", color: "bg-lime-500", icon: Image },
+                                            pro_advice: { label: "Pro", color: "bg-amber-500", icon: Sparkles },
+                                            "pro-advice": { label: "Pro", color: "bg-amber-500", icon: Sparkles },
+                                            contact_screenshot: { label: "Contact", color: "bg-indigo-500", icon: MessageSquareIcon },
+                                          };
+                                          const config = sourceConfig[media.uploadSource] || { label: media.uploadSource, color: "bg-stone-500", icon: FileImage };
+                                          const SourceIcon = config.icon;
+                                          
+                                          return (
+                                            <div
+                                              key={media.id}
+                                              className="group relative aspect-square rounded-xl overflow-hidden bg-stone-100 dark:bg-[#252526] border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-700 transition-all"
+                                            >
+                                              {isImage && media.url ? (
+                                                <a href={media.url} target="_blank" rel="noreferrer" className="block w-full h-full">
+                                                  <img
+                                                    src={media.url}
+                                                    alt="Upload"
+                                                    className="w-full h-full object-cover"
+                                                    loading="lazy"
+                                                    onError={(e) => {
+                                                      // Replace with fallback icon if image fails to load
+                                                      const target = e.currentTarget;
+                                                      target.style.display = 'none';
+                                                      const parent = target.parentElement;
+                                                      if (parent) {
+                                                        const fallback = document.createElement('div');
+                                                        fallback.className = 'w-full h-full flex items-center justify-center bg-stone-100 dark:bg-[#252526]';
+                                                        fallback.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-stone-300 dark:text-stone-600"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+                                                        parent.insertBefore(fallback, target);
+                                                      }
+                                                    }}
+                                                  />
+                                                  {/* Hover overlay */}
+                                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                    <div className="bg-white/90 dark:bg-black/80 rounded-full p-2">
+                                                      <ExternalLink className="h-4 w-4 text-stone-700 dark:text-stone-200" />
+                                                    </div>
+                                                  </div>
+                                                </a>
+                                              ) : (
+                                                <a href={media.url || "#"} target="_blank" rel="noreferrer" className="w-full h-full flex items-center justify-center">
+                                                  <FileImage className="h-8 w-8 text-stone-300 dark:text-stone-600" />
+                                                </a>
+                                              )}
+                                              {/* Source Badge */}
+                                              <div className={cn("absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-bold text-white flex items-center gap-0.5", config.color)}>
+                                                <SourceIcon className="h-2.5 w-2.5" />
+                                                {config.label}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                      
+                                      {/* View All Link */}
+                                      {(memberData.mediaTotalCount || 0) > 5 && memberData.user?.id && (
+                                        <Link
+                                          to={`/admin/upload/library?userId=${memberData.user.id}`}
+                                          className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+                                        >
+                                          View all {memberData.mediaTotalCount} media files
+                                          <ArrowRight className="h-4 w-4" />
+                                        </Link>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               </CardContent>
                             </Card>
+
+                            {/* Report Cases Section */}
+                            <Card className="rounded-2xl overflow-hidden">
+                              <CardContent className="p-0">
+                                {/* Header */}
+                                <div className="px-4 py-3 bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 border-b border-red-200 dark:border-red-800/50">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                      <span className="text-sm font-semibold text-red-900 dark:text-red-100">Report Cases</span>
+                                      <div className="flex items-center gap-1.5">
+                                        {(memberData.reportsAgainstCount || 0) > 0 && (
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-200">
+                                            {memberData.reportsAgainstCount} against
+                                          </span>
+                                        )}
+                                        {(memberData.reportsByCount || 0) > 0 && (
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
+                                            {memberData.reportsByCount} filed
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <Link
+                                      to="/admin/members/reports"
+                                      className="text-xs font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:underline flex items-center gap-1"
+                                    >
+                                      View all reports
+                                      <ArrowRight className="h-3 w-3" />
+                                    </Link>
+                                  </div>
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                                    Reports filed against this user for review
+                                  </p>
+                                </div>
+                                
+                                {/* Reports Content */}
+                                <div className="p-4">
+                                  {(!memberData.userReports || memberData.userReports.length === 0) ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                      <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-3">
+                                        <CircleCheck className="h-6 w-6 text-green-500" />
+                                      </div>
+                                      <p className="text-sm font-medium text-green-700 dark:text-green-400">No reports against this user</p>
+                                      <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+                                        This user has a clean record
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      {memberData.userReports.slice(0, 5).map((report) => (
+                                        <div
+                                          key={report.id}
+                                          className={cn(
+                                            "p-3 rounded-xl border",
+                                            report.status === 'review'
+                                              ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
+                                              : "bg-stone-50 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700"
+                                          )}
+                                        >
+                                          <div className="flex items-start justify-between gap-2">
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <Badge
+                                                  variant={report.status === 'review' ? 'default' : 'secondary'}
+                                                  className={cn(
+                                                    "text-xs",
+                                                    report.status === 'review' 
+                                                      ? "bg-amber-500" 
+                                                      : "bg-emerald-500"
+                                                  )}
+                                                >
+                                                  {report.status === 'review' ? (
+                                                    <><Clock className="h-3 w-3 mr-1" /> Open</>
+                                                  ) : (
+                                                    <><Check className="h-3 w-3 mr-1" /> Closed</>
+                                                  )}
+                                                </Badge>
+                                                <span className="text-xs text-stone-500">
+                                                  {report.createdAt ? new Date(report.createdAt).toLocaleDateString() : '-'}
+                                                </span>
+                                              </div>
+                                              <p className="text-sm mt-2 line-clamp-2">{report.reason || 'No reason provided'}</p>
+                                              <div className="flex items-center gap-3 mt-2 text-xs text-stone-500">
+                                                <span>Reported by: <span className="font-medium">{report.reporterName}</span></span>
+                                                {report.classifierName && (
+                                                  <span>Handled by: <span className="font-medium">{report.classifierName}</span></span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                      
+                                      {(memberData.reportsAgainstCount || 0) > 5 && (
+                                        <Link
+                                          to="/admin/members/reports"
+                                          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                                        >
+                                          View all {memberData.reportsAgainstCount} reports
+                                          <ArrowRight className="h-4 w-4" />
+                                        </Link>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            {/* User Messages Section - For report verification */}
+                            <Card className="rounded-2xl overflow-hidden">
+                              <CardContent className="p-0">
+                                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-b border-blue-200 dark:border-blue-800/50">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <MessageSquareIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                      <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">User Messages</span>
+                                      {memberMessagesStats.loading ? (
+                                        <RefreshCw className="h-3 w-3 animate-spin text-blue-400" />
+                                      ) : (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
+                                            {memberMessagesStats.messageCount} sent
+                                          </span>
+                                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-200 dark:bg-indigo-800 text-indigo-700 dark:text-indigo-200">
+                                            {memberMessagesStats.conversationCount} chats
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60"
+                                      onClick={() => setMemberMessagesOpen(true)}
+                                      disabled={memberMessagesStats.conversationCount === 0 && !memberMessagesStats.loading}
+                                    >
+                                      <MessageSquareIcon className="h-4 w-4 mr-2" />
+                                      View Messages
+                                    </Button>
+                                  </div>
+                                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                    Browse conversations from this user's perspective to verify reports
+                                  </p>
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            {/* Messages Dialog */}
+                            <AdminUserMessagesDialog
+                              open={memberMessagesOpen}
+                              onOpenChange={setMemberMessagesOpen}
+                              userId={memberData?.user?.id || ''}
+                              userName={memberData?.profile?.display_name || memberData?.user?.email || null}
+                            />
 
                             {(memberData.isBannedEmail ||
                               (memberData.bannedIps &&
@@ -8353,11 +9969,16 @@ export const AdminPage: React.FC = () => {
                                   <div className="text-sm mt-1">
                                     Email banned{" "}
                                     {memberData.bannedAt
-                                      ? `on ? ${new Date(memberData.bannedAt).toLocaleString()}`
+                                      ? `on ${new Date(memberData.bannedAt).toLocaleString()}`
                                       : ""}
                                     {memberData.bannedReason
-                                      ? ` ? ? ${memberData.bannedReason}`
+                                      ? ` — ${memberData.bannedReason}`
                                       : ""}
+                                  </div>
+                                )}
+                                {memberData.bannedByName && (
+                                  <div className="text-xs text-stone-700 dark:text-stone-300 mt-1">
+                                    Banned by {memberData.bannedByName}
                                   </div>
                                 )}
                                 {memberData.bannedIps &&
@@ -8393,6 +10014,38 @@ export const AdminPage: React.FC = () => {
                                   )}
                               </div>
                             )}
+
+                            {/* Admin Commentary - Last Element */}
+                            <Card className="rounded-2xl">
+                              <CardContent className="p-4 space-y-2">
+                                <div className="flex items-start justify-between">
+                                  <div className="text-sm font-medium flex items-center gap-2">
+                                    <MessageSquareText className="h-4 w-4 text-stone-500" />
+                                    Admin Commentary
+                                  </div>
+                                  <AddAdminNote
+                                    profileId={memberData.user?.id || ""}
+                                    onAdded={() => lookupMember()}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  {(memberData.adminNotes || []).length ===
+                                  0 ? (
+                                    <div className="text-sm opacity-60">
+                                      No notes yet.
+                                    </div>
+                                  ) : (
+                                    (memberData.adminNotes || []).map((n) => (
+                                      <NoteRow
+                                        key={n.id}
+                                        note={n}
+                                        onRemoved={() => lookupMember()}
+                                      />
+                                    ))
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
                           </div>
                         )}
                       </CardContent>
@@ -8844,6 +10497,10 @@ export const AdminPage: React.FC = () => {
                       </Card>
                   </div>
                 )}
+
+                    {membersView === "reports" && (
+                      <AdminReportsPanel />
+                    )}
                   </div>
                 )}
 
@@ -9725,4 +11382,3 @@ function NoteRow({
     </div>
   );
 }
-

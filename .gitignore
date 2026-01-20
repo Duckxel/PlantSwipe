@@ -1,6 +1,12 @@
 # dependencies
 node_modules/
 
+# Package manager lock files (bun is primary)
+# Ignore npm's lock file since we use bun:
+package-lock.json
+# bun.lock
+# bun.lockb
+
 # builds & bundles
 dist/
 build/
@@ -52,3 +58,22 @@ plant-swipe/supabase/config.toml
 
 # Domain configuration (server-specific)
 domain.json
+
+# Bun runtime
+.bun/
+*.bun
+
+# Editor settings that may auto-generate
+*.sublime-workspace
+*.sublime-project
+
+# Debug
+*.pid
+*.seed
+*.pid.lock
+
+# Yarn (if accidentally used)
+yarn.lock
+.yarn/
+.yarnrc.yml
+.pnp.*

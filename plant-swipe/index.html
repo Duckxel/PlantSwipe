@@ -7,6 +7,9 @@
       <meta name="description" content="Discover, swipe and manage the perfect plants for every garden." />
       <meta name="theme-color" content="#052e16" />
       
+      <!-- Canonical URL (updated dynamically by React) -->
+      <link rel="canonical" href="https://aphylia.app" />
+      
       <!-- Open Graph / Facebook -->
       <meta property="og:type" content="website" />
       <meta property="og:site_name" content="Aphylia" />
@@ -105,14 +108,9 @@
       </style>
       <!-- Preload CSS as usual, but do not preload the font aggressively -->
       <!-- <link rel="preload" as="style" href="/src/index.scss" /> -->
-      <!-- Font preload reduced priority or removed if causing FCP block -->
-      <link
-        rel="preload"
-        as="font"
-        href="/src/assets/fonts/Lavonte.ttf"
-        type="font/ttf"
-        crossorigin
-      />
+      <!-- Font preload removed - causes "not used within a few seconds" warning -->
+      <!-- The Lavonte font will load on-demand when the font-brand class is used -->
+      <!-- This is acceptable as the font is only used for the brand name -->
       <!-- Use script to load CSS to avoid render blocking if possible, or standard link -->
       <!-- Vite handles CSS loading via main.tsx import in dev, but for prod we might need this. -->
       <!-- However, since we renamed to scss, we should rely on Vite injecting it. -->
@@ -120,6 +118,9 @@
       <!-- For dev/preview where src is served: -->
       <noscript><link rel="stylesheet" href="/src/index.scss" /></noscript>
       <title>Aphylia</title>
+
+      <!-- Ensure runtime environment variables load before the app initializes -->
+      <script src="/env-loader.js" data-base="/" crossorigin="anonymous"></script>
     </head>
     <body>
       <div id="root">

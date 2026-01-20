@@ -93,17 +93,26 @@ export const ResizableImageNode = Node.create<ResizableImageNodeOptions>({
   renderHTML({ HTMLAttributes }) {
     const { src, alt, title, width, height, align } = HTMLAttributes as ResizableImageAttributes
     
+    // Normalize width value
+    const widthValue = typeof width === "number" ? `${width}px` : width || "100%"
+    const heightValue = typeof height === "number" ? `${height}px` : height || "auto"
+    const alignValue = align || "center"
+    
+    // Email-compatible container style using text-align for alignment
     const containerStyle = `
-      text-align: ${align || "center"};
+      text-align: ${alignValue};
       padding: 16px 0;
+      margin: 0;
     `.replace(/\s+/g, " ").trim()
 
+    // Email-compatible image style
     const imgStyle = `
       max-width: 100%;
-      width: ${typeof width === "number" ? `${width}px` : width || "100%"};
-      height: ${typeof height === "number" ? `${height}px` : height || "auto"};
+      width: ${widthValue};
+      height: ${heightValue};
       border-radius: 16px;
       display: inline-block;
+      vertical-align: middle;
     `.replace(/\s+/g, " ").trim()
 
     return [
@@ -111,9 +120,9 @@ export const ResizableImageNode = Node.create<ResizableImageNodeOptions>({
       mergeAttributes(
         { 
           "data-type": "resizable-image",
-          "data-width": typeof width === "number" ? `${width}px` : width || "100%",
-          "data-height": typeof height === "number" ? `${height}px` : height || "auto",
-          "data-align": align || "center",
+          "data-width": widthValue,
+          "data-height": heightValue,
+          "data-align": alignValue,
           style: containerStyle,
         },
         this.options.HTMLAttributes

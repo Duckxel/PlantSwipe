@@ -265,6 +265,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
         GapCursor,
         HorizontalRule,
         ImageUploadNode.configure({
+          type: "resizableImage", // Use resizable image node for alignment & sizing controls
           accept: "image/*",
           limit: 3,
           maxSize: MAX_FILE_SIZE,
@@ -274,7 +275,9 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
         }),
         EmailButtonNode,
         StyledDividerNode,
-        ImageGridNode,
+        ImageGridNode.configure({
+          uploadFolder: uploadFolderRef.current,
+        }),
         ResizableImageNode,
         EmailCardNode,
         SensitiveCodeNode,

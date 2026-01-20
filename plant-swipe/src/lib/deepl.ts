@@ -4,6 +4,10 @@
  * Translates plant data between supported languages using DeepL API
  * Requires DEEPL_API_KEY environment variable on the server
  * Updated for new JSONB structure
+ * 
+ * Features:
+ * - Language detection for Pro Insights
+ * - Translation caching for Pro Advice content
  */
 
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from './i18n'
@@ -530,4 +534,111 @@ export async function translateNotificationToAllLanguages(
   }
 
   return translations
+}
+
+// ============================================================================
+// Pro Advice Translation Functions
+// ============================================================================
+
+/**
+ * Detect the language of a text using DeepL API
+ * @param text The text to detect the language of
+ * @returns The detected language code (lowercase, e.g., 'en', 'fr') or null if detection failed
+ */
+export async function detectLanguage(text: string): Promise<string | null> {
+  if (!text || text.trim() === '') return null
+
+  try {
+    const response = await fetch('/api/detect-language', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: response.statusText }))
+      console.error('Language detection error:', errorData)
+      return null
+    }
+
+    const data = await response.json()
+    return data.detectedLanguage || null
+  } catch (error) {
+    console.error('Language detection error:', error)
+    return null
+  }
+}
+
+/**
+ * Translate text with automatic language detection
+ * Returns both the translated text and the detected source language
+ */
+export async function translateWithDetection(
+  text: string,
+  targetLang: SupportedLanguage
+): Promise<{ translatedText: string; detectedLanguage: string | null; skipped?: boolean }> {
+  if (!text || text.trim() === '') {
+    return { translatedText: text, detectedLanguage: null }
+  }
+
+  try {
+    const response = await fetch('/api/translate-detect', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text: text.trim(),
+        target_lang: targetLang.toUpperCase(),
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: response.statusText }))
+      throw new Error(errorData.error || `Translation API error: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return {
+      translatedText: data.translatedText || text,
+      detectedLanguage: data.detectedLanguage || null,
+      skipped: data.skipped || false,
+    }
+  } catch (error) {
+    console.error('Translation with detection error:', error)
+    throw error
+  }
+}
+
+/**
+ * Translate Pro Advice content to a target language
+ * Used for on-demand translation when viewing in full screen
+ * 
+ * @param content The original content to translate
+ * @param targetLang The target language code
+ * @param sourceLang Optional source language (if known from originalLanguage field)
+ * @returns The translated content
+ */
+export async function translateProAdviceContent(
+  content: string,
+  targetLang: SupportedLanguage,
+  sourceLang?: string | null
+): Promise<string> {
+  if (!content || content.trim() === '') return content
+
+  // If source language is known and equals target, return original
+  if (sourceLang && sourceLang.toLowerCase() === targetLang.toLowerCase()) {
+    return content
+  }
+
+  // If source language is known, use standard translation
+  if (sourceLang && SUPPORTED_LANGUAGES.includes(sourceLang.toLowerCase() as SupportedLanguage)) {
+    return translateText(content, targetLang, sourceLang.toLowerCase() as SupportedLanguage)
+  }
+
+  // Otherwise, use translation with auto-detection
+  const result = await translateWithDetection(content, targetLang)
+  return result.translatedText
 }

@@ -5,6 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 // Use regular path/url imports (Vite provides Node polytypes via tsconfig.node.json)
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { execSync } from 'child_process'
+import fs from 'fs'
 
 // Frontend-only config
 
@@ -12,6 +14,28 @@ import { fileURLToPath } from 'url'
 // Derive __dirname for ESM context
 // @ts-ignore augment import.meta at runtime
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Get git commit SHA for build info (fallback to 'dev' if git not available)
+const getGitCommitSha = () => {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim()
+  } catch {
+    return 'dev'
+  }
+}
+
+// Get app version from package.json or environment
+const getAppVersion = () => {
+  try {
+    if (process.env.VITE_APP_VERSION) return process.env.VITE_APP_VERSION
+    // Read package.json using fs for ESM compatibility
+    const pkgPath = path.resolve(__dirname, 'package.json')
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+    return pkg.version || '1.0.0'
+  } catch {
+    return '1.0.0'
+  }
+}
 
 const normalizeBasePath = (value?: string) => {
   if (!value || value.trim() === '' || value === '/') return '/'
@@ -28,6 +52,11 @@ const isPwaDisabled = disablePwaFlag === 'true' || disablePwaFlag === '1' || dis
 
 export default defineConfig({
   base: appBase,
+  define: {
+    // Inject build info for runtime logging
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(getAppVersion()),
+    'import.meta.env.VITE_COMMIT_SHA': JSON.stringify(getGitCommitSha()),
+  },
   plugins: [
     react(),
       VitePWA({
@@ -40,7 +69,6 @@ export default defineConfig({
       filename: 'sw.ts',
       includeAssets: [
         'env-loader.js',
-        'env.js',
         'icons/plant-swipe-icon.svg',
         'icons/plant-swipe-icon-outline.svg',
         'icons/icon-192x192.png',
@@ -81,7 +109,9 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff,woff2,ttf}'],
-        globIgnores: ['**/*.map', '**/node_modules/**'],
+        // Never precache runtime env endpoints; they must come from the active host
+        // (often dynamic) rather than a baked fallback bundled at build time.
+        globIgnores: ['**/*.map', '**/node_modules/**', '**/env.js', '**/api/env.js'],
       },
       devOptions: {
         enabled: process.env.VITE_ENABLE_PWA === 'true',

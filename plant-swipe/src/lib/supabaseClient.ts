@@ -72,6 +72,7 @@ export type ProfileRow = {
   disable_friend_requests?: boolean | null
   notify_push?: boolean | null
   notify_email?: boolean | null
+  threat_level?: number | null
 }
 
 export type BlogPostRow = {
@@ -153,4 +154,3 @@ export type PlantStockRow = {
   updated_by: string | null
   created_at: string
 }
-

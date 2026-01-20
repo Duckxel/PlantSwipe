@@ -13,6 +13,13 @@ dist-ssr
 .npm-cache
 /.npm-cache
 .npm-lock-hash
+.bun-lock-hash
+
+# Package manager lock files (bun is primary)
+# Ignore npm's lock file since we use bun:
+package-lock.json
+# bun.lock
+# bun.lockb
 *.local
 .env
 .env.*
@@ -21,6 +28,9 @@ dist-ssr
 
 # Generated files
 public/sitemap.xml
+
+# Ephemeral chat uploads
+uploads/to_delete/
 
 # Editor directories and files
 .vscode/*

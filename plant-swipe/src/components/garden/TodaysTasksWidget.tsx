@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Droplets, Scissors, Leaf, Package, Sparkles, ChevronRight } from "lucide-react";
+import { CheckCircle2, Droplets, Scissors, Leaf, Package, Sparkles, ChevronRight, Loader2 } from "lucide-react";
 
 interface TaskOccurrence {
   id: string;
@@ -196,7 +196,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
                     disabled={isCompleting}
                   >
                     {isCompleting ? (
-                      <span className="animate-pulse">⏳</span>
+                      <Loader2 className="w-3 h-3 animate-spin" />
                     ) : (
                       <>
                         <CheckCircle2 className="w-3 h-3 mr-0.5" />
@@ -257,9 +257,10 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
                           className={`rounded-lg h-6 md:h-7 px-2 md:px-2.5 text-[10px] md:text-xs font-semibold flex-shrink-0 border-2 transition-all ${config.buttonOutline}`}
                           onClick={() => onProgressOccurrence(occ.id, remaining)}
                           disabled={isProgressing}
+                          aria-label={`${t("garden.complete", "Complete")} ${t(`garden.taskTypes.${taskType}`)} ${t("garden.activity.plant")} ${plant.nickname || plant.plant?.name || "Plant"}`}
                         >
                           {isProgressing ? (
-                            <span className="animate-spin text-xs">⏳</span>
+                            <Loader2 className="w-3 h-3 md:w-3.5 md:h-3.5 animate-spin" />
                           ) : (
                             <>
                               <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 mr-0.5" />

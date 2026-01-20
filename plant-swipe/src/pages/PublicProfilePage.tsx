@@ -8,9 +8,10 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2 } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle, Bug, Medal } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
 import type { UserRole } from "@/constants/userRoles"
+import { hasBugCatcherRole } from "@/constants/userRoles"
 import { SearchInput } from "@/components/ui/search-input"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
@@ -20,6 +21,11 @@ import { BookmarksSection } from "@/components/profile/BookmarksSection"
 import { PublicGardensSection } from "@/components/profile/PublicGardensSection"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { Link } from "@/components/i18n/Link"
+import { ReportUserDialog } from "@/components/moderation/ReportUserDialog"
+import { BlockUserDialog } from "@/components/moderation/BlockUserDialog"
+import { hasBlockedUser, unblockUser, isBlockedByUser } from "@/lib/moderation"
+import { getOrCreateConversation } from "@/lib/messaging"
+import { sendFriendRequestPushNotification } from "@/lib/notifications"
 
 type PublicProfile = {
   id: string
@@ -45,6 +51,9 @@ type PublicStats = {
   currentStreak: number
   bestStreak: number
   friendsCount?: number
+  // Bug Catcher stats
+  bugPoints?: number
+  bugCatcherRank?: number
 }
 
 type DayAgg = { day: string; completed: number; any_success: boolean }
@@ -208,7 +217,20 @@ export default function PublicProfilePage() {
         // Check if viewer can see this profile
         let viewerCanSee = true
         let isAdminViewingPrivateNonFriend = false
-        if (profileIsPrivate && !isOwnerViewing && !viewerIsAdmin) {
+        let treatingAsPrivateDueToBlock = false
+        
+        // Check if the profile owner has blocked the viewer
+        // If blocked, treat the profile as private (even if it's not)
+        if (!isOwnerViewing && user?.id) {
+          const blockedByOwner = await isBlockedByUser(userId)
+          if (blockedByOwner && !viewerIsAdmin) {
+            // Profile owner blocked the viewer - show as private
+            viewerCanSee = false
+            treatingAsPrivateDueToBlock = true
+          }
+        }
+        
+        if (!treatingAsPrivateDueToBlock && profileIsPrivate && !isOwnerViewing && !viewerIsAdmin) {
           // Check if they are friends
           if (user?.id) {
             // Check if friendship exists in either direction
@@ -230,7 +252,7 @@ export default function PublicProfilePage() {
           } else {
             viewerCanSee = false
           }
-        } else if (profileIsPrivate && !isOwnerViewing && viewerIsAdmin) {
+        } else if (!treatingAsPrivateDueToBlock && profileIsPrivate && !isOwnerViewing && viewerIsAdmin) {
           // Admin viewing private profile - check if they're friends
           if (user?.id) {
             const { data: friendCheck1 } = await supabase
@@ -317,6 +339,23 @@ export default function PublicProfilePage() {
             setStats((prev) => prev ? { ...prev, friendsCount: friendCount } : null)
           } else {
             setStats((prev) => prev ? { ...prev, friendsCount: 0 } : null)
+          }
+
+          // Bug Catcher stats (if user has bug_catcher role)
+          if (hasBugCatcherRole(profileRoles)) {
+            const { data: profilePoints } = await supabase
+              .from('profiles')
+              .select('bug_points')
+              .eq('id', userId)
+              .single()
+            
+            const { data: bugRank } = await supabase.rpc('get_bug_catcher_rank', { _user_id: userId })
+            
+            setStats((prev) => prev ? {
+              ...prev,
+              bugPoints: profilePoints?.bug_points || 0,
+              bugCatcherRank: bugRank || 0
+            } : null)
           }
 
           // Heatmap: last 28 days (4 rows × 7 columns)
@@ -446,6 +485,19 @@ export default function PublicProfilePage() {
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null)
 
+  // Other user menu (report/block) state
+  const [otherMenuOpen, setOtherMenuOpen] = React.useState(false)
+  const otherMenuAnchorRef = React.useRef<HTMLDivElement | null>(null)
+  const otherMenuRef = React.useRef<HTMLDivElement | null>(null)
+  const [otherMenuPos, setOtherMenuPos] = React.useState<{ top: number; right: number } | null>(null)
+  
+  // Report/Block dialog state
+  const [reportDialogOpen, setReportDialogOpen] = React.useState(false)
+  const [blockDialogOpen, setBlockDialogOpen] = React.useState(false)
+  const [isBlocked, setIsBlocked] = React.useState(false)
+  const [blockLoading, setBlockLoading] = React.useState(false)
+  const [messageLoading, setMessageLoading] = React.useState(false)
+
   // Share button state
   const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'error'>('idle')
   const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -566,39 +618,44 @@ export default function PublicProfilePage() {
     if (!user?.id || !pp?.id || isOwner) return
     setFriendRequestLoading(true)
     try {
-      // Check if there's an existing request (including rejected/accepted ones)
+      // Check if there's an existing request in EITHER direction
       const { data: existingRequest } = await supabase
         .from('friend_requests')
-        .select('id, status')
-        .eq('requester_id', user.id)
-        .eq('recipient_id', pp.id)
+        .select('id, status, requester_id')
+        .or(`and(requester_id.eq.${user.id},recipient_id.eq.${pp.id}),and(requester_id.eq.${pp.id},recipient_id.eq.${user.id})`)
         .maybeSingle()
       
       if (existingRequest) {
         if (existingRequest.status === 'pending') {
+          // If there's a pending request FROM the other user TO us, accept it instead
+          if (existingRequest.requester_id === pp.id) {
+            const { error: acceptErr } = await supabase.rpc('accept_friend_request', {
+              _request_id: existingRequest.id
+            })
+            if (acceptErr) throw acceptErr
+            setFriendStatus('friends')
+            setFriendsSince(new Date().toISOString())
+            setFriendRequestLoading(false)
+            return
+          }
+          // Our request is already pending
           setFriendStatus('request_sent')
           setFriendRequestId(existingRequest.id)
           setFriendRequestLoading(false)
           return
         }
-        // If rejected or accepted, update it to pending (allows resending after removal/rejection)
+        
+        // For rejected or accepted requests, delete the old one first
+        // This ensures we can always create a new request
         if (existingRequest.status === 'rejected' || existingRequest.status === 'accepted') {
-          const { data, error: err } = await supabase
+          await supabase
             .from('friend_requests')
-            .update({ status: 'pending' })
+            .delete()
             .eq('id', existingRequest.id)
-            .select('id')
-            .single()
-          
-          if (err) throw err
-          setFriendStatus('request_sent')
-          setFriendRequestId(data.id)
-          setFriendRequestLoading(false)
-          return
         }
       }
       
-      // No existing request, create a new one
+      // Create a new friend request
       const { data, error: err } = await supabase
         .from('friend_requests')
         .insert({
@@ -612,12 +669,21 @@ export default function PublicProfilePage() {
       if (err) throw err
       setFriendStatus('request_sent')
       setFriendRequestId(data.id)
+      
+      // Send push notification to recipient
+      const senderName = profile?.display_name || 'Someone'
+      const { data: recipientProfile } = await supabase
+        .from('profiles')
+        .select('language')
+        .eq('id', pp.id)
+        .maybeSingle()
+      sendFriendRequestPushNotification(pp.id, senderName, recipientProfile?.language || 'en').catch(() => {})
     } catch (e: any) {
       setEditError(e?.message || t('profile.editProfile.failedToSendFriendRequest'))
     } finally {
       setFriendRequestLoading(false)
     }
-  }, [user?.id, pp?.id, isOwner])
+  }, [user?.id, pp?.id, isOwner, profile?.display_name])
 
   const acceptFriendRequest = React.useCallback(async () => {
     if (!friendRequestId || !user?.id || !pp?.id) return
@@ -677,6 +743,69 @@ export default function PublicProfilePage() {
       window.removeEventListener('scroll', recompute, true)
     }
   }, [menuOpen])
+
+  // Handle other user menu (report/block) positioning
+  React.useEffect(() => {
+    if (!otherMenuOpen) return
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as HTMLElement
+      if (otherMenuRef.current && otherMenuRef.current.contains(t)) return
+      if (otherMenuAnchorRef.current && otherMenuAnchorRef.current.contains(t)) return
+      setOtherMenuOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOtherMenuOpen(false) }
+    const recompute = () => {
+      const a = otherMenuAnchorRef.current
+      if (!a) return
+      const r = a.getBoundingClientRect()
+      setOtherMenuPos({ top: r.bottom + 8, right: Math.max(0, window.innerWidth - r.right) })
+    }
+    document.addEventListener('click', onDoc)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', recompute)
+    window.addEventListener('scroll', recompute, true)
+    recompute()
+    return () => {
+      document.removeEventListener('click', onDoc)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', recompute)
+      window.removeEventListener('scroll', recompute, true)
+    }
+  }, [otherMenuOpen])
+
+  // Check if user is blocked
+  React.useEffect(() => {
+    if (!user?.id || !pp?.id || isOwner) return
+    hasBlockedUser(pp.id).then(setIsBlocked).catch(() => {})
+  }, [user?.id, pp?.id, isOwner])
+
+  // Handle unblock
+  const handleUnblock = React.useCallback(async () => {
+    if (!pp?.id) return
+    setBlockLoading(true)
+    try {
+      await unblockUser(pp.id)
+      setIsBlocked(false)
+    } catch (e) {
+      console.error('Failed to unblock:', e)
+    } finally {
+      setBlockLoading(false)
+    }
+  }, [pp?.id])
+
+  // Handle starting a conversation with this user
+  const handleStartConversation = React.useCallback(async () => {
+    if (!pp?.id || friendStatus !== 'friends') return
+    setMessageLoading(true)
+    try {
+      const conversationId = await getOrCreateConversation(pp.id)
+      navigate(`/messages?conversation=${conversationId}`)
+    } catch (e) {
+      console.error('Failed to start conversation:', e)
+    } finally {
+      setMessageLoading(false)
+    }
+  }, [pp?.id, friendStatus, navigate])
 
   const daysFlat = React.useMemo(() => {
     // Build a fixed 28-day window (UTC)
@@ -873,31 +1002,34 @@ export default function PublicProfilePage() {
                 <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/10 blur-3xl" />
               </div>
               <CardContent className="relative z-10 p-6 md:p-8 space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
+              {/* Profile header - stacks on mobile, row on tablet+ */}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                {/* Avatar - centered on mobile */}
+                <div className="h-16 w-16 shrink-0 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center mx-auto sm:mx-0" aria-hidden>
                   <UserIcon
                     className="h-8 w-8 text-black"
                   />
                 </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center">
-                          <span className="text-2xl font-semibold truncate">{pp.display_name || pp.username || t('profile.member')}</span>
-                          <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
-                        </div>
-                        {pp.isAdminViewingPrivateNonFriend && (
-                          <div title={t('profile.privateProfileViewedByAdmin')}>
-                            <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
-                          </div>
-                        )}
-                        {!pp.roles?.length && !pp.is_admin && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full border bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-600">{t('profile.member')}</span>
-                        )}
+                {/* Profile info - takes remaining space */}
+                <div className="flex-1 min-w-0 text-center sm:text-left">
+                  <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
+                    <div className="flex items-center gap-1 min-w-0 max-w-full">
+                      <span className="text-xl sm:text-2xl font-semibold truncate max-w-[200px] sm:max-w-[300px]">{pp.display_name || pp.username || t('profile.member')}</span>
+                      <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
+                    </div>
+                    {pp.isAdminViewingPrivateNonFriend && (
+                      <div title={t('profile.privateProfileViewedByAdmin')}>
+                        <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
                       </div>
+                    )}
+                    {!pp.roles?.length && !pp.is_admin && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full border bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-600">{t('profile.member')}</span>
+                    )}
+                  </div>
                   {canViewProfile && (
                     <>
-                      <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
-                      <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
+                      <div className="text-sm opacity-70 mt-1 flex items-center gap-1 justify-center sm:justify-start">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
+                      <div className="text-xs opacity-70 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 justify-center sm:justify-start">
                         {pp.is_online ? (
                           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-500" />{t('profile.currentlyOnline')}</span>
                         ) : (
@@ -906,40 +1038,29 @@ export default function PublicProfilePage() {
                         {pp.joined_at && (
                           <span>
                             • {t('profile.joined')} {new Date(pp.joined_at).toLocaleDateString(i18n.language)}
-                            {stats?.friendsCount != null && stats.friendsCount > 0 && (
-                              <span className="ml-2">• {stats.friendsCount} {stats.friendsCount !== 1 ? t('profile.friends') : t('profile.friend')}</span>
-                            )}
                           </span>
+                        )}
+                        {stats?.friendsCount != null && stats.friendsCount > 0 && (
+                          <span>• {stats.friendsCount} {stats.friendsCount !== 1 ? t('profile.friends') : t('profile.friend')}</span>
                         )}
                       </div>
                     </>
                   )}
                 </div>
-                <div className="ml-auto flex items-center gap-2" ref={anchorRef}>
-                  {/* Share button - always visible */}
-                  <Button 
-                    className="rounded-2xl" 
-                    variant="secondary" 
-                    onClick={handleShare}
-                    aria-label={t('common.share', { defaultValue: 'Share' })}
-                  >
-                    <Share2 className="h-4 w-4" />
-                    {shareStatus === 'copied' ? (
-                      <span className="ml-1.5 text-emerald-600 dark:text-emerald-400 text-xs">{t('plantInfo.shareCopied', { defaultValue: 'Copied!' })}</span>
-                    ) : shareStatus === 'error' ? (
-                      <span className="ml-1.5 text-red-500 text-xs">{t('plantInfo.shareFailed', { defaultValue: 'Error' })}</span>
-                    ) : (
-                      <span className="hidden sm:inline ml-1.5 text-xs">{t('common.share', { defaultValue: 'Share' })}</span>
-                    )}
-                  </Button>
+                {/* Action buttons - centered on mobile, right-aligned on tablet+ */}
+                <div className="flex items-center justify-center sm:justify-end gap-2 shrink-0 w-full sm:w-auto" ref={anchorRef}>
                   {isOwner ? (
                     <>
-                      <Button className="rounded-2xl" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
+                      <Button className="rounded-2xl self-start" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
                       {menuOpen && menuPos && createPortal(
-                        <div ref={menuRef} className="w-40 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await handleLogout() }}>{t('profile.logout')}</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>{t('profile.deleteAccount')}</button>
+                        <div ref={menuRef} className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); handleShare() }}>
+                            <Share2 className="h-4 w-4" />
+                            {shareStatus === 'copied' ? t('plantInfo.shareCopied', { defaultValue: 'Copied!' }) : t('common.share', { defaultValue: 'Share' })}
+                          </button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await handleLogout() }}>{t('profile.logout')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>{t('profile.deleteAccount')}</button>
                         </div>,
                         document.body
                       )}
@@ -972,7 +1093,7 @@ export default function PublicProfilePage() {
                         </Button>
                       )}
                       {friendStatus === 'friends' && (
-                        <div className="flex flex-col items-end gap-1">
+                        <div className="flex flex-col items-center sm:items-end gap-1">
                           <Button className="rounded-2xl" variant="secondary" disabled>
                             {t('profile.friends')}
                           </Button>
@@ -983,21 +1104,226 @@ export default function PublicProfilePage() {
                           )}
                         </div>
                       )}
+                      {/* 3-dots menu for report/block */}
+                      <div ref={otherMenuAnchorRef}>
+                        <Button 
+                          className="rounded-2xl self-start" 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => setOtherMenuOpen((o) => !o)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {otherMenuOpen && otherMenuPos && createPortal(
+                        <div 
+                          ref={otherMenuRef} 
+                          className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-lg z-[60] p-1" 
+                          style={{ position: 'fixed', top: otherMenuPos.top, right: otherMenuPos.right }}
+                        >
+                          {/* Share button */}
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              handleShare();
+                            }}
+                          >
+                            <Share2 className="h-4 w-4" />
+                            {shareStatus === 'copied' ? t('plantInfo.shareCopied', { defaultValue: 'Copied!' }) : t('common.share', { defaultValue: 'Share' })}
+                          </button>
+                          {/* Message button - only for friends */}
+                          {friendStatus === 'friends' && (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={async (e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                await handleStartConversation();
+                              }}
+                              disabled={messageLoading}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              {t('profile.message', { defaultValue: 'Message' })}
+                            </button>
+                          )}
+                          {isBlocked ? (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={async (e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                await handleUnblock();
+                              }}
+                              disabled={blockLoading}
+                            >
+                              <Ban className="h-4 w-4" />
+                              {t('moderation.block.unblock')}
+                            </button>
+                          ) : (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={(e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                setBlockDialogOpen(true);
+                              }}
+                            >
+                              <Ban className="h-4 w-4" />
+                              {t('moderation.block.title')}
+                            </button>
+                          )}
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              setReportDialogOpen(true);
+                            }}
+                          >
+                            <AlertTriangle className="h-4 w-4" />
+                            {t('moderation.report.title')}
+                          </button>
+                        </div>,
+                        document.body
+                      )}
                     </>
-                  ) : null}
+                  ) : user?.id ? (
+                    /* User is logged in but friend requests are disabled - still show 3-dots menu */
+                    <>
+                      <div ref={otherMenuAnchorRef}>
+                        <Button 
+                          className="rounded-2xl" 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => setOtherMenuOpen((o) => !o)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {otherMenuOpen && otherMenuPos && createPortal(
+                        <div 
+                          ref={otherMenuRef} 
+                          className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-lg z-[60] p-1" 
+                          style={{ position: 'fixed', top: otherMenuPos.top, right: otherMenuPos.right }}
+                        >
+                          {/* Share button */}
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              handleShare();
+                            }}
+                          >
+                            <Share2 className="h-4 w-4" />
+                            {shareStatus === 'copied' ? t('plantInfo.shareCopied', { defaultValue: 'Copied!' }) : t('common.share', { defaultValue: 'Share' })}
+                          </button>
+                          {/* Message button - only for friends */}
+                          {friendStatus === 'friends' && (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={async (e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                await handleStartConversation();
+                              }}
+                              disabled={messageLoading}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              {t('profile.message', { defaultValue: 'Message' })}
+                            </button>
+                          )}
+                          {isBlocked ? (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={async (e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                await handleUnblock();
+                              }}
+                              disabled={blockLoading}
+                            >
+                              <Ban className="h-4 w-4" />
+                              {t('moderation.block.unblock')}
+                            </button>
+                          ) : (
+                            <button 
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                              onMouseDown={(e) => { 
+                                e.stopPropagation(); 
+                                setOtherMenuOpen(false); 
+                                setBlockDialogOpen(true);
+                              }}
+                            >
+                              <Ban className="h-4 w-4" />
+                              {t('moderation.block.title')}
+                            </button>
+                          )}
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              setReportDialogOpen(true);
+                            }}
+                          >
+                            <AlertTriangle className="h-4 w-4" />
+                            {t('moderation.report.title')}
+                          </button>
+                        </div>,
+                        document.body
+                      )}
+                    </>
+                  ) : (
+                    /* Non-logged-in users - show share button only */
+                    <>
+                      <div ref={otherMenuAnchorRef}>
+                        <Button 
+                          className="rounded-2xl" 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => setOtherMenuOpen((o) => !o)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {otherMenuOpen && otherMenuPos && createPortal(
+                        <div 
+                          ref={otherMenuRef} 
+                          className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-lg z-[60] p-1" 
+                          style={{ position: 'fixed', top: otherMenuPos.top, right: otherMenuPos.right }}
+                        >
+                          <button 
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" 
+                            onMouseDown={(e) => { 
+                              e.stopPropagation(); 
+                              setOtherMenuOpen(false); 
+                              handleShare();
+                            }}
+                          >
+                            <Share2 className="h-4 w-4" />
+                            {shareStatus === 'copied' ? t('plantInfo.shareCopied', { defaultValue: 'Copied!' }) : t('common.share', { defaultValue: 'Share' })}
+                          </button>
+                        </div>,
+                        document.body
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
               {canViewProfile && pp.bio && (
-                <div className="text-sm opacity-90">{pp.bio}</div>
+                <div className="text-sm opacity-90 text-center sm:text-left">{pp.bio}</div>
               )}
               {!canViewProfile && !isOwner && pp.is_private && (
-                <div className="mt-4 p-4 rounded-xl bg-stone-50 border border-stone-200 flex items-start gap-3">
-                  <Lock className="h-5 w-5 mt-0.5 text-stone-600 shrink-0" />
+                <div className="mt-4 p-4 rounded-xl bg-stone-50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-700 flex items-start gap-3">
+                  <Lock className="h-5 w-5 mt-0.5 text-stone-600 dark:text-stone-400 shrink-0" />
                   <div>
-                    <div className="text-sm font-medium text-stone-900 mb-1">
+                    <div className="text-sm font-medium text-stone-900 dark:text-stone-100 mb-1">
                       {t('profile.privateProfile.title')}
                     </div>
-                    <div className="text-xs opacity-70 text-stone-700">
+                    <div className="text-xs opacity-70 text-stone-700 dark:text-stone-300">
                       {t('profile.privateProfile.description')}
                     </div>
                   </div>
@@ -1011,16 +1337,34 @@ export default function PublicProfilePage() {
                 <div className="mt-4">
                   <Card className={glassCard}>
                     <CardContent className="p-6 md:p-8 space-y-4">
-                      <div className="text-lg font-semibold">{t("profile.highlights")}</div>
-                    <div className="flex flex-col md:flex-row items-center justify-center gap-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-lg font-semibold">{t("profile.highlights")}</div>
+                        {/* Bug Catcher Badge - simple inline display */}
+                        {pp.roles && hasBugCatcherRole(pp.roles) && stats?.bugPoints !== undefined && (stats.bugPoints > 0 || (stats.bugCatcherRank && stats.bugCatcherRank <= 10)) && (
+                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-100 dark:bg-stone-800 text-sm">
+                            <Bug className="h-4 w-4 text-orange-500" />
+                            <span className="font-medium tabular-nums">{stats.bugPoints} pts</span>
+                            {stats.bugCatcherRank && stats.bugCatcherRank > 0 && (
+                              <>
+                                <span className="text-stone-400">•</span>
+                                <span className="text-stone-600 dark:text-stone-400">#{stats.bugCatcherRank}</span>
+                              </>
+                            )}
+                            {stats.bugCatcherRank && stats.bugCatcherRank <= 10 && (
+                              <Medal className="h-3.5 w-3.5 text-amber-500" />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-0">
                       {/* Task completion grid - left side */}
-                      <div className="flex-1 flex justify-center items-center">
+                      <div className="flex-1 flex justify-center items-center py-2">
                         <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1.5 sm:gap-2">
                           {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
                             <div
                               key={idx}
                               tabIndex={0}
-                              className={`h-8 w-8 sm:h-10 sm:w-10 rounded-[4px] ${colorFor(item)}`}
+                              className={`h-7 w-7 sm:h-10 sm:w-10 rounded-[4px] ${colorFor(item)}`}
                               onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
                               onMouseLeave={hideTooltip}
                               onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
@@ -1031,44 +1375,45 @@ export default function PublicProfilePage() {
                         </div>
                       </div>
                       
-                      {/* Thin divider line */}
-                      <div className="hidden md:block w-px h-full min-h-[200px] bg-stone-300 dark:bg-[#3e3e42] mx-2" />
+                      {/* Horizontal divider on mobile, vertical on desktop */}
+                      <div className="w-full h-px md:hidden bg-stone-200 dark:bg-[#3e3e42]" />
+                      <div className="hidden md:block w-px h-full min-h-[200px] bg-stone-300 dark:bg-[#3e3e42] mx-4" />
                       
                       {/* Highlight cards - right side, 2x2 grid */}
-                      <div className="flex-1 flex justify-center items-center">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1.5 mb-2">
-                              <Sprout className="h-5 w-5 text-emerald-600" />
-                              <div className="text-xs opacity-60">{t('profile.plantsOwned')}</div>
+                      <div className="flex-1 flex justify-center items-center py-2">
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
+                              <Sprout className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
+                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.plantsOwned')}</div>
                             </div>
-                            <div className="text-xl font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
+                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
                           </div>
-                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1.5 mb-2">
-                              <Home className="h-5 w-5 text-blue-600" />
-                              <div className="text-xs opacity-60">{t('profile.gardens')}</div>
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
+                              <Home className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.gardens')}</div>
                             </div>
-                            <div className="text-xl font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
+                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
                           </div>
-                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1.5 mb-2">
-                              <Flame className="h-5 w-5 text-orange-500" />
-                              <div className="text-xs opacity-60">{t('profile.currentStreak')}</div>
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
+                              <Flame className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
+                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.currentStreak')}</div>
                             </div>
-                            <div className="text-xl font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
+                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
                           </div>
-                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1.5 mb-2">
-                              <Trophy className="h-5 w-5 text-amber-500" />
-                              <div className="text-xs opacity-60">{t('profile.longestStreak')}</div>
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
+                              <Trophy className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
+                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.longestStreak')}</div>
                             </div>
-                            <div className="text-xl font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
+                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
                           </div>
                         </div>
                       </div>
                     </div>
-                
+                    
                 {tooltip && createPortal(
                   <div
                     className="fixed z-[70] pointer-events-none"
@@ -1163,9 +1508,29 @@ export default function PublicProfilePage() {
               }}
             />
           )}
+          
+          {/* Report User Dialog */}
+          {pp && !isOwner && (
+            <ReportUserDialog
+              open={reportDialogOpen}
+              onOpenChange={setReportDialogOpen}
+              userId={pp.id}
+              displayName={pp.display_name}
+            />
+          )}
+          
+          {/* Block User Dialog */}
+          {pp && !isOwner && (
+            <BlockUserDialog
+              open={blockDialogOpen}
+              onOpenChange={setBlockDialogOpen}
+              userId={pp.id}
+              displayName={pp.display_name}
+              onBlocked={() => setIsBlocked(true)}
+            />
+          )}
         </>
       )}
     </div>
   )
 }
-

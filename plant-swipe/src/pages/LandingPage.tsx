@@ -8,6 +8,7 @@ import { Footer } from "@/components/layout/Footer"
 import MobileNavBar from "@/components/layout/MobileNavBar"
 import { useAuthActions } from "@/context/AuthActionsContext"
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
+import { supabase } from "@/lib/supabaseClient"
 import {
   Leaf,
   Droplets,
@@ -23,9 +24,270 @@ import {
   Sparkles,
   ArrowRight,
   MessageCircle,
+  Users,
+  Zap,
+  Shield,
+  Heart,
+  TrendingUp,
+  Globe,
+  Smartphone,
+  Clock,
+  Flower2,
+  TreeDeciduous,
+  Sprout,
+  Palette,
+  Share2,
+  Calendar,
+  Target,
+  Award,
+  Lightbulb,
+  Instagram,
+  Twitter,
+  Mail,
+  GraduationCap,
+  HandHeart,
+  BarChart3,
+  Search,
+  Flame,
+  CheckCircle2,
+  CircleDot,
+  PawPrint,
 } from "lucide-react"
 
-// Lightweight landing page - no heavy dependencies for fast LCP
+// Icon mapping for dynamic rendering
+const iconMap: Record<string, React.ElementType> = {
+  Leaf, Droplets, Sun, Bell, BookMarked, Camera, NotebookPen, Wifi, Users, Check,
+  Clock, TrendingUp, Shield, Heart, Globe, Zap, MessageCircle, Flower2,
+  TreeDeciduous, Sprout, Star, Sparkles, Palette, Share2, Calendar, Target, Award, Lightbulb,
+  Instagram, Twitter, Mail, GraduationCap, HandHeart, BarChart3, Search, Flame, CheckCircle2, CircleDot, PawPrint,
+}
+
+// Types for database data
+type HeroCard = {
+  id: string
+  plant_name: string
+  plant_scientific_name: string | null
+  image_url: string | null
+  water_frequency: string
+  light_level: string
+  reminder_text: string
+}
+
+type LandingStats = {
+  plants_count: string
+  plants_label: string
+  users_count: string
+  users_label: string
+  tasks_count: string
+  tasks_label: string
+  rating_value: string
+  rating_label: string
+}
+
+type LandingFeature = {
+  id: string
+  icon_name: string
+  title: string
+  description: string | null
+  color: string
+  is_in_circle: boolean
+}
+
+type Testimonial = {
+  id: string
+  author_name: string
+  author_role: string | null
+  quote: string
+  rating: number
+}
+
+type FAQ = {
+  id: string
+  question: string
+  answer: string
+}
+
+type ShowcaseCard = {
+  id: string
+  position: number
+  card_type: string
+  icon_name: string | null
+  title: string
+  description: string | null
+  badge_text: string | null
+  image_url: string | null
+  cover_image_url: string | null
+  plant_images: Array<{ url: string; name: string }> | null
+  garden_name: string | null
+  plants_count: number | null
+  species_count: number | null
+  streak_count: number | null
+  progress_percent: number | null
+  link_url: string | null
+  color: string
+  is_active: boolean
+  selected_garden_ids: string[] | null
+}
+
+// Type for fetched garden data to display on landing page
+type ShowcaseGarden = {
+  id: string
+  name: string
+  coverImageUrl: string | null
+  streak: number
+  plantCount: number
+  previewPlants: Array<{
+    id: string
+    name: string
+    nickname: string | null
+    imageUrl: string | null
+  }>
+  ownerDisplayName: string | null
+}
+
+type LandingPageSettings = {
+  // Hero Section
+  hero_badge_text: string
+  hero_title: string
+  hero_title_highlight: string
+  hero_title_end: string
+  hero_description: string
+  hero_cta_primary_text: string
+  hero_cta_primary_link: string
+  hero_cta_secondary_text: string
+  hero_cta_secondary_link: string
+  hero_social_proof_text: string
+  // Section Visibility
+  show_hero_section: boolean
+  show_stats_section: boolean
+  show_beginner_section: boolean
+  show_features_section: boolean
+  show_demo_section: boolean
+  show_how_it_works_section: boolean
+  show_showcase_section: boolean
+  show_testimonials_section: boolean
+  show_faq_section: boolean
+  show_final_cta_section: boolean
+  // Social Links
+  instagram_url: string
+  twitter_url: string
+  support_email: string
+  // Final CTA
+  final_cta_badge: string
+  final_cta_title: string
+  final_cta_subtitle: string
+  final_cta_button_text: string
+  final_cta_secondary_text: string
+  // Beginner Section
+  beginner_badge: string
+  beginner_title: string
+  beginner_title_highlight: string
+  beginner_subtitle: string
+  // Meta/SEO
+  meta_title: string
+  meta_description: string
+}
+
+// Context for landing page data
+type LandingDataContextType = {
+  heroCards: HeroCard[]
+  stats: LandingStats | null
+  circleFeatures: LandingFeature[]
+  gridFeatures: LandingFeature[]
+  showcaseCards: ShowcaseCard[]
+  showcaseGardens: ShowcaseGarden[]
+  testimonials: Testimonial[]
+  faqItems: FAQ[]
+  settings: LandingPageSettings | null
+  loading: boolean
+}
+
+const LandingDataContext = React.createContext<LandingDataContextType>({
+  heroCards: [],
+  stats: null,
+  circleFeatures: [],
+  gridFeatures: [],
+  showcaseCards: [],
+  showcaseGardens: [],
+  testimonials: [],
+  faqItems: [],
+  settings: null,
+  loading: true,
+})
+
+const useLandingData = () => React.useContext(LandingDataContext)
+
+// CSS Animations
+const animationStyles = `
+  @keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-20px) rotate(3deg); }
+  }
+  @keyframes float-slow {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes float-delayed {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-15px) rotate(-2deg); }
+  }
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+  }
+  @keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  @keyframes bounce-subtle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
+  .animate-float-delayed { animation: float-delayed 7s ease-in-out infinite 1s; }
+  .animate-pulse-glow { animation: pulse-glow 4s ease-in-out infinite; }
+  .animate-gradient { animation: gradient-shift 8s ease infinite; background-size: 200% 200%; }
+  .animate-marquee { animation: marquee 30s linear infinite; }
+  .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
+  .animate-scale-in { animation: scale-in 0.5s ease-out forwards; }
+  .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+  .animate-bounce-subtle { animation: bounce-subtle 2s ease-in-out infinite; }
+  .plant-icon-theme { filter: brightness(0) saturate(100%); }
+  .dark .plant-icon-theme { filter: brightness(0) saturate(100%) invert(100%); }
+  .gradient-text {
+    background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .dark .glass-card {
+    background: rgba(30, 30, 30, 0.7);
+  }
+`
+
 const LandingPage: React.FC = () => {
   const { t } = useTranslation("Landing")
   const { user, profile, signOut } = useAuth()
@@ -33,13 +295,178 @@ const LandingPage: React.FC = () => {
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
 
+  // Load landing page data from database
+  const [landingData, setLandingData] = React.useState<LandingDataContextType>({
+    heroCards: [],
+    stats: null,
+    circleFeatures: [],
+    gridFeatures: [],
+    showcaseCards: [],
+    showcaseGardens: [],
+    testimonials: [],
+    faqItems: [],
+    settings: null,
+    loading: true,
+  })
+
+  React.useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Execute all queries in parallel, but handle errors individually
+        // Some tables may not exist yet (404), which is fine - we fall back to defaults
+        const results = await Promise.allSettled([
+          supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
+          supabase.from("landing_hero_cards").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
+          supabase.from("landing_features").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_showcase_cards").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_testimonials").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_faq").select("*").eq("is_active", true).order("position"),
+        ])
+
+        // Extract data safely, using null/empty array as fallback for any failures
+        const getData = <T,>(result: PromiseSettledResult<{ data: T | null; error: unknown }>, defaultValue: T): T => {
+          if (result.status === 'rejected') return defaultValue
+          const { data, error } = result.value
+          // Treat any error (including 404 for missing tables) as "use default"
+          if (error || data === null) return defaultValue
+          return data
+        }
+
+        const settings = getData(results[0], null)
+        const heroCards = getData(results[1], [])
+        const stats = getData(results[2], null)
+        const features = getData(results[3], []) as LandingFeature[]
+        const showcaseCards = getData(results[4], []) as ShowcaseCard[]
+        const testimonials = getData(results[5], [])
+        const faqItems = getData(results[6], [])
+        
+        // Collect all selected garden IDs from showcase cards
+        const allSelectedGardenIds = (showcaseCards || [])
+          .flatMap(card => card.selected_garden_ids || [])
+          .filter((id, idx, arr) => arr.indexOf(id) === idx) // dedupe
+        
+        // Fetch garden data if there are selected gardens
+        let showcaseGardens: ShowcaseGarden[] = []
+        if (allSelectedGardenIds.length > 0) {
+          try {
+            // Fetch gardens
+            const { data: gardens } = await supabase
+              .from('gardens')
+              .select('id, name, cover_image_url, streak, created_by')
+              .in('id', allSelectedGardenIds)
+            
+            if (gardens && gardens.length > 0) {
+              // Fetch plant data for each garden
+              const { data: gardenPlants } = await supabase
+                .from('garden_plants')
+                .select('id, garden_id, plant_id, nickname, sort_index')
+                .in('garden_id', allSelectedGardenIds)
+                .order('sort_index', { ascending: true })
+              
+              // Group plants by garden
+              const plantsByGarden: Record<string, any[]> = {}
+              for (const gp of gardenPlants || []) {
+                const gid = String(gp.garden_id)
+                if (!plantsByGarden[gid]) plantsByGarden[gid] = []
+                plantsByGarden[gid].push(gp)
+              }
+              
+              // Fetch plant images
+              const allPlantIds = [...new Set((gardenPlants || []).map(p => String(p.plant_id)))]
+              const plantsMap: Record<string, { name: string; imageUrl: string | null }> = {}
+              
+              if (allPlantIds.length > 0) {
+                const { data: plantRows } = await supabase
+                  .from('plants')
+                  .select('id, common_name, plant_images(link, use)')
+                  .in('id', allPlantIds)
+                
+                if (plantRows) {
+                  for (const p of plantRows) {
+                    const images = Array.isArray((p as any).plant_images) ? (p as any).plant_images : []
+                    const primaryImg = images.find((img: any) => img.use === 'primary')
+                    const imageUrl = primaryImg?.link || images[0]?.link || null
+                    plantsMap[String(p.id)] = {
+                      name: (p as any).common_name || '',
+                      imageUrl
+                    }
+                  }
+                }
+              }
+              
+              // Fetch owner names
+              const ownerIds = [...new Set(gardens.map(g => String(g.created_by)))]
+              const ownerNames: Record<string, string> = {}
+              if (ownerIds.length > 0) {
+                const { data: profiles } = await supabase
+                  .from('profiles')
+                  .select('id, display_name')
+                  .in('id', ownerIds)
+                if (profiles) {
+                  for (const p of profiles) {
+                    ownerNames[p.id] = p.display_name || ''
+                  }
+                }
+              }
+              
+              // Build showcase gardens
+              showcaseGardens = gardens.map((g: any) => {
+                const gid = String(g.id)
+                const gardenPlantsList = plantsByGarden[gid] || []
+                const previewPlants = gardenPlantsList.slice(0, 6).map((gp: any) => {
+                  const plantId = String(gp.plant_id)
+                  const plantData = plantsMap[plantId] || { name: '', imageUrl: null }
+                  return {
+                    id: String(gp.id),
+                    name: plantData.name,
+                    nickname: gp.nickname || null,
+                    imageUrl: plantData.imageUrl
+                  }
+                })
+                
+                return {
+                  id: gid,
+                  name: String(g.name),
+                  coverImageUrl: g.cover_image_url || null,
+                  streak: Number(g.streak ?? 0),
+                  plantCount: gardenPlantsList.length,
+                  previewPlants,
+                  ownerDisplayName: ownerNames[String(g.created_by)] || null
+                }
+              })
+            }
+          } catch (gardenErr) {
+            console.error("Failed to load showcase gardens:", gardenErr)
+          }
+        }
+        
+        setLandingData({
+          heroCards: heroCards || [],
+          stats: stats || null,
+          circleFeatures: features.filter((f: LandingFeature) => f.is_in_circle),
+          gridFeatures: features.filter((f: LandingFeature) => !f.is_in_circle),
+          showcaseCards: showcaseCards || [],
+          showcaseGardens,
+          testimonials: testimonials || [],
+          faqItems: faqItems || [],
+          settings: settings || null,
+          loading: false,
+        })
+      } catch (e) {
+        console.error("Failed to load landing data:", e)
+        setLandingData(prev => ({ ...prev, loading: false }))
+      }
+    }
+    loadData()
+  }, [])
+
   const handleProfileNavigation = React.useCallback(() => {
     navigate('/profile')
   }, [navigate])
 
   const handleLogout = React.useCallback(async () => {
     await signOut()
-    // Stay on current page unless it requires authentication
     const protectedPrefixes = ['/profile', '/friends', '/settings', '/admin', '/create']
     const isOnProtectedPage = protectedPrefixes.some(prefix => 
       pathWithoutLang === prefix || pathWithoutLang.startsWith(prefix + '/')
@@ -56,117 +483,194 @@ const LandingPage: React.FC = () => {
   })
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-24 pt-2 md:px-8 md:pb-8 md:pt-4 overflow-x-hidden overflow-y-visible">
-      {/* Desktop Navigation - uses the real TopBar */}
-      <div className="overflow-y-visible">
-        <TopBar
-          openLogin={openLogin}
-          openSignup={openSignup}
-          user={user}
-          displayName={profile?.display_name || null}
-          onProfile={handleProfileNavigation}
-          onLogout={handleLogout}
-        />
+    <LandingDataContext.Provider value={landingData}>
+    <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden">
+      <style>{animationStyles}</style>
+      
+      {/* Ambient Background Elements */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[120px] animate-pulse-glow" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-[100px] animate-pulse-glow" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-emerald-600/5 rounded-full blur-[80px]" />
       </div>
 
-      {/* Mobile Navigation - uses the real MobileNavBar */}
-      <MobileNavBar
-        canCreate={false}
-        onLogin={openLogin}
-        onSignup={openSignup}
-        onProfile={handleProfileNavigation}
-        onLogout={handleLogout}
-      />
+      <div className="relative">
+        {/* Mobile Logo Header */}
+        <header className="md:hidden flex items-center justify-center py-6 mb-2 px-4">
+          <Link to={user ? "/discovery" : "/"} className="flex items-center gap-3 no-underline group">
+            <div className="relative">
+              <div className="absolute inset-0 bg-emerald-500/20 rounded-xl blur-lg group-hover:bg-emerald-500/30 transition-colors" />
+              <img src="/icons/plant-swipe-icon.svg" alt="Aphylia" className="relative h-11 w-10 plant-icon-theme" draggable="false" />
+            </div>
+            <span className="font-brand text-[1.75rem] font-bold tracking-tight text-stone-900 dark:text-white">
+              {t("common.appName", { ns: "common", defaultValue: "Aphylia" })}
+            </span>
+          </Link>
+        </header>
 
-      {/* Hero Section */}
-      <HeroSection />
+        {/* Navigation */}
+        <div className="relative z-50">
+          <TopBar
+            openLogin={openLogin}
+            openSignup={openSignup}
+            user={user}
+            displayName={profile?.display_name || null}
+            onProfile={handleProfileNavigation}
+            onLogout={handleLogout}
+          />
+        </div>
+        <MobileNavBar canCreate={false} onLogin={openLogin} onSignup={openSignup} onProfile={handleProfileNavigation} onLogout={handleLogout} />
 
-      {/* Feature Grid */}
-      <FeaturesSection />
+        {/* Hero Section */}
+        {(landingData.settings?.show_hero_section ?? true) && <HeroSection />}
 
-      {/* How It Works */}
-      <HowItWorksSection />
+        {/* Stats Banner */}
+        {(landingData.settings?.show_stats_section ?? true) && <StatsBanner />}
 
-      {/* Showcase */}
-      <ShowcaseSection />
+        {/* Beginner Friendly Section */}
+        {(landingData.settings?.show_beginner_section ?? true) && <BeginnerFriendlySection />}
 
-      {/* Social Proof */}
-      <TestimonialsSection />
+        {/* Features Grid */}
+        {(landingData.settings?.show_features_section ?? true) && <FeaturesSection />}
 
-      {/* FAQ */}
-      <FAQSection />
+        {/* Interactive Demo */}
+        {(landingData.settings?.show_demo_section ?? true) && <InteractiveDemoSection />}
 
-      {/* Final CTA */}
-      <FinalCTASection />
+        {/* How It Works */}
+        {(landingData.settings?.show_how_it_works_section ?? true) && <HowItWorksSection />}
 
-      {/* Footer - same as the rest of the app */}
-      <Footer />
+        {/* Showcase */}
+        {(landingData.settings?.show_showcase_section ?? true) && <ShowcaseSection />}
+
+        {/* Testimonials */}
+        {(landingData.settings?.show_testimonials_section ?? true) && <TestimonialsSection />}
+
+        {/* FAQ */}
+        {(landingData.settings?.show_faq_section ?? true) && <FAQSection />}
+
+        {/* Final CTA */}
+        {(landingData.settings?.show_final_cta_section ?? true) && <FinalCTASection />}
+
+        {/* Footer */}
+        <Footer />
+      </div>
     </div>
+    </LandingDataContext.Provider>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   HERO SECTION
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   HERO SECTION - Completely Redesigned
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const HeroSection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { settings } = useLandingData()
+
+  // Use settings if available, otherwise fall back to translations
+  const badgeText = settings?.hero_badge_text || t("hero.badge")
+  const titleStart = settings?.hero_title || t("hero.title")
+  const titleHighlight = settings?.hero_title_highlight || t("hero.titleHighlight")
+  const titleEnd = settings?.hero_title_end || t("hero.titleEnd")
+  const description = settings?.hero_description || t("hero.description")
+  const ctaPrimaryText = settings?.hero_cta_primary_text || t("hero.ctaDownload")
+  const ctaPrimaryLink = settings?.hero_cta_primary_link || "/download"
+  const ctaSecondaryText = settings?.hero_cta_secondary_text || t("hero.ctaTryBrowser")
+  const ctaSecondaryLink = settings?.hero_cta_secondary_link || "/discovery"
+  const socialProofText = settings?.hero_social_proof_text || t("hero.socialProof")
 
   return (
-    <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-32 overflow-hidden">
-      {/* Background Glow */}
-      <div
-        className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-radial from-emerald-500/10 via-emerald-400/5 to-transparent blur-3xl pointer-events-none"
-        aria-hidden="true"
-      />
+    <section className="relative pt-24 pb-16 lg:pt-32 lg:pb-24 px-4 sm:px-6 lg:px-8 overflow-visible">
+      {/* Floating Plant Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-[10%] opacity-20 dark:opacity-10 animate-float">
+          <Leaf className="h-12 w-12 text-emerald-500 rotate-[-15deg]" />
+        </div>
+        <div className="absolute top-40 right-[15%] opacity-15 dark:opacity-10 animate-float-delayed">
+          <Flower2 className="h-16 w-16 text-pink-400 rotate-12" />
+        </div>
+        <div className="absolute bottom-32 left-[20%] opacity-20 dark:opacity-10 animate-float-slow">
+          <TreeDeciduous className="h-14 w-14 text-emerald-600 rotate-[-8deg]" />
+        </div>
+        <div className="absolute top-60 left-[5%] opacity-10 dark:opacity-5 animate-float-delayed">
+          <Sprout className="h-10 w-10 text-green-500" />
+        </div>
+        <div className="absolute bottom-20 right-[10%] opacity-15 dark:opacity-10 animate-float">
+          <Droplets className="h-8 w-8 text-blue-400" />
+        </div>
+      </div>
 
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left: Copy */}
-          <div className="text-center lg:text-left space-y-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-              <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+      <div className="relative max-w-7xl mx-auto">
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+          {/* Left: Hero Content */}
+          <div className="text-center lg:text-left space-y-8 animate-fade-in-up">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-sm">
+              <div className="relative">
+                <Sparkles className="h-4 w-4 text-emerald-500" />
+                <div className="absolute inset-0 animate-ping">
+                  <Sparkles className="h-4 w-4 text-emerald-500 opacity-50" />
+                </div>
+              </div>
               <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                {t("hero.badge")}
+                {badgeText}
               </span>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-[1.1]">
-              {t("hero.title")}{" "}
-              <span className="text-emerald-600 dark:text-emerald-400">
-                {t("hero.titleHighlight")}
-              </span>{" "}
-              {t("hero.titleEnd")}
+            {/* Headline */}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.1]">
+              <span className="text-stone-900 dark:text-white">{titleStart}</span>{" "}
+              <span className="gradient-text">{titleHighlight}</span>{" "}
+              <span className="text-stone-900 dark:text-white">{titleEnd}</span>
             </h1>
 
-            <p className="text-lg sm:text-xl text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed">
-              {t("hero.description")}
+            {/* Subheadline */}
+            <p className="text-lg sm:text-xl text-stone-600 dark:text-stone-300 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+              {description}
             </p>
 
+            {/* CTA Buttons - Enhanced with stronger visual emphasis */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <Link
-                to="/download"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-primary text-primary-foreground text-base font-semibold hover:opacity-90 transition-all"
+                to={ctaPrimaryLink}
+                className="group relative inline-flex items-center justify-center gap-3 px-10 py-5 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-500 to-teal-500 text-white text-lg font-bold overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-1 animate-gradient"
               >
-                <Leaf className="h-5 w-5" />
-                {t("hero.ctaDownload")}
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity animate-gradient" />
+                <Sparkles className="relative h-5 w-5" />
+                <span className="relative">{ctaPrimaryText}</span>
+                <ArrowRight className="relative h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link
-                to="/discovery"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-secondary text-secondary-foreground text-base font-semibold border border-border hover:bg-secondary/80 transition-all"
+                to={ctaSecondaryLink}
+                className="group inline-flex items-center justify-center gap-2 px-8 py-5 rounded-2xl bg-white/90 dark:bg-white/10 backdrop-blur-sm text-stone-900 dark:text-white text-base font-semibold border-2 border-emerald-500/30 dark:border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all duration-300 hover:-translate-y-0.5"
               >
-                {t("hero.ctaTryBrowser")}
-                <ArrowRight className="h-4 w-4" />
+                <Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                <span>{ctaSecondaryText}</span>
+                <ArrowRight className="h-4 w-4 text-emerald-600 dark:text-emerald-400 group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              {t("hero.socialProof")}
-            </p>
+            {/* Social Proof Pills */}
+            <div className="flex flex-wrap items-center gap-4 justify-center lg:justify-start pt-4">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/60 dark:bg-white/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10">
+                <div className="flex -space-x-2">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className={`h-6 w-6 rounded-full border-2 border-white dark:border-stone-800 ${['bg-emerald-400', 'bg-teal-400', 'bg-green-400', 'bg-lime-400'][i]}`} />
+                  ))}
+                </div>
+                <span className="text-sm text-stone-600 dark:text-stone-300">{socialProofText}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                ))}
+                <span className="text-sm font-medium text-stone-600 dark:text-stone-300 ml-1">4.9</span>
+              </div>
+            </div>
           </div>
 
-          {/* Right: Hero Card / Phone Mockup */}
-          <div className="relative flex justify-center lg:justify-end">
-            <HeroCard />
+          {/* Right: Hero Visual */}
+          <div className="relative flex justify-center lg:justify-end animate-scale-in" style={{ animationDelay: '0.2s' }}>
+            <HeroVisual />
           </div>
         </div>
       </div>
@@ -174,156 +678,404 @@ const HeroSection: React.FC = () => {
   )
 }
 
-const HeroCard: React.FC = () => {
+const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { heroCards: dbHeroCards } = useLandingData()
+  
+  // Start with a random card for variety across different page loads
+  const [activeCardIndex, setActiveCardIndex] = React.useState(() => 
+    dbHeroCards.length > 0 ? Math.floor(Math.random() * dbHeroCards.length) : 0
+  )
+
+  // Reset to random when cards are loaded
+  React.useEffect(() => {
+    if (dbHeroCards.length > 0) {
+      setActiveCardIndex(Math.floor(Math.random() * dbHeroCards.length))
+    }
+  }, [dbHeroCards.length])
+
+  // Use first hero card from database if available, otherwise use translation defaults
+  const activeCard = dbHeroCards[activeCardIndex] || null
+  const plantName = activeCard?.plant_name || t("heroCard.plantName")
+  const plantScientific = activeCard?.plant_scientific_name || t("heroCard.plantSubname")
+  const waterFrequency = activeCard?.water_frequency || t("heroCard.waterFrequency")
+  const lightLevel = activeCard?.light_level || t("heroCard.lightLevel")
+  const reminderText = activeCard?.reminder_text || t("heroCard.waterIn")
+  const imageUrl = activeCard?.image_url
+
+  // Auto-cycle through cards if multiple exist
+  React.useEffect(() => {
+    if (dbHeroCards.length <= 1) return
+    const interval = setInterval(() => {
+      setActiveCardIndex((prev) => (prev + 1) % dbHeroCards.length)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [dbHeroCards.length])
 
   return (
     <div className="relative">
-      {/* Glow behind card */}
-      <div
-        className="absolute inset-0 -m-8 bg-gradient-radial from-emerald-500/20 via-emerald-400/5 to-transparent blur-2xl"
-        aria-hidden="true"
-      />
+      {/* Glow Effects */}
+      <div className="absolute inset-0 -m-12 bg-gradient-to-br from-emerald-500/30 via-teal-500/20 to-green-500/30 rounded-full blur-3xl animate-pulse-glow" />
+      
+      {/* Main Phone Frame */}
+      <div className="relative w-[300px] sm:w-[340px] animate-float-slow">
+        <div className="relative bg-stone-900 dark:bg-stone-950 rounded-[3rem] p-3 shadow-2xl shadow-emerald-900/20">
+          {/* Screen */}
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-[#0f1a14] dark:to-[#0a1510] rounded-[2.5rem] overflow-hidden">
+            {/* Dynamic Island */}
+            <div className="h-10 flex items-center justify-center pt-2">
+              <div className="w-24 h-7 bg-stone-900 dark:bg-black rounded-full" />
+            </div>
 
-      {/* Phone Frame */}
-      <div className="relative w-[280px] sm:w-[320px] bg-card rounded-[3rem] p-3 shadow-2xl border border-border">
-        <div className="bg-secondary rounded-[2.5rem] overflow-hidden">
-          {/* Status bar */}
-          <div className="h-8 flex items-center justify-center">
-            <div className="w-20 h-5 bg-muted rounded-full" />
-          </div>
-
-          {/* Content */}
-          <div className="px-4 pb-6 space-y-4">
-            {/* Plant Image Placeholder */}
-            <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-emerald-500/10">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Leaf className="h-16 w-16 text-emerald-500/30" />
-              </div>
-              {/* Overlay info */}
-              <div className="absolute bottom-3 left-3 right-3">
-                <div className="bg-background/90 backdrop-blur-md rounded-xl p-3 space-y-1 border border-border">
-                  <p className="text-foreground font-semibold text-sm">{t("heroCard.plantName")}</p>
-                  <p className="text-muted-foreground text-xs italic">{t("heroCard.plantSubname")}</p>
+            {/* App Content */}
+            <div className="px-5 pb-8 space-y-4">
+              {/* Plant Image Area */}
+              <div className="relative aspect-[4/3] rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20">
+                {imageUrl ? (
+                  <img 
+                    src={imageUrl} 
+                    alt={plantName}
+                    className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
+                      <Leaf className="relative h-20 w-20 text-emerald-500/60" />
+                    </div>
+                  </div>
+                )}
+                {/* Plant Info Overlay */}
+                <div className="absolute bottom-3 left-3 right-3">
+                  <div className="glass-card rounded-2xl p-3 space-y-1 border border-white/30 dark:border-white/10">
+                    <p className="text-stone-900 dark:text-white font-semibold text-sm">{plantName}</p>
+                    <p className="text-stone-600 dark:text-stone-400 text-xs italic">{plantScientific}</p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Care Info Pills */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-background border border-border">
-                <Droplets className="h-4 w-4 text-blue-500" />
-                <span className="text-xs text-muted-foreground">{t("heroCard.waterFrequency")}</span>
+              {/* Care Pills */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-white/10 border border-stone-200/50 dark:border-white/10">
+                  <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                    <Droplets className="h-4 w-4 text-blue-500" />
+                  </div>
+                  <span className="text-xs text-stone-600 dark:text-stone-300">{waterFrequency}</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-white/10 border border-stone-200/50 dark:border-white/10">
+                  <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                    <Sun className="h-4 w-4 text-amber-500" />
+                  </div>
+                  <span className="text-xs text-stone-600 dark:text-stone-300">{lightLevel}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-background border border-border">
-                <Sun className="h-4 w-4 text-amber-500" />
-                <span className="text-xs text-muted-foreground">{t("heroCard.lightLevel")}</span>
-              </div>
-            </div>
 
-            {/* Reminder Pill */}
-            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-              <div className="h-8 w-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              {/* Reminder Card */}
+              <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20">
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center animate-bounce-subtle">
+                  <Bell className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 uppercase tracking-wide">{t("heroCard.nextReminder")}</p>
+                  <p className="text-sm font-semibold text-stone-900 dark:text-white">{reminderText}</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-emerald-500" />
               </div>
-              <div>
-                <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80">{t("heroCard.nextReminder")}</p>
-                <p className="text-sm font-medium text-foreground">{t("heroCard.waterIn")}</p>
-              </div>
+
+              {/* Card Indicators - show if multiple cards */}
+              {dbHeroCards.length > 1 && (
+                <div className="flex justify-center gap-1.5 pt-2">
+                  {dbHeroCards.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveCardIndex(i)}
+                      className={`h-1.5 rounded-full transition-all ${
+                        i === activeCardIndex 
+                          ? 'w-6 bg-emerald-500' 
+                          : 'w-1.5 bg-stone-300 dark:bg-stone-600 hover:bg-stone-400'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Floating elements */}
-      <div className="absolute -top-4 -right-4 px-3 py-2 rounded-xl bg-card shadow-lg border border-border animate-float-slow">
+      {/* Floating Cards */}
+      <div className="absolute -top-4 -left-8 px-4 py-3 rounded-2xl glass-card shadow-lg border border-white/30 dark:border-white/10 animate-float" style={{ animationDelay: '0.5s' }}>
         <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-full bg-emerald-500/20 flex items-center justify-center">
-            <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          <div className="h-8 w-8 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <span className="text-xs font-medium text-foreground">{t("heroCard.careLogged")}</span>
+          <span className="text-sm font-medium text-stone-900 dark:text-white">{t("heroCard.careLogged")}</span>
+        </div>
+      </div>
+
+      <div className="absolute -bottom-2 -right-6 px-4 py-3 rounded-2xl glass-card shadow-lg border border-white/30 dark:border-white/10 animate-float-delayed">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-xl bg-pink-500/20 flex items-center justify-center">
+            <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />
+          </div>
+          <span className="text-sm font-medium text-stone-900 dark:text-white">+42 today</span>
         </div>
       </div>
     </div>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   FEATURES SECTION
-   ───────────────────────────────────────────────────────────────────────────── */
-const colorMap = {
-  emerald: "bg-emerald-500",
-  blue: "bg-blue-500",
-  purple: "bg-purple-500",
-  pink: "bg-pink-500",
-  amber: "bg-amber-500",
-  teal: "bg-teal-500",
-} as const
-
-const FeaturesSection: React.FC = () => {
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STATS BANNER - Animated Counter Section
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const StatsBanner: React.FC = () => {
   const { t } = useTranslation("Landing")
-
-  const features = [
-    {
-      icon: BookMarked,
-      titleKey: "features.smartLibrary.title",
-      descKey: "features.smartLibrary.description",
-      color: "emerald" as const,
+  const { stats: dbStats } = useLandingData()
+  
+  // Use database values if available, otherwise fallback to translations
+  const stats = [
+    { 
+      value: dbStats?.plants_count || "10K+", 
+      label: dbStats?.plants_label || t("stats.plants", { defaultValue: "Plant Species" }), 
+      icon: Leaf 
     },
-    {
-      icon: Bell,
-      titleKey: "features.careReminders.title",
-      descKey: "features.careReminders.description",
-      color: "blue" as const,
+    { 
+      value: dbStats?.users_count || "50K+", 
+      label: dbStats?.users_label || t("stats.users", { defaultValue: "Happy Gardeners" }), 
+      icon: Users 
     },
-    {
-      icon: BookMarked,
-      titleKey: "features.collections.title",
-      descKey: "features.collections.description",
-      color: "purple" as const,
+    { 
+      value: dbStats?.tasks_count || "100K+", 
+      label: dbStats?.tasks_label || t("stats.tasks", { defaultValue: "Care Tasks Done" }), 
+      icon: Check 
     },
-    {
-      icon: Camera,
-      titleKey: "features.plantId.title",
-      descKey: "features.plantId.description",
-      color: "pink" as const,
-    },
-    {
-      icon: NotebookPen,
-      titleKey: "features.journal.title",
-      descKey: "features.journal.description",
-      color: "amber" as const,
-    },
-    {
-      icon: Wifi,
-      titleKey: "features.pwa.title",
-      descKey: "features.pwa.description",
-      color: "teal" as const,
+    { 
+      value: dbStats?.rating_value || "4.9", 
+      label: dbStats?.rating_label || t("stats.rating", { defaultValue: "App Store Rating" }), 
+      icon: Star 
     },
   ]
 
   return (
-    <section id="features" className="py-20 lg:py-32 scroll-mt-20">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="relative py-12 lg:py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
+      <div className="max-w-7xl mx-auto">
+        <div className="relative rounded-3xl bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 p-[1px]">
+          <div className="rounded-3xl bg-white/95 dark:bg-stone-950/95 backdrop-blur-xl px-8 py-10 lg:px-12">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+              {stats.map((stat, i) => (
+                <div key={i} className="text-center group">
+                  <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-500/10 mb-4 group-hover:scale-110 transition-transform">
+                    <stat.icon className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div className="text-3xl lg:text-4xl font-bold text-stone-900 dark:text-white mb-1">
+                    {stat.value}
+                  </div>
+                  <div className="text-sm text-stone-600 dark:text-stone-400">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   BEGINNER FRIENDLY SECTION - New Gardeners Welcome
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const BeginnerFriendlySection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+  const { settings } = useLandingData()
+
+  // Use settings if available, otherwise fall back to translations
+  const badge = settings?.beginner_badge || t("beginner.badge", { defaultValue: "Perfect for Beginners" })
+  const title = settings?.beginner_title || t("beginner.title", { defaultValue: "Know Nothing About Gardening?" })
+  const titleHighlight = settings?.beginner_title_highlight || t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })
+  const subtitle = settings?.beginner_subtitle || t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany." })
+
+  const beginnerFeatures = [
+    {
+      icon: GraduationCap,
+      title: t("beginner.feature1Title", { defaultValue: "Learn as You Grow" }),
+      description: t("beginner.feature1Desc", { defaultValue: "No gardening experience? No problem! Our app teaches you everything step by step." }),
+      color: "emerald",
+    },
+    {
+      icon: Sparkles,
+      title: t("beginner.feature2Title", { defaultValue: "Your Plant Assistant" }),
+      description: t("beginner.feature2Desc", { defaultValue: "Not sure what's wrong? Just ask Aphylia - your friendly assistant that explains plant care in simple terms." }),
+      color: "purple",
+    },
+    {
+      icon: Bell,
+      title: t("beginner.feature3Title", { defaultValue: "Never Forget to Water" }),
+      description: t("beginner.feature3Desc", { defaultValue: "Get gentle reminders exactly when your plants need attention. We'll help you build the habit." }),
+      color: "blue",
+    },
+    {
+      icon: Camera,
+      title: t("beginner.feature4Title", { defaultValue: "Identify Any Plant" }),
+      description: t("beginner.feature4Desc", { defaultValue: "Found a plant but don't know what it is? Snap a photo and we'll tell you everything about it." }),
+      color: "pink",
+    },
+  ]
+
+  return (
+    <section className="py-20 lg:py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/4 -left-20 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 -right-20 w-80 h-80 bg-teal-500/5 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative max-w-7xl mx-auto">
+        {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
+            <Sprout className="h-4 w-4 text-emerald-500" />
+            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+              {badge}
+            </span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
+            {title}
+            <br />
+            <span className="gradient-text">{titleHighlight}</span>
+          </h2>
+          <p className="text-lg sm:text-xl text-stone-600 dark:text-stone-400 leading-relaxed">
+            {subtitle}
+          </p>
+        </div>
+
+        {/* Feature Cards */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {beginnerFeatures.map((feature, i) => (
+            <div
+              key={i}
+              className="group relative rounded-3xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5"
+            >
+              <div className={`h-14 w-14 rounded-2xl bg-${feature.color}-500/10 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
+                <feature.icon className={`h-7 w-7 text-${feature.color}-500`} />
+              </div>
+              <h3 className="text-lg font-bold text-stone-900 dark:text-white mb-2">
+                {feature.title}
+              </h3>
+              <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed">
+                {feature.description}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom CTA */}
+        <div className="mt-12 text-center">
+          <div className="inline-flex flex-col sm:flex-row items-center gap-4 p-6 rounded-2xl bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-green-500/5 border border-emerald-500/10">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                <Heart className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="text-left">
+                <p className="font-semibold text-stone-900 dark:text-white">
+                  {t("beginner.ctaTitle", { defaultValue: "Join thousands of first-time plant parents" })}
+                </p>
+                <p className="text-sm text-stone-600 dark:text-stone-400">
+                  {t("beginner.ctaSubtitle", { defaultValue: "Start your green journey today — we'll guide you every step of the way" })}
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/discovery"
+              className="flex-shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20"
+            >
+              {t("beginner.ctaButton", { defaultValue: "Get Started Free" })}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   FEATURES SECTION - Bento Grid Style
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const FeaturesSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
+  return (
+    <section id="features" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+      <div className="max-w-7xl mx-auto">
+        {/* Section Header */}
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
+            <Zap className="h-4 w-4 text-emerald-500" />
+            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+              {t("features.badge", { defaultValue: "Powerful Features" })}
+            </span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("features.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("features.subtitle")}
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature, i) => (
-            <FeatureCard
-              key={i}
-              icon={feature.icon}
-              title={t(feature.titleKey)}
-              description={t(feature.descKey)}
-              color={feature.color}
-            />
-          ))}
+        {/* Bento Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+          {/* Large Feature Card */}
+          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/20 p-8 overflow-hidden hover:border-emerald-500/40 transition-all duration-500">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-colors" />
+            <div className="relative">
+              <div className="inline-flex h-14 w-14 rounded-2xl bg-emerald-500 items-center justify-center mb-6 shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform">
+                <BookMarked className="h-7 w-7 text-white" />
+              </div>
+              <h3 className="text-2xl font-bold text-stone-900 dark:text-white mb-3">{t("features.smartLibrary.title")}</h3>
+              <p className="text-stone-600 dark:text-stone-400 text-base leading-relaxed max-w-lg">{t("features.smartLibrary.description")}</p>
+              
+              {/* Mini preview */}
+              <div className="mt-8 flex gap-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-16 w-16 rounded-xl bg-gradient-to-br from-emerald-400/20 to-teal-400/20 border border-emerald-500/20 flex items-center justify-center">
+                    <Leaf className="h-6 w-6 text-emerald-500/50" />
+                  </div>
+                ))}
+                <div className="h-16 w-16 rounded-xl bg-stone-100 dark:bg-white/5 border border-stone-200 dark:border-white/10 flex items-center justify-center">
+                  <span className="text-sm font-medium text-stone-400">+10K</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Regular Feature Cards */}
+          <FeatureCard icon={Bell} title={t("features.careReminders.title")} description={t("features.careReminders.description")} gradient="from-blue-500/10 to-indigo-500/10" iconBg="bg-blue-500" />
+          <FeatureCard icon={Camera} title={t("features.plantId.title")} description={t("features.plantId.description")} gradient="from-pink-500/10 to-rose-500/10" iconBg="bg-pink-500" />
+          <FeatureCard icon={NotebookPen} title={t("features.journal.title")} description={t("features.journal.description")} gradient="from-amber-500/10 to-orange-500/10" iconBg="bg-amber-500" />
+          
+          {/* Wide Feature Card */}
+          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-r from-purple-500/10 via-violet-500/5 to-transparent border border-purple-500/20 p-8 overflow-hidden hover:border-purple-500/40 transition-all duration-500">
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <div className="inline-flex h-14 w-14 rounded-2xl bg-purple-500 items-center justify-center shadow-lg shadow-purple-500/30 group-hover:scale-110 transition-transform flex-shrink-0">
+                <Wifi className="h-7 w-7 text-white" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-stone-900 dark:text-white mb-2">{t("features.pwa.title")}</h3>
+                <p className="text-stone-600 dark:text-stone-400">{t("features.pwa.description")}</p>
+              </div>
+              <div className="flex gap-3 md:ml-auto">
+                <div className="h-12 w-12 rounded-xl bg-white dark:bg-white/10 border border-stone-200 dark:border-white/10 flex items-center justify-center">
+                  <Smartphone className="h-5 w-5 text-stone-600 dark:text-stone-300" />
+                </div>
+                <div className="h-12 w-12 rounded-xl bg-white dark:bg-white/10 border border-stone-200 dark:border-white/10 flex items-center justify-center">
+                  <Globe className="h-5 w-5 text-stone-600 dark:text-stone-300" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <FeatureCard icon={BookMarked} title={t("features.collections.title")} description={t("features.collections.description")} gradient="from-teal-500/10 to-cyan-500/10" iconBg="bg-teal-500" />
         </div>
       </div>
     </section>
@@ -334,67 +1086,182 @@ const FeatureCard: React.FC<{
   icon: React.ElementType
   title: string
   description: string
-  color: keyof typeof colorMap
-}> = ({ icon: Icon, title, description, color }) => {
-  return (
-    <div className="group relative rounded-2xl border border-border bg-card p-6 hover:border-emerald-500/30 hover:bg-card/80 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-      {/* Icon */}
-      <div
-        className={`inline-flex h-12 w-12 rounded-xl ${colorMap[color]} items-center justify-center mb-4`}
-      >
-        <Icon className="h-6 w-6 text-white" />
-      </div>
-
-      <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
-      <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
+  gradient: string
+  iconBg: string
+}> = ({ icon: Icon, title, description, gradient, iconBg }) => (
+  <div className={`group relative rounded-3xl bg-gradient-to-br ${gradient} border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl`}>
+    <div className={`inline-flex h-12 w-12 rounded-xl ${iconBg} items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
+      <Icon className="h-6 w-6 text-white" />
     </div>
+    <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">{title}</h3>
+    <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed">{description}</p>
+  </div>
+)
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   INTERACTIVE DEMO SECTION
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const InteractiveDemoSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+  const { circleFeatures: dbFeatures } = useLandingData()
+  const [activeFeature, setActiveFeature] = React.useState(0)
+
+  // Default features - 8 features for a fuller circle
+  const defaultFeatures = [
+    { icon: Leaf, label: t("demo.discover", { defaultValue: "Discover Plants" }), color: "emerald" },
+    { icon: Clock, label: t("demo.schedule", { defaultValue: "Schedule Care" }), color: "blue" },
+    { icon: TrendingUp, label: t("demo.track", { defaultValue: "Track Growth" }), color: "purple" },
+    { icon: Shield, label: t("demo.protect", { defaultValue: "Get Alerts" }), color: "rose" },
+    { icon: Camera, label: t("demo.identify", { defaultValue: "Identify Plants" }), color: "pink" },
+    { icon: NotebookPen, label: t("demo.journal", { defaultValue: "Keep Journal" }), color: "amber" },
+    { icon: Users, label: t("demo.community", { defaultValue: "Join Community" }), color: "teal" },
+    { icon: Sparkles, label: t("demo.assistant", { defaultValue: "Smart Assistant" }), color: "indigo" },
+  ]
+
+  // Use database features if available, otherwise use defaults
+  const features = dbFeatures.length > 0 
+    ? dbFeatures.map(f => ({
+        icon: iconMap[f.icon_name] || Leaf,
+        label: f.title,
+        color: f.color,
+      }))
+    : defaultFeatures
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveFeature((prev) => (prev + 1) % features.length)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [features.length])
+
+  return (
+    <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-50/30 to-transparent dark:via-emerald-950/20">
+      <div className="max-w-7xl mx-auto">
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+          {/* Left: Demo Visual */}
+          <div className="relative order-2 lg:order-1">
+            <div className="relative aspect-square max-w-md mx-auto">
+              {/* Center Circle */}
+              <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30" />
+              <div className="absolute inset-[25%] rounded-full bg-white dark:bg-stone-900 shadow-2xl shadow-emerald-500/20 flex items-center justify-center">
+                <div className="text-center p-4 sm:p-6">
+                  {features[activeFeature] && (
+                    <>
+                      <div className={`inline-flex h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-${features[activeFeature].color}-500 items-center justify-center mb-3`}>
+                        {React.createElement(features[activeFeature].icon, { className: "h-7 w-7 sm:h-8 sm:w-8 text-white" })}
+                      </div>
+                      <p className="text-xs sm:text-sm font-medium text-stone-900 dark:text-white">{features[activeFeature].label}</p>
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              {/* Orbiting Elements */}
+              <div className="absolute inset-0 animate-spin-slow">
+                {features.map((feature, i) => {
+                  const angleStep = 360 / features.length
+                  const angle = (i * angleStep - 90) * (Math.PI / 180) // Start from top
+                  const x = 50 + 42 * Math.cos(angle)
+                  const y = 50 + 42 * Math.sin(angle)
+                  const IconComponent = feature.icon
+                  const colorClass = `bg-${feature.color}-500`
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setActiveFeature(i)}
+                      style={{ left: `${x}%`, top: `${y}%` }}
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                        activeFeature === i 
+                          ? `${colorClass} scale-110 shadow-lg` 
+                          : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:scale-105'
+                      }`}
+                    >
+                      <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${activeFeature === i ? 'text-white' : 'text-stone-600 dark:text-stone-400'}`} />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Content */}
+          <div className="order-1 lg:order-2 text-center lg:text-left">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
+              {t("demo.title", { defaultValue: "Your Complete Plant Care Companion" })}
+            </h2>
+            <p className="text-lg text-stone-600 dark:text-stone-400 mb-8 max-w-lg mx-auto lg:mx-0">
+              {t("demo.description", { defaultValue: "From discovery to daily care, we've got everything you need to help your plants thrive." })}
+            </p>
+            
+            {/* Feature Tabs */}
+            <div className="flex flex-wrap gap-3 justify-center lg:justify-start">
+              {features.map((feature, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveFeature(i)}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 ${
+                    activeFeature === i
+                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                      : 'bg-white dark:bg-white/10 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-white/10 hover:border-emerald-500/30'
+                  }`}
+                >
+                  <feature.icon className="h-4 w-4" />
+                  <span className="text-sm font-medium">{feature.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   HOW IT WORKS
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   HOW IT WORKS - Redesigned
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const HowItWorksSection: React.FC = () => {
   const { t } = useTranslation("Landing")
 
   const steps = [
-    { num: 1, titleKey: "howItWorks.step1.title", descKey: "howItWorks.step1.description" },
-    { num: 2, titleKey: "howItWorks.step2.title", descKey: "howItWorks.step2.description" },
-    { num: 3, titleKey: "howItWorks.step3.title", descKey: "howItWorks.step3.description" },
+    { num: 1, icon: Camera, titleKey: "howItWorks.step1.title", descKey: "howItWorks.step1.description" },
+    { num: 2, icon: BookMarked, titleKey: "howItWorks.step2.title", descKey: "howItWorks.step2.description" },
+    { num: 3, icon: Sparkles, titleKey: "howItWorks.step3.title", descKey: "howItWorks.step3.description" },
   ]
 
   return (
-    <section
-      id="how-it-works"
-      className="py-20 lg:py-32 bg-secondary/30 scroll-mt-20"
-    >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="how-it-works" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+      <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("howItWorks.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("howItWorks.subtitle")}
           </p>
         </div>
 
         <div className="relative">
-          {/* Connecting line (desktop) */}
-          <div
-            className="hidden lg:block absolute top-1/2 left-[16%] right-[16%] h-0.5 bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400"
-            aria-hidden="true"
-          />
+          {/* Connecting Line */}
+          <div className="hidden lg:block absolute top-24 left-[calc(16.67%+24px)] right-[calc(16.67%+24px)] h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 rounded-full" />
 
           <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
             {steps.map((step, i) => (
-              <div key={i} className="relative text-center">
-                {/* Number badge */}
-                <div className="relative z-10 mx-auto mb-6 h-16 w-16 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg">
-                  <span className="text-2xl font-bold text-white">{step.num}</span>
+              <div key={i} className="relative text-center group">
+                {/* Step Number with Icon */}
+                <div className="relative z-10 mx-auto mb-8">
+                  <div className="relative inline-flex">
+                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-xl shadow-emerald-500/30 group-hover:scale-110 transition-transform">
+                      <step.icon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-white dark:bg-stone-900 border-2 border-emerald-500 flex items-center justify-center">
+                      <span className="text-sm font-bold text-emerald-600">{step.num}</span>
+                    </div>
+                  </div>
                 </div>
 
-                <h3 className="text-xl font-semibold text-foreground mb-2">{t(step.titleKey)}</h3>
-                <p className="text-muted-foreground text-sm max-w-xs mx-auto">{t(step.descKey)}</p>
+                <h3 className="text-xl font-bold text-stone-900 dark:text-white mb-3">{t(step.titleKey)}</h3>
+                <p className="text-stone-600 dark:text-stone-400 max-w-xs mx-auto">{t(step.descKey)}</p>
               </div>
             ))}
           </div>
@@ -404,76 +1271,555 @@ const HowItWorksSection: React.FC = () => {
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   SHOWCASE SECTION
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SHOWCASE SECTION - Realistic UI Previews matching actual app components
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const ShowcaseSection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { showcaseCards, showcaseGardens } = useLandingData()
+
+  // Default chart data for analytics preview
+  const chartData = [
+    { day: 'M', completed: 3, due: 4 },
+    { day: 'T', completed: 5, due: 5 },
+    { day: 'W', completed: 2, due: 4 },
+    { day: 'T', completed: 6, due: 6 },
+    { day: 'F', completed: 4, due: 5 },
+    { day: 'S', completed: 5, due: 5 },
+    { day: 'S', completed: 6, due: 6 },
+  ]
+
+  // Find specific card types from database
+  const mainCard = showcaseCards.find(c => c.card_type === 'main' || c.card_type === 'garden')
+  const analyticsCard = showcaseCards.find(c => c.card_type === 'analytics')
+  const tasksCard = showcaseCards.find(c => c.card_type === 'tasks')
+
+  // Get selected gardens for the main card
+  const selectedGardenIds = mainCard?.selected_garden_ids || []
+  const selectedGardens = selectedGardenIds
+    .map(id => showcaseGardens.find(g => g.id === id))
+    .filter((g): g is ShowcaseGarden => g !== undefined)
+
+  // Helper to render a single real garden card
+  const renderRealGardenCard = (garden: ShowcaseGarden, _index: number, isLarge: boolean = true) => {
+    const gardenName = garden.name
+    const plantsCount = garden.plantCount
+    const streakCount = garden.streak
+    const coverImage = garden.coverImageUrl
+    const previewPlants = garden.previewPlants
+    const progressPercent = 85 // Default progress for display
+
+    return (
+      <Link
+        key={garden.id}
+        to={`/garden/${garden.id}`}
+        className={`group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 block ${
+          isLarge ? 'md:col-span-2 md:row-span-2' : ''
+        }`}
+      >
+        {/* Hero Section with cover image */}
+        <div className="relative overflow-hidden">
+          {coverImage ? (
+            <>
+              <div className="absolute inset-0">
+                <img src={coverImage} alt={gardenName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+              </div>
+              <div className={`relative z-10 p-6 ${isLarge ? 'md:p-8 min-h-[200px]' : 'min-h-[140px]'} flex flex-col justify-end`}>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                  <div className="space-y-3">
+                    <h3 className={`${isLarge ? 'text-2xl md:text-3xl' : 'text-xl'} font-bold text-white drop-shadow-lg`}>
+                      {gardenName}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                        <span className="text-base">🌱</span>
+                        <span className="font-semibold text-white text-sm">{plantsCount}</span>
+                        <span className="text-xs text-white/80">plants</span>
+                      </div>
+                      {streakCount > 0 && (
+                        <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                          <span className="text-base">🔥</span>
+                          <span className="font-semibold text-white text-sm">{streakCount}</span>
+                          <span className="text-xs text-white/80">day streak</span>
+                        </div>
+                      )}
+                    </div>
+                    {garden.ownerDisplayName && (
+                      <div className="text-xs text-white/70">by {garden.ownerDisplayName}</div>
+                    )}
+                  </div>
+                  {isLarge && (
+                    <div className="flex items-center gap-3">
+                      <div className="relative w-16 h-16">
+                        <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                          <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
+                          <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-lg" />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-lg font-bold text-white">{progressPercent}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
+              <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
+              <div className={`relative z-10 p-6 ${isLarge ? 'md:p-8' : ''}`}>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="space-y-3">
+                    <h3 className={`${isLarge ? 'text-2xl md:text-3xl' : 'text-xl'} font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent`}>
+                      {gardenName}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
+                        <span className="text-base">🌱</span>
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">{plantsCount}</span>
+                        <span className="text-xs text-stone-600 dark:text-stone-300">plants</span>
+                      </div>
+                      {streakCount > 0 && (
+                        <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
+                          <span className="text-base">🔥</span>
+                          <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{streakCount}</span>
+                          <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
+                        </div>
+                      )}
+                    </div>
+                    {garden.ownerDisplayName && (
+                      <div className="text-xs text-stone-500 dark:text-stone-400">by {garden.ownerDisplayName}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Plants Gallery - Show real plant images */}
+        {isLarge && (
+          <div className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
+                <span>🌿</span> Plants in Garden
+              </h4>
+              <span className="text-xs text-stone-500">{plantsCount} plants</span>
+            </div>
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+              {previewPlants.length > 0 ? (
+                previewPlants.slice(0, 6).map((plant) => (
+                  <div key={plant.id} className="relative aspect-square rounded-2xl overflow-hidden group/plant border border-stone-200/50 dark:border-stone-700/50">
+                    {plant.imageUrl ? (
+                      <img src={plant.imageUrl} alt={plant.nickname || plant.name} className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+                        <Leaf className="h-6 w-6 text-white/60" />
+                      </div>
+                    )}
+                    {plant.nickname && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                        <span className="text-[9px] text-white font-medium truncate block">{plant.nickname}</span>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                [1, 2, 3, 4, 5, 6].map((_, i) => (
+                  <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
+                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+                      <Leaf className="h-6 w-6 text-white/60" />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Badge */}
+        <div className="absolute top-3 left-3">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
+            <Globe className="h-3 w-3" />
+            Public Garden
+          </span>
+        </div>
+      </Link>
+    )
+  }
+
+  // Helper to render a manual garden card (fallback when no gardens selected)
+  const renderManualGardenCard = (card: ShowcaseCard | undefined) => {
+    const gardenName = card?.garden_name || "My Indoor Jungle"
+    const plantsCount = card?.plants_count || 12
+    const speciesCount = card?.species_count || 8
+    const streakCount = card?.streak_count || 7
+    const progressPercent = card?.progress_percent || 85
+    const coverImage = card?.cover_image_url
+    const plantImages = card?.plant_images || []
+
+    return (
+      <div className="md:col-span-2 md:row-span-2 group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]">
+        {/* Hero Section with optional cover image */}
+        <div className="relative overflow-hidden">
+          {coverImage ? (
+            <>
+              <div className="absolute inset-0">
+                <img src={coverImage} alt={gardenName} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+              </div>
+              <div className="relative z-10 p-6 md:p-8 min-h-[200px] flex flex-col justify-end">
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                  <div className="space-y-3">
+                    <h3 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                      {gardenName}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                        <span className="text-base">🌱</span>
+                        <span className="font-semibold text-white text-sm">{plantsCount}</span>
+                        <span className="text-xs text-white/80">plants</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                        <span className="text-base">🔥</span>
+                        <span className="font-semibold text-white text-sm">{streakCount}</span>
+                        <span className="text-xs text-white/80">day streak</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                        <span className="text-base">🌿</span>
+                        <span className="font-semibold text-white text-sm">{speciesCount}</span>
+                        <span className="text-xs text-white/80">species</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Progress Ring */}
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-16 h-16">
+                      <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                        <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
+                        <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-lg" />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-lg font-bold text-white">{progressPercent}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
+              <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
+              <div className="relative z-10 p-6 md:p-8">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="space-y-3">
+                    <h3 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+                      {gardenName}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
+                        <span className="text-base">🌱</span>
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">{plantsCount}</span>
+                        <span className="text-xs text-stone-600 dark:text-stone-300">plants</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
+                        <span className="text-base">🔥</span>
+                        <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{streakCount}</span>
+                        <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-stone-200/50 dark:border-stone-500/20">
+                        <span className="text-base">🌿</span>
+                        <span className="font-semibold text-stone-700 dark:text-stone-300 text-sm">{speciesCount}</span>
+                        <span className="text-xs text-stone-600 dark:text-stone-300">species</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-16 h-16">
+                      <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                        <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" className="text-stone-200 dark:text-stone-700" strokeWidth="6" />
+                        <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-sm" />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{progressPercent}%</span>
+                      </div>
+                    </div>
+                    <div className="hidden sm:block">
+                      <div className="text-xs text-stone-500 dark:text-stone-400">Today's progress</div>
+                      <div className="font-semibold text-stone-700 dark:text-stone-200 text-sm">{Math.round(plantsCount * progressPercent / 100)}/{plantsCount} tasks</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Plants Gallery */}
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
+              <span>🌿</span> Plants in Garden
+            </h4>
+            <span className="text-xs text-stone-500">{plantsCount} plants</span>
+          </div>
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+            {plantImages.length > 0 ? (
+              // Use real plant images from database
+              plantImages.slice(0, 6).map((plant, i) => (
+                <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
+                  <img src={plant.url} alt={plant.name} className="w-full h-full object-cover" />
+                  {i < 2 && (
+                    <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">
+                      {i + 1}
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              // Fallback gradient plants
+              [
+                { color: 'from-emerald-400 to-teal-500' },
+                { color: 'from-green-400 to-emerald-500' },
+                { color: 'from-lime-400 to-green-500' },
+                { color: 'from-teal-400 to-cyan-500' },
+                { color: 'from-emerald-500 to-green-600' },
+                { color: 'from-green-500 to-teal-600' },
+              ].map((plant, i) => (
+                <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
+                  <div className={`absolute inset-0 bg-gradient-to-br ${plant.color}`}>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Leaf className="h-6 w-6 text-white/60" />
+                    </div>
+                  </div>
+                  {i < 2 && (
+                    <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">
+                      {i + 1}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Badge */}
+        <div className="absolute top-3 left-3">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
+            <Globe className="h-3 w-3" />
+            {card?.badge_text || "Garden Dashboard"}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // Render garden cards - use selected gardens if available, otherwise fall back to manual
+  const renderGardenShowcase = () => {
+    if (selectedGardens.length > 0) {
+      // Show selected real gardens
+      if (selectedGardens.length === 1) {
+        // Single garden - show large
+        return renderRealGardenCard(selectedGardens[0], 0, true)
+      } else {
+        // Multiple gardens - show in a grid
+        return (
+          <div className="md:col-span-2 md:row-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {selectedGardens.slice(0, 4).map((garden, i) => (
+              <div key={garden.id} className={i === 0 ? 'md:col-span-2' : ''}>
+                {renderRealGardenCard(garden, i, i === 0)}
+              </div>
+            ))}
+          </div>
+        )
+      }
+    }
+    // Fall back to manual card
+    return renderManualGardenCard(mainCard)
+  }
 
   return (
-    <section className="py-20 lg:py-32 overflow-hidden">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-stone-100/50 to-transparent dark:via-stone-900/30">
+      <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("showcase.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("showcase.subtitle")}
           </p>
         </div>
 
-        {/* Showcase Grid */}
-        <div className="relative">
-          {/* Background glow */}
-          <div
-            className="absolute inset-0 -m-20 bg-gradient-radial from-emerald-500/5 to-transparent blur-3xl pointer-events-none"
-            aria-hidden="true"
-          />
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Garden Dashboard Card(s) - uses selected real gardens or manual fallback */}
+          {renderGardenShowcase()}
 
-          <div className="relative grid md:grid-cols-3 gap-6">
-            {/* Main card */}
-            <div className="md:col-span-2 md:row-span-2 rounded-3xl bg-card border border-border p-8 overflow-hidden relative group">
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgxMjgsMTI4LDEyOCwwLjA1KSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-50" />
-              <div className="relative h-full min-h-[300px] flex flex-col justify-end">
-                <div className="absolute top-4 right-4">
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium border border-emerald-500/20">
-                    {t("showcase.dashboardPreview")}
-                  </span>
+          {/* Tasks Card */}
+          <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="h-12 w-12 rounded-xl bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
+                <Droplets className="h-6 w-6 text-white" />
+              </div>
+              <span className="px-2 py-1 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-medium">
+                {tasksCard?.badge_text || t("showcase.tasksText", { defaultValue: "3 plants need attention" })}
+              </span>
+            </div>
+            <p className="font-semibold text-stone-900 dark:text-white mb-3">{tasksCard?.title || t("showcase.tasksReminder", { defaultValue: "Today's Tasks" })}</p>
+            
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                <span className="text-xs text-stone-600 dark:text-stone-400 line-through">{t("showcase.taskWater", { defaultValue: "Water your Pothos" })}</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
+                <CircleDot className="h-4 w-4 text-blue-500" />
+                <span className="text-xs text-stone-700 dark:text-stone-300">{t("showcase.taskFertilize", { defaultValue: "Fertilize Monstera" })}</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
+                <CircleDot className="h-4 w-4 text-blue-500" />
+                <span className="text-xs text-stone-700 dark:text-stone-300">{t("showcase.taskMist", { defaultValue: "Mist your Fern" })}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Analytics Card */}
+          <div className="group rounded-[28px] bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur border border-stone-200/70 dark:border-[#3e3e42]/70 p-5 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-emerald-500" />
+                <span className="font-semibold text-stone-900 dark:text-white text-sm">{analyticsCard?.title || t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</span>
+              </div>
+              <div className="flex bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5">
+                <span className="px-2 py-1 text-[10px] font-medium rounded-md bg-white dark:bg-stone-700 shadow-sm text-emerald-600 dark:text-emerald-400">Overview</span>
+                <span className="px-2 py-1 text-[10px] font-medium text-stone-500">Tasks</span>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="rounded-[20px] bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-3 relative overflow-hidden border border-stone-200/50 dark:border-stone-700/50">
+                <div className="absolute -right-3 -top-3 w-16 h-16 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-2xl" />
+                <div className="relative">
+                  <div className="flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-300 mb-1">
+                    <Target className="w-3 h-3" />
+                    <span>Completion Rate</span>
+                  </div>
+                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{analyticsCard?.progress_percent || 92}%</div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <TrendingUp className="w-3 h-3 text-emerald-500" />
+                    <span className="text-[10px] text-emerald-500">+8%</span>
+                    <span className="text-[9px] text-stone-400">vs last week</span>
+                  </div>
                 </div>
-                <div className="space-y-4">
-                  <h3 className="text-2xl font-bold text-foreground">{t("showcase.dashboardTitle")}</h3>
-                  <p className="text-muted-foreground max-w-md">
-                    {t("showcase.dashboardDescription")}
-                  </p>
+              </div>
+              
+              <div className="rounded-[20px] bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 p-3 relative overflow-hidden border border-stone-200/50 dark:border-stone-700/50">
+                <div className="absolute -right-3 -top-3 w-16 h-16 bg-orange-200/30 dark:bg-orange-500/10 rounded-full blur-2xl" />
+                <div className="relative">
+                  <div className="flex items-center gap-1 text-[10px] text-orange-700 dark:text-orange-300 mb-1">
+                    <Flame className="w-3 h-3" />
+                    <span>Current Streak</span>
+                  </div>
+                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{analyticsCard?.streak_count || 14}</div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">Best: 21 days</div>
                 </div>
               </div>
             </div>
 
-            {/* Small cards */}
-            <div className="rounded-2xl bg-blue-500/10 border border-blue-500/20 p-6 flex flex-col justify-between">
-              <Droplets className="h-8 w-8 text-blue-500 mb-4" />
-              <div>
-                <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">{t("showcase.wateringReminder")}</p>
-                <p className="text-xs text-blue-600/70 dark:text-blue-400/70">{t("showcase.wateringText")}</p>
+            <div className="rounded-[20px] bg-stone-50 dark:bg-stone-800/50 p-3 border border-stone-200/50 dark:border-stone-700/50">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] text-stone-600 dark:text-stone-400 flex items-center gap-1 font-medium">
+                  <Calendar className="w-3 h-3" />
+                  Activity History
+                </span>
+                <span className="text-[9px] text-stone-400">Last 7 days</span>
+              </div>
+              
+              <div className="relative h-20">
+                <svg viewBox="0 0 280 80" className="w-full h-full" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M 0,50 L 40,35 L 80,55 L 120,20 L 160,40 L 200,25 L 240,15 L 280,10 L 280,80 L 0,80 Z" fill="url(#areaGradient)" />
+                  <path d="M 0,50 L 40,35 L 80,55 L 120,20 L 160,40 L 200,25 L 240,15 L 280,10" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  {[[0, 50], [40, 35], [80, 55], [120, 20], [160, 40], [200, 25], [240, 15], [280, 10]].map(([x, y], i) => (
+                    <circle key={i} cx={x} cy={y} r="3" fill="#10b981" className="drop-shadow-sm" />
+                  ))}
+                </svg>
+                <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1 -mb-4">
+                  {chartData.map((d, i) => (
+                    <span key={i} className="text-[8px] text-stone-400">{d.day}</span>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-6 flex flex-col justify-between">
-              <Sun className="h-8 w-8 text-amber-500 mb-4" />
-              <div>
-                <p className="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">{t("showcase.lightCheck")}</p>
-                <p className="text-xs text-amber-600/70 dark:text-amber-400/70">{t("showcase.lightText")}</p>
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
+              <div className="flex gap-3">
+                {[
+                  { color: 'bg-blue-500', label: 'Water', count: 12 },
+                  { color: 'bg-green-500', label: 'Fertilize', count: 4 },
+                  { color: 'bg-amber-500', label: 'Other', count: 3 },
+                ].map(({ color, label, count }) => (
+                  <div key={label} className="flex items-center gap-1.5">
+                    <div className={`w-2 h-2 rounded-full ${color}`} />
+                    <span className="text-[9px] text-stone-600 dark:text-stone-400">{label}</span>
+                    <span className="text-[9px] font-medium text-stone-900 dark:text-white">{count}</span>
+                  </div>
+                ))}
               </div>
             </div>
+          </div>
 
-            <div className="md:col-span-1 rounded-2xl bg-rose-500/10 border border-rose-500/20 p-6 flex flex-col justify-between">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-                <span className="text-xs text-rose-600/80 dark:text-rose-400/80">{t("showcase.toxicityAlert")}</span>
+          {/* Pet Safety Card */}
+          <div className="group rounded-3xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-500/20 p-6 hover:border-rose-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+              <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t("showcase.toxicityAlert")}</span>
+            </div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                <PawPrint className="h-5 w-5 text-rose-500" />
               </div>
               <div>
-                <p className="text-sm font-medium text-rose-600 dark:text-rose-400 mb-1">{t("showcase.petWarning")}</p>
-                <p className="text-xs text-rose-600/70 dark:text-rose-400/70">{t("showcase.petWarningText")}</p>
+                <p className="font-semibold text-stone-900 dark:text-white text-sm">{t("showcase.petWarning")}</p>
+                <p className="text-xs text-stone-600 dark:text-stone-400">{t("showcase.petWarningText")}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
+              <Shield className="h-4 w-4 text-rose-500" />
+              <span className="text-xs text-rose-600 dark:text-rose-400">Keep away from pets</span>
+            </div>
+          </div>
+
+          {/* Encyclopedia Card */}
+          <div className="md:col-span-2 group rounded-3xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <div className="flex-shrink-0">
+                <div className="h-14 w-14 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">
+                  <BookMarked className="h-7 w-7 text-white" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-stone-900 dark:text-white mb-1">{t("showcase.encyclopediaTitle", { defaultValue: "Plant Encyclopedia" })}</p>
+                <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">{t("showcase.encyclopediaText", { defaultValue: "10,000+ species with care guides" })}</p>
+                
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/60 dark:bg-white/5 border border-amber-500/20 max-w-md">
+                  <Search className="h-4 w-4 text-stone-400" />
+                  <span className="text-sm text-stone-400">{t("showcase.encyclopediaSearch", { defaultValue: "Search any plant..." })}</span>
+                </div>
+              </div>
+              <div className="flex gap-2 md:ml-auto">
+                {[Leaf, Flower2, TreeDeciduous, Sprout].map((Icon, i) => (
+                  <div key={i} className="h-10 w-10 rounded-xl bg-white/60 dark:bg-white/5 border border-amber-500/10 flex items-center justify-center">
+                    <Icon className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -483,53 +1829,69 @@ const ShowcaseSection: React.FC = () => {
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   TESTIMONIALS
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TESTIMONIALS - Redesigned with Marquee
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const TestimonialsSection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { testimonials: dbTestimonials } = useLandingData()
 
+  // Use database testimonials if available, otherwise fallback to translations
   const rawTestimonials = t("testimonials.items", { returnObjects: true })
-  const testimonials = Array.isArray(rawTestimonials) ? rawTestimonials as Array<{
-    name: string
-    role: string
-    quote: string
-  }> : []
+  const fallbackTestimonials = Array.isArray(rawTestimonials) 
+    ? rawTestimonials as Array<{ name: string; role: string; quote: string }> 
+    : []
+
+  const testimonials = dbTestimonials.length > 0 
+    ? dbTestimonials.map(t => ({
+        name: t.author_name,
+        role: t.author_role || "",
+        quote: t.quote,
+        rating: t.rating,
+      }))
+    : fallbackTestimonials.map(t => ({ ...t, rating: 5 }))
+
+  if (testimonials.length === 0) return null
 
   return (
-    <section className="py-20 lg:py-32 bg-secondary/30">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-20 lg:py-32 overflow-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("testimonials.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("testimonials.subtitle")}
           </p>
         </div>
+      </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {testimonials.map((testimonial, i) => (
-            <div
-              key={i}
-              className="rounded-2xl border border-border bg-card p-6 hover:shadow-lg transition-shadow"
-            >
-              {/* Stars */}
-              <div className="flex gap-1 mb-4">
-                {[...Array(5)].map((_, j) => (
-                  <Star key={j} className="h-4 w-4 fill-amber-400 text-amber-400" />
-                ))}
-              </div>
-
-              <p className="text-foreground text-sm mb-6 leading-relaxed">"{testimonial.quote}"</p>
-
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center text-white font-semibold text-sm">
-                  {testimonial.name.charAt(0)}
+      {/* Marquee Container */}
+      <div className="relative">
+        <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-emerald-50 dark:from-[#0a0f0a] to-transparent z-10" />
+        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-emerald-50 dark:from-[#0a0f0a] to-transparent z-10" />
+        
+        <div className="flex animate-marquee">
+          {[...testimonials, ...testimonials].map((testimonial, i) => (
+            <div key={i} className="flex-shrink-0 w-[350px] mx-3">
+              <div className="rounded-3xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-6 h-full hover:shadow-xl transition-shadow">
+                <div className="flex gap-1 mb-4">
+                  {[...Array(5)].map((_, j) => (
+                    <Star 
+                      key={j} 
+                      className={`h-4 w-4 ${j < (testimonial.rating || 5) ? 'fill-amber-400 text-amber-400' : 'text-stone-300'}`} 
+                    />
+                  ))}
                 </div>
-                <div>
-                  <p className="font-medium text-foreground text-sm">{testimonial.name}</p>
-                  <p className="text-muted-foreground text-xs">{testimonial.role}</p>
+                <p className="text-stone-700 dark:text-stone-300 text-sm mb-6 leading-relaxed">"{testimonial.quote}"</p>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold text-sm">
+                    {testimonial.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-medium text-stone-900 dark:text-white text-sm">{testimonial.name}</p>
+                    <p className="text-stone-500 dark:text-stone-400 text-xs">{testimonial.role}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -540,76 +1902,112 @@ const TestimonialsSection: React.FC = () => {
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   FAQ SECTION
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   FAQ SECTION - Redesigned
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const FAQSection: React.FC = () => {
   const [openIndex, setOpenIndex] = React.useState<number | null>(0)
   const { t } = useTranslation("Landing")
+  const { faqItems: dbFaqItems } = useLandingData()
 
+  // Use database FAQ items if available, otherwise fallback to translations
   const rawFaqs = t("faq.items", { returnObjects: true })
-  const faqs = Array.isArray(rawFaqs) ? rawFaqs as Array<{ q: string; a: string }> : []
+  const fallbackFaqs = Array.isArray(rawFaqs) ? rawFaqs as Array<{ q: string; a: string }> : []
+
+  const faqs = dbFaqItems.length > 0 
+    ? dbFaqItems.map(f => ({ q: f.question, a: f.answer }))
+    : fallbackFaqs
+
+  if (faqs.length === 0) return null
 
   return (
-    <section id="faq" className="py-20 lg:py-32 scroll-mt-20">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="faq" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+      <div className="max-w-4xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("faq.title")}
           </h2>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-stone-600 dark:text-stone-400">
             {t("faq.subtitle")}
           </p>
         </div>
 
         <div className="space-y-4">
           {faqs.map((faq, i) => (
-            <div
-              key={i}
-              className="rounded-2xl border border-border bg-card overflow-hidden"
-            >
+            <div key={i} className="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden hover:border-emerald-500/30 transition-colors">
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                className="w-full px-6 py-4 flex items-center justify-between text-left"
+                className="w-full px-6 py-5 flex items-center justify-between text-left"
                 aria-expanded={openIndex === i}
               >
-                <span className="font-medium text-foreground">{faq.q}</span>
-                <ChevronDown
-                  className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
-                    openIndex === i ? "rotate-180" : ""
-                  }`}
-                />
+                <span className="font-semibold text-stone-900 dark:text-white pr-4">{faq.q}</span>
+                <div className={`h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0 transition-transform duration-300 ${openIndex === i ? 'rotate-180' : ''}`}>
+                  <ChevronDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
               </button>
-              <div
-                className={`overflow-hidden transition-all duration-200 ${
-                  openIndex === i ? "max-h-40" : "max-h-0"
-                }`}
-              >
-                <p className="px-6 pb-4 text-muted-foreground text-sm leading-relaxed">{faq.a}</p>
+              <div className={`overflow-hidden transition-all duration-300 ${openIndex === i ? 'max-h-96' : 'max-h-0'}`}>
+                <p className="px-6 pb-5 text-stone-600 dark:text-stone-400 leading-relaxed">{faq.a}</p>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Support CTA */}
-        <div className="mt-12 text-center">
-          <div className="inline-flex flex-col items-center gap-4 p-6 rounded-2xl bg-card border border-border">
-            <MessageCircle className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-            <div className="space-y-1">
-              <p className="font-semibold text-foreground">
-                {t("faq.supportTitle", { defaultValue: "We're here to answer your questions" })}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {t("faq.supportSubtitle", { defaultValue: "Let us know any question you have" })}
-              </p>
+        {/* Support CTA - Enhanced with Social Links */}
+        <div className="mt-16">
+          <div className="rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-green-500/10 border border-emerald-500/20 p-8 lg:p-10">
+            <div className="text-center max-w-2xl mx-auto space-y-6">
+              <div className="inline-flex h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 items-center justify-center shadow-lg shadow-emerald-500/30">
+                <HandHeart className="h-8 w-8 text-white" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-stone-900 dark:text-white">
+                  {t("faq.supportTitle", { defaultValue: "We'd love to hear from you!" })}
+                </h3>
+                <p className="text-stone-600 dark:text-stone-400 text-lg">
+                  {t("faq.supportSubtitle", { defaultValue: "Questions, feedback, or just want to say hi? Reach out anytime - it's always a pleasure to connect with plant lovers!" })}
+                </p>
+              </div>
+
+              {/* Social Links */}
+              <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+                <a
+                  href="https://instagram.com/aphylia_app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium hover:shadow-lg hover:shadow-pink-500/25 hover:-translate-y-0.5 transition-all"
+                >
+                  <Instagram className="h-5 w-5" />
+                  <span>Instagram</span>
+                </a>
+                <a
+                  href="https://twitter.com/aphylia_app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-sky-500/25 hover:-translate-y-0.5 transition-all"
+                >
+                  <Twitter className="h-5 w-5" />
+                  <span>Twitter</span>
+                </a>
+                <a
+                  href="mailto:hello@aphylia.app"
+                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium hover:shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-0.5 transition-all"
+                >
+                  <Mail className="h-5 w-5" />
+                  <span>Email Us</span>
+                </a>
+              </div>
+
+              <div className="pt-4 border-t border-emerald-500/10">
+                <Link
+                  to="/contact"
+                  className="inline-flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium hover:underline"
+                >
+                  {t("faq.supportButton", { defaultValue: "Or visit our contact page" })}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
             </div>
-            <Link
-              to="/contact"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all"
-            >
-              {t("faq.supportButton", { defaultValue: "Contact Support" })}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
           </div>
         </div>
       </div>
@@ -617,44 +2015,100 @@ const FAQSection: React.FC = () => {
   )
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   FINAL CTA
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   FINAL CTA - Enhanced
+   ═══════════════════════════════════════════════════════════════════════════════ */
 const FinalCTASection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { settings } = useLandingData()
+
+  // Use settings if available, otherwise fall back to translations
+  const badge = settings?.final_cta_badge || t("finalCta.badge", { defaultValue: "No experience needed" })
+  const title = settings?.final_cta_title || t("finalCta.title", { defaultValue: "Ready to Start Your Plant Journey?" })
+  const subtitle = settings?.final_cta_subtitle || t("finalCta.subtitle", { defaultValue: "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents." })
+  const primaryButtonText = settings?.final_cta_button_text || t("finalCta.ctaDownload", { defaultValue: "Start Growing" })
+  const secondaryButtonText = settings?.final_cta_secondary_text || t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })
 
   return (
-    <section className="py-20 lg:py-32">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="relative rounded-3xl overflow-hidden bg-emerald-500 p-12 lg:p-20">
-          {/* Background pattern */}
-          <div
-            className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30"
-            aria-hidden="true"
-          />
+    <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="relative rounded-[2.5rem] overflow-hidden">
+          {/* Gradient Background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-teal-500 to-green-600" />
+          
+          {/* Animated Orbs */}
+          <div className="absolute top-0 left-0 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-glow" />
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '2s' }} />
+          
+          {/* Pattern Overlay */}
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30" />
 
-          <div className="relative text-center space-y-8">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white max-w-2xl mx-auto leading-tight">
-              {t("finalCta.title")}
-            </h2>
-            <p className="text-lg text-white/80 max-w-xl mx-auto">
-              {t("finalCta.subtitle")}
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link
-                to="/download"
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white text-emerald-600 text-base font-semibold hover:bg-white/90 transition-all"
-              >
-                <Leaf className="h-5 w-5" />
-                {t("finalCta.ctaDownload")}
-              </Link>
-              <Link
-                to="/about"
-                className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-semibold border border-white/20 transition-all"
-              >
-                {t("finalCta.ctaDocs")}
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+          <div className="relative px-8 py-16 lg:px-16 lg:py-24 text-center">
+            <div className="max-w-3xl mx-auto space-y-8">
+              {/* Beginner Badge */}
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm">
+                <Sprout className="h-4 w-4 text-white" />
+                <span className="text-sm font-medium text-white">
+                  {badge}
+                </span>
+              </div>
+
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight">
+                {title}
+              </h2>
+              <p className="text-lg sm:text-xl text-white/80 max-w-2xl mx-auto">
+                {subtitle}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+                <Link
+                  to="/download"
+                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white text-emerald-600 text-base font-bold hover:bg-white/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5"
+                >
+                  <Leaf className="h-5 w-5" />
+                  {primaryButtonText}
+                </Link>
+                <Link
+                  to="/discovery"
+                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-semibold border border-white/30 transition-all hover:-translate-y-0.5"
+                >
+                  {secondaryButtonText}
+                  <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </Link>
+              </div>
+
+              {/* Social Links */}
+              <div className="pt-8 border-t border-white/20">
+                <p className="text-white/70 text-sm mb-4">
+                  {t("finalCta.socialText", { defaultValue: "Let's connect! We love hearing from you" })}
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <a
+                    href="https://instagram.com/aphylia_app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                    aria-label="Instagram"
+                  >
+                    <Instagram className="h-5 w-5 text-white" />
+                  </a>
+                  <a
+                    href="https://twitter.com/aphylia_app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                    aria-label="Twitter"
+                  >
+                    <Twitter className="h-5 w-5 text-white" />
+                  </a>
+                  <a
+                    href="mailto:hello@aphylia.app"
+                    className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                    aria-label="Email"
+                  >
+                    <Mail className="h-5 w-5 text-white" />
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </div>

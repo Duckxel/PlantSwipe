@@ -1,10 +1,12 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
 import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, X } from "lucide-react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -16,8 +18,10 @@ import { Footer } from "@/components/layout/Footer";
 import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
+import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
+import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import type { Plant, PlantSeason } from "@/types/plant";
+import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import { RequireEditor } from "@/pages/RequireAdmin";
@@ -44,7 +48,10 @@ const CreatePlantPageLazy = lazy(() => import("@/pages/CreatePlantPage").then(mo
 const PlantInfoPageLazy = lazy(() => import("@/pages/PlantInfoPage"))
 const PublicProfilePageLazy = lazy(() => import("@/pages/PublicProfilePage"))
 const FriendsPageLazy = lazy(() => import("@/pages/FriendsPage").then(module => ({ default: module.FriendsPage })))
+const MessagesPageLazy = lazy(() => import("@/pages/MessagesPage").then(module => ({ default: module.MessagesPage })))
+const ScanPageLazy = lazy(() => import("@/pages/ScanPage").then(module => ({ default: module.ScanPage })))
 const SettingsPageLazy = lazy(() => import("@/pages/SettingsPage"))
+const BugCatcherPageLazy = lazy(() => import("@/pages/BugCatcherPage").then(module => ({ default: module.BugCatcherPage })))
 const ContactUsPageLazy = lazy(() => import("@/pages/ContactUsPage"))
 const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
 const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
@@ -66,6 +73,25 @@ type ColorOption = {
   isPrimary: boolean
   parentIds: string[]
   translations: Record<string, string>  // language -> translated name
+}
+
+type PreparedPlant = Plant & {
+  _searchString: string
+  _normalizedColors: string[]
+  _colorTokens: Set<string>        // Pre-tokenized colors for compound matching
+  _typeLabel: string | null
+  _usageLabels: string[]
+  _usageSet: Set<string>           // O(1) usage lookups
+  _habitats: string[]
+  _habitatSet: Set<string>         // O(1) habitat lookups
+  _maintenance: string
+  _petSafe: boolean
+  _humanSafe: boolean
+  _livingSpace: string
+  _seasonsSet: Set<string>         // O(1) season lookups
+  _createdAtTs: number             // Pre-parsed timestamp for sorting
+  _popularityLikes: number         // Pre-extracted popularity for sorting
+  _hasImage: boolean               // Pre-computed image availability
 }
 
 type ExtendedWindow = Window & {
@@ -112,30 +138,52 @@ export default function PlantSwipe() {
   const routeLoadingFallback = (
     <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>
   )
+  const routeErrorFallback = (
+    <div className="p-8 text-center">
+      <p className="text-stone-600 dark:text-stone-400 mb-4">{t('common.loadError', 'Failed to load this page. Please check your internet connection.')}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+      >
+        {t('common.reload', 'Reload Page')}
+      </button>
+    </div>
+  )
   const [query, setQuery] = useState("")
+  const debouncedQuery = useDebounce(query, 100)
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string[]>([])
   const [onlySeeds, setOnlySeeds] = useState(false)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [usageFilters, setUsageFilters] = useState<string[]>([])
+  const [habitatFilters, setHabitatFilters] = useState<string[]>([])
+  const [maintenanceFilter, setMaintenanceFilter] = useState<string | null>(null)
+  const [petSafe, setPetSafe] = useState(false)
+  const [humanSafe, setHumanSafe] = useState(false)
+  const [livingSpaceFilters, setLivingSpaceFilters] = useState<string[]>([])
   const [seasonSectionOpen, setSeasonSectionOpen] = useState(false)
   const [colorSectionOpen, setColorSectionOpen] = useState(false)
   const [advancedColorsOpen, setAdvancedColorsOpen] = useState(false)
   const [typeSectionOpen, setTypeSectionOpen] = useState(false)
   const [usageSectionOpen, setUsageSectionOpen] = useState(false)
+  const [habitatSectionOpen, setHabitatSectionOpen] = useState(false)
+  const [maintenanceSectionOpen, setMaintenanceSectionOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
   })
   const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
   const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
+  const [searchBarVisible, setSearchBarVisible] = useState(true)
+  const lastScrollY = React.useRef(0)
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
   const initialCardBoostRef = React.useRef(true)
 
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "landing" | "discovery" | "gardens" | "search" | "profile" | "create" =
@@ -145,6 +193,18 @@ export default function PlantSwipe() {
     pathWithoutLang.startsWith("/search") ? "search" :
     pathWithoutLang.startsWith("/profile") ? "profile" :
     pathWithoutLang.startsWith("/create") ? "create" : "discovery"
+  
+  // Message notifications - determine if user is on messages page
+  const isOnMessagesPage = pathWithoutLang.startsWith('/messages')
+  const { 
+    notification: messageNotification, 
+    dismiss: dismissMessageNotification
+  } = useMessageNotifications({
+    userId: user?.id ?? null,
+    enabled: Boolean(user),
+    // Don't show notifications when already on messages page
+    currentConversationId: isOnMessagesPage ? 'all' : null
+  })
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -226,6 +286,47 @@ export default function PlantSwipe() {
     const arr = Array.isArray(profile?.liked_plant_ids) ? profile.liked_plant_ids.map(String) : []
     setLikedIds(arr)
   }, [profile])
+
+  // Read search query from URL parameters when on search page
+  React.useEffect(() => {
+    if (pathWithoutLang.startsWith("/search")) {
+      const urlQuery = searchParams.get("q")
+      if (urlQuery && urlQuery !== query) {
+        setQuery(urlQuery)
+        // Clear the URL parameter after setting the query to keep URL clean
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [pathWithoutLang, searchParams, setSearchParams]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hide search bar on scroll down, show on scroll up (mobile only)
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    if (currentView !== "search") return
+    
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      const scrollDelta = currentScrollY - lastScrollY.current
+      
+      // Only trigger if scrolled more than 10px to avoid jitter
+      if (Math.abs(scrollDelta) < 10) return
+      
+      // Show search bar when scrolling up or at top
+      if (scrollDelta < 0 || currentScrollY < 50) {
+        setSearchBarVisible(true)
+      } else {
+        // Hide when scrolling down (only on mobile)
+        if (window.innerWidth < 768) {
+          setSearchBarVisible(false)
+        }
+      }
+      
+      lastScrollY.current = currentScrollY
+    }
+    
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [currentView])
 
   const loadPlants = React.useCallback(async () => {
     // Only show loading if we don't have plants
@@ -364,9 +465,30 @@ export default function PlantSwipe() {
               const c = document.createElement('canvas')
               const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | WebGL2RenderingContext | null
               if (!gl) return null
-              const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
-              const vendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : null
-              const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : null
+              // Use standard VENDOR and RENDERER parameters (Firefox compatible)
+              // WEBGL_debug_renderer_info is deprecated in Firefox
+              let vendor: string | null = null
+              let renderer: string | null = null
+              try {
+                // Try standard parameters first (works in Firefox)
+                vendor = gl.getParameter(gl.VENDOR) as string | null
+                renderer = gl.getParameter(gl.RENDERER) as string | null
+              } catch {
+                // Fallback silently
+              }
+              // If standard params returned generic values, try the extension (Chrome/Safari)
+              // but only if it's available (not in Firefox)
+              if ((!vendor || vendor === 'WebKit' || vendor === 'Mozilla') || (!renderer || renderer === 'WebKit WebGL')) {
+                try {
+                  const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
+                  if (debugInfo) {
+                    vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) as string | null
+                    renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string | null
+                  }
+                } catch {
+                  // Extension not available, use standard values
+                }
+              }
               return { vendor: vendor ?? null, renderer: renderer ?? null }
             } catch {
               // WebGL not available
@@ -478,123 +600,304 @@ export default function PlantSwipe() {
     }
   }, [user?.id, profile?.display_name])
 
-  const filtered = useMemo(() => {
-    const lowerQuery = query.toLowerCase()
-    const normalizedType = typeFilter?.toLowerCase() ?? null
-    const normalizedUsage = usageFilters.map((u) => u.toLowerCase())
-    const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
-
-    // Build a map of color IDs that should match for each selected filter
-    // When a primary color is selected, include all its children colors
-    const getMatchingColorNames = (filterColorName: string): string[] => {
-      const filterColor = colorOptions.find((c) => c.name.toLowerCase() === filterColorName)
-      if (!filterColor) return [filterColorName]
-
-      const matchingNames = [filterColorName]
-      
-      // If this is a primary color, include all colors that have it as a parent
-      if (filterColor.isPrimary) {
-        colorOptions.forEach((c) => {
-          if (c.parentIds.includes(filterColor.id)) {
-            matchingNames.push(c.name.toLowerCase())
-          }
-        })
-      }
-
-      return matchingNames
-    }
-
-    // Build expanded color filters including children
-    const expandedColorFilters = normalizedColorFilters.flatMap((f) => getMatchingColorNames(f))
-
-    const colorMatches = (colorName: string, normalizedColorFilter: string): boolean => {
-      const normalizedColor = (colorName || "").toLowerCase().trim()
-      if (!normalizedColor) return false
-
-      if (normalizedColor === normalizedColorFilter) {
-        return true
-      }
-
-      const tokens = normalizedColor
-        .replace(/[-_/]+/g, " ")
-        .split(/\s+/)
-        .filter(Boolean)
-
-      return tokens.includes(normalizedColorFilter)
-    }
-
-    return plants.filter((p: Plant) => {
-      // Extract colors from both legacy format (p.colors) and new format (p.identity?.colors)
+  // Pre-calculate normalized values for all plants to optimize filter performance
+  // This avoids repeating expensive string operations on every filter change
+  // All Set-based lookups enable O(1) membership tests instead of O(n) array scans
+  const preparedPlants = useMemo(() => {
+    return plants.map((p) => {
+      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
       const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors) 
+      const identityColors = Array.isArray(p.identity?.colors)
         ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
         : []
       const colors = [...legacyColors, ...identityColors]
-      const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
-        .toLowerCase()
-        .includes(lowerQuery)
-      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
-      // Match if any of the selected colors (including children) matches any of the plant's colors (OR logic)
-      const matchesColor = expandedColorFilters.length === 0 
-        ? true 
-        : expandedColorFilters.some((filterColor) => 
-            colors.some((plantColor) => colorMatches(plantColor, filterColor))
-          )
-      const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
-      const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
+      const normalizedColors = colors.map(c => c.toLowerCase().trim())
+      
+      // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
+      // This avoids regex operations during filtering
+      const colorTokens = new Set<string>()
+      normalizedColors.forEach(color => {
+        colorTokens.add(color)
+        // Split compound colors and add individual tokens
+        const tokens = color.replace(/[-_/]+/g, ' ').split(/\s+/).filter(Boolean)
+        tokens.forEach(token => colorTokens.add(token))
+      })
+
+      // Search string
+      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`.toLowerCase()
+
+      // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
-      const matchesType = normalizedType ? typeLabel === normalizedType : true
-      const plantUsageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-      const matchesUsage = normalizedUsage.length
-        ? normalizedUsage.every((usage) => plantUsageLabels.includes(usage))
-        : true
-      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage
+
+      // Usage - both array and Set
+      const usageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
+      const usageSet = new Set(usageLabels)
+
+      // Habitat - both array and Set for O(1) lookups
+      const habitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+      const habitatSet = new Set(habitats)
+
+      // Maintenance
+      const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+
+      // Toxicity
+      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+
+      // Living space
+      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
+
+      // Seasons - convert to Set for O(1) lookups
+      const seasons = Array.isArray(p.seasons) ? p.seasons : []
+      const seasonsSet = new Set(seasons.map(s => String(s)))
+
+      // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
+      const createdAtValue = p.meta?.createdAt
+      const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
+      const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
+
+      // Pre-extract popularity for faster sorting
+      const popularityLikes = p.popularity?.likes ?? 0
+
+      // Pre-compute image availability for Discovery page filtering
+      const hasLegacyImage = Boolean(p.image)
+      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
+      const hasImage = hasLegacyImage || hasImagesArray
+
+      return {
+        ...p,
+        _searchString: searchString,
+        _normalizedColors: normalizedColors,
+        _colorTokens: colorTokens,
+        _typeLabel: typeLabel,
+        _usageLabels: usageLabels,
+        _usageSet: usageSet,
+        _habitats: habitats,
+        _habitatSet: habitatSet,
+        _maintenance: maintenance,
+        _petSafe: petSafe,
+        _humanSafe: humanSafe,
+        _livingSpace: livingSpace,
+        _seasonsSet: seasonsSet,
+        _createdAtTs: createdAtTsFinal,
+        _popularityLikes: popularityLikes,
+        _hasImage: hasImage
+      } as PreparedPlant
     })
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, likedSet, colorOptions])
+  }, [plants])
+
+  // Memoize color filter expansion separately to avoid recomputing on every filter change
+  // This builds a Set of all color names that should match (including children of primary colors)
+  const expandedColorFilterSet = useMemo(() => {
+    const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
+    if (normalizedColorFilters.length === 0) return null
+    
+    const expandedSet = new Set<string>()
+    
+    normalizedColorFilters.forEach((filterColorName) => {
+      expandedSet.add(filterColorName)
+      
+      // Find the color in colorOptions to check if it's primary
+      const filterColor = colorOptions.find((c) => c.name.toLowerCase() === filterColorName)
+      if (filterColor?.isPrimary) {
+        // Include all colors that have this as a parent
+        colorOptions.forEach((c) => {
+          if (c.parentIds.includes(filterColor.id)) {
+            expandedSet.add(c.name.toLowerCase())
+          }
+        })
+      }
+    })
+    
+    return expandedSet
+  }, [colorFilter, colorOptions])
+
+  // Pre-normalize filter values to avoid repeated lowercasing during filtering
+  const normalizedFilters = useMemo(() => ({
+    query: debouncedQuery.toLowerCase(),
+    type: typeFilter?.toLowerCase() ?? null,
+    usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
+    habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
+    maintenance: maintenanceFilter?.toLowerCase() ?? null,
+    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase()))
+  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters])
+
+  // Reset index when search query changes
+  React.useEffect(() => {
+    setIndex(0)
+  }, [debouncedQuery])
+
+  const filtered = useMemo(() => {
+    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet } = normalizedFilters
+    
+    // Pre-compute living space matching logic
+    const livingSpaceCount = livingSpaceSet.size
+    const requiresBoth = livingSpaceCount === 2
+    const requiresIndoor = livingSpaceSet.has('indoor')
+    const requiresOutdoor = livingSpaceSet.has('outdoor')
+
+    return preparedPlants.filter((p) => {
+      // Early exit pattern: check cheapest conditions first
+      // Boolean checks are O(1) and fastest
+      if (petSafe && !p._petSafe) return false
+      if (humanSafe && !p._humanSafe) return false
+      if (onlySeeds && !p.seedsAvailable) return false
+      if (onlyFavorites && !likedSet.has(p.id)) return false
+      
+      // String equality checks - still O(1)
+      if (normalizedType && p._typeLabel !== normalizedType) return false
+      if (normalizedMaintenanceFilter && p._maintenance !== normalizedMaintenanceFilter) return false
+      
+      // Season filter - O(1) Set lookup
+      if (seasonFilter && !p._seasonsSet.has(seasonFilter)) return false
+      
+      // Living space filter - pre-computed logic
+      if (livingSpaceCount > 0) {
+        if (requiresBoth) {
+          if (p._livingSpace !== 'both') return false
+        } else if (requiresIndoor) {
+          if (p._livingSpace !== 'indoor' && p._livingSpace !== 'both') return false
+        } else if (requiresOutdoor) {
+          if (p._livingSpace !== 'outdoor' && p._livingSpace !== 'both') return false
+        }
+      }
+      
+      // Usage filter - O(k) where k is number of selected usages, using O(1) Set lookups
+      if (usageSet.size > 0) {
+        for (const usage of usageSet) {
+          if (!p._usageSet.has(usage)) return false
+        }
+      }
+      
+      // Habitat filter - OR logic: match if plant has ANY selected habitat
+      // Using O(1) Set lookups instead of O(n) array includes
+      if (habitatSet.size > 0) {
+        let hasMatchingHabitat = false
+        for (const h of habitatSet) {
+          if (p._habitatSet.has(h)) {
+            hasMatchingHabitat = true
+            break
+          }
+        }
+        if (!hasMatchingHabitat) return false
+      }
+      
+      // Color filter - using pre-computed color tokens for O(1) lookups
+      // Optimized: Iterate over plant tokens (smaller set) instead of filter set (larger set)
+      // Note: _colorTokens includes both full color strings (e.g. "red-orange") and split tokens (e.g. "red", "orange")
+      if (expandedColorFilterSet) {
+        let hasMatchingColor = false
+        for (const plantToken of p._colorTokens) {
+          if (expandedColorFilterSet.has(plantToken)) {
+            hasMatchingColor = true
+            break
+          }
+        }
+        if (!hasMatchingColor) return false
+      }
+      
+      // Search query - string includes is O(n*m) but unavoidable for substring search
+      // Checked last as it's the most expensive operation
+      if (lowerQuery && !p._searchString.includes(lowerQuery)) return false
+      
+      return true
+    })
+  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, onlySeeds, onlyFavorites, petSafe, humanSafe, likedSet])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
+  
+  // Store shuffled plant IDs separately - this is the stable order
+  const [shuffledPlantIds, setShuffledPlantIds] = useState<string[]>([])
+  
+  // Get plants with images for swipe view (doesn't depend on likedSet for filtering)
+  const swipeablePlants = useMemo(() => {
+    return preparedPlants.filter((p) => p._hasImage)
+  }, [preparedPlants])
+  
+  // Track if we've done initial shuffle
+  const hasInitialShuffleRef = React.useRef(false)
+  
+  // Create/update shuffled order only when plants change or explicit reshuffle
+  React.useEffect(() => {
+    if (swipeablePlants.length === 0) {
+      setShuffledPlantIds([])
+      hasInitialShuffleRef.current = false
+      return
+    }
+    
+    // Only shuffle if we haven't done initial shuffle yet, or explicit epoch triggered
+    if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
+      const shuffleArray = <T,>(arr: T[]): T[] => {
+        const result = arr.slice()
+        for (let i = result.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[result[i], result[j]] = [result[j], result[i]]
+        }
+        return result
+      }
+      
+      const now = new Date()
+      const promoted: string[] = []
+      const regular: string[] = []
+      
+      swipeablePlants.forEach((plant) => {
+        if (isPlantOfTheMonth(plant, now)) {
+          promoted.push(plant.id)
+        } else {
+          regular.push(plant.id)
+        }
+      })
+      
+      const newOrder = promoted.length === 0
+        ? shuffleArray(swipeablePlants.map(p => p.id))
+        : [...shuffleArray(promoted), ...shuffleArray(regular)]
+      
+      setShuffledPlantIds(newOrder)
+      hasInitialShuffleRef.current = true
+    }
+  }, [swipeablePlants, shuffleEpoch])
+  
+  // Build the actual swipe list from the stable shuffled IDs
   const swipeList = useMemo(() => {
-    // shuffleEpoch is used to trigger a reshuffle when user completes a cycle
-    void shuffleEpoch
-    if (filtered.length === 0) return []
-    const shuffleList = (list: Plant[]) => {
-      const arr = list.slice()
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[arr[i], arr[j]] = [arr[j], arr[i]]
-      }
-      return arr
-    }
-    const now = new Date()
-    const promoted: Plant[] = []
-    const regular: Plant[] = []
-    filtered.forEach((plant) => {
-      if (isPlantOfTheMonth(plant, now)) {
-        promoted.push(plant)
-      } else {
-        regular.push(plant)
-      }
-    })
-    if (promoted.length === 0) {
-      return shuffleList(filtered)
-    }
-    return [...shuffleList(promoted), ...shuffleList(regular)]
-  }, [filtered, shuffleEpoch])
+    if (shuffledPlantIds.length === 0) return []
+    
+    // Create a map for O(1) lookups
+    const plantMap = new Map(swipeablePlants.map(p => [p.id, p]))
+    
+    // Return plants in shuffled order, filtering out any that no longer exist
+    return shuffledPlantIds
+      .map(id => plantMap.get(id))
+      .filter((p): p is PreparedPlant => p !== undefined)
+  }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
-    if (searchSort === "default") return filtered
-    const arr = filtered.slice()
-    if (searchSort === "newest") {
-      const getCreatedAtValue = (plant: Plant) => {
-        const value = plant.meta?.createdAt
-        if (!value) return 0
-        const ts = Date.parse(value)
-        return Number.isNaN(ts) ? 0 : ts
-      }
+    // Helper to check if a plant is "in progress"
+    const isPlantInProgress = (p: Plant) => {
+      const status = p.meta?.status?.toLowerCase()
+      return status === 'in progres' || status === 'in progress'
+    }
+
+    // For default sort, push "in progress" plants to the bottom
+    if (searchSort === "default") {
+      const arr = filtered.slice() as PreparedPlant[]
       arr.sort((a, b) => {
-        const diff = getCreatedAtValue(b) - getCreatedAtValue(a)
+        const aInProgress = isPlantInProgress(a) ? 1 : 0
+        const bInProgress = isPlantInProgress(b) ? 1 : 0
+        if (aInProgress !== bInProgress) return aInProgress - bInProgress
+        // Maintain original order for same status
+        return 0
+      })
+      return arr
+    }
+    
+    // Cast to PreparedPlant[] since filtered comes from preparedPlants
+    const arr = filtered.slice() as PreparedPlant[]
+    
+    if (searchSort === "newest") {
+      // Use pre-computed timestamp - no Date.parse on each comparison
+      arr.sort((a, b) => {
+        const diff = b._createdAtTs - a._createdAtTs
         if (diff !== 0) return diff
         return a.name.localeCompare(b.name)
       })
@@ -606,8 +909,9 @@ export default function PlantSwipe() {
         return a.name.localeCompare(b.name)
       })
     } else if (searchSort === "popular") {
+      // Use pre-computed popularity - no property access chain on each comparison
       arr.sort((a, b) => {
-        const diff = (b.popularity?.likes ?? 0) - (a.popularity?.likes ?? 0)
+        const diff = b._popularityLikes - a._popularityLikes
         if (diff !== 0) return diff
         return a.name.localeCompare(b.name)
       })
@@ -625,6 +929,36 @@ export default function PlantSwipe() {
     if (index !== 0) return
     initialCardBoostRef.current = false
   }, [heroImageCandidate, index])
+
+  // Track which images have been preloaded to avoid re-preloading
+  const preloadedImagesRef = React.useRef<Set<string>>(new Set())
+
+  // Preload next card images for instant swipe transitions
+  React.useEffect(() => {
+    if (currentView !== "discovery") return
+    if (typeof window === "undefined") return
+    if (swipeList.length === 0) return
+
+    // Debounce preloading to avoid flashing
+    const timeoutId = setTimeout(() => {
+      // Preload next 2 cards and previous 1 card
+      const offsets = [1, 2, -1]
+      offsets.forEach((offset) => {
+        const targetIndex = (index + offset + swipeList.length) % swipeList.length
+        const plant = swipeList[targetIndex]
+        if (plant) {
+          const imageUrl = getDiscoveryPageImageUrl(plant)
+          if (imageUrl && !preloadedImagesRef.current.has(imageUrl)) {
+            preloadedImagesRef.current.add(imageUrl)
+            const img = new Image()
+            img.src = imageUrl
+          }
+        }
+      })
+    }, 100)
+
+    return () => clearTimeout(timeoutId)
+  }, [currentView, index, swipeList])
 
   React.useEffect(() => {
     if (currentView !== "discovery") return
@@ -686,8 +1020,9 @@ export default function PlantSwipe() {
   // Swipe logic
   const x = useMotionValue(0)
   const y = useMotionValue(0)
+  // Minimum distance (in pixels) the card must travel to trigger a swipe action
+  // This prevents taps/clicks from being interpreted as swipes
   const threshold = 100
-  const velocityThreshold = 500
   
   // Reset motion values immediately when index changes
   React.useEffect(() => {
@@ -699,41 +1034,38 @@ export default function PlantSwipe() {
   const onDragEnd = (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
     const dx = info.offset.x
     const dy = info.offset.y
-    const vx = info.velocity.x
-    const vy = info.velocity.y
     
-    // Calculate effective movement considering both offset and velocity
-    const effectiveX = dx + vx * 0.1
-    const effectiveY = dy + vy * 0.1
-    
-    // Check for significant movement or velocity
-    const absX = Math.abs(effectiveX)
-    const absY = Math.abs(effectiveY)
-    const absVx = Math.abs(vx)
-    const absVy = Math.abs(vy)
+    // Get absolute offset values - this is the actual distance the card traveled
+    const absOffsetX = Math.abs(dx)
+    const absOffsetY = Math.abs(dy)
     
     let actionTaken = false
     
-    // Prioritize vertical swipe over horizontal if both are significant
-    if ((absY > absX && absY > threshold) || (absVy > absVx && absVy > velocityThreshold)) {
-      if (effectiveY < -threshold || vy < -velocityThreshold) {
+    // ONLY trigger actions based on actual distance traveled (threshold = 100px)
+    // Velocity is IGNORED to prevent taps/clicks from being interpreted as swipes
+    // The card must physically move at least 100px to trigger any action
+    
+    // Prioritize vertical swipe over horizontal if vertical movement is greater
+    if (absOffsetY > absOffsetX && absOffsetY > threshold) {
+      if (dy < -threshold) {
         // Swipe up (bottom to top) = open info
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
         handleInfo()
         actionTaken = true
       }
+      // Note: swipe down does nothing
     }
     
-    // Horizontal swipe detection
-    if (!actionTaken && ((absX > absY && absX > threshold) || (absVx > absVy && absVx > velocityThreshold))) {
-      if (effectiveX < -threshold || vx < -velocityThreshold) {
+    // Horizontal swipe detection - only if horizontal movement is greater than vertical
+    if (!actionTaken && absOffsetX > absOffsetY && absOffsetX > threshold) {
+      if (dx < -threshold) {
         // Swipe left (right to left) = next
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
         handlePass()
         actionTaken = true
-      } else if (effectiveX > threshold || vx > velocityThreshold) {
+      } else if (dx > threshold) {
         // Swipe right (left to right) = previous
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
@@ -742,7 +1074,7 @@ export default function PlantSwipe() {
       }
     }
     
-    // No action, snap back to center smoothly
+    // No action taken - snap back to center smoothly
     if (!actionTaken) {
       animate(x, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
       animate(y, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
@@ -911,6 +1243,11 @@ export default function PlantSwipe() {
         colorFilter.length > 0 || 
         typeFilter !== null || 
         usageFilters.length > 0 || 
+        habitatFilters.length > 0 ||
+        maintenanceFilter !== null ||
+        petSafe ||
+        humanSafe ||
+        livingSpaceFilters.length > 0 ||
         onlySeeds || 
         onlyFavorites
 
@@ -920,9 +1257,26 @@ export default function PlantSwipe() {
         setColorFilter([])
         setTypeFilter(null)
         setUsageFilters([])
+        setHabitatFilters([])
+        setMaintenanceFilter(null)
+        setPetSafe(false)
+        setHumanSafe(false)
+        setLivingSpaceFilters([])
         setOnlySeeds(false)
         setOnlyFavorites(false)
       }
+      
+      // Habitat options
+      const habitatOptions = [
+        "Aquatic", "Semi-Aquatic", "Wetland", "Tropical", "Temperate", 
+        "Arid", "Mediterranean", "Mountain", "Grassland", "Forest", "Coastal", "Urban"
+      ] as const
+      
+      // Maintenance level options
+      const maintenanceOptions = ["None", "Low", "Moderate", "Heavy"] as const
+      
+      // Living space options  
+      const livingSpaceOptions = ["Indoor", "Outdoor"] as const
 
       const renderColorOption = (color: ColorOption) => {
         const isActive = colorFilter.includes(color.name)
@@ -1134,6 +1488,140 @@ export default function PlantSwipe() {
             )}
           </div>
 
+          {/* Habitat */}
+          <div>
+            <FilterSectionHeader
+              label={t("moreInfo.labels.habitat", { defaultValue: "Habitat" })}
+              isOpen={habitatSectionOpen}
+              onToggle={() => setHabitatSectionOpen((prev) => !prev)}
+            />
+            {habitatSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {habitatOptions.map((habitat) => {
+                  const isSelected = habitatFilters.includes(habitat)
+                  const habitatKey = habitat.toLowerCase().replace(/[\s-]/g, '')
+                  return (
+                    <button
+                      key={habitat}
+                      type="button"
+                      onClick={() =>
+                        setHabitatFilters((current) =>
+                          isSelected ? current.filter((h) => h !== habitat) : [...current, habitat]
+                        )
+                      }
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        isSelected
+                          ? "bg-teal-600 dark:bg-teal-500 text-white"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={isSelected}
+                    >
+                      {t(`moreInfo.enums.habitat.${habitatKey}`, { defaultValue: habitat })}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Maintenance Level */}
+          <div>
+            <FilterSectionHeader
+              label={t("moreInfo.labels.maintenance", { defaultValue: "Maintenance" })}
+              isOpen={maintenanceSectionOpen}
+              onToggle={() => setMaintenanceSectionOpen((prev) => !prev)}
+            />
+            {maintenanceSectionOpen && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {maintenanceOptions.map((level) => {
+                  const isSelected = maintenanceFilter === level
+                  const levelKey = level.toLowerCase()
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setMaintenanceFilter((current) => (current === level ? null : level))}
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        isSelected
+                          ? "bg-violet-600 dark:bg-violet-500 text-white"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={isSelected}
+                    >
+                      {t(`plantDetails.maintenanceLevels.${levelKey}`, { defaultValue: level })}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Safety Toggles - Pet-Safe & Human-Safe */}
+          <div>
+            <div className="text-xs font-medium mb-3 uppercase tracking-wide text-stone-500 dark:text-stone-300">
+              {t("plant.safetyFilters", { defaultValue: "Safety" })}
+            </div>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setPetSafe((v) => !v)}
+                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                  petSafe ? "bg-cyan-600 dark:bg-cyan-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                }`}
+                aria-pressed={petSafe}
+              >
+                <span>🐾</span> {t("plant.petSafe", { defaultValue: "Pet-Safe" })}
+              </button>
+              <button
+                type="button"
+                onClick={() => setHumanSafe((v) => !v)}
+                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                  humanSafe ? "bg-cyan-600 dark:bg-cyan-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                }`}
+                aria-pressed={humanSafe}
+              >
+                <span>👤</span> {t("plant.humanSafe", { defaultValue: "Human-Safe" })}
+              </button>
+            </div>
+          </div>
+
+          {/* Indoor / Outdoor - Not collapsible */}
+          <div>
+            <div className="text-xs font-medium mb-3 uppercase tracking-wide text-stone-500 dark:text-stone-300">
+              {t("moreInfo.labels.livingSpace", { defaultValue: "Living Space" })}
+            </div>
+            <div className="flex gap-2">
+              {livingSpaceOptions.map((space) => {
+                const isSelected = livingSpaceFilters.includes(space)
+                const spaceKey = space.toLowerCase()
+                return (
+                  <button
+                    key={space}
+                    type="button"
+                    onClick={() =>
+                      setLivingSpaceFilters((current) =>
+                        isSelected ? current.filter((s) => s !== space) : [...current, space]
+                      )
+                    }
+                    className={`flex-1 px-4 py-2 rounded-2xl text-sm shadow-sm border transition ${
+                      isSelected
+                        ? "bg-indigo-600 dark:bg-indigo-500 text-white"
+                        : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                    }`}
+                    aria-pressed={isSelected}
+                  >
+                    {t(`moreInfo.enums.livingSpace.${spaceKey}`, { defaultValue: space })}
+                  </button>
+                )
+              })}
+            </div>
+            {livingSpaceFilters.length === 2 && (
+              <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                {t("plant.livingSpaceBothHint", { defaultValue: "Showing plants suitable for both indoor AND outdoor" })}
+              </p>
+            )}
+          </div>
+
           {/* Toggles */}
           <div className="pt-2 space-y-2">
             <button
@@ -1170,9 +1658,18 @@ export default function PlantSwipe() {
               {usageFilters.map((usage) => (
                 <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
               ))}
+              {habitatFilters.map((habitat) => (
+                <Badge key={habitat} variant="secondary" className="rounded-xl">{t(`moreInfo.enums.habitat.${habitat.toLowerCase().replace(/[\s-]/g, '')}`, { defaultValue: habitat })}</Badge>
+              ))}
+              {maintenanceFilter && <Badge variant="secondary" className="rounded-xl">{t(`plantDetails.maintenanceLevels.${maintenanceFilter.toLowerCase()}`, { defaultValue: maintenanceFilter })}</Badge>}
+              {petSafe && <Badge variant="secondary" className="rounded-xl">🐾 {t("plant.petSafe", { defaultValue: "Pet-Safe" })}</Badge>}
+              {humanSafe && <Badge variant="secondary" className="rounded-xl">👤 {t("plant.humanSafe", { defaultValue: "Human-Safe" })}</Badge>}
+              {livingSpaceFilters.map((space) => (
+                <Badge key={space} variant="secondary" className="rounded-xl">{t(`moreInfo.enums.livingSpace.${space.toLowerCase()}`, { defaultValue: space })}</Badge>
+              ))}
               {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
               {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
-              {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
+              {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && habitatFilters.length === 0 && !maintenanceFilter && !petSafe && !humanSafe && livingSpaceFilters.length === 0 && !onlySeeds && !onlyFavorites && (
                 <span className="opacity-50">{t("plant.none")}</span>
               )}
             </div>
@@ -1188,6 +1685,7 @@ export default function PlantSwipe() {
     if (isLandingPage) {
       return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <ErrorBoundary fallback={routeErrorFallback}>
           <Routes>
             <Route
               path="/"
@@ -1199,6 +1697,7 @@ export default function PlantSwipe() {
             />
             <Route path="*" element={<Navigate to="/discovery" replace />} />
           </Routes>
+          </ErrorBoundary>
           {/* Auth Dialog for landing page */}
           <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
             <DialogContent className="rounded-2xl">
@@ -1322,9 +1821,14 @@ export default function PlantSwipe() {
 
             {/* Main content area */}
             <main className="min-h-[60vh]" aria-live="polite">
-              {/* Sticky search bar for search view - sticks to top when scrolled past */}
+              <ErrorBoundary fallback={routeErrorFallback}>
+              {/* Sticky search bar for search view - hides on scroll down on mobile */}
               {currentView === "search" && (
-                <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4">
+                <div 
+                  className={`sticky z-30 -mx-4 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4 transition-all duration-300 ${
+                    searchBarVisible ? 'top-0 opacity-100' : '-top-32 opacity-0 md:top-0 md:opacity-100'
+                  }`}
+                >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div className="flex-1">
                       <Label htmlFor="plant-search-main" className="sr-only">
@@ -1338,7 +1842,6 @@ export default function PlantSwipe() {
                         value={query}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           setQuery(e.target.value)
-                          setIndex(0)
                         }}
                       />
                     </div>
@@ -1442,10 +1945,40 @@ export default function PlantSwipe() {
               )}
             />
             <Route
+              path="/messages"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <MessagesPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/scan"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <ScanPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
               path="/settings"
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
                   <SettingsPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/bug-catcher"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <BugCatcherPageLazy />
                 </Suspense>
               ) : (
                 <Navigate to="/" replace />
@@ -1567,7 +2100,7 @@ export default function PlantSwipe() {
               path="/admin/*"
               element={
                 <RequireEditor>
-                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
+                  <Suspense fallback={<div className="p-8 flex items-center justify-center gap-2 text-sm opacity-60"><Loader2 className="h-4 w-4 animate-spin" /><span>Loading admin panel...</span></div>}>
                     <AdminPage />
                   </Suspense>
                 </RequireEditor>
@@ -1709,6 +2242,7 @@ export default function PlantSwipe() {
               }
             />
           </Routes>
+              </ErrorBoundary>
         </main>
       </div>
 
@@ -1768,8 +2302,7 @@ export default function PlantSwipe() {
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
-            <Button className="w-full rounded-2xl" onClick={submitAuth} disabled={authSubmitting}>
-              {authSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
               {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
             </Button>
             <div className="text-center text-sm">
@@ -1792,6 +2325,15 @@ export default function PlantSwipe() {
       <Footer />
       <BroadcastToast />
       <RequestPlantDialog open={requestPlantDialogOpen} onOpenChange={setRequestPlantDialogOpen} />
+      
+      {/* Message notification toast - shows when new messages arrive */}
+      <MessageNotificationToast
+        notification={messageNotification}
+        onDismiss={dismissMessageNotification}
+        onOpen={(conversationId) => {
+          navigate(`/messages?conversation=${conversationId}`)
+        }}
+      />
     </div>
     </AuthActionsProvider>
   )

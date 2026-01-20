@@ -122,15 +122,24 @@
   },
   "meet": {
     "title": "Meet the team",
-    "subtitle": "Two friends, one plant-shaped friendship bracelet.",
+    "subtitle": "A dedicated team, one plant-shaped friendship bracelet.",
     "badge": "Aphyllante squad",
     "ritualLabel": "Launch ritual",
-    "order": ["xavier", "five"],
+    "order": ["lauryne", "xavier", "five"],
     "members": {
+      "lauryne": {
+        "name": "Lauryne",
+        "role": "CEO",
+        "adjectives": [],
+        "description": "Leading Aphylia with vision and passion.",
+        "ritual": "",
+        "placeholder": "Photo placeholder — Lauryne",
+        "placeholderCta": "Add photo soon"
+      },
       "xavier": {
         "name": "Xavier",
-        "role": "Chaotic creative · Plant lover",
-        "adjectives": ["Chaotic creative", "Sun-chasing"],
+        "role": "Co-Founder · Plant lover",
+        "adjectives": ["Psychokwak", "Sun-chasing"],
         "description": "Keeps a notebook of balcony microclimates, paints UI ideas in watercolor, and never travels without pruning shears.",
         "ritual": "Coffee in one hand, cigarette in the other, whispering to seedlings before every deploy.",
         "placeholder": "Photo placeholder — Xavier in the balcony jungle",
@@ -138,8 +147,8 @@
       },
       "five": {
         "name": "FIVE",
-        "role": "Sleepless overthinker · Code lover",
-        "adjectives": ["Sleepless overthinker", "Pixel tinkerer"],
+        "role": "Co-Founder · Code lover",
+        "adjectives": ["Five", "Pixel tinkerer"],
         "description": "Writes migration scripts at midnight, labels every plant by Latin name, and can debug while watering basil.",
         "ritual": "Mango Monster, a whispered prayer, fingers crossed as the build bar crawls across the screen.",
         "placeholder": "Photo placeholder — FIVE guarding the terminal",

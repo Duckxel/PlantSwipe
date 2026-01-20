@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   getUserGardens,
@@ -38,6 +37,8 @@ import {
   refreshGardenTaskCache,
   refreshUserTaskCache,
 } from "@/lib/gardens";
+import { getPendingGardenInvites, acceptGardenInvite, declineGardenInvite } from "@/lib/notifications";
+import type { GardenInvite } from "@/types/notification";
 import { useAuthActions } from "@/context/AuthActionsContext";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -50,6 +51,8 @@ import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
 import { GardenListSkeleton } from "@/components/garden/GardenSkeletons";
+import { updateTaskNotificationState } from "@/hooks/useTaskNotification";
+import { GardenListSidebar } from "@/components/garden/GardenListSidebar";
 
 export const GardenListPage: React.FC = () => {
   const { user, profile } = useAuth();
@@ -104,6 +107,9 @@ export const GardenListPage: React.FC = () => {
     Set<string>
   >(new Set());
   const [markingAllCompleted, setMarkingAllCompleted] = React.useState(false);
+  // Garden invites state
+  const [gardenInvites, setGardenInvites] = React.useState<GardenInvite[]>([]);
+  const [processingInviteId, setProcessingInviteId] = React.useState<string | null>(null);
 
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -1205,12 +1211,40 @@ export const GardenListPage: React.FC = () => {
     };
   }, [scheduleReload, user?.id, clearLocalStorageCache]);
 
+  // ⚡ Shared lookup memos - O(1) lookups instead of O(n) .find()/.filter() calls
+  // NOTE: These MUST be defined before callbacks that use them to avoid TDZ errors
+  const plantsById = React.useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const p of allPlants) {
+      map[p.id] = p;
+    }
+    return map;
+  }, [allPlants]);
+
+  const gardensById = React.useMemo(() => {
+    const map: Record<string, (typeof gardens)[0]> = {};
+    for (const g of gardens) {
+      map[g.id] = g;
+    }
+    return map;
+  }, [gardens]);
+
+  const plantIdsByGarden = React.useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    for (const p of allPlants) {
+      if (!map[p.gardenId]) map[p.gardenId] = new Set();
+      map[p.gardenId].add(p.id);
+    }
+    return map;
+  }, [allPlants]);
+
   const onProgressOccurrence = React.useCallback(
     async (occId: string, inc: number) => {
       // Set loading state
       setProgressingOccIds((prev) => new Set(prev).add(occId));
 
       let broadcastGardenId: string | null = null;
+      let gp: any = null;
       const o = todayTaskOccurrences.find((x: any) => x.id === occId);
 
       // Optimistic update - update UI immediately
@@ -1223,7 +1257,8 @@ export const GardenListPage: React.FC = () => {
           prev.map((x: any) => (x.id === occId ? optimisticOcc : x)),
         );
 
-        const gp = allPlants.find((p: any) => p.id === o.gardenPlantId);
+        // ⚡ O(1) lookup instead of O(P) .find()
+        gp = plantsById[o.gardenPlantId];
         broadcastGardenId = gp?.gardenId || null;
       }
 
@@ -1232,7 +1267,7 @@ export const GardenListPage: React.FC = () => {
         // Log activity for the appropriate garden
         try {
           if (o && broadcastGardenId) {
-            const gp = allPlants.find((p: any) => p.id === o.gardenPlantId);
+            // Reuse gp from above - no need to find again
             const type = (o as any).taskType || "custom";
             const taskTypeLabel = t(`garden.taskTypes.${type}`);
             const plantName = gp?.nickname || gp?.plant?.name || null;
@@ -1342,7 +1377,7 @@ export const GardenListPage: React.FC = () => {
       }
     },
     [
-      allPlants,
+      plantsById,
       emitGardenRealtime,
       loadAllTodayOccurrences,
       todayTaskOccurrences,
@@ -1359,13 +1394,17 @@ export const GardenListPage: React.FC = () => {
       // Set loading state
       setCompletingPlantIds((prev) => new Set(prev).add(gardenPlantId));
 
-      const gp = allPlants.find((p: any) => p.id === gardenPlantId);
+      // ⚡ O(1) lookup instead of O(P) .find()
+      const gp = plantsById[gardenPlantId];
       const gardenId = gp?.gardenId ? String(gp.gardenId) : null;
 
       // Optimistic update - mark all as completed immediately
       const occs = todayTaskOccurrences.filter(
         (o) => o.gardenPlantId === gardenPlantId,
       );
+      // Build lookup map for O(1) updates
+      const occsById = new Map(occs.map((o) => [o.id, o]));
+
       const optimisticOccs = occs.map((o) => ({
         ...o,
         completedCount: Math.max(
@@ -1373,11 +1412,9 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
+      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
       setTodayTaskOccurrences((prev) =>
-        prev.map((x: any) => {
-          const updated = optimisticOccs.find((opt) => opt.id === x.id);
-          return updated || x;
-        }),
+        prev.map((x: any) => optimisticById.get(x.id) || x),
       );
 
       try {
@@ -1428,12 +1465,9 @@ export const GardenListPage: React.FC = () => {
           });
         }
       } catch (error) {
-        // Revert optimistic update on error
+        // Revert optimistic update on error using O(1) Map lookup
         setTodayTaskOccurrences((prev) =>
-          prev.map((x: any) => {
-            const original = occs.find((orig) => orig.id === x.id);
-            return original || x;
-          }),
+          prev.map((x: any) => occsById.get(x.id) || x),
         );
         throw error;
       } finally {
@@ -1485,7 +1519,7 @@ export const GardenListPage: React.FC = () => {
       }
     },
     [
-      allPlants,
+      plantsById,
       emitGardenRealtime,
       loadAllTodayOccurrences,
       todayTaskOccurrences,
@@ -1501,13 +1535,14 @@ export const GardenListPage: React.FC = () => {
       // Set loading state
       setCompletingGardenIds((prev) => new Set(prev).add(gardenId));
 
-      // Get all tasks for this garden
-      const gardenPlantIds = allPlants
-        .filter((p: any) => p.gardenId === gardenId)
-        .map((p: any) => p.id);
-      const occs = todayTaskOccurrences.filter((o) =>
-        gardenPlantIds.includes(o.gardenPlantId),
-      );
+      // ⚡ O(O) using Set lookup instead of O(P) filter + O(O*P) includes
+      const gardenPlantIdSet = plantIdsByGarden[gardenId];
+      const occs = gardenPlantIdSet
+        ? todayTaskOccurrences.filter((o) => gardenPlantIdSet.has(o.gardenPlantId))
+        : [];
+
+      // Build lookup map for O(1) updates
+      const occsById = new Map(occs.map((o) => [o.id, o]));
 
       // Optimistic update - mark all as completed immediately
       const optimisticOccs = occs.map((o) => ({
@@ -1517,11 +1552,9 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
+      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
       setTodayTaskOccurrences((prev) =>
-        prev.map((x: any) => {
-          const updated = optimisticOccs.find((opt) => opt.id === x.id);
-          return updated || x;
-        }),
+        prev.map((x: any) => optimisticById.get(x.id) || x),
       );
 
       try {
@@ -1537,7 +1570,7 @@ export const GardenListPage: React.FC = () => {
         await Promise.all(promises);
 
         // Log activity for completing all garden tasks (fire and forget)
-        const gardenName = gardens.find((g) => g.id === gardenId)?.name || t("garden.garden");
+        const gardenName = gardensById[gardenId]?.name || t("garden.garden");
         logGardenActivity({
           gardenId,
           kind: "task_completed" as any,
@@ -1555,12 +1588,9 @@ export const GardenListPage: React.FC = () => {
           actorId: user?.id ?? null,
         }).catch(() => {});
       } catch (error) {
-        // Revert optimistic update on error
+        // Revert optimistic update on error using O(1) Map lookup
         setTodayTaskOccurrences((prev) =>
-          prev.map((x: any) => {
-            const original = occs.find((orig) => orig.id === x.id);
-            return original || x;
-          }),
+          prev.map((x: any) => occsById.get(x.id) || x),
         );
         throw error;
       } finally {
@@ -1607,8 +1637,8 @@ export const GardenListPage: React.FC = () => {
       }
     },
     [
-      allPlants,
-      gardens,
+      plantIdsByGarden,
+      gardensById,
       emitGardenRealtime,
       loadAllTodayOccurrences,
       todayTaskOccurrences,
@@ -1625,9 +1655,9 @@ export const GardenListPage: React.FC = () => {
 
     const affectedGardenIds = new Set<string>();
 
-    // Optimistic update - mark all as completed immediately
+    // ⚡ Optimistic update using O(1) plantsById lookup instead of O(P) .find()
     const optimisticOccs = todayTaskOccurrences.map((o) => {
-      const gp = allPlants.find((p: any) => p.id === o.gardenPlantId);
+      const gp = plantsById[o.gardenPlantId];
       if (gp?.gardenId) affectedGardenIds.add(String(gp.gardenId));
       return {
         ...o,
@@ -1742,14 +1772,36 @@ export const GardenListPage: React.FC = () => {
       }
     }
   }, [
-    allPlants,
+    plantsById,
     emitGardenRealtime,
     loadAllTodayOccurrences,
     todayTaskOccurrences,
     serverToday,
     user?.id,
     clearLocalStorageCache,
+    t,
   ]);
+
+  const onReloadTasks = React.useCallback(() => {
+    // Reset mismatch counter
+    mismatchReloadAttemptsRef.current = 0;
+    setMismatchReloadAttempts(0);
+    // Clear all caches and force reload
+    taskDataCacheRef.current = null;
+    clearLocalStorageCache(`garden_tasks_cache_`);
+    const today = serverTodayRef.current ?? serverToday;
+    if (today) {
+      Object.keys(resyncCacheRef.current).forEach((key) => {
+        if (key.endsWith(`::${today}`)) {
+          delete resyncCacheRef.current[key];
+        }
+      });
+    }
+    setLoadingTasks(true);
+    loadAllTodayOccurrences(undefined, undefined, false).catch(() => {
+      setLoadingTasks(false);
+    });
+  }, [clearLocalStorageCache, loadAllTodayOccurrences, serverToday]);
 
   const onCreate = async () => {
     if (!user?.id) return;
@@ -1925,6 +1977,37 @@ export const GardenListPage: React.FC = () => {
   ]);
 
   const gardensWithTasks = React.useMemo(() => {
+    // ⚡ Optimized: Single-pass O(T + G) using shared plantsById lookup
+    const gardenData: Record<
+      string,
+      { plantIds: Set<string>; plants: any[]; req: number; done: number }
+    > = {};
+
+    // O(T): Single pass over occurrences - compute plants, req, done simultaneously
+    for (const o of todayTaskOccurrences) {
+      const plant = plantsById[o.gardenPlantId];
+      if (!plant) continue;
+
+      const gardenId = plant.gardenId;
+      let data = gardenData[gardenId];
+      if (!data) {
+        data = { plantIds: new Set(), plants: [], req: 0, done: 0 };
+        gardenData[gardenId] = data;
+      }
+
+      // Accumulate task counts
+      const reqCount = Math.max(1, Number(o.requiredCount || 1));
+      data.req += reqCount;
+      data.done += Math.min(reqCount, Number(o.completedCount || 0));
+
+      // Track unique plants (Set for O(1) dedup)
+      if (!data.plantIds.has(o.gardenPlantId)) {
+        data.plantIds.add(o.gardenPlantId);
+        data.plants.push(plant);
+      }
+    }
+
+    // O(G): Build result array in garden order
     const byGarden: Array<{
       gardenId: string;
       gardenName: string;
@@ -1932,75 +2015,94 @@ export const GardenListPage: React.FC = () => {
       req: number;
       done: number;
     }> = [];
-    const idToGardenName = gardens.reduce<Record<string, string>>((acc, g) => {
-      acc[g.id] = g.name;
-      return acc;
-    }, {});
+
     for (const g of gardens) {
-      const plants = allPlants.filter(
-        (gp: any) =>
-          gp.gardenId === g.id && (occsByPlant[gp.id] || []).length > 0,
-      );
-      if (plants.length === 0) continue;
-      let req = 0,
-        done = 0;
-      for (const gp of plants) {
-        const occs = occsByPlant[gp.id] || [];
-        req += occs.reduce(
-          (a: number, o: any) => a + Math.max(1, Number(o.requiredCount || 1)),
-          0,
-        );
-        done += occs.reduce(
-          (a: number, o: any) =>
-            a +
-            Math.min(
-              Math.max(1, Number(o.requiredCount || 1)),
-              Number(o.completedCount || 0),
-            ),
-          0,
-        );
-      }
+      const data = gardenData[g.id];
+      if (!data || data.plants.length === 0) continue;
       byGarden.push({
         gardenId: g.id,
-        gardenName: idToGardenName[g.id] || "",
-        plants,
-        req,
-        done,
+        gardenName: g.name,
+        plants: data.plants,
+        req: data.req,
+        done: data.done,
       });
     }
+
     console.log(
       "[GardenList] gardensWithTasks computed:",
       byGarden.length,
-      "gardens with tasks,",
+      "gardens,",
       todayTaskOccurrences.length,
-      "occurrences,",
-      allPlants.length,
-      "plants",
+      "occurrences",
     );
     return byGarden;
-  }, [gardens, allPlants, occsByPlant, todayTaskOccurrences.length]);
+  }, [gardens, plantsById, todayTaskOccurrences]);
 
-  const totalTasks = React.useMemo(
-    () =>
-      todayTaskOccurrences.reduce(
-        (a, o) => a + Math.max(1, Number(o.requiredCount || 1)),
-        0,
-      ),
-    [todayTaskOccurrences],
-  );
-  const totalDone = React.useMemo(
-    () =>
-      todayTaskOccurrences.reduce(
-        (a, o) =>
-          a +
-          Math.min(
-            Math.max(1, Number(o.requiredCount || 1)),
-            Number(o.completedCount || 0),
-          ),
-        0,
-      ),
-    [todayTaskOccurrences],
-  );
+  // ⚡ Single-pass computation of totalTasks and totalDone
+  const { totalTasks, totalDone } = React.useMemo(() => {
+    let tasks = 0;
+    let done = 0;
+    for (const o of todayTaskOccurrences) {
+      const req = Math.max(1, Number(o.requiredCount || 1));
+      tasks += req;
+      done += Math.min(req, Number(o.completedCount || 0));
+    }
+    return { totalTasks: tasks, totalDone: done };
+  }, [todayTaskOccurrences]);
+
+  // ⚡ Update task notification state immediately when we have fresh task data
+  // This ensures the red dot indicator in the nav is instantly accurate
+  React.useEffect(() => {
+    if (!user?.id) return;
+    if (loadingTasks) return; // Don't update while still loading
+    // Has unfinished tasks if totalTasks > totalDone
+    const hasUnfinished = totalTasks > totalDone;
+    updateTaskNotificationState(user.id, hasUnfinished);
+  }, [user?.id, totalTasks, totalDone, loadingTasks]);
+
+  // Load garden invites
+  const loadGardenInvites = React.useCallback(async () => {
+    if (!user?.id) {
+      setGardenInvites([]);
+      return;
+    }
+    try {
+      const invites = await getPendingGardenInvites(user.id);
+      setGardenInvites(invites);
+    } catch (e) {
+      console.warn('[GardenList] Failed to load garden invites:', e);
+    }
+  }, [user?.id]);
+
+  React.useEffect(() => {
+    loadGardenInvites();
+  }, [loadGardenInvites]);
+
+  // Handle accept garden invite
+  const handleAcceptInvite = React.useCallback(async (inviteId: string) => {
+    setProcessingInviteId(inviteId);
+    try {
+      await acceptGardenInvite(inviteId);
+      await Promise.all([loadGardenInvites(), load()]);
+    } catch (e: any) {
+      console.error('Failed to accept invite:', e);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  }, [loadGardenInvites, load]);
+
+  // Handle decline garden invite
+  const handleDeclineInvite = React.useCallback(async (inviteId: string) => {
+    setProcessingInviteId(inviteId);
+    try {
+      await declineGardenInvite(inviteId);
+      await loadGardenInvites();
+    } catch (e: any) {
+      console.error('Failed to decline invite:', e);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  }, [loadGardenInvites]);
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16">
@@ -2239,221 +2341,29 @@ export const GardenListPage: React.FC = () => {
         </div>
 
         {/* Right-side Tasks sidebar for all gardens - hidden for non-logged-in users */}
-        {user && (
-          <aside className="mt-6 lg:mt-6 lg:pl-6 rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/70 dark:bg-[#1f1f1f]/70 backdrop-blur p-6 shadow-[0_30px_80px_-45px_rgba(15,23,42,0.65)]">
-            <div className="space-y-4">
-              <div className="text-lg font-semibold">{t("garden.tasks")}</div>
-              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
-                <div className="text-sm opacity-60 mb-2">
-                  {t("garden.allGardens")}
-                </div>
-                <div className="h-2 bg-stone-200 dark:bg-[#3e3e42] rounded-full overflow-hidden">
-                  <div
-                    className="h-2 bg-emerald-500"
-                    style={{
-                      width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%`,
-                    }}
-                  />
-                </div>
-                <div className="text-xs opacity-70 mt-1">
-                  {t("garden.today")}: {totalDone} / {totalTasks}
-                </div>
-              </Card>
-              {totalTasks > totalDone && (
-                <div>
-                  <Button
-                    className="rounded-2xl w-full"
-                    onClick={onMarkAllCompleted}
-                    disabled={markingAllCompleted}
-                  >
-                    {markingAllCompleted ? (
-                      <span className="flex items-center gap-2">
-                        <span className="animate-spin">⏳</span>
-                        {t("garden.completing")}
-                      </span>
-                    ) : (
-                      t("garden.markAllCompleted")
-                    )}
-                  </Button>
-                </div>
-              )}
-              {loadingTasks && (
-                <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 text-sm opacity-70 shadow-sm">
-                  {t("garden.loadingTasks")}
-                  {mismatchReloadAttempts > 0 && (
-                    <div className="text-xs opacity-60 mt-1">
-                      Reload attempt {mismatchReloadAttempts}/3
-                    </div>
-                  )}
-                </Card>
-              )}
-              {!loadingTasks &&
-                gardensWithTasks.length === 0 &&
-                todayTaskOccurrences.length === 0 && (
-                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
-                    <div className="text-sm opacity-70 mb-2">
-                      {t("garden.noTasksToday")}
-                    </div>
-                    {/* Show reload button if progress indicates tasks exist */}
-                    {Object.values(progressByGarden).some(
-                      (prog) => (prog.due || 0) > 0,
-                    ) && (
-                      <Button
-                        className="rounded-xl w-full mt-2"
-                        variant="outline"
-                        onClick={() => {
-                          // Reset mismatch counter
-                          mismatchReloadAttemptsRef.current = 0;
-                          setMismatchReloadAttempts(0);
-                          // Clear all caches and force reload
-                          taskDataCacheRef.current = null;
-                          clearLocalStorageCache(`garden_tasks_cache_`);
-                          const today = serverTodayRef.current ?? serverToday;
-                          if (today) {
-                            Object.keys(resyncCacheRef.current).forEach(
-                              (key) => {
-                                if (key.endsWith(`::${today}`)) {
-                                  delete resyncCacheRef.current[key];
-                                }
-                              },
-                            );
-                          }
-                          setLoadingTasks(true);
-                          loadAllTodayOccurrences(
-                            undefined,
-                            undefined,
-                            false,
-                          ).catch(() => {
-                            setLoadingTasks(false);
-                          });
-                        }}
-                      >
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Reload Tasks
-                      </Button>
-                    )}
-                  </Card>
-                )}
-              {!loadingTasks &&
-                gardensWithTasks.length > 0 &&
-                gardensWithTasks.map((gw) => (
-                  <Card
-                    key={gw.gardenId}
-                    className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 shadow-sm"
-                  >
-                    {/* Garden header with Complete All button */}
-                    <div className="flex items-center justify-between gap-3 mb-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{gw.gardenName}</div>
-                        <div className="text-xs opacity-70">
-                          {gw.done} / {gw.req} {t("garden.done")}
-                        </div>
-                      </div>
-                      {gw.done < gw.req && (
-                        <Button
-                          size="sm"
-                          className="rounded-xl flex-shrink-0"
-                          onClick={() => onCompleteAllForGarden(gw.gardenId)}
-                          disabled={completingGardenIds.has(gw.gardenId)}
-                        >
-                          {completingGardenIds.has(gw.gardenId) ? (
-                            <span className="flex items-center gap-1">
-                              <span className="animate-spin">⏳</span>
-                            </span>
-                          ) : (
-                            t("garden.completeAll")
-                          )}
-                        </Button>
-                      )}
-                    </div>
-                    {/* Tasks list - compact mobile-friendly layout */}
-                    <div className="space-y-2">
-                      {gw.plants.flatMap((gp: any) => {
-                        const occs = occsByPlant[gp.id] || [];
-                        return occs.map((o: any) => {
-                          const tt = (o as any).taskType || "custom";
-                          const badgeClass = `${tt === "water" ? "bg-blue-600 dark:bg-blue-500" : tt === "fertilize" ? "bg-green-600 dark:bg-green-500" : tt === "harvest" ? "bg-yellow-500 dark:bg-yellow-400" : tt === "cut" ? "bg-orange-600 dark:bg-orange-500" : "bg-purple-600 dark:bg-purple-500"} ${tt === "harvest" ? "text-black dark:text-black" : "text-white"}`;
-                          const taskEmoji = (o as any).taskEmoji;
-                          const icon =
-                            taskEmoji &&
-                            taskEmoji !== "??" &&
-                            taskEmoji !== "???" &&
-                            taskEmoji.trim() !== ""
-                              ? taskEmoji
-                              : tt === "water"
-                                ? "💧"
-                                : tt === "fertilize"
-                                  ? "🍽️"
-                                  : tt === "harvest"
-                                    ? "🌾"
-                                    : tt === "cut"
-                                      ? "✂️"
-                                      : "🪴";
-                          const isDone =
-                            Number(o.completedCount || 0) >=
-                            Number(o.requiredCount || 1);
-                          const remaining = Math.max(
-                            0,
-                            Number(o.requiredCount || 1) - Number(o.completedCount || 0),
-                          );
-                          return (
-                            <div
-                              key={o.id}
-                              className={`flex items-center gap-2 text-sm rounded-xl p-2 ${isDone ? "bg-stone-50/80 dark:bg-[#2d2d30]/80 opacity-60" : "bg-white/80 dark:bg-[#1f1f1f]/70"}`}
-                            >
-                              {/* Icon */}
-                              <span className="h-7 w-7 flex-shrink-0 flex items-center justify-center rounded-lg bg-stone-100 dark:bg-[#2d2d30]">
-                                {icon}
-                              </span>
-                              {/* Task info */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span
-                                    className={`text-[10px] px-1.5 py-0.5 rounded-full ${badgeClass}`}
-                                  >
-                                    {t(`garden.taskTypes.${tt}`)}
-                                  </span>
-                                  <span className="text-xs text-stone-600 dark:text-stone-400 truncate">
-                                    {gp.nickname || gp.plant?.name}
-                                  </span>
-                                </div>
-                                {o.requiredCount > 1 && !isDone && (
-                                  <div className="text-[10px] opacity-60 mt-0.5">
-                                    {o.completedCount || 0} / {o.requiredCount}
-                                  </div>
-                                )}
-                              </div>
-                              {/* Complete button */}
-                              {!isDone ? (
-                                <Button
-                                  className="rounded-lg h-7 px-2 text-xs flex-shrink-0"
-                                  size="sm"
-                                  onClick={() =>
-                                    onProgressOccurrence(o.id, remaining)
-                                  }
-                                  disabled={progressingOccIds.has(o.id)}
-                                >
-                                  {progressingOccIds.has(o.id) ? (
-                                    <span className="animate-spin">⏳</span>
-                                  ) : (
-                                    t("garden.complete", "Complete")
-                                  )}
-                                </Button>
-                              ) : (
-                                <span className="text-emerald-600 dark:text-emerald-400 text-xs flex-shrink-0">
-                                  ✓
-                                </span>
-                              )}
-                            </div>
-                          );
-                        });
-                      })}
-                    </div>
-                  </Card>
-                ))}
-            </div>
-          </aside>
-        )}
+        <GardenListSidebar
+          user={user}
+          t={t}
+          totalTasks={totalTasks}
+          totalDone={totalDone}
+          onMarkAllCompleted={onMarkAllCompleted}
+          markingAllCompleted={markingAllCompleted}
+          loadingTasks={loadingTasks}
+          mismatchReloadAttempts={mismatchReloadAttempts}
+          gardensWithTasks={gardensWithTasks}
+          todayTaskOccurrences={todayTaskOccurrences}
+          progressByGarden={progressByGarden}
+          onReloadTasks={onReloadTasks}
+          onCompleteAllForGarden={onCompleteAllForGarden}
+          completingGardenIds={completingGardenIds}
+          occsByPlant={occsByPlant}
+          onProgressOccurrence={onProgressOccurrence}
+          progressingOccIds={progressingOccIds}
+          gardenInvites={gardenInvites}
+          handleAcceptInvite={handleAcceptInvite}
+          handleDeclineInvite={handleDeclineInvite}
+          processingInviteId={processingInviteId}
+        />
       </div>
     </div>
   );

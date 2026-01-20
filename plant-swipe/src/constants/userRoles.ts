@@ -9,6 +9,7 @@
  * - Creator: partnered social media influencer
  * - VIP: paid account access without having to pay
  * - Plus: paid account (cannot be manually assigned by admin)
+ * - BugCatcher: tester role for finding and reporting bugs, earns points
  */
 
 export const USER_ROLES = {
@@ -19,6 +20,7 @@ export const USER_ROLES = {
   CREATOR: 'creator',
   VIP: 'vip',
   PLUS: 'plus',
+  BUG_CATCHER: 'bug_catcher',
 } as const
 
 export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES]
@@ -33,6 +35,7 @@ export const ADMIN_ASSIGNABLE_ROLES: UserRole[] = [
   USER_ROLES.MERCHANT,
   USER_ROLES.CREATOR,
   USER_ROLES.VIP,
+  USER_ROLES.BUG_CATCHER,
 ]
 
 /**
@@ -126,12 +129,23 @@ export const ROLE_CONFIG: Record<UserRole, {
     iconColor: 'text-slate-600',
     darkIconColor: 'dark:text-slate-300',
   },
+  bug_catcher: {
+    label: 'Bug Catcher',
+    description: 'Tester who finds and reports bugs',
+    color: 'orange',
+    bgColor: 'bg-orange-100',
+    borderColor: 'border-orange-300',
+    darkBgColor: 'dark:bg-orange-900/40',
+    darkBorderColor: 'dark:border-orange-700',
+    iconColor: 'text-orange-600',
+    darkIconColor: 'dark:text-orange-400',
+  },
 }
 
 /**
  * Check if user has a specific role
  */
-export function hasRole(roles: UserRole[] | null | undefined, role: UserRole): boolean {
+export function hasRole(roles: string[] | null | undefined, role: UserRole): boolean {
   if (!roles || !Array.isArray(roles)) return false
   return roles.includes(role)
 }
@@ -139,7 +153,7 @@ export function hasRole(roles: UserRole[] | null | undefined, role: UserRole): b
 /**
  * Check if user has any of the specified roles
  */
-export function hasAnyRole(roles: UserRole[] | null | undefined, checkRoles: UserRole[]): boolean {
+export function hasAnyRole(roles: string[] | null | undefined, checkRoles: UserRole[]): boolean {
   if (!roles || !Array.isArray(roles)) return false
   return checkRoles.some(role => roles.includes(role))
 }
@@ -148,7 +162,7 @@ export function hasAnyRole(roles: UserRole[] | null | undefined, checkRoles: Use
  * Check if user has admin-level access (admin or editor)
  */
 export function hasAdminAccess(roles: string[] | null | undefined): boolean {
-  return hasAnyRole(roles as UserRole[] | null | undefined, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
+  return hasAnyRole(roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
 }
 
 /**
@@ -156,7 +170,7 @@ export function hasAdminAccess(roles: string[] | null | undefined): boolean {
  */
 export function hasFullAdminAccess(roles: string[] | null | undefined, isAdmin?: boolean | null): boolean {
   if (isAdmin === true) return true
-  return hasRole(roles as UserRole[] | null | undefined, USER_ROLES.ADMIN)
+  return hasRole(roles, USER_ROLES.ADMIN)
 }
 
 /**
@@ -165,7 +179,7 @@ export function hasFullAdminAccess(roles: string[] | null | undefined, isAdmin?:
  */
 export function hasEditorAccess(roles: string[] | null | undefined, isAdmin?: boolean | null): boolean {
   if (isAdmin === true) return true
-  return hasAnyRole(roles as UserRole[] | null | undefined, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
+  return hasAnyRole(roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR])
 }
 
 /**
@@ -183,5 +197,20 @@ export function checkEditorAccess(profile: { is_admin?: boolean | null; roles?: 
 export function checkFullAdminAccess(profile: { is_admin?: boolean | null; roles?: string[] | null } | null | undefined): boolean {
   if (!profile) return false
   if (profile.is_admin === true) return true
-  return hasRole(profile.roles as UserRole[] | null | undefined, USER_ROLES.ADMIN)
+  return hasRole(profile.roles, USER_ROLES.ADMIN)
+}
+
+/**
+ * Check if user has Bug Catcher role
+ */
+export function hasBugCatcherRole(roles: string[] | null | undefined): boolean {
+  return hasRole(roles, USER_ROLES.BUG_CATCHER)
+}
+
+/**
+ * Check Bug Catcher access from a profile object
+ */
+export function checkBugCatcherAccess(profile: { roles?: string[] | null } | null | undefined): boolean {
+  if (!profile) return false
+  return hasBugCatcherRole(profile.roles)
 }

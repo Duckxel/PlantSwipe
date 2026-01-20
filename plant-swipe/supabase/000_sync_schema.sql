@@ -69,6 +69,12 @@ select cron.schedule(
   $$select public.invoke_edge_function('email-campaign-runner')$$
 );
 
+-- Aphylia Chat Image Cleanup (hourly)
+-- NOTE: The actual file cleanup for chat images stored in uploads/to_delete folder
+-- is handled by the Node.js server cron job (server.js) since files are stored on disk.
+-- Files older than 1 hour are automatically deleted.
+-- This comment serves as documentation for the cleanup mechanism.
+
 -- ========== Public schema hard cleanup (drops rogue tables) ==========
 -- IMPORTANT: All tables created in this schema MUST be listed here to avoid data loss!
 -- When adding a new table, add it to this list immediately.
@@ -82,6 +88,7 @@ do $$ declare
     'plant_watering_schedules',
     'plant_sources',
     'plant_infusion_mixes',
+    'plant_pro_advices',
     'plant_images',
     'colors',
     'plant_colors',
@@ -100,6 +107,7 @@ do $$ declare
     'admin_campaign_sends',
     'admin_email_triggers',
     'admin_automatic_email_sends',
+    'team_members',
     -- Gardens
     'gardens',
     'garden_members',
@@ -120,6 +128,8 @@ do $$ declare
     'friends',
     'bookmarks',
     'bookmark_items',
+    'garden_invites',
+    'user_blocks',
     -- Moderation & analytics
     'web_visits',
     'banned_accounts',
@@ -127,6 +137,8 @@ do $$ declare
     'broadcast_messages',
     'blog_posts',
     'profile_admin_notes',
+    'user_reports',
+    'user_report_notes',
     -- Notifications
     'notification_campaigns',
     'notification_templates',
@@ -141,7 +153,25 @@ do $$ declare
     'garden_plant_images',
     -- Journal
     'garden_journal_entries',
-    'garden_journal_photos'
+    'garden_journal_photos',
+    -- Messaging
+    'conversations',
+    'messages',
+    'message_reactions',
+    -- Landing Page CMS
+    'landing_hero_cards',
+    'landing_stats',
+    'landing_features',
+    'landing_showcase_cards',
+    'landing_testimonials',
+    'landing_faq',
+    -- Plant Scanning
+    'plant_scans',
+    -- Bug Catcher System
+    'bug_actions',
+    'bug_action_responses',
+    'bug_reports',
+    'bug_points_history'
   ];
   rec record;
 begin
@@ -181,6 +211,8 @@ alter table if exists public.profiles add column if not exists accent_key text d
 alter table if exists public.profiles add column if not exists is_private boolean not null default false;
 -- Friend requests setting: when true, users cannot send friend requests (prevents unwanted invites)
 alter table if exists public.profiles add column if not exists disable_friend_requests boolean not null default false;
+-- Garden invite privacy: 'anyone' (default) or 'friends_only' to restrict who can send garden invites
+alter table if exists public.profiles add column if not exists garden_invite_privacy text default 'anyone' check (garden_invite_privacy in ('anyone', 'friends_only'));
 -- Language preference: stores user's preferred language code (e.g., 'en', 'fr')
 alter table if exists public.profiles add column if not exists language text default 'en';
 -- Notification preferences: push notifications and email campaigns (default to true/enabled)
@@ -188,8 +220,14 @@ alter table if exists public.profiles add column if not exists notify_push boole
 alter table if exists public.profiles add column if not exists notify_email boolean default true;
 -- User roles: admin, editor, pro, merchant, creator, vip, plus
 alter table if exists public.profiles add column if not exists roles text[] default '{}';
+-- Threat level: 0=Safe, 1=Sus (1 incident), 2=Danger (multiple incidents), 3=Banned
+alter table if exists public.profiles add column if not exists threat_level integer not null default 0 check (threat_level >= 0 and threat_level <= 3);
+-- Bug Catcher points: total accumulated bug points for users with bug_catcher role
+alter table if exists public.profiles add column if not exists bug_points integer default 0;
 -- Create GIN index for efficient role queries
 create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
+-- Create index for threat level queries
+create index if not exists idx_profiles_threat_level on public.profiles (threat_level) where threat_level > 0;
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin
@@ -204,6 +242,37 @@ drop index if exists public.profiles_username_unique;
 
 -- Unique index on display_name (case-insensitive)
 create unique index if not exists profiles_display_name_lower_unique on public.profiles ((lower(display_name)));
+
+-- Role helper functions for policy checks
+create or replace function public.has_role(_user_id uuid, _role text)
+returns boolean
+language sql
+stable
+security definer
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = _user_id
+      and _role = any(coalesce(roles, '{}'))
+  );
+$$;
+
+create or replace function public.has_any_role(_user_id uuid, _roles text[])
+returns boolean
+language sql
+stable
+security definer
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = _user_id
+      and coalesce(roles, '{}') && _roles
+  );
+$$;
+
+grant execute on function public.has_role(uuid, text) to anon, authenticated;
+grant execute on function public.has_any_role(uuid, text[]) to anon, authenticated;
+
 alter table public.profiles enable row level security;
 -- Helper to avoid RLS self-recursion when checking admin
 -- Uses SECURITY DEFINER to bypass RLS on public.profiles
@@ -335,12 +404,13 @@ end $$;
 --   watering_type, division, soil, mulching, nutrition_need, fertilizer
 --   sowing_month, flowering_month, fruiting_month
 --   height_cm, wingspan_cm, tutoring, sow_type, separation_cm, transplanting
---   infusion, aromatherapy, spice_mixes
+--   infusion, aromatherapy
 --   melliferous, polenizer, be_fertilizer, conservation_status
---   pests, diseases, companions
+--   companions
 --   status, admin_commentary, created_by, created_time, updated_by, updated_time
 --
 -- TRANSLATABLE FIELDS (stored ONLY in plant_translations):
+--   spice_mixes, pests, diseases (also kept in plants table for backward compatibility)
 --   name, given_names, scientific_name, family, overview
 --   promotion_month, life_cycle, season, foliage_persistance
 --   toxicity_human, toxicity_pets, allergens, symbolism
@@ -390,13 +460,14 @@ create table if not exists public.plants (
   -- Non-translatable usage fields
   infusion boolean default false,
   aromatherapy boolean default false,
+  -- DEPRECATED: spice_mixes moved to plant_translations (will be dropped after migration)
   spice_mixes text[] not null default '{}',
   -- Non-translatable ecology fields
   melliferous boolean default false,
   polenizer text[] not null default '{}'::text[] check (polenizer <@ array['bee','wasp','ant','butterfly','bird','mosquito','fly','beetle','ladybug','stagbeetle','cockchafer','dungbeetle','weevil']),
   be_fertilizer boolean default false,
   conservation_status text check (conservation_status in ('safe','at risk','vulnerable','endangered','critically endangered','extinct')),
-  -- Non-translatable danger fields
+  -- DEPRECATED: pests and diseases moved to plant_translations (will be dropped after migration)
   pests text[] not null default '{}',
   diseases text[] not null default '{}',
   -- Non-translatable miscellaneous fields
@@ -530,6 +601,35 @@ alter table if exists public.plants drop column if exists water_freq_amount;
 alter table if exists public.plants drop column if exists water_freq_unit;
 alter table if exists public.plants drop column if exists water_freq_value;
 alter table if exists public.plants drop column if exists updated_at;
+
+-- Update plant_type check constraint to include all valid types (including 'succulent')
+-- This fixes databases where the column was created with an older constraint
+do $$ begin
+  -- Drop the old constraint if it exists (constraint name may vary)
+  if exists (
+    select 1 from pg_constraint c
+    join pg_namespace n on n.oid = c.connamespace
+    where c.conrelid = 'public.plants'::regclass
+    and c.contype = 'c'
+    and c.conname like '%plant_type%'
+  ) then
+    execute (
+      select 'alter table public.plants drop constraint ' || quote_ident(c.conname)
+      from pg_constraint c
+      join pg_namespace n on n.oid = c.connamespace
+      where c.conrelid = 'public.plants'::regclass
+      and c.contype = 'c'
+      and c.conname like '%plant_type%'
+      limit 1
+    );
+  end if;
+  -- Add the updated constraint with all valid plant types
+  alter table public.plants add constraint plants_plant_type_check 
+    check (plant_type is null or plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent'));
+exception when duplicate_object then
+  -- Constraint already exists with correct definition
+  null;
+end $$;
 
 -- Strict column whitelist for plants (drops anything not declared above)
 do $$ declare
@@ -755,6 +855,114 @@ do $$ begin
   create policy plant_infusion_mixes_all on public.plant_infusion_mixes for all to authenticated using (true) with check (true);
 end $$;
 
+-- ========== Plant professional advice (Pro/Admin/Editor contributions) ==========
+create table if not exists public.plant_pro_advices (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  author_display_name text,
+  author_username text,
+  author_avatar_url text,
+  author_roles text[] not null default '{}'::text[],
+  content text not null,
+  original_language text,
+  translations jsonb not null default '{}'::jsonb,
+  image_url text,
+  reference_url text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  constraint plant_pro_advices_content_not_blank check (char_length(btrim(content)) > 0),
+  constraint plant_pro_advices_metadata_object check (metadata is null or jsonb_typeof(metadata) = 'object')
+);
+
+-- Add translation columns if they don't exist (for existing databases)
+-- This ensures the columns are added without losing existing data
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'plant_pro_advices' 
+    and column_name = 'original_language'
+  ) then
+    alter table public.plant_pro_advices add column original_language text;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'plant_pro_advices' 
+    and column_name = 'translations'
+  ) then
+    alter table public.plant_pro_advices add column translations jsonb not null default '{}'::jsonb;
+  end if;
+end $$;
+
+-- Add constraint for translations column if it doesn't exist
+do $$ begin
+  if not exists (
+    select 1 from information_schema.table_constraints 
+    where table_schema = 'public' 
+    and table_name = 'plant_pro_advices' 
+    and constraint_name = 'plant_pro_advices_translations_object'
+  ) then
+    alter table public.plant_pro_advices 
+      add constraint plant_pro_advices_translations_object 
+      check (translations is null or jsonb_typeof(translations) = 'object');
+  end if;
+end $$;
+
+-- Create indexes
+create index if not exists plant_pro_advices_plant_created_idx on public.plant_pro_advices (plant_id, created_at desc);
+create index if not exists plant_pro_advices_original_language_idx on public.plant_pro_advices (original_language);
+
+-- Add column comments
+comment on column public.plant_pro_advices.original_language is 'ISO language code of the original content (e.g., en, fr). Detected via DeepL API when advice is created.';
+comment on column public.plant_pro_advices.translations is 'JSONB object storing cached translations keyed by language code. Example: {"fr": "Traduit...", "en": "Translated..."}';
+
+alter table public.plant_pro_advices enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_pro_advices' and policyname='plant_pro_advices_select_all') then
+    drop policy plant_pro_advices_select_all on public.plant_pro_advices;
+  end if;
+  create policy plant_pro_advices_select_all on public.plant_pro_advices for select to authenticated, anon using (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_pro_advices' and policyname='plant_pro_advices_insert_authorized') then
+    drop policy plant_pro_advices_insert_authorized on public.plant_pro_advices;
+  end if;
+  create policy plant_pro_advices_insert_authorized on public.plant_pro_advices for insert to authenticated
+    with check (
+      author_id = auth.uid()
+      and coalesce(public.has_any_role(auth.uid(), array['admin','editor','pro']), false)
+    );
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_pro_advices' and policyname='plant_pro_advices_update_moderate') then
+    drop policy plant_pro_advices_update_moderate on public.plant_pro_advices;
+  end if;
+  create policy plant_pro_advices_update_moderate on public.plant_pro_advices for update to authenticated
+    using (
+      author_id = auth.uid()
+      or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false)
+    )
+    with check (
+      author_id = auth.uid()
+      or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false)
+    );
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_pro_advices' and policyname='plant_pro_advices_delete_moderate') then
+    drop policy plant_pro_advices_delete_moderate on public.plant_pro_advices;
+  end if;
+  create policy plant_pro_advices_delete_moderate on public.plant_pro_advices for delete to authenticated
+    using (
+      author_id = auth.uid()
+      or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false)
+    );
+end $$;
+
 -- ========== Plant images ==========
 create table if not exists public.plant_images (
   id uuid primary key default gen_random_uuid(),
@@ -924,10 +1132,11 @@ end $$;
 --   watering_type, division, soil, mulching, nutrition_need, fertilizer
 --   sowing_month, flowering_month, fruiting_month
 --   height_cm, wingspan_cm, tutoring, sow_type, separation_cm, transplanting
---   infusion, aromatherapy, spice_mixes
+--   infusion, aromatherapy
 --   melliferous, polenizer, be_fertilizer, conservation_status
---   pests, diseases, companions
+--   companions
 --   status, admin_commentary, created_by, created_time, updated_by, updated_time
+--   (spice_mixes, pests, diseases are NOW TRANSLATABLE - stored in both tables for compatibility)
 
 create table if not exists public.plant_translations (
   id uuid primary key default gen_random_uuid(),
@@ -973,6 +1182,10 @@ create table if not exists public.plant_translations (
   source_name text,
   source_url text,
   tags text[] not null default '{}',
+  -- Translatable array fields (spice mixes, pests, diseases)
+  spice_mixes text[] not null default '{}',
+  pests text[] not null default '{}',
+  diseases text[] not null default '{}',
   -- Timestamps
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -1211,6 +1424,10 @@ alter table if exists public.plant_translations add column if not exists tags te
 alter table if exists public.plant_translations add column if not exists nutritional_intake text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists recipes_ideas text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists cut text;
+-- Translatable array fields (moved from plants table to support translation)
+alter table if exists public.plant_translations add column if not exists spice_mixes text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists pests text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists diseases text[] not null default '{}';
 -- level_sun is NOT translated - it stays only in plants table (dropped above)
 
 -- ========== Migrate English data from plants to plant_translations ==========
@@ -1250,7 +1467,10 @@ begin
       ground_effect,
       source_name,
       source_url,
-      tags
+      tags,
+      spice_mixes,
+      pests,
+      diseases
     )
     select
       p.id,
@@ -1274,7 +1494,10 @@ begin
       p.ground_effect,
       p.source_name,
       p.source_url,
-      coalesce(p.tags, '{}')
+      coalesce(p.tags, '{}'),
+      coalesce(p.spice_mixes, '{}'),
+      coalesce(p.pests, '{}'),
+      coalesce(p.diseases, '{}')
     from public.plants p
     where not exists (
       select 1 from public.plant_translations pt 
@@ -1319,6 +1542,40 @@ alter table if exists public.plants drop column if exists ground_effect;
 alter table if exists public.plants drop column if exists source_name;
 alter table if exists public.plants drop column if exists source_url;
 alter table if exists public.plants drop column if exists tags;
+
+-- Migrate spice_mixes, pests, diseases from plants to plant_translations for existing English translations
+-- This handles plants that already have English translations but the new columns are empty
+do $$
+begin
+  -- Only run if spice_mixes column still exists in plants table
+  if exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' and table_name = 'plants' and column_name = 'spice_mixes'
+  ) then
+    -- Update English translations with data from plants table where translation fields are empty
+    update public.plant_translations pt
+    set 
+      spice_mixes = coalesce(p.spice_mixes, '{}'),
+      pests = coalesce(p.pests, '{}'),
+      diseases = coalesce(p.diseases, '{}')
+    from public.plants p
+    where pt.plant_id = p.id
+      and pt.language = 'en'
+      and (array_length(pt.spice_mixes, 1) is null or array_length(pt.spice_mixes, 1) = 0)
+      and (
+        array_length(p.spice_mixes, 1) > 0 
+        or array_length(p.pests, 1) > 0 
+        or array_length(p.diseases, 1) > 0
+      );
+    
+    raise notice '[plant_translations] Migrated spice_mixes, pests, diseases to English translations';
+  end if;
+end $$;
+
+-- spice_mixes, pests, diseases are now translatable - drop from plants table
+alter table if exists public.plants drop column if exists spice_mixes;
+alter table if exists public.plants drop column if exists pests;
+alter table if exists public.plants drop column if exists diseases;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;
@@ -1427,27 +1684,125 @@ do $$ begin
     end if;
 end $$;
 
--- ========== Admin media uploads ==========
+-- ========== Global Image Database (admin_media_uploads) ==========
+-- Tracks ALL images uploaded across the platform: admin uploads, blog images, 
+-- garden covers, message attachments, pro advice images, email images, etc.
 create table if not exists public.admin_media_uploads (
   id uuid primary key default gen_random_uuid(),
-  admin_id uuid,
-  admin_email text,
-  admin_name text,
-  bucket text not null,
-  path text not null,
-  public_url text,
-  mime_type text,
-  original_mime_type text,
-  size_bytes integer,
-  original_size_bytes integer,
-  quality integer,
-  compression_percent integer,
-  metadata jsonb,
+  admin_id uuid,                    -- User ID who uploaded (despite the name, can be any user)
+  admin_email text,                 -- Email of uploader
+  admin_name text,                  -- Display name of uploader
+  bucket text not null,             -- Storage bucket name
+  path text not null,               -- Path within the bucket
+  public_url text,                  -- Public URL to access the image
+  mime_type text,                   -- Final MIME type after optimization
+  original_mime_type text,          -- Original MIME type before optimization
+  size_bytes integer,               -- Final size in bytes
+  original_size_bytes integer,      -- Original size before optimization
+  quality integer,                  -- Quality setting used for optimization
+  compression_percent integer,      -- Percentage of space saved
+  metadata jsonb,                   -- Additional metadata (original name, garden info, etc.)
+  upload_source text,               -- Function/purpose: admin, blog, garden_cover, messages, pro_advice, email
   created_at timestamptz not null default now()
 );
 create index if not exists admin_media_uploads_created_idx on public.admin_media_uploads (created_at desc);
 create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
 create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
+create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
+
+-- Add upload_source column to existing installations (safe to run multiple times)
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'admin_media_uploads' 
+    and column_name = 'upload_source'
+  ) then
+    alter table public.admin_media_uploads add column upload_source text;
+  end if;
+end $$;
+
+-- Backfill upload_source from metadata for existing records
+update public.admin_media_uploads
+set upload_source = coalesce(
+  metadata->>'scope',
+  metadata->>'source',
+  case 
+    when path like '%garden%cover%' then 'garden_cover'
+    when path like '%blog%' then 'blog'
+    when path like '%messages%' then 'messages'
+    when path like '%pro-advice%' or path like '%pro_advice%' then 'pro_advice'
+    when path like '%contact%' then 'contact_screenshot'
+    when path like '%journal%' then 'garden_journal'
+    else 'admin'
+  end
+)
+where upload_source is null;
+
+-- ========== Team Members (About page) ==========
+create table if not exists public.team_members (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  display_name text not null,
+  role text not null,
+  tag text,
+  image_url text,
+  position integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_team_members_position on public.team_members(position);
+create index if not exists idx_team_members_active on public.team_members(is_active) where is_active = true;
+
+alter table public.team_members enable row level security;
+
+-- Policies: anyone can read active team members, only admins can modify
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename = 'team_members' and policyname = 'team_members_select_public') then
+    create policy team_members_select_public on public.team_members 
+      for select to authenticated, anon 
+      using (is_active = true);
+  end if;
+  
+  if not exists (select 1 from pg_policies where tablename = 'team_members' and policyname = 'team_members_admin_all') then
+    create policy team_members_admin_all on public.team_members 
+      for all to authenticated 
+      using (
+        exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin = true)
+      )
+      with check (
+        exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin = true)
+      );
+  end if;
+end $$;
+
+-- Trigger to update updated_at timestamp
+create or replace function public.update_team_members_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists team_members_updated_at on public.team_members;
+create trigger team_members_updated_at
+  before update on public.team_members
+  for each row
+  execute function public.update_team_members_updated_at();
+
+-- Insert initial team members (only if table is empty)
+insert into public.team_members (name, display_name, role, tag, image_url, position, is_active)
+select * from (values 
+  ('lauryne', 'Lauryne Gaignard', 'CEO', null::text, null::text, 0, true),
+  ('xavier', 'Xavier Sabar', 'Co-Founder', 'Psychokwak', 'https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0151-ab46ee91-19d9-4c9f-9694-8c975c084cf1.webp', 1, true),
+  ('five', 'Chan AH-HONG', 'Co-Founder', 'Five', 'https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0414-2-low-0a499a50-08a7-4615-834d-288b179e628e.webp', 2, true)
+) as t(name, display_name, role, tag, image_url, position, is_active)
+where not exists (select 1 from public.team_members limit 1);
+
+comment on table public.team_members is 'Team members displayed on the About page, managed via Admin panel';
 
 -- Indexes for requested plant lookups
 create index if not exists requested_plants_plant_name_normalized_idx on public.requested_plants(plant_name_normalized);
@@ -1972,6 +2327,29 @@ create policy gp_delete on public.garden_plants for delete to authenticated
     exists (select 1 from public.garden_members gm where gm.garden_id = garden_plants.garden_id and gm.user_id = (select auth.uid()))
     or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
   );
+
+-- ========== PUBLIC GARDEN ACCESS FOR ANONYMOUS USERS ==========
+-- Helper function to check if a garden is public (SECURITY DEFINER to bypass RLS)
+-- Defined early so it can be used by anon policies below
+create or replace function public.is_public_garden(_garden_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.gardens
+    where id = _garden_id and privacy = 'public'
+  );
+$$;
+grant execute on function public.is_public_garden(uuid) to anon, authenticated;
+
+-- Allow anon users to read garden_plants for public gardens
+drop policy if exists gp_select_anon_public on public.garden_plants;
+create policy gp_select_anon_public on public.garden_plants for select to anon
+  using (public.is_public_garden(garden_id));
+
 alter table public.garden_plant_events enable row level security;
 alter table public.garden_inventory enable row level security;
 alter table public.garden_instance_inventory enable row level security;
@@ -2075,6 +2453,15 @@ do $$ begin
   end if;
 end $$;
 
+-- Allow anon users to read public gardens
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_select_anon_public') then
+    drop policy gardens_select_anon_public on public.gardens;
+  end if;
+  create policy gardens_select_anon_public on public.gardens for select to anon
+    using (privacy = 'public');
+end $$;
+
 alter table public.garden_members disable row level security;
 
 do $$
@@ -2155,6 +2542,11 @@ drop policy if exists gm_delete on public.garden_members;
         where p.id = (select auth.uid()) and p.is_admin = true
       )
     );
+
+-- Allow anon users to read garden_members for public gardens
+drop policy if exists gm_select_anon_public on public.garden_members;
+create policy gm_select_anon_public on public.garden_members for select to anon
+  using (public.is_public_garden(garden_id));
 
 -- Garden tasks policies
 do $$ begin
@@ -2548,6 +2940,11 @@ create policy gpt_delete on public.garden_plant_tasks for delete to authenticate
     or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
   );
 
+-- Allow anon users to read garden_plant_tasks for public gardens
+drop policy if exists gpt_select_anon_public on public.garden_plant_tasks;
+create policy gpt_select_anon_public on public.garden_plant_tasks for select to anon
+  using (public.is_public_garden(garden_id));
+
 -- garden_plant_task_occurrences policies
 drop policy if exists gpto_iud on public.garden_plant_task_occurrences;
 drop policy if exists gpto_select on public.garden_plant_task_occurrences;
@@ -2600,6 +2997,17 @@ create policy gpto_delete on public.garden_plant_task_occurrences for delete to 
       where gp.id = garden_plant_task_occurrences.garden_plant_id and gm.user_id = (select auth.uid())
     )
     or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+  );
+
+-- Allow anon users to read garden_plant_task_occurrences for public gardens
+drop policy if exists gpto_select_anon_public on public.garden_plant_task_occurrences;
+create policy gpto_select_anon_public on public.garden_plant_task_occurrences for select to anon
+  using (
+    exists (
+      select 1 from public.garden_plants gp
+      where gp.id = garden_plant_task_occurrences.garden_plant_id
+      and public.is_public_garden(gp.garden_id)
+    )
   );
 
 -- ========== RPCs used by the app ==========
@@ -3763,6 +4171,113 @@ do $$ begin
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- ========== User Reports (Moderation) ==========
+-- Files/cases for user reports that admins review
+create table if not exists public.user_reports (
+  id uuid primary key default gen_random_uuid(),
+  reported_user_id uuid not null references public.profiles(id) on delete cascade,
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  reason text not null,
+  status text not null default 'review' check (status in ('review', 'classified')),
+  created_at timestamptz not null default now(),
+  classified_at timestamptz,
+  classified_by uuid references public.profiles(id) on delete set null
+);
+create index if not exists user_reports_reported_user_idx on public.user_reports (reported_user_id);
+create index if not exists user_reports_reporter_idx on public.user_reports (reporter_id);
+create index if not exists user_reports_status_idx on public.user_reports (status);
+create index if not exists user_reports_created_at_idx on public.user_reports (created_at desc);
+
+-- Admin notes on user reports
+create table if not exists public.user_report_notes (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references public.user_reports(id) on delete cascade,
+  admin_id uuid not null references public.profiles(id) on delete cascade,
+  note text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists user_report_notes_report_idx on public.user_report_notes (report_id);
+
+-- RLS for user_reports: admins can read all, users can create reports
+alter table public.user_reports enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_admin_all') then
+    drop policy user_reports_admin_all on public.user_reports;
+  end if;
+  create policy user_reports_admin_all on public.user_reports for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_reports' and policyname='user_reports_user_insert') then
+    drop policy user_reports_user_insert on public.user_reports;
+  end if;
+  create policy user_reports_user_insert on public.user_reports for insert to authenticated
+    with check (reporter_id = (select auth.uid()));
+end $$;
+
+-- RLS for user_report_notes: admins only
+alter table public.user_report_notes enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_report_notes' and policyname='user_report_notes_admin_all') then
+    drop policy user_report_notes_admin_all on public.user_report_notes;
+  end if;
+  create policy user_report_notes_admin_all on public.user_report_notes for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- ========== User Blocks ==========
+-- Users can block other users to prevent friend requests, garden invites, etc.
+create table if not exists public.user_blocks (
+  id uuid primary key default gen_random_uuid(),
+  blocker_id uuid not null references public.profiles(id) on delete cascade,
+  blocked_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(blocker_id, blocked_id),
+  check (blocker_id <> blocked_id)
+);
+create index if not exists user_blocks_blocker_idx on public.user_blocks (blocker_id);
+create index if not exists user_blocks_blocked_idx on public.user_blocks (blocked_id);
+
+-- RLS for user_blocks: users can manage their own blocks
+alter table public.user_blocks enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='user_blocks' and policyname='user_blocks_own') then
+    drop policy user_blocks_own on public.user_blocks;
+  end if;
+  create policy user_blocks_own on public.user_blocks for all to authenticated
+    using (blocker_id = (select auth.uid()) or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (blocker_id = (select auth.uid()));
+end $$;
+
+-- Function to check if a user is blocked
+create or replace function public.is_user_blocked(_blocker_id uuid, _blocked_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_blocks
+    where blocker_id = _blocker_id and blocked_id = _blocked_id
+  );
+$$;
+grant execute on function public.is_user_blocked(uuid, uuid) to authenticated;
+
+-- Function to check if either user has blocked the other (bidirectional)
+create or replace function public.are_users_blocked(_user1_id uuid, _user2_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_blocks
+    where (blocker_id = _user1_id and blocked_id = _user2_id)
+       or (blocker_id = _user2_id and blocked_id = _user1_id)
+  );
+$$;
+grant execute on function public.are_users_blocked(uuid, uuid) to authenticated;
+
 -- ========== Cleanup of unused objects ==========
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)
@@ -4165,7 +4680,8 @@ create table if not exists public.admin_email_triggers (
 -- Insert default trigger types
 insert into public.admin_email_triggers (trigger_type, display_name, description, is_enabled)
 values 
-  ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false)
+  ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false),
+  ('BAN_USER', 'User Ban Notification', 'Sent when a user is marked as threat level 3 (ban)', false)
 on conflict (trigger_type) do nothing;
 
 alter table public.admin_email_triggers enable row level security;
@@ -4292,6 +4808,15 @@ do $$ begin
       exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
       or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
     );
+end $$;
+
+-- Allow anon users to read garden_activity_logs for public gardens
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_activity_logs' and policyname='gal_select_anon_public') then
+    drop policy gal_select_anon_public on public.garden_activity_logs;
+  end if;
+  create policy gal_select_anon_public on public.garden_activity_logs for select to anon
+    using (public.is_public_garden(garden_id));
 end $$;
 
 -- Helper RPC to write an activity log with best-effort actor name
@@ -4669,6 +5194,89 @@ end;
 $$;
 
 grant execute on function public.get_friend_email(uuid) to authenticated;
+
+-- ========== Garden Invites (invitation system for gardens) ==========
+create table if not exists public.garden_invites (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  inviter_id uuid not null references public.profiles(id) on delete cascade,
+  invitee_id uuid not null references public.profiles(id) on delete cascade,
+  role text not null default 'member' check (role in ('owner','member')),
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined', 'cancelled')),
+  message text,
+  created_at timestamptz not null default now(),
+  responded_at timestamptz,
+  unique(garden_id, invitee_id),
+  check (inviter_id <> invitee_id)
+);
+
+-- Indexes for garden_invites
+create index if not exists garden_invites_garden_idx on public.garden_invites(garden_id);
+create index if not exists garden_invites_inviter_idx on public.garden_invites(inviter_id);
+create index if not exists garden_invites_invitee_idx on public.garden_invites(invitee_id);
+create index if not exists garden_invites_status_idx on public.garden_invites(status);
+
+-- Enable RLS for garden_invites
+alter table public.garden_invites enable row level security;
+
+-- RLS policies for garden_invites
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_select_own') then
+    drop policy garden_invites_select_own on public.garden_invites;
+  end if;
+  create policy garden_invites_select_own on public.garden_invites for select to authenticated
+    using (
+      inviter_id = (select auth.uid())
+      or invitee_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_insert_own') then
+    drop policy garden_invites_insert_own on public.garden_invites;
+  end if;
+  -- Only garden owners/members can send invites
+  create policy garden_invites_insert_own on public.garden_invites for insert to authenticated
+    with check (
+      inviter_id = (select auth.uid())
+      and exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_invites.garden_id
+        and gm.user_id = (select auth.uid())
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_update_own') then
+    drop policy garden_invites_update_own on public.garden_invites;
+  end if;
+  -- Invitee can update (accept/decline), inviter can update (cancel)
+  create policy garden_invites_update_own on public.garden_invites for update to authenticated
+    using (
+      invitee_id = (select auth.uid())
+      or inviter_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    )
+    with check (
+      invitee_id = (select auth.uid())
+      or inviter_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_invites' and policyname='garden_invites_delete_own') then
+    drop policy garden_invites_delete_own on public.garden_invites;
+  end if;
+  create policy garden_invites_delete_own on public.garden_invites for delete to authenticated
+    using (
+      inviter_id = (select auth.uid())
+      or invitee_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
 
 -- Function to search user profiles with friend prioritization and privacy metadata
 create or replace function public.search_user_profiles(_term text, _limit integer default 3)
@@ -7092,6 +7700,9 @@ alter table if exists public.garden_ai_advice add column if not exists translati
 -- Add language preference to gardens for advice translation
 alter table if exists public.gardens add column if not exists preferred_language text default 'en';
 
+-- Migration: Add hide_ai_chat column to gardens (default false = chat visible by default)
+alter table if exists public.gardens add column if not exists hide_ai_chat boolean not null default false;
+
 -- ========== Plant Stocks Management ==========
 -- Table to manage plant seed/plant availability, quantity, and pricing for the shop
 create table if not exists public.plant_stocks (
@@ -7143,3 +7754,1507 @@ do $$ begin
   create policy plant_stocks_delete_admin on public.plant_stocks for delete to authenticated
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
+
+-- ========== Messaging System ==========
+-- This adds a complete messaging system with:
+-- - Conversations (1:1 between friends)
+-- - Messages with text content and optional link sharing
+-- - Message reactions (emoji reactions)
+-- - Reply threading support
+
+-- ========== Conversations Table ==========
+-- A conversation is a 1:1 chat between two friends
+CREATE TABLE IF NOT EXISTS public.conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  participant_1 UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  participant_2 UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- Last message timestamp for ordering conversations
+  last_message_at TIMESTAMPTZ,
+  -- Each participant can mute the conversation
+  muted_by_1 BOOLEAN NOT NULL DEFAULT FALSE,
+  muted_by_2 BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Ensure unique conversation between two users (order-independent)
+  CONSTRAINT unique_conversation UNIQUE (participant_1, participant_2),
+  CONSTRAINT different_participants CHECK (participant_1 <> participant_2),
+  -- Normalize order: participant_1 < participant_2 to avoid duplicates
+  CONSTRAINT ordered_participants CHECK (participant_1 < participant_2)
+);
+
+-- Indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_conversations_participant_1 ON public.conversations(participant_1);
+CREATE INDEX IF NOT EXISTS idx_conversations_participant_2 ON public.conversations(participant_2);
+CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON public.conversations(last_message_at DESC NULLS LAST);
+
+-- ========== Messages Table ==========
+CREATE TABLE IF NOT EXISTS public.messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  -- Message content
+  content TEXT NOT NULL CHECK (length(content) > 0 AND length(content) <= 4000),
+  -- Optional link sharing (plant, garden, bookmark, etc.)
+  link_type TEXT CHECK (link_type IN ('plant', 'garden', 'bookmark', 'profile', 'external')),
+  link_id TEXT, -- ID of the linked resource
+  link_url TEXT, -- URL for external links
+  link_preview JSONB, -- Cached preview data: { title, description, image }
+  -- Reply threading
+  reply_to_id UUID REFERENCES public.messages(id) ON DELETE SET NULL,
+  -- Timestamps
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- Soft delete (allows sender to delete their own messages)
+  deleted_at TIMESTAMPTZ,
+  -- Edit tracking
+  edited_at TIMESTAMPTZ,
+  -- Read receipt: null = unread, timestamp = when read
+  read_at TIMESTAMPTZ
+);
+
+-- Indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON public.messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON public.messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages(conversation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_reply_to ON public.messages(reply_to_id) WHERE reply_to_id IS NOT NULL;
+
+-- ========== Message Reactions Table ==========
+CREATE TABLE IF NOT EXISTS public.message_reactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id UUID NOT NULL REFERENCES public.messages(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  emoji TEXT NOT NULL CHECK (length(emoji) > 0 AND length(emoji) <= 10),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- Each user can only react once with the same emoji to a message
+  CONSTRAINT unique_reaction UNIQUE (message_id, user_id, emoji)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_message_reactions_message_id ON public.message_reactions(message_id);
+CREATE INDEX IF NOT EXISTS idx_message_reactions_user_id ON public.message_reactions(user_id);
+
+-- ========== Enable RLS ==========
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
+
+-- ========== Grant Access ==========
+GRANT SELECT, INSERT, UPDATE ON public.conversations TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.messages TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.message_reactions TO authenticated;
+
+-- ========== RLS Policies for Conversations ==========
+-- Users can only see conversations they are part of
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='conversations' AND policyname='conversations_select_own') THEN
+    DROP POLICY conversations_select_own ON public.conversations;
+  END IF;
+  CREATE POLICY conversations_select_own ON public.conversations FOR SELECT TO authenticated
+    USING (
+      participant_1 = (SELECT auth.uid())
+      OR participant_2 = (SELECT auth.uid())
+      OR public.is_admin_user((SELECT auth.uid()))
+    );
+END $$;
+
+-- Users can create conversations (handled by function to normalize order)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='conversations' AND policyname='conversations_insert_own') THEN
+    DROP POLICY conversations_insert_own ON public.conversations;
+  END IF;
+  CREATE POLICY conversations_insert_own ON public.conversations FOR INSERT TO authenticated
+    WITH CHECK (
+      participant_1 = (SELECT auth.uid()) OR participant_2 = (SELECT auth.uid())
+    );
+END $$;
+
+-- Users can update their own mute settings
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='conversations' AND policyname='conversations_update_own') THEN
+    DROP POLICY conversations_update_own ON public.conversations;
+  END IF;
+  CREATE POLICY conversations_update_own ON public.conversations FOR UPDATE TO authenticated
+    USING (
+      participant_1 = (SELECT auth.uid())
+      OR participant_2 = (SELECT auth.uid())
+      OR public.is_admin_user((SELECT auth.uid()))
+    )
+    WITH CHECK (
+      participant_1 = (SELECT auth.uid())
+      OR participant_2 = (SELECT auth.uid())
+      OR public.is_admin_user((SELECT auth.uid()))
+    );
+END $$;
+
+-- ========== RLS Policies for Messages ==========
+-- Users can see messages in their conversations
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='messages' AND policyname='messages_select_own') THEN
+    DROP POLICY messages_select_own ON public.messages;
+  END IF;
+  CREATE POLICY messages_select_own ON public.messages FOR SELECT TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.conversations c
+        WHERE c.id = messages.conversation_id
+        AND (c.participant_1 = (SELECT auth.uid()) OR c.participant_2 = (SELECT auth.uid()))
+      )
+      OR public.is_admin_user((SELECT auth.uid()))
+    );
+END $$;
+
+-- Users can send messages in their conversations
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='messages' AND policyname='messages_insert_own') THEN
+    DROP POLICY messages_insert_own ON public.messages;
+  END IF;
+  CREATE POLICY messages_insert_own ON public.messages FOR INSERT TO authenticated
+    WITH CHECK (
+      sender_id = (SELECT auth.uid())
+      AND EXISTS (
+        SELECT 1 FROM public.conversations c
+        WHERE c.id = messages.conversation_id
+        AND (c.participant_1 = (SELECT auth.uid()) OR c.participant_2 = (SELECT auth.uid()))
+      )
+    );
+END $$;
+
+-- Users can update their own messages (edit/delete)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='messages' AND policyname='messages_update_own') THEN
+    DROP POLICY messages_update_own ON public.messages;
+  END IF;
+  CREATE POLICY messages_update_own ON public.messages FOR UPDATE TO authenticated
+    USING (
+      sender_id = (SELECT auth.uid())
+      OR EXISTS (
+        SELECT 1 FROM public.conversations c
+        WHERE c.id = messages.conversation_id
+        AND (c.participant_1 = (SELECT auth.uid()) OR c.participant_2 = (SELECT auth.uid()))
+      )
+      OR public.is_admin_user((SELECT auth.uid()))
+    )
+    WITH CHECK (
+      sender_id = (SELECT auth.uid())
+      OR EXISTS (
+        SELECT 1 FROM public.conversations c
+        WHERE c.id = messages.conversation_id
+        AND (c.participant_1 = (SELECT auth.uid()) OR c.participant_2 = (SELECT auth.uid()))
+      )
+      OR public.is_admin_user((SELECT auth.uid()))
+    );
+END $$;
+
+-- ========== RLS Policies for Reactions ==========
+-- Users can see reactions on messages they can see
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='message_reactions' AND policyname='reactions_select_own') THEN
+    DROP POLICY reactions_select_own ON public.message_reactions;
+  END IF;
+  CREATE POLICY reactions_select_own ON public.message_reactions FOR SELECT TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.messages m
+        JOIN public.conversations c ON c.id = m.conversation_id
+        WHERE m.id = message_reactions.message_id
+        AND (c.participant_1 = (SELECT auth.uid()) OR c.participant_2 = (SELECT auth.uid()))
+      )
+      OR public.is_admin_user((SELECT auth.uid()))
+    );
+END $$;
+
+-- Users can add reactions to messages they can see
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='message_reactions' AND policyname='reactions_insert_own') THEN
+    DROP POLICY reactions_insert_own ON public.message_reactions;
+  END IF;
+  CREATE POLICY reactions_insert_own ON public.message_reactions FOR INSERT TO authenticated
+    WITH CHECK (
+      user_id = (SELECT auth.uid())
+      AND EXISTS (
+        SELECT 1 FROM public.messages m
+        JOIN public.conversations c ON c.id = m.conversation_id
+        WHERE m.id = message_reactions.message_id
+        AND (c.participant_1 = (SELECT auth.uid()) OR c.participant_2 = (SELECT auth.uid()))
+      )
+    );
+END $$;
+
+-- Users can remove their own reactions
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='message_reactions' AND policyname='reactions_delete_own') THEN
+    DROP POLICY reactions_delete_own ON public.message_reactions;
+  END IF;
+  CREATE POLICY reactions_delete_own ON public.message_reactions FOR DELETE TO authenticated
+    USING (
+      user_id = (SELECT auth.uid())
+      OR public.is_admin_user((SELECT auth.uid()))
+    );
+END $$;
+
+-- ========== Helper Functions ==========
+
+-- Function to get or create a conversation between two users
+CREATE OR REPLACE FUNCTION public.get_or_create_conversation(_user1_id UUID, _user2_id UUID)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_caller UUID;
+  v_p1 UUID;
+  v_p2 UUID;
+  v_conversation_id UUID;
+  v_are_friends BOOLEAN;
+  v_are_blocked BOOLEAN;
+BEGIN
+  v_caller := auth.uid();
+  IF v_caller IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  
+  -- Caller must be one of the participants
+  IF v_caller <> _user1_id AND v_caller <> _user2_id THEN
+    RAISE EXCEPTION 'Cannot create conversation for other users';
+  END IF;
+  
+  -- Normalize order
+  IF _user1_id < _user2_id THEN
+    v_p1 := _user1_id;
+    v_p2 := _user2_id;
+  ELSE
+    v_p1 := _user2_id;
+    v_p2 := _user1_id;
+  END IF;
+  
+  -- Check if they are friends
+  SELECT EXISTS (
+    SELECT 1 FROM public.friends
+    WHERE (user_id = v_p1 AND friend_id = v_p2)
+    OR (user_id = v_p2 AND friend_id = v_p1)
+  ) INTO v_are_friends;
+  
+  IF NOT v_are_friends THEN
+    RAISE EXCEPTION 'You can only message your friends';
+  END IF;
+  
+  -- Check if blocked
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_blocks
+    WHERE (blocker_id = v_p1 AND blocked_id = v_p2)
+    OR (blocker_id = v_p2 AND blocked_id = v_p1)
+  ) INTO v_are_blocked;
+  
+  IF v_are_blocked THEN
+    RAISE EXCEPTION 'Cannot message this user';
+  END IF;
+  
+  -- Try to find existing conversation
+  SELECT id INTO v_conversation_id
+  FROM public.conversations
+  WHERE participant_1 = v_p1 AND participant_2 = v_p2;
+  
+  IF v_conversation_id IS NOT NULL THEN
+    RETURN v_conversation_id;
+  END IF;
+  
+  -- Create new conversation
+  INSERT INTO public.conversations (participant_1, participant_2)
+  VALUES (v_p1, v_p2)
+  RETURNING id INTO v_conversation_id;
+  
+  RETURN v_conversation_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_or_create_conversation(UUID, UUID) TO authenticated;
+
+-- Function to send a message
+CREATE OR REPLACE FUNCTION public.send_message(
+  _conversation_id UUID,
+  _content TEXT,
+  _link_type TEXT DEFAULT NULL,
+  _link_id TEXT DEFAULT NULL,
+  _link_url TEXT DEFAULT NULL,
+  _link_preview JSONB DEFAULT NULL,
+  _reply_to_id UUID DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_caller UUID;
+  v_message_id UUID;
+  v_recipient_id UUID;
+  v_p1 UUID;
+  v_p2 UUID;
+  v_is_muted BOOLEAN;
+BEGIN
+  v_caller := auth.uid();
+  IF v_caller IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  
+  -- Verify caller is participant
+  SELECT participant_1, participant_2 INTO v_p1, v_p2
+  FROM public.conversations
+  WHERE id = _conversation_id;
+  
+  IF v_p1 IS NULL THEN
+    RAISE EXCEPTION 'Conversation not found';
+  END IF;
+  
+  IF v_caller <> v_p1 AND v_caller <> v_p2 THEN
+    RAISE EXCEPTION 'Not a participant of this conversation';
+  END IF;
+  
+  -- Get recipient ID
+  IF v_caller = v_p1 THEN
+    v_recipient_id := v_p2;
+    SELECT muted_by_2 INTO v_is_muted FROM public.conversations WHERE id = _conversation_id;
+  ELSE
+    v_recipient_id := v_p1;
+    SELECT muted_by_1 INTO v_is_muted FROM public.conversations WHERE id = _conversation_id;
+  END IF;
+  
+  -- Insert message
+  INSERT INTO public.messages (
+    conversation_id,
+    sender_id,
+    content,
+    link_type,
+    link_id,
+    link_url,
+    link_preview,
+    reply_to_id
+  )
+  VALUES (
+    _conversation_id,
+    v_caller,
+    _content,
+    _link_type,
+    _link_id,
+    _link_url,
+    _link_preview,
+    _reply_to_id
+  )
+  RETURNING id INTO v_message_id;
+  
+  -- Update conversation's last_message_at
+  UPDATE public.conversations
+  SET last_message_at = NOW(), updated_at = NOW()
+  WHERE id = _conversation_id;
+  
+  RETURN v_message_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.send_message(UUID, TEXT, TEXT, TEXT, TEXT, JSONB, UUID) TO authenticated;
+
+-- Function to get unread message count for a user
+CREATE OR REPLACE FUNCTION public.get_unread_message_count(_user_id UUID)
+RETURNS INTEGER
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COUNT(*)::INTEGER
+  FROM public.messages m
+  JOIN public.conversations c ON c.id = m.conversation_id
+  WHERE (c.participant_1 = _user_id OR c.participant_2 = _user_id)
+  AND m.sender_id <> _user_id
+  AND m.read_at IS NULL
+  AND m.deleted_at IS NULL;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_unread_message_count(UUID) TO authenticated;
+
+-- Function to mark messages as read
+CREATE OR REPLACE FUNCTION public.mark_messages_as_read(_conversation_id UUID)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_caller UUID;
+  v_count INTEGER;
+BEGIN
+  v_caller := auth.uid();
+  IF v_caller IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  
+  -- Mark all unread messages from the other user as read
+  UPDATE public.messages
+  SET read_at = NOW()
+  WHERE conversation_id = _conversation_id
+  AND sender_id <> v_caller
+  AND read_at IS NULL
+  AND deleted_at IS NULL;
+  
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  
+  RETURN v_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.mark_messages_as_read(UUID) TO authenticated;
+
+-- Function to get conversation with last message and unread count
+CREATE OR REPLACE FUNCTION public.get_user_conversations(_user_id UUID)
+RETURNS TABLE (
+  conversation_id UUID,
+  other_user_id UUID,
+  other_user_display_name TEXT,
+  other_user_avatar_url TEXT,
+  last_message_content TEXT,
+  last_message_at TIMESTAMPTZ,
+  last_message_sender_id UUID,
+  unread_count BIGINT,
+  is_muted BOOLEAN,
+  created_at TIMESTAMPTZ
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  WITH conv_data AS (
+    SELECT 
+      c.id,
+      CASE WHEN c.participant_1 = _user_id THEN c.participant_2 ELSE c.participant_1 END AS other_id,
+      CASE WHEN c.participant_1 = _user_id THEN c.muted_by_1 ELSE c.muted_by_2 END AS is_muted,
+      c.last_message_at,
+      c.created_at
+    FROM public.conversations c
+    WHERE c.participant_1 = _user_id OR c.participant_2 = _user_id
+  ),
+  last_msgs AS (
+    SELECT DISTINCT ON (m.conversation_id)
+      m.conversation_id,
+      m.content,
+      m.created_at,
+      m.sender_id
+    FROM public.messages m
+    WHERE m.deleted_at IS NULL
+    ORDER BY m.conversation_id, m.created_at DESC
+  ),
+  unread_counts AS (
+    SELECT 
+      m.conversation_id,
+      COUNT(*) AS cnt
+    FROM public.messages m
+    WHERE m.sender_id <> _user_id
+    AND m.read_at IS NULL
+    AND m.deleted_at IS NULL
+    GROUP BY m.conversation_id
+  )
+  SELECT 
+    cd.id AS conversation_id,
+    cd.other_id AS other_user_id,
+    p.display_name AS other_user_display_name,
+    p.avatar_url AS other_user_avatar_url,
+    lm.content AS last_message_content,
+    COALESCE(lm.created_at, cd.created_at) AS last_message_at,
+    lm.sender_id AS last_message_sender_id,
+    COALESCE(uc.cnt, 0) AS unread_count,
+    cd.is_muted,
+    cd.created_at
+  FROM conv_data cd
+  LEFT JOIN public.profiles p ON p.id = cd.other_id
+  LEFT JOIN last_msgs lm ON lm.conversation_id = cd.id
+  LEFT JOIN unread_counts uc ON uc.conversation_id = cd.id
+  ORDER BY COALESCE(lm.created_at, cd.created_at) DESC NULLS LAST;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_user_conversations(UUID) TO authenticated;
+
+-- ========== Landing Page CMS Tables ==========
+-- These tables store configurable content for the landing page
+
+-- Hero Cards: Multiple plant cards shown in the hero section
+create table if not exists public.landing_hero_cards (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  plant_name text not null,
+  plant_scientific_name text,
+  plant_description text,
+  image_url text,
+  water_frequency text default '2x/week',
+  light_level text default 'Bright indirect',
+  reminder_text text default 'Water in 2 days',
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Add indexes
+create index if not exists idx_landing_hero_cards_position on public.landing_hero_cards(position);
+create index if not exists idx_landing_hero_cards_active on public.landing_hero_cards(is_active);
+
+-- Landing Stats: Single row containing all stats displayed on the landing page
+create table if not exists public.landing_stats (
+  id uuid primary key default gen_random_uuid(),
+  plants_count text not null default '10K+',
+  plants_label text not null default 'Plant Species',
+  users_count text not null default '50K+',
+  users_label text not null default 'Happy Gardeners',
+  tasks_count text not null default '100K+',
+  tasks_label text not null default 'Care Tasks Done',
+  rating_value text not null default '4.9',
+  rating_label text not null default 'App Store Rating',
+  updated_at timestamptz default now()
+);
+
+-- Ensure only one row exists for stats
+create or replace function public.ensure_single_landing_stats()
+returns trigger as $$
+begin
+  if (select count(*) from public.landing_stats) > 0 and TG_OP = 'INSERT' then
+    raise exception 'Only one landing_stats row allowed';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists ensure_single_landing_stats_trigger on public.landing_stats;
+create trigger ensure_single_landing_stats_trigger
+  before insert on public.landing_stats
+  for each row execute function public.ensure_single_landing_stats();
+
+-- Landing Features: Feature cards shown in the spinning circle and features section
+create table if not exists public.landing_features (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  icon_name text not null default 'Leaf',
+  title text not null,
+  description text,
+  color text not null default 'emerald',
+  is_in_circle boolean not null default false,
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_features_position on public.landing_features(position);
+create index if not exists idx_landing_features_active on public.landing_features(is_active);
+create index if not exists idx_landing_features_circle on public.landing_features(is_in_circle);
+
+-- Landing Showcase Cards: Cards in the "Designed for your jungle" section
+create table if not exists public.landing_showcase_cards (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  card_type text not null default 'small',
+  icon_name text,
+  title text not null,
+  description text,
+  badge_text text,
+  image_url text,
+  cover_image_url text,
+  plant_images jsonb default '[]'::jsonb,
+  garden_name text,
+  plants_count integer default 12,
+  species_count integer default 8,
+  streak_count integer default 7,
+  progress_percent integer default 85,
+  link_url text,
+  color text not null default 'emerald',
+  is_active boolean not null default true,
+  -- Selected public gardens to showcase (array of garden IDs)
+  selected_garden_ids uuid[] default array[]::uuid[],
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_showcase_position on public.landing_showcase_cards(position);
+create index if not exists idx_landing_showcase_active on public.landing_showcase_cards(is_active);
+
+-- Landing Testimonials: Customer reviews/testimonials
+create table if not exists public.landing_testimonials (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  author_name text not null,
+  author_role text,
+  author_avatar_url text,
+  quote text not null,
+  rating integer not null default 5 check (rating >= 1 and rating <= 5),
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_testimonials_position on public.landing_testimonials(position);
+create index if not exists idx_landing_testimonials_active on public.landing_testimonials(is_active);
+
+-- Landing FAQ: Frequently asked questions
+create table if not exists public.landing_faq (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  question text not null,
+  answer text not null,
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_faq_position on public.landing_faq(position);
+create index if not exists idx_landing_faq_active on public.landing_faq(is_active);
+
+-- RLS Policies for Landing Page Tables
+-- All landing tables are publicly readable but only admin-writable
+
+alter table public.landing_hero_cards enable row level security;
+drop policy if exists "Landing hero cards are publicly readable" on public.landing_hero_cards;
+create policy "Landing hero cards are publicly readable" on public.landing_hero_cards for select using (true);
+drop policy if exists "Admins can manage landing hero cards" on public.landing_hero_cards;
+create policy "Admins can manage landing hero cards" on public.landing_hero_cards for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_stats enable row level security;
+drop policy if exists "Landing stats are publicly readable" on public.landing_stats;
+create policy "Landing stats are publicly readable" on public.landing_stats for select using (true);
+drop policy if exists "Admins can manage landing stats" on public.landing_stats;
+create policy "Admins can manage landing stats" on public.landing_stats for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_features enable row level security;
+drop policy if exists "Landing features are publicly readable" on public.landing_features;
+create policy "Landing features are publicly readable" on public.landing_features for select using (true);
+drop policy if exists "Admins can manage landing features" on public.landing_features;
+create policy "Admins can manage landing features" on public.landing_features for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_showcase_cards enable row level security;
+drop policy if exists "Landing showcase cards are publicly readable" on public.landing_showcase_cards;
+create policy "Landing showcase cards are publicly readable" on public.landing_showcase_cards for select using (true);
+drop policy if exists "Admins can manage landing showcase cards" on public.landing_showcase_cards;
+create policy "Admins can manage landing showcase cards" on public.landing_showcase_cards for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_testimonials enable row level security;
+drop policy if exists "Landing testimonials are publicly readable" on public.landing_testimonials;
+create policy "Landing testimonials are publicly readable" on public.landing_testimonials for select using (true);
+drop policy if exists "Admins can manage landing testimonials" on public.landing_testimonials;
+create policy "Admins can manage landing testimonials" on public.landing_testimonials for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_faq enable row level security;
+drop policy if exists "Landing FAQ are publicly readable" on public.landing_faq;
+create policy "Landing FAQ are publicly readable" on public.landing_faq for select using (true);
+drop policy if exists "Admins can manage landing FAQ" on public.landing_faq;
+create policy "Admins can manage landing FAQ" on public.landing_faq for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+-- =============================================
+-- PLANT SCANS TABLE
+-- Stores plant identification scans using Kindwise API
+-- =============================================
+
+-- Drop and recreate to fix schema issues (new feature, no data loss)
+DROP TABLE IF EXISTS public.plant_scans CASCADE;
+
+-- ========== Plant Scans Table ==========
+CREATE TABLE public.plant_scans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  
+  -- Image information
+  image_url TEXT NOT NULL,
+  image_path TEXT,  -- Storage path if stored in Supabase
+  image_bucket TEXT DEFAULT 'PHOTOS',
+  
+  -- API request/response
+  api_access_token TEXT,  -- Kindwise API access token for the request
+  api_model_version TEXT,  -- e.g., 'plant_id:3.1.0'
+  api_status TEXT DEFAULT 'pending',  -- pending, processing, completed, failed
+  api_response JSONB,  -- Full API response stored for reference
+  
+  -- Identification results
+  is_plant BOOLEAN,
+  is_plant_probability NUMERIC(5,4),  -- 0.0000 to 1.0000
+  
+  -- Top match result (denormalized for easy querying)
+  top_match_name TEXT,
+  top_match_scientific_name TEXT,
+  top_match_probability NUMERIC(5,4),
+  top_match_entity_id TEXT,
+  
+  -- All suggestions stored as JSONB array
+  suggestions JSONB DEFAULT '[]'::jsonb,
+  
+  -- Similar images from API
+  similar_images JSONB DEFAULT '[]'::jsonb,
+  
+  -- Location data (optional)
+  latitude NUMERIC(9,6),
+  longitude NUMERIC(9,6),
+  
+  -- Link to our database plant (if matched)
+  matched_plant_id TEXT REFERENCES public.plants(id) ON DELETE SET NULL,
+  
+  -- User notes
+  user_notes TEXT,
+  
+  -- Metadata
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ  -- Soft delete
+);
+
+-- Indexes for plant_scans
+CREATE INDEX IF NOT EXISTS idx_plant_scans_user_id ON public.plant_scans(user_id);
+CREATE INDEX IF NOT EXISTS idx_plant_scans_created_at ON public.plant_scans(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_plant_scans_top_match ON public.plant_scans(top_match_name);
+CREATE INDEX IF NOT EXISTS idx_plant_scans_matched_plant ON public.plant_scans(matched_plant_id);
+
+-- Enable RLS
+ALTER TABLE public.plant_scans ENABLE ROW LEVEL SECURITY;
+
+-- Grant access
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.plant_scans TO authenticated;
+
+-- ========== RLS Policies for Plant Scans ==========
+-- Users can only see their own scans
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='plant_scans' AND policyname='plant_scans_select_own') THEN
+    DROP POLICY plant_scans_select_own ON public.plant_scans;
+  END IF;
+  CREATE POLICY plant_scans_select_own ON public.plant_scans FOR SELECT TO authenticated
+    USING (auth.uid() = user_id);
+END $$;
+
+-- Users can insert their own scans
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='plant_scans' AND policyname='plant_scans_insert_own') THEN
+    DROP POLICY plant_scans_insert_own ON public.plant_scans;
+  END IF;
+  CREATE POLICY plant_scans_insert_own ON public.plant_scans FOR INSERT TO authenticated
+    WITH CHECK (auth.uid() = user_id);
+END $$;
+
+-- Users can update their own scans
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='plant_scans' AND policyname='plant_scans_update_own') THEN
+    DROP POLICY plant_scans_update_own ON public.plant_scans;
+  END IF;
+  CREATE POLICY plant_scans_update_own ON public.plant_scans FOR UPDATE TO authenticated
+    USING (auth.uid() = user_id);
+END $$;
+
+-- Users can delete their own scans
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='plant_scans' AND policyname='plant_scans_delete_own') THEN
+    DROP POLICY plant_scans_delete_own ON public.plant_scans;
+  END IF;
+  CREATE POLICY plant_scans_delete_own ON public.plant_scans FOR DELETE TO authenticated
+    USING (auth.uid() = user_id);
+END $$;
+
+-- ========== Storage Bucket for Scan Images ==========
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'plant-scans',
+  'plant-scans',
+  true,
+  10485760,  -- 10MB limit
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif']
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies for plant-scans bucket
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='plant_scans_upload_own') THEN
+    CREATE POLICY plant_scans_upload_own ON storage.objects FOR INSERT TO authenticated
+      WITH CHECK (
+        bucket_id = 'plant-scans' 
+        AND (storage.foldername(name))[1] = auth.uid()::text
+      );
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='plant_scans_view_public') THEN
+    CREATE POLICY plant_scans_view_public ON storage.objects FOR SELECT TO public
+      USING (bucket_id = 'plant-scans');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='plant_scans_delete_own') THEN
+    CREATE POLICY plant_scans_delete_own ON storage.objects FOR DELETE TO authenticated
+      USING (
+        bucket_id = 'plant-scans'
+        AND (storage.foldername(name))[1] = auth.uid()::text
+      );
+  END IF;
+END $$;
+
+-- ========== Trigger for updated_at ==========
+CREATE OR REPLACE FUNCTION public.update_plant_scan_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_plant_scan_updated_at ON public.plant_scans;
+CREATE TRIGGER trigger_plant_scan_updated_at
+  BEFORE UPDATE ON public.plant_scans
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_plant_scan_updated_at();
+
+-- Comments for documentation
+COMMENT ON TABLE public.plant_scans IS 'Stores plant identification scans from users using Kindwise Plant.id API';
+COMMENT ON COLUMN public.plant_scans.api_response IS 'Full JSON response from Kindwise API for reference';
+COMMENT ON COLUMN public.plant_scans.suggestions IS 'Array of plant identification suggestions with probabilities';
+COMMENT ON COLUMN public.plant_scans.matched_plant_id IS 'Reference to our plants table if a match was found';
+
+-- =============================================
+-- BUG CATCHER SYSTEM
+-- Tables and functions for bug catcher actions, responses, reports, and points
+-- =============================================
+
+-- ========== Bug Actions Table ==========
+-- Tasks that bug catchers can complete to earn points
+CREATE TABLE IF NOT EXISTS public.bug_actions (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    title text NOT NULL,
+    description text,
+    points_reward integer NOT NULL DEFAULT 10,
+    status text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'planned', 'active', 'closed')),
+    release_date timestamptz,  -- When the action becomes available (for planned status)
+    questions jsonb DEFAULT '[]',  -- Array of questions: [{id, title, required, type}]
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+    completed_count integer DEFAULT 0  -- Cached count of completions
+);
+
+CREATE INDEX IF NOT EXISTS idx_bug_actions_status ON public.bug_actions(status);
+CREATE INDEX IF NOT EXISTS idx_bug_actions_release_date ON public.bug_actions(release_date) WHERE status = 'planned';
+
+COMMENT ON TABLE public.bug_actions IS 'Tasks/actions that bug catchers can complete to earn points';
+COMMENT ON COLUMN public.bug_actions.questions IS 'Array of question objects: [{id: string, title: string, required: boolean, type: "text"|"textarea"|"boolean"}]';
+
+-- ========== Bug Action Responses Table ==========
+-- User responses to actions
+CREATE TABLE IF NOT EXISTS public.bug_action_responses (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    action_id uuid NOT NULL REFERENCES public.bug_actions(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    answers jsonb DEFAULT '{}',  -- {questionId: answer}
+    points_earned integer DEFAULT 0,
+    completed_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    UNIQUE(action_id, user_id)  -- Each user can only complete an action once
+);
+
+CREATE INDEX IF NOT EXISTS idx_bug_action_responses_user ON public.bug_action_responses(user_id);
+CREATE INDEX IF NOT EXISTS idx_bug_action_responses_action ON public.bug_action_responses(action_id);
+
+COMMENT ON TABLE public.bug_action_responses IS 'User responses to bug catcher actions';
+
+-- ========== Bug Reports Table ==========
+-- Bugs reported by bug catchers
+CREATE TABLE IF NOT EXISTS public.bug_reports (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    bug_name text NOT NULL,
+    description text NOT NULL,
+    steps_to_reproduce text,
+    screenshots jsonb DEFAULT '[]',  -- Array of image URLs
+    user_info jsonb DEFAULT '{}',  -- {username, role, server, device}
+    console_logs text,
+    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'reviewing', 'closed', 'completed')),
+    points_earned integer DEFAULT 0,
+    admin_notes text,
+    reviewed_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    resolved_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS idx_bug_reports_user ON public.bug_reports(user_id);
+CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON public.bug_reports(status);
+CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON public.bug_reports(created_at DESC);
+
+COMMENT ON TABLE public.bug_reports IS 'Bug reports submitted by bug catchers';
+
+-- ========== Bug Points History Table ==========
+-- Track point transactions
+CREATE TABLE IF NOT EXISTS public.bug_points_history (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    points integer NOT NULL,
+    reason text NOT NULL,  -- 'action_completed', 'bug_report_accepted', 'bonus', 'adjustment'
+    reference_id uuid,  -- Reference to action_response or bug_report
+    reference_type text,  -- 'action' or 'bug_report'
+    created_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_bug_points_history_user ON public.bug_points_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_bug_points_history_created ON public.bug_points_history(created_at DESC);
+
+COMMENT ON TABLE public.bug_points_history IS 'History of all point transactions for bug catchers';
+
+-- ========== Bug Catcher Functions ==========
+
+-- Function to get bug catcher leaderboard (top N)
+CREATE OR REPLACE FUNCTION public.get_bug_catcher_leaderboard(_limit integer DEFAULT 10)
+RETURNS TABLE(
+    rank bigint,
+    user_id uuid,
+    display_name text,
+    avatar_url text,
+    bug_points integer,
+    actions_completed bigint
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT 
+        ROW_NUMBER() OVER (ORDER BY COALESCE(p.bug_points, 0) DESC, p.id) as rank,
+        p.id as user_id,
+        p.display_name,
+        p.avatar_url,
+        COALESCE(p.bug_points, 0) as bug_points,
+        COUNT(DISTINCT bar.id) as actions_completed
+    FROM public.profiles p
+    LEFT JOIN public.bug_action_responses bar ON bar.user_id = p.id
+    WHERE 'bug_catcher' = ANY(COALESCE(p.roles, '{}'))
+    GROUP BY p.id, p.display_name, p.avatar_url, p.bug_points
+    ORDER BY COALESCE(p.bug_points, 0) DESC, p.id
+    LIMIT _limit;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_bug_catcher_leaderboard(integer) TO authenticated;
+
+-- Function to get user's bug catcher rank
+CREATE OR REPLACE FUNCTION public.get_bug_catcher_rank(_user_id uuid)
+RETURNS integer
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT COALESCE(
+        (SELECT rank::integer FROM (
+            SELECT 
+                p.id,
+                ROW_NUMBER() OVER (ORDER BY COALESCE(p.bug_points, 0) DESC, p.id) as rank
+            FROM public.profiles p
+            WHERE 'bug_catcher' = ANY(COALESCE(p.roles, '{}'))
+        ) ranked WHERE id = _user_id),
+        0
+    );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_bug_catcher_rank(uuid) TO authenticated;
+
+-- Function to get available actions for a bug catcher (max N uncompleted)
+CREATE OR REPLACE FUNCTION public.get_available_bug_actions(_user_id uuid, _limit integer DEFAULT 5)
+RETURNS TABLE(
+    id uuid,
+    title text,
+    description text,
+    points_reward integer,
+    questions jsonb,
+    created_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT 
+        ba.id,
+        ba.title,
+        ba.description,
+        ba.points_reward,
+        ba.questions,
+        ba.created_at
+    FROM public.bug_actions ba
+    WHERE ba.status = 'active'
+    AND NOT EXISTS (
+        SELECT 1 FROM public.bug_action_responses bar 
+        WHERE bar.action_id = ba.id AND bar.user_id = _user_id
+    )
+    ORDER BY ba.created_at DESC
+    LIMIT _limit;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_available_bug_actions(uuid, integer) TO authenticated;
+
+-- Function to get completed actions for a user
+CREATE OR REPLACE FUNCTION public.get_completed_bug_actions(_user_id uuid)
+RETURNS TABLE(
+    id uuid,
+    action_id uuid,
+    title text,
+    description text,
+    points_earned integer,
+    answers jsonb,
+    completed_at timestamptz,
+    action_status text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT 
+        bar.id,
+        bar.action_id,
+        ba.title,
+        ba.description,
+        bar.points_earned,
+        bar.answers,
+        bar.completed_at,
+        ba.status as action_status
+    FROM public.bug_action_responses bar
+    JOIN public.bug_actions ba ON ba.id = bar.action_id
+    WHERE bar.user_id = _user_id
+    ORDER BY bar.completed_at DESC;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_completed_bug_actions(uuid) TO authenticated;
+
+-- Function to submit action response
+CREATE OR REPLACE FUNCTION public.submit_bug_action_response(
+    _user_id uuid,
+    _action_id uuid,
+    _answers jsonb
+)
+RETURNS TABLE(success boolean, points_earned integer, message text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_action_status text;
+    v_points_reward integer;
+    v_response_id uuid;
+BEGIN
+    -- Check if action exists and is active
+    SELECT status, points_reward INTO v_action_status, v_points_reward
+    FROM public.bug_actions WHERE id = _action_id;
+    
+    IF v_action_status IS NULL THEN
+        RETURN QUERY SELECT false, 0, 'Action not found'::text;
+        RETURN;
+    END IF;
+    
+    IF v_action_status != 'active' THEN
+        RETURN QUERY SELECT false, 0, 'Action is not active'::text;
+        RETURN;
+    END IF;
+    
+    -- Check if user has bug_catcher role
+    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = _user_id AND 'bug_catcher' = ANY(COALESCE(roles, '{}'))) THEN
+        RETURN QUERY SELECT false, 0, 'User is not a bug catcher'::text;
+        RETURN;
+    END IF;
+    
+    -- Check if already completed
+    IF EXISTS (SELECT 1 FROM public.bug_action_responses WHERE action_id = _action_id AND user_id = _user_id) THEN
+        RETURN QUERY SELECT false, 0, 'Action already completed'::text;
+        RETURN;
+    END IF;
+    
+    -- Insert response
+    INSERT INTO public.bug_action_responses (action_id, user_id, answers, points_earned)
+    VALUES (_action_id, _user_id, _answers, v_points_reward)
+    RETURNING id INTO v_response_id;
+    
+    -- Update user's bug points
+    UPDATE public.profiles 
+    SET bug_points = COALESCE(bug_points, 0) + v_points_reward
+    WHERE id = _user_id;
+    
+    -- Add to points history
+    INSERT INTO public.bug_points_history (user_id, points, reason, reference_id, reference_type)
+    VALUES (_user_id, v_points_reward, 'action_completed', v_response_id, 'action');
+    
+    -- Update action completed count
+    UPDATE public.bug_actions 
+    SET completed_count = COALESCE(completed_count, 0) + 1
+    WHERE id = _action_id;
+    
+    RETURN QUERY SELECT true, v_points_reward, 'Action completed successfully'::text;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.submit_bug_action_response(uuid, uuid, jsonb) TO authenticated;
+
+-- Function to update an action response (if action not closed)
+CREATE OR REPLACE FUNCTION public.update_bug_action_response(
+    _user_id uuid,
+    _response_id uuid,
+    _answers jsonb
+)
+RETURNS TABLE(success boolean, message text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_action_status text;
+BEGIN
+    -- Check if response exists and belongs to user
+    SELECT ba.status INTO v_action_status
+    FROM public.bug_action_responses bar
+    JOIN public.bug_actions ba ON ba.id = bar.action_id
+    WHERE bar.id = _response_id AND bar.user_id = _user_id;
+    
+    IF v_action_status IS NULL THEN
+        RETURN QUERY SELECT false, 'Response not found'::text;
+        RETURN;
+    END IF;
+    
+    IF v_action_status = 'closed' THEN
+        RETURN QUERY SELECT false, 'Cannot update response for closed action'::text;
+        RETURN;
+    END IF;
+    
+    -- Update response
+    UPDATE public.bug_action_responses 
+    SET answers = _answers, updated_at = now()
+    WHERE id = _response_id AND user_id = _user_id;
+    
+    RETURN QUERY SELECT true, 'Response updated successfully'::text;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.update_bug_action_response(uuid, uuid, jsonb) TO authenticated;
+
+-- Function to submit a bug report (auto-fills user info from profile)
+CREATE OR REPLACE FUNCTION public.submit_bug_report(
+    _user_id uuid,
+    _bug_name text,
+    _description text,
+    _steps_to_reproduce text DEFAULT NULL,
+    _screenshots jsonb DEFAULT '[]',
+    _console_logs text DEFAULT NULL
+)
+RETURNS TABLE(success boolean, report_id uuid, points_earned integer, message text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_report_id uuid;
+    v_base_points integer := 5;  -- Base points for submitting a bug report
+    v_user_info jsonb;
+    v_display_name text;
+    v_roles text[];
+BEGIN
+    -- Check if user has bug_catcher role and get profile info
+    SELECT display_name, roles INTO v_display_name, v_roles
+    FROM public.profiles 
+    WHERE id = _user_id AND 'bug_catcher' = ANY(COALESCE(roles, '{}'));
+    
+    IF v_display_name IS NULL AND v_roles IS NULL THEN
+        RETURN QUERY SELECT false, NULL::uuid, 0, 'User is not a bug catcher'::text;
+        RETURN;
+    END IF;
+    
+    -- Auto-populate user info from profile
+    v_user_info := jsonb_build_object(
+        'username', COALESCE(v_display_name, ''),
+        'roles', COALESCE(array_to_string(v_roles, ', '), 'bug_catcher'),
+        'user_id', _user_id::text
+    );
+    
+    -- Insert bug report
+    INSERT INTO public.bug_reports (
+        user_id, bug_name, description, steps_to_reproduce, 
+        screenshots, user_info, console_logs, points_earned
+    )
+    VALUES (
+        _user_id, _bug_name, _description, _steps_to_reproduce,
+        _screenshots, v_user_info, _console_logs, v_base_points
+    )
+    RETURNING id INTO v_report_id;
+    
+    -- Award base points for submission
+    UPDATE public.profiles 
+    SET bug_points = COALESCE(bug_points, 0) + v_base_points
+    WHERE id = _user_id;
+    
+    -- Add to points history
+    INSERT INTO public.bug_points_history (user_id, points, reason, reference_id, reference_type)
+    VALUES (_user_id, v_base_points, 'bug_report_submitted', v_report_id, 'bug_report');
+    
+    RETURN QUERY SELECT true, v_report_id, v_base_points, 'Bug report submitted successfully'::text;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.submit_bug_report(uuid, text, text, text, jsonb, text) TO authenticated;
+
+-- Function for admin to complete a bug report (awards bonus points)
+CREATE OR REPLACE FUNCTION public.admin_complete_bug_report(
+    _report_id uuid,
+    _admin_id uuid,
+    _bonus_points integer DEFAULT 15,
+    _admin_notes text DEFAULT NULL
+)
+RETURNS TABLE(success boolean, message text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_user_id uuid;
+    v_current_status text;
+BEGIN
+    -- Get report info
+    SELECT user_id, status INTO v_user_id, v_current_status
+    FROM public.bug_reports WHERE id = _report_id;
+    
+    IF v_user_id IS NULL THEN
+        RETURN QUERY SELECT false, 'Bug report not found'::text;
+        RETURN;
+    END IF;
+    
+    IF v_current_status IN ('closed', 'completed') THEN
+        RETURN QUERY SELECT false, 'Bug report already resolved'::text;
+        RETURN;
+    END IF;
+    
+    -- Update report
+    UPDATE public.bug_reports 
+    SET status = 'completed',
+        points_earned = COALESCE(points_earned, 0) + _bonus_points,
+        admin_notes = _admin_notes,
+        reviewed_by = _admin_id,
+        resolved_at = now(),
+        updated_at = now()
+    WHERE id = _report_id;
+    
+    -- Award bonus points to user
+    UPDATE public.profiles 
+    SET bug_points = COALESCE(bug_points, 0) + _bonus_points
+    WHERE id = v_user_id;
+    
+    -- Add to points history
+    INSERT INTO public.bug_points_history (user_id, points, reason, reference_id, reference_type)
+    VALUES (v_user_id, _bonus_points, 'bug_report_accepted', _report_id, 'bug_report');
+    
+    RETURN QUERY SELECT true, 'Bug report completed and bonus points awarded'::text;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_complete_bug_report(uuid, uuid, integer, text) TO authenticated;
+
+-- Function for admin to close a bug report (duplicate or invalid - no bonus points)
+CREATE OR REPLACE FUNCTION public.admin_close_bug_report(
+    _report_id uuid,
+    _admin_id uuid,
+    _admin_notes text DEFAULT NULL
+)
+RETURNS TABLE(success boolean, message text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_current_status text;
+BEGIN
+    -- Get report status
+    SELECT status INTO v_current_status
+    FROM public.bug_reports WHERE id = _report_id;
+    
+    IF v_current_status IS NULL THEN
+        RETURN QUERY SELECT false, 'Bug report not found'::text;
+        RETURN;
+    END IF;
+    
+    IF v_current_status IN ('closed', 'completed') THEN
+        RETURN QUERY SELECT false, 'Bug report already resolved'::text;
+        RETURN;
+    END IF;
+    
+    -- Update report
+    UPDATE public.bug_reports 
+    SET status = 'closed',
+        admin_notes = _admin_notes,
+        reviewed_by = _admin_id,
+        resolved_at = now(),
+        updated_at = now()
+    WHERE id = _report_id;
+    
+    RETURN QUERY SELECT true, 'Bug report closed'::text;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_close_bug_report(uuid, uuid, text) TO authenticated;
+
+-- Function to get bug catcher stats for admin
+CREATE OR REPLACE FUNCTION public.get_bug_catcher_stats()
+RETURNS TABLE(
+    total_bug_catchers bigint,
+    total_actions bigint,
+    active_actions bigint,
+    total_responses bigint,
+    pending_bug_reports bigint,
+    total_points_awarded bigint
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT 
+        (SELECT COUNT(*) FROM public.profiles WHERE 'bug_catcher' = ANY(COALESCE(roles, '{}'))) as total_bug_catchers,
+        (SELECT COUNT(*) FROM public.bug_actions) as total_actions,
+        (SELECT COUNT(*) FROM public.bug_actions WHERE status = 'active') as active_actions,
+        (SELECT COUNT(*) FROM public.bug_action_responses) as total_responses,
+        (SELECT COUNT(*) FROM public.bug_reports WHERE status = 'pending') as pending_bug_reports,
+        (SELECT COALESCE(SUM(bug_points), 0) FROM public.profiles WHERE 'bug_catcher' = ANY(COALESCE(roles, '{}'))) as total_points_awarded;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_bug_catcher_stats() TO authenticated;
+
+-- Function to get user bug reports
+CREATE OR REPLACE FUNCTION public.get_user_bug_reports(_user_id uuid)
+RETURNS TABLE(
+    id uuid,
+    bug_name text,
+    description text,
+    status text,
+    points_earned integer,
+    created_at timestamptz,
+    resolved_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT 
+        br.id,
+        br.bug_name,
+        br.description,
+        br.status,
+        br.points_earned,
+        br.created_at,
+        br.resolved_at
+    FROM public.bug_reports br
+    WHERE br.user_id = _user_id
+    ORDER BY br.created_at DESC;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_user_bug_reports(uuid) TO authenticated;
+
+-- ========== Bug Catcher RLS Policies ==========
+
+-- Enable RLS on all bug catcher tables
+ALTER TABLE public.bug_actions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bug_action_responses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bug_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bug_points_history ENABLE ROW LEVEL SECURITY;
+
+-- Bug Actions policies
+DROP POLICY IF EXISTS "Bug catchers can view active actions" ON public.bug_actions;
+CREATE POLICY "Bug catchers can view active actions" ON public.bug_actions
+    FOR SELECT
+    TO authenticated
+    USING (status = 'active' OR EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ));
+
+DROP POLICY IF EXISTS "Admins can manage all actions" ON public.bug_actions;
+CREATE POLICY "Admins can manage all actions" ON public.bug_actions
+    FOR ALL
+    TO authenticated
+    USING (EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ))
+    WITH CHECK (EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ));
+
+-- Bug Action Responses policies
+DROP POLICY IF EXISTS "Users can view own responses" ON public.bug_action_responses;
+CREATE POLICY "Users can view own responses" ON public.bug_action_responses
+    FOR SELECT
+    TO authenticated
+    USING (user_id = auth.uid() OR EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ));
+
+DROP POLICY IF EXISTS "Users can insert own responses" ON public.bug_action_responses;
+CREATE POLICY "Users can insert own responses" ON public.bug_action_responses
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can update own responses" ON public.bug_action_responses;
+CREATE POLICY "Users can update own responses" ON public.bug_action_responses
+    FOR UPDATE
+    TO authenticated
+    USING (user_id = auth.uid())
+    WITH CHECK (user_id = auth.uid());
+
+-- Bug Reports policies
+DROP POLICY IF EXISTS "Users can view own reports" ON public.bug_reports;
+CREATE POLICY "Users can view own reports" ON public.bug_reports
+    FOR SELECT
+    TO authenticated
+    USING (user_id = auth.uid() OR EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ));
+
+DROP POLICY IF EXISTS "Users can insert own reports" ON public.bug_reports;
+CREATE POLICY "Users can insert own reports" ON public.bug_reports
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Admins can update reports" ON public.bug_reports;
+CREATE POLICY "Admins can update reports" ON public.bug_reports
+    FOR UPDATE
+    TO authenticated
+    USING (EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ))
+    WITH CHECK (EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ));
+
+-- Bug Points History policies
+DROP POLICY IF EXISTS "Users can view own points history" ON public.bug_points_history;
+CREATE POLICY "Users can view own points history" ON public.bug_points_history
+    FOR SELECT
+    TO authenticated
+    USING (user_id = auth.uid() OR EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ));
+
+DROP POLICY IF EXISTS "System can insert points history" ON public.bug_points_history;
+CREATE POLICY "System can insert points history" ON public.bug_points_history
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (true);  -- Controlled by functions
+
+-- Grant authenticated users access to tables (needed for RLS to work)
+GRANT SELECT ON public.bug_actions TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.bug_action_responses TO authenticated;
+GRANT SELECT, INSERT ON public.bug_reports TO authenticated;
+GRANT SELECT, INSERT ON public.bug_points_history TO authenticated;
+
+-- Admins need full access
+GRANT ALL ON public.bug_actions TO authenticated;
+GRANT ALL ON public.bug_reports TO authenticated;
+

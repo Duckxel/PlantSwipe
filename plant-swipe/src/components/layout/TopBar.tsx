@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle } from "lucide-react"
+import { Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings, Crown, CreditCard, LayoutGrid, Route, HelpCircle, MessageCircle, ScanLine, Bug } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -16,8 +16,10 @@ interface TopBarProps {
 
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
+import { useNotifications } from "@/hooks/useNotifications"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { checkEditorAccess } from "@/constants/userRoles"
+import { checkEditorAccess, checkBugCatcherAccess } from "@/constants/userRoles"
+import { NotificationBell } from "@/components/layout/NotificationPanel"
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useLanguageNavigate()
@@ -29,6 +31,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPosition, setMenuPosition] = React.useState<{ top: number; right: number } | null>(null)
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "topbar" })
+  const { totalCount, counts, friendRequests, gardenInvites, refresh: refreshNotifications } = useNotifications(user?.id ?? null, { channelKey: "topbar" })
 
   const recomputeMenuPosition = React.useCallback(() => {
     const anchor = anchorRef.current
@@ -102,7 +105,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
           // Logged-in navigation: Discovery, Gardens, Encyclopedia (always normal)
           <>
             <NavPill to="/discovery" isActive={pathWithoutLang === '/discovery' || pathWithoutLang.startsWith('/discovery/')} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
-            <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished} />
+            <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished || gardenInvites.length > 0} />
             <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
           </>
         ) : (
@@ -128,42 +131,91 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             </Button>
           </>
         ) : (
-          <div className="relative" ref={anchorRef}>
-            <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Profile menu" aria-haspopup="menu" aria-expanded={menuOpen}>
-              <User className="h-4 w-4 mr-2 shrink-0" />
-              <span className="hidden sm:inline max-w-[40vw] truncate min-w-0">{label}</span>
-              <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
+          <div className="flex items-center gap-2">
+            {/* Scan Button */}
+            <Button
+              variant="secondary"
+              size="icon"
+              className="rounded-2xl h-9 w-9 hidden sm:flex text-emerald-600 dark:text-emerald-400"
+              onClick={() => navigate('/scan')}
+              aria-label={t('scan.title', { defaultValue: 'Scan Plant' })}
+            >
+              <ScanLine className="h-4 w-4" />
             </Button>
-            {menuOpen && menuPosition && createPortal(
-              <div
-                ref={menuRef}
-                className="w-40 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow z-[60] p-1"
-                style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
-                role="menu"
+            {/* Messages Button */}
+            <div className="relative">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="rounded-2xl h-9 w-9"
+                onClick={() => navigate('/messages')}
+                aria-label={t('common.messages', { defaultValue: 'Messages' })}
               >
-                {checkEditorAccess(profile) && (
-                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
-                    <Shield className="h-4 w-4" /> {t('common.admin')}
+                <MessageCircle className="h-4 w-4" />
+              </Button>
+              {counts.unreadMessages > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-blue-500 text-white text-[10px] font-medium flex items-center justify-center ring-2 ring-white dark:ring-[#252526]"
+                  aria-hidden="true"
+                >
+                  {counts.unreadMessages > 99 ? '99+' : counts.unreadMessages}
+                </span>
+              )}
+            </div>
+            <NotificationBell
+              totalCount={totalCount}
+              friendRequests={friendRequests}
+              gardenInvites={gardenInvites}
+              onRefresh={refreshNotifications}
+            />
+            <div className="relative" ref={anchorRef}>
+              <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Profile menu" aria-haspopup="menu" aria-expanded={menuOpen}>
+                <User className="h-4 w-4 mr-2 shrink-0" />
+                <span className="hidden sm:inline max-w-[40vw] truncate min-w-0">{label}</span>
+                <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
+              </Button>
+              {menuOpen && menuPosition && createPortal(
+                <div
+                  ref={menuRef}
+                  className="w-40 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow z-[60] p-1"
+                  style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
+                  role="menu"
+                >
+                  {checkEditorAccess(profile) && (
+                    <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                      <Shield className="h-4 w-4" /> {t('common.admin')}
+                    </button>
+                  )}
+                  {checkBugCatcherAccess(profile) && (
+                    <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/bug-catcher') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2 text-orange-600 dark:text-orange-400" role="menuitem">
+                      <Bug className="h-4 w-4" /> {t('common.bugCatcher', { defaultValue: 'Bug Catching' })}
+                    </button>
+                  )}
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                    <User className="h-4 w-4" /> {t('common.profile')}
                   </button>
-                )}
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
-                  <User className="h-4 w-4" /> {t('common.profile')}
-                </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
-                  <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
-                </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
-                  <Settings className="h-4 w-4" /> {t('common.settings')}
-                </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/pricing') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2 text-emerald-600 dark:text-emerald-400" role="menuitem">
-                  <Crown className="h-4 w-4" /> {t('common.membership', { defaultValue: 'Membership' })}
-                </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
-                  <LogOut className="h-4 w-4" /> {t('common.logout')}
-                </button>
-              </div>,
-              document.body
-            )}
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/scan') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2 text-emerald-600 dark:text-emerald-400" role="menuitem">
+                    <ScanLine className="h-4 w-4" /> {t('scan.title', { defaultValue: 'Scan' })}
+                  </button>
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                    <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
+                  </button>
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/messages') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                    <MessageCircle className="h-4 w-4" /> {t('common.messages', { defaultValue: 'Messages' })}
+                  </button>
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                    <Settings className="h-4 w-4" /> {t('common.settings')}
+                  </button>
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/pricing') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2 text-emerald-600 dark:text-emerald-400" role="menuitem">
+                    <Crown className="h-4 w-4" /> {t('common.membership', { defaultValue: 'Membership' })}
+                  </button>
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
+                    <LogOut className="h-4 w-4" /> {t('common.logout')}
+                  </button>
+                </div>,
+                document.body
+              )}
+            </div>
           </div>
         )}
       </div>
