@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "serve": "bun server.js",
     "check-translations": "bun scripts/check-translations.js",
-    "generate:sitemap": "bun scripts/generate-sitemap.js"
+    "generate:sitemap": "bun scripts/generate-sitemap.js",
+    "sync-email-template": "bash scripts/sync-email-template.sh"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.16",
