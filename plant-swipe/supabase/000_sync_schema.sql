@@ -8458,11 +8458,9 @@ create policy "Admins can manage landing FAQ" on public.landing_faq for all usin
 -- Stores plant identification scans using Kindwise API
 -- =============================================
 
--- Drop and recreate to fix schema issues (new feature, no data loss)
-DROP TABLE IF EXISTS public.plant_scans CASCADE;
-
 -- ========== Plant Scans Table ==========
-CREATE TABLE public.plant_scans (
+-- Use CREATE TABLE IF NOT EXISTS to preserve existing data
+CREATE TABLE IF NOT EXISTS public.plant_scans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   
@@ -8508,6 +8506,43 @@ CREATE TABLE public.plant_scans (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ  -- Soft delete
 );
+
+-- Add columns if they don't exist (safe migration for existing tables)
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS image_path TEXT;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS image_bucket TEXT DEFAULT 'PHOTOS';
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS api_access_token TEXT;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS api_model_version TEXT;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS api_status TEXT DEFAULT 'pending';
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS api_response JSONB;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS is_plant BOOLEAN;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS is_plant_probability NUMERIC(5,4);
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS top_match_name TEXT;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS top_match_scientific_name TEXT;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS top_match_probability NUMERIC(5,4);
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS top_match_entity_id TEXT;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS suggestions JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS similar_images JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS latitude NUMERIC(9,6);
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS longitude NUMERIC(9,6);
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS matched_plant_id TEXT;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS user_notes TEXT;
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- Add foreign key constraint if it doesn't exist (for matched_plant_id)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_name = 'plant_scans_matched_plant_id_fkey' 
+    AND table_name = 'plant_scans'
+  ) THEN
+    ALTER TABLE public.plant_scans 
+    ADD CONSTRAINT plant_scans_matched_plant_id_fkey 
+    FOREIGN KEY (matched_plant_id) REFERENCES public.plants(id) ON DELETE SET NULL;
+  END IF;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Indexes for plant_scans
 CREATE INDEX IF NOT EXISTS idx_plant_scans_user_id ON public.plant_scans(user_id);
