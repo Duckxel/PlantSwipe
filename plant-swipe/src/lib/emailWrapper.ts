@@ -24,6 +24,13 @@ const DEFAULT_OPTIONS: EmailWrapperOptions = {
   language: 'en',
 }
 
+// Social media URLs
+const SOCIAL_MEDIA = {
+  youtube: 'https://www.youtube.com/@aphylia_app',
+  twitter: 'https://x.com/aphylia_app',
+  instagram: 'https://www.instagram.com/aphylia_app/',
+}
+
 // Localized strings for the email wrapper
 const EMAIL_WRAPPER_I18N: Record<SupportedLanguage, {
   teamName: string
@@ -33,6 +40,7 @@ const EMAIL_WRAPPER_I18N: Record<SupportedLanguage, {
   contactLink: string
   unsubscribeLink: string
   copyright: string
+  followUs: string
 }> = {
   en: {
     teamName: 'The Aphylia Team',
@@ -42,6 +50,7 @@ const EMAIL_WRAPPER_I18N: Record<SupportedLanguage, {
     contactLink: 'Contact',
     unsubscribeLink: 'Unsubscribe',
     copyright: '© {year} Aphylia. Made with 💚 for plant enthusiasts everywhere.',
+    followUs: 'Follow us',
   },
   fr: {
     teamName: "L'équipe Aphylia",
@@ -51,6 +60,7 @@ const EMAIL_WRAPPER_I18N: Record<SupportedLanguage, {
     contactLink: 'Contact',
     unsubscribeLink: 'Se désabonner',
     copyright: '© {year} Aphylia. Fait avec 💚 pour les passionnés de plantes partout dans le monde.',
+    followUs: 'Suivez-nous',
   },
 }
 
@@ -270,6 +280,37 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
                       </tr>
                     </table>
                     
+                    <!-- Social Media Links -->
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px auto;">
+                      <tr>
+                        <td align="center">
+                          <p style="margin:0 0 12px 0;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">${strings.followUs}</p>
+                          <table role="presentation" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <!-- YouTube -->
+                              <td style="padding:0 8px;">
+                                <a href="${SOCIAL_MEDIA.youtube}" target="_blank" style="display:inline-block;width:36px;height:36px;background:#f3f4f6;border-radius:50%;text-decoration:none;line-height:36px;text-align:center;" title="YouTube">
+                                  <span style="font-size:16px;">▶</span>
+                                </a>
+                              </td>
+                              <!-- X (Twitter) -->
+                              <td style="padding:0 8px;">
+                                <a href="${SOCIAL_MEDIA.twitter}" target="_blank" style="display:inline-block;width:36px;height:36px;background:#f3f4f6;border-radius:50%;text-decoration:none;line-height:36px;text-align:center;" title="X">
+                                  <span style="font-size:16px;font-weight:bold;color:#374151;">𝕏</span>
+                                </a>
+                              </td>
+                              <!-- Instagram -->
+                              <td style="padding:0 8px;">
+                                <a href="${SOCIAL_MEDIA.instagram}" target="_blank" style="display:inline-block;width:36px;height:36px;background:linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);border-radius:50%;text-decoration:none;line-height:36px;text-align:center;" title="Instagram">
+                                  <span style="font-size:14px;color:#ffffff;">📷</span>
+                                </a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                    
                     <!-- Links -->
                     <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;">
                       <a href="${opts.websiteUrl}" style="color:#059669;text-decoration:none;font-weight:500;">aphylia.app</a>
@@ -347,6 +388,28 @@ export function getEmailBodyContent(bodyHtml: string, options: EmailWrapperOptio
       <a href="${opts.websiteUrl}" style="display:inline-block;background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:50px;text-decoration:none;box-shadow:0 8px 24px -6px rgba(16, 185, 129, 0.4);margin-bottom:16px;">
         ${strings.exploreButton}
       </a>
+      <div style="margin:16px 0;">
+        <p style="margin:0 0 12px 0;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">${strings.followUs}</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+          <tr>
+            <td style="padding:0 8px;">
+              <a href="${SOCIAL_MEDIA.youtube}" target="_blank" style="display:inline-block;width:36px;height:36px;background:#f3f4f6;border-radius:50%;text-decoration:none;line-height:36px;text-align:center;" title="YouTube">
+                <span style="font-size:16px;">▶</span>
+              </a>
+            </td>
+            <td style="padding:0 8px;">
+              <a href="${SOCIAL_MEDIA.twitter}" target="_blank" style="display:inline-block;width:36px;height:36px;background:#f3f4f6;border-radius:50%;text-decoration:none;line-height:36px;text-align:center;" title="X">
+                <span style="font-size:16px;font-weight:bold;color:#374151;">𝕏</span>
+              </a>
+            </td>
+            <td style="padding:0 8px;">
+              <a href="${SOCIAL_MEDIA.instagram}" target="_blank" style="display:inline-block;width:36px;height:36px;background:linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);border-radius:50%;text-decoration:none;line-height:36px;text-align:center;" title="Instagram">
+                <span style="font-size:14px;color:#ffffff;">📷</span>
+              </a>
+            </td>
+          </tr>
+        </table>
+      </div>
       <p style="margin:12px 0 0 0;font-size:12px;color:#9ca3af;">
         ${strings.copyright.replace('{year}', String(currentYear))}
       </p>
