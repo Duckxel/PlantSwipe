@@ -508,13 +508,12 @@ export async function processPlantRequest(
       transplanting: coerceBoolean(plant.growth?.transplanting, null),
       infusion: coerceBoolean(plant.usage?.infusion, false),
       aromatherapy: coerceBoolean(plant.usage?.aromatherapy, false),
-      spice_mixes: plant.usage?.spiceMixes || [],
+      // spice_mixes moved to plant_translations (translatable)
       melliferous: coerceBoolean(plant.ecology?.melliferous, false),
       polenizer: polenizerEnum.toDbArray(plant.ecology?.polenizer),
       be_fertilizer: coerceBoolean(plant.ecology?.beFertilizer, false),
       conservation_status: conservationStatusEnum.toDb(plant.ecology?.conservationStatus) || null,
-      pests: plant.danger?.pests || [],
-      diseases: plant.danger?.diseases || [],
+      // pests and diseases moved to plant_translations (translatable)
       companions: plant.miscellaneous?.companions || [],
       status: normalizedStatus,
       admin_commentary: plant.meta?.adminCommentary || null,
@@ -573,6 +572,10 @@ export async function processPlantRequest(
       source_name: primarySource?.name || null,
       source_url: primarySource?.url || null,
       tags: plant.miscellaneous?.tags || [],
+      // Translatable array fields
+      spice_mixes: plant.usage?.spiceMixes || [],
+      pests: plant.danger?.pests || [],
+      diseases: plant.danger?.diseases || [],
     }
     
     const { error: translationError } = await supabase
@@ -629,6 +632,9 @@ export async function processPlantRequest(
           advice_infusion,
           ground_effect,
           tags,
+          spice_mixes,
+          pests,
+          diseases,
         ] = await Promise.all([
           translateText(String(plant.name || trimmedName || ''), target, 'en'),
           translateArray(plant.identity?.givenNames || [], target, 'en'),
@@ -649,6 +655,9 @@ export async function processPlantRequest(
           translateStringSafe(plant.usage?.adviceInfusion),
           translateStringSafe(plant.ecology?.groundEffect),
           translateArraySafe(plant.miscellaneous?.tags),
+          translateArraySafe(plant.usage?.spiceMixes),
+          translateArraySafe(plant.danger?.pests),
+          translateArraySafe(plant.danger?.diseases),
         ])
         
         return {
@@ -674,6 +683,9 @@ export async function processPlantRequest(
           source_name: translatedSourceName || null,
           source_url: primarySource?.url ? String(primarySource.url) : null,
           tags,
+          spice_mixes,
+          pests,
+          diseases,
         }
       })
     )

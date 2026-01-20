@@ -2031,6 +2031,25 @@
       "actions": {
         "remove": "Supprimer"
       },
+      "hideCompanionSuggestions": "Masquer les suggestions IA",
+      "showCompanionSuggestions": "Afficher les suggestions IA",
+      "companionSuggestionsReview": "Cliquez sur Ajouter pour associer les plantes suggérées. Toutes ne sont pas forcément dans la base de données.",
+      "noCompanions": "Aucune plante compagne ou associée ajoutée.",
+      "addCompanionBtn": "Ajouter des plantes compagnes / associées",
+      "selectCompanionTitle": "Sélectionner des plantes compagnes et associées",
+      "selectCompanionDesc": "Sélectionnez plusieurs plantes à ajouter comme compagnes ou variétés apparentées.",
+      "searchPlantsPlaceholder": "Rechercher des plantes par nom...",
+      "searchingBtn": "Recherche...",
+      "searchBtn": "Rechercher",
+      "noPlantsFound": "Aucune plante trouvée. Essayez un autre terme de recherche.",
+      "hideColorSuggestions": "Masquer les suggestions de couleurs IA",
+      "showColorSuggestions": "Afficher les suggestions de couleurs IA",
+      "colorSuggestionsReview": "Vérifiez et ajoutez les couleurs souhaitées à votre palette.",
+      "colorFallback": "Couleur",
+      "colorAdded": "Ajoutée",
+      "addColor": "Ajouter",
+      "colorsLabel": "Couleurs",
+      "colorSuggestionPlaceholder": "Les recommandations IA apparaîtront ici lorsqu'elles seront disponibles.",
       "colors": {
         "addColorButton": "Ajouter une couleur",
         "dialogTitle": "Sélectionner ou ajouter une couleur",
@@ -2280,7 +2299,13 @@
           "in_progres": "En cours",
           "rework": "À retravailler",
           "review": "En révision",
-          "approved": "Approuvé"
+          "approved": "Approuvé",
+          "safe": "En sécurité",
+          "at_risk": "À risque",
+          "vulnerable": "Vulnérable",
+          "endangered": "En danger",
+          "critically_endangered": "En danger critique",
+          "extinct": "Éteint"
       },
       "fields": {
         "identity": {

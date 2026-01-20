@@ -2031,6 +2031,25 @@
       "actions": {
         "remove": "Remove"
       },
+      "hideCompanionSuggestions": "Hide AI suggestions",
+      "showCompanionSuggestions": "Show AI suggestions",
+      "companionSuggestionsReview": "Click Add to link suggested plants. Not all may exist in the database.",
+      "noCompanions": "No companion or related plants added yet.",
+      "addCompanionBtn": "Add Companion / Related Plants",
+      "selectCompanionTitle": "Select Companion & Related Plants",
+      "selectCompanionDesc": "Select multiple plants to add as companions or related varieties.",
+      "searchPlantsPlaceholder": "Search plants by name...",
+      "searchingBtn": "Searching...",
+      "searchBtn": "Search",
+      "noPlantsFound": "No plants found. Try a different search term.",
+      "hideColorSuggestions": "Hide AI color suggestions",
+      "showColorSuggestions": "Show AI color suggestions",
+      "colorSuggestionsReview": "Review and add the colors you like to your palette.",
+      "colorFallback": "Color",
+      "colorAdded": "Added",
+      "addColor": "Add",
+      "colorsLabel": "Colors",
+      "colorSuggestionPlaceholder": "AI recommendations will show up here when available.",
       "colors": {
         "addColorButton": "Add color",
         "dialogTitle": "Select or add a color",
@@ -2280,7 +2299,13 @@
           "in_progres": "In progress",
           "rework": "Rework",
           "review": "Review",
-          "approved": "Approved"
+          "approved": "Approved",
+          "safe": "Safe",
+          "at_risk": "At Risk",
+          "vulnerable": "Vulnerable",
+          "endangered": "Endangered",
+          "critically_endangered": "Critically Endangered",
+          "extinct": "Extinct"
       },
       "fields": {
         "identity": {
