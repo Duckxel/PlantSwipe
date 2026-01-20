@@ -13,3 +13,7 @@
 ## 2025-05-24 - Mobile-Specific Accessibility Gaps
 **Learning:** The mobile layout in `SwipePage` used raw `<button>` elements instead of the accessible `Button` component used in desktop, resulting in missing ARIA labels on icon-only buttons.
 **Action:** When implementing separate mobile/desktop layouts, verify that accessibility attributes (aria-label, title) are synchronized or that shared components are used.
+
+## 2025-05-25 - Redundant Icon Margins in Buttons
+**Learning:** The shared `Button` component enforces `gap-2`, making manual margins (like `mr-2`) on icons redundant and potentially causing double spacing.
+**Action:** Remove manual spacing classes from icons when using the `Button` component to rely on its internal layout logic.

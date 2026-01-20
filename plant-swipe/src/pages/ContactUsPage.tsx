@@ -3,7 +3,7 @@ import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Clock, HelpCircle, Mail, MessageCircle, Check, Copy, UploadCloud, Loader2, X } from "lucide-react"
+import { Clock, HelpCircle, Mail, MessageCircle, Check, Copy, UploadCloud, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -607,9 +607,10 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
                       size="sm"
                       className="rounded-2xl gap-2"
                       onClick={() => document.getElementById('contact-screenshot')?.click()}
-                      disabled={inputsDisabled}
+                      loading={isUploading}
+                      disabled={inputsDisabled && !isUploading}
                     >
-                      {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                      {!isUploading && <UploadCloud className="h-4 w-4" />}
                       {isUploading ? "Uploading..." : "Upload Screenshot"}
                     </Button>
                     <Input
@@ -640,16 +641,10 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
               <Button
                 type="submit"
                 className="rounded-2xl"
-                disabled={formStatus === "loading" || formStatus === "success"}
+                loading={formStatus === "loading"}
+                disabled={formStatus === "success"}
               >
-                {formStatus === "loading" ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    {t('contactUs.form.submitSending')}
-                  </>
-                ) : (
-                  t('contactUs.form.submitButton')
-                )}
+                {formStatus === "loading" ? t('contactUs.form.submitSending') : t('contactUs.form.submitButton')}
               </Button>
             </DialogFooter>
           </form>

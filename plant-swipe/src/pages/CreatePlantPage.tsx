@@ -1391,7 +1391,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (isEnglish && pendingTranslations.length > 0) {
            const pendingPayloads = pendingTranslations.map(t => {
              // Create a copy without system fields
-             const { id, created_at, plant_id, ...rest } = t
+             const { id: _id, created_at: _created_at, plant_id: _plant_id, ...rest } = t
              return {
                ...rest,
                plant_id: savedId, // Link to the new plant ID
@@ -1888,15 +1888,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 </select>
               </div>
               <div className="flex flex-wrap gap-2 items-center">
-                <Button type="button" onClick={translatePlant} disabled={translating} className="rounded-2xl shadow-md">
-                  {translating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                <Button type="button" onClick={translatePlant} loading={translating} className="rounded-2xl shadow-md">
                   {t('plantAdmin.deeplTranslate', 'DeepL Translation')}
                 </Button>
               </div>
               <div className="flex gap-2">
                   <Button variant="secondary" onClick={onCancel} className="rounded-2xl">{t('common.cancel', 'Cancel')}</Button>
-                <Button onClick={() => savePlant()} disabled={saving || aiWorking} className="rounded-2xl shadow-md">
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button onClick={() => savePlant()} loading={saving} disabled={aiWorking} className="rounded-2xl shadow-md">
                     {t('plantAdmin.savePlant', 'Save Plant')}
                 </Button>
               </div>
@@ -1932,9 +1930,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               <Button
                 type="button"
                 onClick={aiCompleted ? undefined : runAiFill}
-                disabled={aiWorking || !(plant.name && typeof plant.name === 'string' && plant.name.trim()) || aiCompleted}
+                loading={aiWorking}
+                disabled={!(plant.name && typeof plant.name === 'string' && plant.name.trim()) || aiCompleted}
               >
-                {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                {!aiWorking && (aiCompleted ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />)}
                 {aiCompleted ? t('plantAdmin.aiFilled', 'AI Filled') : t('plantAdmin.aiFill', 'AI fill all fields')}
               </Button>
               {!(plant.name && typeof plant.name === 'string' && plant.name.trim()) && (
