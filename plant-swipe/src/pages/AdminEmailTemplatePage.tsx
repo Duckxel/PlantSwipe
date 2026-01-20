@@ -25,9 +25,6 @@ import {
   History,
   Plus,
   RotateCcw,
-  Youtube,
-  Twitter,
-  Instagram,
 } from "lucide-react"
 import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
 import { VariableHighlighter } from "@/components/tiptap-extensions/variable-highlighter"
@@ -2060,9 +2057,9 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     }}
                   >
                     <img
-                      src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png"
+                      src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260-ae7e1e2d-ea1d-4944-be95-84cc4b8a29ed.png"
                       alt="Aphylia"
-                      style={{ display: 'block', height: '48px', width: 'auto', filter: 'brightness(0) invert(1)' }}
+                      style={{ display: 'block', height: '48px', width: 'auto' }}
                     />
                   </div>
                 </div>
@@ -2176,14 +2173,13 @@ export const AdminEmailTemplatePage: React.FC = () => {
                           justifyContent: 'center',
                           width: '40px',
                           height: '40px',
-                          background: '#f3f4f6',
+                          background: '#374151',
                           borderRadius: '12px',
                           textDecoration: 'none',
-                          color: '#6b7280',
                         }}
                         title="YouTube"
                       >
-                        <Youtube style={{ width: '20px', height: '20px' }} />
+                        <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/youtube-19624fb6-23e5-4af1-a383-24cbf131cf70.png" alt="YouTube" style={{ width: '20px', height: '20px' }} />
                       </a>
                       {/* X (Twitter) */}
                       <a
@@ -2196,14 +2192,13 @@ export const AdminEmailTemplatePage: React.FC = () => {
                           justifyContent: 'center',
                           width: '40px',
                           height: '40px',
-                          background: '#f3f4f6',
+                          background: '#374151',
                           borderRadius: '12px',
                           textDecoration: 'none',
-                          color: '#6b7280',
                         }}
                         title="X"
                       >
-                        <Twitter style={{ width: '20px', height: '20px' }} />
+                        <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/twitter-700af2d5-45cb-41c2-a0c4-479fa9979124.png" alt="X" style={{ width: '20px', height: '20px' }} />
                       </a>
                       {/* Instagram */}
                       <a
@@ -2216,14 +2211,13 @@ export const AdminEmailTemplatePage: React.FC = () => {
                           justifyContent: 'center',
                           width: '40px',
                           height: '40px',
-                          background: '#f3f4f6',
+                          background: '#374151',
                           borderRadius: '12px',
                           textDecoration: 'none',
-                          color: '#6b7280',
                         }}
                         title="Instagram"
                       >
-                        <Instagram style={{ width: '20px', height: '20px' }} />
+                        <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/instagram-822eef7b-752d-47af-a1bb-79d99039bbb9.png" alt="Instagram" style={{ width: '20px', height: '20px' }} />
                       </a>
                     </div>
                   </div>

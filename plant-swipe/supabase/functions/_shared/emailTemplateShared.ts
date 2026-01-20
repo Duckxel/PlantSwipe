@@ -43,16 +43,16 @@ export const SOCIAL_MEDIA = {
   instagram: 'https://www.instagram.com/aphylia_app/',
 }
 
-// Inline SVG icons for email (Lucide icon paths)
-export const SOCIAL_ICONS = {
-  youtube: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>`,
-  twitter: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/></svg>`,
-  instagram: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>`,
+// Social media icon URLs (white PNGs)
+export const SOCIAL_ICON_URLS = {
+  youtube: 'https://media.aphylia.app/UTILITY/admin/uploads/png/youtube-19624fb6-23e5-4af1-a383-24cbf131cf70.png',
+  twitter: 'https://media.aphylia.app/UTILITY/admin/uploads/png/twitter-700af2d5-45cb-41c2-a0c4-479fa9979124.png',
+  instagram: 'https://media.aphylia.app/UTILITY/admin/uploads/png/instagram-822eef7b-752d-47af-a1bb-79d99039bbb9.png',
 }
 
 // Logo URLs
 export const LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
-export const BANNER_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png'
+export const BANNER_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260-ae7e1e2d-ea1d-4944-be95-84cc4b8a29ed.png'
 
 // Localized strings for the email wrapper
 export const EMAIL_WRAPPER_I18N: Record<SupportedLanguage, {
@@ -234,7 +234,7 @@ export function wrapEmailHtmlShared(bodyHtml: string, options: EmailWrapperOptio
           <tr>
             <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:32px 48px;text-align:center;">
               <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
-                <img src="${BANNER_URL}" alt="Aphylia" height="48" style="display:block;border:0;outline:none;text-decoration:none;height:48px;width:auto;filter:brightness(0) invert(1);" />
+                <img src="${BANNER_URL}" alt="Aphylia" height="48" style="display:block;border:0;outline:none;text-decoration:none;height:48px;width:auto;" />
               </div>
             </td>
           </tr>
@@ -304,18 +304,18 @@ export function wrapEmailHtmlShared(bodyHtml: string, options: EmailWrapperOptio
                           <table role="presentation" cellpadding="0" cellspacing="0">
                             <tr>
                               <td style="padding:0 6px;">
-                                <a href="${SOCIAL_MEDIA.youtube}" target="_blank" style="display:inline-block;width:40px;height:40px;background:#f3f4f6;border-radius:12px;text-decoration:none;text-align:center;line-height:40px;color:#6b7280;" title="YouTube">
-                                  <span style="display:inline-block;vertical-align:middle;line-height:normal;margin-top:10px;">${SOCIAL_ICONS.youtube}</span>
+                                <a href="${SOCIAL_MEDIA.youtube}" target="_blank" style="display:inline-block;width:40px;height:40px;background:#374151;border-radius:12px;text-decoration:none;text-align:center;" title="YouTube">
+                                  <img src="${SOCIAL_ICON_URLS.youtube}" alt="YouTube" width="20" height="20" style="display:block;margin:10px auto;border:0;outline:none;" />
                                 </a>
                               </td>
                               <td style="padding:0 6px;">
-                                <a href="${SOCIAL_MEDIA.twitter}" target="_blank" style="display:inline-block;width:40px;height:40px;background:#f3f4f6;border-radius:12px;text-decoration:none;text-align:center;line-height:40px;color:#6b7280;" title="X">
-                                  <span style="display:inline-block;vertical-align:middle;line-height:normal;margin-top:10px;">${SOCIAL_ICONS.twitter}</span>
+                                <a href="${SOCIAL_MEDIA.twitter}" target="_blank" style="display:inline-block;width:40px;height:40px;background:#374151;border-radius:12px;text-decoration:none;text-align:center;" title="X">
+                                  <img src="${SOCIAL_ICON_URLS.twitter}" alt="X" width="20" height="20" style="display:block;margin:10px auto;border:0;outline:none;" />
                                 </a>
                               </td>
                               <td style="padding:0 6px;">
-                                <a href="${SOCIAL_MEDIA.instagram}" target="_blank" style="display:inline-block;width:40px;height:40px;background:#f3f4f6;border-radius:12px;text-decoration:none;text-align:center;line-height:40px;color:#6b7280;" title="Instagram">
-                                  <span style="display:inline-block;vertical-align:middle;line-height:normal;margin-top:10px;">${SOCIAL_ICONS.instagram}</span>
+                                <a href="${SOCIAL_MEDIA.instagram}" target="_blank" style="display:inline-block;width:40px;height:40px;background:#374151;border-radius:12px;text-decoration:none;text-align:center;" title="Instagram">
+                                  <img src="${SOCIAL_ICON_URLS.instagram}" alt="Instagram" width="20" height="20" style="display:block;margin:10px auto;border:0;outline:none;" />
                                 </a>
                               </td>
                             </tr>
