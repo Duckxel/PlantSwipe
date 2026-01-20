@@ -3805,15 +3805,36 @@ returns void
 language plpgsql
 set search_path = public
 as $$
-declare g record; anchor date := (_day - interval '1 day')::date; begin
+declare 
+  g record; 
+  anchor date := (_day - interval '1 day')::date;
+  yesterday date := (_day - interval '1 day')::date;
+begin
+  -- CRITICAL: First, ensure task occurrences exist for YESTERDAY (for accurate streak calculation)
+  -- This catches gardens where users didn't log in yesterday - their tasks still need to be created
+  -- so we can accurately determine if they missed any tasks and should lose their streak
+  perform public.ensure_all_gardens_tasks_occurrences_for_day(yesterday);
+  
+  -- Also ensure task occurrences exist for TODAY (so streak calculation tomorrow will be accurate)
+  perform public.ensure_all_gardens_tasks_occurrences_for_day(_day);
+  
+  -- Now process each garden: update streak based on yesterday, compute today's task status
   for g in select id from public.gardens loop
+    -- Recompute yesterday's success based on now-existing occurrences
+    perform public.compute_garden_task_for_day(g.id, yesterday);
+    -- Update streak using yesterday as anchor (checks consecutive successful days ending yesterday)
     perform public.update_garden_streak(g.id, anchor);
+    -- Compute today's task status (will show 0/X until user completes tasks)
     perform public.compute_garden_task_for_day(g.id, _day);
   end loop;
 end; $$;
 
 -- ========== Scheduling (optional) ==========
--- Schedule daily computation at 00:05 UTC to update streaks and create daily tasks
+-- Schedule daily computation at 00:05 UTC to:
+-- 1. Create task occurrences for all gardens (for yesterday AND today)
+-- 2. Recalculate yesterday's success based on actual task completion
+-- 3. Update streaks (users who didn't complete tasks will lose their streak)
+-- 4. Initialize today's task records
 do $$ begin
   begin
     perform cron.schedule(
@@ -7024,6 +7045,43 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.ensure_gardens_tasks_occurrences(uuid[], timestamptz, timestamptz) TO authenticated;
+
+-- ========== Ensure task occurrences for ALL gardens (used by cron job) ==========
+-- This function creates task occurrences for all gardens for a given day.
+-- It must run BEFORE streak calculation to ensure accurate task tracking.
+-- Without this, users who don't log in don't have their task occurrences created,
+-- and the system incorrectly thinks they have no tasks, allowing streaks to continue.
+CREATE OR REPLACE FUNCTION public.ensure_all_gardens_tasks_occurrences_for_day(_day date)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _all_garden_ids uuid[];
+  _start_iso timestamptz;
+  _end_iso timestamptz;
+BEGIN
+  -- Get all garden IDs that have at least one task defined
+  SELECT array_agg(DISTINCT t.garden_id)
+  INTO _all_garden_ids
+  FROM garden_plant_tasks t;
+  
+  -- If no gardens have tasks, nothing to do
+  IF _all_garden_ids IS NULL OR array_length(_all_garden_ids, 1) IS NULL THEN
+    RETURN;
+  END IF;
+  
+  -- Define the day window
+  _start_iso := (_day::text || 'T00:00:00.000Z')::timestamptz;
+  _end_iso := (_day::text || 'T23:59:59.999Z')::timestamptz;
+  
+  -- Create task occurrences for all gardens using the existing batch function
+  PERFORM public.ensure_gardens_tasks_occurrences(_all_garden_ids, _start_iso, _end_iso);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ensure_all_gardens_tasks_occurrences_for_day(date) TO authenticated;
 
 -- Optimization: Batch fetch member counts for gardens
 CREATE OR REPLACE FUNCTION public.get_garden_member_counts(_garden_ids uuid[])
