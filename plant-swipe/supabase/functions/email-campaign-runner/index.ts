@@ -43,6 +43,20 @@ const SUPPORTED_LANGUAGES = ['en', 'fr'] as const
 type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]
 const DEFAULT_LANGUAGE: SupportedLanguage = 'en'
 
+// Social media URLs
+const SOCIAL_MEDIA = {
+  youtube: 'https://www.youtube.com/@aphylia_app',
+  twitter: 'https://x.com/aphylia_app',
+  instagram: 'https://www.instagram.com/aphylia_app/',
+}
+
+// Inline SVG icons for email (Lucide icon paths)
+const SOCIAL_ICONS = {
+  youtube: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>`,
+  twitter: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/></svg>`,
+  instagram: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>`,
+}
+
 // Email wrapper localized strings
 const EMAIL_WRAPPER_STRINGS: Record<SupportedLanguage, {
   teamName: string
@@ -51,6 +65,7 @@ const EMAIL_WRAPPER_STRINGS: Record<SupportedLanguage, {
   aboutLink: string
   contactLink: string
   copyright: string
+  followUs: string
 }> = {
   en: {
     teamName: "The Aphylia Team",
@@ -59,6 +74,7 @@ const EMAIL_WRAPPER_STRINGS: Record<SupportedLanguage, {
     aboutLink: "About",
     contactLink: "Contact",
     copyright: "© {{year}} Aphylia. Made with 💚 for plant enthusiasts everywhere.",
+    followUs: "Follow us",
   },
   fr: {
     teamName: "L'équipe Aphylia",
@@ -67,6 +83,7 @@ const EMAIL_WRAPPER_STRINGS: Record<SupportedLanguage, {
     aboutLink: "À propos",
     contactLink: "Contact",
     copyright: "© {{year}} Aphylia. Fait avec 💚 pour les passionnés de plantes partout.",
+    followUs: "Suivez-nous",
   },
 }
 
@@ -1393,7 +1410,6 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
 
   // Aphylia logo URL for emails (using PNG for Gmail compatibility - Gmail doesn't support SVG or WebP)
   const logoUrl = "https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png"
-  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
   const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
   return `<!DOCTYPE html>
@@ -1493,26 +1509,12 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
     <tr>
       <td align="center" style="padding:48px 20px;">
         <table role="presentation" class="email-container" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%);border-radius:32px;border:1px solid rgba(16, 185, 129, 0.12);box-shadow:0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;overflow:hidden;">
+          <!-- Header Banner -->
           <tr>
             <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:32px 48px;text-align:center;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td align="center">
-                    <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
-                      <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td style="vertical-align:middle;padding-right:12px;">
-                            ${logoImg}
-                          </td>
-                          <td style="vertical-align:middle;">
-                            <span style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;font-family:'Quicksand',-apple-system,BlinkMacSystemFont,sans-serif;">Aphylia</span>
-                          </td>
-                        </tr>
-                      </table>
-                    </div>
-                  </td>
-                </tr>
-              </table>
+              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
+                <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png" alt="Aphylia" height="32" style="display:block;border:0;outline:none;text-decoration:none;height:32px;width:auto;filter:brightness(0) invert(1);" />
+              </div>
             </td>
           </tr>
           <tr>
@@ -1566,6 +1568,38 @@ function wrapEmailHtml(bodyHtml: string, subject: string, language: SupportedLan
                         </td>
                       </tr>
                     </table>
+                    
+                    <!-- Social Media Links -->
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px auto;">
+                      <tr>
+                        <td align="center">
+                          <p style="margin:0 0 12px 0;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">${strings.followUs}</p>
+                          <table role="presentation" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <!-- YouTube -->
+                              <td style="padding:0 6px;">
+                                <a href="${SOCIAL_MEDIA.youtube}" target="_blank" style="display:inline-block;width:40px;height:40px;background:#f3f4f6;border-radius:12px;text-decoration:none;text-align:center;line-height:40px;color:#6b7280;" title="YouTube">
+                                  <span style="display:inline-block;vertical-align:middle;line-height:normal;margin-top:10px;">${SOCIAL_ICONS.youtube}</span>
+                                </a>
+                              </td>
+                              <!-- X (Twitter) -->
+                              <td style="padding:0 6px;">
+                                <a href="${SOCIAL_MEDIA.twitter}" target="_blank" style="display:inline-block;width:40px;height:40px;background:#f3f4f6;border-radius:12px;text-decoration:none;text-align:center;line-height:40px;color:#6b7280;" title="X">
+                                  <span style="display:inline-block;vertical-align:middle;line-height:normal;margin-top:10px;">${SOCIAL_ICONS.twitter}</span>
+                                </a>
+                              </td>
+                              <!-- Instagram -->
+                              <td style="padding:0 6px;">
+                                <a href="${SOCIAL_MEDIA.instagram}" target="_blank" style="display:inline-block;width:40px;height:40px;background:#f3f4f6;border-radius:12px;text-decoration:none;text-align:center;line-height:40px;color:#6b7280;" title="Instagram">
+                                  <span style="display:inline-block;vertical-align:middle;line-height:normal;margin-top:10px;">${SOCIAL_ICONS.instagram}</span>
+                                </a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                    
                     <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;">
                       <a href="${websiteUrl}" style="color:#059669;text-decoration:none;font-weight:500;">aphylia.app</a>
                       <span style="color:#d1d5db;margin:0 8px;">•</span>
