@@ -935,7 +935,6 @@ async function sendBatch(
     // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
     // Wrap the body HTML with our beautiful styled email template (using shared template)
-    const websiteUrl = Deno.env.get("WEBSITE_URL") ?? "https://aphylia.app"
     const html = wrapEmailHtmlShared(bodyHtml, {
       subject,
       language: userLang as SharedSupportedLanguage,
