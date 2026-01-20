@@ -53,6 +53,7 @@ import {
   Clock,
   CalendarDays,
   FileText,
+  Wrench,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -137,7 +138,7 @@ const normalizeSchedules = (rows?: any[]): WaterSchedules => {
   }))
 }
 
-// Fast query to check plant status and get minimal info for construction banner
+// Fast query to check plant status and get basic info for construction banner
 // This allows non-privileged users to see the "in construction" message immediately
 // without waiting for all the heavy relation queries
 async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Promise<{
@@ -145,31 +146,57 @@ async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Prom
   status?: string
   name?: string
   scientificName?: string
+  family?: string
+  plantType?: string
+  levelSun?: string
+  livingSpace?: string
+  lifeCycle?: string
+  season?: string[]
+  maintenanceLevel?: string
+  overview?: string
+  primaryImage?: string
 } | null> {
   const targetLanguage = language || 'en'
   
-  // Run both queries in parallel for speed
-  const [plantResult, translationResult] = await Promise.all([
+  // Run all queries in parallel for speed
+  const [plantResult, translationResult, imageResult] = await Promise.all([
     supabase
       .from('plants')
-      .select('id, name, scientific_name, status')
+      .select('id, name, scientific_name, status, family, plant_type, level_sun, living_space, life_cycle, season, maintenance_level')
       .eq('id', id)
       .maybeSingle(),
     supabase
       .from('plant_translations')
-      .select('name')
+      .select('name, overview')
       .eq('plant_id', id)
       .eq('language', targetLanguage)
+      .maybeSingle(),
+    supabase
+      .from('plant_images')
+      .select('link')
+      .eq('plant_id', id)
+      .eq('use', 'primary')
       .maybeSingle()
   ])
   
   if (plantResult.error || !plantResult.data) return null
   
+  const data = plantResult.data
+  
   return {
     exists: true,
-    status: plantResult.data.status || undefined,
-    name: translationResult.data?.name || plantResult.data.name,
-    scientificName: plantResult.data.scientific_name || undefined,
+    status: data.status || undefined,
+    name: translationResult.data?.name || data.name,
+    scientificName: data.scientific_name || undefined,
+    family: data.family || undefined,
+    plantType: plantTypeEnum.toUi(data.plant_type) || undefined,
+    levelSun: levelSunEnum.toUi(data.level_sun) || undefined,
+    livingSpace: livingSpaceEnum.toUi(data.living_space) || undefined,
+    lifeCycle: lifeCycleEnum.toUi(data.life_cycle) || undefined,
+    season: seasonEnum.toUiArray(data.season) || undefined,
+    maintenanceLevel: maintenanceLevelEnum.toUi(data.maintenance_level) || undefined,
+    overview: translationResult.data?.overview || undefined,
+    primaryImage: imageResult.data?.link || undefined,
   }
 }
 
@@ -400,6 +427,15 @@ const PlantInfoPage: React.FC = () => {
     name: string
     scientificName?: string
     status: string
+    family?: string
+    plantType?: string
+    levelSun?: string
+    livingSpace?: string
+    lifeCycle?: string
+    season?: string[]
+    maintenanceLevel?: string
+    overview?: string
+    primaryImage?: string
   } | null>(null)
   const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -528,6 +564,15 @@ const PlantInfoPage: React.FC = () => {
             name: basicInfo.name || 'Unknown Plant',
             scientificName: basicInfo.scientificName,
             status: basicInfo.status || 'in progress',
+            family: basicInfo.family,
+            plantType: basicInfo.plantType,
+            levelSun: basicInfo.levelSun,
+            livingSpace: basicInfo.livingSpace,
+            lifeCycle: basicInfo.lifeCycle,
+            season: basicInfo.season,
+            maintenanceLevel: basicInfo.maintenanceLevel,
+            overview: basicInfo.overview,
+            primaryImage: basicInfo.primaryImage,
           })
           setPlant(null)
           setLoading(false)
@@ -607,6 +652,29 @@ const PlantInfoPage: React.FC = () => {
   // Fast-path: Show construction banner immediately for non-privileged users
   // This avoids loading full plant data when user won't see it anyway
   if (limitedPlantInfo) {
+    // Helper to translate enum values for the limited info display
+    const translateLimitedEnum = (value: string | undefined): string => {
+      if (!value) return ''
+      const key = value.toLowerCase().replace(/[_\s-]/g, '')
+      const translationKeys = [
+        `plantDetails.plantType.${key}`,
+        `plantDetails.sunLevels.${key}`,
+        `plantDetails.maintenanceLevels.${key}`,
+        `plantDetails.seasons.${key}`,
+        `moreInfo.lifeCycle.${key}`,
+        `moreInfo.livingSpace.${key}`,
+      ]
+      for (const k of translationKeys) {
+        const translated = t(k, { defaultValue: '' })
+        if (translated) return translated
+      }
+      return value.replace(/[_-]/g, ' ')
+    }
+    
+    const hasBasicInfo = limitedPlantInfo.family || limitedPlantInfo.plantType || limitedPlantInfo.lifeCycle
+    const hasCareInfo = limitedPlantInfo.levelSun || limitedPlantInfo.maintenanceLevel || limitedPlantInfo.livingSpace
+    const hasSeasons = limitedPlantInfo.season && limitedPlantInfo.season.length > 0
+    
     return (
       <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
         <div className="flex items-center gap-2 justify-between">
@@ -621,29 +689,160 @@ const PlantInfoPage: React.FC = () => {
             <ChevronLeft className="h-5 w-5" />
           </Button>
         </div>
-        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
-          <div className="flex justify-center">
-            <div className="p-4 rounded-full bg-amber-100 dark:bg-amber-900/40">
-              <HardHat className="h-12 w-12 text-amber-600 dark:text-amber-400" />
-            </div>
+        
+        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 overflow-hidden">
+          {/* Hero section with image */}
+          <div className="relative">
+            {limitedPlantInfo.primaryImage ? (
+              <div className="relative h-48 sm:h-64 md:h-72 overflow-hidden">
+                <img 
+                  src={limitedPlantInfo.primaryImage} 
+                  alt={limitedPlantInfo.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white drop-shadow-lg">{limitedPlantInfo.name}</h1>
+                  {limitedPlantInfo.scientificName && (
+                    <p className="text-base sm:text-lg italic text-white/80 mt-1">{limitedPlantInfo.scientificName}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 sm:p-8 text-center border-b border-amber-200/50 dark:border-amber-500/20">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-stone-900 dark:text-white">{limitedPlantInfo.name}</h1>
+                {limitedPlantInfo.scientificName && (
+                  <p className="text-base sm:text-lg italic text-stone-600 dark:text-stone-400 mt-1">{limitedPlantInfo.scientificName}</p>
+                )}
+              </div>
+            )}
           </div>
-          <div className="space-y-3">
-            <h2 className="text-2xl sm:text-3xl font-bold text-amber-900 dark:text-amber-100">
+          
+          {/* Construction notice */}
+          <div className="p-6 sm:p-8 text-center border-b border-amber-200/50 dark:border-amber-500/20 bg-amber-50/50 dark:bg-amber-900/10">
+            <div className="flex justify-center mb-4">
+              <div className="p-3 rounded-full bg-amber-100 dark:bg-amber-900/40">
+                <HardHat className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+              </div>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-amber-900 dark:text-amber-100 mb-2">
               {t('plantInfo.inConstruction.title', { defaultValue: 'Plant in Construction' })}
             </h2>
-            <p className="text-amber-700 dark:text-amber-300 max-w-lg mx-auto">
+            <p className="text-amber-700 dark:text-amber-300 max-w-lg mx-auto text-sm sm:text-base">
               {t('plantInfo.inConstruction.description', { 
                 defaultValue: 'We are currently verifying and completing the information for this plant. Check back soon for the full details!' 
               })}
             </p>
           </div>
-          <div className="pt-4 space-y-4 max-w-md mx-auto">
-            <div className="text-left p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-amber-200/50 dark:border-amber-500/20">
-              <h3 className="font-semibold text-lg text-stone-900 dark:text-white">{limitedPlantInfo.name}</h3>
-              {limitedPlantInfo.scientificName && (
-                <p className="text-sm italic text-stone-600 dark:text-stone-400">{limitedPlantInfo.scientificName}</p>
-              )}
-            </div>
+          
+          {/* Available plant info */}
+          <div className="p-6 sm:p-8 space-y-6">
+            {/* Overview if available */}
+            {limitedPlantInfo.overview && (
+              <div className="text-stone-700 dark:text-stone-300 text-sm sm:text-base leading-relaxed">
+                {limitedPlantInfo.overview}
+              </div>
+            )}
+            
+            {/* Basic Info Grid */}
+            {(hasBasicInfo || hasCareInfo || hasSeasons) && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+                {limitedPlantInfo.plantType && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('plantDetails.stats.type', { defaultValue: 'Type' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.plantType)}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.family && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('moreInfo.labels.family', { defaultValue: 'Family' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {limitedPlantInfo.family}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.lifeCycle && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('moreInfo.labels.lifeCycle', { defaultValue: 'Life Cycle' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.lifeCycle)}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.levelSun && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sun className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('plantDetails.stats.sunLevel', { defaultValue: 'Sun' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.levelSun)}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.maintenanceLevel && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Wrench className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('plantDetails.stats.maintenance', { defaultValue: 'Maintenance' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.maintenanceLevel)}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.livingSpace && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <MapPin className="h-4 w-4 text-rose-500 dark:text-rose-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('moreInfo.labels.livingSpace', { defaultValue: 'Living Space' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.livingSpace)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Seasons */}
+            {hasSeasons && (
+              <div className="flex flex-wrap gap-2 justify-center">
+                {limitedPlantInfo.season!.map((s) => (
+                  <Badge key={s} variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 px-3 py-1">
+                    {translateLimitedEnum(s)}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
