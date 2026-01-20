@@ -9,7 +9,7 @@ import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateri
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
-import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
@@ -802,9 +802,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const duplicatedFromName = searchParams.get('duplicatedFrom')
   const languageNavigate = useLanguageNavigate()
   const { profile } = useAuth()
-  const initialLanguage: SupportedLanguage = 'en'
-  const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
-  const languageRef = React.useRef<SupportedLanguage>(initialLanguage)
+  // Get the language from the URL path (e.g., /fr/admin/plants/create -> 'fr')
+  const urlLanguage = useLanguage()
+  const [language, setLanguage] = React.useState<SupportedLanguage>(urlLanguage)
+  const languageRef = React.useRef<SupportedLanguage>(urlLanguage)
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
   // Cache of plant data per language to preserve edits when switching languages
   const [plantByLanguage, setPlantByLanguage] = React.useState<Partial<Record<SupportedLanguage, Plant>>>({})
@@ -872,10 +873,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       languageRef.current = language
     }, [language])
 
+    // Sync language state with URL when it changes (e.g., user navigates to /fr version)
+    React.useEffect(() => {
+      if (urlLanguage !== language) {
+        setLanguage(urlLanguage)
+      }
+    }, [urlLanguage])
+
     // Track if initial load is complete
     const initialLoadCompleteRef = React.useRef(false)
     // Track the previous language to save edits before switching
-    const previousLanguageRef = React.useRef<SupportedLanguage>(initialLanguage)
+    const previousLanguageRef = React.useRef<SupportedLanguage>(urlLanguage)
     
     // Handle language changes - save current edits and load new language data
     React.useEffect(() => {
