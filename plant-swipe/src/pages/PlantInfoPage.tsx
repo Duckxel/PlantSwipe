@@ -137,6 +137,42 @@ const normalizeSchedules = (rows?: any[]): WaterSchedules => {
   }))
 }
 
+// Fast query to check plant status and get minimal info for construction banner
+// This allows non-privileged users to see the "in construction" message immediately
+// without waiting for all the heavy relation queries
+async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Promise<{
+  exists: boolean
+  status?: string
+  name?: string
+  scientificName?: string
+} | null> {
+  const targetLanguage = language || 'en'
+  
+  // Run both queries in parallel for speed
+  const [plantResult, translationResult] = await Promise.all([
+    supabase
+      .from('plants')
+      .select('id, name, scientific_name, status')
+      .eq('id', id)
+      .maybeSingle(),
+    supabase
+      .from('plant_translations')
+      .select('name')
+      .eq('plant_id', id)
+      .eq('language', targetLanguage)
+      .maybeSingle()
+  ])
+  
+  if (plantResult.error || !plantResult.data) return null
+  
+  return {
+    exists: true,
+    status: plantResult.data.status || undefined,
+    name: translationResult.data?.name || plantResult.data.name,
+    scientificName: plantResult.data.scientific_name || undefined,
+  }
+}
+
 async function fetchPlantWithRelations(id: string, language?: string): Promise<Plant | null> {
   const { data, error } = await supabase.from('plants').select('*').eq('id', id).maybeSingle()
   if (error) throw new Error(error.message)
@@ -359,6 +395,12 @@ const PlantInfoPage: React.FC = () => {
   const [isBookmarked, setIsBookmarked] = React.useState(false)
   const [gardenOpen, setGardenOpen] = React.useState(false)
   const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'shared' | 'error'>('idle')
+  // For fast-path: show construction banner immediately for non-privileged users
+  const [limitedPlantInfo, setLimitedPlantInfo] = React.useState<{
+    name: string
+    scientificName?: string
+    status: string
+  } | null>(null)
   const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   React.useEffect(() => {
@@ -457,7 +499,42 @@ const PlantInfoPage: React.FC = () => {
       if (!id) { setLoading(false); return }
       setLoading(true)
       setError(null)
+      setLimitedPlantInfo(null)
+      
       try {
+        // Fast-path: First check plant status with minimal query
+        const basicInfo = await fetchPlantStatusAndBasicInfo(id, currentLang)
+        
+        if (ignore) return
+        
+        if (!basicInfo) {
+          setPlant(null)
+          setLoading(false)
+          return
+        }
+        
+        // Check if plant is "in construction"
+        const statusLower = basicInfo.status?.toLowerCase()
+        const isInConstruction = statusLower === 'in progres' || statusLower === 'in progress'
+        
+        // Check if user has privileged access
+        const hasPrivilegedAccess = profile?.is_admin === true || 
+          hasAnyRole(profile?.roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR, USER_ROLES.PRO])
+        
+        // For non-privileged users viewing "in construction" plants,
+        // show the construction banner immediately without loading full data
+        if (isInConstruction && !hasPrivilegedAccess) {
+          setLimitedPlantInfo({
+            name: basicInfo.name || 'Unknown Plant',
+            scientificName: basicInfo.scientificName,
+            status: basicInfo.status || 'in progress',
+          })
+          setPlant(null)
+          setLoading(false)
+          return
+        }
+        
+        // User has access or plant is published - load full data
         const record = await fetchPlantWithRelations(id, currentLang)
         if (!ignore) setPlant(record)
       } catch (e: any) {
@@ -468,7 +545,7 @@ const PlantInfoPage: React.FC = () => {
     }
     load()
     return () => { ignore = true }
-  }, [id, currentLang])
+  }, [id, currentLang, profile?.is_admin, profile?.roles])
 
   const toggleLiked = async () => {
     if (!user?.id || !id) return
@@ -526,6 +603,53 @@ const PlantInfoPage: React.FC = () => {
     return <PlantInfoPageSkeleton label={t('common.loading', { defaultValue: 'Loading plant data' })} />
   }
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
+  
+  // Fast-path: Show construction banner immediately for non-privileged users
+  // This avoids loading full plant data when user won't see it anyway
+  if (limitedPlantInfo) {
+    return (
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
+        <div className="flex items-center gap-2 justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="rounded-full border border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
+            onClick={handleGoBack}
+            aria-label={t('common.back', { defaultValue: 'Back' })}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+        </div>
+        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
+          <div className="flex justify-center">
+            <div className="p-4 rounded-full bg-amber-100 dark:bg-amber-900/40">
+              <HardHat className="h-12 w-12 text-amber-600 dark:text-amber-400" />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-2xl sm:text-3xl font-bold text-amber-900 dark:text-amber-100">
+              {t('plantInfo.inConstruction.title', { defaultValue: 'Plant in Construction' })}
+            </h2>
+            <p className="text-amber-700 dark:text-amber-300 max-w-lg mx-auto">
+              {t('plantInfo.inConstruction.description', { 
+                defaultValue: 'We are currently verifying and completing the information for this plant. Check back soon for the full details!' 
+              })}
+            </p>
+          </div>
+          <div className="pt-4 space-y-4 max-w-md mx-auto">
+            <div className="text-left p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-amber-200/50 dark:border-amber-500/20">
+              <h3 className="font-semibold text-lg text-stone-900 dark:text-white">{limitedPlantInfo.name}</h3>
+              {limitedPlantInfo.scientificName && (
+                <p className="text-sm italic text-stone-600 dark:text-stone-400">{limitedPlantInfo.scientificName}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
