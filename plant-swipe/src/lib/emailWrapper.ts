@@ -199,8 +199,10 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
           
           <!-- Header Banner -->
           <tr>
-            <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:20px 24px;text-align:center;">
-              <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png" alt="Aphylia" width="160" style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;max-width:100%;height:auto;filter:brightness(0) invert(1);" />
+            <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:32px 48px;text-align:center;">
+              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
+                <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png" alt="Aphylia" height="32" style="display:block;border:0;outline:none;text-decoration:none;height:32px;width:auto;filter:brightness(0) invert(1);" />
+              </div>
             </td>
           </tr>
           
