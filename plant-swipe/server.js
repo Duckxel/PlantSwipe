@@ -1037,6 +1037,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
       let finalBuffer
       let finalMimeType
       let finalTypeSegment
+      let finalExtension = 'webp' // Default to webp for optimized files
       let compressionPercent = 0
       let quality = null
 
@@ -1060,6 +1061,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
             .toBuffer()
           finalMimeType = 'image/webp'
           finalTypeSegment = sanitizePathSegment('webp', 'webp')
+          finalExtension = 'webp'
           quality = webpQuality
           compressionPercent = file.size > 0
             ? Math.max(0, Math.round(100 - (finalBuffer.length / file.size) * 100))
@@ -1088,9 +1090,10 @@ async function handleScopedImageUpload(req, res, options = {}) {
         }
         const ext = extMap[mime] || originalTypeSegment
         finalTypeSegment = sanitizePathSegment(ext, ext)
+        finalExtension = ext // Use original file extension when not optimizing
       }
 
-      const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix)
+      const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix, finalExtension)
 
       try {
         const { error: uploadError } = await supabaseServiceClient.storage.from(bucket).upload(objectPath, finalBuffer, {
@@ -1255,16 +1258,18 @@ function deriveUploadTypeSegment(originalName, mimeType) {
   return 'unknown'
 }
 
-function buildUploadObjectPath(baseName, typeSegment, prefix = adminUploadPrefix) {
+function buildUploadObjectPath(baseName, typeSegment, prefix = adminUploadPrefix, extension = 'webp') {
   const unique =
     (typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
       : crypto.randomBytes(10).toString('hex'))
   const cleanPrefix = typeof prefix === 'string' ? prefix.replace(/^\/+|\/+$/g, '') : ''
+  // Use provided extension (without leading dot if present)
+  const ext = (extension || 'webp').replace(/^\./, '')
   const segments = [
     cleanPrefix,
     sanitizePathSegment(typeSegment, 'unknown'),
-    `${baseName}-${unique}.webp`,
+    `${baseName}-${unique}.${ext}`,
   ].filter(Boolean)
   return segments.join('/').replace(/\/{2,}/g, '/')
 }
@@ -13722,7 +13727,9 @@ app.post('/api/bug-report/upload-screenshot', async (req, res) => {
       const userSegment = sanitizePathSegment(`user-${user.id}`, 'user')
       const timestamp = Date.now()
       const typeSegment = userSegment ? `bug-${userSegment}-${timestamp}` : `bug-${timestamp}`
-      const objectPath = buildUploadObjectPath(baseName, typeSegment, bugScreenshotUploadPrefix)
+      // Use correct extension based on final mime type (gif if preserved, webp if converted)
+      const finalExtension = finalMimeType === 'image/gif' ? 'gif' : 'webp'
+      const objectPath = buildUploadObjectPath(baseName, typeSegment, bugScreenshotUploadPrefix, finalExtension)
 
       try {
         const { error: uploadError } = await supabaseServiceClient
