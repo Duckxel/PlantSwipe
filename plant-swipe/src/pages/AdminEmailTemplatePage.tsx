@@ -25,6 +25,9 @@ import {
   History,
   Plus,
   RotateCcw,
+  Youtube,
+  Twitter,
+  Instagram,
 } from "lucide-react"
 import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
 import { VariableHighlighter } from "@/components/tiptap-extensions/variable-highlighter"
@@ -2174,7 +2177,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px' }}>
                       Follow us
                     </p>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
                       {/* YouTube */}
                       <a
                         href="https://www.youtube.com/@aphylia_app"
@@ -2184,15 +2187,16 @@ export const AdminEmailTemplatePage: React.FC = () => {
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          width: '36px',
-                          height: '36px',
+                          width: '40px',
+                          height: '40px',
                           background: '#f3f4f6',
-                          borderRadius: '50%',
+                          borderRadius: '12px',
                           textDecoration: 'none',
+                          color: '#6b7280',
                         }}
                         title="YouTube"
                       >
-                        <span style={{ fontSize: '16px' }}>▶</span>
+                        <Youtube style={{ width: '20px', height: '20px' }} />
                       </a>
                       {/* X (Twitter) */}
                       <a
@@ -2203,15 +2207,16 @@ export const AdminEmailTemplatePage: React.FC = () => {
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          width: '36px',
-                          height: '36px',
+                          width: '40px',
+                          height: '40px',
                           background: '#f3f4f6',
-                          borderRadius: '50%',
+                          borderRadius: '12px',
                           textDecoration: 'none',
+                          color: '#6b7280',
                         }}
                         title="X"
                       >
-                        <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#374151' }}>𝕏</span>
+                        <Twitter style={{ width: '20px', height: '20px' }} />
                       </a>
                       {/* Instagram */}
                       <a
@@ -2222,15 +2227,16 @@ export const AdminEmailTemplatePage: React.FC = () => {
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          width: '36px',
-                          height: '36px',
-                          background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
-                          borderRadius: '50%',
+                          width: '40px',
+                          height: '40px',
+                          background: '#f3f4f6',
+                          borderRadius: '12px',
                           textDecoration: 'none',
+                          color: '#6b7280',
                         }}
                         title="Instagram"
                       >
-                        <span style={{ fontSize: '14px', color: '#ffffff' }}>📷</span>
+                        <Instagram style={{ width: '20px', height: '20px' }} />
                       </a>
                     </div>
                   </div>
