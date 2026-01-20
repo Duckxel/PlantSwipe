@@ -2236,14 +2236,18 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
       } else if (data) {
         const due = Number(data.due_count ?? 0)
         const completed = Number(data.completed_count ?? 0)
+        const allTasksDone = Boolean(data.all_tasks_done ?? true)
         
-        // Verify cache: if cache says no tasks, verify by computing from real data
-        if (due === 0 && completed === 0 && Boolean(data.all_tasks_done ?? true)) {
-          // Cache says no tasks - verify this is correct
+        // Verify cache: if cache says all done, verify by computing from real data
+        // This catches cases where new tasks were added after cache was updated
+        if (allTasksDone || (due === 0 && completed === 0)) {
+          // Cache says all tasks done or no tasks - verify this is correct
           const verified = await getGardenTodayProgressUltraFast(normalizedGardenId, dayIso)
-          if (verified.due > 0 || verified.completed > 0) {
+          const verifiedHasRemaining = verified.due > verified.completed
+          
+          // Check if cache is stale (real data differs from cache)
+          if (verified.due !== due || verified.completed !== completed || verifiedHasRemaining !== !allTasksDone) {
             // Cache is wrong - use real data and trigger refresh
-            const hasRemaining = verified.due > verified.completed
             if (!taskCachesDisabled) {
               setTimeout(() => {
                 refreshGardenTaskCache(normalizedGardenId, dayIso).catch(() => {})
@@ -2251,8 +2255,8 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
             }
             return {
               ...verified,
-              hasRemainingTasks: hasRemaining,
-              allTasksDone: !hasRemaining && verified.due > 0,
+              hasRemainingTasks: verifiedHasRemaining,
+              allTasksDone: !verifiedHasRemaining && verified.due > 0,
             }
           }
         }
@@ -2261,7 +2265,7 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
           due,
           completed,
           hasRemainingTasks: Boolean(data.has_remaining_tasks ?? false),
-          allTasksDone: Boolean(data.all_tasks_done ?? true),
+          allTasksDone,
         }
       }
     } catch (err) {
@@ -2349,9 +2353,10 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
       if (!result[gid]) {
         gardensToVerify.push(gid)
       } else {
-        // Verify cache: if cache says all done but we suspect there might be tasks, verify
+        // Verify cache: if cache says all done, verify it's actually true
+        // This catches cases where new tasks were added after cache was updated
         const cached = result[gid]
-        if (cached.due === 0 && cached.completed === 0 && cached.allTasksDone) {
+        if (cached.allTasksDone || (cached.due === 0 && cached.completed === 0)) {
           gardensToVerify.push(gid)
         }
       }
@@ -2978,10 +2983,11 @@ export async function getUserGardensTasksTodayCached(userId: string, dayIso?: st
       if (!result[gid]) {
         gardensToVerify.push(gid)
       } else {
-        // Verify cache correctness: if cache says all done but we suspect there might be tasks, verify
+        // Verify cache correctness: if cache says all done, verify it's actually true
+        // This catches cases where new tasks were added after cache was updated
         const cached = result[gid]
-        if (cached.due === 0 && cached.completed === 0 && cached.allTasksDone) {
-          // Cache says no tasks - verify this is correct
+        if (cached.allTasksDone || (cached.due === 0 && cached.completed === 0)) {
+          // Cache says all tasks done or no tasks - verify this is correct
           gardensToVerify.push(gid)
         }
       }
