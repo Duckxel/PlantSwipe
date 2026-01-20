@@ -1057,16 +1057,18 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       setCompanionsLoading(true)
       try {
         // Run all queries in parallel for faster loading
-        const queries: Promise<any>[] = [
+        const queries = [
           supabase
             .from('plants')
             .select('id, name')
-            .in('id', companionIds),
+            .in('id', companionIds)
+            .then(res => res),
           supabase
             .from('plant_images')
             .select('plant_id, link')
             .in('plant_id', companionIds)
             .eq('use', 'primary')
+            .then(res => res)
         ]
         
         // Add translation query if not English
@@ -1077,6 +1079,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               .select('plant_id, name')
               .in('plant_id', companionIds)
               .eq('language', currentLang)
+              .then(res => res)
           )
         }
         
