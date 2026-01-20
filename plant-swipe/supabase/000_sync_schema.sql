@@ -7100,6 +7100,633 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_garden_member_counts(uuid[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_garden_member_counts(uuid[]) TO anon;
+
+-- ============================================================================
+-- TASK VALIDATION IMPROVEMENTS - Best Practices Implementation
+-- ============================================================================
+
+-- ========== 1. DATA VALIDATION CONSTRAINTS ==========
+
+-- Add constraint: weekly_days must be valid day numbers (0=Sunday to 6=Saturday)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE table_name = 'garden_plant_tasks' 
+    AND constraint_name = 'valid_weekly_days'
+  ) THEN
+    ALTER TABLE public.garden_plant_tasks
+      ADD CONSTRAINT valid_weekly_days
+      CHECK (
+        weekly_days IS NULL 
+        OR (
+          array_length(weekly_days, 1) > 0 
+          AND array_length(weekly_days, 1) <= 7
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest(weekly_days) AS d WHERE d < 0 OR d > 6
+          )
+        )
+      );
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Add constraint: monthly_days must be valid day numbers (1-31)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE table_name = 'garden_plant_tasks' 
+    AND constraint_name = 'valid_monthly_days'
+  ) THEN
+    ALTER TABLE public.garden_plant_tasks
+      ADD CONSTRAINT valid_monthly_days
+      CHECK (
+        monthly_days IS NULL 
+        OR (
+          array_length(monthly_days, 1) > 0 
+          AND array_length(monthly_days, 1) <= 31
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest(monthly_days) AS d WHERE d < 1 OR d > 31
+          )
+        )
+      );
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Add constraint: interval_amount must be positive when interval_unit is set
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE table_name = 'garden_plant_tasks' 
+    AND constraint_name = 'valid_interval'
+  ) THEN
+    ALTER TABLE public.garden_plant_tasks
+      ADD CONSTRAINT valid_interval
+      CHECK (
+        (interval_unit IS NULL AND interval_amount IS NULL)
+        OR (interval_unit IS NOT NULL AND interval_amount IS NOT NULL AND interval_amount > 0)
+      );
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Add constraint: completed_count cannot exceed required_count on occurrences
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE table_name = 'garden_plant_task_occurrences' 
+    AND constraint_name = 'completed_within_required'
+  ) THEN
+    ALTER TABLE public.garden_plant_task_occurrences
+      ADD CONSTRAINT completed_within_required
+      CHECK (completed_count <= required_count);
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- ========== 2. VALIDATION TRIGGER FOR SCHEDULE CONSISTENCY ==========
+
+-- Function to validate task schedule data consistency
+CREATE OR REPLACE FUNCTION public.validate_task_schedule()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  -- Validate one_time_date schedule
+  IF NEW.schedule_kind = 'one_time_date' THEN
+    IF NEW.due_at IS NULL THEN
+      RAISE EXCEPTION 'one_time_date schedule requires due_at to be set';
+    END IF;
+  
+  -- Validate one_time_duration schedule
+  ELSIF NEW.schedule_kind = 'one_time_duration' THEN
+    IF NEW.interval_amount IS NULL OR NEW.interval_unit IS NULL THEN
+      RAISE EXCEPTION 'one_time_duration schedule requires interval_amount and interval_unit';
+    END IF;
+    IF NEW.interval_amount <= 0 THEN
+      RAISE EXCEPTION 'interval_amount must be positive';
+    END IF;
+  
+  -- Validate repeat_duration schedule
+  ELSIF NEW.schedule_kind = 'repeat_duration' THEN
+    IF NEW.interval_amount IS NULL OR NEW.interval_unit IS NULL THEN
+      RAISE EXCEPTION 'repeat_duration schedule requires interval_amount and interval_unit';
+    END IF;
+    IF NEW.interval_amount <= 0 THEN
+      RAISE EXCEPTION 'interval_amount must be positive';
+    END IF;
+  
+  -- Validate repeat_pattern schedule
+  ELSIF NEW.schedule_kind = 'repeat_pattern' THEN
+    IF NEW.period IS NULL THEN
+      RAISE EXCEPTION 'repeat_pattern schedule requires period to be set';
+    END IF;
+    
+    -- Validate period-specific requirements
+    IF NEW.period = 'week' AND (NEW.weekly_days IS NULL OR array_length(NEW.weekly_days, 1) IS NULL) THEN
+      RAISE EXCEPTION 'weekly repeat_pattern requires at least one day in weekly_days';
+    END IF;
+    
+    IF NEW.period = 'month' AND (
+      (NEW.monthly_days IS NULL OR array_length(NEW.monthly_days, 1) IS NULL) 
+      AND (NEW.monthly_nth_weekdays IS NULL OR array_length(NEW.monthly_nth_weekdays, 1) IS NULL)
+    ) THEN
+      RAISE EXCEPTION 'monthly repeat_pattern requires monthly_days or monthly_nth_weekdays';
+    END IF;
+    
+    IF NEW.period = 'year' AND (NEW.yearly_days IS NULL OR array_length(NEW.yearly_days, 1) IS NULL) THEN
+      RAISE EXCEPTION 'yearly repeat_pattern requires at least one day in yearly_days';
+    END IF;
+  END IF;
+  
+  -- Validate custom task has a name
+  IF NEW.type = 'custom' AND (NEW.custom_name IS NULL OR trim(NEW.custom_name) = '') THEN
+    RAISE EXCEPTION 'custom task type requires a custom_name';
+  END IF;
+  
+  -- Ensure garden_plant belongs to the garden
+  IF NOT EXISTS (
+    SELECT 1 FROM public.garden_plants gp 
+    WHERE gp.id = NEW.garden_plant_id AND gp.garden_id = NEW.garden_id
+  ) THEN
+    RAISE EXCEPTION 'garden_plant_id must belong to the specified garden_id';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- Create trigger for task validation
+DROP TRIGGER IF EXISTS validate_task_schedule_trigger ON public.garden_plant_tasks;
+CREATE TRIGGER validate_task_schedule_trigger
+  BEFORE INSERT OR UPDATE ON public.garden_plant_tasks
+  FOR EACH ROW
+  EXECUTE FUNCTION public.validate_task_schedule();
+
+-- ========== 3. OCCURRENCE VALIDATION TRIGGER ==========
+
+-- Function to validate and normalize occurrence data
+CREATE OR REPLACE FUNCTION public.validate_task_occurrence()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  -- Ensure required_count is positive
+  IF NEW.required_count IS NULL OR NEW.required_count < 1 THEN
+    NEW.required_count := 1;
+  END IF;
+  
+  -- Ensure completed_count is non-negative
+  IF NEW.completed_count IS NULL OR NEW.completed_count < 0 THEN
+    NEW.completed_count := 0;
+  END IF;
+  
+  -- Cap completed_count at required_count
+  IF NEW.completed_count > NEW.required_count THEN
+    NEW.completed_count := NEW.required_count;
+  END IF;
+  
+  -- Set completed_at when task is fully completed
+  IF NEW.completed_count >= NEW.required_count AND NEW.completed_at IS NULL THEN
+    NEW.completed_at := now();
+  END IF;
+  
+  -- Clear completed_at if task is no longer complete (edge case: required_count increased)
+  IF NEW.completed_count < NEW.required_count AND NEW.completed_at IS NOT NULL THEN
+    NEW.completed_at := NULL;
+  END IF;
+  
+  -- Validate garden_plant_id matches the task's garden_plant_id
+  IF TG_OP = 'INSERT' THEN
+    DECLARE
+      _task_garden_plant_id uuid;
+    BEGIN
+      SELECT garden_plant_id INTO _task_garden_plant_id
+      FROM public.garden_plant_tasks WHERE id = NEW.task_id;
+      
+      IF _task_garden_plant_id IS NOT NULL AND _task_garden_plant_id != NEW.garden_plant_id THEN
+        -- Auto-correct to match task's garden_plant_id
+        NEW.garden_plant_id := _task_garden_plant_id;
+      END IF;
+    END;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- Create trigger for occurrence validation
+DROP TRIGGER IF EXISTS validate_task_occurrence_trigger ON public.garden_plant_task_occurrences;
+CREATE TRIGGER validate_task_occurrence_trigger
+  BEFORE INSERT OR UPDATE ON public.garden_plant_task_occurrences
+  FOR EACH ROW
+  EXECUTE FUNCTION public.validate_task_occurrence();
+
+-- ========== 4. PERFORMANCE INDEXES ==========
+
+-- Composite index for finding tasks by garden and type
+CREATE INDEX IF NOT EXISTS idx_tasks_garden_type 
+  ON public.garden_plant_tasks (garden_id, type);
+
+-- Composite index for finding tasks by plant
+CREATE INDEX IF NOT EXISTS idx_tasks_garden_plant 
+  ON public.garden_plant_tasks (garden_plant_id, schedule_kind);
+
+-- Index for occurrence lookups by task and date range
+CREATE INDEX IF NOT EXISTS idx_occurrences_task_due 
+  ON public.garden_plant_task_occurrences (task_id, due_at);
+
+-- Partial index for incomplete occurrences (most common query)
+CREATE INDEX IF NOT EXISTS idx_occurrences_incomplete 
+  ON public.garden_plant_task_occurrences (task_id, due_at) 
+  WHERE completed_count < required_count;
+
+-- Index for user completions lookup
+CREATE INDEX IF NOT EXISTS idx_user_completions_user_time 
+  ON public.garden_task_user_completions (user_id, occurred_at DESC);
+
+-- ========== 5. CLEANUP FUNCTIONS ==========
+
+-- Function to clean up old task occurrences (older than retention period)
+CREATE OR REPLACE FUNCTION public.cleanup_old_task_occurrences(_retention_days integer DEFAULT 90)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _deleted_count integer;
+  _cutoff_date timestamptz;
+BEGIN
+  _cutoff_date := (CURRENT_DATE - (_retention_days || ' days')::interval)::timestamptz;
+  
+  -- Delete old occurrences (cascades to user completions)
+  WITH deleted AS (
+    DELETE FROM public.garden_plant_task_occurrences
+    WHERE due_at < _cutoff_date
+    RETURNING id
+  )
+  SELECT count(*) INTO _deleted_count FROM deleted;
+  
+  RETURN _deleted_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.cleanup_old_task_occurrences(integer) TO authenticated;
+
+-- Function to remove orphaned occurrences (task was deleted but cascade failed)
+CREATE OR REPLACE FUNCTION public.cleanup_orphaned_occurrences()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _deleted_count integer;
+BEGIN
+  WITH deleted AS (
+    DELETE FROM public.garden_plant_task_occurrences o
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.garden_plant_tasks t WHERE t.id = o.task_id
+    )
+    RETURNING o.id
+  )
+  SELECT count(*) INTO _deleted_count FROM deleted;
+  
+  RETURN _deleted_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.cleanup_orphaned_occurrences() TO authenticated;
+
+-- Function to fix inconsistent occurrence data
+CREATE OR REPLACE FUNCTION public.fix_inconsistent_occurrences()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _fixed_count integer := 0;
+BEGIN
+  -- Fix occurrences where completed_count > required_count
+  UPDATE public.garden_plant_task_occurrences
+  SET completed_count = required_count
+  WHERE completed_count > required_count;
+  GET DIAGNOSTICS _fixed_count = ROW_COUNT;
+  
+  -- Fix occurrences marked complete but completed_count < required_count
+  UPDATE public.garden_plant_task_occurrences
+  SET completed_at = NULL
+  WHERE completed_at IS NOT NULL AND completed_count < required_count;
+  
+  -- Fix occurrences not marked complete but completed_count >= required_count
+  UPDATE public.garden_plant_task_occurrences
+  SET completed_at = now()
+  WHERE completed_at IS NULL AND completed_count >= required_count;
+  
+  RETURN _fixed_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.fix_inconsistent_occurrences() TO authenticated;
+
+-- ========== 6. IMPROVED STREAK CALCULATION ==========
+
+-- Enhanced streak calculation that handles edge cases
+CREATE OR REPLACE FUNCTION public.compute_garden_streak_v2(_garden_id uuid, _anchor_day date)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _d date := _anchor_day;
+  _streak integer := 0;
+  _task_record record;
+  _garden_created_at date;
+  _has_tasks boolean;
+BEGIN
+  -- Get garden creation date (don't count days before garden existed)
+  SELECT (created_at AT TIME ZONE 'UTC')::date INTO _garden_created_at
+  FROM public.gardens WHERE id = _garden_id;
+  
+  IF _garden_created_at IS NULL THEN
+    RETURN 0;
+  END IF;
+  
+  -- Check if garden has any tasks at all
+  SELECT EXISTS(
+    SELECT 1 FROM public.garden_plant_tasks WHERE garden_id = _garden_id
+  ) INTO _has_tasks;
+  
+  -- No tasks = no streak (can't maintain a streak without tasks)
+  IF NOT _has_tasks THEN
+    RETURN 0;
+  END IF;
+  
+  -- Calculate streak going backwards from anchor day
+  LOOP
+    -- Don't count days before garden was created
+    IF _d < _garden_created_at THEN
+      EXIT;
+    END IF;
+    
+    -- Check garden_tasks table for this day's success
+    SELECT day, success INTO _task_record
+    FROM public.garden_tasks
+    WHERE garden_id = _garden_id 
+      AND day = _d 
+      AND task_type = 'watering'
+    LIMIT 1;
+    
+    -- If no record exists for this day, check if tasks were due
+    IF _task_record IS NULL THEN
+      -- Check if any tasks existed and had occurrences due on this day
+      DECLARE
+        _had_tasks_due boolean;
+        _all_completed boolean;
+      BEGIN
+        SELECT 
+          EXISTS(
+            SELECT 1 FROM public.garden_plant_task_occurrences o
+            JOIN public.garden_plant_tasks t ON t.id = o.task_id
+            WHERE t.garden_id = _garden_id
+              AND (o.due_at AT TIME ZONE 'UTC')::date = _d
+          ),
+          NOT EXISTS(
+            SELECT 1 FROM public.garden_plant_task_occurrences o
+            JOIN public.garden_plant_tasks t ON t.id = o.task_id
+            WHERE t.garden_id = _garden_id
+              AND (o.due_at AT TIME ZONE 'UTC')::date = _d
+              AND o.completed_count < o.required_count
+          )
+        INTO _had_tasks_due, _all_completed;
+        
+        IF _had_tasks_due THEN
+          IF _all_completed THEN
+            _streak := _streak + 1;
+          ELSE
+            -- Had tasks but didn't complete them - streak broken
+            EXIT;
+          END IF;
+        ELSE
+          -- No tasks due this day - check if we should continue
+          -- Only continue if the garden had tasks defined before this date
+          IF EXISTS(
+            SELECT 1 FROM public.garden_plant_tasks 
+            WHERE garden_id = _garden_id 
+              AND (created_at AT TIME ZONE 'UTC')::date <= _d
+          ) THEN
+            -- Garden had tasks but none were due - day is a "pass"
+            _streak := _streak + 1;
+          ELSE
+            -- No tasks defined yet - don't count this day
+            EXIT;
+          END IF;
+        END IF;
+      END;
+    ELSIF NOT COALESCE(_task_record.success, false) THEN
+      -- Day failed - streak broken
+      EXIT;
+    ELSE
+      -- Day successful - increment streak
+      _streak := _streak + 1;
+    END IF;
+    
+    -- Move to previous day
+    _d := (_d - interval '1 day')::date;
+    
+    -- Safety limit to prevent infinite loops
+    IF _streak > 3650 THEN -- Max 10 years
+      EXIT;
+    END IF;
+  END LOOP;
+  
+  RETURN _streak;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.compute_garden_streak_v2(uuid, date) TO authenticated;
+
+-- ========== 7. SCHEDULED CLEANUP CRON JOB ==========
+
+-- Schedule weekly cleanup of old task data (Sundays at 3:00 UTC)
+DO $$ BEGIN
+  BEGIN
+    PERFORM cron.schedule(
+      'cleanup_old_task_data',
+      '0 3 * * 0',
+      $_cron$
+        SELECT public.cleanup_old_task_occurrences(90);
+        SELECT public.cleanup_orphaned_occurrences();
+        SELECT public.fix_inconsistent_occurrences();
+      $_cron$
+    );
+  EXCEPTION
+    WHEN others THEN NULL;
+  END;
+END $$;
+
+-- ========== 8. HELPER FUNCTION FOR TASK STATUS SUMMARY ==========
+
+-- Get comprehensive task status for a garden on a specific day
+CREATE OR REPLACE FUNCTION public.get_garden_task_status(_garden_id uuid, _day date DEFAULT CURRENT_DATE)
+RETURNS TABLE (
+  total_tasks_due integer,
+  total_completed integer,
+  total_remaining integer,
+  is_all_done boolean,
+  task_types_breakdown jsonb,
+  completion_percentage numeric
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _start_iso timestamptz := (_day::text || 'T00:00:00.000Z')::timestamptz;
+  _end_iso timestamptz := (_day::text || 'T23:59:59.999Z')::timestamptz;
+BEGIN
+  RETURN QUERY
+  SELECT
+    COALESCE(SUM(o.required_count), 0)::integer AS total_tasks_due,
+    COALESCE(SUM(LEAST(o.completed_count, o.required_count)), 0)::integer AS total_completed,
+    COALESCE(SUM(GREATEST(0, o.required_count - o.completed_count)), 0)::integer AS total_remaining,
+    (COALESCE(SUM(o.required_count), 0) = 0 OR 
+     COALESCE(SUM(LEAST(o.completed_count, o.required_count)), 0) >= COALESCE(SUM(o.required_count), 0)) AS is_all_done,
+    jsonb_object_agg(
+      COALESCE(t.type, 'unknown'),
+      jsonb_build_object(
+        'due', COALESCE(SUM(o.required_count) FILTER (WHERE t.type IS NOT NULL), 0),
+        'completed', COALESCE(SUM(LEAST(o.completed_count, o.required_count)) FILTER (WHERE t.type IS NOT NULL), 0)
+      )
+    ) AS task_types_breakdown,
+    CASE 
+      WHEN COALESCE(SUM(o.required_count), 0) = 0 THEN 100.0
+      ELSE ROUND(
+        (COALESCE(SUM(LEAST(o.completed_count, o.required_count)), 0)::numeric / 
+         COALESCE(SUM(o.required_count), 1)::numeric) * 100, 
+        1
+      )
+    END AS completion_percentage
+  FROM public.garden_plant_task_occurrences o
+  JOIN public.garden_plant_tasks t ON t.id = o.task_id
+  WHERE t.garden_id = _garden_id
+    AND o.due_at >= _start_iso
+    AND o.due_at <= _end_iso;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_garden_task_status(uuid, date) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_garden_task_status(uuid, date) TO anon;
+
+-- ========== 9. AUDIT LOGGING FOR TASK CHANGES ==========
+
+-- Create audit log table for task changes (optional - enable if debugging needed)
+CREATE TABLE IF NOT EXISTS public.garden_task_audit_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  operation text NOT NULL CHECK (operation IN ('INSERT', 'UPDATE', 'DELETE')),
+  table_name text NOT NULL,
+  record_id uuid NOT NULL,
+  old_data jsonb,
+  new_data jsonb,
+  changed_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  changed_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Index for efficient audit log queries
+CREATE INDEX IF NOT EXISTS idx_task_audit_record ON public.garden_task_audit_log (table_name, record_id, changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_audit_time ON public.garden_task_audit_log (changed_at DESC);
+
+-- Enable RLS on audit log
+ALTER TABLE public.garden_task_audit_log ENABLE ROW LEVEL SECURITY;
+
+-- Only admins can view audit logs
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_task_audit_log' AND policyname='audit_admin_only') THEN
+    CREATE POLICY audit_admin_only ON public.garden_task_audit_log FOR SELECT TO authenticated
+      USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin = true));
+  END IF;
+END $$;
+
+-- Audit trigger function
+CREATE OR REPLACE FUNCTION public.audit_task_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO public.garden_task_audit_log (operation, table_name, record_id, old_data, changed_by)
+    VALUES (TG_OP, TG_TABLE_NAME, OLD.id, to_jsonb(OLD), auth.uid());
+    RETURN OLD;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO public.garden_task_audit_log (operation, table_name, record_id, old_data, new_data, changed_by)
+    VALUES (TG_OP, TG_TABLE_NAME, NEW.id, to_jsonb(OLD), to_jsonb(NEW), auth.uid());
+    RETURN NEW;
+  ELSIF TG_OP = 'INSERT' THEN
+    INSERT INTO public.garden_task_audit_log (operation, table_name, record_id, new_data, changed_by)
+    VALUES (TG_OP, TG_TABLE_NAME, NEW.id, to_jsonb(NEW), auth.uid());
+    RETURN NEW;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+-- Create audit triggers (disabled by default - enable for debugging)
+-- DROP TRIGGER IF EXISTS audit_tasks_trigger ON public.garden_plant_tasks;
+-- CREATE TRIGGER audit_tasks_trigger
+--   AFTER INSERT OR UPDATE OR DELETE ON public.garden_plant_tasks
+--   FOR EACH ROW EXECUTE FUNCTION public.audit_task_changes();
+
+-- DROP TRIGGER IF EXISTS audit_occurrences_trigger ON public.garden_plant_task_occurrences;
+-- CREATE TRIGGER audit_occurrences_trigger
+--   AFTER INSERT OR UPDATE OR DELETE ON public.garden_plant_task_occurrences
+--   FOR EACH ROW EXECUTE FUNCTION public.audit_task_changes();
+
+-- ========== 10. STATS FUNCTION FOR DEBUGGING ==========
+
+-- Get task system health statistics
+CREATE OR REPLACE FUNCTION public.get_task_system_stats()
+RETURNS TABLE (
+  stat_name text,
+  stat_value bigint
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT 'total_gardens' AS stat_name, count(*)::bigint FROM public.gardens
+  UNION ALL
+  SELECT 'gardens_with_tasks', count(DISTINCT garden_id)::bigint FROM public.garden_plant_tasks
+  UNION ALL
+  SELECT 'total_tasks', count(*)::bigint FROM public.garden_plant_tasks
+  UNION ALL
+  SELECT 'total_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences
+  UNION ALL
+  SELECT 'completed_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences WHERE completed_count >= required_count
+  UNION ALL
+  SELECT 'pending_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences WHERE completed_count < required_count
+  UNION ALL
+  SELECT 'occurrences_today', count(*)::bigint FROM public.garden_plant_task_occurrences 
+    WHERE (due_at AT TIME ZONE 'UTC')::date = CURRENT_DATE
+  UNION ALL
+  SELECT 'orphaned_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences o
+    WHERE NOT EXISTS (SELECT 1 FROM public.garden_plant_tasks t WHERE t.id = o.task_id)
+  UNION ALL
+  SELECT 'inconsistent_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences
+    WHERE completed_count > required_count
+  ORDER BY stat_name;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_task_system_stats() TO authenticated;
+
 -- Create bookmarks table
 create table if not exists public.bookmarks (
   id uuid not null default gen_random_uuid(),
