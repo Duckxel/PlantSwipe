@@ -20,6 +20,8 @@ export type PlantProfileFormProps = {
   colorSuggestions?: PlantColor[]
   companionSuggestions?: string[]
   categoryProgress?: CategoryProgress
+  /** Current language for companion search (e.g., 'en', 'fr'). Defaults to 'en'. */
+  language?: string
 }
 
 const neuCardClass =
@@ -145,7 +147,9 @@ const CompanionSelector: React.FC<{
   showSuggestions?: boolean;
   onToggleSuggestions?: () => void;
   currentPlantId?: string;
-}> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId }) => {
+  /** Language for searching (e.g., 'en', 'fr'). When not 'en', searches plant_translations. */
+  language?: string;
+}> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId, language = 'en' }) => {
   const { t } = useTranslation('common')
   const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
   const [open, setOpen] = React.useState(false)
@@ -159,17 +163,60 @@ const CompanionSelector: React.FC<{
     setCompanions((prev) => prev.filter((c) => value.includes(c.id)))
   }, [value])
 
+  // Fetch plant names (and images) for companion IDs - use translations for non-English
   React.useEffect(() => {
     const missing = value.filter((id) => !companions.find((c) => c.id === id))
     if (!missing.length) return
     const loadMissing = async () => {
-      const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', missing)
-      if (plantsData) {
-        // Also fetch images
+      let plantNames: { id: string; name: string }[] = []
+      
+      if (language !== 'en') {
+        // For non-English, fetch translated names from plant_translations
+        const { data: translationData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, name')
+          .in('plant_id', missing)
+          .eq('language', language)
+        
+        if (translationData && translationData.length > 0) {
+          plantNames = translationData.map((t) => ({
+            id: t.plant_id as string,
+            name: t.name as string
+          }))
+        }
+        
+        // For any plants without translations, fall back to English
+        const foundIds = new Set(plantNames.map(p => p.id))
+        const missingTranslations = missing.filter(id => !foundIds.has(id))
+        if (missingTranslations.length > 0) {
+          const { data: fallbackData } = await supabase
+            .from('plants')
+            .select('id,name')
+            .in('id', missingTranslations)
+          if (fallbackData) {
+            plantNames = [...plantNames, ...fallbackData.map((p) => ({
+              id: p.id as string,
+              name: (p as any).name as string
+            }))]
+          }
+        }
+      } else {
+        // For English, fetch from plants table
+        const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', missing)
+        if (plantsData) {
+          plantNames = plantsData.map((p) => ({
+            id: p.id as string,
+            name: (p as any).name as string
+          }))
+        }
+      }
+      
+      if (plantNames.length > 0) {
+        // Fetch images
         const { data: imagesData } = await supabase
           .from('plant_images')
           .select('plant_id, link')
-          .in('plant_id', missing)
+          .in('plant_id', plantNames.map(p => p.id))
           .eq('use', 'primary')
         
         const imageMap = new Map<string, string>()
@@ -179,26 +226,60 @@ const CompanionSelector: React.FC<{
           })
         }
         
-        setCompanions((prev) => [...prev, ...plantsData.map((p) => ({ 
-          id: p.id as string, 
-          name: (p as any).name as string,
-          imageUrl: imageMap.get(p.id as string)
+        setCompanions((prev) => [...prev, ...plantNames.map((p) => ({ 
+          id: p.id, 
+          name: p.name,
+          imageUrl: imageMap.get(p.id)
         }))])
       }
     }
     loadMissing()
-  }, [companions, value])
+  }, [companions, value, language])
 
+  // Search plants - use translations for non-English languages
   const searchPlants = async (searchTerm?: string) => {
     setLoading(true)
     const term = searchTerm ?? search
-    const query = supabase.from('plants').select('id,name').order('name').limit(30)
-    if (term.trim()) query.ilike('name', `%${term.trim()}%`)
-    const { data: plantsData } = await query
+    let plantResults: { id: string; name: string }[] = []
     
-    if (plantsData) {
+    if (language !== 'en') {
+      // For non-English, search in plant_translations table
+      let query = supabase
+        .from('plant_translations')
+        .select('plant_id, name')
+        .eq('language', language)
+        .order('name')
+        .limit(30)
+      
+      if (term.trim()) {
+        query = query.ilike('name', `%${term.trim()}%`)
+      }
+      
+      const { data: translationData } = await query
+      
+      if (translationData) {
+        plantResults = translationData.map((t) => ({
+          id: t.plant_id as string,
+          name: t.name as string
+        }))
+      }
+    } else {
+      // For English, search in plants table
+      let query = supabase.from('plants').select('id,name').order('name').limit(30)
+      if (term.trim()) query = query.ilike('name', `%${term.trim()}%`)
+      const { data: plantsData } = await query
+      
+      if (plantsData) {
+        plantResults = plantsData.map((p) => ({
+          id: p.id as string,
+          name: (p as any).name as string
+        }))
+      }
+    }
+    
+    if (plantResults.length > 0) {
       // Fetch images for results
-      const ids = plantsData.map(p => p.id)
+      const ids = plantResults.map(p => p.id)
       const { data: imagesData } = await supabase
         .from('plant_images')
         .select('plant_id, link')
@@ -212,11 +293,13 @@ const CompanionSelector: React.FC<{
         })
       }
       
-      setResults(plantsData.map((p) => ({ 
-        id: p.id as string, 
-        name: (p as any).name as string,
-        imageUrl: imageMap.get(p.id as string)
+      setResults(plantResults.map((p) => ({ 
+        id: p.id, 
+        name: p.name,
+        imageUrl: imageMap.get(p.id)
       })))
+    } else {
+      setResults([])
     }
     setLoading(false)
   }
@@ -263,20 +346,82 @@ const CompanionSelector: React.FC<{
   }
 
   // Search for a suggested companion by name and add it
+  // Uses current language for non-English search
   const addSuggestedCompanion = async (suggestedName: string) => {
     setSuggestionSearching(suggestedName)
     try {
-      let query = supabase.from('plants').select('id,name').ilike('name', suggestedName).limit(1)
-      let { data } = await query
+      let foundPlant: { id: string; name: string } | null = null
       
-      if (!data?.length) {
-        query = supabase.from('plants').select('id,name').ilike('name', `%${suggestedName}%`).limit(1)
-        const result = await query
-        data = result.data
+      if (language !== 'en') {
+        // For non-English, search in plant_translations first
+        let { data: translationData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, name')
+          .eq('language', language)
+          .ilike('name', suggestedName)
+          .limit(1)
+        
+        if (!translationData?.length) {
+          // Try partial match
+          const { data } = await supabase
+            .from('plant_translations')
+            .select('plant_id, name')
+            .eq('language', language)
+            .ilike('name', `%${suggestedName}%`)
+            .limit(1)
+          translationData = data
+        }
+        
+        if (translationData?.length) {
+          foundPlant = {
+            id: translationData[0].plant_id as string,
+            name: translationData[0].name as string
+          }
+        }
       }
       
-      if (data?.length) {
-        const plantId = data[0].id as string
+      // Fall back to English search if not found or if language is English
+      if (!foundPlant) {
+        let { data } = await supabase
+          .from('plants')
+          .select('id,name')
+          .ilike('name', suggestedName)
+          .limit(1)
+        
+        if (!data?.length) {
+          const result = await supabase
+            .from('plants')
+            .select('id,name')
+            .ilike('name', `%${suggestedName}%`)
+            .limit(1)
+          data = result.data
+        }
+        
+        if (data?.length) {
+          // If language is not English, try to fetch the translated name
+          if (language !== 'en') {
+            const { data: translatedName } = await supabase
+              .from('plant_translations')
+              .select('name')
+              .eq('plant_id', data[0].id)
+              .eq('language', language)
+              .limit(1)
+            
+            foundPlant = {
+              id: data[0].id as string,
+              name: translatedName?.[0]?.name || (data[0] as any).name as string
+            }
+          } else {
+            foundPlant = {
+              id: data[0].id as string,
+              name: (data[0] as any).name as string
+            }
+          }
+        }
+      }
+      
+      if (foundPlant) {
+        const plantId = foundPlant.id
         // Prevent adding current plant as its own companion
         if (plantId === currentPlantId) return
         
@@ -291,7 +436,7 @@ const CompanionSelector: React.FC<{
           
           const plant = { 
             id: plantId, 
-            name: (data[0] as any).name as string,
+            name: foundPlant.name,
             imageUrl: imgData?.[0]?.link
           }
           onChange([...value, plant.id])
@@ -1862,7 +2007,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en' }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
     basics: null,
@@ -2131,6 +2276,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                           showSuggestions={showCompanionRecommendations}
                           onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
                           currentPlantId={value.id}
+                          language={language}
                         />
                       </div>
                     )}

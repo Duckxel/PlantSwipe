@@ -2072,6 +2072,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             colorSuggestions={colorSuggestions}
             companionSuggestions={companionSuggestions}
             categoryProgress={hasAiProgress ? aiProgress : undefined}
+            language={language}
           />
         )}
     </div>
