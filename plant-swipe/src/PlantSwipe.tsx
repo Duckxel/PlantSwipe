@@ -78,7 +78,6 @@ type ColorOption = {
 type PreparedPlant = Plant & {
   _searchString: string
   _normalizedColors: string[]
-  _colorSet: Set<string>           // O(1) color lookups
   _colorTokens: Set<string>        // Pre-tokenized colors for compound matching
   _typeLabel: string | null
   _usageLabels: string[]
@@ -613,7 +612,6 @@ export default function PlantSwipe() {
         : []
       const colors = [...legacyColors, ...identityColors]
       const normalizedColors = colors.map(c => c.toLowerCase().trim())
-      const colorSet = new Set(normalizedColors)
       
       // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
       // This avoids regex operations during filtering
@@ -670,7 +668,6 @@ export default function PlantSwipe() {
         ...p,
         _searchString: searchString,
         _normalizedColors: normalizedColors,
-        _colorSet: colorSet,
         _colorTokens: colorTokens,
         _typeLabel: typeLabel,
         _usageLabels: usageLabels,
@@ -786,11 +783,12 @@ export default function PlantSwipe() {
       }
       
       // Color filter - using pre-computed color tokens for O(1) lookups
+      // Optimized: Iterate over plant tokens (smaller set) instead of filter set (larger set)
+      // Note: _colorTokens includes both full color strings (e.g. "red-orange") and split tokens (e.g. "red", "orange")
       if (expandedColorFilterSet) {
         let hasMatchingColor = false
-        for (const filterColor of expandedColorFilterSet) {
-          // Check both exact match and tokenized match using pre-computed Sets
-          if (p._colorSet.has(filterColor) || p._colorTokens.has(filterColor)) {
+        for (const plantToken of p._colorTokens) {
+          if (expandedColorFilterSet.has(plantToken)) {
             hasMatchingColor = true
             break
           }
