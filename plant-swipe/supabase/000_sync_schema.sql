@@ -6993,7 +6993,9 @@ BEGIN
 
     -- Repeat pattern
     ELSIF _task.schedule_kind = 'repeat_pattern' THEN
-       _curr := _start_date;
+       -- Start from the later of: window start OR task creation date
+       -- This prevents creating occurrences for dates before the task existed
+       _curr := GREATEST(_start_date, (_task.created_at AT TIME ZONE 'UTC')::date);
        WHILE _curr <= _end_date LOOP
           _match := false;
           _weekday := extract(dow from _curr); -- 0-6 (Sun-Sat)
