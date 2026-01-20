@@ -232,8 +232,8 @@ export function wrapEmailHtmlShared(bodyHtml: string, options: EmailWrapperOptio
           
           <!-- Header Banner -->
           <tr>
-            <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:32px 48px;text-align:center;">
-              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
+            <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:20px 48px;text-align:center;">
+              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:16px;padding:10px 24px;">
                 <img src="${BANNER_URL}" alt="Aphylia" height="48" style="display:block;border:0;outline:none;text-decoration:none;height:48px;width:auto;" />
               </div>
             </td>

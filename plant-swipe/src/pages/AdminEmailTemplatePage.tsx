@@ -2044,7 +2044,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
                 <div
                   style={{
                     background: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%)',
-                    padding: '32px 48px',
+                    padding: '20px 48px',
                     textAlign: 'center',
                   }}
                 >
@@ -2052,8 +2052,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
                     style={{
                       display: 'inline-block',
                       background: 'rgba(255, 255, 255, 0.15)',
-                      borderRadius: '20px',
-                      padding: '14px 28px',
+                      borderRadius: '16px',
+                      padding: '10px 24px',
                     }}
                   >
                     <img
