@@ -889,6 +889,11 @@ else
   fi
 fi
 
+# Discard local changes to lock files and package.json that bun install may have caused
+# These files should match what's in the repo, not local regenerations
+log "Discarding local lock file changes (if any)…"
+"${GIT_LOCAL_CMD[@]}" checkout -- "$NODE_DIR/bun.lock" "$NODE_DIR/package.json" 2>/dev/null || true
+
 # Write the current time to TIME file on successful completion
 log "Recording successful update time…"
 TIME_FILE="$WORK_DIR/TIME"
