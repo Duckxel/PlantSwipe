@@ -508,13 +508,12 @@ export async function processPlantRequest(
       transplanting: coerceBoolean(plant.growth?.transplanting, null),
       infusion: coerceBoolean(plant.usage?.infusion, false),
       aromatherapy: coerceBoolean(plant.usage?.aromatherapy, false),
-      spice_mixes: plant.usage?.spiceMixes || [],
+      // spice_mixes moved to plant_translations (translatable)
       melliferous: coerceBoolean(plant.ecology?.melliferous, false),
       polenizer: polenizerEnum.toDbArray(plant.ecology?.polenizer),
       be_fertilizer: coerceBoolean(plant.ecology?.beFertilizer, false),
       conservation_status: conservationStatusEnum.toDb(plant.ecology?.conservationStatus) || null,
-      pests: plant.danger?.pests || [],
-      diseases: plant.danger?.diseases || [],
+      // pests and diseases moved to plant_translations (translatable)
       companions: plant.miscellaneous?.companions || [],
       status: normalizedStatus,
       admin_commentary: plant.meta?.adminCommentary || null,

@@ -460,13 +460,14 @@ create table if not exists public.plants (
   -- Non-translatable usage fields
   infusion boolean default false,
   aromatherapy boolean default false,
+  -- DEPRECATED: spice_mixes moved to plant_translations (will be dropped after migration)
   spice_mixes text[] not null default '{}',
   -- Non-translatable ecology fields
   melliferous boolean default false,
   polenizer text[] not null default '{}'::text[] check (polenizer <@ array['bee','wasp','ant','butterfly','bird','mosquito','fly','beetle','ladybug','stagbeetle','cockchafer','dungbeetle','weevil']),
   be_fertilizer boolean default false,
   conservation_status text check (conservation_status in ('safe','at risk','vulnerable','endangered','critically endangered','extinct')),
-  -- Non-translatable danger fields
+  -- DEPRECATED: pests and diseases moved to plant_translations (will be dropped after migration)
   pests text[] not null default '{}',
   diseases text[] not null default '{}',
   -- Non-translatable miscellaneous fields
@@ -1541,6 +1542,40 @@ alter table if exists public.plants drop column if exists ground_effect;
 alter table if exists public.plants drop column if exists source_name;
 alter table if exists public.plants drop column if exists source_url;
 alter table if exists public.plants drop column if exists tags;
+
+-- Migrate spice_mixes, pests, diseases from plants to plant_translations for existing English translations
+-- This handles plants that already have English translations but the new columns are empty
+do $$
+begin
+  -- Only run if spice_mixes column still exists in plants table
+  if exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' and table_name = 'plants' and column_name = 'spice_mixes'
+  ) then
+    -- Update English translations with data from plants table where translation fields are empty
+    update public.plant_translations pt
+    set 
+      spice_mixes = coalesce(p.spice_mixes, '{}'),
+      pests = coalesce(p.pests, '{}'),
+      diseases = coalesce(p.diseases, '{}')
+    from public.plants p
+    where pt.plant_id = p.id
+      and pt.language = 'en'
+      and (array_length(pt.spice_mixes, 1) is null or array_length(pt.spice_mixes, 1) = 0)
+      and (
+        array_length(p.spice_mixes, 1) > 0 
+        or array_length(p.pests, 1) > 0 
+        or array_length(p.diseases, 1) > 0
+      );
+    
+    raise notice '[plant_translations] Migrated spice_mixes, pests, diseases to English translations';
+  end if;
+end $$;
+
+-- spice_mixes, pests, diseases are now translatable - drop from plants table
+alter table if exists public.plants drop column if exists spice_mixes;
+alter table if exists public.plants drop column if exists pests;
+alter table if exists public.plants drop column if exists diseases;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;

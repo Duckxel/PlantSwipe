@@ -756,8 +756,8 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       recipesIdeas: translation?.recipes_ideas || [],
       // Non-translatable fields from plants table
       aromatherapy: data.aromatherapy || false,
-      // Translatable field from plant_translations, fallback to plants table
-      spiceMixes: translation?.spice_mixes || data.spice_mixes || [],
+      // Translatable field from plant_translations only
+      spiceMixes: translation?.spice_mixes || [],
     },
     ecology: {
       // Non-translatable fields from plants table
@@ -770,9 +770,9 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       conservationStatus: (conservationStatusEnum.toUi(data.conservation_status) as PlantEcologyData["conservationStatus"]) || undefined,
     },
     danger: { 
-      // Translatable fields from plant_translations, fallback to plants table
-      pests: translation?.pests || data.pests || [], 
-      diseases: translation?.diseases || data.diseases || [] 
+      // Translatable fields from plant_translations only
+      pests: translation?.pests || [], 
+      diseases: translation?.diseases || [] 
     },
     miscellaneous: {
       companions: data.companions || [],
@@ -1285,13 +1285,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
             infusion: coerceBoolean(plantToSave.usage?.infusion, false),
             aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
-            spice_mixes: plantToSave.usage?.spiceMixes || [],
+            // spice_mixes moved to plant_translations (translatable)
             melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
             polenizer: normalizedPolenizer,
             be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
             conservation_status: normalizedConservationStatus || null,
-            pests: plantToSave.danger?.pests || [],
-            diseases: plantToSave.danger?.diseases || [],
+            // pests and diseases moved to plant_translations (translatable)
             companions: plantToSave.miscellaneous?.companions || [],
             status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
@@ -1318,11 +1317,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             admin_commentary: plantToSave.meta?.adminCommentary || null,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
-            // Also save non-translatable fields that can be edited in any language
-            pests: plantToSave.danger?.pests || [],
-            diseases: plantToSave.danger?.diseases || [],
+            // Non-translatable fields that can be edited in any language
             companions: plantToSave.miscellaneous?.companions || [],
-            spice_mixes: plantToSave.usage?.spiceMixes || [],
+            // Note: pests, diseases, spice_mixes are now in plant_translations (translatable)
           }
           const { error: metaUpdateError } = await supabase
             .from('plants')
