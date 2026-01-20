@@ -515,6 +515,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         onClick={(e) => { e.stopPropagation(); handlePrevious() }}
                         onPointerDown={(e) => e.stopPropagation()}
                         onTouchStart={(e) => e.stopPropagation()}
+                        aria-label={t("plant.back")}
+                        title={t("plant.back")}
                       >
                         <ChevronLeft className="h-5 w-5" />
                       </button>
@@ -534,6 +536,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         onClick={(e) => { e.stopPropagation(); handlePass() }}
                         onPointerDown={(e) => e.stopPropagation()}
                         onTouchStart={(e) => e.stopPropagation()}
+                        aria-label={t("plant.next")}
+                        title={t("plant.next")}
                       >
                         <ChevronRight className="h-5 w-5" />
                       </button>
