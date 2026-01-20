@@ -2168,6 +2168,73 @@ export const AdminEmailTemplatePage: React.FC = () => {
                   >
                     Explore Aphylia →
                   </a>
+                  
+                  {/* Social Media Links */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                      Follow us
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
+                      {/* YouTube */}
+                      <a
+                        href="https://www.youtube.com/@aphylia_app"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '36px',
+                          height: '36px',
+                          background: '#f3f4f6',
+                          borderRadius: '50%',
+                          textDecoration: 'none',
+                        }}
+                        title="YouTube"
+                      >
+                        <span style={{ fontSize: '16px' }}>▶</span>
+                      </a>
+                      {/* X (Twitter) */}
+                      <a
+                        href="https://x.com/aphylia_app"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '36px',
+                          height: '36px',
+                          background: '#f3f4f6',
+                          borderRadius: '50%',
+                          textDecoration: 'none',
+                        }}
+                        title="X"
+                      >
+                        <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#374151' }}>𝕏</span>
+                      </a>
+                      {/* Instagram */}
+                      <a
+                        href="https://www.instagram.com/aphylia_app/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '36px',
+                          height: '36px',
+                          background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                          borderRadius: '50%',
+                          textDecoration: 'none',
+                        }}
+                        title="Instagram"
+                      >
+                        <span style={{ fontSize: '14px', color: '#ffffff' }}>📷</span>
+                      </a>
+                    </div>
+                  </div>
+                  
                   <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#9ca3af' }}>
                     <a href="#" style={{ color: '#059669', fontWeight: 500, textDecoration: 'none' }}>aphylia.app</a>
                     <span style={{ margin: '0 8px', color: '#d1d5db' }}>•</span>
