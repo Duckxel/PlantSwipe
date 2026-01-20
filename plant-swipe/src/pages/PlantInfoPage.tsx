@@ -145,22 +145,37 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
   // All translatable fields are stored in plant_translations for ALL languages (including English)
   // Load translation for the requested language
   const targetLanguage = language || 'en'
-  let translation: any = null
-  const { data: translationData } = await supabase
-    .from('plant_translations')
-    .select('*')
-    .eq('plant_id', id)
-    .eq('language', targetLanguage)
-    .maybeSingle()
-  translation = translationData || null
   
-  const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
-  const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
-  const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
-  const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
-  const { data: infusionMixRows } = await supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id)
+  // Run all independent queries in parallel for faster loading
+  const [
+    translationResult,
+    colorLinksResult,
+    imagesResult,
+    schedulesResult,
+    sourcesResult,
+    infusionMixResult
+  ] = await Promise.all([
+    supabase
+      .from('plant_translations')
+      .select('*')
+      .eq('plant_id', id)
+      .eq('language', targetLanguage)
+      .maybeSingle(),
+    supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id),
+    supabase.from('plant_images').select('id,link,use').eq('plant_id', id),
+    supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id),
+    supabase.from('plant_sources').select('id,name,url').eq('plant_id', id),
+    supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id)
+  ])
   
-  // Fetch color translations for the target language
+  const translation = translationResult.data || null
+  const colorLinks = colorLinksResult.data
+  const images = imagesResult.data
+  const schedules = schedulesResult.data
+  const sources = sourcesResult.data
+  const infusionMixRows = infusionMixResult.data
+  
+  // Fetch color translations for the target language (depends on colorLinks result)
   const colorIds = (colorLinks || []).map((c: any) => c.colors?.id).filter(Boolean)
   let colorTranslationsMap: Record<string, string> = {}
   if (colorIds.length > 0) {
@@ -718,13 +733,37 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       
       setCompanionsLoading(true)
       try {
-        // Fetch plant basic info
-        const { data: plantsData } = await supabase
-          .from('plants')
-          .select('id, name')
-          .in('id', companionIds)
+        // Run all queries in parallel for faster loading
+        const queries: Promise<any>[] = [
+          supabase
+            .from('plants')
+            .select('id, name')
+            .in('id', companionIds),
+          supabase
+            .from('plant_images')
+            .select('plant_id, link')
+            .in('plant_id', companionIds)
+            .eq('use', 'primary')
+        ]
+        
+        // Add translation query if not English
+        if (currentLang !== 'en') {
+          queries.push(
+            supabase
+              .from('plant_translations')
+              .select('plant_id, name')
+              .in('plant_id', companionIds)
+              .eq('language', currentLang)
+          )
+        }
+        
+        const results = await Promise.all(queries)
         
         if (ignore) return
+        
+        const plantsData = results[0].data
+        const imagesData = results[1].data
+        const translationsData = currentLang !== 'en' ? results[2]?.data : null
         
         if (!plantsData?.length) {
           setCompanionPlants([])
@@ -732,45 +771,25 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           return
         }
         
-        // Fetch primary images for companion plants
-        const { data: imagesData } = await supabase
-          .from('plant_images')
-          .select('plant_id, link')
-          .in('plant_id', companionIds)
-          .eq('use', 'primary')
-        
-        if (ignore) return
-        
         const imageMap = new Map<string, string>()
         if (imagesData) {
-          imagesData.forEach((img) => {
+          imagesData.forEach((img: { plant_id?: string; link?: string }) => {
             if (img.plant_id && img.link) {
               imageMap.set(img.plant_id, img.link)
             }
           })
         }
         
-        // Fetch translated names if not English
-        let nameTranslations: Record<string, string> = {}
-        if (currentLang !== 'en') {
-          const { data: translationsData } = await supabase
-            .from('plant_translations')
-            .select('plant_id, name')
-            .in('plant_id', companionIds)
-            .eq('language', currentLang)
-          
-          if (!ignore && translationsData) {
-            translationsData.forEach((trans) => {
-              if (trans.plant_id && trans.name) {
-                nameTranslations[trans.plant_id] = trans.name
-              }
-            })
-          }
+        const nameTranslations: Record<string, string> = {}
+        if (translationsData) {
+          translationsData.forEach((trans: { plant_id?: string; name?: string }) => {
+            if (trans.plant_id && trans.name) {
+              nameTranslations[trans.plant_id] = trans.name
+            }
+          })
         }
         
-        if (ignore) return
-        
-        const companions = plantsData.map((p) => ({
+        const companions = plantsData.map((p: { id: string; name: string }) => ({
           id: p.id,
           name: nameTranslations[p.id] || p.name,
           imageUrl: imageMap.get(p.id),
