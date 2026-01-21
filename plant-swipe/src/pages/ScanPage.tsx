@@ -105,14 +105,15 @@ export const ScanPage: React.FC = () => {
   }, [user?.id, t])
   
   // Load more scans (pagination)
+  // Note: recheckMatches is enabled (default) to ensure consistent UX across all pages
   const loadMoreScans = async () => {
     if (!user?.id || loadingMore || !hasMore) return
     try {
       setLoadingMore(true)
       const data = await getUserScans({ 
         limit: SCANS_PER_PAGE, 
-        offset: scans.length,
-        recheckMatches: false // Don't recheck on load more to speed up
+        offset: scans.length
+        // recheckMatches defaults to true for consistent experience
       })
       setScans(prev => [...prev, ...data])
       setHasMore(data.length === SCANS_PER_PAGE)
