@@ -43,6 +43,7 @@ import {
   Upload,
   Link2,
   Search,
+  X,
   ArrowRight,
   Share2,
   Download,
