@@ -678,7 +678,10 @@ export default function PlantSwipe() {
   // Pre-calculate normalized values for all plants to optimize filter performance
   // This avoids repeating expensive string operations on every filter change
   // All Set-based lookups enable O(1) membership tests instead of O(n) array scans
+  // Enhanced: Now includes color translations for bi-directional language matching
   const preparedPlants = useMemo(() => {
+    const { nameMap, translationMap } = colorLookups
+    
     return plants.map((p) => {
       // Colors - build both array (for iteration) and Sets (for O(1) lookups)
       const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
@@ -690,12 +693,30 @@ export default function PlantSwipe() {
       
       // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
       // This avoids regex operations during filtering
+      // Enhanced: Also add translations for bi-directional matching
+      // (e.g., plant with "red" will also match filter "rouge")
       const colorTokens = new Set<string>()
       normalizedColors.forEach(color => {
         colorTokens.add(color)
         // Split compound colors and add individual tokens
         const tokens = color.replace(/[-_/]+/g, ' ').split(/\s+/).filter(Boolean)
-        tokens.forEach(token => colorTokens.add(token))
+        tokens.forEach(token => {
+          colorTokens.add(token)
+          
+          // Try to find this token in the color database
+          // If found, add all its translations for bi-directional matching
+          const matchedColor = nameMap.get(token) || translationMap.get(token)
+          if (matchedColor) {
+            // Add canonical name
+            colorTokens.add(matchedColor.name.toLowerCase())
+            // Add all translations
+            Object.values(matchedColor.translations).forEach(translatedName => {
+              if (translatedName) {
+                colorTokens.add(translatedName.toLowerCase().trim())
+              }
+            })
+          }
+        })
       })
 
       // Search string
@@ -759,7 +780,7 @@ export default function PlantSwipe() {
         _hasImage: hasImage
       } as PreparedPlant
     })
-  }, [plants])
+  }, [plants, colorLookups])
 
   // Memoize color filter expansion separately to avoid recomputing on every filter change
   // This builds a Set of all color names that should match (including children of primary colors)
