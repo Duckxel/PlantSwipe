@@ -416,33 +416,21 @@ export default function PlantSwipe() {
   }, [])
 
   // Create O(1) lookups for color matching to avoid O(N) iteration in filter logic
-<<<<<<< Updated upstream
-  // "expansionMap" flattens the dependency graph: Key = color name, Value = Set of all matching colors (itself + children)
-  // This pre-calculates all string normalizations, removing that cost from the filter loop
-  const { expansionMap, nameMap } = useMemo(() => {
-    const nMap = new Map<string, ColorOption>()
-=======
   // Enhanced with ID-based lookup and translation-aware matching
   const colorLookups = useMemo(() => {
     const nameMap = new Map<string, ColorOption>()
     const idMap = new Map<string, ColorOption>()
->>>>>>> Stashed changes
     const childrenMap = new Map<string, ColorOption[]>()
     // Translation map: any translated name (lowercase) -> ColorOption
     // This enables users to filter by colors in their language
     const translationMap = new Map<string, ColorOption>()
 
-    // First pass: Index colors and group children by parent ID
     colorOptions.forEach(c => {
-<<<<<<< Updated upstream
-      nMap.set(c.name.toLowerCase(), c)
-=======
       const normalizedName = c.name.toLowerCase()
       nameMap.set(normalizedName, c)
       idMap.set(c.id, c)
       
       // Build children map for primary color expansion
->>>>>>> Stashed changes
       c.parentIds.forEach(pid => {
         const existing = childrenMap.get(pid)
         if (existing) {
@@ -459,28 +447,7 @@ export default function PlantSwipe() {
         }
       })
     })
-<<<<<<< Updated upstream
-
-    // Second pass: Build the flattened expansion map
-    const eMap = new Map<string, Set<string>>()
-    colorOptions.forEach(c => {
-      const normalizedName = c.name.toLowerCase()
-      const expansion = new Set<string>()
-      expansion.add(normalizedName)
-
-      if (c.isPrimary) {
-        const children = childrenMap.get(c.id)
-        if (children) {
-          children.forEach(child => expansion.add(child.name.toLowerCase()))
-        }
-      }
-      eMap.set(normalizedName, expansion)
-    })
-
-    return { expansionMap: eMap, nameMap: nMap }
-=======
     return { nameMap, idMap, childrenMap, translationMap }
->>>>>>> Stashed changes
   }, [colorOptions])
 
   React.useEffect(() => {
@@ -489,18 +456,14 @@ export default function PlantSwipe() {
     // Supports both canonical names and translated names via the lookup maps
     const { nameMap, translationMap } = colorLookups
     const hasAdvancedColor = colorFilter.some((colorName) => {
-<<<<<<< Updated upstream
-      const color = nameMap.get(colorName.toLowerCase())
-=======
       const normalizedName = colorName.toLowerCase()
       const color = nameMap.get(normalizedName) || translationMap.get(normalizedName)
->>>>>>> Stashed changes
       return color && !color.isPrimary
     })
     if (hasAdvancedColor) {
       setAdvancedColorsOpen(true)
     }
-  }, [colorFilter, nameMap])
+  }, [colorFilter, colorLookups])
 
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
@@ -790,19 +753,7 @@ export default function PlantSwipe() {
     if (normalizedColorFilters.length === 0) return null
     
     const expandedSet = new Set<string>()
-<<<<<<< Updated upstream
-    
-    normalizedColorFilters.forEach((filterColorName) => {
-      // Use the pre-calculated expansion map - O(1) lookup
-      const expansion = expansionMap.get(filterColorName)
-      if (expansion) {
-        // Fast set union
-        expansion.forEach(c => expandedSet.add(c))
-      } else {
-        // Fallback for unknown colors (shouldn't happen with correct data)
-        expandedSet.add(filterColorName)
-=======
-    const { nameMap, idMap, childrenMap, translationMap } = colorLookups
+    const { nameMap, childrenMap, translationMap } = colorLookups
     
     // Pre-allocate a Set for tracking processed color IDs to avoid duplicate expansion
     const processedIds = new Set<string>()
@@ -813,7 +764,7 @@ export default function PlantSwipe() {
       
       // Try to resolve the color - first by name, then by translation
       // This allows filtering by colors in any supported language
-      let filterColor = nameMap.get(filterColorName) || translationMap.get(filterColorName)
+      const filterColor = nameMap.get(filterColorName) || translationMap.get(filterColorName)
       
       if (filterColor && !processedIds.has(filterColor.id)) {
         processedIds.add(filterColor.id)
@@ -844,12 +795,11 @@ export default function PlantSwipe() {
             }
           }
         }
->>>>>>> Stashed changes
       }
     })
     
     return expandedSet
-  }, [colorFilter, expansionMap])
+  }, [colorFilter, colorLookups])
 
   // Pre-normalize filter values to avoid repeated lowercasing during filtering
   const normalizedFilters = useMemo(() => ({
