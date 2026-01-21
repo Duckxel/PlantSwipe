@@ -146,15 +146,6 @@ type LandingFeature = {
   is_active: boolean
 }
 
-type PublicGardenOption = {
-  id: string
-  name: string
-  coverImageUrl: string | null
-  plantCount: number
-  streak: number
-  ownerDisplayName: string | null
-}
-
 type Testimonial = {
   id: string
   position: number
