@@ -23,7 +23,6 @@ import {
   CheckCircle2, 
   ExternalLink,
   Trash2,
-  ChevronRight,
   ScanLine,
   Sparkles,
   History,
@@ -429,30 +428,27 @@ export const ScanPage: React.FC = () => {
                   </div>
                   
                   {/* Info */}
-                  <div className="flex-1 min-w-0 py-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="font-semibold text-stone-900 dark:text-white truncate">
-                          {scan.topMatchName || t('scan.unknownPlant', { defaultValue: 'Unknown Plant' })}
-                        </h3>
-                        {/* Scientific name if available */}
-                        {scientificName && scientificName !== scan.topMatchName && (
-                          <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate mt-0.5">
-                            {scientificName}
-                          </p>
-                        )}
-                        {scan.topMatchProbability && confidence && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge 
-                              variant="outline" 
-                              className={cn("rounded-full text-xs", confidence.color)}
-                            >
-                              {formatProbability(scan.topMatchProbability)}
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-stone-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex-1 min-w-0 py-1 pr-8">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-stone-900 dark:text-white truncate">
+                        {scan.topMatchName || t('scan.unknownPlant', { defaultValue: 'Unknown Plant' })}
+                      </h3>
+                      {/* Scientific name if available */}
+                      {scientificName && scientificName !== scan.topMatchName && (
+                        <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                          {scientificName}
+                        </p>
+                      )}
+                      {scan.topMatchProbability && confidence && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge 
+                            variant="outline" 
+                            className={cn("rounded-full text-xs", confidence.color)}
+                          >
+                            {formatProbability(scan.topMatchProbability)}
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                     
                     <div className="flex flex-wrap items-center gap-2 mt-2">
