@@ -1057,16 +1057,19 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       setCompanionsLoading(true)
       try {
         // Run all queries in parallel for faster loading
+        // Note: .then(r => r) converts PostgrestFilterBuilder to a proper Promise for TypeScript
         const queries: Promise<any>[] = [
           supabase
             .from('plants')
             .select('id, name')
-            .in('id', companionIds),
+            .in('id', companionIds)
+            .then(r => r),
           supabase
             .from('plant_images')
             .select('plant_id, link')
             .in('plant_id', companionIds)
             .eq('use', 'primary')
+            .then(r => r)
         ]
         
         // Add translation query if not English
@@ -1077,6 +1080,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               .select('plant_id, name')
               .in('plant_id', companionIds)
               .eq('language', currentLang)
+              .then(r => r)
           )
         }
         
