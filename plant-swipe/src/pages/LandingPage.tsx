@@ -340,10 +340,10 @@ const LandingPage: React.FC = () => {
     }
   }, [signOut, navigate, pathWithoutLang])
 
-  // Page metadata - use DB settings if available, fallback to translations
+  // Page metadata from translations
   usePageMetadata({
-    title: landingData.settings?.meta_title || ("Aphylia – " + t("hero.badge")),
-    description: landingData.settings?.meta_description || t("hero.description"),
+    title: "Aphylia – " + t("hero.badge"),
+    description: t("hero.description"),
   })
 
   return (
@@ -425,21 +425,21 @@ const LandingPage: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const HeroSection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { settings, stats } = useLandingData()
+  const { stats } = useLandingData()
 
-  // Database settings take priority, fallback to translations
-  const badgeText = settings?.hero_badge_text || t("hero.badge")
-  const titleStart = settings?.hero_title || t("hero.title")
-  const titleHighlight = settings?.hero_title_highlight || t("hero.titleHighlight")
-  const titleEnd = settings?.hero_title_end || t("hero.titleEnd")
-  const description = settings?.hero_description || t("hero.description")
-  const ctaPrimaryText = settings?.hero_cta_primary_text || t("hero.ctaDownload")
-  const ctaPrimaryLink = settings?.hero_cta_primary_link || "/download"
-  const ctaSecondaryText = settings?.hero_cta_secondary_text || t("hero.ctaTryBrowser")
-  const ctaSecondaryLink = settings?.hero_cta_secondary_link || "/discovery"
-  const socialProofText = settings?.hero_social_proof_text || t("hero.socialProof")
+  // All text content from translations (not editable via admin)
+  const badgeText = t("hero.badge")
+  const titleStart = t("hero.title")
+  const titleHighlight = t("hero.titleHighlight")
+  const titleEnd = t("hero.titleEnd")
+  const description = t("hero.description")
+  const ctaPrimaryText = t("hero.ctaDownload")
+  const ctaPrimaryLink = "/download"
+  const ctaSecondaryText = t("hero.ctaTryBrowser")
+  const ctaSecondaryLink = "/discovery"
+  const socialProofText = t("hero.socialProof")
   
-  // Stats from database for social proof
+  // Stats from database for social proof (rating is editable via Stats tab)
   const ratingValue = stats?.rating_value || "4.9"
 
   return (
@@ -750,13 +750,12 @@ const StatsBanner: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const BeginnerFriendlySection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { settings } = useLandingData()
 
-  // Database settings take priority, fallback to translations
-  const badge = settings?.beginner_badge || t("beginner.badge", { defaultValue: "Perfect for Beginners" })
-  const title = settings?.beginner_title || t("beginner.title", { defaultValue: "Know Nothing About Gardening?" })
-  const titleHighlight = settings?.beginner_title_highlight || t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })
-  const subtitle = settings?.beginner_subtitle || t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany." })
+  // All text content from translations (not editable via admin)
+  const badge = t("beginner.badge", { defaultValue: "Perfect for Beginners" })
+  const title = t("beginner.title", { defaultValue: "Know Nothing About Gardening?" })
+  const titleHighlight = t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })
+  const subtitle = t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany." })
 
   const beginnerFeatures = [
     {
@@ -1320,14 +1319,13 @@ const FAQSection: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const FinalCTASection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { settings } = useLandingData()
 
-  // Database settings take priority, fallback to translations
-  const badge = settings?.final_cta_badge || t("finalCta.badge", { defaultValue: "No experience needed" })
-  const title = settings?.final_cta_title || t("finalCta.title", { defaultValue: "Ready to Start Your Plant Journey?" })
-  const subtitle = settings?.final_cta_subtitle || t("finalCta.subtitle", { defaultValue: "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents." })
-  const primaryButtonText = settings?.final_cta_button_text || t("finalCta.ctaDownload", { defaultValue: "Start Growing" })
-  const secondaryButtonText = settings?.final_cta_secondary_text || t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })
+  // All text content from translations (not editable via admin)
+  const badge = t("finalCta.badge", { defaultValue: "No experience needed" })
+  const title = t("finalCta.title", { defaultValue: "Ready to Start Your Plant Journey?" })
+  const subtitle = t("finalCta.subtitle", { defaultValue: "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents." })
+  const primaryButtonText = t("finalCta.ctaDownload", { defaultValue: "Start Growing" })
+  const secondaryButtonText = t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })
 
   return (
     <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8">
