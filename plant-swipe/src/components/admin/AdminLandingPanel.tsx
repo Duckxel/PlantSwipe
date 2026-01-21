@@ -75,6 +75,7 @@ import {
   Twitter,
   Mail,
   Layers,
+  Megaphone,
   GraduationCap,
   CirclePlay,
   Route,
