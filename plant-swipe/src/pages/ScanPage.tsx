@@ -455,22 +455,10 @@ export const ScanPage: React.FC = () => {
                       <span className="text-xs text-stone-500 dark:text-stone-400">
                         {formatDate(scan.createdAt)}
                       </span>
-                      {scan.matchedPlant ? (
+                      {scan.matchedPlant && (
                         <Badge className="rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           {t('scan.inDatabase', { defaultValue: 'In Database' })}
-                        </Badge>
-                      ) : scan.topMatchName && (
-                        <Badge 
-                          variant="outline" 
-                          className="rounded-full text-xs text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleRequestPlant(scan.topMatchName!)
-                          }}
-                        >
-                          <Plus className="h-3 w-3 mr-1" />
-                          {t('scan.requestPlant', { defaultValue: 'Request' })}
                         </Badge>
                       )}
                     </div>
@@ -641,19 +629,13 @@ export const ScanPage: React.FC = () => {
                         {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
                       </Button>
                     ) : (
-                      /* Request Plant button when NOT in database - only shown after all matching strategies completed */
-                      <div className="space-y-2">
-                        <p className="text-xs text-center text-stone-500 dark:text-stone-400">
-                          {t('scan.notInDatabaseYet', { defaultValue: 'This plant is not in our database yet' })}
-                        </p>
-                        <Button 
-                          onClick={() => handleRequestPlant(currentResult.topMatchName!)}
-                          className="w-full rounded-full bg-amber-500 hover:bg-amber-600 text-white gap-2"
-                        >
-                          <Plus className="h-4 w-4" />
-                          {t('scan.requestPlant', { defaultValue: 'Request This Plant' })}
-                        </Button>
-                      </div>
+                      /* Subtle request plant option when NOT in database */
+                      <button 
+                        onClick={() => handleRequestPlant(currentResult.topMatchName!)}
+                        className="w-full text-center text-xs text-stone-400 dark:text-stone-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors py-2"
+                      >
+                        {t('scan.notInDatabaseRequest', { defaultValue: "Not in our database? Request it" })}
+                      </button>
                     )}
                     
                     {/* Search in encyclopedia */}

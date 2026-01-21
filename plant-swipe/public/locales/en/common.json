@@ -2881,6 +2881,7 @@
       "requestPlant": "Request This Plant",
       "notInDatabase": "Not in our database yet",
       "notInDatabaseYet": "This plant is not in our database yet",
+      "notInDatabaseRequest": "Not in our database? Request it",
       "errors": {
         "loadFailed": "Failed to load your scans",
         "notAPlant": "This doesn't appear to be a plant. Please try a different image.",

@@ -364,11 +364,66 @@ export async function createPlantScan(
 }
 
 /**
+ * Re-check if a scan now has a matching plant in the database
+ * This is useful when plants are added after the scan was created
+ * Updates the scan record if a new match is found
+ */
+async function recheckScanMatch(scan: any): Promise<any> {
+  // Skip if already has a match
+  if (scan.matched_plant_id || scan.matched_plant) {
+    return scan
+  }
+  
+  // Skip if no top match name to search for
+  if (!scan.top_match_name) {
+    return scan
+  }
+  
+  // Build a suggestion object from the scan data for findMatchingPlant
+  const suggestion: PlantScanSuggestion = {
+    id: scan.top_match_entity_id || '',
+    name: scan.top_match_name,
+    probability: scan.top_match_probability || 0,
+    // Try to extract taxonomy from suggestions if available
+    genus: scan.suggestions?.[0]?.genus,
+    species: scan.suggestions?.[0]?.species,
+    infraspecies: scan.suggestions?.[0]?.infraspecies,
+    commonNames: scan.suggestions?.[0]?.commonNames
+  }
+  
+  // Try to find a match
+  const matchedPlantId = await findMatchingPlant(suggestion)
+  
+  if (matchedPlantId) {
+    console.log('[plantScan] Re-check found new match for scan:', scan.id, '-> plant:', matchedPlantId)
+    
+    // Update the scan record with the new match
+    const { data: updatedScan, error } = await supabase
+      .from('plant_scans')
+      .update({ matched_plant_id: matchedPlantId })
+      .eq('id', scan.id)
+      .select(`
+        *,
+        matched_plant:plants(id, name, scientific_name)
+      `)
+      .single()
+    
+    if (!error && updatedScan) {
+      return updatedScan
+    }
+  }
+  
+  return scan
+}
+
+/**
  * Get all scans for the current user
+ * Automatically re-checks unmatched scans for new database matches
  */
 export async function getUserScans(options?: {
   limit?: number
   offset?: number
+  recheckMatches?: boolean
 }): Promise<PlantScan[]> {
   const session = (await supabase.auth.getSession()).data.session
   if (!session?.user?.id) {
@@ -402,7 +457,30 @@ export async function getUserScans(options?: {
     throw new Error(error.message)
   }
   
-  return (data || []).map(transformDbRow)
+  // Re-check unmatched scans for new database matches (default: enabled)
+  const shouldRecheck = options?.recheckMatches !== false
+  let scans = data || []
+  
+  if (shouldRecheck) {
+    // Only re-check scans without matches (limit to first 10 to avoid too many queries)
+    const unmatchedScans = scans.filter(s => !s.matched_plant_id && s.top_match_name)
+    const scansToRecheck = unmatchedScans.slice(0, 10)
+    
+    if (scansToRecheck.length > 0) {
+      console.log('[plantScan] Re-checking', scansToRecheck.length, 'unmatched scans for new database matches')
+      
+      // Re-check in parallel
+      const recheckedScans = await Promise.all(
+        scansToRecheck.map(scan => recheckScanMatch(scan))
+      )
+      
+      // Merge rechecked scans back into the list
+      const recheckedMap = new Map(recheckedScans.map(s => [s.id, s]))
+      scans = scans.map(s => recheckedMap.get(s.id) || s)
+    }
+  }
+  
+  return scans.map(transformDbRow)
 }
 
 /**
