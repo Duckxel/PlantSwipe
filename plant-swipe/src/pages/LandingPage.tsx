@@ -452,7 +452,7 @@ const LandingPage: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const HeroSection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { settings } = useLandingData()
+  const { settings, stats } = useLandingData()
 
   // Database settings take priority, fallback to translations
   const badgeText = settings?.hero_badge_text || t("hero.badge")
@@ -465,6 +465,9 @@ const HeroSection: React.FC = () => {
   const ctaSecondaryText = settings?.hero_cta_secondary_text || t("hero.ctaTryBrowser")
   const ctaSecondaryLink = settings?.hero_cta_secondary_link || "/discovery"
   const socialProofText = settings?.hero_social_proof_text || t("hero.socialProof")
+  
+  // Stats from database for social proof
+  const ratingValue = stats?.rating_value || "4.9"
 
   return (
     <section className="relative pt-24 pb-16 lg:pt-32 lg:pb-24 px-4 sm:px-6 lg:px-8 overflow-visible">
@@ -551,7 +554,7 @@ const HeroSection: React.FC = () => {
                 {[...Array(5)].map((_, i) => (
                   <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
                 ))}
-                <span className="text-sm font-medium text-stone-600 dark:text-stone-300 ml-1">4.9</span>
+                <span className="text-sm font-medium text-stone-600 dark:text-stone-300 ml-1">{ratingValue}</span>
               </div>
             </div>
           </div>

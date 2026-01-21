@@ -2237,7 +2237,7 @@ const StatsTab: React.FC<{
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Statistics Banner</h3>
-          <p className="text-sm text-stone-500">Displayed in the stats section below the hero</p>
+          <p className="text-sm text-stone-500">Displayed in the stats section and used for hero social proof (rating)</p>
         </div>
         <Button onClick={saveStats} disabled={saving} className="rounded-xl">
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
