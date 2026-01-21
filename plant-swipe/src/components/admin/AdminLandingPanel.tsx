@@ -51,7 +51,6 @@ import {
   Copy,
   Monitor,
   Settings,
-  Layers,
   Megaphone,
   GraduationCap,
   CirclePlay,
@@ -930,7 +929,6 @@ const GlobalSettingsTab: React.FC<{
   settingsError?: string | null
 }> = ({ settings, setSettings, saving, setSaving, settingsError }) => {
   const [localSettings, setLocalSettings] = React.useState<LandingPageSettings | null>(settings)
-  const [activeSection, setActiveSection] = React.useState<"visibility">("visibility")
 
   React.useEffect(() => {
     setLocalSettings(settings)
@@ -960,8 +958,30 @@ const GlobalSettingsTab: React.FC<{
   }
 
   const updateSetting = <K extends keyof LandingPageSettings>(key: K, value: LandingPageSettings[K]) => {
-    if (!localSettings) return
-    setLocalSettings({ ...localSettings, [key]: value })
+    setLocalSettings(prev => prev ? { ...prev, [key]: value } : prev)
+  }
+
+  const visibilityItems = [
+    { key: "show_hero_section" as const, label: "Hero Section", description: "Main hero area with headline and phone mockup", icon: Smartphone },
+    { key: "show_stats_section" as const, label: "Stats Banner", description: "Statistics banner showing key metrics", icon: BarChart3 },
+    { key: "show_beginner_section" as const, label: "Beginner Section", description: "Section encouraging new users", icon: GraduationCap },
+    { key: "show_features_section" as const, label: "Features Grid", description: "Feature cards showcasing capabilities", icon: Grid3X3 },
+    { key: "show_demo_section" as const, label: "Interactive Demo", description: "Animated demo with rotating features", icon: CirclePlay },
+    { key: "show_how_it_works_section" as const, label: "How It Works", description: "Step-by-step guide section", icon: Route },
+    { key: "show_testimonials_section" as const, label: "Testimonials", description: "Customer reviews and ratings", icon: Quote },
+    { key: "show_faq_section" as const, label: "FAQ Section", description: "Frequently asked questions", icon: HelpCircle },
+    { key: "show_final_cta_section" as const, label: "Final CTA", description: "Final call-to-action before footer", icon: Megaphone },
+  ]
+
+  const setAllVisibility = (visible: boolean) => {
+    setLocalSettings(prev => {
+      if (!prev) return prev
+      const updates: Partial<LandingPageSettings> = {}
+      visibilityItems.forEach(item => {
+        updates[item.key] = visible
+      })
+      return { ...prev, ...updates }
+    })
   }
 
   // Show error state if settings table is not available
@@ -992,22 +1012,6 @@ const GlobalSettingsTab: React.FC<{
     )
   }
 
-  const sectionTabs = [
-    { id: "visibility" as const, label: "Section Visibility", icon: Layers, description: "Control which sections appear" },
-  ]
-
-  const visibilityItems = [
-    { key: "show_hero_section" as const, label: "Hero Section", description: "Main hero area with headline and phone mockup", icon: Smartphone },
-    { key: "show_stats_section" as const, label: "Stats Banner", description: "Statistics banner showing key metrics", icon: BarChart3 },
-    { key: "show_beginner_section" as const, label: "Beginner Section", description: "Section encouraging new users", icon: GraduationCap },
-    { key: "show_features_section" as const, label: "Features Grid", description: "Feature cards showcasing capabilities", icon: Grid3X3 },
-    { key: "show_demo_section" as const, label: "Interactive Demo", description: "Animated demo with rotating features", icon: CirclePlay },
-    { key: "show_how_it_works_section" as const, label: "How It Works", description: "Step-by-step guide section", icon: Route },
-    { key: "show_testimonials_section" as const, label: "Testimonials", description: "Customer reviews and ratings", icon: Quote },
-    { key: "show_faq_section" as const, label: "FAQ Section", description: "Frequently asked questions", icon: HelpCircle },
-    { key: "show_final_cta_section" as const, label: "Final CTA", description: "Final call-to-action before footer", icon: Megaphone },
-  ]
-
   return (
     <div className="space-y-6">
       {/* Header with Save Button */}
@@ -1015,10 +1019,10 @@ const GlobalSettingsTab: React.FC<{
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white flex items-center gap-2">
             <Settings className="h-5 w-5 text-emerald-500" />
-            Global Landing Page Settings
+            Section Visibility
           </h3>
           <p className="text-sm text-stone-500 mt-1">
-            Control section visibility and manage social links. Text content is managed via translation files.
+            Toggle sections on or off to customize your landing page. Text content is managed via translation files.
           </p>
         </div>
         <Button onClick={saveSettings} disabled={saving} className="rounded-xl">
@@ -1027,101 +1031,27 @@ const GlobalSettingsTab: React.FC<{
         </Button>
       </div>
 
-      {/* Section Navigation */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        {sectionTabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveSection(tab.id)}
-            className={cn(
-              "flex flex-col items-center gap-2 p-3 rounded-xl text-center transition-all",
-              activeSection === tab.id
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
-                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
-            )}
-          >
-            <tab.icon className="h-5 w-5" />
-            <span className="text-xs font-medium">{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Active Section Content */}
+      {/* Section Visibility Content */}
       <Card className="rounded-xl">
         <CardContent className="p-6">
-          {/* Section Visibility */}
-          {activeSection === "visibility" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-stone-200 dark:border-stone-700">
-                <div>
-                  <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-emerald-500" />
-                    Section Visibility
-                  </h4>
-                  <p className="text-sm text-stone-500 mt-1">Toggle sections on or off to customize your landing page</p>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-stone-500">
-                  <span className="flex items-center gap-1">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                    Visible
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <div className="h-2 w-2 rounded-full bg-stone-300" />
-                    Hidden
-                  </span>
-                </div>
+          <div className="space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-stone-200 dark:border-stone-700">
+              <div className="flex items-center gap-2 text-xs text-stone-500">
+                <span className="flex items-center gap-1">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Visible
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="h-2 w-2 rounded-full bg-stone-300" />
+                  Hidden
+                </span>
               </div>
-
-              <div className="grid gap-3">
-                {visibilityItems.map((item) => {
-                  const isVisible = localSettings[item.key]
-                  return (
-                    <div
-                      key={item.key}
-                      className={cn(
-                        "flex items-center justify-between p-4 rounded-xl border transition-all",
-                        isVisible
-                          ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800"
-                          : "bg-stone-50 dark:bg-stone-900/50 border-stone-200 dark:border-stone-700 opacity-75"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "h-10 w-10 rounded-xl flex items-center justify-center",
-                          isVisible ? "bg-emerald-500/10" : "bg-stone-200 dark:bg-stone-800"
-                        )}>
-                          <item.icon className={cn(
-                            "h-5 w-5",
-                            isVisible ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400"
-                          )} />
-                        </div>
-                        <div>
-                          <p className={cn(
-                            "font-medium",
-                            isVisible ? "text-stone-900 dark:text-white" : "text-stone-500"
-                          )}>
-                            {item.label}
-                          </p>
-                          <p className="text-xs text-stone-500">{item.description}</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={isVisible}
-                        onCheckedChange={(checked) => updateSetting(item.key, checked)}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-
               {/* Quick Actions */}
-              <div className="flex gap-2 pt-4 border-t border-stone-200 dark:border-stone-700">
+              <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    visibilityItems.forEach(item => updateSetting(item.key, true))
-                  }}
+                  onClick={() => setAllVisibility(true)}
                   className="rounded-xl"
                 >
                   <Eye className="h-4 w-4 mr-2" />
@@ -1130,9 +1060,7 @@ const GlobalSettingsTab: React.FC<{
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    visibilityItems.forEach(item => updateSetting(item.key, false))
-                  }}
+                  onClick={() => setAllVisibility(false)}
                   className="rounded-xl"
                 >
                   <EyeOff className="h-4 w-4 mr-2" />
@@ -1140,8 +1068,49 @@ const GlobalSettingsTab: React.FC<{
                 </Button>
               </div>
             </div>
-          )}
 
+            <div className="grid gap-3">
+              {visibilityItems.map((item) => {
+                const isVisible = localSettings[item.key]
+                return (
+                  <div
+                    key={item.key}
+                    className={cn(
+                      "flex items-center justify-between p-4 rounded-xl border transition-all",
+                      isVisible
+                        ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800"
+                        : "bg-stone-50 dark:bg-stone-900/50 border-stone-200 dark:border-stone-700 opacity-75"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "h-10 w-10 rounded-xl flex items-center justify-center",
+                        isVisible ? "bg-emerald-500/10" : "bg-stone-200 dark:bg-stone-800"
+                      )}>
+                        <item.icon className={cn(
+                          "h-5 w-5",
+                          isVisible ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400"
+                        )} />
+                      </div>
+                      <div>
+                        <p className={cn(
+                          "font-medium",
+                          isVisible ? "text-stone-900 dark:text-white" : "text-stone-500"
+                        )}>
+                          {item.label}
+                        </p>
+                        <p className="text-xs text-stone-500">{item.description}</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={isVisible}
+                      onCheckedChange={(checked) => updateSetting(item.key, checked)}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
