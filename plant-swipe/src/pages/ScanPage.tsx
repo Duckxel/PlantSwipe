@@ -253,12 +253,24 @@ export const ScanPage: React.FC = () => {
       parts.push(suggestion.species)
     }
     if (suggestion.infraspecies) {
-      // Check if it's a cultivar (usually single-quoted) or variety/subspecies
-      const infraspecies = suggestion.infraspecies
-      if (infraspecies.includes("'") || infraspecies.match(/^[A-Z]/)) {
-        parts.push(`'${infraspecies.replace(/'/g, '')}'`)
+      // Use infraspecies as-is if it already appears formatted (quotes or known prefixes),
+      // otherwise default to treating it as a variety.
+      const rawInfraspecies = suggestion.infraspecies.trim()
+      const lowerInfraspecies = rawInfraspecies.toLowerCase()
+      const hasQuotes =
+        rawInfraspecies.startsWith("'") ||
+        rawInfraspecies.endsWith("'") ||
+        rawInfraspecies.includes('"')
+      const hasKnownPrefix =
+        lowerInfraspecies.startsWith('var.') ||
+        lowerInfraspecies.startsWith('subsp.') ||
+        lowerInfraspecies.startsWith('ssp.') ||
+        lowerInfraspecies.startsWith('cv.')
+
+      if (hasQuotes || hasKnownPrefix) {
+        parts.push(rawInfraspecies)
       } else {
-        parts.push(`var. ${infraspecies}`)
+        parts.push(`var. ${rawInfraspecies}`)
       }
     }
     
