@@ -162,7 +162,6 @@ do $$ declare
     'landing_page_settings',
     'landing_hero_cards',
     'landing_stats',
-    'landing_features',
     'landing_testimonials',
     'landing_faq',
     'landing_faq_translations',
@@ -9085,24 +9084,6 @@ create trigger ensure_single_landing_stats_trigger
   before insert on public.landing_stats
   for each row execute function public.ensure_single_landing_stats();
 
--- Landing Features: Feature cards shown in the spinning circle and features section
-create table if not exists public.landing_features (
-  id uuid primary key default gen_random_uuid(),
-  position integer not null default 0,
-  icon_name text not null default 'Leaf',
-  title text not null,
-  description text,
-  color text not null default 'emerald',
-  is_in_circle boolean not null default false,
-  is_active boolean not null default true,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
-create index if not exists idx_landing_features_position on public.landing_features(position);
-create index if not exists idx_landing_features_active on public.landing_features(is_active);
-create index if not exists idx_landing_features_circle on public.landing_features(is_in_circle);
-
 -- Landing Testimonials: Customer reviews/testimonials
 create table if not exists public.landing_testimonials (
   id uuid primary key default gen_random_uuid(),
@@ -9178,14 +9159,6 @@ drop policy if exists "Landing stats are publicly readable" on public.landing_st
 create policy "Landing stats are publicly readable" on public.landing_stats for select using (true);
 drop policy if exists "Admins can manage landing stats" on public.landing_stats;
 create policy "Admins can manage landing stats" on public.landing_stats for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
-
-alter table public.landing_features enable row level security;
-drop policy if exists "Landing features are publicly readable" on public.landing_features;
-create policy "Landing features are publicly readable" on public.landing_features for select using (true);
-drop policy if exists "Admins can manage landing features" on public.landing_features;
-create policy "Admins can manage landing features" on public.landing_features for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
 

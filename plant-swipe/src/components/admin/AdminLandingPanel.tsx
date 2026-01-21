@@ -135,17 +135,6 @@ type LandingStats = {
   rating_label: string
 }
 
-type LandingFeature = {
-  id: string
-  position: number
-  icon_name: string
-  title: string
-  description: string | null
-  color: string
-  is_in_circle: boolean
-  is_active: boolean
-}
-
 type Testimonial = {
   id: string
   position: number
@@ -217,7 +206,7 @@ type LandingPageSettings = {
   meta_description: string
 }
 
-type LandingTab = "settings" | "hero" | "stats" | "features" | "testimonials" | "faq"
+type LandingTab = "settings" | "hero" | "stats" | "testimonials" | "faq"
 
 // ========================
 // IMPORT FROM PLANTS MODAL
@@ -867,33 +856,6 @@ const StatsPreview: React.FC<{ stats: LandingStats | null }> = ({ stats }) => {
 }
 
 // ========================
-// FEATURE PREVIEW
-// ========================
-const FeaturePreview: React.FC<{ feature: LandingFeature }> = ({ feature }) => {
-  const IconComponent = iconMap[feature.icon_name] || Leaf
-  const color = colorOptions.find(c => c.value === feature.color) || colorOptions[0]
-
-  return (
-    <div className="flex items-start gap-3 p-3 rounded-xl bg-gradient-to-br from-stone-50 to-stone-100 dark:from-stone-900 dark:to-stone-800 border border-stone-200 dark:border-stone-700">
-      <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0", color.bg)}>
-        <IconComponent className="h-5 w-5 text-white" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-sm text-stone-900 dark:text-white truncate">
-          {feature.title || "Feature Title"}
-        </p>
-        <p className="text-xs text-stone-500 dark:text-stone-400 line-clamp-2">
-          {feature.description || "Feature description goes here"}
-        </p>
-      </div>
-      {!feature.is_active && (
-        <EyeOff className="h-4 w-4 text-stone-400 flex-shrink-0" />
-      )}
-    </div>
-  )
-}
-
-// ========================
 // MAIN COMPONENT
 // ========================
 export const AdminLandingPanel: React.FC = () => {
@@ -907,7 +869,6 @@ export const AdminLandingPanel: React.FC = () => {
   const [settingsError, setSettingsError] = React.useState<string | null>(null)
   const [heroCards, setHeroCards] = React.useState<HeroCard[]>([])
   const [stats, setStats] = React.useState<LandingStats | null>(null)
-  const [features, setFeatures] = React.useState<LandingFeature[]>([])
   const [testimonials, setTestimonials] = React.useState<Testimonial[]>([])
   const [faqItems, setFaqItems] = React.useState<FAQ[]>([])
 
@@ -916,11 +877,10 @@ export const AdminLandingPanel: React.FC = () => {
     setLoading(true)
     setSettingsError(null)
     try {
-      const [settingsRes, heroRes, statsRes, featuresRes, testimonialsRes, faqRes] = await Promise.all([
+      const [settingsRes, heroRes, statsRes, testimonialsRes, faqRes] = await Promise.all([
         supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
         supabase.from("landing_hero_cards").select("*").order("position"),
         supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
-        supabase.from("landing_features").select("*").order("position"),
         supabase.from("landing_testimonials").select("*").order("position"),
         supabase.from("landing_faq").select("*").order("position"),
       ])
@@ -964,7 +924,6 @@ export const AdminLandingPanel: React.FC = () => {
       }
 
       if (heroRes.data) setHeroCards(heroRes.data)
-      if (featuresRes.data) setFeatures(featuresRes.data)
       if (testimonialsRes.data) setTestimonials(testimonialsRes.data)
       if (faqRes.data) setFaqItems(faqRes.data)
     } catch (e) {
@@ -983,7 +942,6 @@ export const AdminLandingPanel: React.FC = () => {
     { id: "settings" as const, label: "Global Settings", icon: Settings },
     { id: "hero" as const, label: "Hero Cards", icon: Smartphone, count: heroCards.length },
     { id: "stats" as const, label: "Stats", icon: BarChart3 },
-    { id: "features" as const, label: "Features", icon: Sparkles, count: features.length },
     { id: "testimonials" as const, label: "Reviews", icon: Star, count: testimonials.length },
     { id: "faq" as const, label: "FAQ", icon: HelpCircle, count: faqItems.length },
   ]
@@ -1095,15 +1053,6 @@ export const AdminLandingPanel: React.FC = () => {
               setSaving={setSaving}
               showPreview={showPreview}
               sectionVisible={settings?.show_stats_section ?? true}
-            />
-          )}
-          {activeTab === "features" && (
-            <FeaturesTab
-              features={features}
-              setFeatures={setFeatures}
-              setSaving={setSaving}
-              showPreview={showPreview}
-              sectionVisible={settings?.show_features_section ?? true}
             />
           )}
           {activeTab === "testimonials" && (
@@ -2302,207 +2251,6 @@ const StatsTab: React.FC<{
                 <StatsPreview stats={localStats} />
               </div>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ========================
-// FEATURES TAB
-// ========================
-const FeaturesTab: React.FC<{
-  features: LandingFeature[]
-  setFeatures: React.Dispatch<React.SetStateAction<LandingFeature[]>>
-  setSaving: React.Dispatch<React.SetStateAction<boolean>>
-  showPreview: boolean
-  sectionVisible: boolean
-}> = ({ features, setFeatures, setSaving, showPreview, sectionVisible }) => {
-  const circleFeatures = features.filter(f => f.is_in_circle)
-  const gridFeatures = features.filter(f => !f.is_in_circle)
-
-  const addFeature = async (isCircle: boolean) => {
-    const relevantFeatures = isCircle ? circleFeatures : gridFeatures
-    const newFeature: Partial<LandingFeature> = {
-      position: relevantFeatures.length,
-      icon_name: "Leaf",
-      title: "New Feature",
-      description: "Feature description",
-      color: "emerald",
-      is_in_circle: isCircle,
-      is_active: true,
-    }
-
-    const { data, error } = await supabase
-      .from("landing_features")
-      .insert(newFeature)
-      .select()
-      .single()
-
-    if (data && !error) {
-      setFeatures([...features, data])
-    }
-  }
-
-  const updateFeature = async (id: string, updates: Partial<LandingFeature>) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from("landing_features")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
-
-    if (!error) {
-      setFeatures(features.map(f => f.id === id ? { ...f, ...updates } : f))
-    }
-    setSaving(false)
-  }
-
-  const deleteFeature = async (id: string) => {
-    if (!confirm("Delete this feature?")) return
-    const { error } = await supabase
-      .from("landing_features")
-      .delete()
-      .eq("id", id)
-
-    if (!error) {
-      setFeatures(features.filter(f => f.id !== id))
-    }
-  }
-
-  const renderFeatureCard = (feature: LandingFeature) => (
-    <Card key={feature.id} className="rounded-xl">
-      <CardContent className="p-4">
-        <div className="flex items-start gap-4">
-          {/* Icon Picker */}
-          <IconPicker
-            value={feature.icon_name}
-            onChange={(iconName) => updateFeature(feature.id, { icon_name: iconName })}
-            color={feature.color}
-          />
-
-          {/* Fields */}
-          <div className="flex-1 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-stone-500">Title</Label>
-                <Input
-                  value={feature.title}
-                  onChange={(e) => updateFeature(feature.id, { title: e.target.value })}
-                  className="rounded-xl"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-stone-500">Color</Label>
-                <ColorPicker
-                  value={feature.color}
-                  onChange={(color) => updateFeature(feature.id, { color })}
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-stone-500">Description</Label>
-              <Input
-                value={feature.description || ""}
-                onChange={(e) => updateFeature(feature.id, { description: e.target.value })}
-                className="rounded-xl"
-                placeholder="Brief description..."
-              />
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => updateFeature(feature.id, { is_active: !feature.is_active })}
-              className={cn(
-                "rounded-xl",
-                feature.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
-              )}
-            >
-              {feature.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => deleteFeature(feature.id)}
-              className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-
-  return (
-    <div className="space-y-8">
-      <SectionHiddenBanner visible={sectionVisible} />
-
-      {/* Circle Features */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Interactive Demo Features</h3>
-            <p className="text-sm text-stone-500">Shown in the spinning circle (8 recommended)</p>
-          </div>
-          <Button onClick={() => addFeature(true)} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Feature
-          </Button>
-        </div>
-
-        {circleFeatures.length === 0 ? (
-          <Card className="rounded-xl border-dashed">
-            <CardContent className="py-8 text-center text-stone-500">
-              No circle features yet. Add one to get started.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className={cn(
-            "grid gap-4",
-            showPreview ? "lg:grid-cols-[1fr,280px]" : "grid-cols-1"
-          )}>
-            <div className="space-y-3">
-              {circleFeatures.map(renderFeatureCard)}
-            </div>
-            {showPreview && circleFeatures.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-stone-600 dark:text-stone-400">Preview</h4>
-                {circleFeatures.slice(0, 3).map((f) => (
-                  <FeaturePreview key={f.id} feature={f} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Grid Features */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Feature Grid Cards</h3>
-            <p className="text-sm text-stone-500">Shown in the bento grid section</p>
-          </div>
-          <Button onClick={() => addFeature(false)} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Feature
-          </Button>
-        </div>
-
-        {gridFeatures.length === 0 ? (
-          <Card className="rounded-xl border-dashed">
-            <CardContent className="py-8 text-center text-stone-500">
-              No grid features yet. Add one to get started.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {gridFeatures.map(renderFeatureCard)}
           </div>
         )}
       </div>

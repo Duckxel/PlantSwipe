@@ -55,14 +55,6 @@ import {
   PawPrint,
 } from "lucide-react"
 
-// Icon mapping for dynamic rendering
-const iconMap: Record<string, React.ElementType> = {
-  Leaf, Droplets, Sun, Bell, BookMarked, Camera, NotebookPen, Wifi, Users, Check,
-  Clock, TrendingUp, Shield, Heart, Globe, Zap, MessageCircle, Flower2,
-  TreeDeciduous, Sprout, Star, Sparkles, Palette, Share2, Calendar, Target, Award, Lightbulb,
-  Instagram, Twitter, Mail, GraduationCap, HandHeart, BarChart3, Search, Flame, CheckCircle2, CircleDot, PawPrint,
-}
-
 // Types for database data
 type HeroCard = {
   id: string
@@ -83,15 +75,6 @@ type LandingStats = {
   tasks_label: string
   rating_value: string
   rating_label: string
-}
-
-type LandingFeature = {
-  id: string
-  icon_name: string
-  title: string
-  description: string | null
-  color: string
-  is_in_circle: boolean
 }
 
 type Testimonial = {
@@ -155,8 +138,6 @@ type LandingPageSettings = {
 type LandingDataContextType = {
   heroCards: HeroCard[]
   stats: LandingStats | null
-  circleFeatures: LandingFeature[]
-  gridFeatures: LandingFeature[]
   testimonials: Testimonial[]
   faqItems: FAQ[]
   settings: LandingPageSettings | null
@@ -166,8 +147,6 @@ type LandingDataContextType = {
 const LandingDataContext = React.createContext<LandingDataContextType>({
   heroCards: [],
   stats: null,
-  circleFeatures: [],
-  gridFeatures: [],
   testimonials: [],
   faqItems: [],
   settings: null,
@@ -263,8 +242,6 @@ const LandingPage: React.FC = () => {
   const [landingData, setLandingData] = React.useState<LandingDataContextType>({
     heroCards: [],
     stats: null,
-    circleFeatures: [],
-    gridFeatures: [],
     testimonials: [],
     faqItems: [],
     settings: null,
@@ -283,7 +260,6 @@ const LandingPage: React.FC = () => {
           supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
           supabase.from("landing_hero_cards").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
-          supabase.from("landing_features").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_testimonials").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_faq").select("*").eq("is_active", true).order("position"),
         ])
@@ -300,9 +276,8 @@ const LandingPage: React.FC = () => {
         const settings = getData(results[0], null)
         const heroCards = getData(results[1], [])
         const stats = getData(results[2], null)
-        const features = getData(results[3], []) as LandingFeature[]
-        const testimonials = getData(results[4], [])
-        let faqItems = getData(results[5], []) as FAQ[]
+        const testimonials = getData(results[3], [])
+        let faqItems = getData(results[4], []) as FAQ[]
         
         // Load FAQ translations for current language (if not English)
         if (currentLang !== 'en' && faqItems.length > 0) {
@@ -336,8 +311,6 @@ const LandingPage: React.FC = () => {
         setLandingData({
           heroCards: heroCards || [],
           stats: stats || null,
-          circleFeatures: features.filter((f: LandingFeature) => f.is_in_circle),
-          gridFeatures: features.filter((f: LandingFeature) => !f.is_in_circle),
           testimonials: testimonials || [],
           faqItems: faqItems || [],
           settings: settings || null,
@@ -994,11 +967,10 @@ const FeatureCard: React.FC<{
    ═══════════════════════════════════════════════════════════════════════════════ */
 const InteractiveDemoSection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { circleFeatures: dbFeatures } = useLandingData()
   const [activeFeature, setActiveFeature] = React.useState(0)
 
-  // Default features - 8 features for a fuller circle
-  const defaultFeatures = [
+  // Features from translations
+  const features = [
     { icon: Leaf, label: t("demo.discover", { defaultValue: "Discover Plants" }), color: "emerald" },
     { icon: Clock, label: t("demo.schedule", { defaultValue: "Schedule Care" }), color: "blue" },
     { icon: TrendingUp, label: t("demo.track", { defaultValue: "Track Growth" }), color: "purple" },
@@ -1008,15 +980,6 @@ const InteractiveDemoSection: React.FC = () => {
     { icon: Users, label: t("demo.community", { defaultValue: "Join Community" }), color: "teal" },
     { icon: Sparkles, label: t("demo.assistant", { defaultValue: "Smart Assistant" }), color: "indigo" },
   ]
-
-  // Use database features if available, otherwise use defaults
-  const features = dbFeatures.length > 0 
-    ? dbFeatures.map(f => ({
-        icon: iconMap[f.icon_name] || Leaf,
-        label: f.title,
-        color: f.color,
-      }))
-    : defaultFeatures
 
   React.useEffect(() => {
     const interval = setInterval(() => {
