@@ -166,6 +166,7 @@ do $$ declare
     'landing_showcase_cards',
     'landing_testimonials',
     'landing_faq',
+    'landing_faq_translations',
     -- Plant Scanning
     'plant_scans',
     -- Bug Catcher System
@@ -9149,7 +9150,7 @@ create table if not exists public.landing_testimonials (
 create index if not exists idx_landing_testimonials_position on public.landing_testimonials(position);
 create index if not exists idx_landing_testimonials_active on public.landing_testimonials(is_active);
 
--- Landing FAQ: Frequently asked questions
+-- Landing FAQ: Frequently asked questions (base content in English)
 create table if not exists public.landing_faq (
   id uuid primary key default gen_random_uuid(),
   position integer not null default 0,
@@ -9162,6 +9163,21 @@ create table if not exists public.landing_faq (
 
 create index if not exists idx_landing_faq_position on public.landing_faq(position);
 create index if not exists idx_landing_faq_active on public.landing_faq(is_active);
+
+-- Landing FAQ Translations: Stores translations for FAQ items
+create table if not exists public.landing_faq_translations (
+  id uuid primary key default gen_random_uuid(),
+  faq_id uuid not null references public.landing_faq(id) on delete cascade,
+  language text not null,
+  question text not null,
+  answer text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(faq_id, language)
+);
+
+create index if not exists idx_landing_faq_translations_faq_id on public.landing_faq_translations(faq_id);
+create index if not exists idx_landing_faq_translations_language on public.landing_faq_translations(language);
 
 -- RLS Policies for Landing Page Tables
 -- All landing tables are publicly readable but only admin-writable
@@ -9226,6 +9242,15 @@ drop policy if exists "Admins can manage landing FAQ" on public.landing_faq;
 create policy "Admins can manage landing FAQ" on public.landing_faq for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
+
+alter table public.landing_faq_translations enable row level security;
+drop policy if exists "Landing FAQ translations are publicly readable" on public.landing_faq_translations;
+create policy "Landing FAQ translations are publicly readable" on public.landing_faq_translations for select using (true);
+drop policy if exists "Admins can manage landing FAQ translations" on public.landing_faq_translations;
+create policy "Admins can manage landing FAQ translations" on public.landing_faq_translations for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
 -- =============================================
 -- PLANT SCANS TABLE
 -- Stores plant identification scans using Kindwise API

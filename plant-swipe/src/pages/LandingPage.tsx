@@ -9,6 +9,7 @@ import MobileNavBar from "@/components/layout/MobileNavBar"
 import { useAuthActions } from "@/context/AuthActionsContext"
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { supabase } from "@/lib/supabaseClient"
+import i18n from "@/lib/i18n"
 import {
   Leaf,
   Droplets,
@@ -314,6 +315,9 @@ const LandingPage: React.FC = () => {
     loading: true,
   })
 
+  // Track current language for FAQ translations
+  const currentLang = i18n.language || 'en'
+
   React.useEffect(() => {
     const loadData = async () => {
       try {
@@ -344,7 +348,36 @@ const LandingPage: React.FC = () => {
         const features = getData(results[3], []) as LandingFeature[]
         const showcaseCards = getData(results[4], []) as ShowcaseCard[]
         const testimonials = getData(results[5], [])
-        const faqItems = getData(results[6], [])
+        let faqItems = getData(results[6], []) as FAQ[]
+        
+        // Load FAQ translations for current language (if not English)
+        if (currentLang !== 'en' && faqItems.length > 0) {
+          try {
+            const { data: translations } = await supabase
+              .from("landing_faq_translations")
+              .select("*")
+              .eq("language", currentLang)
+            
+            if (translations && translations.length > 0) {
+              // Create a map of translations by faq_id
+              const translationMap = new Map<string, { question: string; answer: string }>()
+              translations.forEach((t: { faq_id: string; question: string; answer: string }) => {
+                translationMap.set(t.faq_id, { question: t.question, answer: t.answer })
+              })
+              
+              // Apply translations to FAQ items
+              faqItems = faqItems.map(faq => {
+                const translation = translationMap.get(faq.id)
+                if (translation) {
+                  return { ...faq, question: translation.question, answer: translation.answer }
+                }
+                return faq
+              })
+            }
+          } catch (e) {
+            console.error("Failed to load FAQ translations:", e)
+          }
+        }
         
         // Collect all selected garden IDs from showcase cards
         const allSelectedGardenIds = (showcaseCards || [])
@@ -464,7 +497,7 @@ const LandingPage: React.FC = () => {
       }
     }
     loadData()
-  }, [])
+  }, [currentLang])
 
   const handleProfileNavigation = React.useCallback(() => {
     navigate('/profile')

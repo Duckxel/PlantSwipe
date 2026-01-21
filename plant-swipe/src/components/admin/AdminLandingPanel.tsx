@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabaseClient"
+import { translateText } from "@/lib/deepl"
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import {
   Loader2,
   Plus,
@@ -83,6 +85,7 @@ import {
   Grid3X3,
   Quote,
   AlertCircle,
+  Languages,
 } from "lucide-react"
 
 // Icon mapping for dynamic rendering
@@ -193,6 +196,14 @@ type FAQ = {
   question: string
   answer: string
   is_active: boolean
+}
+
+type FAQTranslation = {
+  id: string
+  faq_id: string
+  language: string
+  question: string
+  answer: string
 }
 
 type LandingPageSettings = {
@@ -3031,14 +3042,69 @@ const TestimonialsTab: React.FC<{
 }
 
 // ========================
-// FAQ TAB
+// FAQ TAB WITH TRANSLATION SUPPORT
 // ========================
+const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
+  en: "English",
+  fr: "Français",
+}
+
 const FAQTab: React.FC<{
   items: FAQ[]
   setItems: React.Dispatch<React.SetStateAction<FAQ[]>>
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   sectionVisible: boolean
 }> = ({ items, setItems, setSaving, sectionVisible }) => {
+  const [selectedLang, setSelectedLang] = React.useState<SupportedLanguage>("en")
+  const [translations, setTranslations] = React.useState<Record<string, FAQTranslation>>({})
+  const [translating, setTranslating] = React.useState(false)
+  const [loadingTranslations, setLoadingTranslations] = React.useState(false)
+
+  // Load translations for the selected language
+  const loadTranslations = React.useCallback(async (lang: SupportedLanguage) => {
+    if (lang === "en") {
+      setTranslations({})
+      return
+    }
+    
+    setLoadingTranslations(true)
+    try {
+      const { data, error } = await supabase
+        .from("landing_faq_translations")
+        .select("*")
+        .eq("language", lang)
+      
+      if (data && !error) {
+        const translationMap: Record<string, FAQTranslation> = {}
+        data.forEach((t: FAQTranslation) => {
+          translationMap[t.faq_id] = t
+        })
+        setTranslations(translationMap)
+      }
+    } catch (e) {
+      console.error("Failed to load translations:", e)
+    } finally {
+      setLoadingTranslations(false)
+    }
+  }, [])
+
+  // Load translations when language changes
+  React.useEffect(() => {
+    loadTranslations(selectedLang)
+  }, [selectedLang, loadTranslations])
+
+  // Get the display content for an FAQ item based on selected language
+  const getDisplayContent = (item: FAQ) => {
+    if (selectedLang === "en") {
+      return { question: item.question, answer: item.answer }
+    }
+    const translation = translations[item.id]
+    return {
+      question: translation?.question || item.question,
+      answer: translation?.answer || item.answer,
+    }
+  }
+
   const addFAQ = async () => {
     const newFAQ: Partial<FAQ> = {
       position: items.length,
@@ -3060,19 +3126,60 @@ const FAQTab: React.FC<{
 
   const updateFAQ = async (id: string, updates: Partial<FAQ>) => {
     setSaving(true)
-    const { error } = await supabase
-      .from("landing_faq")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
+    
+    if (selectedLang === "en") {
+      // Update base FAQ
+      const { error } = await supabase
+        .from("landing_faq")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", id)
 
-    if (!error) {
-      setItems(items.map(i => i.id === id ? { ...i, ...updates } : i))
+      if (!error) {
+        setItems(items.map(i => i.id === id ? { ...i, ...updates } : i))
+      }
+    } else {
+      // Update or create translation
+      const existingTranslation = translations[id]
+      const translationData = {
+        faq_id: id,
+        language: selectedLang,
+        question: updates.question ?? existingTranslation?.question ?? "",
+        answer: updates.answer ?? existingTranslation?.answer ?? "",
+        updated_at: new Date().toISOString(),
+      }
+      
+      if (existingTranslation) {
+        // Update existing translation
+        const { error } = await supabase
+          .from("landing_faq_translations")
+          .update(translationData)
+          .eq("id", existingTranslation.id)
+        
+        if (!error) {
+          setTranslations(prev => ({
+            ...prev,
+            [id]: { ...existingTranslation, ...translationData }
+          }))
+        }
+      } else {
+        // Insert new translation
+        const { data, error } = await supabase
+          .from("landing_faq_translations")
+          .insert(translationData)
+          .select()
+          .single()
+        
+        if (data && !error) {
+          setTranslations(prev => ({ ...prev, [id]: data }))
+        }
+      }
     }
+    
     setSaving(false)
   }
 
   const deleteFAQ = async (id: string) => {
-    if (!confirm("Delete this FAQ?")) return
+    if (!confirm("Delete this FAQ? This will also delete all translations.")) return
     const { error } = await supabase
       .from("landing_faq")
       .delete()
@@ -3080,6 +3187,12 @@ const FAQTab: React.FC<{
 
     if (!error) {
       setItems(items.filter(i => i.id !== id))
+      // Remove from translations state
+      setTranslations(prev => {
+        const newTranslations = { ...prev }
+        delete newTranslations[id]
+        return newTranslations
+      })
     }
   }
 
@@ -3101,22 +3214,130 @@ const FAQTab: React.FC<{
     }
   }
 
+  // Translate all FAQs to the selected language using DeepL
+  const translateAllFAQs = async () => {
+    if (selectedLang === "en") return
+    
+    setTranslating(true)
+    setSaving(true)
+    
+    try {
+      for (const item of items) {
+        // Translate question and answer from English
+        const [translatedQuestion, translatedAnswer] = await Promise.all([
+          translateText(item.question, selectedLang, "en"),
+          translateText(item.answer, selectedLang, "en"),
+        ])
+        
+        const existingTranslation = translations[item.id]
+        const translationData = {
+          faq_id: item.id,
+          language: selectedLang,
+          question: translatedQuestion,
+          answer: translatedAnswer,
+          updated_at: new Date().toISOString(),
+        }
+        
+        if (existingTranslation) {
+          await supabase
+            .from("landing_faq_translations")
+            .update(translationData)
+            .eq("id", existingTranslation.id)
+        } else {
+          const { data } = await supabase
+            .from("landing_faq_translations")
+            .insert(translationData)
+            .select()
+            .single()
+          
+          if (data) {
+            setTranslations(prev => ({ ...prev, [item.id]: data }))
+          }
+        }
+      }
+      
+      // Reload translations after bulk update
+      await loadTranslations(selectedLang)
+    } catch (e) {
+      console.error("Translation failed:", e)
+      alert("Translation failed. Please try again.")
+    } finally {
+      setTranslating(false)
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">FAQ Items</h3>
           <p className="text-sm text-stone-500">Questions and answers shown in the FAQ section</p>
         </div>
-        <Button onClick={addFAQ} className="rounded-xl">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Question
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Language Selector */}
+          <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <button
+                key={lang}
+                onClick={() => setSelectedLang(lang)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                  selectedLang === lang
+                    ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
+                )}
+              >
+                {LANGUAGE_LABELS[lang]}
+              </button>
+            ))}
+          </div>
+          
+          {/* DeepL Translate Button (only shown for non-English) */}
+          {selectedLang !== "en" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={translateAllFAQs}
+              disabled={translating || items.length === 0}
+              className="rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400"
+            >
+              {translating ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Languages className="h-4 w-4 mr-2" />
+              )}
+              {translating ? "Translating..." : "DeepL Translate All"}
+            </Button>
+          )}
+          
+          <Button onClick={addFAQ} className="rounded-xl" disabled={selectedLang !== "en"}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Question
+          </Button>
+        </div>
       </div>
 
-      {items.length === 0 ? (
+      {/* Language Info Banner */}
+      {selectedLang !== "en" && (
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <Languages className="h-4 w-4 text-blue-500" />
+          <span className="text-sm text-blue-700 dark:text-blue-300">
+            Editing {LANGUAGE_LABELS[selectedLang]} translations. Base content is managed in English.
+          </span>
+        </div>
+      )}
+
+      {loadingTranslations ? (
+        <Card className="rounded-xl">
+          <CardContent className="py-12 text-center">
+            <Loader2 className="h-8 w-8 mx-auto mb-2 text-stone-400 animate-spin" />
+            <p className="text-stone-500">Loading translations...</p>
+          </CardContent>
+        </Card>
+      ) : items.length === 0 ? (
         <Card className="rounded-xl border-dashed">
           <CardContent className="py-12 text-center text-stone-500">
             No FAQ items yet. Add one to get started.
@@ -3124,82 +3345,94 @@ const FAQTab: React.FC<{
         </Card>
       ) : (
         <div className="space-y-3">
-          {items.map((item, index) => (
-            <Card key={item.id} className="rounded-xl">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  {/* Position Controls */}
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => moveFAQ(index, "up")}
-                      disabled={index === 0}
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </Button>
-                    <div className="flex items-center justify-center h-6 w-6 text-xs font-medium text-stone-400">
-                      {index + 1}
+          {items.map((item, index) => {
+            const displayContent = getDisplayContent(item)
+            const hasTranslation = selectedLang !== "en" && !!translations[item.id]
+            
+            return (
+              <Card key={item.id} className="rounded-xl">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    {/* Position Controls */}
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => moveFAQ(index, "up")}
+                        disabled={index === 0 || selectedLang !== "en"}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <div className="flex items-center justify-center h-6 w-6 text-xs font-medium text-stone-400">
+                        {index + 1}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => moveFAQ(index, "down")}
+                        disabled={index === items.length - 1 || selectedLang !== "en"}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => moveFAQ(index, "down")}
-                      disabled={index === items.length - 1}
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </div>
 
-                  {/* Content */}
-                  <div className="flex-1 space-y-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-stone-500">Question</Label>
-                      <Input
-                        value={item.question}
-                        onChange={(e) => updateFAQ(item.id, { question: e.target.value })}
-                        className="rounded-xl font-medium"
-                      />
+                    {/* Content */}
+                    <div className="flex-1 space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs text-stone-500">Question</Label>
+                          {selectedLang !== "en" && !hasTranslation && (
+                            <span className="text-xs text-amber-600 dark:text-amber-400">(not translated)</span>
+                          )}
+                        </div>
+                        <Input
+                          value={displayContent.question}
+                          onChange={(e) => updateFAQ(item.id, { question: e.target.value })}
+                          className="rounded-xl font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-stone-500">Answer</Label>
+                        <Textarea
+                          value={displayContent.answer}
+                          onChange={(e) => updateFAQ(item.id, { answer: e.target.value })}
+                          className="rounded-xl"
+                          rows={3}
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-stone-500">Answer</Label>
-                      <Textarea
-                        value={item.answer}
-                        onChange={(e) => updateFAQ(item.id, { answer: e.target.value })}
-                        className="rounded-xl"
-                        rows={3}
-                      />
-                    </div>
-                  </div>
 
-                  {/* Actions */}
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => updateFAQ(item.id, { is_active: !item.is_active })}
-                      className={cn(
-                        "rounded-xl",
-                        item.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
-                      )}
-                    >
-                      {item.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteFAQ(item.id)}
-                      className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {/* Actions */}
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => updateFAQ(item.id, { is_active: !item.is_active })}
+                        disabled={selectedLang !== "en"}
+                        className={cn(
+                          "rounded-xl",
+                          item.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
+                        )}
+                      >
+                        {item.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteFAQ(item.id)}
+                        disabled={selectedLang !== "en"}
+                        className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>
