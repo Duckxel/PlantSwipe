@@ -163,7 +163,6 @@ do $$ declare
     'landing_hero_cards',
     'landing_stats',
     'landing_features',
-    'landing_showcase_cards',
     'landing_testimonials',
     'landing_faq',
     'landing_faq_translations',
@@ -9104,35 +9103,6 @@ create index if not exists idx_landing_features_position on public.landing_featu
 create index if not exists idx_landing_features_active on public.landing_features(is_active);
 create index if not exists idx_landing_features_circle on public.landing_features(is_in_circle);
 
--- Landing Showcase Cards: Cards in the "Designed for your jungle" section
-create table if not exists public.landing_showcase_cards (
-  id uuid primary key default gen_random_uuid(),
-  position integer not null default 0,
-  card_type text not null default 'small',
-  icon_name text,
-  title text not null,
-  description text,
-  badge_text text,
-  image_url text,
-  cover_image_url text,
-  plant_images jsonb default '[]'::jsonb,
-  garden_name text,
-  plants_count integer default 12,
-  species_count integer default 8,
-  streak_count integer default 7,
-  progress_percent integer default 85,
-  link_url text,
-  color text not null default 'emerald',
-  is_active boolean not null default true,
-  -- Selected public gardens to showcase (array of garden IDs)
-  selected_garden_ids uuid[] default array[]::uuid[],
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
-create index if not exists idx_landing_showcase_position on public.landing_showcase_cards(position);
-create index if not exists idx_landing_showcase_active on public.landing_showcase_cards(is_active);
-
 -- Landing Testimonials: Customer reviews/testimonials
 create table if not exists public.landing_testimonials (
   id uuid primary key default gen_random_uuid(),
@@ -9216,14 +9186,6 @@ drop policy if exists "Landing features are publicly readable" on public.landing
 create policy "Landing features are publicly readable" on public.landing_features for select using (true);
 drop policy if exists "Admins can manage landing features" on public.landing_features;
 create policy "Admins can manage landing features" on public.landing_features for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
-
-alter table public.landing_showcase_cards enable row level security;
-drop policy if exists "Landing showcase cards are publicly readable" on public.landing_showcase_cards;
-create policy "Landing showcase cards are publicly readable" on public.landing_showcase_cards for select using (true);
-drop policy if exists "Admins can manage landing showcase cards" on public.landing_showcase_cards;
-create policy "Admins can manage landing showcase cards" on public.landing_showcase_cards for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
 
