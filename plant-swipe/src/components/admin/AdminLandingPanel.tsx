@@ -1181,7 +1181,7 @@ const GlobalSettingsTab: React.FC<{
   settingsError?: string | null
 }> = ({ settings, setSettings, saving, setSaving, settingsError }) => {
   const [localSettings, setLocalSettings] = React.useState<LandingPageSettings | null>(settings)
-  const [activeSection, setActiveSection] = React.useState<"visibility" | "hero" | "beginner" | "cta" | "social" | "meta">("visibility")
+  const [activeSection, setActiveSection] = React.useState<"visibility" | "social">("visibility")
 
   React.useEffect(() => {
     setLocalSettings(settings)
@@ -1245,11 +1245,7 @@ const GlobalSettingsTab: React.FC<{
 
   const sectionTabs = [
     { id: "visibility" as const, label: "Section Visibility", icon: Layers, description: "Control which sections appear on the landing page" },
-    { id: "hero" as const, label: "Hero Section", icon: Type, description: "Headlines, descriptions, and CTA buttons" },
-    { id: "beginner" as const, label: "Beginner Section", icon: GraduationCap, description: "Content for the beginner-friendly section" },
-    { id: "cta" as const, label: "Final CTA", icon: Megaphone, description: "Final call-to-action section at page bottom" },
     { id: "social" as const, label: "Social & Contact", icon: Share2, description: "Social media links and contact info" },
-    { id: "meta" as const, label: "SEO & Meta", icon: FileText, description: "Page title and description for search engines" },
   ]
 
   const visibilityItems = [
@@ -1275,7 +1271,7 @@ const GlobalSettingsTab: React.FC<{
             Global Landing Page Settings
           </h3>
           <p className="text-sm text-stone-500 mt-1">
-            Control visibility and customize text content across all sections
+            Control section visibility and social links. Text content is managed via translation files.
           </p>
         </div>
         <Button onClick={saveSettings} disabled={saving} className="rounded-xl">
@@ -1399,255 +1395,6 @@ const GlobalSettingsTab: React.FC<{
             </div>
           )}
 
-          {/* Hero Section Settings */}
-          {activeSection === "hero" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <Type className="h-4 w-4 text-emerald-500" />
-                  Hero Section Content
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">Customize the main headline and call-to-action buttons</p>
-              </div>
-
-              {/* Badge */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Badge Text</Label>
-                <Input
-                  value={localSettings.hero_badge_text}
-                  onChange={(e) => updateSetting("hero_badge_text", e.target.value)}
-                  placeholder="Your Personal Plant Care Expert"
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-stone-500">Small badge shown above the headline</p>
-              </div>
-
-              {/* Headline */}
-              <div className="grid sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title Start</Label>
-                  <Input
-                    value={localSettings.hero_title}
-                    onChange={(e) => updateSetting("hero_title", e.target.value)}
-                    placeholder="Grow Your"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title Highlight <span className="text-emerald-500">(Gradient)</span></Label>
-                  <Input
-                    value={localSettings.hero_title_highlight}
-                    onChange={(e) => updateSetting("hero_title_highlight", e.target.value)}
-                    placeholder="Green Paradise"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title End</Label>
-                  <Input
-                    value={localSettings.hero_title_end}
-                    onChange={(e) => updateSetting("hero_title_end", e.target.value)}
-                    placeholder="with Confidence"
-                    className="rounded-xl"
-                  />
-                </div>
-              </div>
-
-              {/* Preview */}
-              <div className="p-4 rounded-xl bg-stone-100 dark:bg-stone-900">
-                <p className="text-xs text-stone-500 mb-2">Preview:</p>
-                <h3 className="text-xl font-bold">
-                  <span className="text-stone-900 dark:text-white">{localSettings.hero_title || "Grow Your"}</span>{" "}
-                  <span className="text-emerald-500">{localSettings.hero_title_highlight || "Green Paradise"}</span>{" "}
-                  <span className="text-stone-900 dark:text-white">{localSettings.hero_title_end || "with Confidence"}</span>
-                </h3>
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Description</Label>
-                <Textarea
-                  value={localSettings.hero_description}
-                  onChange={(e) => updateSetting("hero_description", e.target.value)}
-                  placeholder="Discover, track, and nurture your plants..."
-                  className="rounded-xl"
-                  rows={3}
-                />
-              </div>
-
-              {/* CTA Buttons */}
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl border border-stone-200 dark:border-stone-700 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <MousePointer className="h-4 w-4 text-emerald-500" />
-                    <Label className="text-sm font-medium">Primary CTA Button</Label>
-                  </div>
-                  <Input
-                    value={localSettings.hero_cta_primary_text}
-                    onChange={(e) => updateSetting("hero_cta_primary_text", e.target.value)}
-                    placeholder="Download App"
-                    className="rounded-xl"
-                  />
-                  <Input
-                    value={localSettings.hero_cta_primary_link}
-                    onChange={(e) => updateSetting("hero_cta_primary_link", e.target.value)}
-                    placeholder="/download"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="p-4 rounded-xl border border-stone-200 dark:border-stone-700 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <MousePointer className="h-4 w-4 text-stone-400" />
-                    <Label className="text-sm font-medium">Secondary CTA Button</Label>
-                  </div>
-                  <Input
-                    value={localSettings.hero_cta_secondary_text}
-                    onChange={(e) => updateSetting("hero_cta_secondary_text", e.target.value)}
-                    placeholder="Try in Browser"
-                    className="rounded-xl"
-                  />
-                  <Input
-                    value={localSettings.hero_cta_secondary_link}
-                    onChange={(e) => updateSetting("hero_cta_secondary_link", e.target.value)}
-                    placeholder="/discovery"
-                    className="rounded-xl"
-                  />
-                </div>
-              </div>
-
-              {/* Social Proof */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Social Proof Text</Label>
-                <Input
-                  value={localSettings.hero_social_proof_text}
-                  onChange={(e) => updateSetting("hero_social_proof_text", e.target.value)}
-                  placeholder="10,000+ plant lovers"
-                  className="rounded-xl"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Beginner Section Settings */}
-          {activeSection === "beginner" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <GraduationCap className="h-4 w-4 text-emerald-500" />
-                  Beginner-Friendly Section
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">Content for users who are new to plant care</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Badge Text</Label>
-                <Input
-                  value={localSettings.beginner_badge}
-                  onChange={(e) => updateSetting("beginner_badge", e.target.value)}
-                  placeholder="Perfect for Beginners"
-                  className="rounded-xl"
-                />
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title</Label>
-                  <Input
-                    value={localSettings.beginner_title}
-                    onChange={(e) => updateSetting("beginner_title", e.target.value)}
-                    placeholder="Know Nothing About Gardening?"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title Highlight <span className="text-emerald-500">(Colored)</span></Label>
-                  <Input
-                    value={localSettings.beginner_title_highlight}
-                    onChange={(e) => updateSetting("beginner_title_highlight", e.target.value)}
-                    placeholder="That's Exactly Why We Built This"
-                    className="rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Subtitle</Label>
-                <Textarea
-                  value={localSettings.beginner_subtitle}
-                  onChange={(e) => updateSetting("beginner_subtitle", e.target.value)}
-                  placeholder="Everyone starts somewhere..."
-                  className="rounded-xl"
-                  rows={2}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Final CTA Settings */}
-          {activeSection === "cta" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <Megaphone className="h-4 w-4 text-emerald-500" />
-                  Final Call-to-Action Section
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">The last push to convert visitors before the footer</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Badge Text</Label>
-                <Input
-                  value={localSettings.final_cta_badge}
-                  onChange={(e) => updateSetting("final_cta_badge", e.target.value)}
-                  placeholder="No experience needed"
-                  className="rounded-xl"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Title</Label>
-                <Input
-                  value={localSettings.final_cta_title}
-                  onChange={(e) => updateSetting("final_cta_title", e.target.value)}
-                  placeholder="Ready to Start Your Plant Journey?"
-                  className="rounded-xl"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Subtitle</Label>
-                <Textarea
-                  value={localSettings.final_cta_subtitle}
-                  onChange={(e) => updateSetting("final_cta_subtitle", e.target.value)}
-                  placeholder="Whether it's your first succulent..."
-                  className="rounded-xl"
-                  rows={2}
-                />
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Primary Button Text</Label>
-                  <Input
-                    value={localSettings.final_cta_button_text}
-                    onChange={(e) => updateSetting("final_cta_button_text", e.target.value)}
-                    placeholder="Start Growing"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Secondary Button Text</Label>
-                  <Input
-                    value={localSettings.final_cta_secondary_text}
-                    onChange={(e) => updateSetting("final_cta_secondary_text", e.target.value)}
-                    placeholder="Explore Plants"
-                    className="rounded-xl"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Social & Contact Settings */}
           {activeSection === "social" && (
             <div className="space-y-6">
@@ -1708,53 +1455,6 @@ const GlobalSettingsTab: React.FC<{
             </div>
           )}
 
-          {/* SEO & Meta Settings */}
-          {activeSection === "meta" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-emerald-500" />
-                  SEO & Meta Information
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">Optimize how your landing page appears in search results</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Meta Title</Label>
-                <Input
-                  value={localSettings.meta_title}
-                  onChange={(e) => updateSetting("meta_title", e.target.value)}
-                  placeholder="Aphylia – Your Personal Plant Care Expert"
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-stone-500">{localSettings.meta_title?.length || 0}/60 characters recommended</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Meta Description</Label>
-                <Textarea
-                  value={localSettings.meta_description}
-                  onChange={(e) => updateSetting("meta_description", e.target.value)}
-                  placeholder="Discover, track, and nurture your plants..."
-                  className="rounded-xl"
-                  rows={3}
-                />
-                <p className="text-xs text-stone-500">{localSettings.meta_description?.length || 0}/160 characters recommended</p>
-              </div>
-
-              {/* Preview */}
-              <div className="p-4 rounded-xl bg-stone-100 dark:bg-stone-900 space-y-1">
-                <p className="text-xs text-stone-500 mb-2">Search Result Preview:</p>
-                <p className="text-blue-600 dark:text-blue-400 text-base font-medium truncate">
-                  {localSettings.meta_title || "Page Title"}
-                </p>
-                <p className="text-emerald-600 text-xs">example.com</p>
-                <p className="text-sm text-stone-600 dark:text-stone-400 line-clamp-2">
-                  {localSettings.meta_description || "Page description will appear here..."}
-                </p>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 
