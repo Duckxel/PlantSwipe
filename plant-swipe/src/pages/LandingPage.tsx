@@ -1162,7 +1162,7 @@ const InteractiveDemoSection: React.FC = () => {
               </div>
               
               {/* Orbiting Elements - Ferris wheel style: icons stay upright */}
-              <div className="absolute inset-0 animate-spin-slow">
+              <div className="absolute inset-0 animate-spin-slow" style={{ transformOrigin: 'center center' }}>
                 {features.map((feature, i) => {
                   const angleStep = 360 / features.length
                   const angle = (i * angleStep - 90) * (Math.PI / 180) // Start from top
@@ -1171,18 +1171,22 @@ const InteractiveDemoSection: React.FC = () => {
                   const IconComponent = feature.icon
                   const colorClass = `bg-${feature.color}-500`
                   return (
-                    <button
+                    <div
                       key={i}
-                      onClick={() => setActiveFeature(i)}
+                      className="absolute -translate-x-1/2 -translate-y-1/2"
                       style={{ left: `${x}%`, top: `${y}%` }}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-all duration-300 animate-counter-spin-slow ${
-                        activeFeature === i 
-                          ? `${colorClass} scale-110 shadow-lg` 
-                          : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:scale-105'
-                      }`}
                     >
-                      <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${activeFeature === i ? 'text-white' : 'text-stone-600 dark:text-stone-400'}`} />
-                    </button>
+                      <button
+                        onClick={() => setActiveFeature(i)}
+                        className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-all duration-300 animate-counter-spin-slow ${
+                          activeFeature === i 
+                            ? `${colorClass} scale-110 shadow-lg` 
+                            : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:scale-105'
+                        }`}
+                      >
+                        <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${activeFeature === i ? 'text-white' : 'text-stone-600 dark:text-stone-400'}`} />
+                      </button>
+                    </div>
                   )
                 })}
               </div>
