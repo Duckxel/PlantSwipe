@@ -232,7 +232,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
                       <div className={`w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
                         isDone ? "bg-stone-100 dark:bg-stone-700/30" : "bg-white dark:bg-stone-900/80 shadow-sm"
                       }`}>
-                        <span className="text-base md:text-lg">
+                        <span className="text-base md:text-lg" role="img" aria-hidden="true">
                           {getTaskIcon(taskType, occ.taskEmoji)}
                         </span>
                       </div>
@@ -282,13 +282,14 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
 
       {/* Show more link */}
       {compact && plantsWithTasks.length > 4 && onNavigateToPlants && (
-        <button
+        <Button
+          variant="ghost"
           onClick={onNavigateToPlants}
-          className="w-full p-2 md:p-3 text-xs md:text-sm text-emerald-600 dark:text-emerald-400 hover:bg-stone-50 dark:hover:bg-stone-800/50 flex items-center justify-center gap-1 border-t border-stone-100 dark:border-stone-800"
+          className="w-full h-auto p-2 md:p-3 text-xs md:text-sm text-emerald-600 dark:text-emerald-400 hover:bg-stone-50 dark:hover:bg-stone-800/50 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center justify-center gap-1 border-t border-stone-100 dark:border-stone-800 rounded-none"
         >
           {t("gardenDashboard.todaysTasks.viewAll", "View all {{count}} plants with tasks", { count: plantsWithTasks.length })}
           <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
-        </button>
+        </Button>
       )}
     </Card>
   );
