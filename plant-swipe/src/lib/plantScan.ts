@@ -11,7 +11,8 @@ import type {
   PlantScanSuggestion, 
   KindwiseApiResponse,
   ScanImageUploadResult,
-  ScanStatus
+  ScanStatus,
+  ClassificationLevel
 } from '@/types/scan'
 
 // ===== Constants =====
@@ -44,12 +45,22 @@ export interface UploadAndIdentifyResult {
  * - Uploads to PHOTOS bucket under scans/{userId}/
  * - Calls Kindwise API with the optimized image
  * - Records in admin_media_uploads table
+ * 
+ * @param file - The image file to upload and identify
+ * @param options - Optional parameters for identification
+ * @param options.latitude - Geographic coordinate for better accuracy
+ * @param options.longitude - Geographic coordinate for better accuracy
+ * @param options.classificationLevel - Level of taxonomic detail in results:
+ *   - 'species': genus + species (default) - e.g., "Philodendron hederaceum"
+ *   - 'all': includes cultivars/varieties - e.g., "Philodendron hederaceum var. oxycardium 'Brasil'"
+ *   - 'genus': genus only - e.g., "Philodendron"
  */
 export async function uploadAndIdentifyPlant(
   file: File,
   options?: {
     latitude?: number
     longitude?: number
+    classificationLevel?: ClassificationLevel
   }
 ): Promise<UploadAndIdentifyResult> {
   const session = (await supabase.auth.getSession()).data.session
@@ -75,6 +86,9 @@ export async function uploadAndIdentifyPlant(
   }
   if (options?.longitude !== undefined) {
     formData.append('longitude', String(options.longitude))
+  }
+  if (options?.classificationLevel) {
+    formData.append('classification_level', options.classificationLevel)
   }
   
   const response = await fetch('/api/scan/upload-and-identify', {
@@ -142,6 +156,7 @@ export function fileToBase64(file: File): Promise<string> {
 
 /**
  * Convert API response to app-friendly format
+ * Extracts taxonomy details including cultivar/infraspecies when classification_level='all'
  */
 function transformApiResponse(apiResponse: KindwiseApiResponse): {
   isPlant: boolean
@@ -163,7 +178,13 @@ function transformApiResponse(apiResponse: KindwiseApiResponse): {
       similarity: img.similarity,
       citation: img.citation
     })),
-    entityId: s.details?.entity_id
+    entityId: s.details?.entity_id,
+    // Extract taxonomy details when available (classification_level='all')
+    genus: s.details?.taxonomy?.genus,
+    species: s.details?.taxonomy?.species,
+    infraspecies: s.details?.taxonomy?.infraspecies,
+    commonNames: s.details?.common_names,
+    synonyms: s.details?.synonyms
   }))
   
   const topMatch = suggestions.length > 0 ? suggestions[0] : undefined

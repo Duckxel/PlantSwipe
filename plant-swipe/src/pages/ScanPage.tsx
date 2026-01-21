@@ -28,8 +28,17 @@ import {
   Sparkles,
   History,
   Image as ImageIcon,
-  Search
+  Search,
+  FlaskConical,
+  Info
 } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
 import { 
@@ -40,7 +49,7 @@ import {
   formatProbability,
   getConfidenceLevel
 } from '@/lib/plantScan'
-import type { PlantScan } from '@/types/scan'
+import type { PlantScan, ClassificationLevel } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 
 export const ScanPage: React.FC = () => {
@@ -68,6 +77,9 @@ export const ScanPage: React.FC = () => {
   const [identifyError, setIdentifyError] = React.useState<string | null>(null)
   const [currentResult, setCurrentResult] = React.useState<PlantScan | null>(null)
   const [showResultDialog, setShowResultDialog] = React.useState(false)
+  
+  // Classification level state - 'all' enables cultivar/variety identification
+  const [classificationLevel, setClassificationLevel] = React.useState<ClassificationLevel>('all')
   
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null)
@@ -128,7 +140,10 @@ export const ScanPage: React.FC = () => {
     try {
       // Combined upload + identify in a single request
       // Uses same optimization as Admin/Garden Cover/Messages uploads
-      const result = await uploadAndIdentifyPlant(file)
+      // Pass classification_level for deeper identification including cultivars
+      const result = await uploadAndIdentifyPlant(file, {
+        classificationLevel
+      })
       
       // Check if it's a plant
       if (!result.identification.result?.is_plant?.binary) {
@@ -285,9 +300,50 @@ export const ScanPage: React.FC = () => {
             <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">
               {t('scan.newScanTitle', { defaultValue: 'Identify a Plant' })}
             </h3>
-            <p className="text-sm text-stone-500 dark:text-stone-400 text-center max-w-xs mb-6">
+            <p className="text-sm text-stone-500 dark:text-stone-400 text-center max-w-xs mb-4">
               {t('scan.newScanHint', { defaultValue: 'Take a clear photo of a leaf, flower, or the whole plant for best results.' })}
             </p>
+            
+            {/* Classification Level Selector */}
+            <div className="flex flex-col items-center gap-2 mb-6 w-full max-w-xs">
+              <Select
+                value={classificationLevel}
+                onValueChange={(value: ClassificationLevel) => setClassificationLevel(value)}
+              >
+                <SelectTrigger className="rounded-full bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 w-full">
+                  <div className="flex items-center gap-2">
+                    <FlaskConical className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <SelectValue placeholder={t('scan.classificationLevel', { defaultValue: 'Detail Level' })} />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">{t('scan.levelAll', { defaultValue: 'Full Detail (Cultivars)' })}</span>
+                      <span className="text-xs text-stone-500">{t('scan.levelAllDesc', { defaultValue: "e.g., Philodendron 'Brasil'" })}</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="species">
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">{t('scan.levelSpecies', { defaultValue: 'Species Level' })}</span>
+                      <span className="text-xs text-stone-500">{t('scan.levelSpeciesDesc', { defaultValue: 'e.g., Philodendron hederaceum' })}</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="genus">
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">{t('scan.levelGenus', { defaultValue: 'Genus Only' })}</span>
+                      <span className="text-xs text-stone-500">{t('scan.levelGenusDesc', { defaultValue: 'e.g., Philodendron' })}</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-stone-400 dark:text-stone-500 text-center flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                {t('scan.classificationHintShort', { 
+                  defaultValue: 'Full Detail identifies cultivars like \'Brasil\' or \'Pink Princess\'' 
+                })}
+              </p>
+            </div>
             
             <div className="flex gap-3">
               <Button 
@@ -482,7 +538,7 @@ export const ScanPage: React.FC = () => {
               {currentResult.topMatchName && (
                 <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">
                         {t('scan.topMatch', { defaultValue: 'Best Match' })}
                       </p>
@@ -493,11 +549,52 @@ export const ScanPage: React.FC = () => {
                       >
                         {currentResult.topMatchName}
                       </button>
+                      
+                      {/* Show taxonomy breakdown when available (cultivar/variety info) */}
+                      {currentResult.suggestions?.[0] && (
+                        <div className="mt-2 space-y-1">
+                          {/* Display genus, species, and infraspecies separately when available */}
+                          {(currentResult.suggestions[0].genus || currentResult.suggestions[0].species || currentResult.suggestions[0].infraspecies) && (
+                            <div className="flex flex-wrap gap-1.5 text-xs">
+                              {currentResult.suggestions[0].genus && (
+                                <Badge variant="outline" className="rounded-full bg-white/50 dark:bg-stone-800/50 text-stone-600 dark:text-stone-300">
+                                  <span className="text-stone-400 mr-1">{t('scan.genus', { defaultValue: 'Genus' })}:</span>
+                                  <span className="italic">{currentResult.suggestions[0].genus}</span>
+                                </Badge>
+                              )}
+                              {currentResult.suggestions[0].species && (
+                                <Badge variant="outline" className="rounded-full bg-white/50 dark:bg-stone-800/50 text-stone-600 dark:text-stone-300">
+                                  <span className="text-stone-400 mr-1">{t('scan.species', { defaultValue: 'Species' })}:</span>
+                                  <span className="italic">{currentResult.suggestions[0].species}</span>
+                                </Badge>
+                              )}
+                              {currentResult.suggestions[0].infraspecies && (
+                                <Badge variant="outline" className="rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                                  <FlaskConical className="h-3 w-3 mr-1" />
+                                  <span className="text-amber-500 mr-1">{t('scan.cultivar', { defaultValue: 'Cultivar' })}:</span>
+                                  <span>'{currentResult.suggestions[0].infraspecies}'</span>
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Common names */}
+                          {currentResult.suggestions[0].commonNames && currentResult.suggestions[0].commonNames.length > 0 && (
+                            <div className="text-xs text-stone-500 dark:text-stone-400">
+                              <span className="font-medium">{t('scan.commonNames', { defaultValue: 'Also known as' })}:</span>{' '}
+                              {currentResult.suggestions[0].commonNames.slice(0, 3).join(', ')}
+                              {currentResult.suggestions[0].commonNames.length > 3 && (
+                                <span className="text-stone-400"> +{currentResult.suggestions[0].commonNames.length - 3} more</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {currentResult.topMatchProbability && (
                       <Badge 
                         className={cn(
-                          "rounded-full text-lg font-bold px-3 py-1",
+                          "rounded-full text-lg font-bold px-3 py-1 flex-shrink-0 ml-2",
                           getConfidenceLevel(currentResult.topMatchProbability).level === 'high' 
                             ? "bg-emerald-600 text-white" 
                             : getConfidenceLevel(currentResult.topMatchProbability).level === 'medium'
@@ -544,13 +641,30 @@ export const ScanPage: React.FC = () => {
                       <button 
                         key={suggestion.id || idx}
                         onClick={() => navigate(`/search?q=${encodeURIComponent(suggestion.name)}`)}
-                        className="flex items-center justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
+                        className="flex items-start justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
                         title={t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
                       >
-                        <span className="text-sm text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                          {suggestion.name}
-                        </span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                            {suggestion.name}
+                          </span>
+                          {/* Show infraspecies/cultivar if available */}
+                          {suggestion.infraspecies && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <Badge variant="outline" className="rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                                <FlaskConical className="h-2.5 w-2.5 mr-1" />
+                                '{suggestion.infraspecies}'
+                              </Badge>
+                            </div>
+                          )}
+                          {/* Show common names if available */}
+                          {suggestion.commonNames && suggestion.commonNames.length > 0 && (
+                            <p className="text-xs text-stone-400 mt-0.5 truncate">
+                              {suggestion.commonNames.slice(0, 2).join(', ')}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                           <Badge variant="outline" className="rounded-full text-xs">
                             {formatProbability(suggestion.probability)}
                           </Badge>
