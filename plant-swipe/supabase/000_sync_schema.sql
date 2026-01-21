@@ -9091,6 +9091,8 @@ create table if not exists public.landing_testimonials (
   author_name text not null,
   author_role text,
   author_avatar_url text,
+  author_website_url text,
+  linked_user_id uuid references public.profiles(id) on delete set null,
   quote text not null,
   rating integer not null default 5 check (rating >= 1 and rating <= 5),
   is_active boolean not null default true,

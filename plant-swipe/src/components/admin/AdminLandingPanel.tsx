@@ -59,6 +59,8 @@ import {
   Quote,
   AlertCircle,
   Languages,
+  User,
+  LinkIcon,
 } from "lucide-react"
 
 // Types
@@ -93,6 +95,8 @@ type Testimonial = {
   author_name: string
   author_role: string | null
   author_avatar_url: string | null
+  author_website_url: string | null
+  linked_user_id: string | null
   quote: string
   rating: number
   is_active: boolean
@@ -112,6 +116,12 @@ type FAQTranslation = {
   language: string
   question: string
   answer: string
+}
+
+type UserProfile = {
+  id: string
+  display_name: string
+  avatar_url: string | null
 }
 
 type LandingPageSettings = {
@@ -1161,14 +1171,23 @@ const HeroCardsTab: React.FC<{
   showPreview: boolean
   sectionVisible: boolean
 }> = ({ cards, setCards, setSaving, showPreview, sectionVisible }) => {
+  const [localCards, setLocalCards] = React.useState<HeroCard[]>(cards)
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [importPlantOpen, setImportPlantOpen] = React.useState(false)
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
   const [expandedCardId, setExpandedCardId] = React.useState<string | null>(null)
 
+  // Sync local cards when parent cards change (e.g., after add/delete)
+  React.useEffect(() => {
+    setLocalCards(cards)
+  }, [cards])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = JSON.stringify(localCards) !== JSON.stringify(cards)
+
   const addCard = async () => {
     const newCard: Partial<HeroCard> = {
-      position: cards.length,
+      position: localCards.length,
       plant_name: "New Plant",
       plant_scientific_name: "Scientific name",
       water_frequency: "2x/week",
@@ -1185,6 +1204,7 @@ const HeroCardsTab: React.FC<{
 
     if (data && !error) {
       setCards([...cards, data])
+      setLocalCards([...localCards, data])
       setExpandedCardId(data.id)
     }
   }
@@ -1195,7 +1215,7 @@ const HeroCardsTab: React.FC<{
     image_url: string | null
   }) => {
     const newCard: Partial<HeroCard> = {
-      position: cards.length,
+      position: localCards.length,
       plant_name: plant.name,
       plant_scientific_name: plant.scientific_name,
       image_url: plant.image_url,
@@ -1213,21 +1233,33 @@ const HeroCardsTab: React.FC<{
 
     if (data && !error) {
       setCards([...cards, data])
+      setLocalCards([...localCards, data])
       setExpandedCardId(data.id)
     }
   }
 
-  const updateCard = async (id: string, updates: Partial<HeroCard>) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from("landing_hero_cards")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
+  // Update local state only (no database write)
+  const updateLocalCard = (id: string, updates: Partial<HeroCard>) => {
+    setLocalCards(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
+  }
 
-    if (!error) {
-      setCards(cards.map(c => c.id === id ? { ...c, ...updates } : c))
+  // Save all changes to database
+  const saveAllCards = async () => {
+    setSaving(true)
+    try {
+      for (const card of localCards) {
+        const originalCard = cards.find(c => c.id === card.id)
+        if (originalCard && JSON.stringify(originalCard) !== JSON.stringify(card)) {
+          await supabase
+            .from("landing_hero_cards")
+            .update({ ...card, updated_at: new Date().toISOString() })
+            .eq("id", card.id)
+        }
+      }
+      setCards(localCards)
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const deleteCard = async (id: string) => {
@@ -1239,28 +1271,31 @@ const HeroCardsTab: React.FC<{
 
     if (!error) {
       setCards(cards.filter(c => c.id !== id))
+      setLocalCards(localCards.filter(c => c.id !== id))
     }
   }
 
   const moveCard = async (index: number, direction: "up" | "down") => {
-    if ((direction === "up" && index === 0) || (direction === "down" && index === cards.length - 1)) return
+    if ((direction === "up" && index === 0) || (direction === "down" && index === localCards.length - 1)) return
 
     const newIndex = direction === "up" ? index - 1 : index + 1
-    const newCards = [...cards]
+    const newCards = [...localCards]
     ;[newCards[index], newCards[newIndex]] = [newCards[newIndex], newCards[index]]
 
     const updates = newCards.map((card, i) => ({ ...card, position: i }))
-    setCards(updates)
+    setLocalCards(updates)
 
+    // Save position changes immediately since they affect display order
     for (const card of updates) {
       await supabase
         .from("landing_hero_cards")
         .update({ position: card.position })
         .eq("id", card.id)
     }
+    setCards(updates)
   }
 
-  const editingCard = cards.find(c => c.id === editingCardId)
+  const editingCard = localCards.find(c => c.id === editingCardId)
 
   return (
     <div className="space-y-6">
@@ -1286,10 +1321,16 @@ const HeroCardsTab: React.FC<{
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Hero Cards</h3>
           <p className="text-sm text-stone-500">
-            {cards.filter(c => c.is_active).length} active of {cards.length} total
+            {localCards.filter(c => c.is_active).length} active of {localCards.length} total
           </p>
         </div>
         <div className="flex gap-2">
+          {hasUnsavedChanges && (
+            <Button onClick={saveAllCards} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
+          )}
           <Button onClick={() => setImportPlantOpen(true)} variant="outline" className="rounded-xl">
             <Download className="h-4 w-4 mr-2" />
             Import from Plants
@@ -1301,7 +1342,7 @@ const HeroCardsTab: React.FC<{
         </div>
       </div>
 
-      {cards.length === 0 ? (
+      {localCards.length === 0 ? (
         <Card className="rounded-xl border-dashed">
           <CardContent className="py-16 text-center">
             <Smartphone className="h-12 w-12 mx-auto mb-4 text-stone-300" />
@@ -1320,7 +1361,7 @@ const HeroCardsTab: React.FC<{
         )}>
           {/* Cards List */}
           <div className="space-y-4">
-            {cards.map((card, index) => (
+            {localCards.map((card, index) => (
               <Card
                 key={card.id}
                 className={cn(
@@ -1349,7 +1390,7 @@ const HeroCardsTab: React.FC<{
                         size="icon"
                         className="h-6 w-6"
                         onClick={() => moveCard(index, "down")}
-                        disabled={index === cards.length - 1}
+                        disabled={index === localCards.length - 1}
                       >
                         <ChevronDown className="h-4 w-4" />
                       </Button>
@@ -1384,7 +1425,7 @@ const HeroCardsTab: React.FC<{
                       <div className="flex items-center gap-2 mb-2">
                         <Input
                           value={card.plant_name}
-                          onChange={(e) => updateCard(card.id, { plant_name: e.target.value })}
+                          onChange={(e) => updateLocalCard(card.id, { plant_name: e.target.value })}
                           className="rounded-xl font-semibold text-lg h-9"
                           placeholder="Plant name"
                         />
@@ -1404,7 +1445,7 @@ const HeroCardsTab: React.FC<{
                       <div className="flex items-center gap-2 text-sm text-stone-500">
                         <Input
                           value={card.plant_scientific_name || ""}
-                          onChange={(e) => updateCard(card.id, { plant_scientific_name: e.target.value })}
+                          onChange={(e) => updateLocalCard(card.id, { plant_scientific_name: e.target.value })}
                           className="rounded-xl h-8 italic text-sm flex-1"
                           placeholder="Scientific name"
                         />
@@ -1422,7 +1463,7 @@ const HeroCardsTab: React.FC<{
                                 </div>
                                 <Input
                                   value={card.water_frequency}
-                                  onChange={(e) => updateCard(card.id, { water_frequency: e.target.value })}
+                                  onChange={(e) => updateLocalCard(card.id, { water_frequency: e.target.value })}
                                   className="rounded-xl h-8"
                                   placeholder="e.g., 2x/week"
                                 />
@@ -1436,7 +1477,7 @@ const HeroCardsTab: React.FC<{
                                 </div>
                                 <Input
                                   value={card.light_level}
-                                  onChange={(e) => updateCard(card.id, { light_level: e.target.value })}
+                                  onChange={(e) => updateLocalCard(card.id, { light_level: e.target.value })}
                                   className="rounded-xl h-8"
                                   placeholder="e.g., Bright indirect"
                                 />
@@ -1452,7 +1493,7 @@ const HeroCardsTab: React.FC<{
                               </div>
                               <Input
                                 value={card.reminder_text}
-                                onChange={(e) => updateCard(card.id, { reminder_text: e.target.value })}
+                                onChange={(e) => updateLocalCard(card.id, { reminder_text: e.target.value })}
                                 className="rounded-xl h-8"
                                 placeholder="e.g., Water in 2 days"
                               />
@@ -1463,7 +1504,7 @@ const HeroCardsTab: React.FC<{
                             <Label className="text-xs">Description (optional)</Label>
                             <Textarea
                               value={card.plant_description || ""}
-                              onChange={(e) => updateCard(card.id, { plant_description: e.target.value })}
+                              onChange={(e) => updateLocalCard(card.id, { plant_description: e.target.value })}
                               className="rounded-xl"
                               rows={2}
                               placeholder="A brief description of this plant..."
@@ -1478,7 +1519,7 @@ const HeroCardsTab: React.FC<{
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => updateCard(card.id, { is_active: !card.is_active })}
+                        onClick={() => updateLocalCard(card.id, { is_active: !card.is_active })}
                         className={cn(
                           "rounded-xl",
                           card.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
@@ -1510,8 +1551,8 @@ const HeroCardsTab: React.FC<{
                     <Eye className="h-4 w-4" />
                     Live Preview
                   </h4>
-                  {cards.filter(c => c.is_active).length > 0 ? (
-                    <HeroCardPreview card={cards.filter(c => c.is_active)[0]} />
+                  {localCards.filter(c => c.is_active).length > 0 ? (
+                    <HeroCardPreview card={localCards.filter(c => c.is_active)[0]} />
                   ) : (
                     <div className="text-center py-8 text-stone-500 text-sm">
                       No active cards to preview
@@ -1519,11 +1560,11 @@ const HeroCardsTab: React.FC<{
                   )}
                 </div>
 
-                {cards.filter(c => c.is_active).length > 1 && (
+                {localCards.filter(c => c.is_active).length > 1 && (
                   <div className="mt-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
                     <p className="text-xs text-emerald-700 dark:text-emerald-300">
                       <Shuffle className="h-3 w-3 inline mr-1" />
-                      {cards.filter(c => c.is_active).length} cards will rotate on the live page
+                      {localCards.filter(c => c.is_active).length} cards will rotate on the live page
                     </p>
                   </div>
                 )}
@@ -1542,7 +1583,7 @@ const HeroCardsTab: React.FC<{
         }}
         onSelect={(url) => {
           if (editingCardId) {
-            updateCard(editingCardId, { image_url: url })
+            updateLocalCard(editingCardId, { image_url: url })
           }
         }}
         currentImage={editingCard?.image_url}
@@ -1574,6 +1615,9 @@ const StatsTab: React.FC<{
   React.useEffect(() => {
     setLocalStats(stats)
   }, [stats])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = stats && localStats && JSON.stringify(stats) !== JSON.stringify(localStats)
 
   const saveStats = async () => {
     if (!localStats) return
@@ -1645,10 +1689,12 @@ const StatsTab: React.FC<{
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Statistics Banner</h3>
           <p className="text-sm text-stone-500">Displayed in the stats section and used for hero social proof (rating)</p>
         </div>
-        <Button onClick={saveStats} disabled={saving} className="rounded-xl">
-          {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-          Save Changes
-        </Button>
+        {hasUnsavedChanges && (
+          <Button onClick={saveStats} disabled={saving} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+            Save Changes
+          </Button>
+        )}
       </div>
 
       <div className={cn(
@@ -1724,12 +1770,56 @@ const TestimonialsTab: React.FC<{
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   sectionVisible: boolean
 }> = ({ testimonials, setTestimonials, setSaving, sectionVisible }) => {
+  const [localTestimonials, setLocalTestimonials] = React.useState<Testimonial[]>(testimonials)
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
+  const [userPickerOpen, setUserPickerOpen] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(null)
+  const [availableUsers, setAvailableUsers] = React.useState<UserProfile[]>([])
+  const [userSearchQuery, setUserSearchQuery] = React.useState("")
+  const [loadingUsers, setLoadingUsers] = React.useState(false)
+
+  // Sync local testimonials when parent changes
+  React.useEffect(() => {
+    setLocalTestimonials(testimonials)
+  }, [testimonials])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = JSON.stringify(localTestimonials) !== JSON.stringify(testimonials)
+
+  // Load available users for linking
+  const loadUsers = React.useCallback(async (search?: string) => {
+    setLoadingUsers(true)
+    try {
+      let query = supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .limit(20)
+      
+      if (search) {
+        query = query.ilike("display_name", `%${search}%`)
+      }
+      
+      const { data, error } = await query
+      if (data && !error) {
+        setAvailableUsers(data)
+      }
+    } catch (e) {
+      console.error("Failed to load users:", e)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }, [])
+
+  // Load users when user picker opens
+  React.useEffect(() => {
+    if (userPickerOpen) {
+      loadUsers(userSearchQuery)
+    }
+  }, [userPickerOpen, userSearchQuery, loadUsers])
 
   const addTestimonial = async () => {
     const newTestimonial: Partial<Testimonial> = {
-      position: testimonials.length,
+      position: localTestimonials.length,
       author_name: "New Reviewer",
       author_role: "Plant Enthusiast",
       quote: "This app is amazing!",
@@ -1745,20 +1835,32 @@ const TestimonialsTab: React.FC<{
 
     if (data && !error) {
       setTestimonials([...testimonials, data])
+      setLocalTestimonials([...localTestimonials, data])
     }
   }
 
-  const updateTestimonial = async (id: string, updates: Partial<Testimonial>) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from("landing_testimonials")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
+  // Update local state only
+  const updateLocalTestimonial = (id: string, updates: Partial<Testimonial>) => {
+    setLocalTestimonials(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
+  }
 
-    if (!error) {
-      setTestimonials(testimonials.map(t => t.id === id ? { ...t, ...updates } : t))
+  // Save all changes to database
+  const saveAllTestimonials = async () => {
+    setSaving(true)
+    try {
+      for (const testimonial of localTestimonials) {
+        const originalTestimonial = testimonials.find(t => t.id === testimonial.id)
+        if (originalTestimonial && JSON.stringify(originalTestimonial) !== JSON.stringify(testimonial)) {
+          await supabase
+            .from("landing_testimonials")
+            .update({ ...testimonial, updated_at: new Date().toISOString() })
+            .eq("id", testimonial.id)
+        }
+      }
+      setTestimonials(localTestimonials)
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const deleteTestimonial = async (id: string) => {
@@ -1770,10 +1872,27 @@ const TestimonialsTab: React.FC<{
 
     if (!error) {
       setTestimonials(testimonials.filter(t => t.id !== id))
+      setLocalTestimonials(localTestimonials.filter(t => t.id !== id))
     }
   }
 
-  const editingTestimonial = testimonials.find(t => t.id === editingId)
+  // Link a user profile to a testimonial
+  const linkUserToTestimonial = (testimonialId: string, user: UserProfile) => {
+    updateLocalTestimonial(testimonialId, {
+      linked_user_id: user.id,
+      author_name: user.display_name,
+      author_avatar_url: user.avatar_url,
+    })
+    setUserPickerOpen(false)
+    setEditingId(null)
+  }
+
+  // Unlink a user from a testimonial
+  const unlinkUser = (testimonialId: string) => {
+    updateLocalTestimonial(testimonialId, { linked_user_id: null })
+  }
+
+  const editingTestimonial = localTestimonials.find(t => t.id === editingId)
 
   return (
     <div className="space-y-4">
@@ -1784,13 +1903,21 @@ const TestimonialsTab: React.FC<{
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Customer Reviews</h3>
           <p className="text-sm text-stone-500">Testimonials shown in the reviews section</p>
         </div>
-        <Button onClick={addTestimonial} className="rounded-xl">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Review
-        </Button>
+        <div className="flex gap-2">
+          {hasUnsavedChanges && (
+            <Button onClick={saveAllTestimonials} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
+          )}
+          <Button onClick={addTestimonial} className="rounded-xl">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Review
+          </Button>
+        </div>
       </div>
 
-      {testimonials.length === 0 ? (
+      {localTestimonials.length === 0 ? (
         <Card className="rounded-xl border-dashed">
           <CardContent className="py-12 text-center text-stone-500">
             No testimonials yet. Add one to get started.
@@ -1798,7 +1925,7 @@ const TestimonialsTab: React.FC<{
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {testimonials.map((testimonial) => (
+          {localTestimonials.map((testimonial) => (
             <Card key={testimonial.id} className="rounded-xl">
               <CardContent className="p-4 space-y-4">
                 <div className="flex items-start justify-between">
@@ -1826,13 +1953,13 @@ const TestimonialsTab: React.FC<{
                     <div className="space-y-1">
                       <Input
                         value={testimonial.author_name}
-                        onChange={(e) => updateTestimonial(testimonial.id, { author_name: e.target.value })}
+                        onChange={(e) => updateLocalTestimonial(testimonial.id, { author_name: e.target.value })}
                         className="rounded-xl h-8 font-medium"
                         placeholder="Name"
                       />
                       <Input
                         value={testimonial.author_role || ""}
-                        onChange={(e) => updateTestimonial(testimonial.id, { author_role: e.target.value })}
+                        onChange={(e) => updateLocalTestimonial(testimonial.id, { author_role: e.target.value })}
                         className="rounded-xl h-7 text-xs"
                         placeholder="Role"
                       />
@@ -1842,7 +1969,7 @@ const TestimonialsTab: React.FC<{
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => updateTestimonial(testimonial.id, { is_active: !testimonial.is_active })}
+                      onClick={() => updateLocalTestimonial(testimonial.id, { is_active: !testimonial.is_active })}
                       className={cn(
                         "rounded-xl h-8 w-8",
                         testimonial.is_active ? "text-emerald-600 bg-emerald-50" : "text-stone-400"
@@ -1866,7 +1993,7 @@ const TestimonialsTab: React.FC<{
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
-                      onClick={() => updateTestimonial(testimonial.id, { rating: star })}
+                      onClick={() => updateLocalTestimonial(testimonial.id, { rating: star })}
                       className="focus:outline-none transition-transform hover:scale-110"
                     >
                       <Star
@@ -1881,11 +2008,64 @@ const TestimonialsTab: React.FC<{
 
                 <Textarea
                   value={testimonial.quote}
-                  onChange={(e) => updateTestimonial(testimonial.id, { quote: e.target.value })}
+                  onChange={(e) => updateLocalTestimonial(testimonial.id, { quote: e.target.value })}
                   className="rounded-xl"
                   rows={3}
                   placeholder="Review text..."
                 />
+
+                {/* Website/Review Link */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-stone-500 flex items-center gap-1">
+                    <LinkIcon className="h-3 w-3" />
+                    Website or Review Link
+                  </Label>
+                  <Input
+                    value={testimonial.author_website_url || ""}
+                    onChange={(e) => updateLocalTestimonial(testimonial.id, { author_website_url: e.target.value })}
+                    className="rounded-xl h-8 text-sm"
+                    placeholder="https://example.com or review URL"
+                  />
+                </div>
+
+                {/* Link to User Profile */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-stone-500 flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    Link to App User
+                  </Label>
+                  {testimonial.linked_user_id ? (
+                    <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                      <div className="h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs">
+                        <User className="h-3 w-3" />
+                      </div>
+                      <span className="text-sm text-emerald-700 dark:text-emerald-300 flex-1">
+                        Linked to user profile
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => unlinkUser(testimonial.id)}
+                        className="h-6 px-2 text-xs text-red-500 hover:text-red-600"
+                      >
+                        Unlink
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditingId(testimonial.id)
+                        setUserPickerOpen(true)
+                      }}
+                      className="rounded-xl w-full justify-start text-stone-500"
+                    >
+                      <User className="h-3.5 w-3.5 mr-2" />
+                      Link to existing user...
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -1900,11 +2080,75 @@ const TestimonialsTab: React.FC<{
         }}
         onSelect={(url) => {
           if (editingId) {
-            updateTestimonial(editingId, { author_avatar_url: url })
+            updateLocalTestimonial(editingId, { author_avatar_url: url })
           }
         }}
         currentImage={editingTestimonial?.author_avatar_url}
       />
+
+      {/* User Picker Modal */}
+      {userPickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="w-full max-w-md rounded-xl">
+            <CardContent className="p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-stone-900 dark:text-white">Link to User Profile</h4>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setUserPickerOpen(false)
+                    setEditingId(null)
+                    setUserSearchQuery("")
+                  }}
+                  className="rounded-xl h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                <Input
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="rounded-xl pl-9"
+                  placeholder="Search users..."
+                />
+              </div>
+
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {loadingUsers ? (
+                  <div className="py-8 text-center">
+                    <Loader2 className="h-6 w-6 mx-auto animate-spin text-stone-400" />
+                  </div>
+                ) : availableUsers.length === 0 ? (
+                  <div className="py-8 text-center text-stone-500 text-sm">
+                    No users found
+                  </div>
+                ) : (
+                  availableUsers.map((user) => (
+                    <button
+                      key={user.id}
+                      onClick={() => editingId && linkUserToTestimonial(editingId, user)}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold overflow-hidden">
+                        {user.avatar_url ? (
+                          <img src={user.avatar_url} alt={user.display_name} className="w-full h-full object-cover" />
+                        ) : (
+                          user.display_name.charAt(0)
+                        )}
+                      </div>
+                      <span className="font-medium text-stone-900 dark:text-white">{user.display_name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
@@ -1923,15 +2167,28 @@ const FAQTab: React.FC<{
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   sectionVisible: boolean
 }> = ({ items, setItems, setSaving, sectionVisible }) => {
+  const [localItems, setLocalItems] = React.useState<FAQ[]>(items)
   const [selectedLang, setSelectedLang] = React.useState<SupportedLanguage>("en")
   const [translations, setTranslations] = React.useState<Record<string, FAQTranslation>>({})
+  const [localTranslations, setLocalTranslations] = React.useState<Record<string, Partial<FAQTranslation>>>({})
   const [translating, setTranslating] = React.useState(false)
   const [loadingTranslations, setLoadingTranslations] = React.useState(false)
+
+  // Sync local items when parent changes
+  React.useEffect(() => {
+    setLocalItems(items)
+  }, [items])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = selectedLang === "en" 
+    ? JSON.stringify(localItems) !== JSON.stringify(items)
+    : Object.keys(localTranslations).length > 0
 
   // Load translations for the selected language
   const loadTranslations = React.useCallback(async (lang: SupportedLanguage) => {
     if (lang === "en") {
       setTranslations({})
+      setLocalTranslations({})
       return
     }
     
@@ -1948,6 +2205,7 @@ const FAQTab: React.FC<{
           translationMap[t.faq_id] = t
         })
         setTranslations(translationMap)
+        setLocalTranslations({})
       }
     } catch (e) {
       console.error("Failed to load translations:", e)
@@ -1964,18 +2222,21 @@ const FAQTab: React.FC<{
   // Get the display content for an FAQ item based on selected language
   const getDisplayContent = (item: FAQ) => {
     if (selectedLang === "en") {
-      return { question: item.question, answer: item.answer }
+      const localItem = localItems.find(i => i.id === item.id)
+      return { question: localItem?.question || item.question, answer: localItem?.answer || item.answer }
     }
-    const translation = translations[item.id]
+    // Check local translations first, then fall back to saved translations
+    const localTrans = localTranslations[item.id]
+    const savedTrans = translations[item.id]
     return {
-      question: translation?.question || item.question,
-      answer: translation?.answer || item.answer,
+      question: localTrans?.question ?? savedTrans?.question ?? item.question,
+      answer: localTrans?.answer ?? savedTrans?.answer ?? item.answer,
     }
   }
 
   const addFAQ = async () => {
     const newFAQ: Partial<FAQ> = {
-      position: items.length,
+      position: localItems.length,
       question: "New Question?",
       answer: "Answer goes here...",
       is_active: true,
@@ -1989,61 +2250,83 @@ const FAQTab: React.FC<{
 
     if (data && !error) {
       setItems([...items, data])
+      setLocalItems([...localItems, data])
     }
   }
 
-  const updateFAQ = async (id: string, updates: Partial<FAQ>) => {
-    setSaving(true)
-    
+  // Update local state only
+  const updateLocalFAQ = (id: string, updates: Partial<FAQ>) => {
     if (selectedLang === "en") {
-      // Update base FAQ
-      const { error } = await supabase
-        .from("landing_faq")
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq("id", id)
-
-      if (!error) {
-        setItems(items.map(i => i.id === id ? { ...i, ...updates } : i))
-      }
+      setLocalItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i))
     } else {
-      // Update or create translation
-      const existingTranslation = translations[id]
-      const translationData = {
-        faq_id: id,
-        language: selectedLang,
-        question: updates.question ?? existingTranslation?.question ?? "",
-        answer: updates.answer ?? existingTranslation?.answer ?? "",
-        updated_at: new Date().toISOString(),
-      }
-      
-      if (existingTranslation) {
-        // Update existing translation
-        const { error } = await supabase
-          .from("landing_faq_translations")
-          .update(translationData)
-          .eq("id", existingTranslation.id)
-        
-        if (!error) {
-          setTranslations(prev => ({
-            ...prev,
-            [id]: { ...existingTranslation, ...translationData }
-          }))
+      // Update local translations
+      setLocalTranslations(prev => ({
+        ...prev,
+        [id]: {
+          ...prev[id],
+          ...updates,
+          faq_id: id,
+          language: selectedLang,
         }
-      } else {
-        // Insert new translation
-        const { data, error } = await supabase
-          .from("landing_faq_translations")
-          .insert(translationData)
-          .select()
-          .single()
-        
-        if (data && !error) {
-          setTranslations(prev => ({ ...prev, [id]: data }))
-        }
-      }
+      }))
     }
-    
-    setSaving(false)
+  }
+
+  // Save all changes to database
+  const saveAllFAQs = async () => {
+    setSaving(true)
+    try {
+      if (selectedLang === "en") {
+        // Save English base content
+        for (const item of localItems) {
+          const originalItem = items.find(i => i.id === item.id)
+          if (originalItem && JSON.stringify(originalItem) !== JSON.stringify(item)) {
+            await supabase
+              .from("landing_faq")
+              .update({ ...item, updated_at: new Date().toISOString() })
+              .eq("id", item.id)
+          }
+        }
+        setItems(localItems)
+      } else {
+        // Save translations
+        for (const [faqId, localTrans] of Object.entries(localTranslations)) {
+          const existingTranslation = translations[faqId]
+          const translationData = {
+            faq_id: faqId,
+            language: selectedLang,
+            question: localTrans.question ?? existingTranslation?.question ?? "",
+            answer: localTrans.answer ?? existingTranslation?.answer ?? "",
+            updated_at: new Date().toISOString(),
+          }
+          
+          if (existingTranslation) {
+            await supabase
+              .from("landing_faq_translations")
+              .update(translationData)
+              .eq("id", existingTranslation.id)
+            
+            setTranslations(prev => ({
+              ...prev,
+              [faqId]: { ...existingTranslation, ...translationData }
+            }))
+          } else {
+            const { data, error } = await supabase
+              .from("landing_faq_translations")
+              .insert(translationData)
+              .select()
+              .single()
+            
+            if (data && !error) {
+              setTranslations(prev => ({ ...prev, [faqId]: data }))
+            }
+          }
+        }
+        setLocalTranslations({})
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const deleteFAQ = async (id: string) => {
@@ -2055,8 +2338,14 @@ const FAQTab: React.FC<{
 
     if (!error) {
       setItems(items.filter(i => i.id !== id))
+      setLocalItems(localItems.filter(i => i.id !== id))
       // Remove from translations state
       setTranslations(prev => {
+        const newTranslations = { ...prev }
+        delete newTranslations[id]
+        return newTranslations
+      })
+      setLocalTranslations(prev => {
         const newTranslations = { ...prev }
         delete newTranslations[id]
         return newTranslations
@@ -2065,21 +2354,23 @@ const FAQTab: React.FC<{
   }
 
   const moveFAQ = async (index: number, direction: "up" | "down") => {
-    if ((direction === "up" && index === 0) || (direction === "down" && index === items.length - 1)) return
+    if ((direction === "up" && index === 0) || (direction === "down" && index === localItems.length - 1)) return
 
     const newIndex = direction === "up" ? index - 1 : index + 1
-    const newItems = [...items]
+    const newItems = [...localItems]
     ;[newItems[index], newItems[newIndex]] = [newItems[newIndex], newItems[index]]
 
     const updates = newItems.map((item, i) => ({ ...item, position: i }))
-    setItems(updates)
+    setLocalItems(updates)
 
+    // Save position changes immediately
     for (const item of updates) {
       await supabase
         .from("landing_faq")
         .update({ position: item.position })
         .eq("id", item.id)
     }
+    setItems(updates)
   }
 
   // Translate all FAQs to the selected language using DeepL
@@ -2090,7 +2381,7 @@ const FAQTab: React.FC<{
     setSaving(true)
     
     try {
-      for (const item of items) {
+      for (const item of localItems) {
         // Translate question and answer from English
         const [translatedQuestion, translatedAnswer] = await Promise.all([
           translateText(item.question, selectedLang, "en"),
@@ -2145,6 +2436,14 @@ const FAQTab: React.FC<{
           <p className="text-sm text-stone-500">Questions and answers shown in the FAQ section</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Save Button */}
+          {hasUnsavedChanges && (
+            <Button onClick={saveAllFAQs} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
+          )}
+
           {/* Language Selector */}
           <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
             {SUPPORTED_LANGUAGES.map((lang) => (
@@ -2169,7 +2468,7 @@ const FAQTab: React.FC<{
               variant="outline"
               size="sm"
               onClick={translateAllFAQs}
-              disabled={translating || items.length === 0}
+              disabled={translating || localItems.length === 0}
               className="rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400"
             >
               {translating ? (
@@ -2205,7 +2504,7 @@ const FAQTab: React.FC<{
             <p className="text-stone-500">Loading translations...</p>
           </CardContent>
         </Card>
-      ) : items.length === 0 ? (
+      ) : localItems.length === 0 ? (
         <Card className="rounded-xl border-dashed">
           <CardContent className="py-12 text-center text-stone-500">
             No FAQ items yet. Add one to get started.
@@ -2213,9 +2512,9 @@ const FAQTab: React.FC<{
         </Card>
       ) : (
         <div className="space-y-3">
-          {items.map((item, index) => {
+          {localItems.map((item, index) => {
             const displayContent = getDisplayContent(item)
-            const hasTranslation = selectedLang !== "en" && !!translations[item.id]
+            const hasTranslation = selectedLang !== "en" && (!!translations[item.id] || !!localTranslations[item.id])
             
             return (
               <Card key={item.id} className="rounded-xl">
@@ -2240,7 +2539,7 @@ const FAQTab: React.FC<{
                         size="icon"
                         className="h-6 w-6"
                         onClick={() => moveFAQ(index, "down")}
-                        disabled={index === items.length - 1 || selectedLang !== "en"}
+                        disabled={index === localItems.length - 1 || selectedLang !== "en"}
                       >
                         <ChevronDown className="h-4 w-4" />
                       </Button>
@@ -2257,7 +2556,7 @@ const FAQTab: React.FC<{
                         </div>
                         <Input
                           value={displayContent.question}
-                          onChange={(e) => updateFAQ(item.id, { question: e.target.value })}
+                          onChange={(e) => updateLocalFAQ(item.id, { question: e.target.value })}
                           className="rounded-xl font-medium"
                         />
                       </div>
@@ -2265,7 +2564,7 @@ const FAQTab: React.FC<{
                         <Label className="text-xs text-stone-500">Answer</Label>
                         <Textarea
                           value={displayContent.answer}
-                          onChange={(e) => updateFAQ(item.id, { answer: e.target.value })}
+                          onChange={(e) => updateLocalFAQ(item.id, { answer: e.target.value })}
                           className="rounded-xl"
                           rows={3}
                         />
@@ -2277,7 +2576,7 @@ const FAQTab: React.FC<{
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => updateFAQ(item.id, { is_active: !item.is_active })}
+                        onClick={() => updateLocalFAQ(item.id, { is_active: !item.is_active })}
                         disabled={selectedLang !== "en"}
                         className={cn(
                           "rounded-xl",
