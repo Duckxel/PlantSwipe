@@ -198,6 +198,18 @@ function transformApiResponse(apiResponse: KindwiseApiResponse): {
 }
 
 /**
+ * Escape special characters for PostgreSQL ILIKE patterns
+ * Prevents injection and unexpected query behavior from user input
+ * Characters escaped: % (any sequence), _ (single char), \ (escape char)
+ */
+function escapeIlikePattern(input: string): string {
+  return input
+    .replace(/\\/g, '\\\\')  // Escape backslash first
+    .replace(/%/g, '\\%')    // Escape percent
+    .replace(/_/g, '\\_')    // Escape underscore
+}
+
+/**
  * Try to find a matching plant in our database
  * Uses multiple search strategies for best matching
  * All strategies are executed before returning - Request Plant should only appear after this completes
@@ -211,12 +223,17 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
   console.log('[plantScan] Starting database match for:', topMatch.name)
   console.log('[plantScan] Taxonomy info - Genus:', topMatch.genus, 'Species:', topMatch.species, 'Infraspecies:', topMatch.infraspecies)
   
+  // Sanitize inputs to prevent ILIKE injection
+  const safeName = escapeIlikePattern(topMatch.name)
+  const safeGenus = topMatch.genus ? escapeIlikePattern(topMatch.genus) : null
+  const safeSpecies = topMatch.species ? escapeIlikePattern(topMatch.species) : null
+  
   try {
     // Strategy 1: Exact name match (case-insensitive)
     const { data: exactMatch, error: exactError } = await supabase
       .from('plants')
       .select('id, name, scientific_name')
-      .or(`name.ilike.${topMatch.name},scientific_name.ilike.${topMatch.name}`)
+      .or(`name.ilike.${safeName},scientific_name.ilike.${safeName}`)
       .limit(1)
       .single()
     
@@ -226,14 +243,14 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
     }
     
     // Strategy 2: Build scientific name from genus + species and search
-    if (topMatch.genus && topMatch.species) {
-      const scientificName = `${topMatch.genus} ${topMatch.species}`
-      console.log('[plantScan] Trying Strategy 2 with scientific name:', scientificName)
+    if (safeGenus && safeSpecies) {
+      const safeScientificName = `${safeGenus} ${safeSpecies}`
+      console.log('[plantScan] Trying Strategy 2 with scientific name:', `${topMatch.genus} ${topMatch.species}`)
       
       const { data: scientificMatch, error: sciError } = await supabase
         .from('plants')
         .select('id, name, scientific_name')
-        .or(`scientific_name.ilike.${scientificName},scientific_name.ilike.${scientificName}%`)
+        .or(`scientific_name.ilike.${safeScientificName},scientific_name.ilike.${safeScientificName}%`)
         .limit(1)
         .single()
       
@@ -247,7 +264,7 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
     const { data: partialMatch, error: partialError } = await supabase
       .from('plants')
       .select('id, name, scientific_name')
-      .or(`name.ilike.%${topMatch.name}%,scientific_name.ilike.%${topMatch.name}%`)
+      .or(`name.ilike.%${safeName}%,scientific_name.ilike.%${safeName}%`)
       .limit(1)
       .single()
     
@@ -257,13 +274,13 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
     }
     
     // Strategy 4: Search by genus only if we have it
-    if (topMatch.genus) {
+    if (safeGenus) {
       console.log('[plantScan] Trying Strategy 4 with genus:', topMatch.genus)
       
       const { data: genusMatch, error: genusError } = await supabase
         .from('plants')
         .select('id, name, scientific_name')
-        .or(`scientific_name.ilike.${topMatch.genus}%,name.ilike.%${topMatch.genus}%`)
+        .or(`scientific_name.ilike.${safeGenus}%,name.ilike.%${safeGenus}%`)
         .limit(1)
         .single()
       
@@ -278,10 +295,11 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
       console.log('[plantScan] Trying Strategy 5 with common names:', topMatch.commonNames.slice(0, 3))
       
       for (const commonName of topMatch.commonNames.slice(0, 3)) {
+        const safeCommonName = escapeIlikePattern(commonName)
         const { data: commonNameMatch, error: commonError } = await supabase
           .from('plants')
           .select('id, name, scientific_name')
-          .or(`name.ilike.%${commonName}%,scientific_name.ilike.%${commonName}%`)
+          .or(`name.ilike.%${safeCommonName}%,scientific_name.ilike.%${safeCommonName}%`)
           .limit(1)
           .single()
         
