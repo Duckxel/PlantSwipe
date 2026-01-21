@@ -9103,6 +9103,17 @@ create table if not exists public.landing_testimonials (
 create index if not exists idx_landing_testimonials_position on public.landing_testimonials(position);
 create index if not exists idx_landing_testimonials_active on public.landing_testimonials(is_active);
 
+-- Add new columns to landing_testimonials if they don't exist (for existing tables)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'landing_testimonials' AND column_name = 'author_website_url') THEN
+    ALTER TABLE public.landing_testimonials ADD COLUMN author_website_url text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'landing_testimonials' AND column_name = 'linked_user_id') THEN
+    ALTER TABLE public.landing_testimonials ADD COLUMN linked_user_id uuid references public.profiles(id) on delete set null;
+  END IF;
+END $$;
+
 -- Landing FAQ: Frequently asked questions (base content in English)
 create table if not exists public.landing_faq (
   id uuid primary key default gen_random_uuid(),
