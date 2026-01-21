@@ -1057,30 +1057,33 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       setCompanionsLoading(true)
       try {
         // Run all queries in parallel for faster loading
-        // Note: .then(r => r) converts PostgrestFilterBuilder to a proper Promise for TypeScript
+        // Note: Promise.resolve() wraps PromiseLike into a proper Promise for TypeScript
         const queries: Promise<any>[] = [
-          supabase
-            .from('plants')
-            .select('id, name')
-            .in('id', companionIds)
-            .then(r => r),
-          supabase
-            .from('plant_images')
-            .select('plant_id, link')
-            .in('plant_id', companionIds)
-            .eq('use', 'primary')
-            .then(r => r)
+          Promise.resolve(
+            supabase
+              .from('plants')
+              .select('id, name')
+              .in('id', companionIds)
+          ),
+          Promise.resolve(
+            supabase
+              .from('plant_images')
+              .select('plant_id, link')
+              .in('plant_id', companionIds)
+              .eq('use', 'primary')
+          )
         ]
         
         // Add translation query if not English
         if (currentLang !== 'en') {
           queries.push(
-            supabase
-              .from('plant_translations')
-              .select('plant_id, name')
-              .in('plant_id', companionIds)
-              .eq('language', currentLang)
-              .then(r => r)
+            Promise.resolve(
+              supabase
+                .from('plant_translations')
+                .select('plant_id, name')
+                .in('plant_id', companionIds)
+                .eq('language', currentLang)
+            )
           )
         }
         
