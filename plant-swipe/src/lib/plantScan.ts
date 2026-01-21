@@ -469,12 +469,22 @@ export async function getUserScans(options?: {
     if (scansToRecheck.length > 0) {
       console.log('[plantScan] Re-checking', scansToRecheck.length, 'unmatched scans for new database matches')
       
-      // Re-check in parallel
-      const recheckedScans = await Promise.all(
+      // Re-check in parallel, but handle individual failures gracefully
+      const recheckResults = await Promise.allSettled(
         scansToRecheck.map(scan => recheckScanMatch(scan))
       )
       
-      // Merge rechecked scans back into the list
+      const recheckedScans = recheckResults
+        .filter((result): result is PromiseFulfilledResult<PlantScan> => result.status === 'fulfilled')
+        .map(result => result.value)
+      
+      // Optional: log failed rechecks without failing the whole operation
+      const failedRechecks = recheckResults.filter(result => result.status === 'rejected')
+      if (failedRechecks.length > 0) {
+        console.warn('[plantScan] Failed to re-check some scans', failedRechecks.length)
+      }
+      
+      // Merge successfully rechecked scans back into the list
       const recheckedMap = new Map(recheckedScans.map(s => [s.id, s]))
       scans = scans.map(s => recheckedMap.get(s.id) || s)
     }
