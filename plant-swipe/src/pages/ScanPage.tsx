@@ -240,6 +240,45 @@ export const ScanPage: React.FC = () => {
     setShowRequestDialog(true)
   }
   
+  // Determine the type of infraspecies and return appropriate label and display value
+  const getInfraspeciesInfo = (infraspecies: string | undefined): { label: string; value: string } | null => {
+    if (!infraspecies) return null
+    
+    const raw = infraspecies.trim()
+    const lower = raw.toLowerCase()
+    
+    // Check for cultivar indicators (quotes or cv. prefix)
+    if (raw.startsWith("'") || raw.endsWith("'") || raw.includes('"') || lower.startsWith('cv.')) {
+      const cleanValue = raw.replace(/^cv\.\s*/i, '').replace(/['"]/g, '')
+      return { label: 'Cultivar', value: `'${cleanValue}'` }
+    }
+    
+    // Check for variety
+    if (lower.startsWith('var.')) {
+      const cleanValue = raw.replace(/^var\.\s*/i, '')
+      return { label: 'Variety', value: cleanValue }
+    }
+    
+    // Check for subspecies
+    if (lower.startsWith('subsp.') || lower.startsWith('ssp.')) {
+      const cleanValue = raw.replace(/^(subsp\.|ssp\.)\s*/i, '')
+      return { label: 'Subspecies', value: cleanValue }
+    }
+    
+    // Check for forma
+    if (lower.startsWith('f.') || lower.startsWith('forma')) {
+      const cleanValue = raw.replace(/^(f\.|forma)\s*/i, '')
+      return { label: 'Form', value: cleanValue }
+    }
+    
+    // Default: assume it's a cultivar if it starts with uppercase, otherwise variety
+    if (raw.match(/^[A-Z]/)) {
+      return { label: 'Cultivar', value: `'${raw}'` }
+    }
+    
+    return { label: 'Variety', value: raw }
+  }
+  
   // Build full scientific name from taxonomy parts
   const buildFullScientificName = (suggestion: PlantScan['suggestions'][0] | undefined) => {
     if (!suggestion) return null
@@ -639,13 +678,17 @@ export const ScanPage: React.FC = () => {
                                   <span className="italic font-medium">{currentResult.suggestions[0].species}</span>
                                 </Badge>
                               )}
-                              {currentResult.suggestions[0].infraspecies && (
-                                <Badge variant="outline" className="rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 text-xs">
-                                  <FlaskConical className="h-3 w-3 mr-1" />
-                                  <span className="text-amber-500 mr-1">{t('scan.cultivar', { defaultValue: 'Cultivar' })}:</span>
-                                  <span className="font-medium">'{currentResult.suggestions[0].infraspecies}'</span>
-                                </Badge>
-                              )}
+                              {currentResult.suggestions[0].infraspecies && (() => {
+                                const infraInfo = getInfraspeciesInfo(currentResult.suggestions[0].infraspecies)
+                                if (!infraInfo) return null
+                                return (
+                                  <Badge variant="outline" className="rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 text-xs">
+                                    <FlaskConical className="h-3 w-3 mr-1" />
+                                    <span className="text-amber-500 mr-1">{t(`scan.${infraInfo.label.toLowerCase()}`, { defaultValue: infraInfo.label })}:</span>
+                                    <span className="font-medium">{infraInfo.value}</span>
+                                  </Badge>
+                                )
+                              })()}
                             </div>
                           )}
                           
@@ -744,14 +787,18 @@ export const ScanPage: React.FC = () => {
                             {suggestion.name}
                           </span>
                           {/* Show infraspecies/cultivar if available */}
-                          {suggestion.infraspecies && (
-                            <div className="flex items-center gap-1 mt-1">
-                              <Badge variant="outline" className="rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
-                                <FlaskConical className="h-2.5 w-2.5 mr-1" />
-                                '{suggestion.infraspecies}'
-                              </Badge>
-                            </div>
-                          )}
+                          {suggestion.infraspecies && (() => {
+                            const infraInfo = getInfraspeciesInfo(suggestion.infraspecies)
+                            if (!infraInfo) return null
+                            return (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Badge variant="outline" className="rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                                  <FlaskConical className="h-2.5 w-2.5 mr-1" />
+                                  {infraInfo.value}
+                                </Badge>
+                              </div>
+                            )
+                          })()}
                           {/* Show common names if available */}
                           {suggestion.commonNames && suggestion.commonNames.length > 0 && (
                             <p className="text-xs text-stone-400 mt-0.5 truncate">
