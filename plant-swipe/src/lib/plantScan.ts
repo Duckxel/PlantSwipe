@@ -311,6 +311,7 @@ export async function createPlantScan(
   options?: {
     latitude?: number
     longitude?: number
+    classificationLevel?: ClassificationLevel
   }
 ): Promise<PlantScan> {
   const session = (await supabase.auth.getSession()).data.session
@@ -347,7 +348,8 @@ export async function createPlantScan(
       similar_images: topMatch?.similarImages || [],
       latitude: options?.latitude,
       longitude: options?.longitude,
-      matched_plant_id: matchedPlantId
+      matched_plant_id: matchedPlantId,
+      classification_level: options?.classificationLevel || 'all'
     })
     .select(`
       *,
@@ -587,6 +589,7 @@ function transformDbRow(row: any): PlantScan {
     apiModelVersion: row.api_model_version,
     apiStatus: row.api_status as ScanStatus,
     apiResponse: row.api_response,
+    classificationLevel: row.classification_level as ClassificationLevel,
     isPlant: row.is_plant,
     isPlantProbability: row.is_plant_probability,
     topMatchName: row.top_match_name,

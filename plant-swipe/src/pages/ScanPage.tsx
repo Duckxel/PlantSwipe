@@ -177,11 +177,12 @@ export const ScanPage: React.FC = () => {
         return
       }
       
-      // Save to database
+      // Save to database with classification level for reference
       const scan = await createPlantScan(
         result.upload.url, 
         result.upload.path, 
-        result.identification
+        result.identification,
+        { classificationLevel: 'all' }
       )
       
       setCurrentResult(scan)
