@@ -22947,7 +22947,14 @@ async function generateCrawlerHtml(req, pagePath) {
         if (posts?.length) {
           // Use the most recent post's cover image
           const latestWithImage = posts.find(p => p.cover_image_url)
-          if (latestWithImage) image = ensureAbsoluteUrl(latestWithImage.cover_image_url) || image
+          if (latestWithImage) {
+            image = ensureAbsoluteUrl(latestWithImage.cover_image_url) || image
+            imageWidth = 1200
+            imageHeight = 630
+            imageAlt = `${tr.blogTitle} - ${latestWithImage.title}`
+          } else {
+            imageAlt = `${tr.blogTitle} - Aphylia`
+          }
 
           pageContent = `
             <article>
