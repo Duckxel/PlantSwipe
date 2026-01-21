@@ -55,11 +55,17 @@ import {
 } from "lucide-react"
 
 // Icon mapping for dynamic rendering
+// Using explicit key-value pairs to satisfy TypeScript's noUnusedLocals
 const iconMap: Record<string, React.ElementType> = {
-  Leaf, Droplets, Sun, Bell, BookMarked, Camera, NotebookPen, Wifi, Users, Check,
-  Clock, TrendingUp, Shield, Heart, Globe, Zap, MessageCircle, Flower2,
-  TreeDeciduous, Sprout, Star, Sparkles, Palette, Share2, Calendar, Target, Award, Lightbulb,
-  Instagram, Twitter, Mail, GraduationCap, HandHeart, BarChart3, Search, Flame, CheckCircle2, CircleDot, PawPrint,
+  Leaf: Leaf, Droplets: Droplets, Sun: Sun, Bell: Bell, BookMarked: BookMarked, 
+  Camera: Camera, NotebookPen: NotebookPen, Wifi: Wifi, Users: Users, Check: Check,
+  Clock: Clock, TrendingUp: TrendingUp, Shield: Shield, Heart: Heart, Globe: Globe, 
+  Zap: Zap, MessageCircle: MessageCircle, Flower2: Flower2, TreeDeciduous: TreeDeciduous, 
+  Sprout: Sprout, Star: Star, Sparkles: Sparkles, Palette: Palette, Share2: Share2, 
+  Calendar: Calendar, Target: Target, Award: Award, Lightbulb: Lightbulb, Instagram: Instagram, 
+  Twitter: Twitter, Mail: Mail, GraduationCap: GraduationCap, HandHeart: HandHeart, 
+  BarChart3: BarChart3, Search: Search, Flame: Flame, CheckCircle2: CheckCircle2, 
+  CircleDot: CircleDot, PawPrint: PawPrint,
 }
 
 // Types for database data
