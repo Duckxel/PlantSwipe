@@ -45,16 +45,12 @@ import {
   Search,
   X,
   ArrowRight,
-  Share2,
   Download,
   Shuffle,
   ExternalLink,
   Copy,
   Monitor,
   Settings,
-  Instagram,
-  Twitter,
-  Mail,
   Layers,
   Megaphone,
   GraduationCap,
@@ -934,7 +930,7 @@ const GlobalSettingsTab: React.FC<{
   settingsError?: string | null
 }> = ({ settings, setSettings, saving, setSaving, settingsError }) => {
   const [localSettings, setLocalSettings] = React.useState<LandingPageSettings | null>(settings)
-  const [activeSection, setActiveSection] = React.useState<"visibility" | "social">("visibility")
+  const [activeSection, setActiveSection] = React.useState<"visibility">("visibility")
 
   React.useEffect(() => {
     setLocalSettings(settings)
@@ -998,7 +994,6 @@ const GlobalSettingsTab: React.FC<{
 
   const sectionTabs = [
     { id: "visibility" as const, label: "Section Visibility", icon: Layers, description: "Control which sections appear" },
-    { id: "social" as const, label: "Social & Contact", icon: Share2, description: "Social media links and contact" },
   ]
 
   const visibilityItems = [
@@ -1143,66 +1138,6 @@ const GlobalSettingsTab: React.FC<{
                   <EyeOff className="h-4 w-4 mr-2" />
                   Hide All
                 </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Social & Contact Settings */}
-          {activeSection === "social" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <Share2 className="h-4 w-4 text-emerald-500" />
-                  Social Media & Contact
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">Links displayed in the footer and contact sections</p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-stone-700">
-                  <div className="h-10 w-10 rounded-xl bg-pink-500/10 flex items-center justify-center">
-                    <Instagram className="h-5 w-5 text-pink-500" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-sm font-medium">Instagram URL</Label>
-                    <Input
-                      value={localSettings.instagram_url}
-                      onChange={(e) => updateSetting("instagram_url", e.target.value)}
-                      placeholder="https://instagram.com/your_handle"
-                      className="rounded-xl mt-1"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-stone-700">
-                  <div className="h-10 w-10 rounded-xl bg-sky-500/10 flex items-center justify-center">
-                    <Twitter className="h-5 w-5 text-sky-500" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-sm font-medium">Twitter/X URL</Label>
-                    <Input
-                      value={localSettings.twitter_url}
-                      onChange={(e) => updateSetting("twitter_url", e.target.value)}
-                      placeholder="https://twitter.com/your_handle"
-                      className="rounded-xl mt-1"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-stone-700">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                    <Mail className="h-5 w-5 text-emerald-500" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-sm font-medium">Support Email</Label>
-                    <Input
-                      value={localSettings.support_email}
-                      onChange={(e) => updateSetting("support_email", e.target.value)}
-                      placeholder="hello@example.com"
-                      className="rounded-xl mt-1"
-                    />
-                  </div>
-                </div>
               </div>
             </div>
           )}
