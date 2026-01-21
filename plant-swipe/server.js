@@ -13449,12 +13449,13 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
       const longitude = req.body?.longitude ? parseFloat(req.body.longitude) : undefined
       
       // Parse optional classification_level from form data
-      // Options: 'species' (default), 'all' (includes cultivars/varieties), 'genus' (genus only)
-      const classificationLevel = req.body?.classification_level || 'species'
+      // Options: 'all' (default - includes cultivars/varieties), 'species', 'genus' (genus only)
+      // Default to 'all' for maximum detail including cultivars and varieties
+      const classificationLevel = req.body?.classification_level || 'all'
       const validClassificationLevels = ['species', 'all', 'genus']
       const sanitizedClassificationLevel = validClassificationLevels.includes(classificationLevel) 
         ? classificationLevel 
-        : 'species'
+        : 'all'
 
       let optimizedBuffer
       let finalMimeType = 'image/webp'

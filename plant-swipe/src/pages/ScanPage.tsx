@@ -29,16 +29,8 @@ import {
   History,
   Image as ImageIcon,
   Search,
-  FlaskConical,
-  Info
+  FlaskConical
 } from 'lucide-react'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
 import { 
@@ -49,7 +41,7 @@ import {
   formatProbability,
   getConfidenceLevel
 } from '@/lib/plantScan'
-import type { PlantScan, ClassificationLevel } from '@/types/scan'
+import type { PlantScan } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 
 export const ScanPage: React.FC = () => {
@@ -77,9 +69,6 @@ export const ScanPage: React.FC = () => {
   const [identifyError, setIdentifyError] = React.useState<string | null>(null)
   const [currentResult, setCurrentResult] = React.useState<PlantScan | null>(null)
   const [showResultDialog, setShowResultDialog] = React.useState(false)
-  
-  // Classification level state - 'all' enables cultivar/variety identification
-  const [classificationLevel, setClassificationLevel] = React.useState<ClassificationLevel>('all')
   
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null)
@@ -140,9 +129,9 @@ export const ScanPage: React.FC = () => {
     try {
       // Combined upload + identify in a single request
       // Uses same optimization as Admin/Garden Cover/Messages uploads
-      // Pass classification_level for deeper identification including cultivars
+      // Always use 'all' classification_level for maximum detail including cultivars
       const result = await uploadAndIdentifyPlant(file, {
-        classificationLevel
+        classificationLevel: 'all'
       })
       
       // Check if it's a plant
@@ -300,50 +289,9 @@ export const ScanPage: React.FC = () => {
             <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">
               {t('scan.newScanTitle', { defaultValue: 'Identify a Plant' })}
             </h3>
-            <p className="text-sm text-stone-500 dark:text-stone-400 text-center max-w-xs mb-4">
+            <p className="text-sm text-stone-500 dark:text-stone-400 text-center max-w-xs mb-6">
               {t('scan.newScanHint', { defaultValue: 'Take a clear photo of a leaf, flower, or the whole plant for best results.' })}
             </p>
-            
-            {/* Classification Level Selector */}
-            <div className="flex flex-col items-center gap-2 mb-6 w-full max-w-xs">
-              <Select
-                value={classificationLevel}
-                onValueChange={(value: ClassificationLevel) => setClassificationLevel(value)}
-              >
-                <SelectTrigger className="rounded-full bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 w-full">
-                  <div className="flex items-center gap-2">
-                    <FlaskConical className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    <SelectValue placeholder={t('scan.classificationLevel', { defaultValue: 'Detail Level' })} />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">{t('scan.levelAll', { defaultValue: 'Full Detail (Cultivars)' })}</span>
-                      <span className="text-xs text-stone-500">{t('scan.levelAllDesc', { defaultValue: "e.g., Philodendron 'Brasil'" })}</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="species">
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">{t('scan.levelSpecies', { defaultValue: 'Species Level' })}</span>
-                      <span className="text-xs text-stone-500">{t('scan.levelSpeciesDesc', { defaultValue: 'e.g., Philodendron hederaceum' })}</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="genus">
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">{t('scan.levelGenus', { defaultValue: 'Genus Only' })}</span>
-                      <span className="text-xs text-stone-500">{t('scan.levelGenusDesc', { defaultValue: 'e.g., Philodendron' })}</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-stone-400 dark:text-stone-500 text-center flex items-center gap-1">
-                <Info className="h-3 w-3" />
-                {t('scan.classificationHintShort', { 
-                  defaultValue: 'Full Detail identifies cultivars like \'Brasil\' or \'Pink Princess\'' 
-                })}
-              </p>
-            </div>
             
             <div className="flex gap-3">
               <Button 
