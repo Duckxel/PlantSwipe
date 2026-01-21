@@ -416,31 +416,51 @@ export default function PlantSwipe() {
   }, [])
 
   // Create O(1) lookups for color matching to avoid O(N) iteration in filter logic
-  const colorLookups = useMemo(() => {
-    const nameMap = new Map<string, ColorOption>()
+  // "expansionMap" flattens the dependency graph: Key = color name, Value = Set of all matching colors (itself + children)
+  // This pre-calculates all string normalizations, removing that cost from the filter loop
+  const { expansionMap, nameMap } = useMemo(() => {
+    const nMap = new Map<string, ColorOption>()
     const childrenMap = new Map<string, ColorOption[]>()
 
+    // First pass: Index colors and group children by parent ID
     colorOptions.forEach(c => {
-      nameMap.set(c.name.toLowerCase(), c)
+      nMap.set(c.name.toLowerCase(), c)
       c.parentIds.forEach(pid => {
         if (!childrenMap.has(pid)) childrenMap.set(pid, [])
         childrenMap.get(pid)!.push(c)
       })
     })
-    return { nameMap, childrenMap }
+
+    // Second pass: Build the flattened expansion map
+    const eMap = new Map<string, Set<string>>()
+    colorOptions.forEach(c => {
+      const normalizedName = c.name.toLowerCase()
+      const expansion = new Set<string>()
+      expansion.add(normalizedName)
+
+      if (c.isPrimary) {
+        const children = childrenMap.get(c.id)
+        if (children) {
+          children.forEach(child => expansion.add(child.name.toLowerCase()))
+        }
+      }
+      eMap.set(normalizedName, expansion)
+    })
+
+    return { expansionMap: eMap, nameMap: nMap }
   }, [colorOptions])
 
   React.useEffect(() => {
     if (colorFilter.length === 0) return
     // Open advanced colors section if any selected color is not primary
     const hasAdvancedColor = colorFilter.some((colorName) => {
-      const color = colorLookups.nameMap.get(colorName.toLowerCase())
+      const color = nameMap.get(colorName.toLowerCase())
       return color && !color.isPrimary
     })
     if (hasAdvancedColor) {
       setAdvancedColorsOpen(true)
     }
-  }, [colorFilter, colorLookups])
+  }, [colorFilter, nameMap])
 
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
@@ -708,24 +728,21 @@ export default function PlantSwipe() {
     if (normalizedColorFilters.length === 0) return null
     
     const expandedSet = new Set<string>()
-    const { nameMap, childrenMap } = colorLookups
     
     normalizedColorFilters.forEach((filterColorName) => {
-      expandedSet.add(filterColorName)
-      
-      // Look up color in map - O(1) instead of O(N) search
-      const filterColor = nameMap.get(filterColorName)
-      if (filterColor?.isPrimary) {
-        // Look up children in map - O(1) instead of O(N) filter
-        const children = childrenMap.get(filterColor.id)
-        if (children) {
-          children.forEach(c => expandedSet.add(c.name.toLowerCase()))
-        }
+      // Use the pre-calculated expansion map - O(1) lookup
+      const expansion = expansionMap.get(filterColorName)
+      if (expansion) {
+        // Fast set union
+        expansion.forEach(c => expandedSet.add(c))
+      } else {
+        // Fallback for unknown colors (shouldn't happen with correct data)
+        expandedSet.add(filterColorName)
       }
     })
     
     return expandedSet
-  }, [colorFilter, colorLookups])
+  }, [colorFilter, expansionMap])
 
   // Pre-normalize filter values to avoid repeated lowercasing during filtering
   const normalizedFilters = useMemo(() => ({
