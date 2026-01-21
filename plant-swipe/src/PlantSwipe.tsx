@@ -36,6 +36,11 @@ import { useTranslation } from "react-i18next";
 
 import { SwipePage } from "@/pages/SwipePage"
 
+// ⚡ Performance: Hoisted regex constants to avoid allocation on every function call
+const RE_SPLIT_COLOR = /[-_/]+/g
+const RE_WHITESPACE = /\s+/
+const RE_CLEAN_TOXICITY = /[\s-]/g
+
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })))
 const AdminEmailTemplatePageLazy = lazy(() => import("@/pages/AdminEmailTemplatePage").then(module => ({ default: module.AdminEmailTemplatePage })))
@@ -92,6 +97,7 @@ type PreparedPlant = Plant & {
   _createdAtTs: number             // Pre-parsed timestamp for sorting
   _popularityLikes: number         // Pre-extracted popularity for sorting
   _hasImage: boolean               // Pre-computed image availability
+  _isInProgress: boolean           // Pre-computed status check
 }
 
 type ExtendedWindow = Window & {
@@ -662,7 +668,7 @@ export default function PlantSwipe() {
       normalizedColors.forEach(color => {
         colorTokens.add(color)
         // Split compound colors and add individual tokens
-        const tokens = color.replace(/[-_/]+/g, ' ').split(/\s+/).filter(Boolean)
+        const tokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
         tokens.forEach(token => {
           colorTokens.add(token)
           
@@ -700,8 +706,8 @@ export default function PlantSwipe() {
       const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
 
       // Toxicity
-      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(RE_CLEAN_TOXICITY, '') === 'nontoxic'
+      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(RE_CLEAN_TOXICITY, '') === 'nontoxic'
 
       // Living space
       const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
@@ -723,6 +729,10 @@ export default function PlantSwipe() {
       const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
       const hasImage = hasLegacyImage || hasImagesArray
 
+      // Status for sorting
+      const status = p.meta?.status?.toLowerCase()
+      const isInProgress = status === 'in progres' || status === 'in progress'
+
       return {
         ...p,
         _searchString: searchString,
@@ -740,7 +750,8 @@ export default function PlantSwipe() {
         _seasonsSet: seasonsSet,
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
-        _hasImage: hasImage
+        _hasImage: hasImage,
+        _isInProgress: isInProgress
       } as PreparedPlant
     })
   }, [plants, colorLookups])
@@ -961,18 +972,12 @@ export default function PlantSwipe() {
   }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
-    // Helper to check if a plant is "in progress"
-    const isPlantInProgress = (p: Plant) => {
-      const status = p.meta?.status?.toLowerCase()
-      return status === 'in progres' || status === 'in progress'
-    }
-
     // For default sort, push "in progress" plants to the bottom
     if (searchSort === "default") {
       const arr = filtered.slice() as PreparedPlant[]
       arr.sort((a, b) => {
-        const aInProgress = isPlantInProgress(a) ? 1 : 0
-        const bInProgress = isPlantInProgress(b) ? 1 : 0
+        const aInProgress = a._isInProgress ? 1 : 0
+        const bInProgress = b._isInProgress ? 1 : 0
         if (aInProgress !== bInProgress) return aInProgress - bInProgress
         // Maintain original order for same status
         return 0
