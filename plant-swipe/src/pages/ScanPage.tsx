@@ -629,13 +629,15 @@ export const ScanPage: React.FC = () => {
                         {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
                       </Button>
                     ) : (
-                      /* Subtle request plant option when NOT in database */
-                      <button 
+                      /* Subtle request plant button when NOT in database */
+                      <Button 
                         onClick={() => handleRequestPlant(currentResult.topMatchName!)}
-                        className="w-full text-center text-xs text-stone-400 dark:text-stone-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors py-2"
+                        variant="ghost"
+                        className="w-full rounded-full text-stone-500 dark:text-stone-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 gap-2"
                       >
+                        <Plus className="h-4 w-4" />
                         {t('scan.notInDatabaseRequest', { defaultValue: "Not in our database? Request it" })}
-                      </button>
+                      </Button>
                     )}
                     
                     {/* Search in encyclopedia */}
