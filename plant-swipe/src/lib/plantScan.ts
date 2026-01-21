@@ -200,70 +200,105 @@ function transformApiResponse(apiResponse: KindwiseApiResponse): {
 /**
  * Try to find a matching plant in our database
  * Uses multiple search strategies for best matching
+ * All strategies are executed before returning - Request Plant should only appear after this completes
  */
 async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Promise<string | undefined> {
-  if (!topMatch?.name) return undefined
+  if (!topMatch?.name) {
+    console.log('[plantScan] No plant name to match')
+    return undefined
+  }
   
-  // Strategy 1: Exact name match (case-insensitive)
-  const { data: exactMatch } = await supabase
-    .from('plants')
-    .select('id')
-    .or(`name.ilike.${topMatch.name},scientific_name.ilike.${topMatch.name}`)
-    .limit(1)
-    .single()
+  console.log('[plantScan] Starting database match for:', topMatch.name)
+  console.log('[plantScan] Taxonomy info - Genus:', topMatch.genus, 'Species:', topMatch.species, 'Infraspecies:', topMatch.infraspecies)
   
-  if (exactMatch) return exactMatch.id
-  
-  // Strategy 2: Build scientific name from genus + species and search
-  if (topMatch.genus && topMatch.species) {
-    const scientificName = `${topMatch.genus} ${topMatch.species}`
-    const { data: scientificMatch } = await supabase
+  try {
+    // Strategy 1: Exact name match (case-insensitive)
+    const { data: exactMatch, error: exactError } = await supabase
       .from('plants')
-      .select('id')
-      .or(`scientific_name.ilike.${scientificName},scientific_name.ilike.${scientificName}%`)
+      .select('id, name, scientific_name')
+      .or(`name.ilike.${topMatch.name},scientific_name.ilike.${topMatch.name}`)
       .limit(1)
       .single()
     
-    if (scientificMatch) return scientificMatch.id
-  }
-  
-  // Strategy 3: Partial name match (contains)
-  const { data: partialMatch } = await supabase
-    .from('plants')
-    .select('id')
-    .or(`name.ilike.%${topMatch.name}%,scientific_name.ilike.%${topMatch.name}%`)
-    .limit(1)
-    .single()
-  
-  if (partialMatch) return partialMatch.id
-  
-  // Strategy 4: Search by genus only if we have it
-  if (topMatch.genus) {
-    const { data: genusMatch } = await supabase
-      .from('plants')
-      .select('id')
-      .or(`scientific_name.ilike.${topMatch.genus}%,name.ilike.%${topMatch.genus}%`)
-      .limit(1)
-      .single()
+    if (exactMatch && !exactError) {
+      console.log('[plantScan] ✓ Strategy 1 (exact match) found:', exactMatch.name)
+      return exactMatch.id
+    }
     
-    if (genusMatch) return genusMatch.id
-  }
-  
-  // Strategy 5: Search by common names if available
-  if (topMatch.commonNames && topMatch.commonNames.length > 0) {
-    for (const commonName of topMatch.commonNames.slice(0, 3)) {
-      const { data: commonNameMatch } = await supabase
+    // Strategy 2: Build scientific name from genus + species and search
+    if (topMatch.genus && topMatch.species) {
+      const scientificName = `${topMatch.genus} ${topMatch.species}`
+      console.log('[plantScan] Trying Strategy 2 with scientific name:', scientificName)
+      
+      const { data: scientificMatch, error: sciError } = await supabase
         .from('plants')
-        .select('id')
-        .or(`name.ilike.%${commonName}%,scientific_name.ilike.%${commonName}%`)
+        .select('id, name, scientific_name')
+        .or(`scientific_name.ilike.${scientificName},scientific_name.ilike.${scientificName}%`)
         .limit(1)
         .single()
       
-      if (commonNameMatch) return commonNameMatch.id
+      if (scientificMatch && !sciError) {
+        console.log('[plantScan] ✓ Strategy 2 (scientific name) found:', scientificMatch.name)
+        return scientificMatch.id
+      }
     }
+    
+    // Strategy 3: Partial name match (contains)
+    const { data: partialMatch, error: partialError } = await supabase
+      .from('plants')
+      .select('id, name, scientific_name')
+      .or(`name.ilike.%${topMatch.name}%,scientific_name.ilike.%${topMatch.name}%`)
+      .limit(1)
+      .single()
+    
+    if (partialMatch && !partialError) {
+      console.log('[plantScan] ✓ Strategy 3 (partial match) found:', partialMatch.name)
+      return partialMatch.id
+    }
+    
+    // Strategy 4: Search by genus only if we have it
+    if (topMatch.genus) {
+      console.log('[plantScan] Trying Strategy 4 with genus:', topMatch.genus)
+      
+      const { data: genusMatch, error: genusError } = await supabase
+        .from('plants')
+        .select('id, name, scientific_name')
+        .or(`scientific_name.ilike.${topMatch.genus}%,name.ilike.%${topMatch.genus}%`)
+        .limit(1)
+        .single()
+      
+      if (genusMatch && !genusError) {
+        console.log('[plantScan] ✓ Strategy 4 (genus match) found:', genusMatch.name)
+        return genusMatch.id
+      }
+    }
+    
+    // Strategy 5: Search by common names if available
+    if (topMatch.commonNames && topMatch.commonNames.length > 0) {
+      console.log('[plantScan] Trying Strategy 5 with common names:', topMatch.commonNames.slice(0, 3))
+      
+      for (const commonName of topMatch.commonNames.slice(0, 3)) {
+        const { data: commonNameMatch, error: commonError } = await supabase
+          .from('plants')
+          .select('id, name, scientific_name')
+          .or(`name.ilike.%${commonName}%,scientific_name.ilike.%${commonName}%`)
+          .limit(1)
+          .single()
+        
+        if (commonNameMatch && !commonError) {
+          console.log('[plantScan] ✓ Strategy 5 (common name) found:', commonNameMatch.name, 'via', commonName)
+          return commonNameMatch.id
+        }
+      }
+    }
+    
+    console.log('[plantScan] ✗ No match found after all 5 strategies')
+    return undefined
+    
+  } catch (err) {
+    console.error('[plantScan] Error during database matching:', err)
+    return undefined
   }
-  
-  return undefined
 }
 
 /**
@@ -288,6 +323,9 @@ export async function createPlantScan(
   // Try to match with our database using multiple strategies
   const matchedPlantId = await findMatchingPlant(topMatch)
   
+  // Log the matching result for debugging
+  console.log('[plantScan] Database match result:', matchedPlantId ? `Found plant ID: ${matchedPlantId}` : 'No match found')
+  
   const { data, error } = await supabase
     .from('plant_scans')
     .insert({
@@ -311,7 +349,10 @@ export async function createPlantScan(
       longitude: options?.longitude,
       matched_plant_id: matchedPlantId
     })
-    .select()
+    .select(`
+      *,
+      matched_plant:plants(id, name, scientific_name)
+    `)
     .single()
   
   if (error) {

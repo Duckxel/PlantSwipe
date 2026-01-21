@@ -641,14 +641,19 @@ export const ScanPage: React.FC = () => {
                         {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
                       </Button>
                     ) : (
-                      /* Request Plant button when NOT in database */
-                      <Button 
-                        onClick={() => handleRequestPlant(currentResult.topMatchName!)}
-                        className="w-full rounded-full bg-amber-500 hover:bg-amber-600 text-white gap-2"
-                      >
-                        <Plus className="h-4 w-4" />
-                        {t('scan.requestPlant', { defaultValue: 'Request This Plant' })}
-                      </Button>
+                      /* Request Plant button when NOT in database - only shown after all matching strategies completed */
+                      <div className="space-y-2">
+                        <p className="text-xs text-center text-stone-500 dark:text-stone-400">
+                          {t('scan.notInDatabaseYet', { defaultValue: 'This plant is not in our database yet' })}
+                        </p>
+                        <Button 
+                          onClick={() => handleRequestPlant(currentResult.topMatchName!)}
+                          className="w-full rounded-full bg-amber-500 hover:bg-amber-600 text-white gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          {t('scan.requestPlant', { defaultValue: 'Request This Plant' })}
+                        </Button>
+                      </div>
                     )}
                     
                     {/* Search in encyclopedia */}
