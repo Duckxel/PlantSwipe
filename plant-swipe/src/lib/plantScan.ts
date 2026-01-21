@@ -198,6 +198,75 @@ function transformApiResponse(apiResponse: KindwiseApiResponse): {
 }
 
 /**
+ * Try to find a matching plant in our database
+ * Uses multiple search strategies for best matching
+ */
+async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Promise<string | undefined> {
+  if (!topMatch?.name) return undefined
+  
+  // Strategy 1: Exact name match (case-insensitive)
+  const { data: exactMatch } = await supabase
+    .from('plants')
+    .select('id')
+    .or(`name.ilike.${topMatch.name},scientific_name.ilike.${topMatch.name}`)
+    .limit(1)
+    .single()
+  
+  if (exactMatch) return exactMatch.id
+  
+  // Strategy 2: Build scientific name from genus + species and search
+  if (topMatch.genus && topMatch.species) {
+    const scientificName = `${topMatch.genus} ${topMatch.species}`
+    const { data: scientificMatch } = await supabase
+      .from('plants')
+      .select('id')
+      .or(`scientific_name.ilike.${scientificName},scientific_name.ilike.${scientificName}%`)
+      .limit(1)
+      .single()
+    
+    if (scientificMatch) return scientificMatch.id
+  }
+  
+  // Strategy 3: Partial name match (contains)
+  const { data: partialMatch } = await supabase
+    .from('plants')
+    .select('id')
+    .or(`name.ilike.%${topMatch.name}%,scientific_name.ilike.%${topMatch.name}%`)
+    .limit(1)
+    .single()
+  
+  if (partialMatch) return partialMatch.id
+  
+  // Strategy 4: Search by genus only if we have it
+  if (topMatch.genus) {
+    const { data: genusMatch } = await supabase
+      .from('plants')
+      .select('id')
+      .or(`scientific_name.ilike.${topMatch.genus}%,name.ilike.%${topMatch.genus}%`)
+      .limit(1)
+      .single()
+    
+    if (genusMatch) return genusMatch.id
+  }
+  
+  // Strategy 5: Search by common names if available
+  if (topMatch.commonNames && topMatch.commonNames.length > 0) {
+    for (const commonName of topMatch.commonNames.slice(0, 3)) {
+      const { data: commonNameMatch } = await supabase
+        .from('plants')
+        .select('id')
+        .or(`name.ilike.%${commonName}%,scientific_name.ilike.%${commonName}%`)
+        .limit(1)
+        .single()
+      
+      if (commonNameMatch) return commonNameMatch.id
+    }
+  }
+  
+  return undefined
+}
+
+/**
  * Create a new plant scan record
  */
 export async function createPlantScan(
@@ -216,20 +285,8 @@ export async function createPlantScan(
   
   const { isPlant, isPlantProbability, topMatch, suggestions } = transformApiResponse(apiResponse)
   
-  // Try to match with our database
-  let matchedPlantId: string | undefined
-  if (topMatch?.name) {
-    const { data: matchedPlant } = await supabase
-      .from('plants')
-      .select('id')
-      .or(`name.ilike.%${topMatch.name}%,scientific_name.ilike.%${topMatch.name}%`)
-      .limit(1)
-      .single()
-    
-    if (matchedPlant) {
-      matchedPlantId = matchedPlant.id
-    }
-  }
+  // Try to match with our database using multiple strategies
+  const matchedPlantId = await findMatchingPlant(topMatch)
   
   const { data, error } = await supabase
     .from('plant_scans')

@@ -2876,6 +2876,10 @@
       "species": "Espèce",
       "cultivar": "Cultivar",
       "commonNames": "Aussi connu sous",
+      "synonyms": "Synonymes",
+      "scientificName": "Nom Scientifique",
+      "requestPlant": "Demander Cette Plante",
+      "notInDatabase": "Pas encore dans notre base",
       "errors": {
         "loadFailed": "Impossible de charger vos scans",
         "notAPlant": "Ceci ne semble pas être une plante. Veuillez essayer une autre image.",

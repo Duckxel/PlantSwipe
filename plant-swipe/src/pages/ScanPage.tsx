@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
+import { RequestPlantDialog } from '@/components/plant/RequestPlantDialog'
 import { 
   uploadAndIdentifyPlant, 
   createPlantScan,
@@ -73,6 +74,10 @@ export const ScanPage: React.FC = () => {
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null)
   const [isDeleting, setIsDeleting] = React.useState(false)
+  
+  // Request plant dialog
+  const [showRequestDialog, setShowRequestDialog] = React.useState(false)
+  const [requestPlantName, setRequestPlantName] = React.useState<string>('')
   
   // Load user's scans
   const loadScans = React.useCallback(async () => {
@@ -198,6 +203,37 @@ export const ScanPage: React.FC = () => {
   // Navigate to plant info
   const goToPlantInfo = (plantId: string) => {
     navigate(`/plants/${plantId}`)
+  }
+  
+  // Open request plant dialog with pre-filled name
+  const handleRequestPlant = (plantName: string) => {
+    setRequestPlantName(plantName)
+    setShowRequestDialog(true)
+  }
+  
+  // Build full scientific name from taxonomy parts
+  const buildFullScientificName = (suggestion: PlantScan['suggestions'][0] | undefined) => {
+    if (!suggestion) return null
+    
+    const parts: string[] = []
+    
+    if (suggestion.genus) {
+      parts.push(suggestion.genus)
+    }
+    if (suggestion.species) {
+      parts.push(suggestion.species)
+    }
+    if (suggestion.infraspecies) {
+      // Check if it's a cultivar (usually single-quoted) or variety/subspecies
+      const infraspecies = suggestion.infraspecies
+      if (infraspecies.includes("'") || infraspecies.match(/^[A-Z]/)) {
+        parts.push(`'${infraspecies.replace(/'/g, '')}'`)
+      } else {
+        parts.push(`var. ${infraspecies}`)
+      }
+    }
+    
+    return parts.length > 0 ? parts.join(' ') : null
   }
   
   // Format date
@@ -364,6 +400,8 @@ export const ScanPage: React.FC = () => {
             const confidence = scan.topMatchProbability 
               ? getConfidenceLevel(scan.topMatchProbability)
               : null
+            const topSuggestion = scan.suggestions?.[0]
+            const scientificName = buildFullScientificName(topSuggestion)
             
             return (
               <Card 
@@ -397,6 +435,12 @@ export const ScanPage: React.FC = () => {
                         <h3 className="font-semibold text-stone-900 dark:text-white truncate">
                           {scan.topMatchName || t('scan.unknownPlant', { defaultValue: 'Unknown Plant' })}
                         </h3>
+                        {/* Scientific name if available */}
+                        {scientificName && scientificName !== scan.topMatchName && (
+                          <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                            {scientificName}
+                          </p>
+                        )}
                         {scan.topMatchProbability && confidence && (
                           <div className="flex items-center gap-2 mt-1">
                             <Badge 
@@ -405,23 +449,32 @@ export const ScanPage: React.FC = () => {
                             >
                               {formatProbability(scan.topMatchProbability)}
                             </Badge>
-                            <span className="text-xs text-stone-500 dark:text-stone-400">
-                              {confidence.label}
-                            </span>
                           </div>
                         )}
                       </div>
                       <ChevronRight className="h-5 w-5 text-stone-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                     
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
                       <span className="text-xs text-stone-500 dark:text-stone-400">
                         {formatDate(scan.createdAt)}
                       </span>
-                      {scan.matchedPlant && (
+                      {scan.matchedPlant ? (
                         <Badge className="rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           {t('scan.inDatabase', { defaultValue: 'In Database' })}
+                        </Badge>
+                      ) : scan.topMatchName && (
+                        <Badge 
+                          variant="outline" 
+                          className="rounded-full text-xs text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRequestPlant(scan.topMatchName!)
+                          }}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          {t('scan.requestPlant', { defaultValue: 'Request' })}
                         </Badge>
                       )}
                     </div>
@@ -490,6 +543,8 @@ export const ScanPage: React.FC = () => {
                       <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">
                         {t('scan.topMatch', { defaultValue: 'Best Match' })}
                       </p>
+                      
+                      {/* Main plant name - clickable to search */}
                       <button
                         onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
                         className="text-xl font-bold text-stone-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-left underline decoration-dotted underline-offset-2 cursor-pointer"
@@ -498,29 +553,41 @@ export const ScanPage: React.FC = () => {
                         {currentResult.topMatchName}
                       </button>
                       
-                      {/* Show taxonomy breakdown when available (cultivar/variety info) */}
+                      {/* Full scientific name with taxonomy */}
                       {currentResult.suggestions?.[0] && (
-                        <div className="mt-2 space-y-1">
-                          {/* Display genus, species, and infraspecies separately when available */}
+                        <div className="mt-3 space-y-2">
+                          {/* Full scientific name display */}
+                          {buildFullScientificName(currentResult.suggestions[0]) && (
+                            <div className="p-2 rounded-lg bg-white/60 dark:bg-stone-800/40 border border-emerald-100 dark:border-emerald-900/50">
+                              <p className="text-xs text-stone-500 dark:text-stone-400 mb-0.5">
+                                {t('scan.scientificName', { defaultValue: 'Scientific Name' })}
+                              </p>
+                              <p className="text-sm font-medium italic text-stone-800 dark:text-stone-200">
+                                {buildFullScientificName(currentResult.suggestions[0])}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* Taxonomy breakdown badges */}
                           {(currentResult.suggestions[0].genus || currentResult.suggestions[0].species || currentResult.suggestions[0].infraspecies) && (
-                            <div className="flex flex-wrap gap-1.5 text-xs">
+                            <div className="flex flex-wrap gap-1.5">
                               {currentResult.suggestions[0].genus && (
-                                <Badge variant="outline" className="rounded-full bg-white/50 dark:bg-stone-800/50 text-stone-600 dark:text-stone-300">
+                                <Badge variant="outline" className="rounded-full bg-white/50 dark:bg-stone-800/50 text-stone-600 dark:text-stone-300 text-xs">
                                   <span className="text-stone-400 mr-1">{t('scan.genus', { defaultValue: 'Genus' })}:</span>
-                                  <span className="italic">{currentResult.suggestions[0].genus}</span>
+                                  <span className="italic font-medium">{currentResult.suggestions[0].genus}</span>
                                 </Badge>
                               )}
                               {currentResult.suggestions[0].species && (
-                                <Badge variant="outline" className="rounded-full bg-white/50 dark:bg-stone-800/50 text-stone-600 dark:text-stone-300">
+                                <Badge variant="outline" className="rounded-full bg-white/50 dark:bg-stone-800/50 text-stone-600 dark:text-stone-300 text-xs">
                                   <span className="text-stone-400 mr-1">{t('scan.species', { defaultValue: 'Species' })}:</span>
-                                  <span className="italic">{currentResult.suggestions[0].species}</span>
+                                  <span className="italic font-medium">{currentResult.suggestions[0].species}</span>
                                 </Badge>
                               )}
                               {currentResult.suggestions[0].infraspecies && (
-                                <Badge variant="outline" className="rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                                <Badge variant="outline" className="rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 text-xs">
                                   <FlaskConical className="h-3 w-3 mr-1" />
                                   <span className="text-amber-500 mr-1">{t('scan.cultivar', { defaultValue: 'Cultivar' })}:</span>
-                                  <span>'{currentResult.suggestions[0].infraspecies}'</span>
+                                  <span className="font-medium">'{currentResult.suggestions[0].infraspecies}'</span>
                                 </Badge>
                               )}
                             </div>
@@ -530,9 +597,20 @@ export const ScanPage: React.FC = () => {
                           {currentResult.suggestions[0].commonNames && currentResult.suggestions[0].commonNames.length > 0 && (
                             <div className="text-xs text-stone-500 dark:text-stone-400">
                               <span className="font-medium">{t('scan.commonNames', { defaultValue: 'Also known as' })}:</span>{' '}
-                              {currentResult.suggestions[0].commonNames.slice(0, 3).join(', ')}
-                              {currentResult.suggestions[0].commonNames.length > 3 && (
-                                <span className="text-stone-400"> +{currentResult.suggestions[0].commonNames.length - 3} more</span>
+                              {currentResult.suggestions[0].commonNames.slice(0, 5).join(', ')}
+                              {currentResult.suggestions[0].commonNames.length > 5 && (
+                                <span className="text-stone-400"> +{currentResult.suggestions[0].commonNames.length - 5} more</span>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Synonyms if available */}
+                          {currentResult.suggestions[0].synonyms && currentResult.suggestions[0].synonyms.length > 0 && (
+                            <div className="text-xs text-stone-400 dark:text-stone-500">
+                              <span className="font-medium">{t('scan.synonyms', { defaultValue: 'Synonyms' })}:</span>{' '}
+                              <span className="italic">{currentResult.suggestions[0].synonyms.slice(0, 3).join(', ')}</span>
+                              {currentResult.suggestions[0].synonyms.length > 3 && (
+                                <span> +{currentResult.suggestions[0].synonyms.length - 3} more</span>
                               )}
                             </div>
                           )}
@@ -555,26 +633,38 @@ export const ScanPage: React.FC = () => {
                     )}
                   </div>
                   
-                  {/* Search in encyclopedia */}
-                  <Button 
-                    onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
-                    variant="outline"
-                    className="w-full mt-4 rounded-full gap-2 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
-                  >
-                    <Search className="h-4 w-4" />
-                    {t('scan.searchInEncyclopedia', { defaultValue: 'Search in Encyclopedia' })}
-                  </Button>
-                  
-                  {/* Link to database plant (if exact match found) */}
-                  {currentResult.matchedPlant && (
+                  {/* Action buttons */}
+                  <div className="mt-4 space-y-2">
+                    {/* Link to database plant (if exact match found) */}
+                    {currentResult.matchedPlant ? (
+                      <Button 
+                        onClick={() => goToPlantInfo(currentResult.matchedPlant!.id)}
+                        className="w-full rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
+                      </Button>
+                    ) : (
+                      /* Request Plant button when NOT in database */
+                      <Button 
+                        onClick={() => handleRequestPlant(currentResult.topMatchName!)}
+                        className="w-full rounded-full bg-amber-500 hover:bg-amber-600 text-white gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {t('scan.requestPlant', { defaultValue: 'Request This Plant' })}
+                      </Button>
+                    )}
+                    
+                    {/* Search in encyclopedia */}
                     <Button 
-                      onClick={() => goToPlantInfo(currentResult.matchedPlant!.id)}
-                      className="w-full mt-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                      onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
+                      variant="outline"
+                      className="w-full rounded-full gap-2 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
                     >
-                      <ExternalLink className="h-4 w-4" />
-                      {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
+                      <Search className="h-4 w-4" />
+                      {t('scan.searchInEncyclopedia', { defaultValue: 'Search in Encyclopedia' })}
                     </Button>
-                  )}
+                  </div>
                 </div>
               )}
               
@@ -709,6 +799,13 @@ export const ScanPage: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Request Plant Dialog */}
+      <RequestPlantDialog
+        open={showRequestDialog}
+        onOpenChange={setShowRequestDialog}
+        initialPlantName={requestPlantName}
+      />
     </div>
   )
 }
