@@ -1057,7 +1057,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       setCompanionsLoading(true)
       try {
         // Run all queries in parallel for faster loading
-        const queries: Promise<any>[] = [
+        const queries: PromiseLike<any>[] = [
           supabase
             .from('plants')
             .select('id, name')
