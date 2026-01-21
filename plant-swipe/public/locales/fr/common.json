@@ -2882,6 +2882,7 @@
       "notInDatabase": "Pas encore dans notre base",
       "notInDatabaseYet": "Cette plante n'est pas encore dans notre base de données",
       "notInDatabaseRequest": "Pas dans notre base ? Demandez-la",
+      "loadMore": "Charger Plus",
       "errors": {
         "loadFailed": "Impossible de charger vos scans",
         "notAPlant": "Ceci ne semble pas être une plante. Veuillez essayer une autre image.",

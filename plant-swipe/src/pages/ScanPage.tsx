@@ -28,7 +28,9 @@ import {
   History,
   Image as ImageIcon,
   Search,
-  FlaskConical
+  FlaskConical,
+  X,
+  ZoomIn
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
@@ -56,9 +58,14 @@ export const ScanPage: React.FC = () => {
   
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   
+  // Pagination constants
+  const SCANS_PER_PAGE = 10
+  
   // State
   const [scans, setScans] = React.useState<PlantScan[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+  const [hasMore, setHasMore] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   
   // Scan flow state
@@ -78,13 +85,17 @@ export const ScanPage: React.FC = () => {
   const [showRequestDialog, setShowRequestDialog] = React.useState(false)
   const [requestPlantName, setRequestPlantName] = React.useState<string>('')
   
-  // Load user's scans
+  // Fullscreen image viewer
+  const [fullscreenImage, setFullscreenImage] = React.useState<string | null>(null)
+  
+  // Load user's scans (initial load)
   const loadScans = React.useCallback(async () => {
     if (!user?.id) return
     try {
       setError(null)
-      const data = await getUserScans({ limit: 50 })
+      const data = await getUserScans({ limit: SCANS_PER_PAGE })
       setScans(data)
+      setHasMore(data.length === SCANS_PER_PAGE)
     } catch (e: any) {
       console.error('[scan] Failed to load scans:', e)
       setError(e?.message || t('scan.errors.loadFailed', { defaultValue: 'Failed to load your scans' }))
@@ -92,6 +103,25 @@ export const ScanPage: React.FC = () => {
       setLoading(false)
     }
   }, [user?.id, t])
+  
+  // Load more scans (pagination)
+  const loadMoreScans = async () => {
+    if (!user?.id || loadingMore || !hasMore) return
+    try {
+      setLoadingMore(true)
+      const data = await getUserScans({ 
+        limit: SCANS_PER_PAGE, 
+        offset: scans.length,
+        recheckMatches: false // Don't recheck on load more to speed up
+      })
+      setScans(prev => [...prev, ...data])
+      setHasMore(data.length === SCANS_PER_PAGE)
+    } catch (e: any) {
+      console.error('[scan] Failed to load more scans:', e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
   
   React.useEffect(() => {
     loadScans()
@@ -479,6 +509,30 @@ export const ScanPage: React.FC = () => {
             )
           })}
         </div>
+        
+        {/* Load More Button */}
+        {hasMore && scans.length > 0 && (
+          <div className="flex justify-center mt-6">
+            <Button
+              onClick={loadMoreScans}
+              variant="outline"
+              className="rounded-full gap-2"
+              disabled={loadingMore}
+            >
+              {loadingMore ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('common.loading', { defaultValue: 'Loading...' })}
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  {t('scan.loadMore', { defaultValue: 'Load More' })}
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       )}
       
       {/* Camera Dialog */}
@@ -508,14 +562,20 @@ export const ScanPage: React.FC = () => {
           
           {currentResult && (
             <div className="space-y-6 mt-2">
-              {/* Scanned image */}
+              {/* Scanned image - clickable to view fullscreen */}
               {currentResult.imageUrl && (
-                <div className="relative rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800">
+                <div 
+                  className="relative rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group"
+                  onClick={() => setFullscreenImage(currentResult.imageUrl!)}
+                >
                   <img 
                     src={currentResult.imageUrl}
                     alt="Scanned plant"
                     className="w-full h-48 object-cover"
                   />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                  </div>
                 </div>
               )}
               
@@ -699,23 +759,27 @@ export const ScanPage: React.FC = () => {
                 </div>
               )}
               
-              {/* Similar images */}
+              {/* Similar images - clickable to view fullscreen */}
               {currentResult.suggestions?.[0]?.similarImages && currentResult.suggestions[0].similarImages.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium text-stone-900 dark:text-white mb-3">
                     {t('scan.similarImages', { defaultValue: 'Similar Images' })}
                   </h4>
                   <div className="flex gap-2 overflow-x-auto pb-2">
-                    {currentResult.suggestions[0].similarImages.slice(0, 4).map((img, idx) => (
+                    {currentResult.suggestions[0].similarImages.slice(0, 6).map((img, idx) => (
                       <div 
                         key={img.id || idx}
-                        className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800"
+                        className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group relative"
+                        onClick={() => setFullscreenImage(img.url)}
                       >
                         <img 
                           src={img.urlSmall || img.url}
                           alt={`Similar image ${idx + 1}`}
                           className="w-full h-full object-cover"
                         />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                          <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -791,6 +855,27 @@ export const ScanPage: React.FC = () => {
         onOpenChange={setShowRequestDialog}
         initialPlantName={requestPlantName}
       />
+      
+      {/* Fullscreen Image Viewer */}
+      <Dialog open={!!fullscreenImage} onOpenChange={(open) => !open && setFullscreenImage(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none rounded-2xl overflow-hidden">
+          <button
+            onClick={() => setFullscreenImage(null)}
+            className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          {fullscreenImage && (
+            <div className="flex items-center justify-center w-full h-full min-h-[50vh]">
+              <img 
+                src={fullscreenImage}
+                alt="Fullscreen view"
+                className="max-w-full max-h-[90vh] object-contain"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
