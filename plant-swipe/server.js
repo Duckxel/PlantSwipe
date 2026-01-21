@@ -21751,7 +21751,16 @@ async function generateCrawlerHtml(req, pagePath) {
   // Default meta tags
   let title = 'Aphylia - Discover, Swipe and Manage Plants for Your Garden'
   let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
-  let image = `${siteUrl}/icons/icon-512x512.png`
+  
+  // Banner image ONLY for landing page - other pages should use specific images or no image
+  const LANDING_BANNER_IMAGE = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260-ae7e1e2d-ea1d-4944-be95-84cc4b8a29ed.png'
+  
+  // Image settings - null means no image (don't show logo as fallback)
+  // Only landing page gets the banner, other pages get specific images or nothing
+  let image = null
+  let imageWidth = null
+  let imageHeight = null
+  let imageAlt = 'Aphylia'
   let pageContent = ''
   
   // Track whether the requested resource was found (for proper 404 handling)
@@ -22341,13 +22350,16 @@ async function generateCrawlerHtml(req, pagePath) {
           const discoveryImg = images?.find(img => img.use === 'discovery')
           const anyImg = images?.[0]
 
-          if (primaryImg?.link) {
-            image = ensureAbsoluteUrl(primaryImg.link) || image
-          } else if (discoveryImg?.link) {
-            image = ensureAbsoluteUrl(discoveryImg.link) || image
-          } else if (anyImg?.link) {
-            image = ensureAbsoluteUrl(anyImg.link) || image
+          // Set plant image - don't specify dimensions to avoid squeezing
+          // Let the platform render the image at its natural aspect ratio
+          const selectedImg = primaryImg?.link || discoveryImg?.link || anyImg?.link
+          if (selectedImg) {
+            image = ensureAbsoluteUrl(selectedImg)
+            // Don't set width/height - let the image display at natural dimensions
+            // This prevents squeezing on platforms like Discord/Telegram
+            imageAlt = `${plant.name} - Plant photo`
           }
+          // If no image found, image stays null - no fallback to banner
 
           // Build structured content for the page
           const quickFacts = []
@@ -22473,7 +22485,12 @@ async function generateCrawlerHtml(req, pagePath) {
 
         description = descParts.length > 0 ? descParts.join(' • ') : tr.blogDesc
 
-        if (post.cover_image_url) image = ensureAbsoluteUrl(post.cover_image_url) || image
+        // Blog cover images - don't force dimensions
+        if (post.cover_image_url) {
+          image = ensureAbsoluteUrl(post.cover_image_url)
+          imageAlt = `${post.title} - Aphylia Blog`
+        }
+        // If no cover image, image stays null - no fallback
 
         // Use locale-specific date format
         const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
@@ -22575,7 +22592,12 @@ async function generateCrawlerHtml(req, pagePath) {
         // For private profiles, show limited info
         if (isPrivate) {
           description = `${displayName} ${tr.profileOnAphylia || 'on Aphylia'} 🌱 ${tr.profilePrivateAccount || 'This is a private profile.'}`
-          if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
+          // Use avatar if available, otherwise no image
+          if (profile.avatar_url) {
+            image = ensureAbsoluteUrl(profile.avatar_url)
+            imageAlt = `${displayName} - Profile on Aphylia`
+          }
+          // If no avatar, image stays null - no fallback
 
           pageContent = `
             <article itemscope itemtype="https://schema.org/Person">
@@ -22635,7 +22657,12 @@ async function generateCrawlerHtml(req, pagePath) {
 
           description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
 
-          if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
+          // Use avatar if available, otherwise no image
+          if (profile.avatar_url) {
+            image = ensureAbsoluteUrl(profile.avatar_url)
+            imageAlt = `${displayName} - Garden Profile on Aphylia`
+          }
+          // If no avatar, image stays null - no fallback
 
           pageContent = `
             <article itemscope itemtype="https://schema.org/Person">
@@ -22710,7 +22737,12 @@ async function generateCrawlerHtml(req, pagePath) {
           const gardenEmoji = '🏡'
           title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
           description = `${gardenName} ${tr.gardenOnAphylia || 'on Aphylia'} 🌱 ${tr.gardenPrivate || 'This is a private garden.'}`
-          if (garden.cover_image_url) image = ensureAbsoluteUrl(garden.cover_image_url)
+          // Use garden cover if available, otherwise no image
+          if (garden.cover_image_url) {
+            image = ensureAbsoluteUrl(garden.cover_image_url)
+            imageAlt = `${gardenName} - Garden on Aphylia`
+          }
+          // If no cover, image stays null - no fallback
 
           pageContent = `
             <article itemscope itemtype="https://schema.org/Place">
@@ -22809,7 +22841,12 @@ async function generateCrawlerHtml(req, pagePath) {
             ? descParts.join(' • ')
             : `${tr.gardenExploreThis}. ${tr.gardenDiscover}`
 
-          if (gardenImage) image = gardenImage
+          // Use garden image if found, otherwise no image
+          if (gardenImage) {
+            image = gardenImage
+            imageAlt = `${gardenName} - Garden on Aphylia`
+          }
+          // If no image found, image stays null - no fallback
 
           pageContent = `
             <article itemscope itemtype="https://schema.org/Place">
@@ -22887,9 +22924,13 @@ async function generateCrawlerHtml(req, pagePath) {
         )
 
         if (posts?.length) {
-          // Use the most recent post's cover image
+          // Use the most recent post's cover image if available
           const latestWithImage = posts.find(p => p.cover_image_url)
-          if (latestWithImage) image = ensureAbsoluteUrl(latestWithImage.cover_image_url) || image
+          if (latestWithImage) {
+            image = ensureAbsoluteUrl(latestWithImage.cover_image_url)
+            imageAlt = `${tr.blogTitle} - ${latestWithImage.title}`
+          }
+          // If no image found, image stays null - no fallback
 
           pageContent = `
             <article>
@@ -23152,7 +23193,12 @@ async function generateCrawlerHtml(req, pagePath) {
           description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
         }
 
-        if (listImage) image = listImage
+        // Use plant image if found, otherwise no image
+        if (listImage) {
+          image = listImage
+          imageAlt = `${bookmarkName} - Plant Collection on Aphylia`
+        }
+        // If no image found, image stays null - no fallback
 
         pageContent = `
           <article>
@@ -23168,10 +23214,14 @@ async function generateCrawlerHtml(req, pagePath) {
       }
     }
 
-    // Homepage with dynamic content
+    // Homepage with dynamic content - ONLY page that gets the banner image
     else if (pagePath === '/' || effectivePath.length === 0) {
       title = `🌱 ${tr.homeTitle}`
       description = tr.homeDesc
+      
+      // Landing page is the ONLY page that uses the banner image
+      image = LANDING_BANNER_IMAGE
+      imageAlt = 'Aphylia - Your Personal Plant Companion'
 
       // Try to get some stats (with timeout to avoid blocking)
       let plantCountStat = '5,000+'
@@ -23225,20 +23275,23 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
-  <!-- Open Graph / Facebook -->
+  <!-- Open Graph / Facebook / Discord / Telegram / LinkedIn -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
   <meta property="og:title" content="${escapeHtml(title)}">
   <meta property="og:description" content="${escapeHtml(description)}">
-  <meta property="og:image" content="${escapeHtml(image)}">
+  ${image ? `<meta property="og:image" content="${escapeHtml(image)}">
+  <meta property="og:image:alt" content="${escapeHtml(imageAlt)}">` : '<!-- No image for this page -->'}
   <meta property="og:site_name" content="Aphylia">
+  <meta property="og:locale" content="${detectedLang === 'fr' ? 'fr_FR' : 'en_US'}">
   
   <!-- Twitter -->
-  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">
   <meta name="twitter:url" content="${escapeHtml(canonicalUrl)}">
   <meta name="twitter:title" content="${escapeHtml(title)}">
   <meta name="twitter:description" content="${escapeHtml(description)}">
-  <meta name="twitter:image" content="${escapeHtml(image)}">
+  ${image ? `<meta name="twitter:image" content="${escapeHtml(image)}">
+  <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}">` : ''}
   
   <!-- Theme -->
   <meta name="theme-color" content="#052e16">
