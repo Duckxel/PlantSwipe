@@ -336,10 +336,36 @@ const LandingPage: React.FC = () => {
             console.error("Failed to load demo feature translations:", e)
           }
         }
+
+        // Load Stats translations for current language (if not English)
+        let translatedStats = stats
+        if (currentLang !== 'en' && stats) {
+          try {
+            const { data: statsTranslation } = await supabase
+              .from("landing_stats_translations")
+              .select("*")
+              .eq("stats_id", stats.id)
+              .eq("language", currentLang)
+              .maybeSingle()
+            
+            if (statsTranslation) {
+              // Apply translations to stats labels
+              translatedStats = {
+                ...stats,
+                plants_label: statsTranslation.plants_label || stats.plants_label,
+                users_label: statsTranslation.users_label || stats.users_label,
+                tasks_label: statsTranslation.tasks_label || stats.tasks_label,
+                rating_label: statsTranslation.rating_label || stats.rating_label,
+              }
+            }
+          } catch (e) {
+            console.error("Failed to load stats translations:", e)
+          }
+        }
         
         setLandingData({
           heroCards: heroCards || [],
-          stats: stats || null,
+          stats: translatedStats || null,
           testimonials: testimonials || [],
           faqItems: faqItems || [],
           demoFeatures: demoFeatures || [],

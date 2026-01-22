@@ -162,6 +162,7 @@ do $$ declare
     'landing_page_settings',
     'landing_hero_cards',
     'landing_stats',
+    'landing_stats_translations',
     'landing_testimonials',
     'landing_faq',
     'landing_faq_translations',
@@ -9086,6 +9087,23 @@ create trigger ensure_single_landing_stats_trigger
   before insert on public.landing_stats
   for each row execute function public.ensure_single_landing_stats();
 
+-- Landing Stats Translations: Stores translations for stats labels
+create table if not exists public.landing_stats_translations (
+  id uuid primary key default gen_random_uuid(),
+  stats_id uuid not null references public.landing_stats(id) on delete cascade,
+  language text not null,
+  plants_label text not null,
+  users_label text not null,
+  tasks_label text not null,
+  rating_label text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(stats_id, language)
+);
+
+create index if not exists idx_landing_stats_translations_stats_id on public.landing_stats_translations(stats_id);
+create index if not exists idx_landing_stats_translations_language on public.landing_stats_translations(language);
+
 -- Landing Testimonials: Customer reviews/testimonials
 create table if not exists public.landing_testimonials (
   id uuid primary key default gen_random_uuid(),
@@ -9217,6 +9235,14 @@ drop policy if exists "Landing stats are publicly readable" on public.landing_st
 create policy "Landing stats are publicly readable" on public.landing_stats for select using (true);
 drop policy if exists "Admins can manage landing stats" on public.landing_stats;
 create policy "Admins can manage landing stats" on public.landing_stats for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_stats_translations enable row level security;
+drop policy if exists "Landing stats translations are publicly readable" on public.landing_stats_translations;
+create policy "Landing stats translations are publicly readable" on public.landing_stats_translations for select using (true);
+drop policy if exists "Admins can manage landing stats translations" on public.landing_stats_translations;
+create policy "Admins can manage landing stats translations" on public.landing_stats_translations for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
 

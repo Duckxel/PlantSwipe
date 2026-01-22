@@ -89,6 +89,16 @@ type LandingStats = {
   rating_label: string
 }
 
+type StatsTranslation = {
+  id: string
+  stats_id: string
+  language: string
+  plants_label: string
+  users_label: string
+  tasks_label: string
+  rating_label: string
+}
+
 type Testimonial = {
   id: string
   position: number
@@ -1630,6 +1640,11 @@ const HeroCardsTab: React.FC<{
 // ========================
 // STATS TAB
 // ========================
+const STATS_LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
+  en: "🇬🇧 EN",
+  fr: "🇫🇷 FR",
+}
+
 const StatsTab: React.FC<{
   stats: LandingStats | null
   setStats: React.Dispatch<React.SetStateAction<LandingStats | null>>
@@ -1639,30 +1654,193 @@ const StatsTab: React.FC<{
   sectionVisible: boolean
 }> = ({ stats, setStats, saving, setSaving, showPreview, sectionVisible }) => {
   const [localStats, setLocalStats] = React.useState<LandingStats | null>(stats)
+  const [selectedLang, setSelectedLang] = React.useState<SupportedLanguage>("en")
+  const [translation, setTranslation] = React.useState<StatsTranslation | null>(null)
+  const [localTranslation, setLocalTranslation] = React.useState<Partial<StatsTranslation>>({})
+  const [translating, setTranslating] = React.useState(false)
+  const [loadingTranslation, setLoadingTranslation] = React.useState(false)
 
   React.useEffect(() => {
     setLocalStats(stats)
   }, [stats])
 
-  // Check if there are unsaved changes
-  const hasUnsavedChanges = stats && localStats && JSON.stringify(stats) !== JSON.stringify(localStats)
+  // Load translation for selected language
+  const loadTranslation = React.useCallback(async (lang: SupportedLanguage) => {
+    if (lang === "en" || !stats) {
+      setTranslation(null)
+      setLocalTranslation({})
+      return
+    }
+    
+    setLoadingTranslation(true)
+    try {
+      const { data, error } = await supabase
+        .from("landing_stats_translations")
+        .select("*")
+        .eq("stats_id", stats.id)
+        .eq("language", lang)
+        .maybeSingle()
+      
+      if (data && !error) {
+        setTranslation(data)
+      } else {
+        setTranslation(null)
+      }
+      setLocalTranslation({})
+    } catch (e) {
+      console.error("Failed to load stats translation:", e)
+    } finally {
+      setLoadingTranslation(false)
+    }
+  }, [stats])
 
+  // Load translation when language changes
+  React.useEffect(() => {
+    loadTranslation(selectedLang)
+  }, [selectedLang, loadTranslation])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = selectedLang === "en"
+    ? stats && localStats && JSON.stringify(stats) !== JSON.stringify(localStats)
+    : Object.keys(localTranslation).length > 0
+
+  // Get display label for a stat based on selected language
+  const getDisplayLabel = (labelKey: "plants_label" | "users_label" | "tasks_label" | "rating_label") => {
+    if (selectedLang === "en") {
+      return localStats?.[labelKey] || ""
+    }
+    return localTranslation[labelKey] ?? translation?.[labelKey] ?? localStats?.[labelKey] ?? ""
+  }
+
+  // Update label value
+  const updateLabel = (labelKey: "plants_label" | "users_label" | "tasks_label" | "rating_label", value: string) => {
+    if (selectedLang === "en") {
+      if (localStats) {
+        setLocalStats({ ...localStats, [labelKey]: value })
+      }
+    } else {
+      setLocalTranslation(prev => ({ ...prev, [labelKey]: value }))
+    }
+  }
+
+  // Save changes
   const saveStats = async () => {
     if (!localStats) return
     setSaving(true)
 
-    const { error } = await supabase
-      .from("landing_stats")
-      .update({
-        ...localStats,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", localStats.id)
+    try {
+      if (selectedLang === "en") {
+        // Save base English content
+        const { error } = await supabase
+          .from("landing_stats")
+          .update({
+            ...localStats,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", localStats.id)
 
-    if (!error) {
-      setStats(localStats)
+        if (!error) {
+          setStats(localStats)
+        }
+      } else {
+        // Save translation
+        const translationData = {
+          stats_id: localStats.id,
+          language: selectedLang,
+          plants_label: localTranslation.plants_label ?? translation?.plants_label ?? localStats.plants_label,
+          users_label: localTranslation.users_label ?? translation?.users_label ?? localStats.users_label,
+          tasks_label: localTranslation.tasks_label ?? translation?.tasks_label ?? localStats.tasks_label,
+          rating_label: localTranslation.rating_label ?? translation?.rating_label ?? localStats.rating_label,
+          updated_at: new Date().toISOString(),
+        }
+
+        if (translation) {
+          // Update existing translation
+          await supabase
+            .from("landing_stats_translations")
+            .update(translationData)
+            .eq("id", translation.id)
+          
+          setTranslation({ ...translation, ...translationData })
+        } else {
+          // Insert new translation
+          const { data, error } = await supabase
+            .from("landing_stats_translations")
+            .insert(translationData)
+            .select()
+            .single()
+          
+          if (data && !error) {
+            setTranslation(data)
+          }
+        }
+        setLocalTranslation({})
+      }
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
+  }
+
+  // Translate all labels using DeepL
+  const translateAllLabels = async () => {
+    if (selectedLang === "en" || !localStats) return
+    
+    setTranslating(true)
+    setSaving(true)
+    
+    try {
+      const [plantsLabel, usersLabel, tasksLabel, ratingLabel] = await Promise.all([
+        translateText(localStats.plants_label, selectedLang, "en"),
+        translateText(localStats.users_label, selectedLang, "en"),
+        translateText(localStats.tasks_label, selectedLang, "en"),
+        translateText(localStats.rating_label, selectedLang, "en"),
+      ])
+
+      const translationData = {
+        stats_id: localStats.id,
+        language: selectedLang,
+        plants_label: plantsLabel,
+        users_label: usersLabel,
+        tasks_label: tasksLabel,
+        rating_label: ratingLabel,
+        updated_at: new Date().toISOString(),
+      }
+
+      if (translation) {
+        const { error } = await supabase
+          .from("landing_stats_translations")
+          .update(translationData)
+          .eq("id", translation.id)
+        
+        if (error) throw error
+        setTranslation({ ...translation, ...translationData })
+      } else {
+        const { data, error } = await supabase
+          .from("landing_stats_translations")
+          .insert(translationData)
+          .select()
+          .single()
+        
+        if (error) {
+          // Check for table not found error
+          if (error.code === "42P01" || error.message.includes("does not exist")) {
+            throw new Error("Stats translations table not found. Please run the database migration (000_sync_schema.sql) to create the landing_stats_translations table.")
+          }
+          throw error
+        }
+        if (data) {
+          setTranslation(data)
+        }
+      }
+      setLocalTranslation({})
+    } catch (e: unknown) {
+      console.error("Translation failed:", e)
+      const errorMessage = e instanceof Error ? e.message : "Translation failed. Please try again."
+      alert(errorMessage)
+    } finally {
+      setTranslating(false)
+      setSaving(false)
+    }
   }
 
   if (!localStats) {
@@ -1712,18 +1890,68 @@ const StatsTab: React.FC<{
     <div className="space-y-6">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Statistics Banner</h3>
-          <p className="text-sm text-stone-500">Displayed in the stats section and used for hero social proof (rating)</p>
+          <p className="text-sm text-stone-500">
+            {selectedLang === "en" 
+              ? "Edit values and labels (base English content)"
+              : `Translate labels to ${STATS_LANGUAGE_LABELS[selectedLang]} (values are shared)`}
+          </p>
         </div>
-        {hasUnsavedChanges && (
-          <Button onClick={saveStats} disabled={saving} className="rounded-xl bg-amber-500 hover:bg-amber-600">
-            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-            Save Changes
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Save Button */}
+          {hasUnsavedChanges && (
+            <Button onClick={saveStats} disabled={saving} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Changes
+            </Button>
+          )}
+
+          {/* Language Selector */}
+          <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <button
+                key={lang}
+                onClick={() => setSelectedLang(lang)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                  selectedLang === lang
+                    ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
+                )}
+              >
+                {STATS_LANGUAGE_LABELS[lang]}
+              </button>
+            ))}
+          </div>
+
+          {/* DeepL Translate Button */}
+          {selectedLang !== "en" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={translateAllLabels}
+              disabled={translating || saving}
+              className="rounded-xl"
+            >
+              {translating ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Languages className="h-4 w-4 mr-2" />
+              )}
+              {translating ? "Translating..." : "DeepL Translate All"}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {loadingTranslation && (
+        <div className="flex items-center gap-2 text-sm text-stone-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading translations...
+        </div>
+      )}
 
       <div className={cn(
         "grid gap-6",
@@ -1747,22 +1975,30 @@ const StatsTab: React.FC<{
                 </div>
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-stone-500">Value</Label>
+                    <Label className="text-xs text-stone-500">Value {selectedLang !== "en" && "(shared)"}</Label>
                     <Input
                       value={localStats[stat.countKey]}
                       onChange={(e) => setLocalStats({ ...localStats, [stat.countKey]: e.target.value })}
                       className="rounded-xl"
                       placeholder="10K+"
+                      disabled={selectedLang !== "en"}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-stone-500">Label</Label>
+                    <Label className="text-xs text-stone-500">
+                      Label {selectedLang !== "en" && `(${STATS_LANGUAGE_LABELS[selectedLang]})`}
+                    </Label>
                     <Input
-                      value={localStats[stat.labelKey]}
-                      onChange={(e) => setLocalStats({ ...localStats, [stat.labelKey]: e.target.value })}
+                      value={getDisplayLabel(stat.labelKey)}
+                      onChange={(e) => updateLabel(stat.labelKey, e.target.value)}
                       className="rounded-xl"
                       placeholder="Description"
                     />
+                    {selectedLang !== "en" && (
+                      <p className="text-xs text-stone-400">
+                        Original: {localStats[stat.labelKey]}
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -1777,9 +2013,17 @@ const StatsTab: React.FC<{
               <div className="rounded-xl bg-stone-100 dark:bg-stone-900 p-4">
                 <h4 className="text-sm font-medium text-stone-600 dark:text-stone-400 mb-4 flex items-center gap-2">
                   <Eye className="h-4 w-4" />
-                  Live Preview
+                  Live Preview ({STATS_LANGUAGE_LABELS[selectedLang]})
                 </h4>
-                <StatsPreview stats={localStats} />
+                <StatsPreview 
+                  stats={{
+                    ...localStats,
+                    plants_label: getDisplayLabel("plants_label"),
+                    users_label: getDisplayLabel("users_label"),
+                    tasks_label: getDisplayLabel("tasks_label"),
+                    rating_label: getDisplayLabel("rating_label"),
+                  }} 
+                />
               </div>
             </div>
           </div>
