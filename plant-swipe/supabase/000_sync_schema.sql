@@ -9155,9 +9155,9 @@ create policy "Admins can manage landing page settings" on public.landing_page_s
 );
 
 -- Insert default settings row if not exists
-insert into public.landing_page_settings (id) 
-values (gen_random_uuid())
-on conflict do nothing;
+insert into public.landing_page_settings (id)
+select gen_random_uuid()
+where not exists (select 1 from public.landing_page_settings limit 1);
 
 alter table public.landing_hero_cards enable row level security;
 drop policy if exists "Landing hero cards are publicly readable" on public.landing_hero_cards;
