@@ -28,6 +28,7 @@
     "careLogged": "Soin enregistré !"
   },
   "features": {
+    "badge": "Fonctionnalités puissantes",
     "title": "Tout ce dont votre jardin a besoin, dans une seule application.",
     "subtitle": "Du suivi des arrosages à l'identification d'espèces inconnues, Aphylia vous accompagne.",
     "smartLibrary": {
@@ -128,6 +129,8 @@
     "rating": "Note App Store"
   },
   "demo": {
+    "title": "Votre compagnon complet pour les soins des plantes",
+    "description": "De la découverte aux soins quotidiens, nous avons tout ce qu'il vous faut pour aider vos plantes à prospérer.",
     "discover": "Découvrir des plantes",
     "schedule": "Planifier les soins",
     "track": "Suivre la croissance",
@@ -147,7 +150,12 @@
     "feature2Title": "Votre assistant végétal",
     "feature2Desc": "Vous ne savez pas ce qui ne va pas ? Demandez simplement à Aphylia - votre assistant amical qui explique les soins des plantes en termes simples.",
     "feature3Title": "N'oubliez plus jamais d'arroser",
-    "feature3Desc": "Recevez des rappels doux exactement quand vos plantes ont besoin d'attention. Nous vous aiderons à prendre l'habitude."
+    "feature3Desc": "Recevez des rappels doux exactement quand vos plantes ont besoin d'attention. Nous vous aiderons à prendre l'habitude.",
+    "ctaTitle": "Rejoignez des milliers de nouveaux parents de plantes",
+    "ctaSubtitle": "Commencez votre aventure verte aujourd'hui — nous vous guiderons à chaque étape",
+    "ctaButton": "Commencer gratuitement",
+    "feature4Title": "Identifiez n'importe quelle plante",
+    "feature4Desc": "Vous avez trouvé une plante mais ne savez pas ce que c'est ? Prenez une photo et nous vous dirons tout à son sujet."
   },
   "floatingCards": {
     "newLikes": "+42 aujourd'hui",
@@ -228,10 +236,12 @@
     "supportButton": "Contacter le support"
   },
   "finalCta": {
+    "badge": "Aucune expérience requise",
     "title": "Prêt à cultiver des plantes plus heureuses ?",
     "subtitle": "Rejoignez des milliers d'amoureux des plantes qui font confiance à Aphylia pour garder leurs jardins florissants.",
     "ctaDownload": "Télécharger Aphylia",
-    "ctaDocs": "Voir la documentation"
+    "ctaDocs": "Voir la documentation",
+    "socialText": "Connectons-nous ! Nous adorons avoir de vos nouvelles"
   },
   "footer": {
     "about": "À propos",

@@ -196,7 +196,10 @@
     "feature2Title": "Your Plant Assistant",
     "feature2Desc": "Not sure what's wrong? Just ask Aphylia - your friendly assistant that explains plant care in simple terms.",
     "feature3Title": "Never Forget to Water",
-    "feature3Desc": "Get gentle reminders exactly when your plants need attention. We'll help you build the habit."
+    "feature3Desc": "Get gentle reminders exactly when your plants need attention. We'll help you build the habit.",
+    "ctaTitle": "Join thousands of first-time plant parents",
+    "ctaSubtitle": "Start your green journey today — we'll guide you every step of the way",
+    "ctaButton": "Get Started Free"
   },
   "finalCta": {
     "badge": "No experience needed",
