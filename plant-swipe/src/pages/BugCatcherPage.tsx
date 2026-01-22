@@ -445,7 +445,7 @@ export function BugCatcherPage() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16">
+      <div className="max-w-5xl mx-auto pt-4 md:mt-8 px-3 md:px-4 pb-24 md:pb-16">
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin opacity-50" />
         </div>
@@ -455,15 +455,15 @@ export function BugCatcherPage() {
 
   if (!hasBugCatcherRole) {
     return (
-      <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16">
+      <div className="max-w-5xl mx-auto pt-4 md:mt-8 px-3 md:px-4 pb-24 md:pb-16">
         <Card className={glassCard}>
-          <CardContent className="p-8 text-center">
-            <Bug className="h-12 w-12 mx-auto mb-4 text-orange-500 opacity-50" />
-            <h2 className="text-xl font-semibold mb-2">Bug Catcher Access Required</h2>
+          <CardContent className="p-6 md:p-8 text-center">
+            <Bug className="h-10 w-10 md:h-12 md:w-12 mx-auto mb-3 md:mb-4 text-orange-500 opacity-50" />
+            <h2 className="text-lg md:text-xl font-semibold mb-2">Bug Catcher Access Required</h2>
             <p className="text-sm opacity-70 mb-4">
               You need the Bug Catcher role to access this page.
             </p>
-            <Button onClick={() => navigate('/')} className="rounded-2xl">
+            <Button onClick={() => navigate('/')} className="rounded-2xl h-11 md:h-9">
               Go Home
             </Button>
           </CardContent>
@@ -473,39 +473,42 @@ export function BugCatcherPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-      {/* Navigation Tabs */}
+    <div className="max-w-5xl mx-auto pt-4 md:mt-8 px-3 md:px-4 pb-24 md:pb-16 space-y-4 md:space-y-6">
+      {/* Mobile-optimized Navigation Tabs */}
       <div className="flex items-center gap-2">
+        <div className="flex-1 flex gap-1.5 md:gap-2 bg-stone-100 dark:bg-[#252526] p-1 md:p-1.5 rounded-2xl">
+          <Button
+            variant={pageView === 'dashboard' ? 'default' : 'ghost'}
+            className={`flex-1 rounded-xl h-10 md:h-9 text-sm ${pageView === 'dashboard' ? '' : 'hover:bg-white/50 dark:hover:bg-white/10'}`}
+            onClick={() => setPageView('dashboard')}
+          >
+            <Target className="h-4 w-4 mr-1.5 md:mr-2" />
+            <span className="hidden xs:inline">Dashboard</span>
+            <span className="xs:hidden">Home</span>
+          </Button>
+          <Button
+            variant={pageView === 'report' ? 'default' : 'ghost'}
+            className={`flex-1 rounded-xl h-10 md:h-9 text-sm ${pageView === 'report' ? '' : 'hover:bg-white/50 dark:hover:bg-white/10'}`}
+            onClick={() => setPageView('report')}
+          >
+            <Bug className="h-4 w-4 mr-1.5 md:mr-2" />
+            <span className="hidden xs:inline">Report Bug</span>
+            <span className="xs:hidden">Report</span>
+          </Button>
+        </div>
         <Button
-          variant={pageView === 'dashboard' ? 'default' : 'secondary'}
-          className="rounded-2xl"
-          onClick={() => setPageView('dashboard')}
-        >
-          <Target className="h-4 w-4 mr-2" />
-          Dashboard
-        </Button>
-        <Button
-          variant={pageView === 'report' ? 'default' : 'secondary'}
-          className="rounded-2xl"
-          onClick={() => setPageView('report')}
-        >
-          <Bug className="h-4 w-4 mr-2" />
-          Report Bug
-        </Button>
-        <div className="flex-1" />
-        <Button
-          variant="ghost"
+          variant="secondary"
           size="icon"
-          className="rounded-2xl"
+          className="rounded-xl h-10 w-10 md:h-9 md:w-9 shrink-0"
           onClick={() => setShowHistory(!showHistory)}
           title="View History"
         >
           <History className="h-4 w-4" />
         </Button>
         <Button
-          variant="ghost"
+          variant="secondary"
           size="icon"
-          className="rounded-2xl"
+          className="rounded-xl h-10 w-10 md:h-9 md:w-9 shrink-0"
           onClick={handleRefresh}
           disabled={refreshing}
         >
@@ -515,49 +518,51 @@ export function BugCatcherPage() {
 
       {pageView === 'dashboard' && (
         <>
-          {/* Hero Card - Points & Rank */}
+          {/* Hero Card - Points & Rank - Mobile Optimized */}
           <Card className={heroCard}>
             <div className="absolute inset-0 pointer-events-none">
               <div className="absolute -top-6 -right-8 h-32 w-32 rounded-full bg-orange-200/60 dark:bg-orange-500/15 blur-3xl" />
               <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-amber-100/60 dark:bg-amber-500/10 blur-3xl" />
             </div>
-            <CardContent className="relative z-10 p-6 md:p-8">
-              <div className="flex flex-col md:flex-row items-center gap-6">
-                {/* Bug Icon */}
-                <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center shadow-lg">
-                  <Bug className="h-10 w-10 text-white" />
+            <CardContent className="relative z-10 p-4 md:p-8">
+              {/* Mobile: Compact horizontal layout */}
+              <div className="flex items-center gap-3 md:gap-6">
+                {/* Bug Icon - Smaller on mobile */}
+                <div className="h-14 w-14 md:h-20 md:w-20 rounded-2xl md:rounded-3xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center shadow-lg shrink-0">
+                  <Bug className="h-7 w-7 md:h-10 md:w-10 text-white" />
                 </div>
                 
-                {/* Stats */}
-                <div className="flex-1 text-center md:text-left">
-                  <h1 className="text-2xl md:text-3xl font-bold mb-1">Bug Catcher HQ</h1>
-                  <p className="text-sm opacity-70">Find bugs, earn points, climb the leaderboard!</p>
+                {/* Title - Compact on mobile */}
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-lg md:text-3xl font-bold truncate">Bug Catcher HQ</h1>
+                  <p className="text-xs md:text-sm opacity-70 hidden md:block">Find bugs, earn points, climb the leaderboard!</p>
                 </div>
 
-                {/* Points & Rank Cards */}
-                <div className="flex gap-4">
-                  <div className="text-center p-4 rounded-2xl bg-white/50 dark:bg-black/20 border border-orange-200/50 dark:border-orange-500/20">
-                    <Zap className="h-6 w-6 mx-auto mb-1 text-orange-500" />
-                    <div className="text-2xl font-bold tabular-nums">{userPoints}</div>
-                    <div className="text-xs opacity-60">Bug Points</div>
+                {/* Points & Rank - Inline on mobile */}
+                <div className="flex gap-2 md:gap-4 shrink-0">
+                  <div className="text-center p-2 md:p-4 rounded-xl md:rounded-2xl bg-white/50 dark:bg-black/20 border border-orange-200/50 dark:border-orange-500/20 min-w-[60px] md:min-w-[80px]">
+                    <Zap className="h-4 w-4 md:h-6 md:w-6 mx-auto mb-0.5 md:mb-1 text-orange-500" />
+                    <div className="text-lg md:text-2xl font-bold tabular-nums">{userPoints}</div>
+                    <div className="text-[10px] md:text-xs opacity-60">Points</div>
                   </div>
-                  <div className="text-center p-4 rounded-2xl bg-white/50 dark:bg-black/20 border border-amber-200/50 dark:border-amber-500/20">
-                    <Trophy className="h-6 w-6 mx-auto mb-1 text-amber-500" />
-                    <div className="text-2xl font-bold tabular-nums">
+                  <div className="text-center p-2 md:p-4 rounded-xl md:rounded-2xl bg-white/50 dark:bg-black/20 border border-amber-200/50 dark:border-amber-500/20 min-w-[60px] md:min-w-[80px]">
+                    <Trophy className="h-4 w-4 md:h-6 md:w-6 mx-auto mb-0.5 md:mb-1 text-amber-500" />
+                    <div className="text-lg md:text-2xl font-bold tabular-nums">
                       {userRank > 0 ? `#${userRank}` : '-'}
                     </div>
-                    <div className="text-xs opacity-60">Your Rank</div>
+                    <div className="text-[10px] md:text-xs opacity-60">Rank</div>
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Leaderboard - Compact Top 5 */}
+          {/* Mobile: Stack vertically, Desktop: Side by side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
+            {/* Leaderboard - Mobile Optimized */}
             <Card className={glassCard}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-3">
+              <CardContent className="p-3 md:p-4">
+                <div className="flex items-center gap-2 mb-2 md:mb-3">
                   <Trophy className="h-4 w-4 text-amber-500" />
                   <h2 className="text-sm font-semibold">Top 5 Bug Catchers</h2>
                 </div>
@@ -572,24 +577,24 @@ export function BugCatcherPage() {
                     {leaderboard.map((entry) => (
                       <div
                         key={entry.user_id}
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition text-sm ${
+                        className={`flex items-center gap-2 px-2 md:px-3 py-2 md:py-2.5 rounded-xl transition text-sm active:scale-[0.98] ${
                           entry.user_id === user?.id 
-                            ? 'bg-orange-50 dark:bg-orange-900/20' 
+                            ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200/50 dark:border-orange-700/30' 
                             : 'hover:bg-stone-50 dark:hover:bg-stone-800/50'
                         }`}
                       >
                         <div className="w-6 flex justify-center shrink-0">
                           {getRankIcon(entry.rank)}
                         </div>
-                        <div className="flex-1 min-w-0 truncate">
+                        <div className="flex-1 min-w-0 truncate font-medium">
                           {entry.display_name || 'Anonymous'}
                           {entry.user_id === user?.id && (
-                            <span className="ml-1 text-[10px] text-orange-600 dark:text-orange-400">(You)</span>
+                            <span className="ml-1 text-[10px] text-orange-600 dark:text-orange-400 font-normal">(You)</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-0.5 text-orange-600 dark:text-orange-400 shrink-0">
+                        <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400 shrink-0 bg-orange-50 dark:bg-orange-900/30 px-2 py-0.5 rounded-full">
                           <Zap className="h-3 w-3" />
-                          <span className="font-medium tabular-nums text-xs">{entry.bug_points}</span>
+                          <span className="font-semibold tabular-nums text-xs">{entry.bug_points}</span>
                         </div>
                       </div>
                     ))}
@@ -598,10 +603,10 @@ export function BugCatcherPage() {
               </CardContent>
             </Card>
 
-            {/* Available Actions - Compact */}
+            {/* Available Actions - Mobile Optimized with larger touch targets */}
             <Card className={glassCard}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-3">
+              <CardContent className="p-3 md:p-4">
+                <div className="flex items-center gap-2 mb-2 md:mb-3">
                   <ClipboardList className="h-4 w-4 text-emerald-500" />
                   <h2 className="text-sm font-semibold">Recommended Actions</h2>
                   <Badge variant="secondary" className="ml-auto text-xs">{availableActions.length}/5</Badge>
@@ -613,7 +618,7 @@ export function BugCatcherPage() {
                     <p className="text-xs">All caught up! Check back later.</p>
                   </div>
                 ) : (
-                  <div className="space-y-1">
+                  <div className="space-y-1.5 md:space-y-1">
                     {availableActions.map((action) => (
                       <button
                         key={action.id}
@@ -622,14 +627,16 @@ export function BugCatcherPage() {
                           setActionAnswers({})
                           setActionError(null)
                         }}
-                        className="w-full flex items-center gap-2 px-2 py-2 rounded-lg border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition text-left group"
+                        className="w-full flex items-center gap-2 md:gap-3 px-3 py-3 md:py-2.5 rounded-xl border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 active:scale-[0.98] transition text-left group"
                       >
-                        <Target className="h-4 w-4 text-emerald-500 shrink-0" />
-                        <div className="flex-1 min-w-0 text-sm truncate">{action.title}</div>
+                        <div className="h-8 w-8 md:h-6 md:w-6 rounded-lg md:rounded bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                          <Target className="h-4 w-4 md:h-4 md:w-4 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <div className="flex-1 min-w-0 text-sm font-medium truncate">{action.title}</div>
                         <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 text-xs shrink-0">
                           +{action.points_reward}
                         </Badge>
-                        <ChevronRight className="h-3 w-3 opacity-40 group-hover:opacity-100 transition shrink-0" />
+                        <ChevronRight className="h-4 w-4 opacity-40 group-hover:opacity-100 transition shrink-0" />
                       </button>
                     ))}
                   </div>
@@ -638,36 +645,36 @@ export function BugCatcherPage() {
             </Card>
           </div>
 
-          {/* Bug Reports Summary */}
+          {/* Bug Reports Summary - Mobile Optimized */}
           <Card className={glassCard}>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-2 mb-4">
+            <CardContent className="p-3 md:p-6">
+              <div className="flex items-center gap-2 mb-3 md:mb-4">
                 <Bug className="h-5 w-5 text-orange-500" />
-                <h2 className="text-lg font-semibold">Your Bug Reports</h2>
+                <h2 className="text-base md:text-lg font-semibold">Your Bug Reports</h2>
                 <Badge variant="secondary" className="ml-auto">{userBugReports.length}</Badge>
               </div>
 
               {userBugReports.length === 0 ? (
-                <div className="text-center py-8 opacity-60">
+                <div className="text-center py-6 md:py-8 opacity-60">
                   <Bug className="h-8 w-8 mx-auto mb-2" />
                   <p className="text-sm">No bug reports yet. Found a bug? Report it!</p>
                   <Button 
                     variant="secondary" 
-                    className="rounded-2xl mt-4"
+                    className="rounded-2xl mt-4 h-11"
                     onClick={() => setPageView('report')}
                   >
                     Report a Bug
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="space-y-2 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-3">
                   {userBugReports.slice(0, 6).map((report) => (
                     <div
                       key={report.id}
-                      className="p-4 rounded-xl border border-stone-200 dark:border-[#3e3e42]"
+                      className="p-3 md:p-4 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-stone-900/20 active:scale-[0.99] transition"
                     >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="font-medium truncate">{report.bug_name}</div>
+                      <div className="flex items-start justify-between gap-2 mb-1.5 md:mb-2">
+                        <div className="font-medium text-sm md:text-base truncate">{report.bug_name}</div>
                         {getStatusBadge(report.status)}
                       </div>
                       <div className="text-xs opacity-60 mb-2 line-clamp-2">{report.description}</div>
@@ -676,8 +683,9 @@ export function BugCatcherPage() {
                           {new Date(report.created_at).toLocaleDateString()}
                         </span>
                         {report.points_earned > 0 && (
-                          <span className="text-orange-600 dark:text-orange-400 font-medium">
-                            +{report.points_earned} pts
+                          <span className="text-orange-600 dark:text-orange-400 font-semibold flex items-center gap-0.5">
+                            <Zap className="h-3 w-3" />
+                            +{report.points_earned}
                           </span>
                         )}
                       </div>
@@ -692,27 +700,28 @@ export function BugCatcherPage() {
 
       {pageView === 'report' && (
         <Card className={glassCard}>
-          <CardContent className="p-6 md:p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-12 w-12 rounded-2xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-                <Bug className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+          <CardContent className="p-4 md:p-8">
+            {/* Mobile-optimized header */}
+            <div className="flex items-center gap-3 mb-4 md:mb-6">
+              <div className="h-10 w-10 md:h-12 md:w-12 rounded-xl md:rounded-2xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
+                <Bug className="h-5 w-5 md:h-6 md:w-6 text-orange-600 dark:text-orange-400" />
               </div>
-              <div>
-                <h2 className="text-xl font-semibold">Report a Bug</h2>
-                <p className="text-sm opacity-70">Help us improve by reporting issues you find</p>
+              <div className="min-w-0">
+                <h2 className="text-lg md:text-xl font-semibold">Report a Bug</h2>
+                <p className="text-xs md:text-sm opacity-70 truncate">Help us improve by reporting issues</p>
               </div>
             </div>
 
             {reportSuccess ? (
-              <div className="text-center py-12">
-                <div className="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4">
-                  <Check className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+              <div className="text-center py-8 md:py-12">
+                <div className="h-14 w-14 md:h-16 md:w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-3 md:mb-4">
+                  <Check className="h-7 w-7 md:h-8 md:w-8 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Bug Report Submitted!</h3>
+                <h3 className="text-base md:text-lg font-semibold mb-2">Bug Report Submitted!</h3>
                 <p className="text-sm opacity-70">Thanks for helping us squash bugs. You've earned points!</p>
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4 md:space-y-6">
                 {/* Bug Name */}
                 <div>
                   <Label htmlFor="bug-name" className="text-sm font-medium">
@@ -889,11 +898,12 @@ export function BugCatcherPage() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-3 pt-2">
+                {/* Mobile-optimized submit section */}
+                <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 pt-2">
                   <Button
                     onClick={handleSubmitBugReport}
                     disabled={submittingReport}
-                    className="rounded-2xl flex-1"
+                    className="rounded-2xl h-12 md:h-10 flex-1 text-base md:text-sm"
                   >
                     {submittingReport ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -902,7 +912,7 @@ export function BugCatcherPage() {
                     )}
                     Submit Bug Report
                   </Button>
-                  <Badge variant="secondary" className="shrink-0">
+                  <Badge variant="secondary" className="shrink-0 justify-center py-2 md:py-1">
                     +5 pts on submit
                   </Badge>
                 </div>
@@ -912,19 +922,19 @@ export function BugCatcherPage() {
         </Card>
       )}
 
-      {/* History Sheet */}
+      {/* History Sheet - Mobile Optimized */}
       {showHistory && (
         <Card className={glassCard}>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
+          <CardContent className="p-3 md:p-6">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="flex items-center gap-2">
                 <History className="h-5 w-5 text-blue-500" />
-                <h2 className="text-lg font-semibold">Completed Actions</h2>
+                <h2 className="text-base md:text-lg font-semibold">Completed Actions</h2>
               </div>
               <Button 
                 variant="ghost" 
                 size="icon"
-                className="rounded-xl"
+                className="rounded-xl h-9 w-9"
                 onClick={() => setShowHistory(false)}
               >
                 <X className="h-4 w-4" />
@@ -932,7 +942,7 @@ export function BugCatcherPage() {
             </div>
 
             {completedActions.length === 0 ? (
-              <div className="text-center py-8 opacity-60">
+              <div className="text-center py-6 md:py-8 opacity-60">
                 <Clock className="h-8 w-8 mx-auto mb-2" />
                 <p className="text-sm">No completed actions yet</p>
               </div>
@@ -941,24 +951,26 @@ export function BugCatcherPage() {
                 {completedActions.map((action) => (
                   <div
                     key={action.id}
-                    className="flex items-center gap-3 p-3 rounded-xl border border-stone-200 dark:border-[#3e3e42]"
+                    className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 p-3 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-stone-900/20"
                   >
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{action.title}</div>
-                      <div className="text-xs opacity-60">
-                        {new Date(action.completed_at).toLocaleDateString()}
+                    <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm md:text-base truncate">{action.title}</div>
+                        <div className="text-xs opacity-60">
+                          {new Date(action.completed_at).toLocaleDateString()}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 pl-7 md:pl-0">
                       <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                         +{action.points_earned} pts
                       </Badge>
                       {action.action_status !== 'closed' && (
                         <Button
-                          variant="ghost"
+                          variant="secondary"
                           size="sm"
-                          className="rounded-lg"
+                          className="rounded-lg h-8"
                           onClick={() => {
                             setEditingResponse(action)
                             setEditAnswers(action.answers || {})
@@ -976,15 +988,17 @@ export function BugCatcherPage() {
         </Card>
       )}
 
-      {/* Action Dialog */}
+      {/* Action Dialog - Mobile Optimized */}
       <Dialog open={!!selectedAction} onOpenChange={(open) => !open && setSelectedAction(null)}>
-        <DialogContent className="rounded-2xl max-w-lg">
+        <DialogContent className="rounded-2xl max-w-lg mx-3 md:mx-auto max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-emerald-500" />
-              {selectedAction?.title}
+            <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
+              <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                <Target className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <span className="truncate">{selectedAction?.title}</span>
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               {selectedAction?.description || 'Complete this action to earn points'}
             </DialogDescription>
           </DialogHeader>
@@ -1004,14 +1018,14 @@ export function BugCatcherPage() {
                         onChange={(e) => setActionAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
                         placeholder="Your answer..."
                         rows={3}
-                        className="mt-2 rounded-xl"
+                        className="mt-2 rounded-xl text-base md:text-sm"
                       />
                     ) : question.type === 'boolean' ? (
-                      <div className="flex items-center gap-4 mt-2">
+                      <div className="flex items-center gap-3 mt-2">
                         <Button
                           type="button"
                           variant={actionAnswers[question.id] === true ? 'default' : 'outline'}
-                          className="rounded-xl"
+                          className="rounded-xl flex-1 h-11 md:h-9"
                           onClick={() => setActionAnswers(prev => ({ ...prev, [question.id]: true }))}
                         >
                           Yes
@@ -1019,7 +1033,7 @@ export function BugCatcherPage() {
                         <Button
                           type="button"
                           variant={actionAnswers[question.id] === false ? 'default' : 'outline'}
-                          className="rounded-xl"
+                          className="rounded-xl flex-1 h-11 md:h-9"
                           onClick={() => setActionAnswers(prev => ({ ...prev, [question.id]: false }))}
                         >
                           No
@@ -1030,7 +1044,7 @@ export function BugCatcherPage() {
                         value={(actionAnswers[question.id] as string) || ''}
                         onChange={(e) => setActionAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
                         placeholder="Your answer..."
-                        className="mt-2 rounded-xl"
+                        className="mt-2 rounded-xl h-11 md:h-9 text-base md:text-sm"
                       />
                     )}
                   </div>
@@ -1051,42 +1065,46 @@ export function BugCatcherPage() {
             </div>
           )}
 
-          <DialogFooter className="gap-2">
-            <Badge className="mr-auto bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-2">
+            <Badge className="sm:mr-auto bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 justify-center py-1.5">
               +{selectedAction?.points_reward || 0} points
             </Badge>
-            <Button
-              variant="secondary"
-              className="rounded-xl"
-              onClick={() => setSelectedAction(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="rounded-xl"
-              onClick={handleSubmitAction}
-              disabled={submittingAction}
-            >
-              {submittingAction ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4 mr-2" />
-              )}
-              Complete
-            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button
+                variant="secondary"
+                className="rounded-xl flex-1 sm:flex-none h-11 md:h-9"
+                onClick={() => setSelectedAction(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="rounded-xl flex-1 sm:flex-none h-11 md:h-9"
+                onClick={handleSubmitAction}
+                disabled={submittingAction}
+              >
+                {submittingAction ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 mr-2" />
+                )}
+                Complete
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Response Dialog */}
+      {/* Edit Response Dialog - Mobile Optimized */}
       <Dialog open={!!editingResponse} onOpenChange={(open) => !open && setEditingResponse(null)}>
-        <DialogContent className="rounded-2xl max-w-lg">
+        <DialogContent className="rounded-2xl max-w-lg mx-3 md:mx-auto max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-blue-500" />
-              Edit Response: {editingResponse?.title}
+            <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
+              <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                <History className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <span className="truncate">Edit: {editingResponse?.title}</span>
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               Update your answers (only available while action is active)
             </DialogDescription>
           </DialogHeader>
@@ -1114,16 +1132,16 @@ export function BugCatcherPage() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
             <Button
               variant="secondary"
-              className="rounded-xl"
+              className="rounded-xl h-11 md:h-9 w-full sm:w-auto"
               onClick={() => setEditingResponse(null)}
             >
               Cancel
             </Button>
             <Button
-              className="rounded-xl"
+              className="rounded-xl h-11 md:h-9 w-full sm:w-auto"
               onClick={handleUpdateResponse}
               disabled={savingEdit}
             >
