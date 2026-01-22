@@ -1087,13 +1087,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           )
         }
         
-        const results = await Promise.all(queries)
+        const [plantsRes, imagesRes, translationsRes] = await Promise.all(queries)
         
         if (ignore) return
         
-        const plantsData = plantsRes.data
-        const imagesData = imagesRes.data
-        const translationsData = translationsRes.data
+        const plantsData = plantsRes?.data
+        const imagesData = imagesRes?.data
+        const translationsData = translationsRes?.data
         
         if (!plantsData?.length) {
           setCompanionPlants([])
@@ -1103,7 +1103,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         
         const imageMap = new Map<string, string>()
         if (imagesData) {
-          imagesData.forEach((img) => {
+          imagesData.forEach((img: { plant_id: string; link: string }) => {
             if (img.plant_id && img.link) {
               imageMap.set(img.plant_id, img.link)
             }
@@ -1119,7 +1119,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           })
         }
         
-        const companions = plantsData.map((p) => ({
+        const companions = plantsData.map((p: { id: string; name: string }) => ({
           id: p.id,
           name: nameTranslations[p.id] || p.name,
           imageUrl: imageMap.get(p.id),
