@@ -287,7 +287,7 @@ const GardenListSidebarComponent: React.FC<GardenListSidebarProps> = ({
                         className={`flex items-center gap-2 text-sm rounded-xl p-2 ${isDone ? "bg-stone-50/80 dark:bg-[#2d2d30]/80 opacity-60" : "bg-white/80 dark:bg-[#1f1f1f]/70"}`}
                       >
                         {/* Icon */}
-                        <span className="h-7 w-7 flex-shrink-0 flex items-center justify-center rounded-lg bg-stone-100 dark:bg-[#2d2d30]">
+                        <span className="h-7 w-7 flex-shrink-0 flex items-center justify-center rounded-lg bg-stone-100 dark:bg-[#2d2d30]" role="img" aria-hidden="true">
                           {icon}
                         </span>
                         {/* Task info */}
