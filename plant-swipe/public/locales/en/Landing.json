@@ -121,6 +121,26 @@
       }
     ]
   },
+  "stats": {
+    "plants": "Plant Species",
+    "users": "Happy Gardeners",
+    "tasks": "Care Tasks Done",
+    "rating": "App Store Rating"
+  },
+  "demo": {
+    "discover": "Discover Plants",
+    "schedule": "Schedule Care",
+    "track": "Track Growth",
+    "protect": "Get Alerts",
+    "identify": "Identify Plants",
+    "journal": "Keep Journal",
+    "community": "Join Community",
+    "assistant": "Smart Assistant"
+  },
+  "floatingCards": {
+    "newLikes": "+42 today",
+    "morePlants": "+10K"
+  },
   "pricingSection": {
     "title": "Start for free. Grow as you grow.",
     "subtitle": "Choose a plan that matches your garden size. Upgrade anytime.",

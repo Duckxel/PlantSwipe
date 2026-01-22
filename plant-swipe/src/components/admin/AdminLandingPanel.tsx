@@ -2398,16 +2398,32 @@ const FAQTab: React.FC<{
         }
         
         if (existingTranslation) {
-          await supabase
+          const { error } = await supabase
             .from("landing_faq_translations")
             .update(translationData)
             .eq("id", existingTranslation.id)
+          
+          if (error) {
+            console.error("Failed to update translation:", error)
+            if (error.code === "42P01" || error.message?.includes("does not exist")) {
+              throw new Error("Translation table not found. Please run the database sync to create landing_faq_translations table.")
+            }
+            throw error
+          }
         } else {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from("landing_faq_translations")
             .insert(translationData)
             .select()
             .single()
+          
+          if (error) {
+            console.error("Failed to insert translation:", error)
+            if (error.code === "42P01" || error.message?.includes("does not exist")) {
+              throw new Error("Translation table not found. Please run the database sync to create landing_faq_translations table.")
+            }
+            throw error
+          }
           
           if (data) {
             setTranslations(prev => ({ ...prev, [item.id]: data }))
@@ -2417,9 +2433,10 @@ const FAQTab: React.FC<{
       
       // Reload translations after bulk update
       await loadTranslations(selectedLang)
-    } catch (e) {
+    } catch (e: unknown) {
       console.error("Translation failed:", e)
-      alert("Translation failed. Please try again.")
+      const errorMessage = e instanceof Error ? e.message : "Translation failed. Please try again."
+      alert(errorMessage)
     } finally {
       setTranslating(false)
       setSaving(false)

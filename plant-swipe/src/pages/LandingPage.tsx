@@ -670,7 +670,7 @@ const HeroVisual: React.FC = () => {
           <div className="h-8 w-8 rounded-xl bg-pink-500/20 flex items-center justify-center">
             <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />
           </div>
-          <span className="text-sm font-medium text-stone-900 dark:text-white">+42 today</span>
+          <span className="text-sm font-medium text-stone-900 dark:text-white">{t("floatingCards.newLikes", { defaultValue: "+42 today" })}</span>
         </div>
       </div>
     </div>
@@ -894,7 +894,7 @@ const FeaturesSection: React.FC = () => {
                   </div>
                 ))}
                 <div className="h-16 w-16 rounded-xl bg-stone-100 dark:bg-white/5 border border-stone-200 dark:border-white/10 flex items-center justify-center">
-                  <span className="text-sm font-medium text-stone-400">+10K</span>
+                  <span className="text-sm font-medium text-stone-400">{t("floatingCards.morePlants", { defaultValue: "+10K" })}</span>
                 </div>
               </div>
             </div>

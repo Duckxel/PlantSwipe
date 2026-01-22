@@ -121,6 +121,38 @@
       }
     ]
   },
+  "stats": {
+    "plants": "Espèces de plantes",
+    "users": "Jardiniers heureux",
+    "tasks": "Tâches de soins effectuées",
+    "rating": "Note App Store"
+  },
+  "demo": {
+    "discover": "Découvrir des plantes",
+    "schedule": "Planifier les soins",
+    "track": "Suivre la croissance",
+    "protect": "Recevoir des alertes",
+    "identify": "Identifier les plantes",
+    "journal": "Tenir un journal",
+    "community": "Rejoindre la communauté",
+    "assistant": "Assistant intelligent"
+  },
+  "beginner": {
+    "badge": "Parfait pour les débutants",
+    "title": "Vous n'y connaissez rien en jardinage ?",
+    "titleHighlight": "C'est exactement pour ça que nous avons créé cette app",
+    "subtitle": "Tout le monde commence quelque part. Aphylia transforme les débutants complets en parents de plantes confiants avec des conseils doux, des rappels intelligents et un assistant qui parle votre langue — pas de botanique compliquée.",
+    "feature1Title": "Apprenez en grandissant",
+    "feature1Desc": "Pas d'expérience en jardinage ? Pas de problème ! Notre appli vous apprend tout étape par étape.",
+    "feature2Title": "Votre assistant végétal",
+    "feature2Desc": "Vous ne savez pas ce qui ne va pas ? Demandez simplement à Aphylia - votre assistant amical qui explique les soins des plantes en termes simples.",
+    "feature3Title": "N'oubliez plus jamais d'arroser",
+    "feature3Desc": "Recevez des rappels doux exactement quand vos plantes ont besoin d'attention. Nous vous aiderons à prendre l'habitude."
+  },
+  "floatingCards": {
+    "newLikes": "+42 aujourd'hui",
+    "morePlants": "+10K"
+  },
   "pricingSection": {
     "title": "Commencez gratuitement. Évoluez à votre rythme.",
     "subtitle": "Choisissez un forfait adapté à la taille de votre jardin. Passez au supérieur à tout moment.",
