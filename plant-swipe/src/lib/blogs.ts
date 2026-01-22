@@ -79,7 +79,19 @@ async function ensureUniqueSlug(base: string, existingId?: string) {
   return `${base}-${Date.now()}`
 }
 
-export async function fetchBlogPosts(opts?: { includeDrafts?: boolean; limit?: number }) {
+export type FetchBlogPostsOptions = {
+  includeDrafts?: boolean
+  limit?: number
+  offset?: number
+}
+
+export type FetchBlogPostsResult = {
+  posts: BlogPost[]
+  hasMore: boolean
+  total: number
+}
+
+export async function fetchBlogPosts(opts?: FetchBlogPostsOptions): Promise<BlogPost[]> {
   const query = supabase
     .from('blog_posts')
     .select(BLOG_POST_SELECT)
@@ -88,6 +100,10 @@ export async function fetchBlogPosts(opts?: { includeDrafts?: boolean; limit?: n
 
   if (opts?.limit) {
     query.limit(opts.limit)
+  }
+
+  if (opts?.offset) {
+    query.range(opts.offset, opts.offset + (opts.limit || 10) - 1)
   }
 
   if (!opts?.includeDrafts) {
@@ -99,6 +115,36 @@ export async function fetchBlogPosts(opts?: { includeDrafts?: boolean; limit?: n
     throw new Error(error.message)
   }
   return (data ?? []).map((row) => mapBlogPostRow(row as BlogPostRow))
+}
+
+export async function fetchBlogPostsPaginated(opts?: FetchBlogPostsOptions): Promise<FetchBlogPostsResult> {
+  const limit = opts?.limit || 10
+  const offset = opts?.offset || 0
+
+  // Get total count for pagination info
+  const countQuery = supabase
+    .from('blog_posts')
+    .select('id', { count: 'exact', head: true })
+
+  if (!opts?.includeDrafts) {
+    countQuery.eq('is_published', true).lte('published_at', new Date().toISOString())
+  }
+
+  const { count, error: countError } = await countQuery
+  if (countError) {
+    throw new Error(countError.message)
+  }
+
+  const total = count || 0
+
+  // Fetch the posts
+  const posts = await fetchBlogPosts({ ...opts, limit, offset })
+
+  return {
+    posts,
+    hasMore: offset + posts.length < total,
+    total,
+  }
 }
 
 export async function fetchBlogPost(identifier: string) {
