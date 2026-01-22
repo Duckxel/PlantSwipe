@@ -165,6 +165,8 @@ do $$ declare
     'landing_testimonials',
     'landing_faq',
     'landing_faq_translations',
+    'landing_demo_features',
+    'landing_demo_feature_translations',
     -- Plant Scanning
     'plant_scans',
     -- Bug Catcher System
@@ -9143,6 +9145,49 @@ create table if not exists public.landing_faq_translations (
 create index if not exists idx_landing_faq_translations_faq_id on public.landing_faq_translations(faq_id);
 create index if not exists idx_landing_faq_translations_language on public.landing_faq_translations(language);
 
+-- Landing Demo Features: Features shown in the interactive demo wheel
+create table if not exists public.landing_demo_features (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  icon_name text not null default 'Leaf',
+  label text not null,
+  color text not null default 'emerald',
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_demo_features_position on public.landing_demo_features(position);
+create index if not exists idx_landing_demo_features_active on public.landing_demo_features(is_active);
+
+-- Landing Demo Feature Translations: Stores translations for demo features
+create table if not exists public.landing_demo_feature_translations (
+  id uuid primary key default gen_random_uuid(),
+  feature_id uuid not null references public.landing_demo_features(id) on delete cascade,
+  language text not null,
+  label text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(feature_id, language)
+);
+
+create index if not exists idx_landing_demo_feature_translations_feature_id on public.landing_demo_feature_translations(feature_id);
+create index if not exists idx_landing_demo_feature_translations_language on public.landing_demo_feature_translations(language);
+
+-- Insert default demo features if table is empty
+insert into public.landing_demo_features (position, icon_name, label, color)
+select * from (values
+  (0, 'Leaf', 'Discover Plants', 'emerald'),
+  (1, 'Clock', 'Schedule Care', 'blue'),
+  (2, 'TrendingUp', 'Track Growth', 'purple'),
+  (3, 'Shield', 'Get Alerts', 'rose'),
+  (4, 'Camera', 'Identify Plants', 'pink'),
+  (5, 'NotebookPen', 'Keep Journal', 'amber'),
+  (6, 'Users', 'Join Community', 'teal'),
+  (7, 'Sparkles', 'Smart Assistant', 'indigo')
+) as v(position, icon_name, label, color)
+where not exists (select 1 from public.landing_demo_features limit 1);
+
 -- RLS Policies for Landing Page Tables
 -- All landing tables are publicly readable but only admin-writable
 
@@ -9196,6 +9241,22 @@ drop policy if exists "Landing FAQ translations are publicly readable" on public
 create policy "Landing FAQ translations are publicly readable" on public.landing_faq_translations for select using (true);
 drop policy if exists "Admins can manage landing FAQ translations" on public.landing_faq_translations;
 create policy "Admins can manage landing FAQ translations" on public.landing_faq_translations for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_demo_features enable row level security;
+drop policy if exists "Landing demo features are publicly readable" on public.landing_demo_features;
+create policy "Landing demo features are publicly readable" on public.landing_demo_features for select using (true);
+drop policy if exists "Admins can manage landing demo features" on public.landing_demo_features;
+create policy "Admins can manage landing demo features" on public.landing_demo_features for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_demo_feature_translations enable row level security;
+drop policy if exists "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations;
+create policy "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations for select using (true);
+drop policy if exists "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations;
+create policy "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
 

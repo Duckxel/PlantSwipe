@@ -79,6 +79,13 @@ type FAQ = {
   answer: string
 }
 
+type DemoFeature = {
+  id: string
+  icon_name: string
+  label: string
+  color: string
+}
+
 type LandingPageSettings = {
   // Hero Section
   hero_badge_text: string
@@ -128,6 +135,7 @@ type LandingDataContextType = {
   stats: LandingStats | null
   testimonials: Testimonial[]
   faqItems: FAQ[]
+  demoFeatures: DemoFeature[]
   settings: LandingPageSettings | null
   loading: boolean
 }
@@ -137,6 +145,7 @@ const LandingDataContext = React.createContext<LandingDataContextType>({
   stats: null,
   testimonials: [],
   faqItems: [],
+  demoFeatures: [],
   settings: null,
   loading: true,
 })
@@ -232,6 +241,7 @@ const LandingPage: React.FC = () => {
     stats: null,
     testimonials: [],
     faqItems: [],
+    demoFeatures: [],
     settings: null,
     loading: true,
   })
@@ -250,6 +260,7 @@ const LandingPage: React.FC = () => {
           supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
           supabase.from("landing_testimonials").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_faq").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_demo_features").select("*").eq("is_active", true).order("position"),
         ])
 
         // Extract data safely, using null/empty array as fallback for any failures
@@ -266,6 +277,7 @@ const LandingPage: React.FC = () => {
         const stats = getData(results[2], null)
         const testimonials = getData(results[3], [])
         let faqItems = getData(results[4], []) as FAQ[]
+        let demoFeatures = getData(results[5], []) as DemoFeature[]
         
         // Load FAQ translations for current language (if not English)
         if (currentLang !== 'en' && faqItems.length > 0) {
@@ -295,12 +307,42 @@ const LandingPage: React.FC = () => {
             console.error("Failed to load FAQ translations:", e)
           }
         }
+
+        // Load Demo Feature translations for current language (if not English)
+        if (currentLang !== 'en' && demoFeatures.length > 0) {
+          try {
+            const { data: translations } = await supabase
+              .from("landing_demo_feature_translations")
+              .select("*")
+              .eq("language", currentLang)
+            
+            if (translations && translations.length > 0) {
+              // Create a map of translations by feature_id
+              const translationMap = new Map<string, string>()
+              translations.forEach((t: { feature_id: string; label: string }) => {
+                translationMap.set(t.feature_id, t.label)
+              })
+              
+              // Apply translations to demo features
+              demoFeatures = demoFeatures.map(feature => {
+                const translatedLabel = translationMap.get(feature.id)
+                if (translatedLabel) {
+                  return { ...feature, label: translatedLabel }
+                }
+                return feature
+              })
+            }
+          } catch (e) {
+            console.error("Failed to load demo feature translations:", e)
+          }
+        }
         
         setLandingData({
           heroCards: heroCards || [],
           stats: stats || null,
           testimonials: testimonials || [],
           faqItems: faqItems || [],
+          demoFeatures: demoFeatures || [],
           settings: settings || null,
           loading: false,
         })
@@ -952,12 +994,19 @@ const FeatureCard: React.FC<{
 /* ═══════════════════════════════════════════════════════════════════════════════
    INTERACTIVE DEMO SECTION
    ═══════════════════════════════════════════════════════════════════════════════ */
+// Icon mapping for database features
+const demoIconMap: Record<string, React.ElementType> = {
+  Leaf, Clock, TrendingUp, Shield, Camera, NotebookPen, Users, Sparkles,
+  Bell, Heart, Star, Zap, Globe, Search, BookMarked, Flower2, TreeDeciduous, Sprout, Sun, Droplets
+}
+
 const InteractiveDemoSection: React.FC = () => {
   const { t } = useTranslation("Landing")
+  const { demoFeatures } = useLandingData()
   const [activeFeature, setActiveFeature] = React.useState(0)
 
-  // Features from translations
-  const features = [
+  // Default features from translations (fallback if no database features)
+  const defaultFeatures = [
     { icon: Leaf, label: t("demo.discover", { defaultValue: "Discover Plants" }), color: "emerald" },
     { icon: Clock, label: t("demo.schedule", { defaultValue: "Schedule Care" }), color: "blue" },
     { icon: TrendingUp, label: t("demo.track", { defaultValue: "Track Growth" }), color: "purple" },
@@ -967,6 +1016,15 @@ const InteractiveDemoSection: React.FC = () => {
     { icon: Users, label: t("demo.community", { defaultValue: "Join Community" }), color: "teal" },
     { icon: Sparkles, label: t("demo.assistant", { defaultValue: "Smart Assistant" }), color: "indigo" },
   ]
+
+  // Use database features if available, otherwise use defaults
+  const features = demoFeatures.length > 0
+    ? demoFeatures.map(f => ({
+        icon: demoIconMap[f.icon_name] || Leaf,
+        label: f.label,
+        color: f.color,
+      }))
+    : defaultFeatures
 
   React.useEffect(() => {
     const interval = setInterval(() => {

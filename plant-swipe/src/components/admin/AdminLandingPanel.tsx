@@ -118,6 +118,22 @@ type FAQTranslation = {
   answer: string
 }
 
+type DemoFeature = {
+  id: string
+  position: number
+  icon_name: string
+  label: string
+  color: string
+  is_active: boolean
+}
+
+type DemoFeatureTranslation = {
+  id: string
+  feature_id: string
+  language: string
+  label: string
+}
+
 type UserProfile = {
   id: string
   display_name: string
@@ -168,7 +184,7 @@ type LandingPageSettings = {
   meta_description: string
 }
 
-type LandingTab = "settings" | "hero" | "stats" | "testimonials" | "faq"
+type LandingTab = "settings" | "hero" | "stats" | "testimonials" | "faq" | "demo"
 
 // ========================
 // IMPORT FROM PLANTS MODAL
@@ -714,18 +730,20 @@ export const AdminLandingPanel: React.FC = () => {
   const [stats, setStats] = React.useState<LandingStats | null>(null)
   const [testimonials, setTestimonials] = React.useState<Testimonial[]>([])
   const [faqItems, setFaqItems] = React.useState<FAQ[]>([])
+  const [demoFeatures, setDemoFeatures] = React.useState<DemoFeature[]>([])
 
   // Load all data
   const loadData = React.useCallback(async () => {
     setLoading(true)
     setSettingsError(null)
     try {
-      const [settingsRes, heroRes, statsRes, testimonialsRes, faqRes] = await Promise.all([
+      const [settingsRes, heroRes, statsRes, testimonialsRes, faqRes, demoRes] = await Promise.all([
         supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
         supabase.from("landing_hero_cards").select("*").order("position"),
         supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
         supabase.from("landing_testimonials").select("*").order("position"),
         supabase.from("landing_faq").select("*").order("position"),
+        supabase.from("landing_demo_features").select("*").order("position"),
       ])
 
       // Handle settings - check for table not found error (404)
@@ -769,6 +787,7 @@ export const AdminLandingPanel: React.FC = () => {
       if (heroRes.data) setHeroCards(heroRes.data)
       if (testimonialsRes.data) setTestimonials(testimonialsRes.data)
       if (faqRes.data) setFaqItems(faqRes.data)
+      if (demoRes.data) setDemoFeatures(demoRes.data)
     } catch (e) {
       console.error("Failed to load landing data:", e)
       setSettingsError("Failed to load landing data. Please try again.")
@@ -785,6 +804,7 @@ export const AdminLandingPanel: React.FC = () => {
     { id: "settings" as const, label: "Global Settings", icon: Settings },
     { id: "hero" as const, label: "Hero Cards", icon: Smartphone, count: heroCards.length },
     { id: "stats" as const, label: "Stats", icon: BarChart3 },
+    { id: "demo" as const, label: "Wheel Features", icon: CirclePlay, count: demoFeatures.length },
     { id: "testimonials" as const, label: "Reviews", icon: Star, count: testimonials.length },
     { id: "faq" as const, label: "FAQ", icon: HelpCircle, count: faqItems.length },
   ]
@@ -904,6 +924,14 @@ export const AdminLandingPanel: React.FC = () => {
               setTestimonials={setTestimonials}
               setSaving={setSaving}
               sectionVisible={settings?.show_testimonials_section ?? true}
+            />
+          )}
+          {activeTab === "demo" && (
+            <DemoFeaturesTab
+              features={demoFeatures}
+              setFeatures={setDemoFeatures}
+              setSaving={setSaving}
+              sectionVisible={settings?.show_demo_section ?? true}
             />
           )}
           {activeTab === "faq" && (
@@ -2147,6 +2175,506 @@ const TestimonialsTab: React.FC<{
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ========================
+// DEMO FEATURES TAB WITH TRANSLATION SUPPORT
+// ========================
+const DEMO_LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
+  en: "English",
+  fr: "Français",
+}
+
+const AVAILABLE_ICONS = [
+  "Leaf", "Clock", "TrendingUp", "Shield", "Camera", "NotebookPen", 
+  "Users", "Sparkles", "Bell", "Heart", "Star", "Zap", "Globe", "Search",
+  "BookMarked", "Flower2", "TreeDeciduous", "Sprout", "Sun", "Droplets"
+]
+
+const AVAILABLE_COLORS = [
+  { name: "emerald", class: "bg-emerald-500" },
+  { name: "blue", class: "bg-blue-500" },
+  { name: "purple", class: "bg-purple-500" },
+  { name: "rose", class: "bg-rose-500" },
+  { name: "pink", class: "bg-pink-500" },
+  { name: "amber", class: "bg-amber-500" },
+  { name: "teal", class: "bg-teal-500" },
+  { name: "indigo", class: "bg-indigo-500" },
+  { name: "red", class: "bg-red-500" },
+  { name: "green", class: "bg-green-500" },
+]
+
+const DemoFeaturesTab: React.FC<{
+  features: DemoFeature[]
+  setFeatures: React.Dispatch<React.SetStateAction<DemoFeature[]>>
+  setSaving: React.Dispatch<React.SetStateAction<boolean>>
+  sectionVisible: boolean
+}> = ({ features, setFeatures, setSaving, sectionVisible }) => {
+  const [localFeatures, setLocalFeatures] = React.useState<DemoFeature[]>(features)
+  const [selectedLang, setSelectedLang] = React.useState<SupportedLanguage>("en")
+  const [translations, setTranslations] = React.useState<Record<string, DemoFeatureTranslation>>({})
+  const [localTranslations, setLocalTranslations] = React.useState<Record<string, Partial<DemoFeatureTranslation>>>({})
+  const [translating, setTranslating] = React.useState(false)
+  const [loadingTranslations, setLoadingTranslations] = React.useState(false)
+
+  // Sync local features when parent changes
+  React.useEffect(() => {
+    setLocalFeatures(features)
+  }, [features])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = selectedLang === "en" 
+    ? JSON.stringify(localFeatures) !== JSON.stringify(features)
+    : Object.keys(localTranslations).length > 0
+
+  // Load translations for the selected language
+  const loadTranslations = React.useCallback(async (lang: SupportedLanguage) => {
+    if (lang === "en") {
+      setTranslations({})
+      setLocalTranslations({})
+      return
+    }
+    
+    setLoadingTranslations(true)
+    try {
+      const { data, error } = await supabase
+        .from("landing_demo_feature_translations")
+        .select("*")
+        .eq("language", lang)
+      
+      if (data && !error) {
+        const translationMap: Record<string, DemoFeatureTranslation> = {}
+        data.forEach((t: DemoFeatureTranslation) => {
+          translationMap[t.feature_id] = t
+        })
+        setTranslations(translationMap)
+        setLocalTranslations({})
+      }
+    } catch (e) {
+      console.error("Failed to load translations:", e)
+    } finally {
+      setLoadingTranslations(false)
+    }
+  }, [])
+
+  // Load translations when language changes
+  React.useEffect(() => {
+    loadTranslations(selectedLang)
+  }, [selectedLang, loadTranslations])
+
+  // Get the display label for a feature based on selected language
+  const getDisplayLabel = (feature: DemoFeature) => {
+    if (selectedLang === "en") {
+      const localFeature = localFeatures.find(f => f.id === feature.id)
+      return localFeature?.label || feature.label
+    }
+    const localTrans = localTranslations[feature.id]
+    const savedTrans = translations[feature.id]
+    return localTrans?.label ?? savedTrans?.label ?? feature.label
+  }
+
+  const addFeature = async () => {
+    const newFeature: Partial<DemoFeature> = {
+      position: localFeatures.length,
+      icon_name: "Leaf",
+      label: "New Feature",
+      color: "emerald",
+      is_active: true,
+    }
+
+    const { data, error } = await supabase
+      .from("landing_demo_features")
+      .insert(newFeature)
+      .select()
+      .single()
+
+    if (data && !error) {
+      setFeatures([...features, data])
+      setLocalFeatures([...localFeatures, data])
+    }
+  }
+
+  // Update local state only
+  const updateLocalFeature = (id: string, updates: Partial<DemoFeature>) => {
+    if (selectedLang === "en") {
+      setLocalFeatures(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f))
+    } else {
+      // Update local translations
+      setLocalTranslations(prev => ({
+        ...prev,
+        [id]: {
+          ...prev[id],
+          label: updates.label ?? prev[id]?.label,
+          feature_id: id,
+          language: selectedLang,
+        }
+      }))
+    }
+  }
+
+  // Save all changes to database
+  const saveAllFeatures = async () => {
+    setSaving(true)
+    try {
+      if (selectedLang === "en") {
+        // Save English base content
+        for (const feature of localFeatures) {
+          const originalFeature = features.find(f => f.id === feature.id)
+          if (originalFeature && JSON.stringify(originalFeature) !== JSON.stringify(feature)) {
+            await supabase
+              .from("landing_demo_features")
+              .update({ ...feature, updated_at: new Date().toISOString() })
+              .eq("id", feature.id)
+          }
+        }
+        setFeatures(localFeatures)
+      } else {
+        // Save translations
+        for (const [featureId, localTrans] of Object.entries(localTranslations)) {
+          const existingTranslation = translations[featureId]
+          const translationData = {
+            feature_id: featureId,
+            language: selectedLang,
+            label: localTrans.label ?? existingTranslation?.label ?? "",
+            updated_at: new Date().toISOString(),
+          }
+          
+          if (existingTranslation) {
+            await supabase
+              .from("landing_demo_feature_translations")
+              .update(translationData)
+              .eq("id", existingTranslation.id)
+            
+            setTranslations(prev => ({
+              ...prev,
+              [featureId]: { ...existingTranslation, ...translationData }
+            }))
+          } else {
+            const { data, error } = await supabase
+              .from("landing_demo_feature_translations")
+              .insert(translationData)
+              .select()
+              .single()
+            
+            if (data && !error) {
+              setTranslations(prev => ({ ...prev, [featureId]: data }))
+            }
+          }
+        }
+        setLocalTranslations({})
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteFeature = async (id: string) => {
+    if (!confirm("Delete this feature?")) return
+    const { error } = await supabase
+      .from("landing_demo_features")
+      .delete()
+      .eq("id", id)
+
+    if (!error) {
+      setFeatures(features.filter(f => f.id !== id))
+      setLocalFeatures(localFeatures.filter(f => f.id !== id))
+    }
+  }
+
+  const moveFeature = async (index: number, direction: "up" | "down") => {
+    if ((direction === "up" && index === 0) || (direction === "down" && index === localFeatures.length - 1)) return
+
+    const newIndex = direction === "up" ? index - 1 : index + 1
+    const newFeatures = [...localFeatures]
+    ;[newFeatures[index], newFeatures[newIndex]] = [newFeatures[newIndex], newFeatures[index]]
+
+    const updates = newFeatures.map((feature, i) => ({ ...feature, position: i }))
+    setLocalFeatures(updates)
+
+    // Save position changes immediately
+    for (const feature of updates) {
+      await supabase
+        .from("landing_demo_features")
+        .update({ position: feature.position })
+        .eq("id", feature.id)
+    }
+    setFeatures(updates)
+  }
+
+  // Translate all features to the selected language using DeepL
+  const translateAllFeatures = async () => {
+    if (selectedLang === "en") return
+    
+    setTranslating(true)
+    setSaving(true)
+    
+    try {
+      for (const feature of localFeatures) {
+        const translatedLabel = await translateText(feature.label, selectedLang, "en")
+        
+        const existingTranslation = translations[feature.id]
+        const translationData = {
+          feature_id: feature.id,
+          language: selectedLang,
+          label: translatedLabel,
+          updated_at: new Date().toISOString(),
+        }
+        
+        if (existingTranslation) {
+          const { error } = await supabase
+            .from("landing_demo_feature_translations")
+            .update(translationData)
+            .eq("id", existingTranslation.id)
+          
+          if (error) {
+            console.error("Failed to update translation:", error)
+            throw error
+          }
+        } else {
+          const { data, error } = await supabase
+            .from("landing_demo_feature_translations")
+            .insert(translationData)
+            .select()
+            .single()
+          
+          if (error) {
+            console.error("Failed to insert translation:", error)
+            throw error
+          }
+          
+          if (data) {
+            setTranslations(prev => ({ ...prev, [feature.id]: data }))
+          }
+        }
+      }
+      
+      // Reload translations after bulk update
+      await loadTranslations(selectedLang)
+    } catch (e: unknown) {
+      console.error("Translation failed:", e)
+      const errorMessage = e instanceof Error ? e.message : "Translation failed. Please try again."
+      alert(errorMessage)
+    } finally {
+      setTranslating(false)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <SectionHiddenBanner visible={sectionVisible} />
+
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Demo Wheel Features</h3>
+          <p className="text-sm text-stone-500">Features shown in the interactive demo wheel</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Save Button */}
+          {hasUnsavedChanges && (
+            <Button onClick={saveAllFeatures} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
+          )}
+
+          {/* Language Selector */}
+          <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <button
+                key={lang}
+                onClick={() => setSelectedLang(lang)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                  selectedLang === lang
+                    ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
+                )}
+              >
+                {DEMO_LANGUAGE_LABELS[lang]}
+              </button>
+            ))}
+          </div>
+          
+          {/* DeepL Translate Button (only shown for non-English) */}
+          {selectedLang !== "en" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={translateAllFeatures}
+              disabled={translating || localFeatures.length === 0}
+              className="rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400"
+            >
+              {translating ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Languages className="h-4 w-4 mr-2" />
+              )}
+              {translating ? "Translating..." : "DeepL Translate All"}
+            </Button>
+          )}
+          
+          <Button onClick={addFeature} className="rounded-xl" disabled={selectedLang !== "en"}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Feature
+          </Button>
+        </div>
+      </div>
+
+      {/* Language Info Banner */}
+      {selectedLang !== "en" && (
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <Languages className="h-4 w-4 text-blue-500" />
+          <span className="text-sm text-blue-700 dark:text-blue-300">
+            Editing {DEMO_LANGUAGE_LABELS[selectedLang]} translations. Base content is managed in English.
+          </span>
+        </div>
+      )}
+
+      {loadingTranslations ? (
+        <Card className="rounded-xl">
+          <CardContent className="py-12 text-center">
+            <Loader2 className="h-8 w-8 mx-auto mb-2 text-stone-400 animate-spin" />
+            <p className="text-stone-500">Loading translations...</p>
+          </CardContent>
+        </Card>
+      ) : localFeatures.length === 0 ? (
+        <Card className="rounded-xl border-dashed">
+          <CardContent className="py-12 text-center text-stone-500">
+            No features yet. Add one to get started.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {localFeatures.map((feature, index) => {
+            const displayLabel = getDisplayLabel(feature)
+            const hasTranslation = selectedLang !== "en" && (!!translations[feature.id] || !!localTranslations[feature.id])
+            
+            return (
+              <Card key={feature.id} className="rounded-xl">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    {/* Position Controls */}
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => moveFeature(index, "up")}
+                        disabled={index === 0 || selectedLang !== "en"}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <div className="flex items-center justify-center h-6 w-6 text-xs font-medium text-stone-400">
+                        {index + 1}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => moveFeature(index, "down")}
+                        disabled={index === localFeatures.length - 1 || selectedLang !== "en"}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {/* Icon Preview */}
+                    <div className={cn(
+                      "h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0",
+                      `bg-${feature.color}-500`
+                    )}>
+                      <span className="text-white text-lg">
+                        {feature.icon_name.charAt(0)}
+                      </span>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <Label className="text-xs text-stone-500 flex items-center gap-1">
+                            Label
+                            {selectedLang !== "en" && !hasTranslation && (
+                              <span className="text-amber-600 dark:text-amber-400">(not translated)</span>
+                            )}
+                          </Label>
+                          <Input
+                            value={displayLabel}
+                            onChange={(e) => updateLocalFeature(feature.id, { label: e.target.value })}
+                            className="rounded-xl"
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Icon and Color selectors (only in English mode) */}
+                      {selectedLang === "en" && (
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1">
+                            <Label className="text-xs text-stone-500">Icon</Label>
+                            <select
+                              value={feature.icon_name}
+                              onChange={(e) => updateLocalFeature(feature.id, { icon_name: e.target.value })}
+                              className="w-full h-9 px-3 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-sm"
+                            >
+                              {AVAILABLE_ICONS.map(icon => (
+                                <option key={icon} value={icon}>{icon}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex-1">
+                            <Label className="text-xs text-stone-500">Color</Label>
+                            <div className="flex gap-1 flex-wrap">
+                              {AVAILABLE_COLORS.map(color => (
+                                <button
+                                  key={color.name}
+                                  onClick={() => updateLocalFeature(feature.id, { color: color.name })}
+                                  className={cn(
+                                    "h-6 w-6 rounded-lg transition-all",
+                                    color.class,
+                                    feature.color === color.name && "ring-2 ring-offset-2 ring-stone-900 dark:ring-white"
+                                  )}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => updateLocalFeature(feature.id, { is_active: !feature.is_active })}
+                        disabled={selectedLang !== "en"}
+                        className={cn(
+                          "rounded-xl",
+                          feature.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
+                        )}
+                      >
+                        {feature.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteFeature(feature.id)}
+                        disabled={selectedLang !== "en"}
+                        className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>
