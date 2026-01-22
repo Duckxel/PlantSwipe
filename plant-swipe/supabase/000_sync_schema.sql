@@ -8974,6 +8974,8 @@ $$;
 GRANT EXECUTE ON FUNCTION public.update_bug_action_response(uuid, uuid, jsonb) TO authenticated;
 
 -- Function to submit a bug report (auto-fills user info from profile)
+-- Drop the old version with _user_info parameter to avoid ambiguity
+DROP FUNCTION IF EXISTS public.submit_bug_report(uuid, text, text, text, jsonb, jsonb, text);
 CREATE OR REPLACE FUNCTION public.submit_bug_report(
     _user_id uuid,
     _bug_name text,
