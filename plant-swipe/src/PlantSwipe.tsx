@@ -415,17 +415,55 @@ export default function PlantSwipe() {
     loadColors()
   }, [])
 
+  // Create O(1) lookups for color matching to avoid O(N) iteration in filter logic
+  // Enhanced with ID-based lookup and translation-aware matching
+  const colorLookups = useMemo(() => {
+    const nameMap = new Map<string, ColorOption>()
+    const idMap = new Map<string, ColorOption>()
+    const childrenMap = new Map<string, ColorOption[]>()
+    // Translation map: any translated name (lowercase) -> ColorOption
+    // This enables users to filter by colors in their language
+    const translationMap = new Map<string, ColorOption>()
+
+    colorOptions.forEach(c => {
+      const normalizedName = c.name.toLowerCase()
+      nameMap.set(normalizedName, c)
+      idMap.set(c.id, c)
+      
+      // Build children map for primary color expansion
+      c.parentIds.forEach(pid => {
+        const existing = childrenMap.get(pid)
+        if (existing) {
+          existing.push(c)
+        } else {
+          childrenMap.set(pid, [c])
+        }
+      })
+      
+      // Index all translations for multi-language matching
+      Object.values(c.translations).forEach(translatedName => {
+        if (translatedName) {
+          translationMap.set(translatedName.toLowerCase().trim(), c)
+        }
+      })
+    })
+    return { nameMap, idMap, childrenMap, translationMap }
+  }, [colorOptions])
+
   React.useEffect(() => {
     if (colorFilter.length === 0) return
     // Open advanced colors section if any selected color is not primary
+    // Supports both canonical names and translated names via the lookup maps
+    const { nameMap, translationMap } = colorLookups
     const hasAdvancedColor = colorFilter.some((colorName) => {
-      const color = colorOptions.find((c) => c.name === colorName)
+      const normalizedName = colorName.toLowerCase()
+      const color = nameMap.get(normalizedName) || translationMap.get(normalizedName)
       return color && !color.isPrimary
     })
     if (hasAdvancedColor) {
       setAdvancedColorsOpen(true)
     }
-  }, [colorFilter, colorOptions])
+  }, [colorFilter, colorLookups])
 
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
@@ -603,7 +641,10 @@ export default function PlantSwipe() {
   // Pre-calculate normalized values for all plants to optimize filter performance
   // This avoids repeating expensive string operations on every filter change
   // All Set-based lookups enable O(1) membership tests instead of O(n) array scans
+  // Enhanced: Now includes color translations for bi-directional language matching
   const preparedPlants = useMemo(() => {
+    const { nameMap, translationMap } = colorLookups
+    
     return plants.map((p) => {
       // Colors - build both array (for iteration) and Sets (for O(1) lookups)
       const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
@@ -615,12 +656,30 @@ export default function PlantSwipe() {
       
       // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
       // This avoids regex operations during filtering
+      // Enhanced: Also add translations for bi-directional matching
+      // (e.g., plant with "red" will also match filter "rouge")
       const colorTokens = new Set<string>()
       normalizedColors.forEach(color => {
         colorTokens.add(color)
         // Split compound colors and add individual tokens
         const tokens = color.replace(/[-_/]+/g, ' ').split(/\s+/).filter(Boolean)
-        tokens.forEach(token => colorTokens.add(token))
+        tokens.forEach(token => {
+          colorTokens.add(token)
+          
+          // Try to find this token in the color database
+          // If found, add all its translations for bi-directional matching
+          const matchedColor = nameMap.get(token) || translationMap.get(token)
+          if (matchedColor) {
+            // Add canonical name
+            colorTokens.add(matchedColor.name.toLowerCase())
+            // Add all translations
+            Object.values(matchedColor.translations).forEach(translatedName => {
+              if (translatedName) {
+                colorTokens.add(translatedName.toLowerCase().trim())
+              }
+            })
+          }
+        })
       })
 
       // Search string
@@ -684,33 +743,63 @@ export default function PlantSwipe() {
         _hasImage: hasImage
       } as PreparedPlant
     })
-  }, [plants])
+  }, [plants, colorLookups])
 
   // Memoize color filter expansion separately to avoid recomputing on every filter change
   // This builds a Set of all color names that should match (including children of primary colors)
+  // Enhanced: Also supports matching by translated color names for multi-language filtering
   const expandedColorFilterSet = useMemo(() => {
     const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
     if (normalizedColorFilters.length === 0) return null
     
     const expandedSet = new Set<string>()
+    const { nameMap, childrenMap, translationMap } = colorLookups
+    
+    // Pre-allocate a Set for tracking processed color IDs to avoid duplicate expansion
+    const processedIds = new Set<string>()
     
     normalizedColorFilters.forEach((filterColorName) => {
+      // Add the exact filter name for direct matching
       expandedSet.add(filterColorName)
       
-      // Find the color in colorOptions to check if it's primary
-      const filterColor = colorOptions.find((c) => c.name.toLowerCase() === filterColorName)
-      if (filterColor?.isPrimary) {
-        // Include all colors that have this as a parent
-        colorOptions.forEach((c) => {
-          if (c.parentIds.includes(filterColor.id)) {
-            expandedSet.add(c.name.toLowerCase())
+      // Try to resolve the color - first by name, then by translation
+      // This allows filtering by colors in any supported language
+      const filterColor = nameMap.get(filterColorName) || translationMap.get(filterColorName)
+      
+      if (filterColor && !processedIds.has(filterColor.id)) {
+        processedIds.add(filterColor.id)
+        
+        // Always add the canonical name for reliable matching
+        expandedSet.add(filterColor.name.toLowerCase())
+        
+        // Add all translations for this color to enable cross-language plant matching
+        Object.values(filterColor.translations).forEach(translatedName => {
+          if (translatedName) {
+            expandedSet.add(translatedName.toLowerCase().trim())
           }
         })
+        
+        // If primary color, expand to include all child colors
+        if (filterColor.isPrimary) {
+          const children = childrenMap.get(filterColor.id)
+          if (children) {
+            for (let i = 0; i < children.length; i++) {
+              const child = children[i]
+              expandedSet.add(child.name.toLowerCase())
+              // Also add child translations for comprehensive matching
+              Object.values(child.translations).forEach(translatedName => {
+                if (translatedName) {
+                  expandedSet.add(translatedName.toLowerCase().trim())
+                }
+              })
+            }
+          }
+        }
       }
     })
     
     return expandedSet
-  }, [colorFilter, colorOptions])
+  }, [colorFilter, colorLookups])
 
   // Pre-normalize filter values to avoid repeated lowercasing during filtering
   const normalizedFilters = useMemo(() => ({

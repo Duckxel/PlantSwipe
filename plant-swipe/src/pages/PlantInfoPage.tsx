@@ -1057,24 +1057,37 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       setCompanionsLoading(true)
       try {
         // Run all queries in parallel for faster loading
-        const [plantsRes, imagesRes, translationsRes] = await Promise.all([
-          supabase
-            .from('plants')
-            .select('id, name')
-            .in('id', companionIds),
-          supabase
-            .from('plant_images')
-            .select('plant_id, link')
-            .in('plant_id', companionIds)
-            .eq('use', 'primary'),
-          currentLang !== 'en'
-            ? supabase
+        // Note: Promise.resolve() wraps PromiseLike into a proper Promise for TypeScript
+        const queries: Promise<any>[] = [
+          Promise.resolve(
+            supabase
+              .from('plants')
+              .select('id, name')
+              .in('id', companionIds)
+          ),
+          Promise.resolve(
+            supabase
+              .from('plant_images')
+              .select('plant_id, link')
+              .in('plant_id', companionIds)
+              .eq('use', 'primary')
+          )
+        ]
+        
+        // Add translation query if not English
+        if (currentLang !== 'en') {
+          queries.push(
+            Promise.resolve(
+              supabase
                 .from('plant_translations')
                 .select('plant_id, name')
                 .in('plant_id', companionIds)
                 .eq('language', currentLang)
-            : Promise.resolve({ data: null, error: null })
-        ])
+            )
+          )
+        }
+        
+        const results = await Promise.all(queries)
         
         if (ignore) return
         

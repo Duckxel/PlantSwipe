@@ -11,7 +11,8 @@ import type {
   PlantScanSuggestion, 
   KindwiseApiResponse,
   ScanImageUploadResult,
-  ScanStatus
+  ScanStatus,
+  ClassificationLevel
 } from '@/types/scan'
 
 // ===== Constants =====
@@ -44,12 +45,22 @@ export interface UploadAndIdentifyResult {
  * - Uploads to PHOTOS bucket under scans/{userId}/
  * - Calls Kindwise API with the optimized image
  * - Records in admin_media_uploads table
+ * 
+ * @param file - The image file to upload and identify
+ * @param options - Optional parameters for identification
+ * @param options.latitude - Geographic coordinate for better accuracy
+ * @param options.longitude - Geographic coordinate for better accuracy
+ * @param options.classificationLevel - Level of taxonomic detail in results:
+ *   - 'species': genus + species (default) - e.g., "Philodendron hederaceum"
+ *   - 'all': includes cultivars/varieties - e.g., "Philodendron hederaceum var. oxycardium 'Brasil'"
+ *   - 'genus': genus only - e.g., "Philodendron"
  */
 export async function uploadAndIdentifyPlant(
   file: File,
   options?: {
     latitude?: number
     longitude?: number
+    classificationLevel?: ClassificationLevel
   }
 ): Promise<UploadAndIdentifyResult> {
   const session = (await supabase.auth.getSession()).data.session
@@ -75,6 +86,9 @@ export async function uploadAndIdentifyPlant(
   }
   if (options?.longitude !== undefined) {
     formData.append('longitude', String(options.longitude))
+  }
+  if (options?.classificationLevel) {
+    formData.append('classification_level', options.classificationLevel)
   }
   
   const response = await fetch('/api/scan/upload-and-identify', {
@@ -142,6 +156,7 @@ export function fileToBase64(file: File): Promise<string> {
 
 /**
  * Convert API response to app-friendly format
+ * Extracts taxonomy details including cultivar/infraspecies when classification_level='all'
  */
 function transformApiResponse(apiResponse: KindwiseApiResponse): {
   isPlant: boolean
@@ -163,7 +178,13 @@ function transformApiResponse(apiResponse: KindwiseApiResponse): {
       similarity: img.similarity,
       citation: img.citation
     })),
-    entityId: s.details?.entity_id
+    entityId: s.details?.entity_id,
+    // Extract taxonomy details when available (classification_level='all')
+    genus: s.details?.taxonomy?.genus,
+    species: s.details?.taxonomy?.species,
+    infraspecies: s.details?.taxonomy?.infraspecies,
+    commonNames: s.details?.common_names,
+    synonyms: s.details?.synonyms
   }))
   
   const topMatch = suggestions.length > 0 ? suggestions[0] : undefined
@@ -177,6 +198,128 @@ function transformApiResponse(apiResponse: KindwiseApiResponse): {
 }
 
 /**
+ * Escape special characters for PostgreSQL ILIKE patterns
+ * Prevents injection and unexpected query behavior from user input
+ * Characters escaped: % (any sequence), _ (single char), \ (escape char)
+ */
+function escapeIlikePattern(input: string): string {
+  return input
+    .replace(/\\/g, '\\\\')  // Escape backslash first
+    .replace(/%/g, '\\%')    // Escape percent
+    .replace(/_/g, '\\_')    // Escape underscore
+}
+
+/**
+ * Try to find a matching plant in our database
+ * Uses multiple search strategies for best matching
+ * All strategies are executed before returning - Request Plant should only appear after this completes
+ */
+async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Promise<string | undefined> {
+  if (!topMatch?.name) {
+    console.log('[plantScan] No plant name to match')
+    return undefined
+  }
+  
+  console.log('[plantScan] Starting database match for:', topMatch.name)
+  console.log('[plantScan] Taxonomy info - Genus:', topMatch.genus, 'Species:', topMatch.species, 'Infraspecies:', topMatch.infraspecies)
+  
+  // Sanitize inputs to prevent ILIKE injection
+  const safeName = escapeIlikePattern(topMatch.name)
+  const safeGenus = topMatch.genus ? escapeIlikePattern(topMatch.genus) : null
+  const safeSpecies = topMatch.species ? escapeIlikePattern(topMatch.species) : null
+  
+  try {
+    // Strategy 1: Exact name match (case-insensitive)
+    const { data: exactMatch, error: exactError } = await supabase
+      .from('plants')
+      .select('id, name, scientific_name')
+      .or(`name.ilike.${safeName},scientific_name.ilike.${safeName}`)
+      .limit(1)
+      .single()
+    
+    if (exactMatch && !exactError) {
+      console.log('[plantScan] ✓ Strategy 1 (exact match) found:', exactMatch.name)
+      return exactMatch.id
+    }
+    
+    // Strategy 2: Build scientific name from genus + species and search
+    if (safeGenus && safeSpecies) {
+      const safeScientificName = `${safeGenus} ${safeSpecies}`
+      console.log('[plantScan] Trying Strategy 2 with scientific name:', `${topMatch.genus} ${topMatch.species}`)
+      
+      const { data: scientificMatch, error: sciError } = await supabase
+        .from('plants')
+        .select('id, name, scientific_name')
+        .or(`scientific_name.ilike.${safeScientificName},scientific_name.ilike.${safeScientificName}%`)
+        .limit(1)
+        .single()
+      
+      if (scientificMatch && !sciError) {
+        console.log('[plantScan] ✓ Strategy 2 (scientific name) found:', scientificMatch.name)
+        return scientificMatch.id
+      }
+    }
+    
+    // Strategy 3: Partial name match (contains)
+    const { data: partialMatch, error: partialError } = await supabase
+      .from('plants')
+      .select('id, name, scientific_name')
+      .or(`name.ilike.%${safeName}%,scientific_name.ilike.%${safeName}%`)
+      .limit(1)
+      .single()
+    
+    if (partialMatch && !partialError) {
+      console.log('[plantScan] ✓ Strategy 3 (partial match) found:', partialMatch.name)
+      return partialMatch.id
+    }
+    
+    // Strategy 4: Search by genus only if we have it
+    if (safeGenus) {
+      console.log('[plantScan] Trying Strategy 4 with genus:', topMatch.genus)
+      
+      const { data: genusMatch, error: genusError } = await supabase
+        .from('plants')
+        .select('id, name, scientific_name')
+        .or(`scientific_name.ilike.${safeGenus}%,name.ilike.%${safeGenus}%`)
+        .limit(1)
+        .single()
+      
+      if (genusMatch && !genusError) {
+        console.log('[plantScan] ✓ Strategy 4 (genus match) found:', genusMatch.name)
+        return genusMatch.id
+      }
+    }
+    
+    // Strategy 5: Search by common names if available
+    if (topMatch.commonNames && topMatch.commonNames.length > 0) {
+      console.log('[plantScan] Trying Strategy 5 with common names:', topMatch.commonNames.slice(0, 3))
+      
+      for (const commonName of topMatch.commonNames.slice(0, 3)) {
+        const safeCommonName = escapeIlikePattern(commonName)
+        const { data: commonNameMatch, error: commonError } = await supabase
+          .from('plants')
+          .select('id, name, scientific_name')
+          .or(`name.ilike.%${safeCommonName}%,scientific_name.ilike.%${safeCommonName}%`)
+          .limit(1)
+          .single()
+        
+        if (commonNameMatch && !commonError) {
+          console.log('[plantScan] ✓ Strategy 5 (common name) found:', commonNameMatch.name, 'via', commonName)
+          return commonNameMatch.id
+        }
+      }
+    }
+    
+    console.log('[plantScan] ✗ No match found after all 5 strategies')
+    return undefined
+    
+  } catch (err) {
+    console.error('[plantScan] Error during database matching:', err)
+    return undefined
+  }
+}
+
+/**
  * Create a new plant scan record
  */
 export async function createPlantScan(
@@ -186,6 +329,7 @@ export async function createPlantScan(
   options?: {
     latitude?: number
     longitude?: number
+    classificationLevel?: ClassificationLevel
   }
 ): Promise<PlantScan> {
   const session = (await supabase.auth.getSession()).data.session
@@ -195,20 +339,11 @@ export async function createPlantScan(
   
   const { isPlant, isPlantProbability, topMatch, suggestions } = transformApiResponse(apiResponse)
   
-  // Try to match with our database
-  let matchedPlantId: string | undefined
-  if (topMatch?.name) {
-    const { data: matchedPlant } = await supabase
-      .from('plants')
-      .select('id')
-      .or(`name.ilike.%${topMatch.name}%,scientific_name.ilike.%${topMatch.name}%`)
-      .limit(1)
-      .single()
-    
-    if (matchedPlant) {
-      matchedPlantId = matchedPlant.id
-    }
-  }
+  // Try to match with our database using multiple strategies
+  const matchedPlantId = await findMatchingPlant(topMatch)
+  
+  // Log the matching result for debugging
+  console.log('[plantScan] Database match result:', matchedPlantId ? `Found plant ID: ${matchedPlantId}` : 'No match found')
   
   const { data, error } = await supabase
     .from('plant_scans')
@@ -231,9 +366,13 @@ export async function createPlantScan(
       similar_images: topMatch?.similarImages || [],
       latitude: options?.latitude,
       longitude: options?.longitude,
-      matched_plant_id: matchedPlantId
+      matched_plant_id: matchedPlantId,
+      classification_level: options?.classificationLevel || 'all'
     })
-    .select()
+    .select(`
+      *,
+      matched_plant:plants(id, name, scientific_name)
+    `)
     .single()
   
   if (error) {
@@ -245,11 +384,66 @@ export async function createPlantScan(
 }
 
 /**
+ * Re-check if a scan now has a matching plant in the database
+ * This is useful when plants are added after the scan was created
+ * Updates the scan record if a new match is found
+ */
+async function recheckScanMatch(scan: any): Promise<any> {
+  // Skip if already has a match
+  if (scan.matched_plant_id || scan.matched_plant) {
+    return scan
+  }
+  
+  // Skip if no top match name to search for
+  if (!scan.top_match_name) {
+    return scan
+  }
+  
+  // Build a suggestion object from the scan data for findMatchingPlant
+  const suggestion: PlantScanSuggestion = {
+    id: scan.top_match_entity_id || '',
+    name: scan.top_match_name,
+    probability: scan.top_match_probability || 0,
+    // Try to extract taxonomy from suggestions if available
+    genus: scan.suggestions?.[0]?.genus,
+    species: scan.suggestions?.[0]?.species,
+    infraspecies: scan.suggestions?.[0]?.infraspecies,
+    commonNames: scan.suggestions?.[0]?.commonNames
+  }
+  
+  // Try to find a match
+  const matchedPlantId = await findMatchingPlant(suggestion)
+  
+  if (matchedPlantId) {
+    console.log('[plantScan] Re-check found new match for scan:', scan.id, '-> plant:', matchedPlantId)
+    
+    // Update the scan record with the new match
+    const { data: updatedScan, error } = await supabase
+      .from('plant_scans')
+      .update({ matched_plant_id: matchedPlantId })
+      .eq('id', scan.id)
+      .select(`
+        *,
+        matched_plant:plants(id, name, scientific_name)
+      `)
+      .single()
+    
+    if (!error && updatedScan) {
+      return updatedScan
+    }
+  }
+  
+  return scan
+}
+
+/**
  * Get all scans for the current user
+ * Automatically re-checks unmatched scans for new database matches
  */
 export async function getUserScans(options?: {
   limit?: number
   offset?: number
+  recheckMatches?: boolean
 }): Promise<PlantScan[]> {
   const session = (await supabase.auth.getSession()).data.session
   if (!session?.user?.id) {
@@ -283,7 +477,40 @@ export async function getUserScans(options?: {
     throw new Error(error.message)
   }
   
-  return (data || []).map(transformDbRow)
+  // Re-check unmatched scans for new database matches (default: enabled)
+  const shouldRecheck = options?.recheckMatches !== false
+  let scans = data || []
+  
+  if (shouldRecheck) {
+    // Only re-check scans without matches (limit to first 10 to avoid too many queries)
+    const unmatchedScans = scans.filter(s => !s.matched_plant_id && s.top_match_name)
+    const scansToRecheck = unmatchedScans.slice(0, 10)
+    
+    if (scansToRecheck.length > 0) {
+      console.log('[plantScan] Re-checking', scansToRecheck.length, 'unmatched scans for new database matches')
+      
+      // Re-check in parallel, but handle individual failures gracefully
+      const recheckResults = await Promise.allSettled(
+        scansToRecheck.map(scan => recheckScanMatch(scan))
+      )
+      
+      const recheckedScans = recheckResults
+        .filter((result): result is PromiseFulfilledResult<PlantScan> => result.status === 'fulfilled')
+        .map(result => result.value)
+      
+      // Optional: log failed rechecks without failing the whole operation
+      const failedRechecks = recheckResults.filter(result => result.status === 'rejected')
+      if (failedRechecks.length > 0) {
+        console.warn('[plantScan] Failed to re-check some scans', failedRechecks.length)
+      }
+      
+      // Merge successfully rechecked scans back into the list
+      const recheckedMap = new Map(recheckedScans.map(s => [s.id, s]))
+      scans = scans.map(s => recheckedMap.get(s.id) || s)
+    }
+  }
+  
+  return scans.map(transformDbRow)
 }
 
 /**
@@ -380,6 +607,7 @@ function transformDbRow(row: any): PlantScan {
     apiModelVersion: row.api_model_version,
     apiStatus: row.api_status as ScanStatus,
     apiResponse: row.api_response,
+    classificationLevel: row.classification_level as ClassificationLevel,
     isPlant: row.is_plant,
     isPlantProbability: row.is_plant_probability,
     topMatchName: row.top_match_name,
