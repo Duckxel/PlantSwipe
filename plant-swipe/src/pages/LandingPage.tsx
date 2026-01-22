@@ -589,12 +589,13 @@ const HeroVisual: React.FC = () => {
   }, [dbHeroCards.length])
 
   // Use first hero card from database if available, otherwise use translation defaults
+  // Plant name and image come from database, but all other fields use translations for proper localization
   const activeCard = dbHeroCards[activeCardIndex] || null
   const plantName = activeCard?.plant_name || t("heroCard.plantName")
   const plantScientific = activeCard?.plant_scientific_name || t("heroCard.plantSubname")
-  const waterFrequency = activeCard?.water_frequency || t("heroCard.waterFrequency")
-  const lightLevel = activeCard?.light_level || t("heroCard.lightLevel")
-  const reminderText = activeCard?.reminder_text || t("heroCard.waterIn")
+  const waterFrequency = t("heroCard.waterFrequency")
+  const lightLevel = t("heroCard.lightLevel")
+  const reminderText = t("heroCard.waterIn")
   const imageUrl = activeCard?.image_url
 
   // Auto-cycle through cards if multiple exist
