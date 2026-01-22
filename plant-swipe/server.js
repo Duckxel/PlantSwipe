@@ -5314,15 +5314,36 @@ app.post('/api/blog/summarize', async (req, res) => {
 
   const bodyText = extractPlainText(html, 6000)
   if (!bodyText) {
-    res.json({ summary: '' })
+    res.json({ summary: '', metaDescription: '', seoTitle: '', tags: [] })
     return
   }
 
+  // Generate comprehensive blog metadata including teaser, SEO fields, and tags
   const instructions = [
-    'Summarize the provided Aphylia blog article into a single compelling sentence under 240 characters.',
-    'Write in active voice and avoid emojis or hashtags.',
-    'Mention the core outcome or insight so it can be shown on cards.',
+    'You are a content strategist for Aphylia, a plant care and gardening app.',
+    'Analyze the provided blog article and generate the following in JSON format:',
+    '',
+    '1. "summary": A compelling teaser (2-3 sentences, max 240 chars) that entices readers to click and read more.',
+    '   - Write in active voice, highlight the key benefit or insight',
+    '   - Make it intriguing and value-focused, NOT a truncated version of the content',
+    '   - Avoid starting with "This article..." or "In this post..."',
+    '',
+    '2. "metaDescription": An SEO meta description (150-160 chars) for search engines.',
+    '   - Include the main topic and a call-to-action or benefit',
+    '   - Optimized for click-through rate in search results',
+    '',
+    '3. "seoTitle": An optimized SEO title (max 60 chars) if the original title could be improved.',
+    '   - Return empty string if the original title is already good',
+    '   - Make it more searchable while keeping it engaging',
+    '',
+    '4. "tags": An array of 3-5 relevant tags for categorization.',
+    '   - Use lowercase, hyphenated format (e.g., "plant-care", "indoor-gardening")',
+    '   - Focus on topics that help with discoverability',
+    '   - Maximum 5 tags, minimum 3 tags',
+    '',
+    'Respond ONLY with valid JSON, no markdown or extra text.',
   ].join('\n')
+
   const promptSections = [
     title ? `Title: ${title}` : null,
     `Body:\n${bodyText}`,
@@ -5335,12 +5356,42 @@ app.post('/api/blog/summarize', async (req, res) => {
         reasoning: { effort: 'low' },
         instructions,
         input: promptSections.join('\n\n'),
-        max_output_tokens: 150,
+        max_output_tokens: 500,
       },
       { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
     )
-    const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
-    res.json({ summary })
+    
+    let result = { summary: '', metaDescription: '', seoTitle: '', tags: [] }
+    const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+    
+    if (outputText) {
+      try {
+        // Try to parse JSON response, handling potential markdown code blocks
+        let jsonStr = outputText
+        if (jsonStr.startsWith('```')) {
+          jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+        }
+        const parsed = JSON.parse(jsonStr)
+        
+        result.summary = typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, 240) : ''
+        result.metaDescription = typeof parsed.metaDescription === 'string' ? parsed.metaDescription.trim().slice(0, 160) : ''
+        result.seoTitle = typeof parsed.seoTitle === 'string' ? parsed.seoTitle.trim().slice(0, 60) : ''
+        
+        // Validate and limit tags to 5
+        if (Array.isArray(parsed.tags)) {
+          result.tags = parsed.tags
+            .filter(tag => typeof tag === 'string' && tag.trim())
+            .map(tag => tag.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30))
+            .slice(0, 5)
+        }
+      } catch (parseErr) {
+        // Fallback: treat entire output as summary if JSON parsing fails
+        console.warn('[blog] Failed to parse AI JSON response, using as summary:', parseErr.message)
+        result.summary = outputText.slice(0, 240)
+      }
+    }
+    
+    res.json(result)
   } catch (err) {
     console.error('[blog] summary generation failed', err)
     res.status(500).json({ error: err?.message || 'Failed to generate summary' })

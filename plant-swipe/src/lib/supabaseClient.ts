@@ -85,6 +85,9 @@ export type BlogPostRow = {
   author_name: string | null
   cover_image_url: string | null
   excerpt: string | null
+  meta_description: string | null
+  seo_title: string | null
+  tags: string[] | null
   is_published: boolean
   published_at: string
   created_at: string
