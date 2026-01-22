@@ -447,3 +447,12 @@ export interface PlantPlanting {
 export type PlantMetaLegacy = PlantMeta
 export type PlantClassificationLegacy = PlantClassification
 export type PlantPhoto = PlantImage
+
+export type ColorOption = {
+  id: string
+  name: string
+  hexCode: string
+  isPrimary: boolean
+  parentIds: string[]
+  translations: Record<string, string>
+}
