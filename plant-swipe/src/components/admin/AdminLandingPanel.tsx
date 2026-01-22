@@ -211,6 +211,140 @@ type LandingPageSettings = {
 type LandingTab = "settings" | "hero" | "stats" | "testimonials" | "faq" | "demo"
 
 // ========================
+// SHARED TRANSLATION COMPONENTS
+// ========================
+const ADMIN_LANGUAGE_LABELS: Record<SupportedLanguage, { short: string; full: string }> = {
+  en: { short: "🇬🇧 EN", full: "English" },
+  fr: { short: "🇫🇷 FR", full: "French" },
+}
+
+// Reusable Language Switcher Component
+const LanguageSwitcher: React.FC<{
+  selectedLang: SupportedLanguage
+  onLanguageChange: (lang: SupportedLanguage) => void
+  onTranslateAll?: () => void
+  translating?: boolean
+  disabled?: boolean
+}> = ({ selectedLang, onLanguageChange, onTranslateAll, translating, disabled }) => {
+  return (
+    <div className="flex items-center gap-2">
+      {/* Language Tabs */}
+      <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
+        {SUPPORTED_LANGUAGES.map((lang) => (
+          <button
+            key={lang}
+            onClick={() => onLanguageChange(lang)}
+            disabled={disabled}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+              selectedLang === lang
+                ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white",
+              disabled && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            {ADMIN_LANGUAGE_LABELS[lang].short}
+          </button>
+        ))}
+      </div>
+
+      {/* DeepL Translate Button */}
+      {selectedLang !== "en" && onTranslateAll && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onTranslateAll}
+          disabled={translating || disabled}
+          className="rounded-xl"
+        >
+          {translating ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Languages className="h-4 w-4 mr-2" />
+          )}
+          {translating ? "Translating..." : "DeepL Translate"}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+// Translation Mode Banner
+const TranslationModeBanner: React.FC<{ language: SupportedLanguage }> = ({ language }) => {
+  if (language === "en") return null
+  return (
+    <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+      <Languages className="h-4 w-4 text-blue-500 flex-shrink-0" />
+      <span className="text-sm text-blue-700 dark:text-blue-300">
+        Editing <strong>{ADMIN_LANGUAGE_LABELS[language].full}</strong> translations. Base content is managed in English.
+      </span>
+    </div>
+  )
+}
+
+// ========================
+// ICON PICKER DIALOG
+// ========================
+const IconPickerDialog: React.FC<{
+  open: boolean
+  onClose: () => void
+  selectedIcon: string
+  onSelect: (iconName: string) => void
+  iconMap: Record<string, LucideIcon>
+  availableIcons: string[]
+}> = ({ open, onClose, selectedIcon, onSelect, iconMap, availableIcons }) => {
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Choose an Icon</DialogTitle>
+          <DialogDescription>
+            Select an icon for this feature
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-5 gap-2 max-h-[300px] overflow-y-auto p-2">
+          {availableIcons.map(iconName => {
+            const IconComponent = iconMap[iconName]
+            const isSelected = selectedIcon === iconName
+            return (
+              <button
+                key={iconName}
+                type="button"
+                onClick={() => {
+                  onSelect(iconName)
+                  onClose()
+                }}
+                className={cn(
+                  "flex flex-col items-center justify-center p-3 rounded-xl transition-all",
+                  "hover:bg-stone-100 dark:hover:bg-stone-800",
+                  isSelected 
+                    ? "bg-emerald-100 dark:bg-emerald-900/30 ring-2 ring-emerald-500" 
+                    : "bg-stone-50 dark:bg-stone-900"
+                )}
+                title={iconName}
+              >
+                {IconComponent && (
+                  <IconComponent className={cn(
+                    "h-6 w-6",
+                    isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-stone-600 dark:text-stone-400"
+                  )} />
+                )}
+                <span className={cn(
+                  "text-[10px] mt-1.5 truncate w-full text-center",
+                  isSelected ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-stone-500"
+                )}>
+                  {iconName}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ========================
 // IMPORT FROM PLANTS MODAL
 // ========================
 const ImportPlantModal: React.FC<{
@@ -1654,11 +1788,6 @@ const HeroCardsTab: React.FC<{
 // ========================
 // STATS TAB
 // ========================
-const STATS_LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
-  en: "🇬🇧 EN",
-  fr: "🇫🇷 FR",
-}
-
 const StatsTab: React.FC<{
   stats: LandingStats | null
   setStats: React.Dispatch<React.SetStateAction<LandingStats | null>>
@@ -1907,11 +2036,7 @@ const StatsTab: React.FC<{
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Statistics Banner</h3>
-          <p className="text-sm text-stone-500">
-            {selectedLang === "en" 
-              ? "Edit values and labels (base English content)"
-              : `Translate labels to ${STATS_LANGUAGE_LABELS[selectedLang]} (values are shared)`}
-          </p>
+          <p className="text-sm text-stone-500">Edit values and translatable labels</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Save Button */}
@@ -1922,43 +2047,17 @@ const StatsTab: React.FC<{
             </Button>
           )}
 
-          {/* Language Selector */}
-          <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <button
-                key={lang}
-                onClick={() => setSelectedLang(lang)}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                  selectedLang === lang
-                    ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                    : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
-                )}
-              >
-                {STATS_LANGUAGE_LABELS[lang]}
-              </button>
-            ))}
-          </div>
-
-          {/* DeepL Translate Button */}
-          {selectedLang !== "en" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={translateAllLabels}
-              disabled={translating || saving}
-              className="rounded-xl"
-            >
-              {translating ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Languages className="h-4 w-4 mr-2" />
-              )}
-              {translating ? "Translating..." : "DeepL Translate All"}
-            </Button>
-          )}
+          <LanguageSwitcher
+            selectedLang={selectedLang}
+            onLanguageChange={setSelectedLang}
+            onTranslateAll={translateAllLabels}
+            translating={translating}
+            disabled={saving}
+          />
         </div>
       </div>
+
+      <TranslationModeBanner language={selectedLang} />
 
       {loadingTranslation && (
         <div className="flex items-center gap-2 text-sm text-stone-500">
@@ -2000,7 +2099,7 @@ const StatsTab: React.FC<{
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-stone-500">
-                      Label {selectedLang !== "en" && `(${STATS_LANGUAGE_LABELS[selectedLang]})`}
+                      Label {selectedLang !== "en" && `(${ADMIN_LANGUAGE_LABELS[selectedLang].full})`}
                     </Label>
                     <Input
                       value={getDisplayLabel(stat.labelKey)}
@@ -2027,7 +2126,7 @@ const StatsTab: React.FC<{
               <div className="rounded-xl bg-stone-100 dark:bg-stone-900 p-4">
                 <h4 className="text-sm font-medium text-stone-600 dark:text-stone-400 mb-4 flex items-center gap-2">
                   <Eye className="h-4 w-4" />
-                  Live Preview ({STATS_LANGUAGE_LABELS[selectedLang]})
+                  Live Preview ({ADMIN_LANGUAGE_LABELS[selectedLang].short})
                 </h4>
                 <StatsPreview 
                   stats={{
@@ -2442,10 +2541,6 @@ const TestimonialsTab: React.FC<{
 // ========================
 // DEMO FEATURES TAB WITH TRANSLATION SUPPORT
 // ========================
-const DEMO_LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
-  en: "English",
-  fr: "Français",
-}
 
 // Icon map for rendering actual icons in the picker
 const DEMO_ICON_MAP: Record<string, LucideIcon> = {
@@ -2742,6 +2837,23 @@ const DemoFeaturesTab: React.FC<{
     }
   }
 
+  // Icon picker state
+  const [iconPickerOpen, setIconPickerOpen] = React.useState(false)
+  const [editingFeatureId, setEditingFeatureId] = React.useState<string | null>(null)
+
+  const openIconPicker = (featureId: string) => {
+    setEditingFeatureId(featureId)
+    setIconPickerOpen(true)
+  }
+
+  const handleIconSelect = (iconName: string) => {
+    if (editingFeatureId) {
+      updateLocalFeature(editingFeatureId, { icon_name: iconName })
+    }
+  }
+
+  const currentEditingFeature = editingFeatureId ? localFeatures.find(f => f.id === editingFeatureId) : null
+
   return (
     <div className="space-y-4">
       <SectionHiddenBanner visible={sectionVisible} />
@@ -2760,41 +2872,13 @@ const DemoFeaturesTab: React.FC<{
             </Button>
           )}
 
-          {/* Language Selector */}
-          <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <button
-                key={lang}
-                onClick={() => setSelectedLang(lang)}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                  selectedLang === lang
-                    ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                    : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
-                )}
-              >
-                {DEMO_LANGUAGE_LABELS[lang]}
-              </button>
-            ))}
-          </div>
-          
-          {/* DeepL Translate Button (only shown for non-English) */}
-          {selectedLang !== "en" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={translateAllFeatures}
-              disabled={translating || localFeatures.length === 0}
-              className="rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400"
-            >
-              {translating ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Languages className="h-4 w-4 mr-2" />
-              )}
-              {translating ? "Translating..." : "DeepL Translate All"}
-            </Button>
-          )}
+          <LanguageSwitcher
+            selectedLang={selectedLang}
+            onLanguageChange={setSelectedLang}
+            onTranslateAll={translateAllFeatures}
+            translating={translating}
+            disabled={localFeatures.length === 0}
+          />
           
           <Button onClick={addFeature} className="rounded-xl" disabled={selectedLang !== "en"}>
             <Plus className="h-4 w-4 mr-2" />
@@ -2803,15 +2887,20 @@ const DemoFeaturesTab: React.FC<{
         </div>
       </div>
 
-      {/* Language Info Banner */}
-      {selectedLang !== "en" && (
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-          <Languages className="h-4 w-4 text-blue-500" />
-          <span className="text-sm text-blue-700 dark:text-blue-300">
-            Editing {DEMO_LANGUAGE_LABELS[selectedLang]} translations. Base content is managed in English.
-          </span>
-        </div>
-      )}
+      <TranslationModeBanner language={selectedLang} />
+
+      {/* Icon Picker Dialog */}
+      <IconPickerDialog
+        open={iconPickerOpen}
+        onClose={() => {
+          setIconPickerOpen(false)
+          setEditingFeatureId(null)
+        }}
+        selectedIcon={currentEditingFeature?.icon_name || "Leaf"}
+        onSelect={handleIconSelect}
+        iconMap={DEMO_ICON_MAP}
+        availableIcons={AVAILABLE_ICONS}
+      />
 
       {loadingTranslations ? (
         <Card className="rounded-xl">
@@ -2896,55 +2985,41 @@ const DemoFeaturesTab: React.FC<{
                       
                       {/* Icon and Color selectors (only in English mode) */}
                       {selectedLang === "en" && (
-                        <div className="space-y-3">
-                          {/* Icon Grid Picker */}
+                        <div className="flex items-center gap-4">
+                          {/* Icon Picker - Click to open popup */}
                           <div>
-                            <Label className="text-xs text-stone-500 mb-2 block">Icon</Label>
-                            <div className="grid grid-cols-5 gap-2 p-3 bg-stone-50 dark:bg-stone-800/50 rounded-xl border border-stone-200 dark:border-stone-700">
-                              {AVAILABLE_ICONS.map(iconName => {
-                                const IconComponent = DEMO_ICON_MAP[iconName]
-                                const isSelected = feature.icon_name === iconName
-                                return (
-                                  <button
-                                    key={iconName}
-                                    type="button"
-                                    onClick={() => updateLocalFeature(feature.id, { icon_name: iconName })}
-                                    className={cn(
-                                      "flex flex-col items-center justify-center p-2 rounded-lg transition-all",
-                                      "hover:bg-white dark:hover:bg-stone-700",
-                                      isSelected 
-                                        ? "bg-emerald-100 dark:bg-emerald-900/30 ring-2 ring-emerald-500" 
-                                        : "bg-transparent"
-                                    )}
-                                    title={iconName}
-                                  >
-                                    <IconComponent className={cn(
-                                      "h-5 w-5",
-                                      isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-stone-600 dark:text-stone-400"
-                                    )} />
-                                    <span className={cn(
-                                      "text-[10px] mt-1 truncate w-full text-center",
-                                      isSelected ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-stone-500"
-                                    )}>
-                                      {iconName}
-                                    </span>
-                                  </button>
-                                )
-                              })}
-                            </div>
+                            <Label className="text-xs text-stone-500 mb-1.5 block">Icon</Label>
+                            <button
+                              type="button"
+                              onClick={() => openIconPicker(feature.id)}
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all",
+                                "bg-stone-50 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700",
+                                "hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                              )}
+                            >
+                              {(() => {
+                                const IconComponent = DEMO_ICON_MAP[feature.icon_name]
+                                return IconComponent ? (
+                                  <IconComponent className="h-5 w-5 text-stone-600 dark:text-stone-400" />
+                                ) : null
+                              })()}
+                              <span className="text-sm text-stone-600 dark:text-stone-400">{feature.icon_name}</span>
+                              <ChevronDown className="h-4 w-4 text-stone-400" />
+                            </button>
                           </div>
 
                           {/* Color Picker */}
                           <div>
-                            <Label className="text-xs text-stone-500 mb-2 block">Color</Label>
-                            <div className="flex gap-2 flex-wrap">
+                            <Label className="text-xs text-stone-500 mb-1.5 block">Color</Label>
+                            <div className="flex gap-1.5 flex-wrap">
                               {AVAILABLE_COLORS.map(color => (
                                 <button
                                   key={color.name}
                                   type="button"
                                   onClick={() => updateLocalFeature(feature.id, { color: color.name })}
                                   className={cn(
-                                    "h-8 w-8 rounded-lg transition-all flex items-center justify-center",
+                                    "h-7 w-7 rounded-lg transition-all flex items-center justify-center",
                                     color.class,
                                     feature.color === color.name 
                                       ? "ring-2 ring-offset-2 ring-stone-900 dark:ring-white scale-110" 
@@ -2952,7 +3027,7 @@ const DemoFeaturesTab: React.FC<{
                                   )}
                                 >
                                   {feature.color === color.name && (
-                                    <Check className="h-4 w-4 text-white" />
+                                    <Check className="h-3.5 w-3.5 text-white" />
                                   )}
                                 </button>
                               ))}
@@ -3000,11 +3075,6 @@ const DemoFeaturesTab: React.FC<{
 // ========================
 // FAQ TAB WITH TRANSLATION SUPPORT
 // ========================
-const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
-  en: "English",
-  fr: "Français",
-}
-
 const FAQTab: React.FC<{
   items: FAQ[]
   setItems: React.Dispatch<React.SetStateAction<FAQ[]>>
@@ -3305,41 +3375,13 @@ const FAQTab: React.FC<{
             </Button>
           )}
 
-          {/* Language Selector */}
-          <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <button
-                key={lang}
-                onClick={() => setSelectedLang(lang)}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                  selectedLang === lang
-                    ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                    : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
-                )}
-              >
-                {LANGUAGE_LABELS[lang]}
-              </button>
-            ))}
-          </div>
-          
-          {/* DeepL Translate Button (only shown for non-English) */}
-          {selectedLang !== "en" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={translateAllFAQs}
-              disabled={translating || localItems.length === 0}
-              className="rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400"
-            >
-              {translating ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Languages className="h-4 w-4 mr-2" />
-              )}
-              {translating ? "Translating..." : "DeepL Translate All"}
-            </Button>
-          )}
+          <LanguageSwitcher
+            selectedLang={selectedLang}
+            onLanguageChange={setSelectedLang}
+            onTranslateAll={translateAllFAQs}
+            translating={translating}
+            disabled={localItems.length === 0}
+          />
           
           <Button onClick={addFAQ} className="rounded-xl" disabled={selectedLang !== "en"}>
             <Plus className="h-4 w-4 mr-2" />
@@ -3348,15 +3390,7 @@ const FAQTab: React.FC<{
         </div>
       </div>
 
-      {/* Language Info Banner */}
-      {selectedLang !== "en" && (
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-          <Languages className="h-4 w-4 text-blue-500" />
-          <span className="text-sm text-blue-700 dark:text-blue-300">
-            Editing {LANGUAGE_LABELS[selectedLang]} translations. Base content is managed in English.
-          </span>
-        </div>
-      )}
+      <TranslationModeBanner language={selectedLang} />
 
       {loadingTranslations ? (
         <Card className="rounded-xl">
