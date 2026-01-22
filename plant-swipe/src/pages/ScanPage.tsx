@@ -477,6 +477,7 @@ export const ScanPage: React.FC = () => {
           </p>
         </Card>
       ) : (
+        <>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {scans.map((scan) => {
             const confidence = scan.topMatchProbability 
@@ -586,6 +587,7 @@ export const ScanPage: React.FC = () => {
             </Button>
           </div>
         )}
+        </>
       )}
       
       {/* Camera Dialog */}
