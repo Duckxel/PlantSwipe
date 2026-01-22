@@ -10,12 +10,20 @@ import { useAuth } from "@/context/AuthContext"
 interface RequestPlantDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  initialPlantName?: string
 }
 
-export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, onOpenChange }) => {
+export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, onOpenChange, initialPlantName }) => {
   const { t } = useTranslation('common')
   const { user } = useAuth()
-  const [plantName, setPlantName] = React.useState("")
+  const [plantName, setPlantName] = React.useState(initialPlantName || "")
+  
+  // Update plant name when initialPlantName prop changes
+  React.useEffect(() => {
+    if (initialPlantName && open) {
+      setPlantName(initialPlantName)
+    }
+  }, [initialPlantName, open])
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [success, setSuccess] = React.useState(false)

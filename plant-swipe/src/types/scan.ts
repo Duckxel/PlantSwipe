@@ -3,6 +3,12 @@
  * Using Kindwise Plant.id API for identification
  */
 
+// Classification Level - controls the taxonomic depth of identification results
+// - 'species': genus + species (default) - e.g., "Philodendron hederaceum"
+// - 'all': genus + species + infraspecies (cultivars, varieties, subspecies) - e.g., "Philodendron hederaceum var. oxycardium 'Brasil'"
+// - 'genus': genus only - e.g., "Philodendron"
+export type ClassificationLevel = 'species' | 'all' | 'genus'
+
 // API Response Types from Kindwise
 export interface KindwiseSimilarImage {
   id: string
@@ -17,6 +23,19 @@ export interface KindwiseSimilarImage {
 export interface KindwiseSuggestionDetails {
   language: string
   entity_id: string
+  // Additional taxonomy details when classification_level includes cultivars
+  taxonomy?: {
+    kingdom?: string
+    phylum?: string
+    class?: string
+    order?: string
+    family?: string
+    genus?: string
+    species?: string
+    infraspecies?: string
+  }
+  common_names?: string[]
+  synonyms?: string[]
 }
 
 export interface KindwiseSuggestion {
@@ -48,6 +67,7 @@ export interface KindwiseInput {
   similar_images: boolean
   images: string[]
   datetime: string
+  classification_level?: ClassificationLevel
 }
 
 export interface KindwiseApiResponse {
@@ -81,6 +101,12 @@ export interface PlantScanSuggestion {
   entityId?: string
   // If this suggestion matches a plant in our database
   matchedPlantId?: string
+  // Taxonomy details when classification_level is 'all'
+  genus?: string
+  species?: string
+  infraspecies?: string  // Cultivar, variety, subspecies, or trademark
+  commonNames?: string[]
+  synonyms?: string[]
 }
 
 export interface PlantScan {
@@ -97,6 +123,9 @@ export interface PlantScan {
   apiModelVersion?: string
   apiStatus: ScanStatus
   apiResponse?: KindwiseApiResponse
+  
+  // Classification level used for this scan
+  classificationLevel?: ClassificationLevel
   
   // Is plant check
   isPlant?: boolean
@@ -141,6 +170,7 @@ export interface CreateScanRequest {
   imageBase64: string  // Base64 encoded image
   latitude?: number
   longitude?: number
+  classificationLevel?: ClassificationLevel
 }
 
 export interface UpdateScanRequest {

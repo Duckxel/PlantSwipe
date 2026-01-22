@@ -13447,6 +13447,15 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
       // Parse optional location from form data
       const latitude = req.body?.latitude ? parseFloat(req.body.latitude) : undefined
       const longitude = req.body?.longitude ? parseFloat(req.body.longitude) : undefined
+      
+      // Parse optional classification_level from form data
+      // Options: 'all' (default - includes cultivars/varieties), 'species', 'genus' (genus only)
+      // Default to 'all' for maximum detail including cultivars and varieties
+      const classificationLevel = req.body?.classification_level || 'all'
+      const validClassificationLevels = ['species', 'all', 'genus']
+      const sanitizedClassificationLevel = validClassificationLevels.includes(classificationLevel) 
+        ? classificationLevel 
+        : 'all'
 
       let optimizedBuffer
       let finalMimeType = 'image/webp'
@@ -13488,13 +13497,14 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
         const requestBody = {
           images: [optimizedBase64],
           similar_images: true,
+          classification_level: sanitizedClassificationLevel,
         }
         if (latitude !== undefined && longitude !== undefined && !isNaN(latitude) && !isNaN(longitude)) {
           requestBody.latitude = latitude
           requestBody.longitude = longitude
         }
 
-        console.log('[scan] Calling Kindwise API for user:', user.id)
+        console.log('[scan] Calling Kindwise API for user:', user.id, 'classification_level:', sanitizedClassificationLevel)
 
         const apiResponse = await fetch('https://plant.id/api/v3/identification', {
           method: 'POST',
