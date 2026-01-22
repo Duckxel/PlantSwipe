@@ -61,6 +61,20 @@ import {
   Languages,
   User,
   LinkIcon,
+  // Icons for demo features picker
+  Clock,
+  TrendingUp,
+  Shield,
+  NotebookPen,
+  Sparkles,
+  Heart,
+  Zap,
+  Globe,
+  BookMarked,
+  Flower2,
+  TreeDeciduous,
+  Sprout,
+  type LucideIcon,
 } from "lucide-react"
 
 // Types
@@ -2433,11 +2447,31 @@ const DEMO_LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
   fr: "Français",
 }
 
-const AVAILABLE_ICONS = [
-  "Leaf", "Clock", "TrendingUp", "Shield", "Camera", "NotebookPen", 
-  "Users", "Sparkles", "Bell", "Heart", "Star", "Zap", "Globe", "Search",
-  "BookMarked", "Flower2", "TreeDeciduous", "Sprout", "Sun", "Droplets"
-]
+// Icon map for rendering actual icons in the picker
+const DEMO_ICON_MAP: Record<string, LucideIcon> = {
+  Leaf,
+  Clock,
+  TrendingUp,
+  Shield,
+  Camera,
+  NotebookPen,
+  Users,
+  Sparkles,
+  Bell,
+  Heart,
+  Star,
+  Zap,
+  Globe,
+  Search,
+  BookMarked,
+  Flower2,
+  TreeDeciduous,
+  Sprout,
+  Sun,
+  Droplets,
+}
+
+const AVAILABLE_ICONS = Object.keys(DEMO_ICON_MAP)
 
 const AVAILABLE_COLORS = [
   { name: "emerald", class: "bg-emerald-500" },
@@ -2832,9 +2866,14 @@ const DemoFeaturesTab: React.FC<{
                       "h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0",
                       `bg-${feature.color}-500`
                     )}>
-                      <span className="text-white text-lg">
-                        {feature.icon_name.charAt(0)}
-                      </span>
+                      {(() => {
+                        const IconComponent = DEMO_ICON_MAP[feature.icon_name]
+                        return IconComponent ? (
+                          <IconComponent className="h-6 w-6 text-white" />
+                        ) : (
+                          <span className="text-white text-lg">{feature.icon_name.charAt(0)}</span>
+                        )
+                      })()}
                     </div>
 
                     {/* Content */}
@@ -2857,32 +2896,65 @@ const DemoFeaturesTab: React.FC<{
                       
                       {/* Icon and Color selectors (only in English mode) */}
                       {selectedLang === "en" && (
-                        <div className="flex items-center gap-4">
-                          <div className="flex-1">
-                            <Label className="text-xs text-stone-500">Icon</Label>
-                            <select
-                              value={feature.icon_name}
-                              onChange={(e) => updateLocalFeature(feature.id, { icon_name: e.target.value })}
-                              className="w-full h-9 px-3 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-sm"
-                            >
-                              {AVAILABLE_ICONS.map(icon => (
-                                <option key={icon} value={icon}>{icon}</option>
-                              ))}
-                            </select>
+                        <div className="space-y-3">
+                          {/* Icon Grid Picker */}
+                          <div>
+                            <Label className="text-xs text-stone-500 mb-2 block">Icon</Label>
+                            <div className="grid grid-cols-5 gap-2 p-3 bg-stone-50 dark:bg-stone-800/50 rounded-xl border border-stone-200 dark:border-stone-700">
+                              {AVAILABLE_ICONS.map(iconName => {
+                                const IconComponent = DEMO_ICON_MAP[iconName]
+                                const isSelected = feature.icon_name === iconName
+                                return (
+                                  <button
+                                    key={iconName}
+                                    type="button"
+                                    onClick={() => updateLocalFeature(feature.id, { icon_name: iconName })}
+                                    className={cn(
+                                      "flex flex-col items-center justify-center p-2 rounded-lg transition-all",
+                                      "hover:bg-white dark:hover:bg-stone-700",
+                                      isSelected 
+                                        ? "bg-emerald-100 dark:bg-emerald-900/30 ring-2 ring-emerald-500" 
+                                        : "bg-transparent"
+                                    )}
+                                    title={iconName}
+                                  >
+                                    <IconComponent className={cn(
+                                      "h-5 w-5",
+                                      isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-stone-600 dark:text-stone-400"
+                                    )} />
+                                    <span className={cn(
+                                      "text-[10px] mt-1 truncate w-full text-center",
+                                      isSelected ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-stone-500"
+                                    )}>
+                                      {iconName}
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                            </div>
                           </div>
-                          <div className="flex-1">
-                            <Label className="text-xs text-stone-500">Color</Label>
-                            <div className="flex gap-1 flex-wrap">
+
+                          {/* Color Picker */}
+                          <div>
+                            <Label className="text-xs text-stone-500 mb-2 block">Color</Label>
+                            <div className="flex gap-2 flex-wrap">
                               {AVAILABLE_COLORS.map(color => (
                                 <button
                                   key={color.name}
+                                  type="button"
                                   onClick={() => updateLocalFeature(feature.id, { color: color.name })}
                                   className={cn(
-                                    "h-6 w-6 rounded-lg transition-all",
+                                    "h-8 w-8 rounded-lg transition-all flex items-center justify-center",
                                     color.class,
-                                    feature.color === color.name && "ring-2 ring-offset-2 ring-stone-900 dark:ring-white"
+                                    feature.color === color.name 
+                                      ? "ring-2 ring-offset-2 ring-stone-900 dark:ring-white scale-110" 
+                                      : "hover:scale-105"
                                   )}
-                                />
+                                >
+                                  {feature.color === color.name && (
+                                    <Check className="h-4 w-4 text-white" />
+                                  )}
+                                </button>
                               ))}
                             </div>
                           </div>
