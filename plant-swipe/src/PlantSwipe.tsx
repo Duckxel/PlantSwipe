@@ -1842,8 +1842,7 @@ export default function PlantSwipe() {
                   </div>
                 )}
                 {authError && <div className="text-sm text-red-600">{authError}</div>}
-                <Button className="w-full rounded-2xl" onClick={submitAuth} disabled={authSubmitting}>
-                  {authSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
                   {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
                 </Button>
                 <div className="text-center text-sm">
@@ -1932,6 +1931,7 @@ export default function PlantSwipe() {
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           setQuery(e.target.value)
                         }}
+                        onClear={() => setQuery("")}
                       />
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
