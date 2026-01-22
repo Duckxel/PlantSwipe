@@ -159,12 +159,15 @@ do $$ declare
     'messages',
     'message_reactions',
     -- Landing Page CMS
+    'landing_page_settings',
     'landing_hero_cards',
     'landing_stats',
-    'landing_features',
-    'landing_showcase_cards',
+    'landing_stats_translations',
     'landing_testimonials',
     'landing_faq',
+    'landing_faq_translations',
+    'landing_demo_features',
+    'landing_demo_feature_translations',
     -- Plant Scanning
     'plant_scans',
     -- Bug Catcher System
@@ -8962,6 +8965,78 @@ GRANT EXECUTE ON FUNCTION public.get_user_conversations(UUID) TO authenticated;
 -- ========== Landing Page CMS Tables ==========
 -- These tables store configurable content for the landing page
 
+-- Landing Page Settings: Global settings for the landing page (single row)
+create table if not exists public.landing_page_settings (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  
+  -- Hero Section Settings
+  hero_badge_text text default 'Your Personal Plant Care Expert',
+  hero_title text default 'Grow Your',
+  hero_title_highlight text default 'Green Paradise',
+  hero_title_end text default 'with Confidence',
+  hero_description text default 'Discover, track, and nurture your plants with personalized care reminders, smart identification, and expert tips – all in one beautiful app.',
+  hero_cta_primary_text text default 'Download App',
+  hero_cta_primary_link text default '/download',
+  hero_cta_secondary_text text default 'Try in Browser',
+  hero_cta_secondary_link text default '/discovery',
+  hero_social_proof_text text default '10,000+ plant lovers',
+  
+  -- Section Visibility
+  show_hero_section boolean default true,
+  show_stats_section boolean default true,
+  show_beginner_section boolean default true,
+  show_features_section boolean default true,
+  show_demo_section boolean default true,
+  show_how_it_works_section boolean default true,
+  show_showcase_section boolean default true,
+  show_testimonials_section boolean default true,
+  show_faq_section boolean default true,
+  show_final_cta_section boolean default true,
+  
+  -- Social Links
+  instagram_url text default 'https://instagram.com/aphylia.app',
+  twitter_url text default 'https://twitter.com/aphylia_app',
+  support_email text default 'hello@aphylia.app',
+  
+  -- Final CTA Section
+  final_cta_badge text default 'No experience needed',
+  final_cta_title text default 'Ready to Start Your Plant Journey?',
+  final_cta_subtitle text default 'Whether it''s your first succulent or you''re building a jungle, Aphylia grows with you.',
+  final_cta_button_text text default 'Start Growing',
+  final_cta_secondary_text text default 'Explore Plants',
+  
+  -- Beginner Section
+  beginner_badge text default 'Perfect for Beginners',
+  beginner_title text default 'Know Nothing About Gardening?',
+  beginner_title_highlight text default 'That''s Exactly Why We Built This',
+  beginner_subtitle text default 'Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance.',
+  
+  -- Meta/SEO
+  meta_title text default 'Aphylia – Your Personal Plant Care Expert',
+  meta_description text default 'Discover, track, and nurture your plants with personalized care reminders, smart identification, and expert tips.'
+);
+
+-- Create index for landing_page_settings
+create index if not exists idx_landing_page_settings_id on public.landing_page_settings(id);
+
+-- Ensure only one row exists for settings
+create or replace function public.ensure_single_landing_page_settings()
+returns trigger as $$
+begin
+  if (select count(*) from public.landing_page_settings) > 0 and TG_OP = 'INSERT' then
+    raise exception 'Only one landing_page_settings row allowed';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists ensure_single_landing_page_settings_trigger on public.landing_page_settings;
+create trigger ensure_single_landing_page_settings_trigger
+  before insert on public.landing_page_settings
+  for each row execute function public.ensure_single_landing_page_settings();
+
 -- Hero Cards: Multiple plant cards shown in the hero section
 create table if not exists public.landing_hero_cards (
   id uuid primary key default gen_random_uuid(),
@@ -9012,52 +9087,22 @@ create trigger ensure_single_landing_stats_trigger
   before insert on public.landing_stats
   for each row execute function public.ensure_single_landing_stats();
 
--- Landing Features: Feature cards shown in the spinning circle and features section
-create table if not exists public.landing_features (
+-- Landing Stats Translations: Stores translations for stats labels
+create table if not exists public.landing_stats_translations (
   id uuid primary key default gen_random_uuid(),
-  position integer not null default 0,
-  icon_name text not null default 'Leaf',
-  title text not null,
-  description text,
-  color text not null default 'emerald',
-  is_in_circle boolean not null default false,
-  is_active boolean not null default true,
+  stats_id uuid not null references public.landing_stats(id) on delete cascade,
+  language text not null,
+  plants_label text not null,
+  users_label text not null,
+  tasks_label text not null,
+  rating_label text not null,
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  unique(stats_id, language)
 );
 
-create index if not exists idx_landing_features_position on public.landing_features(position);
-create index if not exists idx_landing_features_active on public.landing_features(is_active);
-create index if not exists idx_landing_features_circle on public.landing_features(is_in_circle);
-
--- Landing Showcase Cards: Cards in the "Designed for your jungle" section
-create table if not exists public.landing_showcase_cards (
-  id uuid primary key default gen_random_uuid(),
-  position integer not null default 0,
-  card_type text not null default 'small',
-  icon_name text,
-  title text not null,
-  description text,
-  badge_text text,
-  image_url text,
-  cover_image_url text,
-  plant_images jsonb default '[]'::jsonb,
-  garden_name text,
-  plants_count integer default 12,
-  species_count integer default 8,
-  streak_count integer default 7,
-  progress_percent integer default 85,
-  link_url text,
-  color text not null default 'emerald',
-  is_active boolean not null default true,
-  -- Selected public gardens to showcase (array of garden IDs)
-  selected_garden_ids uuid[] default array[]::uuid[],
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
-create index if not exists idx_landing_showcase_position on public.landing_showcase_cards(position);
-create index if not exists idx_landing_showcase_active on public.landing_showcase_cards(is_active);
+create index if not exists idx_landing_stats_translations_stats_id on public.landing_stats_translations(stats_id);
+create index if not exists idx_landing_stats_translations_language on public.landing_stats_translations(language);
 
 -- Landing Testimonials: Customer reviews/testimonials
 create table if not exists public.landing_testimonials (
@@ -9066,6 +9111,8 @@ create table if not exists public.landing_testimonials (
   author_name text not null,
   author_role text,
   author_avatar_url text,
+  author_website_url text,
+  linked_user_id uuid references public.profiles(id) on delete set null,
   quote text not null,
   rating integer not null default 5 check (rating >= 1 and rating <= 5),
   is_active boolean not null default true,
@@ -9076,7 +9123,18 @@ create table if not exists public.landing_testimonials (
 create index if not exists idx_landing_testimonials_position on public.landing_testimonials(position);
 create index if not exists idx_landing_testimonials_active on public.landing_testimonials(is_active);
 
--- Landing FAQ: Frequently asked questions
+-- Add new columns to landing_testimonials if they don't exist (for existing tables)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'landing_testimonials' AND column_name = 'author_website_url') THEN
+    ALTER TABLE public.landing_testimonials ADD COLUMN author_website_url text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'landing_testimonials' AND column_name = 'linked_user_id') THEN
+    ALTER TABLE public.landing_testimonials ADD COLUMN linked_user_id uuid references public.profiles(id) on delete set null;
+  END IF;
+END $$;
+
+-- Landing FAQ: Frequently asked questions (base content in English)
 create table if not exists public.landing_faq (
   id uuid primary key default gen_random_uuid(),
   position integer not null default 0,
@@ -9090,8 +9148,79 @@ create table if not exists public.landing_faq (
 create index if not exists idx_landing_faq_position on public.landing_faq(position);
 create index if not exists idx_landing_faq_active on public.landing_faq(is_active);
 
+-- Landing FAQ Translations: Stores translations for FAQ items
+create table if not exists public.landing_faq_translations (
+  id uuid primary key default gen_random_uuid(),
+  faq_id uuid not null references public.landing_faq(id) on delete cascade,
+  language text not null,
+  question text not null,
+  answer text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(faq_id, language)
+);
+
+create index if not exists idx_landing_faq_translations_faq_id on public.landing_faq_translations(faq_id);
+create index if not exists idx_landing_faq_translations_language on public.landing_faq_translations(language);
+
+-- Landing Demo Features: Features shown in the interactive demo wheel
+create table if not exists public.landing_demo_features (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  icon_name text not null default 'Leaf',
+  label text not null,
+  color text not null default 'emerald',
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_demo_features_position on public.landing_demo_features(position);
+create index if not exists idx_landing_demo_features_active on public.landing_demo_features(is_active);
+
+-- Landing Demo Feature Translations: Stores translations for demo features
+create table if not exists public.landing_demo_feature_translations (
+  id uuid primary key default gen_random_uuid(),
+  feature_id uuid not null references public.landing_demo_features(id) on delete cascade,
+  language text not null,
+  label text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(feature_id, language)
+);
+
+create index if not exists idx_landing_demo_feature_translations_feature_id on public.landing_demo_feature_translations(feature_id);
+create index if not exists idx_landing_demo_feature_translations_language on public.landing_demo_feature_translations(language);
+
+-- Insert default demo features if table is empty
+insert into public.landing_demo_features (position, icon_name, label, color)
+select * from (values
+  (0, 'Leaf', 'Discover Plants', 'emerald'),
+  (1, 'Clock', 'Schedule Care', 'blue'),
+  (2, 'TrendingUp', 'Track Growth', 'purple'),
+  (3, 'Shield', 'Get Alerts', 'rose'),
+  (4, 'Camera', 'Identify Plants', 'pink'),
+  (5, 'NotebookPen', 'Keep Journal', 'amber'),
+  (6, 'Users', 'Join Community', 'teal'),
+  (7, 'Sparkles', 'Smart Assistant', 'indigo')
+) as v(position, icon_name, label, color)
+where not exists (select 1 from public.landing_demo_features limit 1);
+
 -- RLS Policies for Landing Page Tables
 -- All landing tables are publicly readable but only admin-writable
+
+alter table public.landing_page_settings enable row level security;
+drop policy if exists "Landing page settings are publicly readable" on public.landing_page_settings;
+create policy "Landing page settings are publicly readable" on public.landing_page_settings for select using (true);
+drop policy if exists "Admins can manage landing page settings" on public.landing_page_settings;
+create policy "Admins can manage landing page settings" on public.landing_page_settings for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+-- Insert default settings row if not exists
+insert into public.landing_page_settings (id)
+select gen_random_uuid()
+where not exists (select 1 from public.landing_page_settings limit 1);
 
 alter table public.landing_hero_cards enable row level security;
 drop policy if exists "Landing hero cards are publicly readable" on public.landing_hero_cards;
@@ -9109,19 +9238,11 @@ create policy "Admins can manage landing stats" on public.landing_stats for all 
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
 
-alter table public.landing_features enable row level security;
-drop policy if exists "Landing features are publicly readable" on public.landing_features;
-create policy "Landing features are publicly readable" on public.landing_features for select using (true);
-drop policy if exists "Admins can manage landing features" on public.landing_features;
-create policy "Admins can manage landing features" on public.landing_features for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
-
-alter table public.landing_showcase_cards enable row level security;
-drop policy if exists "Landing showcase cards are publicly readable" on public.landing_showcase_cards;
-create policy "Landing showcase cards are publicly readable" on public.landing_showcase_cards for select using (true);
-drop policy if exists "Admins can manage landing showcase cards" on public.landing_showcase_cards;
-create policy "Admins can manage landing showcase cards" on public.landing_showcase_cards for all using (
+alter table public.landing_stats_translations enable row level security;
+drop policy if exists "Landing stats translations are publicly readable" on public.landing_stats_translations;
+create policy "Landing stats translations are publicly readable" on public.landing_stats_translations for select using (true);
+drop policy if exists "Admins can manage landing stats translations" on public.landing_stats_translations;
+create policy "Admins can manage landing stats translations" on public.landing_stats_translations for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
 
@@ -9140,6 +9261,31 @@ drop policy if exists "Admins can manage landing FAQ" on public.landing_faq;
 create policy "Admins can manage landing FAQ" on public.landing_faq for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
+
+alter table public.landing_faq_translations enable row level security;
+drop policy if exists "Landing FAQ translations are publicly readable" on public.landing_faq_translations;
+create policy "Landing FAQ translations are publicly readable" on public.landing_faq_translations for select using (true);
+drop policy if exists "Admins can manage landing FAQ translations" on public.landing_faq_translations;
+create policy "Admins can manage landing FAQ translations" on public.landing_faq_translations for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_demo_features enable row level security;
+drop policy if exists "Landing demo features are publicly readable" on public.landing_demo_features;
+create policy "Landing demo features are publicly readable" on public.landing_demo_features for select using (true);
+drop policy if exists "Admins can manage landing demo features" on public.landing_demo_features;
+create policy "Admins can manage landing demo features" on public.landing_demo_features for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_demo_feature_translations enable row level security;
+drop policy if exists "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations;
+create policy "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations for select using (true);
+drop policy if exists "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations;
+create policy "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
 -- =============================================
 -- PLANT SCANS TABLE
 -- Stores plant identification scans using Kindwise API

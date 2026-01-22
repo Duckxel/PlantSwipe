@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabaseClient"
+import { translateText } from "@/lib/deepl"
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import {
   Loader2,
   Plus,
@@ -25,7 +27,6 @@ import {
   RefreshCw,
   Smartphone,
   BarChart3,
-  Sparkles,
   Layout,
   Star,
   HelpCircle,
@@ -36,46 +37,20 @@ import {
   Droplets,
   Sun,
   Bell,
-  BookMarked,
   Camera,
-  NotebookPen,
-  Wifi,
   Users,
   Check,
-  Clock,
-  TrendingUp,
-  Shield,
-  Heart,
-  Globe,
-  Zap,
-  MessageCircle,
-  Flower2,
-  TreeDeciduous,
-  Sprout,
   Upload,
   Link2,
   Search,
   X,
   ArrowRight,
-  Palette,
-  Share2,
-  Calendar,
-  Target,
-  Award,
-  Lightbulb,
   Download,
   Shuffle,
   ExternalLink,
   Copy,
   Monitor,
   Settings,
-  Type,
-  MousePointer,
-  Instagram,
-  Twitter,
-  Mail,
-  FileText,
-  Layers,
   Megaphone,
   GraduationCap,
   CirclePlay,
@@ -83,30 +58,24 @@ import {
   Grid3X3,
   Quote,
   AlertCircle,
+  Languages,
+  User,
+  LinkIcon,
+  // Icons for demo features picker
+  Clock,
+  TrendingUp,
+  Shield,
+  NotebookPen,
+  Sparkles,
+  Heart,
+  Zap,
+  Globe,
+  BookMarked,
+  Flower2,
+  TreeDeciduous,
+  Sprout,
+  type LucideIcon,
 } from "lucide-react"
-
-// Icon mapping for dynamic rendering
-const iconMap: Record<string, React.ElementType> = {
-  Leaf, Droplets, Sun, Bell, BookMarked, Camera, NotebookPen, Wifi, Users, Check,
-  Clock, TrendingUp, Shield, Heart, Globe, Zap, MessageCircle, Flower2,
-  TreeDeciduous, Sprout, Star, Sparkles, ImageIcon, Eye, EyeOff, Palette, Share2,
-  Calendar, Target, Award, Lightbulb,
-}
-
-const availableIcons = Object.keys(iconMap)
-
-const colorOptions = [
-  { value: "emerald", label: "Emerald", bg: "bg-emerald-500", text: "text-emerald-500", ring: "ring-emerald-500" },
-  { value: "blue", label: "Blue", bg: "bg-blue-500", text: "text-blue-500", ring: "ring-blue-500" },
-  { value: "purple", label: "Purple", bg: "bg-purple-500", text: "text-purple-500", ring: "ring-purple-500" },
-  { value: "pink", label: "Pink", bg: "bg-pink-500", text: "text-pink-500", ring: "ring-pink-500" },
-  { value: "amber", label: "Amber", bg: "bg-amber-500", text: "text-amber-500", ring: "ring-amber-500" },
-  { value: "teal", label: "Teal", bg: "bg-teal-500", text: "text-teal-500", ring: "ring-teal-500" },
-  { value: "rose", label: "Rose", bg: "bg-rose-500", text: "text-rose-500", ring: "ring-rose-500" },
-  { value: "indigo", label: "Indigo", bg: "bg-indigo-500", text: "text-indigo-500", ring: "ring-indigo-500" },
-  { value: "orange", label: "Orange", bg: "bg-orange-500", text: "text-orange-500", ring: "ring-orange-500" },
-  { value: "cyan", label: "Cyan", bg: "bg-cyan-500", text: "text-cyan-500", ring: "ring-cyan-500" },
-]
 
 // Types
 type HeroCard = {
@@ -134,46 +103,14 @@ type LandingStats = {
   rating_label: string
 }
 
-type LandingFeature = {
+type StatsTranslation = {
   id: string
-  position: number
-  icon_name: string
-  title: string
-  description: string | null
-  color: string
-  is_in_circle: boolean
-  is_active: boolean
-}
-
-type ShowcaseCard = {
-  id: string
-  position: number
-  card_type: string
-  icon_name: string | null
-  title: string
-  description: string | null
-  badge_text: string | null
-  image_url: string | null
-  cover_image_url: string | null
-  plant_images: Array<{ url: string; name: string }> | null
-  garden_name: string | null
-  plants_count: number | null
-  species_count: number | null
-  streak_count: number | null
-  progress_percent: number | null
-  link_url: string | null
-  color: string
-  is_active: boolean
-  selected_garden_ids: string[] | null
-}
-
-type PublicGardenOption = {
-  id: string
-  name: string
-  coverImageUrl: string | null
-  plantCount: number
-  streak: number
-  ownerDisplayName: string | null
+  stats_id: string
+  language: string
+  plants_label: string
+  users_label: string
+  tasks_label: string
+  rating_label: string
 }
 
 type Testimonial = {
@@ -182,6 +119,8 @@ type Testimonial = {
   author_name: string
   author_role: string | null
   author_avatar_url: string | null
+  author_website_url: string | null
+  linked_user_id: string | null
   quote: string
   rating: number
   is_active: boolean
@@ -193,6 +132,36 @@ type FAQ = {
   question: string
   answer: string
   is_active: boolean
+}
+
+type FAQTranslation = {
+  id: string
+  faq_id: string
+  language: string
+  question: string
+  answer: string
+}
+
+type DemoFeature = {
+  id: string
+  position: number
+  icon_name: string
+  label: string
+  color: string
+  is_active: boolean
+}
+
+type DemoFeatureTranslation = {
+  id: string
+  feature_id: string
+  language: string
+  label: string
+}
+
+type UserProfile = {
+  id: string
+  display_name: string
+  avatar_url: string | null
 }
 
 type LandingPageSettings = {
@@ -239,7 +208,141 @@ type LandingPageSettings = {
   meta_description: string
 }
 
-type LandingTab = "settings" | "hero" | "stats" | "features" | "showcase" | "testimonials" | "faq"
+type LandingTab = "settings" | "hero" | "stats" | "testimonials" | "faq" | "demo"
+
+// ========================
+// SHARED TRANSLATION COMPONENTS
+// ========================
+const ADMIN_LANGUAGE_LABELS: Record<SupportedLanguage, { short: string; full: string }> = {
+  en: { short: "🇬🇧 EN", full: "English" },
+  fr: { short: "🇫🇷 FR", full: "French" },
+}
+
+// Reusable Language Switcher Component
+const LanguageSwitcher: React.FC<{
+  selectedLang: SupportedLanguage
+  onLanguageChange: (lang: SupportedLanguage) => void
+  onTranslateAll?: () => void
+  translating?: boolean
+  disabled?: boolean
+}> = ({ selectedLang, onLanguageChange, onTranslateAll, translating, disabled }) => {
+  return (
+    <div className="flex items-center gap-2">
+      {/* Language Tabs */}
+      <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
+        {SUPPORTED_LANGUAGES.map((lang) => (
+          <button
+            key={lang}
+            onClick={() => onLanguageChange(lang)}
+            disabled={disabled}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+              selectedLang === lang
+                ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white",
+              disabled && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            {ADMIN_LANGUAGE_LABELS[lang].short}
+          </button>
+        ))}
+      </div>
+
+      {/* DeepL Translate Button */}
+      {selectedLang !== "en" && onTranslateAll && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onTranslateAll}
+          disabled={translating || disabled}
+          className="rounded-xl"
+        >
+          {translating ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Languages className="h-4 w-4 mr-2" />
+          )}
+          {translating ? "Translating..." : "DeepL Translate"}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+// Translation Mode Banner
+const TranslationModeBanner: React.FC<{ language: SupportedLanguage }> = ({ language }) => {
+  if (language === "en") return null
+  return (
+    <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+      <Languages className="h-4 w-4 text-blue-500 flex-shrink-0" />
+      <span className="text-sm text-blue-700 dark:text-blue-300">
+        Editing <strong>{ADMIN_LANGUAGE_LABELS[language].full}</strong> translations. Base content is managed in English.
+      </span>
+    </div>
+  )
+}
+
+// ========================
+// ICON PICKER DIALOG
+// ========================
+const IconPickerDialog: React.FC<{
+  open: boolean
+  onClose: () => void
+  selectedIcon: string
+  onSelect: (iconName: string) => void
+  iconMap: Record<string, LucideIcon>
+  availableIcons: string[]
+}> = ({ open, onClose, selectedIcon, onSelect, iconMap, availableIcons }) => {
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Choose an Icon</DialogTitle>
+          <DialogDescription>
+            Select an icon for this feature
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-5 gap-2 max-h-[300px] overflow-y-auto p-2">
+          {availableIcons.map(iconName => {
+            const IconComponent = iconMap[iconName]
+            const isSelected = selectedIcon === iconName
+            return (
+              <button
+                key={iconName}
+                type="button"
+                onClick={() => {
+                  onSelect(iconName)
+                  onClose()
+                }}
+                className={cn(
+                  "flex flex-col items-center justify-center p-3 rounded-xl transition-all",
+                  "hover:bg-stone-100 dark:hover:bg-stone-800",
+                  isSelected 
+                    ? "bg-emerald-100 dark:bg-emerald-900/30 ring-2 ring-emerald-500" 
+                    : "bg-stone-50 dark:bg-stone-900"
+                )}
+                title={iconName}
+              >
+                {IconComponent && (
+                  <IconComponent className={cn(
+                    "h-6 w-6",
+                    isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-stone-600 dark:text-stone-400"
+                  )} />
+                )}
+                <span className={cn(
+                  "text-[10px] mt-1.5 truncate w-full text-center",
+                  isSelected ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-stone-500"
+                )}>
+                  {iconName}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 // ========================
 // IMPORT FROM PLANTS MODAL
@@ -642,125 +745,6 @@ const ImagePickerModal: React.FC<{
 }
 
 // ========================
-// ICON PICKER
-// ========================
-const IconPicker: React.FC<{
-  value: string
-  onChange: (value: string) => void
-  color?: string
-}> = ({ value, onChange, color = "emerald" }) => {
-  const [open, setOpen] = React.useState(false)
-  const IconComponent = iconMap[value] || Leaf
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "h-12 w-12 rounded-xl flex items-center justify-center transition-all hover:scale-105",
-          `bg-${color}-500`
-        )}
-      >
-        <IconComponent className="h-6 w-6 text-white" />
-      </button>
-
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-          />
-          <div className="absolute z-50 top-full mt-2 left-0 p-3 rounded-xl bg-white dark:bg-stone-900 shadow-xl border border-stone-200 dark:border-stone-700">
-            <div className="grid grid-cols-5 gap-2 w-[220px]">
-              {availableIcons.map((iconName) => {
-                const Icon = iconMap[iconName]
-                return (
-                  <button
-                    key={iconName}
-                    type="button"
-                    onClick={() => {
-                      onChange(iconName)
-                      setOpen(false)
-                    }}
-                    className={cn(
-                      "h-10 w-10 rounded-lg flex items-center justify-center transition-all hover:scale-110",
-                      value === iconName
-                        ? `bg-${color}-500 text-white`
-                        : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
-                    )}
-                    title={iconName}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-// ========================
-// COLOR PICKER
-// ========================
-const ColorPicker: React.FC<{
-  value: string
-  onChange: (value: string) => void
-}> = ({ value, onChange }) => {
-  const [open, setOpen] = React.useState(false)
-  const selectedColor = colorOptions.find(c => c.value === value) || colorOptions[0]
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "h-10 px-3 rounded-xl flex items-center gap-2 transition-all border border-stone-200 dark:border-stone-700 hover:border-emerald-500",
-          "bg-white dark:bg-stone-900"
-        )}
-      >
-        <div className={cn("h-5 w-5 rounded-md", selectedColor.bg)} />
-        <span className="text-sm text-stone-600 dark:text-stone-400">{selectedColor.label}</span>
-        <ChevronDown className="h-4 w-4 text-stone-400 ml-auto" />
-      </button>
-
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-          />
-          <div className="absolute z-50 top-full mt-2 left-0 p-3 rounded-xl bg-white dark:bg-stone-900 shadow-xl border border-stone-200 dark:border-stone-700">
-            <div className="grid grid-cols-5 gap-2">
-              {colorOptions.map((color) => (
-                <button
-                  key={color.value}
-                  type="button"
-                  onClick={() => {
-                    onChange(color.value)
-                    setOpen(false)
-                  }}
-                  className={cn(
-                    "h-8 w-8 rounded-lg transition-all hover:scale-110",
-                    color.bg,
-                    value === color.value && "ring-2 ring-offset-2 ring-stone-900 dark:ring-white"
-                  )}
-                  title={color.label}
-                />
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-// ========================
 // HERO CARD PREVIEW
 // ========================
 const HeroCardPreview: React.FC<{ card: HeroCard }> = ({ card }) => {
@@ -889,33 +873,6 @@ const StatsPreview: React.FC<{ stats: LandingStats | null }> = ({ stats }) => {
 }
 
 // ========================
-// FEATURE PREVIEW
-// ========================
-const FeaturePreview: React.FC<{ feature: LandingFeature }> = ({ feature }) => {
-  const IconComponent = iconMap[feature.icon_name] || Leaf
-  const color = colorOptions.find(c => c.value === feature.color) || colorOptions[0]
-
-  return (
-    <div className="flex items-start gap-3 p-3 rounded-xl bg-gradient-to-br from-stone-50 to-stone-100 dark:from-stone-900 dark:to-stone-800 border border-stone-200 dark:border-stone-700">
-      <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0", color.bg)}>
-        <IconComponent className="h-5 w-5 text-white" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-sm text-stone-900 dark:text-white truncate">
-          {feature.title || "Feature Title"}
-        </p>
-        <p className="text-xs text-stone-500 dark:text-stone-400 line-clamp-2">
-          {feature.description || "Feature description goes here"}
-        </p>
-      </div>
-      {!feature.is_active && (
-        <EyeOff className="h-4 w-4 text-stone-400 flex-shrink-0" />
-      )}
-    </div>
-  )
-}
-
-// ========================
 // MAIN COMPONENT
 // ========================
 export const AdminLandingPanel: React.FC = () => {
@@ -926,58 +883,72 @@ export const AdminLandingPanel: React.FC = () => {
 
   // Data states
   const [settings, setSettings] = React.useState<LandingPageSettings | null>(null)
+  const [settingsError, setSettingsError] = React.useState<string | null>(null)
   const [heroCards, setHeroCards] = React.useState<HeroCard[]>([])
   const [stats, setStats] = React.useState<LandingStats | null>(null)
-  const [features, setFeatures] = React.useState<LandingFeature[]>([])
-  const [showcaseCards, setShowcaseCards] = React.useState<ShowcaseCard[]>([])
   const [testimonials, setTestimonials] = React.useState<Testimonial[]>([])
   const [faqItems, setFaqItems] = React.useState<FAQ[]>([])
+  const [demoFeatures, setDemoFeatures] = React.useState<DemoFeature[]>([])
 
   // Load all data
   const loadData = React.useCallback(async () => {
     setLoading(true)
+    setSettingsError(null)
     try {
-      const [settingsRes, heroRes, statsRes, featuresRes, showcaseRes, testimonialsRes, faqRes] = await Promise.all([
+      const [settingsRes, heroRes, statsRes, testimonialsRes, faqRes, demoRes] = await Promise.all([
         supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
         supabase.from("landing_hero_cards").select("*").order("position"),
         supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
-        supabase.from("landing_features").select("*").order("position"),
-        supabase.from("landing_showcase_cards").select("*").order("position"),
         supabase.from("landing_testimonials").select("*").order("position"),
         supabase.from("landing_faq").select("*").order("position"),
+        supabase.from("landing_demo_features").select("*").order("position"),
       ])
 
-      // Auto-initialize settings if table exists but no row
-      if (!settingsRes.data && !settingsRes.error) {
-        const { data: newSettings } = await supabase
+      // Handle settings - check for table not found error (404)
+      if (settingsRes.error) {
+        // Table doesn't exist or other error - show error state instead of infinite spinner
+        console.error("Settings table error:", settingsRes.error)
+        setSettingsError(`Settings table not available: ${settingsRes.error.message}. Please run the landing_page_settings migration.`)
+        setSettings(null)
+      } else if (!settingsRes.data) {
+        // Table exists but no row - try to auto-initialize
+        const { data: newSettings, error: insertError } = await supabase
           .from("landing_page_settings")
           .insert({})
           .select()
           .single()
-        if (newSettings) setSettings(newSettings)
-      } else if (settingsRes.data) {
+        if (insertError) {
+          setSettingsError(`Failed to initialize settings: ${insertError.message}`)
+        } else if (newSettings) {
+          setSettings(newSettings)
+        }
+      } else {
         setSettings(settingsRes.data)
       }
 
-      // Auto-initialize stats if table exists but no row
-      if (!statsRes.data && !statsRes.error) {
+      // Handle stats - check for table not found error
+      if (statsRes.error) {
+        console.error("Stats table error:", statsRes.error)
+        // Don't block on stats error, just leave as null
+      } else if (!statsRes.data) {
+        // Table exists but no row - try to auto-initialize
         const { data: newStats } = await supabase
           .from("landing_stats")
           .insert({})
           .select()
           .single()
         if (newStats) setStats(newStats)
-      } else if (statsRes.data) {
+      } else {
         setStats(statsRes.data)
       }
 
       if (heroRes.data) setHeroCards(heroRes.data)
-      if (featuresRes.data) setFeatures(featuresRes.data)
-      if (showcaseRes.data) setShowcaseCards(showcaseRes.data)
       if (testimonialsRes.data) setTestimonials(testimonialsRes.data)
       if (faqRes.data) setFaqItems(faqRes.data)
+      if (demoRes.data) setDemoFeatures(demoRes.data)
     } catch (e) {
       console.error("Failed to load landing data:", e)
+      setSettingsError("Failed to load landing data. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -991,8 +962,7 @@ export const AdminLandingPanel: React.FC = () => {
     { id: "settings" as const, label: "Global Settings", icon: Settings },
     { id: "hero" as const, label: "Hero Cards", icon: Smartphone, count: heroCards.length },
     { id: "stats" as const, label: "Stats", icon: BarChart3 },
-    { id: "features" as const, label: "Features", icon: Sparkles, count: features.length },
-    { id: "showcase" as const, label: "Showcase", icon: Layout, count: showcaseCards.length },
+    { id: "demo" as const, label: "Wheel Features", icon: CirclePlay, count: demoFeatures.length },
     { id: "testimonials" as const, label: "Reviews", icon: Star, count: testimonials.length },
     { id: "faq" as const, label: "FAQ", icon: HelpCircle, count: faqItems.length },
   ]
@@ -1084,6 +1054,7 @@ export const AdminLandingPanel: React.FC = () => {
               setSettings={setSettings}
               saving={saving}
               setSaving={setSaving}
+              settingsError={settingsError}
             />
           )}
           {activeTab === "hero" && (
@@ -1105,29 +1076,20 @@ export const AdminLandingPanel: React.FC = () => {
               sectionVisible={settings?.show_stats_section ?? true}
             />
           )}
-          {activeTab === "features" && (
-            <FeaturesTab
-              features={features}
-              setFeatures={setFeatures}
-              setSaving={setSaving}
-              showPreview={showPreview}
-              sectionVisible={settings?.show_features_section ?? true}
-            />
-          )}
-          {activeTab === "showcase" && (
-            <ShowcaseTab
-              cards={showcaseCards}
-              setCards={setShowcaseCards}
-              setSaving={setSaving}
-              sectionVisible={settings?.show_showcase_section ?? true}
-            />
-          )}
           {activeTab === "testimonials" && (
             <TestimonialsTab
               testimonials={testimonials}
               setTestimonials={setTestimonials}
               setSaving={setSaving}
               sectionVisible={settings?.show_testimonials_section ?? true}
+            />
+          )}
+          {activeTab === "demo" && (
+            <DemoFeaturesTab
+              features={demoFeatures}
+              setFeatures={setDemoFeatures}
+              setSaving={setSaving}
+              sectionVisible={settings?.show_demo_section ?? true}
             />
           )}
           {activeTab === "faq" && (
@@ -1160,9 +1122,9 @@ const GlobalSettingsTab: React.FC<{
   setSettings: React.Dispatch<React.SetStateAction<LandingPageSettings | null>>
   saving: boolean
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
-}> = ({ settings, setSettings, saving, setSaving }) => {
+  settingsError?: string | null
+}> = ({ settings, setSettings, saving, setSaving, settingsError }) => {
   const [localSettings, setLocalSettings] = React.useState<LandingPageSettings | null>(settings)
-  const [activeSection, setActiveSection] = React.useState<"visibility" | "hero" | "beginner" | "cta" | "social" | "meta">("visibility")
 
   React.useEffect(() => {
     setLocalSettings(settings)
@@ -1192,8 +1154,46 @@ const GlobalSettingsTab: React.FC<{
   }
 
   const updateSetting = <K extends keyof LandingPageSettings>(key: K, value: LandingPageSettings[K]) => {
-    if (!localSettings) return
-    setLocalSettings({ ...localSettings, [key]: value })
+    setLocalSettings(prev => prev ? { ...prev, [key]: value } : prev)
+  }
+
+  const visibilityItems = [
+    { key: "show_hero_section" as const, label: "Hero Section", description: "Main hero area with headline and phone mockup", icon: Smartphone },
+    { key: "show_stats_section" as const, label: "Stats Banner", description: "Statistics banner showing key metrics", icon: BarChart3 },
+    { key: "show_beginner_section" as const, label: "Beginner Section", description: "Section encouraging new users", icon: GraduationCap },
+    { key: "show_features_section" as const, label: "Features Grid", description: "Feature cards showcasing capabilities", icon: Grid3X3 },
+    { key: "show_demo_section" as const, label: "Interactive Demo", description: "Animated demo with rotating features", icon: CirclePlay },
+    { key: "show_how_it_works_section" as const, label: "How It Works", description: "Step-by-step guide section", icon: Route },
+    { key: "show_testimonials_section" as const, label: "Testimonials", description: "Customer reviews and ratings", icon: Quote },
+    { key: "show_faq_section" as const, label: "FAQ Section", description: "Frequently asked questions", icon: HelpCircle },
+    { key: "show_final_cta_section" as const, label: "Final CTA", description: "Final call-to-action before footer", icon: Megaphone },
+  ]
+
+  const setAllVisibility = (visible: boolean) => {
+    setLocalSettings(prev => {
+      if (!prev) return prev
+      const updates: Partial<LandingPageSettings> = {}
+      visibilityItems.forEach(item => {
+        updates[item.key] = visible
+      })
+      return { ...prev, ...updates }
+    })
+  }
+
+  // Show error state if settings table is not available
+  if (settingsError) {
+    return (
+      <Card className="rounded-xl border-rose-200 dark:border-rose-800">
+        <CardContent className="py-16 text-center">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-rose-500" />
+          <h3 className="font-semibold text-stone-900 dark:text-white mb-2">Settings Unavailable</h3>
+          <p className="text-sm text-stone-500 dark:text-stone-400 max-w-md mx-auto mb-4">{settingsError}</p>
+          <p className="text-xs text-stone-400 dark:text-stone-500">
+            The landing page will use default values from translation files until the database table is created.
+          </p>
+        </CardContent>
+      </Card>
+    )
   }
 
   if (!localSettings) {
@@ -1208,28 +1208,6 @@ const GlobalSettingsTab: React.FC<{
     )
   }
 
-  const sectionTabs = [
-    { id: "visibility" as const, label: "Section Visibility", icon: Layers, description: "Control which sections appear on the landing page" },
-    { id: "hero" as const, label: "Hero Section", icon: Type, description: "Headlines, descriptions, and CTA buttons" },
-    { id: "beginner" as const, label: "Beginner Section", icon: GraduationCap, description: "Content for the beginner-friendly section" },
-    { id: "cta" as const, label: "Final CTA", icon: Megaphone, description: "Final call-to-action section at page bottom" },
-    { id: "social" as const, label: "Social & Contact", icon: Share2, description: "Social media links and contact info" },
-    { id: "meta" as const, label: "SEO & Meta", icon: FileText, description: "Page title and description for search engines" },
-  ]
-
-  const visibilityItems = [
-    { key: "show_hero_section" as const, label: "Hero Section", description: "Main hero area with headline and phone mockup", icon: Smartphone },
-    { key: "show_stats_section" as const, label: "Stats Banner", description: "Statistics banner showing key metrics", icon: BarChart3 },
-    { key: "show_beginner_section" as const, label: "Beginner Section", description: "Section encouraging new users", icon: GraduationCap },
-    { key: "show_features_section" as const, label: "Features Grid", description: "Feature cards showcasing capabilities", icon: Grid3X3 },
-    { key: "show_demo_section" as const, label: "Interactive Demo", description: "Animated demo with rotating features", icon: CirclePlay },
-    { key: "show_how_it_works_section" as const, label: "How It Works", description: "Step-by-step guide section", icon: Route },
-    { key: "show_showcase_section" as const, label: "Showcase", description: "App showcase bento grid", icon: Layout },
-    { key: "show_testimonials_section" as const, label: "Testimonials", description: "Customer reviews and ratings", icon: Quote },
-    { key: "show_faq_section" as const, label: "FAQ Section", description: "Frequently asked questions", icon: HelpCircle },
-    { key: "show_final_cta_section" as const, label: "Final CTA", description: "Final call-to-action before footer", icon: Megaphone },
-  ]
-
   return (
     <div className="space-y-6">
       {/* Header with Save Button */}
@@ -1237,10 +1215,10 @@ const GlobalSettingsTab: React.FC<{
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white flex items-center gap-2">
             <Settings className="h-5 w-5 text-emerald-500" />
-            Global Landing Page Settings
+            Section Visibility
           </h3>
           <p className="text-sm text-stone-500 mt-1">
-            Control visibility and customize text content across all sections
+            Toggle sections on or off to customize your landing page. Text content is managed via translation files.
           </p>
         </div>
         <Button onClick={saveSettings} disabled={saving} className="rounded-xl">
@@ -1249,101 +1227,27 @@ const GlobalSettingsTab: React.FC<{
         </Button>
       </div>
 
-      {/* Section Navigation */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        {sectionTabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveSection(tab.id)}
-            className={cn(
-              "flex flex-col items-center gap-2 p-3 rounded-xl text-center transition-all",
-              activeSection === tab.id
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
-                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
-            )}
-          >
-            <tab.icon className="h-5 w-5" />
-            <span className="text-xs font-medium">{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Active Section Content */}
+      {/* Section Visibility Content */}
       <Card className="rounded-xl">
         <CardContent className="p-6">
-          {/* Section Visibility */}
-          {activeSection === "visibility" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-stone-200 dark:border-stone-700">
-                <div>
-                  <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-emerald-500" />
-                    Section Visibility
-                  </h4>
-                  <p className="text-sm text-stone-500 mt-1">Toggle sections on or off to customize your landing page</p>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-stone-500">
-                  <span className="flex items-center gap-1">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                    Visible
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <div className="h-2 w-2 rounded-full bg-stone-300" />
-                    Hidden
-                  </span>
-                </div>
+          <div className="space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-stone-200 dark:border-stone-700">
+              <div className="flex items-center gap-2 text-xs text-stone-500">
+                <span className="flex items-center gap-1">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Visible
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="h-2 w-2 rounded-full bg-stone-300" />
+                  Hidden
+                </span>
               </div>
-
-              <div className="grid gap-3">
-                {visibilityItems.map((item) => {
-                  const isVisible = localSettings[item.key]
-                  return (
-                    <div
-                      key={item.key}
-                      className={cn(
-                        "flex items-center justify-between p-4 rounded-xl border transition-all",
-                        isVisible
-                          ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800"
-                          : "bg-stone-50 dark:bg-stone-900/50 border-stone-200 dark:border-stone-700 opacity-75"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "h-10 w-10 rounded-xl flex items-center justify-center",
-                          isVisible ? "bg-emerald-500/10" : "bg-stone-200 dark:bg-stone-800"
-                        )}>
-                          <item.icon className={cn(
-                            "h-5 w-5",
-                            isVisible ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400"
-                          )} />
-                        </div>
-                        <div>
-                          <p className={cn(
-                            "font-medium",
-                            isVisible ? "text-stone-900 dark:text-white" : "text-stone-500"
-                          )}>
-                            {item.label}
-                          </p>
-                          <p className="text-xs text-stone-500">{item.description}</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={isVisible}
-                        onCheckedChange={(checked) => updateSetting(item.key, checked)}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-
               {/* Quick Actions */}
-              <div className="flex gap-2 pt-4 border-t border-stone-200 dark:border-stone-700">
+              <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    visibilityItems.forEach(item => updateSetting(item.key, true))
-                  }}
+                  onClick={() => setAllVisibility(true)}
                   className="rounded-xl"
                 >
                   <Eye className="h-4 w-4 mr-2" />
@@ -1352,9 +1256,7 @@ const GlobalSettingsTab: React.FC<{
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    visibilityItems.forEach(item => updateSetting(item.key, false))
-                  }}
+                  onClick={() => setAllVisibility(false)}
                   className="rounded-xl"
                 >
                   <EyeOff className="h-4 w-4 mr-2" />
@@ -1362,364 +1264,49 @@ const GlobalSettingsTab: React.FC<{
                 </Button>
               </div>
             </div>
-          )}
 
-          {/* Hero Section Settings */}
-          {activeSection === "hero" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <Type className="h-4 w-4 text-emerald-500" />
-                  Hero Section Content
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">Customize the main headline and call-to-action buttons</p>
-              </div>
-
-              {/* Badge */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Badge Text</Label>
-                <Input
-                  value={localSettings.hero_badge_text}
-                  onChange={(e) => updateSetting("hero_badge_text", e.target.value)}
-                  placeholder="Your Personal Plant Care Expert"
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-stone-500">Small badge shown above the headline</p>
-              </div>
-
-              {/* Headline */}
-              <div className="grid sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title Start</Label>
-                  <Input
-                    value={localSettings.hero_title}
-                    onChange={(e) => updateSetting("hero_title", e.target.value)}
-                    placeholder="Grow Your"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title Highlight <span className="text-emerald-500">(Gradient)</span></Label>
-                  <Input
-                    value={localSettings.hero_title_highlight}
-                    onChange={(e) => updateSetting("hero_title_highlight", e.target.value)}
-                    placeholder="Green Paradise"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title End</Label>
-                  <Input
-                    value={localSettings.hero_title_end}
-                    onChange={(e) => updateSetting("hero_title_end", e.target.value)}
-                    placeholder="with Confidence"
-                    className="rounded-xl"
-                  />
-                </div>
-              </div>
-
-              {/* Preview */}
-              <div className="p-4 rounded-xl bg-stone-100 dark:bg-stone-900">
-                <p className="text-xs text-stone-500 mb-2">Preview:</p>
-                <h3 className="text-xl font-bold">
-                  <span className="text-stone-900 dark:text-white">{localSettings.hero_title || "Grow Your"}</span>{" "}
-                  <span className="text-emerald-500">{localSettings.hero_title_highlight || "Green Paradise"}</span>{" "}
-                  <span className="text-stone-900 dark:text-white">{localSettings.hero_title_end || "with Confidence"}</span>
-                </h3>
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Description</Label>
-                <Textarea
-                  value={localSettings.hero_description}
-                  onChange={(e) => updateSetting("hero_description", e.target.value)}
-                  placeholder="Discover, track, and nurture your plants..."
-                  className="rounded-xl"
-                  rows={3}
-                />
-              </div>
-
-              {/* CTA Buttons */}
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl border border-stone-200 dark:border-stone-700 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <MousePointer className="h-4 w-4 text-emerald-500" />
-                    <Label className="text-sm font-medium">Primary CTA Button</Label>
-                  </div>
-                  <Input
-                    value={localSettings.hero_cta_primary_text}
-                    onChange={(e) => updateSetting("hero_cta_primary_text", e.target.value)}
-                    placeholder="Download App"
-                    className="rounded-xl"
-                  />
-                  <Input
-                    value={localSettings.hero_cta_primary_link}
-                    onChange={(e) => updateSetting("hero_cta_primary_link", e.target.value)}
-                    placeholder="/download"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="p-4 rounded-xl border border-stone-200 dark:border-stone-700 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <MousePointer className="h-4 w-4 text-stone-400" />
-                    <Label className="text-sm font-medium">Secondary CTA Button</Label>
-                  </div>
-                  <Input
-                    value={localSettings.hero_cta_secondary_text}
-                    onChange={(e) => updateSetting("hero_cta_secondary_text", e.target.value)}
-                    placeholder="Try in Browser"
-                    className="rounded-xl"
-                  />
-                  <Input
-                    value={localSettings.hero_cta_secondary_link}
-                    onChange={(e) => updateSetting("hero_cta_secondary_link", e.target.value)}
-                    placeholder="/discovery"
-                    className="rounded-xl"
-                  />
-                </div>
-              </div>
-
-              {/* Social Proof */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Social Proof Text</Label>
-                <Input
-                  value={localSettings.hero_social_proof_text}
-                  onChange={(e) => updateSetting("hero_social_proof_text", e.target.value)}
-                  placeholder="10,000+ plant lovers"
-                  className="rounded-xl"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Beginner Section Settings */}
-          {activeSection === "beginner" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <GraduationCap className="h-4 w-4 text-emerald-500" />
-                  Beginner-Friendly Section
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">Content for users who are new to plant care</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Badge Text</Label>
-                <Input
-                  value={localSettings.beginner_badge}
-                  onChange={(e) => updateSetting("beginner_badge", e.target.value)}
-                  placeholder="Perfect for Beginners"
-                  className="rounded-xl"
-                />
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title</Label>
-                  <Input
-                    value={localSettings.beginner_title}
-                    onChange={(e) => updateSetting("beginner_title", e.target.value)}
-                    placeholder="Know Nothing About Gardening?"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Title Highlight <span className="text-emerald-500">(Colored)</span></Label>
-                  <Input
-                    value={localSettings.beginner_title_highlight}
-                    onChange={(e) => updateSetting("beginner_title_highlight", e.target.value)}
-                    placeholder="That's Exactly Why We Built This"
-                    className="rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Subtitle</Label>
-                <Textarea
-                  value={localSettings.beginner_subtitle}
-                  onChange={(e) => updateSetting("beginner_subtitle", e.target.value)}
-                  placeholder="Everyone starts somewhere..."
-                  className="rounded-xl"
-                  rows={2}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Final CTA Settings */}
-          {activeSection === "cta" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <Megaphone className="h-4 w-4 text-emerald-500" />
-                  Final Call-to-Action Section
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">The last push to convert visitors before the footer</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Badge Text</Label>
-                <Input
-                  value={localSettings.final_cta_badge}
-                  onChange={(e) => updateSetting("final_cta_badge", e.target.value)}
-                  placeholder="No experience needed"
-                  className="rounded-xl"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Title</Label>
-                <Input
-                  value={localSettings.final_cta_title}
-                  onChange={(e) => updateSetting("final_cta_title", e.target.value)}
-                  placeholder="Ready to Start Your Plant Journey?"
-                  className="rounded-xl"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Subtitle</Label>
-                <Textarea
-                  value={localSettings.final_cta_subtitle}
-                  onChange={(e) => updateSetting("final_cta_subtitle", e.target.value)}
-                  placeholder="Whether it's your first succulent..."
-                  className="rounded-xl"
-                  rows={2}
-                />
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Primary Button Text</Label>
-                  <Input
-                    value={localSettings.final_cta_button_text}
-                    onChange={(e) => updateSetting("final_cta_button_text", e.target.value)}
-                    placeholder="Start Growing"
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Secondary Button Text</Label>
-                  <Input
-                    value={localSettings.final_cta_secondary_text}
-                    onChange={(e) => updateSetting("final_cta_secondary_text", e.target.value)}
-                    placeholder="Explore Plants"
-                    className="rounded-xl"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Social & Contact Settings */}
-          {activeSection === "social" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <Share2 className="h-4 w-4 text-emerald-500" />
-                  Social Media & Contact
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">Links displayed in the footer and contact sections</p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-stone-700">
-                  <div className="h-10 w-10 rounded-xl bg-pink-500/10 flex items-center justify-center">
-                    <Instagram className="h-5 w-5 text-pink-500" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-sm font-medium">Instagram URL</Label>
-                    <Input
-                      value={localSettings.instagram_url}
-                      onChange={(e) => updateSetting("instagram_url", e.target.value)}
-                      placeholder="https://instagram.com/your_handle"
-                      className="rounded-xl mt-1"
+            <div className="grid gap-3">
+              {visibilityItems.map((item) => {
+                const isVisible = localSettings[item.key]
+                return (
+                  <div
+                    key={item.key}
+                    className={cn(
+                      "flex items-center justify-between p-4 rounded-xl border transition-all",
+                      isVisible
+                        ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800"
+                        : "bg-stone-50 dark:bg-stone-900/50 border-stone-200 dark:border-stone-700 opacity-75"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "h-10 w-10 rounded-xl flex items-center justify-center",
+                        isVisible ? "bg-emerald-500/10" : "bg-stone-200 dark:bg-stone-800"
+                      )}>
+                        <item.icon className={cn(
+                          "h-5 w-5",
+                          isVisible ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400"
+                        )} />
+                      </div>
+                      <div>
+                        <p className={cn(
+                          "font-medium",
+                          isVisible ? "text-stone-900 dark:text-white" : "text-stone-500"
+                        )}>
+                          {item.label}
+                        </p>
+                        <p className="text-xs text-stone-500">{item.description}</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={isVisible}
+                      onCheckedChange={(checked) => updateSetting(item.key, checked)}
                     />
                   </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-stone-700">
-                  <div className="h-10 w-10 rounded-xl bg-sky-500/10 flex items-center justify-center">
-                    <Twitter className="h-5 w-5 text-sky-500" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-sm font-medium">Twitter/X URL</Label>
-                    <Input
-                      value={localSettings.twitter_url}
-                      onChange={(e) => updateSetting("twitter_url", e.target.value)}
-                      placeholder="https://twitter.com/your_handle"
-                      className="rounded-xl mt-1"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-4 rounded-xl border border-stone-200 dark:border-stone-700">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                    <Mail className="h-5 w-5 text-emerald-500" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-sm font-medium">Support Email</Label>
-                    <Input
-                      value={localSettings.support_email}
-                      onChange={(e) => updateSetting("support_email", e.target.value)}
-                      placeholder="hello@example.com"
-                      className="rounded-xl mt-1"
-                    />
-                  </div>
-                </div>
-              </div>
+                )
+              })}
             </div>
-          )}
-
-          {/* SEO & Meta Settings */}
-          {activeSection === "meta" && (
-            <div className="space-y-6">
-              <div className="pb-4 border-b border-stone-200 dark:border-stone-700">
-                <h4 className="font-semibold text-stone-900 dark:text-white flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-emerald-500" />
-                  SEO & Meta Information
-                </h4>
-                <p className="text-sm text-stone-500 mt-1">Optimize how your landing page appears in search results</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Meta Title</Label>
-                <Input
-                  value={localSettings.meta_title}
-                  onChange={(e) => updateSetting("meta_title", e.target.value)}
-                  placeholder="Aphylia – Your Personal Plant Care Expert"
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-stone-500">{localSettings.meta_title?.length || 0}/60 characters recommended</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Meta Description</Label>
-                <Textarea
-                  value={localSettings.meta_description}
-                  onChange={(e) => updateSetting("meta_description", e.target.value)}
-                  placeholder="Discover, track, and nurture your plants..."
-                  className="rounded-xl"
-                  rows={3}
-                />
-                <p className="text-xs text-stone-500">{localSettings.meta_description?.length || 0}/160 characters recommended</p>
-              </div>
-
-              {/* Preview */}
-              <div className="p-4 rounded-xl bg-stone-100 dark:bg-stone-900 space-y-1">
-                <p className="text-xs text-stone-500 mb-2">Search Result Preview:</p>
-                <p className="text-blue-600 dark:text-blue-400 text-base font-medium truncate">
-                  {localSettings.meta_title || "Page Title"}
-                </p>
-                <p className="text-emerald-600 text-xs">example.com</p>
-                <p className="text-sm text-stone-600 dark:text-stone-400 line-clamp-2">
-                  {localSettings.meta_description || "Page description will appear here..."}
-                </p>
-              </div>
-            </div>
-          )}
+          </div>
         </CardContent>
       </Card>
 
@@ -1770,14 +1357,23 @@ const HeroCardsTab: React.FC<{
   showPreview: boolean
   sectionVisible: boolean
 }> = ({ cards, setCards, setSaving, showPreview, sectionVisible }) => {
+  const [localCards, setLocalCards] = React.useState<HeroCard[]>(cards)
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
   const [importPlantOpen, setImportPlantOpen] = React.useState(false)
   const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
   const [expandedCardId, setExpandedCardId] = React.useState<string | null>(null)
 
+  // Sync local cards when parent cards change (e.g., after add/delete)
+  React.useEffect(() => {
+    setLocalCards(cards)
+  }, [cards])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = JSON.stringify(localCards) !== JSON.stringify(cards)
+
   const addCard = async () => {
     const newCard: Partial<HeroCard> = {
-      position: cards.length,
+      position: localCards.length,
       plant_name: "New Plant",
       plant_scientific_name: "Scientific name",
       water_frequency: "2x/week",
@@ -1794,6 +1390,7 @@ const HeroCardsTab: React.FC<{
 
     if (data && !error) {
       setCards([...cards, data])
+      setLocalCards([...localCards, data])
       setExpandedCardId(data.id)
     }
   }
@@ -1804,7 +1401,7 @@ const HeroCardsTab: React.FC<{
     image_url: string | null
   }) => {
     const newCard: Partial<HeroCard> = {
-      position: cards.length,
+      position: localCards.length,
       plant_name: plant.name,
       plant_scientific_name: plant.scientific_name,
       image_url: plant.image_url,
@@ -1822,21 +1419,33 @@ const HeroCardsTab: React.FC<{
 
     if (data && !error) {
       setCards([...cards, data])
+      setLocalCards([...localCards, data])
       setExpandedCardId(data.id)
     }
   }
 
-  const updateCard = async (id: string, updates: Partial<HeroCard>) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from("landing_hero_cards")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
+  // Update local state only (no database write)
+  const updateLocalCard = (id: string, updates: Partial<HeroCard>) => {
+    setLocalCards(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
+  }
 
-    if (!error) {
-      setCards(cards.map(c => c.id === id ? { ...c, ...updates } : c))
+  // Save all changes to database
+  const saveAllCards = async () => {
+    setSaving(true)
+    try {
+      for (const card of localCards) {
+        const originalCard = cards.find(c => c.id === card.id)
+        if (originalCard && JSON.stringify(originalCard) !== JSON.stringify(card)) {
+          await supabase
+            .from("landing_hero_cards")
+            .update({ ...card, updated_at: new Date().toISOString() })
+            .eq("id", card.id)
+        }
+      }
+      setCards(localCards)
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const deleteCard = async (id: string) => {
@@ -1848,28 +1457,31 @@ const HeroCardsTab: React.FC<{
 
     if (!error) {
       setCards(cards.filter(c => c.id !== id))
+      setLocalCards(localCards.filter(c => c.id !== id))
     }
   }
 
   const moveCard = async (index: number, direction: "up" | "down") => {
-    if ((direction === "up" && index === 0) || (direction === "down" && index === cards.length - 1)) return
+    if ((direction === "up" && index === 0) || (direction === "down" && index === localCards.length - 1)) return
 
     const newIndex = direction === "up" ? index - 1 : index + 1
-    const newCards = [...cards]
+    const newCards = [...localCards]
     ;[newCards[index], newCards[newIndex]] = [newCards[newIndex], newCards[index]]
 
     const updates = newCards.map((card, i) => ({ ...card, position: i }))
-    setCards(updates)
+    setLocalCards(updates)
 
+    // Save position changes immediately since they affect display order
     for (const card of updates) {
       await supabase
         .from("landing_hero_cards")
         .update({ position: card.position })
         .eq("id", card.id)
     }
+    setCards(updates)
   }
 
-  const editingCard = cards.find(c => c.id === editingCardId)
+  const editingCard = localCards.find(c => c.id === editingCardId)
 
   return (
     <div className="space-y-6">
@@ -1895,10 +1507,16 @@ const HeroCardsTab: React.FC<{
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Hero Cards</h3>
           <p className="text-sm text-stone-500">
-            {cards.filter(c => c.is_active).length} active of {cards.length} total
+            {localCards.filter(c => c.is_active).length} active of {localCards.length} total
           </p>
         </div>
         <div className="flex gap-2">
+          {hasUnsavedChanges && (
+            <Button onClick={saveAllCards} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
+          )}
           <Button onClick={() => setImportPlantOpen(true)} variant="outline" className="rounded-xl">
             <Download className="h-4 w-4 mr-2" />
             Import from Plants
@@ -1910,7 +1528,7 @@ const HeroCardsTab: React.FC<{
         </div>
       </div>
 
-      {cards.length === 0 ? (
+      {localCards.length === 0 ? (
         <Card className="rounded-xl border-dashed">
           <CardContent className="py-16 text-center">
             <Smartphone className="h-12 w-12 mx-auto mb-4 text-stone-300" />
@@ -1929,7 +1547,7 @@ const HeroCardsTab: React.FC<{
         )}>
           {/* Cards List */}
           <div className="space-y-4">
-            {cards.map((card, index) => (
+            {localCards.map((card, index) => (
               <Card
                 key={card.id}
                 className={cn(
@@ -1958,7 +1576,7 @@ const HeroCardsTab: React.FC<{
                         size="icon"
                         className="h-6 w-6"
                         onClick={() => moveCard(index, "down")}
-                        disabled={index === cards.length - 1}
+                        disabled={index === localCards.length - 1}
                       >
                         <ChevronDown className="h-4 w-4" />
                       </Button>
@@ -1993,7 +1611,7 @@ const HeroCardsTab: React.FC<{
                       <div className="flex items-center gap-2 mb-2">
                         <Input
                           value={card.plant_name}
-                          onChange={(e) => updateCard(card.id, { plant_name: e.target.value })}
+                          onChange={(e) => updateLocalCard(card.id, { plant_name: e.target.value })}
                           className="rounded-xl font-semibold text-lg h-9"
                           placeholder="Plant name"
                         />
@@ -2013,7 +1631,7 @@ const HeroCardsTab: React.FC<{
                       <div className="flex items-center gap-2 text-sm text-stone-500">
                         <Input
                           value={card.plant_scientific_name || ""}
-                          onChange={(e) => updateCard(card.id, { plant_scientific_name: e.target.value })}
+                          onChange={(e) => updateLocalCard(card.id, { plant_scientific_name: e.target.value })}
                           className="rounded-xl h-8 italic text-sm flex-1"
                           placeholder="Scientific name"
                         />
@@ -2031,7 +1649,7 @@ const HeroCardsTab: React.FC<{
                                 </div>
                                 <Input
                                   value={card.water_frequency}
-                                  onChange={(e) => updateCard(card.id, { water_frequency: e.target.value })}
+                                  onChange={(e) => updateLocalCard(card.id, { water_frequency: e.target.value })}
                                   className="rounded-xl h-8"
                                   placeholder="e.g., 2x/week"
                                 />
@@ -2045,7 +1663,7 @@ const HeroCardsTab: React.FC<{
                                 </div>
                                 <Input
                                   value={card.light_level}
-                                  onChange={(e) => updateCard(card.id, { light_level: e.target.value })}
+                                  onChange={(e) => updateLocalCard(card.id, { light_level: e.target.value })}
                                   className="rounded-xl h-8"
                                   placeholder="e.g., Bright indirect"
                                 />
@@ -2061,7 +1679,7 @@ const HeroCardsTab: React.FC<{
                               </div>
                               <Input
                                 value={card.reminder_text}
-                                onChange={(e) => updateCard(card.id, { reminder_text: e.target.value })}
+                                onChange={(e) => updateLocalCard(card.id, { reminder_text: e.target.value })}
                                 className="rounded-xl h-8"
                                 placeholder="e.g., Water in 2 days"
                               />
@@ -2072,7 +1690,7 @@ const HeroCardsTab: React.FC<{
                             <Label className="text-xs">Description (optional)</Label>
                             <Textarea
                               value={card.plant_description || ""}
-                              onChange={(e) => updateCard(card.id, { plant_description: e.target.value })}
+                              onChange={(e) => updateLocalCard(card.id, { plant_description: e.target.value })}
                               className="rounded-xl"
                               rows={2}
                               placeholder="A brief description of this plant..."
@@ -2087,7 +1705,7 @@ const HeroCardsTab: React.FC<{
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => updateCard(card.id, { is_active: !card.is_active })}
+                        onClick={() => updateLocalCard(card.id, { is_active: !card.is_active })}
                         className={cn(
                           "rounded-xl",
                           card.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
@@ -2119,8 +1737,8 @@ const HeroCardsTab: React.FC<{
                     <Eye className="h-4 w-4" />
                     Live Preview
                   </h4>
-                  {cards.filter(c => c.is_active).length > 0 ? (
-                    <HeroCardPreview card={cards.filter(c => c.is_active)[0]} />
+                  {localCards.filter(c => c.is_active).length > 0 ? (
+                    <HeroCardPreview card={localCards.filter(c => c.is_active)[0]} />
                   ) : (
                     <div className="text-center py-8 text-stone-500 text-sm">
                       No active cards to preview
@@ -2128,11 +1746,11 @@ const HeroCardsTab: React.FC<{
                   )}
                 </div>
 
-                {cards.filter(c => c.is_active).length > 1 && (
+                {localCards.filter(c => c.is_active).length > 1 && (
                   <div className="mt-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
                     <p className="text-xs text-emerald-700 dark:text-emerald-300">
                       <Shuffle className="h-3 w-3 inline mr-1" />
-                      {cards.filter(c => c.is_active).length} cards will rotate on the live page
+                      {localCards.filter(c => c.is_active).length} cards will rotate on the live page
                     </p>
                   </div>
                 )}
@@ -2151,7 +1769,7 @@ const HeroCardsTab: React.FC<{
         }}
         onSelect={(url) => {
           if (editingCardId) {
-            updateCard(editingCardId, { image_url: url })
+            updateLocalCard(editingCardId, { image_url: url })
           }
         }}
         currentImage={editingCard?.image_url}
@@ -2179,27 +1797,193 @@ const StatsTab: React.FC<{
   sectionVisible: boolean
 }> = ({ stats, setStats, saving, setSaving, showPreview, sectionVisible }) => {
   const [localStats, setLocalStats] = React.useState<LandingStats | null>(stats)
+  const [selectedLang, setSelectedLang] = React.useState<SupportedLanguage>("en")
+  const [translation, setTranslation] = React.useState<StatsTranslation | null>(null)
+  const [localTranslation, setLocalTranslation] = React.useState<Partial<StatsTranslation>>({})
+  const [translating, setTranslating] = React.useState(false)
+  const [loadingTranslation, setLoadingTranslation] = React.useState(false)
 
   React.useEffect(() => {
     setLocalStats(stats)
   }, [stats])
 
+  // Load translation for selected language
+  const loadTranslation = React.useCallback(async (lang: SupportedLanguage) => {
+    if (lang === "en" || !stats) {
+      setTranslation(null)
+      setLocalTranslation({})
+      return
+    }
+    
+    setLoadingTranslation(true)
+    try {
+      const { data, error } = await supabase
+        .from("landing_stats_translations")
+        .select("*")
+        .eq("stats_id", stats.id)
+        .eq("language", lang)
+        .maybeSingle()
+      
+      if (data && !error) {
+        setTranslation(data)
+      } else {
+        setTranslation(null)
+      }
+      setLocalTranslation({})
+    } catch (e) {
+      console.error("Failed to load stats translation:", e)
+    } finally {
+      setLoadingTranslation(false)
+    }
+  }, [stats])
+
+  // Load translation when language changes
+  React.useEffect(() => {
+    loadTranslation(selectedLang)
+  }, [selectedLang, loadTranslation])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = selectedLang === "en"
+    ? stats && localStats && JSON.stringify(stats) !== JSON.stringify(localStats)
+    : Object.keys(localTranslation).length > 0
+
+  // Get display label for a stat based on selected language
+  const getDisplayLabel = (labelKey: "plants_label" | "users_label" | "tasks_label" | "rating_label") => {
+    if (selectedLang === "en") {
+      return localStats?.[labelKey] || ""
+    }
+    return localTranslation[labelKey] ?? translation?.[labelKey] ?? localStats?.[labelKey] ?? ""
+  }
+
+  // Update label value
+  const updateLabel = (labelKey: "plants_label" | "users_label" | "tasks_label" | "rating_label", value: string) => {
+    if (selectedLang === "en") {
+      if (localStats) {
+        setLocalStats({ ...localStats, [labelKey]: value })
+      }
+    } else {
+      setLocalTranslation(prev => ({ ...prev, [labelKey]: value }))
+    }
+  }
+
+  // Save changes
   const saveStats = async () => {
     if (!localStats) return
     setSaving(true)
 
-    const { error } = await supabase
-      .from("landing_stats")
-      .update({
-        ...localStats,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", localStats.id)
+    try {
+      if (selectedLang === "en") {
+        // Save base English content
+        const { error } = await supabase
+          .from("landing_stats")
+          .update({
+            ...localStats,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", localStats.id)
 
-    if (!error) {
-      setStats(localStats)
+        if (!error) {
+          setStats(localStats)
+        }
+      } else {
+        // Save translation
+        const translationData = {
+          stats_id: localStats.id,
+          language: selectedLang,
+          plants_label: localTranslation.plants_label ?? translation?.plants_label ?? localStats.plants_label,
+          users_label: localTranslation.users_label ?? translation?.users_label ?? localStats.users_label,
+          tasks_label: localTranslation.tasks_label ?? translation?.tasks_label ?? localStats.tasks_label,
+          rating_label: localTranslation.rating_label ?? translation?.rating_label ?? localStats.rating_label,
+          updated_at: new Date().toISOString(),
+        }
+
+        if (translation) {
+          // Update existing translation
+          await supabase
+            .from("landing_stats_translations")
+            .update(translationData)
+            .eq("id", translation.id)
+          
+          setTranslation({ ...translation, ...translationData })
+        } else {
+          // Insert new translation
+          const { data, error } = await supabase
+            .from("landing_stats_translations")
+            .insert(translationData)
+            .select()
+            .single()
+          
+          if (data && !error) {
+            setTranslation(data)
+          }
+        }
+        setLocalTranslation({})
+      }
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
+  }
+
+  // Translate all labels using DeepL
+  const translateAllLabels = async () => {
+    if (selectedLang === "en" || !localStats) return
+    
+    setTranslating(true)
+    setSaving(true)
+    
+    try {
+      const [plantsLabel, usersLabel, tasksLabel, ratingLabel] = await Promise.all([
+        translateText(localStats.plants_label, selectedLang, "en"),
+        translateText(localStats.users_label, selectedLang, "en"),
+        translateText(localStats.tasks_label, selectedLang, "en"),
+        translateText(localStats.rating_label, selectedLang, "en"),
+      ])
+
+      const translationData = {
+        stats_id: localStats.id,
+        language: selectedLang,
+        plants_label: plantsLabel,
+        users_label: usersLabel,
+        tasks_label: tasksLabel,
+        rating_label: ratingLabel,
+        updated_at: new Date().toISOString(),
+      }
+
+      if (translation) {
+        const { error } = await supabase
+          .from("landing_stats_translations")
+          .update(translationData)
+          .eq("id", translation.id)
+        
+        if (error) throw error
+        setTranslation({ ...translation, ...translationData })
+      } else {
+        const { data, error } = await supabase
+          .from("landing_stats_translations")
+          .insert(translationData)
+          .select()
+          .single()
+        
+        if (error) {
+          // Check for table not found error
+          if (error.code === "42P01" || error.message.includes("does not exist")) {
+            throw new Error("Stats translations table not found. Please run the database migration (000_sync_schema.sql) to create the landing_stats_translations table.")
+          }
+          throw error
+        }
+        if (data) {
+          setTranslation(data)
+        }
+      }
+      setLocalTranslation({})
+    } catch (e: unknown) {
+      console.error("Translation failed:", e)
+      const errorMessage = e instanceof Error ? e.message : "Translation failed. Please try again."
+      alert(errorMessage)
+    } finally {
+      setTranslating(false)
+      setSaving(false)
+    }
   }
 
   if (!localStats) {
@@ -2249,16 +2033,38 @@ const StatsTab: React.FC<{
     <div className="space-y-6">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Statistics Banner</h3>
-          <p className="text-sm text-stone-500">Displayed in the stats section below the hero</p>
+          <p className="text-sm text-stone-500">Edit values and translatable labels</p>
         </div>
-        <Button onClick={saveStats} disabled={saving} className="rounded-xl">
-          {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-          Save Changes
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Save Button */}
+          {hasUnsavedChanges && (
+            <Button onClick={saveStats} disabled={saving} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Changes
+            </Button>
+          )}
+
+          <LanguageSwitcher
+            selectedLang={selectedLang}
+            onLanguageChange={setSelectedLang}
+            onTranslateAll={translateAllLabels}
+            translating={translating}
+            disabled={saving}
+          />
+        </div>
       </div>
+
+      <TranslationModeBanner language={selectedLang} />
+
+      {loadingTranslation && (
+        <div className="flex items-center gap-2 text-sm text-stone-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading translations...
+        </div>
+      )}
 
       <div className={cn(
         "grid gap-6",
@@ -2282,22 +2088,30 @@ const StatsTab: React.FC<{
                 </div>
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-stone-500">Value</Label>
+                    <Label className="text-xs text-stone-500">Value {selectedLang !== "en" && "(shared)"}</Label>
                     <Input
                       value={localStats[stat.countKey]}
                       onChange={(e) => setLocalStats({ ...localStats, [stat.countKey]: e.target.value })}
                       className="rounded-xl"
                       placeholder="10K+"
+                      disabled={selectedLang !== "en"}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-stone-500">Label</Label>
+                    <Label className="text-xs text-stone-500">
+                      Label {selectedLang !== "en" && `(${ADMIN_LANGUAGE_LABELS[selectedLang].full})`}
+                    </Label>
                     <Input
-                      value={localStats[stat.labelKey]}
-                      onChange={(e) => setLocalStats({ ...localStats, [stat.labelKey]: e.target.value })}
+                      value={getDisplayLabel(stat.labelKey)}
+                      onChange={(e) => updateLabel(stat.labelKey, e.target.value)}
                       className="rounded-xl"
                       placeholder="Description"
                     />
+                    {selectedLang !== "en" && (
+                      <p className="text-xs text-stone-400">
+                        Original: {localStats[stat.labelKey]}
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -2312,791 +2126,22 @@ const StatsTab: React.FC<{
               <div className="rounded-xl bg-stone-100 dark:bg-stone-900 p-4">
                 <h4 className="text-sm font-medium text-stone-600 dark:text-stone-400 mb-4 flex items-center gap-2">
                   <Eye className="h-4 w-4" />
-                  Live Preview
+                  Live Preview ({ADMIN_LANGUAGE_LABELS[selectedLang].short})
                 </h4>
-                <StatsPreview stats={localStats} />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ========================
-// FEATURES TAB
-// ========================
-const FeaturesTab: React.FC<{
-  features: LandingFeature[]
-  setFeatures: React.Dispatch<React.SetStateAction<LandingFeature[]>>
-  setSaving: React.Dispatch<React.SetStateAction<boolean>>
-  showPreview: boolean
-  sectionVisible: boolean
-}> = ({ features, setFeatures, setSaving, showPreview, sectionVisible }) => {
-  const circleFeatures = features.filter(f => f.is_in_circle)
-  const gridFeatures = features.filter(f => !f.is_in_circle)
-
-  const addFeature = async (isCircle: boolean) => {
-    const relevantFeatures = isCircle ? circleFeatures : gridFeatures
-    const newFeature: Partial<LandingFeature> = {
-      position: relevantFeatures.length,
-      icon_name: "Leaf",
-      title: "New Feature",
-      description: "Feature description",
-      color: "emerald",
-      is_in_circle: isCircle,
-      is_active: true,
-    }
-
-    const { data, error } = await supabase
-      .from("landing_features")
-      .insert(newFeature)
-      .select()
-      .single()
-
-    if (data && !error) {
-      setFeatures([...features, data])
-    }
-  }
-
-  const updateFeature = async (id: string, updates: Partial<LandingFeature>) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from("landing_features")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
-
-    if (!error) {
-      setFeatures(features.map(f => f.id === id ? { ...f, ...updates } : f))
-    }
-    setSaving(false)
-  }
-
-  const deleteFeature = async (id: string) => {
-    if (!confirm("Delete this feature?")) return
-    const { error } = await supabase
-      .from("landing_features")
-      .delete()
-      .eq("id", id)
-
-    if (!error) {
-      setFeatures(features.filter(f => f.id !== id))
-    }
-  }
-
-  const renderFeatureCard = (feature: LandingFeature) => (
-    <Card key={feature.id} className="rounded-xl">
-      <CardContent className="p-4">
-        <div className="flex items-start gap-4">
-          {/* Icon Picker */}
-          <IconPicker
-            value={feature.icon_name}
-            onChange={(iconName) => updateFeature(feature.id, { icon_name: iconName })}
-            color={feature.color}
-          />
-
-          {/* Fields */}
-          <div className="flex-1 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-stone-500">Title</Label>
-                <Input
-                  value={feature.title}
-                  onChange={(e) => updateFeature(feature.id, { title: e.target.value })}
-                  className="rounded-xl"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-stone-500">Color</Label>
-                <ColorPicker
-                  value={feature.color}
-                  onChange={(color) => updateFeature(feature.id, { color })}
+                <StatsPreview 
+                  stats={{
+                    ...localStats,
+                    plants_label: getDisplayLabel("plants_label"),
+                    users_label: getDisplayLabel("users_label"),
+                    tasks_label: getDisplayLabel("tasks_label"),
+                    rating_label: getDisplayLabel("rating_label"),
+                  }} 
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-stone-500">Description</Label>
-              <Input
-                value={feature.description || ""}
-                onChange={(e) => updateFeature(feature.id, { description: e.target.value })}
-                className="rounded-xl"
-                placeholder="Brief description..."
-              />
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => updateFeature(feature.id, { is_active: !feature.is_active })}
-              className={cn(
-                "rounded-xl",
-                feature.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
-              )}
-            >
-              {feature.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => deleteFeature(feature.id)}
-              className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-
-  return (
-    <div className="space-y-8">
-      <SectionHiddenBanner visible={sectionVisible} />
-
-      {/* Circle Features */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Interactive Demo Features</h3>
-            <p className="text-sm text-stone-500">Shown in the spinning circle (8 recommended)</p>
-          </div>
-          <Button onClick={() => addFeature(true)} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Feature
-          </Button>
-        </div>
-
-        {circleFeatures.length === 0 ? (
-          <Card className="rounded-xl border-dashed">
-            <CardContent className="py-8 text-center text-stone-500">
-              No circle features yet. Add one to get started.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className={cn(
-            "grid gap-4",
-            showPreview ? "lg:grid-cols-[1fr,280px]" : "grid-cols-1"
-          )}>
-            <div className="space-y-3">
-              {circleFeatures.map(renderFeatureCard)}
-            </div>
-            {showPreview && circleFeatures.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-stone-600 dark:text-stone-400">Preview</h4>
-                {circleFeatures.slice(0, 3).map((f) => (
-                  <FeaturePreview key={f.id} feature={f} />
-                ))}
-              </div>
-            )}
           </div>
         )}
       </div>
-
-      {/* Grid Features */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Feature Grid Cards</h3>
-            <p className="text-sm text-stone-500">Shown in the bento grid section</p>
-          </div>
-          <Button onClick={() => addFeature(false)} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Feature
-          </Button>
-        </div>
-
-        {gridFeatures.length === 0 ? (
-          <Card className="rounded-xl border-dashed">
-            <CardContent className="py-8 text-center text-stone-500">
-              No grid features yet. Add one to get started.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {gridFeatures.map(renderFeatureCard)}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ========================
-// SHOWCASE TAB
-// ========================
-const ShowcaseTab: React.FC<{
-  cards: ShowcaseCard[]
-  setCards: React.Dispatch<React.SetStateAction<ShowcaseCard[]>>
-  setSaving: React.Dispatch<React.SetStateAction<boolean>>
-  sectionVisible: boolean
-}> = ({ cards, setCards, setSaving, sectionVisible }) => {
-  const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
-  const [editingCardId, setEditingCardId] = React.useState<string | null>(null)
-  const [imagePickerTarget, setImagePickerTarget] = React.useState<"image" | "cover" | "plant">("image")
-  const [expandedCardId, setExpandedCardId] = React.useState<string | null>(null)
-  const [publicGardens, setPublicGardens] = React.useState<PublicGardenOption[]>([])
-  const [loadingGardens, setLoadingGardens] = React.useState(false)
-  const [gardenSelectorOpen, setGardenSelectorOpen] = React.useState<string | null>(null)
-
-  // Fetch public gardens when component mounts
-  React.useEffect(() => {
-    const fetchPublicGardens = async () => {
-      setLoadingGardens(true)
-      try {
-        const { data, error } = await supabase
-          .from('gardens')
-          .select('id, name, cover_image_url, streak, created_by')
-          .eq('privacy', 'public')
-          .order('created_at', { ascending: false })
-          .limit(50)
-        
-        if (!error && data) {
-          // Fetch plant counts
-          const gardenIds = data.map((g: any) => g.id)
-          const { data: plantCounts } = await supabase
-            .from('garden_plants')
-            .select('garden_id')
-            .in('garden_id', gardenIds)
-          
-          const countByGarden: Record<string, number> = {}
-          for (const p of plantCounts || []) {
-            countByGarden[p.garden_id] = (countByGarden[p.garden_id] || 0) + 1
-          }
-          
-          // Fetch owner names
-          const ownerIds = [...new Set(data.map((g: any) => g.created_by))]
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, display_name')
-            .in('id', ownerIds)
-          
-          const ownerNames: Record<string, string> = {}
-          for (const p of profiles || []) {
-            ownerNames[p.id] = p.display_name || ''
-          }
-          
-          setPublicGardens(data.map((g: any) => ({
-            id: g.id,
-            name: g.name,
-            coverImageUrl: g.cover_image_url,
-            plantCount: countByGarden[g.id] || 0,
-            streak: g.streak || 0,
-            ownerDisplayName: ownerNames[g.created_by] || null
-          })))
-        }
-      } catch (e) {
-        console.error('Failed to fetch public gardens:', e)
-      }
-      setLoadingGardens(false)
-    }
-    fetchPublicGardens()
-  }, [])
-
-  const addCard = async () => {
-    const newCard: Partial<ShowcaseCard> = {
-      position: cards.length,
-      card_type: "small",
-      icon_name: "Leaf",
-      title: "New Card",
-      description: "Card description",
-      color: "emerald",
-      is_active: true,
-      plants_count: 12,
-      species_count: 8,
-      streak_count: 7,
-      progress_percent: 85,
-      plant_images: [],
-      selected_garden_ids: [],
-    }
-
-    const { data, error } = await supabase
-      .from("landing_showcase_cards")
-      .insert(newCard)
-      .select()
-      .single()
-
-    if (data && !error) {
-      setCards([...cards, data])
-    }
-  }
-
-  const updateCard = async (id: string, updates: Partial<ShowcaseCard>) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from("landing_showcase_cards")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
-
-    if (!error) {
-      setCards(cards.map(c => c.id === id ? { ...c, ...updates } : c))
-    }
-    setSaving(false)
-  }
-
-  const deleteCard = async (id: string) => {
-    if (!confirm("Delete this showcase card?")) return
-    const { error } = await supabase
-      .from("landing_showcase_cards")
-      .delete()
-      .eq("id", id)
-
-    if (!error) {
-      setCards(cards.filter(c => c.id !== id))
-    }
-  }
-
-  const addPlantImage = (cardId: string, url: string) => {
-    const card = cards.find(c => c.id === cardId)
-    if (!card) return
-    const currentImages = card.plant_images || []
-    const newImages = [...currentImages, { url, name: `Plant ${currentImages.length + 1}` }]
-    updateCard(cardId, { plant_images: newImages })
-  }
-
-  const removePlantImage = (cardId: string, index: number) => {
-    const card = cards.find(c => c.id === cardId)
-    if (!card) return
-    const currentImages = card.plant_images || []
-    const newImages = currentImages.filter((_, i) => i !== index)
-    updateCard(cardId, { plant_images: newImages })
-  }
-
-  const toggleGardenSelection = (cardId: string, gardenId: string) => {
-    const card = cards.find(c => c.id === cardId)
-    if (!card) return
-    const currentIds = card.selected_garden_ids || []
-    const newIds = currentIds.includes(gardenId)
-      ? currentIds.filter(id => id !== gardenId)
-      : [...currentIds, gardenId]
-    updateCard(cardId, { selected_garden_ids: newIds })
-  }
-
-  const getSelectedGardensInfo = (selectedIds: string[] | null) => {
-    if (!selectedIds || selectedIds.length === 0) return []
-    return publicGardens.filter(g => selectedIds.includes(g.id))
-  }
-
-  const editingCard = cards.find(c => c.id === editingCardId)
-
-  return (
-    <div className="space-y-4">
-      <SectionHiddenBanner visible={sectionVisible} />
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Showcase Cards</h3>
-          <p className="text-sm text-stone-500">Cards in the "Designed for your jungle" section</p>
-        </div>
-        <Button onClick={addCard} className="rounded-xl">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Card
-        </Button>
-      </div>
-
-      {cards.length === 0 ? (
-        <Card className="rounded-xl border-dashed">
-          <CardContent className="py-12 text-center text-stone-500">
-            No showcase cards yet. Add one to get started.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {cards.map((card) => {
-            const isExpanded = expandedCardId === card.id
-            
-            return (
-            <Card key={card.id} className="rounded-xl overflow-hidden">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  {/* Icon Picker */}
-                  <IconPicker
-                    value={card.icon_name || "Leaf"}
-                    onChange={(iconName) => updateCard(card.id, { icon_name: iconName })}
-                    color={card.color}
-                  />
-
-                  {/* Fields */}
-                  <div className="flex-1 space-y-3">
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-stone-500">Title</Label>
-                        <Input
-                          value={card.title}
-                          onChange={(e) => updateCard(card.id, { title: e.target.value })}
-                          className="rounded-xl"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-stone-500">Type</Label>
-                        <select
-                          value={card.card_type}
-                          onChange={(e) => updateCard(card.id, { card_type: e.target.value })}
-                          className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-sm"
-                        >
-                          <option value="small">Small</option>
-                          <option value="large">Large (2-column)</option>
-                          <option value="main">Main (Garden Dashboard)</option>
-                          <option value="analytics">Analytics</option>
-                          <option value="tasks">Tasks List</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-stone-500">Color</Label>
-                        <ColorPicker
-                          value={card.color}
-                          onChange={(color) => updateCard(card.id, { color })}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-stone-500">Badge Text</Label>
-                        <Input
-                          value={card.badge_text || ""}
-                          onChange={(e) => updateCard(card.id, { badge_text: e.target.value })}
-                          className="rounded-xl"
-                          placeholder="Optional badge"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-stone-500">Icon Image</Label>
-                        <Button
-                          variant="outline"
-                          className="w-full rounded-xl justify-start"
-                          onClick={() => {
-                            setEditingCardId(card.id)
-                            setImagePickerTarget("image")
-                            setImagePickerOpen(true)
-                          }}
-                        >
-                          <ImageIcon className="h-4 w-4 mr-2" />
-                          {card.image_url ? "Change" : "Add"}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-stone-500">Description</Label>
-                      <Textarea
-                        value={card.description || ""}
-                        onChange={(e) => updateCard(card.id, { description: e.target.value })}
-                        className="rounded-xl"
-                        rows={2}
-                      />
-                    </div>
-
-                    {/* Expand button for garden/main type */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setExpandedCardId(isExpanded ? null : card.id)}
-                      className="rounded-xl text-xs"
-                    >
-                      {isExpanded ? "Hide Advanced Options" : "Show Advanced Options (Images, Stats)"}
-                    </Button>
-
-                    {/* Expanded options for garden-type cards */}
-                    {isExpanded && (
-                      <div className="space-y-4 pt-4 border-t border-stone-200 dark:border-stone-700">
-                        {/* Select Public Gardens */}
-                        {card.card_type === "main" && (
-                          <div className="space-y-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <Label className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                                  Select Public Gardens to Showcase
-                                </Label>
-                                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                  Choose real gardens to display on the landing page
-                                </p>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-xl border-emerald-300"
-                                onClick={() => setGardenSelectorOpen(gardenSelectorOpen === card.id ? null : card.id)}
-                              >
-                                {gardenSelectorOpen === card.id ? "Close" : "Select Gardens"}
-                              </Button>
-                            </div>
-
-                            {/* Selected Gardens Preview */}
-                            {(card.selected_garden_ids && card.selected_garden_ids.length > 0) && (
-                              <div className="flex flex-wrap gap-2">
-                                {getSelectedGardensInfo(card.selected_garden_ids).map(g => (
-                                  <div 
-                                    key={g.id} 
-                                    className="flex items-center gap-2 bg-white dark:bg-stone-800 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-700"
-                                  >
-                                    {g.coverImageUrl ? (
-                                      <img src={g.coverImageUrl} alt={g.name} className="w-6 h-6 rounded object-cover" />
-                                    ) : (
-                                      <div className="w-6 h-6 rounded bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center">
-                                        <Leaf className="h-3 w-3 text-emerald-600" />
-                                      </div>
-                                    )}
-                                    <span className="text-sm font-medium text-stone-700 dark:text-stone-200">{g.name}</span>
-                                    <span className="text-xs text-stone-500">{g.plantCount} plants</span>
-                                    <button
-                                      onClick={() => toggleGardenSelection(card.id, g.id)}
-                                      className="text-red-500 hover:text-red-600 ml-1"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Garden Selector Dropdown */}
-                            {gardenSelectorOpen === card.id && (
-                              <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 max-h-64 overflow-y-auto">
-                                {loadingGardens ? (
-                                  <div className="p-4 text-center text-stone-500">Loading gardens...</div>
-                                ) : publicGardens.length === 0 ? (
-                                  <div className="p-4 text-center text-stone-500">No public gardens found</div>
-                                ) : (
-                                  publicGardens.map(garden => {
-                                    const isSelected = card.selected_garden_ids?.includes(garden.id)
-                                    return (
-                                      <button
-                                        key={garden.id}
-                                        onClick={() => toggleGardenSelection(card.id, garden.id)}
-                                        className={`w-full flex items-center gap-3 p-3 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors border-b border-stone-100 dark:border-stone-700 last:border-0 ${
-                                          isSelected ? "bg-emerald-50 dark:bg-emerald-900/30" : ""
-                                        }`}
-                                      >
-                                        {garden.coverImageUrl ? (
-                                          <img src={garden.coverImageUrl} alt={garden.name} className="w-12 h-12 rounded-lg object-cover" />
-                                        ) : (
-                                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-800 dark:to-emerald-900 flex items-center justify-center">
-                                            <Leaf className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                                          </div>
-                                        )}
-                                        <div className="flex-1 text-left">
-                                          <div className="font-medium text-stone-800 dark:text-stone-200">{garden.name}</div>
-                                          <div className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-2">
-                                            <span>{garden.plantCount} plants</span>
-                                            {garden.streak > 0 && <span>🔥 {garden.streak} streak</span>}
-                                            {garden.ownerDisplayName && <span>by {garden.ownerDisplayName}</span>}
-                                          </div>
-                                        </div>
-                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                          isSelected 
-                                            ? "bg-emerald-500 border-emerald-500 text-white" 
-                                            : "border-stone-300 dark:border-stone-600"
-                                        }`}>
-                                          {isSelected && <Check className="h-3 w-3" />}
-                                        </div>
-                                      </button>
-                                    )
-                                  })
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Manual Override Section */}
-                        <div className="text-xs text-stone-500 dark:text-stone-400">
-                          {card.card_type === "main" 
-                            ? "If no gardens selected above, these manual settings will be used:"
-                            : "Manual settings for this card:"
-                          }
-                        </div>
-
-                        {/* Cover Image */}
-                        <div className="space-y-2">
-                          <Label className="text-xs text-stone-500 font-medium">Cover Image (Background)</Label>
-                          <div className="flex items-center gap-3">
-                            {card.cover_image_url && (
-                              <div className="relative w-24 h-16 rounded-lg overflow-hidden">
-                                <img src={card.cover_image_url} alt="Cover" className="w-full h-full object-cover" />
-                                <button
-                                  onClick={() => updateCard(card.id, { cover_image_url: null })}
-                                  className="absolute top-1 right-1 h-5 w-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="rounded-xl"
-                              onClick={() => {
-                                setEditingCardId(card.id)
-                                setImagePickerTarget("cover")
-                                setImagePickerOpen(true)
-                              }}
-                            >
-                              <ImageIcon className="h-4 w-4 mr-2" />
-                              {card.cover_image_url ? "Change Cover" : "Add Cover Image"}
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Garden Name */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-stone-500">Garden Name (for preview)</Label>
-                          <Input
-                            value={card.garden_name || ""}
-                            onChange={(e) => updateCard(card.id, { garden_name: e.target.value })}
-                            className="rounded-xl"
-                            placeholder="My Indoor Jungle"
-                          />
-                        </div>
-
-                        {/* Garden Stats */}
-                        <div className="grid grid-cols-4 gap-3">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-stone-500">Plants</Label>
-                            <Input
-                              type="number"
-                              value={card.plants_count || 12}
-                              onChange={(e) => updateCard(card.id, { plants_count: parseInt(e.target.value) || 0 })}
-                              className="rounded-xl"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-stone-500">Species</Label>
-                            <Input
-                              type="number"
-                              value={card.species_count || 8}
-                              onChange={(e) => updateCard(card.id, { species_count: parseInt(e.target.value) || 0 })}
-                              className="rounded-xl"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-stone-500">Streak</Label>
-                            <Input
-                              type="number"
-                              value={card.streak_count || 7}
-                              onChange={(e) => updateCard(card.id, { streak_count: parseInt(e.target.value) || 0 })}
-                              className="rounded-xl"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-stone-500">Progress %</Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={100}
-                              value={card.progress_percent || 85}
-                              onChange={(e) => updateCard(card.id, { progress_percent: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
-                              className="rounded-xl"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Plant Images Gallery */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs text-stone-500 font-medium">Plant Images Gallery</Label>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="rounded-xl"
-                              onClick={() => {
-                                setEditingCardId(card.id)
-                                setImagePickerTarget("plant")
-                                setImagePickerOpen(true)
-                              }}
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              Add Plant
-                            </Button>
-                          </div>
-                          {(card.plant_images && card.plant_images.length > 0) ? (
-                            <div className="flex flex-wrap gap-2">
-                              {card.plant_images.map((img, idx) => (
-                                <div key={idx} className="relative w-16 h-16 rounded-xl overflow-hidden group">
-                                  <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
-                                  <button
-                                    onClick={() => removePlantImage(card.id, idx)}
-                                    className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-stone-400">No plant images yet. Add some to show in the garden preview.</p>
-                          )}
-                        </div>
-
-                        {/* Link URL */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-stone-500">Link URL (optional)</Label>
-                          <Input
-                            value={card.link_url || ""}
-                            onChange={(e) => updateCard(card.id, { link_url: e.target.value })}
-                            className="rounded-xl"
-                            placeholder="/garden/example"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => updateCard(card.id, { is_active: !card.is_active })}
-                      className={cn(
-                        "rounded-xl",
-                        card.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
-                      )}
-                    >
-                      {card.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteCard(card.id)}
-                      className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )})}
-        </div>
-      )}
-
-      <ImagePickerModal
-        open={imagePickerOpen}
-        onClose={() => {
-          setImagePickerOpen(false)
-          setEditingCardId(null)
-        }}
-        onSelect={(url) => {
-          if (editingCardId) {
-            if (imagePickerTarget === "cover") {
-              updateCard(editingCardId, { cover_image_url: url })
-            } else if (imagePickerTarget === "plant") {
-              addPlantImage(editingCardId, url)
-            } else {
-              updateCard(editingCardId, { image_url: url })
-            }
-          }
-        }}
-        currentImage={
-          imagePickerTarget === "cover" 
-            ? editingCard?.cover_image_url 
-            : imagePickerTarget === "plant" 
-              ? null 
-              : editingCard?.image_url
-        }
-      />
     </div>
   )
 }
@@ -3110,12 +2155,56 @@ const TestimonialsTab: React.FC<{
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   sectionVisible: boolean
 }> = ({ testimonials, setTestimonials, setSaving, sectionVisible }) => {
+  const [localTestimonials, setLocalTestimonials] = React.useState<Testimonial[]>(testimonials)
   const [imagePickerOpen, setImagePickerOpen] = React.useState(false)
+  const [userPickerOpen, setUserPickerOpen] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(null)
+  const [availableUsers, setAvailableUsers] = React.useState<UserProfile[]>([])
+  const [userSearchQuery, setUserSearchQuery] = React.useState("")
+  const [loadingUsers, setLoadingUsers] = React.useState(false)
+
+  // Sync local testimonials when parent changes
+  React.useEffect(() => {
+    setLocalTestimonials(testimonials)
+  }, [testimonials])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = JSON.stringify(localTestimonials) !== JSON.stringify(testimonials)
+
+  // Load available users for linking
+  const loadUsers = React.useCallback(async (search?: string) => {
+    setLoadingUsers(true)
+    try {
+      let query = supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .limit(20)
+      
+      if (search) {
+        query = query.ilike("display_name", `%${search}%`)
+      }
+      
+      const { data, error } = await query
+      if (data && !error) {
+        setAvailableUsers(data)
+      }
+    } catch (e) {
+      console.error("Failed to load users:", e)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }, [])
+
+  // Load users when user picker opens
+  React.useEffect(() => {
+    if (userPickerOpen) {
+      loadUsers(userSearchQuery)
+    }
+  }, [userPickerOpen, userSearchQuery, loadUsers])
 
   const addTestimonial = async () => {
     const newTestimonial: Partial<Testimonial> = {
-      position: testimonials.length,
+      position: localTestimonials.length,
       author_name: "New Reviewer",
       author_role: "Plant Enthusiast",
       quote: "This app is amazing!",
@@ -3131,20 +2220,32 @@ const TestimonialsTab: React.FC<{
 
     if (data && !error) {
       setTestimonials([...testimonials, data])
+      setLocalTestimonials([...localTestimonials, data])
     }
   }
 
-  const updateTestimonial = async (id: string, updates: Partial<Testimonial>) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from("landing_testimonials")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
+  // Update local state only
+  const updateLocalTestimonial = (id: string, updates: Partial<Testimonial>) => {
+    setLocalTestimonials(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
+  }
 
-    if (!error) {
-      setTestimonials(testimonials.map(t => t.id === id ? { ...t, ...updates } : t))
+  // Save all changes to database
+  const saveAllTestimonials = async () => {
+    setSaving(true)
+    try {
+      for (const testimonial of localTestimonials) {
+        const originalTestimonial = testimonials.find(t => t.id === testimonial.id)
+        if (originalTestimonial && JSON.stringify(originalTestimonial) !== JSON.stringify(testimonial)) {
+          await supabase
+            .from("landing_testimonials")
+            .update({ ...testimonial, updated_at: new Date().toISOString() })
+            .eq("id", testimonial.id)
+        }
+      }
+      setTestimonials(localTestimonials)
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const deleteTestimonial = async (id: string) => {
@@ -3156,10 +2257,27 @@ const TestimonialsTab: React.FC<{
 
     if (!error) {
       setTestimonials(testimonials.filter(t => t.id !== id))
+      setLocalTestimonials(localTestimonials.filter(t => t.id !== id))
     }
   }
 
-  const editingTestimonial = testimonials.find(t => t.id === editingId)
+  // Link a user profile to a testimonial
+  const linkUserToTestimonial = (testimonialId: string, user: UserProfile) => {
+    updateLocalTestimonial(testimonialId, {
+      linked_user_id: user.id,
+      author_name: user.display_name,
+      author_avatar_url: user.avatar_url,
+    })
+    setUserPickerOpen(false)
+    setEditingId(null)
+  }
+
+  // Unlink a user from a testimonial
+  const unlinkUser = (testimonialId: string) => {
+    updateLocalTestimonial(testimonialId, { linked_user_id: null })
+  }
+
+  const editingTestimonial = localTestimonials.find(t => t.id === editingId)
 
   return (
     <div className="space-y-4">
@@ -3170,13 +2288,21 @@ const TestimonialsTab: React.FC<{
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Customer Reviews</h3>
           <p className="text-sm text-stone-500">Testimonials shown in the reviews section</p>
         </div>
-        <Button onClick={addTestimonial} className="rounded-xl">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Review
-        </Button>
+        <div className="flex gap-2">
+          {hasUnsavedChanges && (
+            <Button onClick={saveAllTestimonials} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
+          )}
+          <Button onClick={addTestimonial} className="rounded-xl">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Review
+          </Button>
+        </div>
       </div>
 
-      {testimonials.length === 0 ? (
+      {localTestimonials.length === 0 ? (
         <Card className="rounded-xl border-dashed">
           <CardContent className="py-12 text-center text-stone-500">
             No testimonials yet. Add one to get started.
@@ -3184,7 +2310,7 @@ const TestimonialsTab: React.FC<{
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {testimonials.map((testimonial) => (
+          {localTestimonials.map((testimonial) => (
             <Card key={testimonial.id} className="rounded-xl">
               <CardContent className="p-4 space-y-4">
                 <div className="flex items-start justify-between">
@@ -3212,13 +2338,13 @@ const TestimonialsTab: React.FC<{
                     <div className="space-y-1">
                       <Input
                         value={testimonial.author_name}
-                        onChange={(e) => updateTestimonial(testimonial.id, { author_name: e.target.value })}
+                        onChange={(e) => updateLocalTestimonial(testimonial.id, { author_name: e.target.value })}
                         className="rounded-xl h-8 font-medium"
                         placeholder="Name"
                       />
                       <Input
                         value={testimonial.author_role || ""}
-                        onChange={(e) => updateTestimonial(testimonial.id, { author_role: e.target.value })}
+                        onChange={(e) => updateLocalTestimonial(testimonial.id, { author_role: e.target.value })}
                         className="rounded-xl h-7 text-xs"
                         placeholder="Role"
                       />
@@ -3228,7 +2354,7 @@ const TestimonialsTab: React.FC<{
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => updateTestimonial(testimonial.id, { is_active: !testimonial.is_active })}
+                      onClick={() => updateLocalTestimonial(testimonial.id, { is_active: !testimonial.is_active })}
                       className={cn(
                         "rounded-xl h-8 w-8",
                         testimonial.is_active ? "text-emerald-600 bg-emerald-50" : "text-stone-400"
@@ -3252,7 +2378,7 @@ const TestimonialsTab: React.FC<{
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
-                      onClick={() => updateTestimonial(testimonial.id, { rating: star })}
+                      onClick={() => updateLocalTestimonial(testimonial.id, { rating: star })}
                       className="focus:outline-none transition-transform hover:scale-110"
                     >
                       <Star
@@ -3267,11 +2393,64 @@ const TestimonialsTab: React.FC<{
 
                 <Textarea
                   value={testimonial.quote}
-                  onChange={(e) => updateTestimonial(testimonial.id, { quote: e.target.value })}
+                  onChange={(e) => updateLocalTestimonial(testimonial.id, { quote: e.target.value })}
                   className="rounded-xl"
                   rows={3}
                   placeholder="Review text..."
                 />
+
+                {/* Website/Review Link */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-stone-500 flex items-center gap-1">
+                    <LinkIcon className="h-3 w-3" />
+                    Website or Review Link
+                  </Label>
+                  <Input
+                    value={testimonial.author_website_url || ""}
+                    onChange={(e) => updateLocalTestimonial(testimonial.id, { author_website_url: e.target.value })}
+                    className="rounded-xl h-8 text-sm"
+                    placeholder="https://example.com or review URL"
+                  />
+                </div>
+
+                {/* Link to User Profile */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-stone-500 flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    Link to App User
+                  </Label>
+                  {testimonial.linked_user_id ? (
+                    <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                      <div className="h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs">
+                        <User className="h-3 w-3" />
+                      </div>
+                      <span className="text-sm text-emerald-700 dark:text-emerald-300 flex-1">
+                        Linked to user profile
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => unlinkUser(testimonial.id)}
+                        className="h-6 px-2 text-xs text-red-500 hover:text-red-600"
+                      >
+                        Unlink
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditingId(testimonial.id)
+                        setUserPickerOpen(true)
+                      }}
+                      className="rounded-xl w-full justify-start text-stone-500"
+                    >
+                      <User className="h-3.5 w-3.5 mr-2" />
+                      Link to existing user...
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -3286,17 +2465,615 @@ const TestimonialsTab: React.FC<{
         }}
         onSelect={(url) => {
           if (editingId) {
-            updateTestimonial(editingId, { author_avatar_url: url })
+            updateLocalTestimonial(editingId, { author_avatar_url: url })
           }
         }}
         currentImage={editingTestimonial?.author_avatar_url}
       />
+
+      {/* User Picker Modal */}
+      {userPickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="w-full max-w-md rounded-xl">
+            <CardContent className="p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-stone-900 dark:text-white">Link to User Profile</h4>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setUserPickerOpen(false)
+                    setEditingId(null)
+                    setUserSearchQuery("")
+                  }}
+                  className="rounded-xl h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                <Input
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="rounded-xl pl-9"
+                  placeholder="Search users..."
+                />
+              </div>
+
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {loadingUsers ? (
+                  <div className="py-8 text-center">
+                    <Loader2 className="h-6 w-6 mx-auto animate-spin text-stone-400" />
+                  </div>
+                ) : availableUsers.length === 0 ? (
+                  <div className="py-8 text-center text-stone-500 text-sm">
+                    No users found
+                  </div>
+                ) : (
+                  availableUsers.map((user) => (
+                    <button
+                      key={user.id}
+                      onClick={() => editingId && linkUserToTestimonial(editingId, user)}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold overflow-hidden">
+                        {user.avatar_url ? (
+                          <img src={user.avatar_url} alt={user.display_name} className="w-full h-full object-cover" />
+                        ) : (
+                          user.display_name.charAt(0)
+                        )}
+                      </div>
+                      <span className="font-medium text-stone-900 dark:text-white">{user.display_name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
 
 // ========================
-// FAQ TAB
+// DEMO FEATURES TAB WITH TRANSLATION SUPPORT
+// ========================
+
+// Icon map for rendering actual icons in the picker
+const DEMO_ICON_MAP: Record<string, LucideIcon> = {
+  Leaf,
+  Clock,
+  TrendingUp,
+  Shield,
+  Camera,
+  NotebookPen,
+  Users,
+  Sparkles,
+  Bell,
+  Heart,
+  Star,
+  Zap,
+  Globe,
+  Search,
+  BookMarked,
+  Flower2,
+  TreeDeciduous,
+  Sprout,
+  Sun,
+  Droplets,
+}
+
+const AVAILABLE_ICONS = Object.keys(DEMO_ICON_MAP)
+
+const AVAILABLE_COLORS = [
+  { name: "emerald", class: "bg-emerald-500" },
+  { name: "blue", class: "bg-blue-500" },
+  { name: "purple", class: "bg-purple-500" },
+  { name: "rose", class: "bg-rose-500" },
+  { name: "pink", class: "bg-pink-500" },
+  { name: "amber", class: "bg-amber-500" },
+  { name: "teal", class: "bg-teal-500" },
+  { name: "indigo", class: "bg-indigo-500" },
+  { name: "red", class: "bg-red-500" },
+  { name: "green", class: "bg-green-500" },
+]
+
+const DemoFeaturesTab: React.FC<{
+  features: DemoFeature[]
+  setFeatures: React.Dispatch<React.SetStateAction<DemoFeature[]>>
+  setSaving: React.Dispatch<React.SetStateAction<boolean>>
+  sectionVisible: boolean
+}> = ({ features, setFeatures, setSaving, sectionVisible }) => {
+  const [localFeatures, setLocalFeatures] = React.useState<DemoFeature[]>(features)
+  const [selectedLang, setSelectedLang] = React.useState<SupportedLanguage>("en")
+  const [translations, setTranslations] = React.useState<Record<string, DemoFeatureTranslation>>({})
+  const [localTranslations, setLocalTranslations] = React.useState<Record<string, Partial<DemoFeatureTranslation>>>({})
+  const [translating, setTranslating] = React.useState(false)
+  const [loadingTranslations, setLoadingTranslations] = React.useState(false)
+
+  // Sync local features when parent changes
+  React.useEffect(() => {
+    setLocalFeatures(features)
+  }, [features])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = selectedLang === "en" 
+    ? JSON.stringify(localFeatures) !== JSON.stringify(features)
+    : Object.keys(localTranslations).length > 0
+
+  // Load translations for the selected language
+  const loadTranslations = React.useCallback(async (lang: SupportedLanguage) => {
+    if (lang === "en") {
+      setTranslations({})
+      setLocalTranslations({})
+      return
+    }
+    
+    setLoadingTranslations(true)
+    try {
+      const { data, error } = await supabase
+        .from("landing_demo_feature_translations")
+        .select("*")
+        .eq("language", lang)
+      
+      if (data && !error) {
+        const translationMap: Record<string, DemoFeatureTranslation> = {}
+        data.forEach((t: DemoFeatureTranslation) => {
+          translationMap[t.feature_id] = t
+        })
+        setTranslations(translationMap)
+        setLocalTranslations({})
+      }
+    } catch (e) {
+      console.error("Failed to load translations:", e)
+    } finally {
+      setLoadingTranslations(false)
+    }
+  }, [])
+
+  // Load translations when language changes
+  React.useEffect(() => {
+    loadTranslations(selectedLang)
+  }, [selectedLang, loadTranslations])
+
+  // Get the display label for a feature based on selected language
+  const getDisplayLabel = (feature: DemoFeature) => {
+    if (selectedLang === "en") {
+      const localFeature = localFeatures.find(f => f.id === feature.id)
+      return localFeature?.label || feature.label
+    }
+    const localTrans = localTranslations[feature.id]
+    const savedTrans = translations[feature.id]
+    return localTrans?.label ?? savedTrans?.label ?? feature.label
+  }
+
+  const addFeature = async () => {
+    const newFeature: Partial<DemoFeature> = {
+      position: localFeatures.length,
+      icon_name: "Leaf",
+      label: "New Feature",
+      color: "emerald",
+      is_active: true,
+    }
+
+    const { data, error } = await supabase
+      .from("landing_demo_features")
+      .insert(newFeature)
+      .select()
+      .single()
+
+    if (data && !error) {
+      setFeatures([...features, data])
+      setLocalFeatures([...localFeatures, data])
+    }
+  }
+
+  // Update local state only
+  const updateLocalFeature = (id: string, updates: Partial<DemoFeature>) => {
+    if (selectedLang === "en") {
+      setLocalFeatures(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f))
+    } else {
+      // Update local translations
+      setLocalTranslations(prev => ({
+        ...prev,
+        [id]: {
+          ...prev[id],
+          label: updates.label ?? prev[id]?.label,
+          feature_id: id,
+          language: selectedLang,
+        }
+      }))
+    }
+  }
+
+  // Save all changes to database
+  const saveAllFeatures = async () => {
+    setSaving(true)
+    try {
+      if (selectedLang === "en") {
+        // Save English base content
+        for (const feature of localFeatures) {
+          const originalFeature = features.find(f => f.id === feature.id)
+          if (originalFeature && JSON.stringify(originalFeature) !== JSON.stringify(feature)) {
+            await supabase
+              .from("landing_demo_features")
+              .update({ ...feature, updated_at: new Date().toISOString() })
+              .eq("id", feature.id)
+          }
+        }
+        setFeatures(localFeatures)
+      } else {
+        // Save translations
+        for (const [featureId, localTrans] of Object.entries(localTranslations)) {
+          const existingTranslation = translations[featureId]
+          const translationData = {
+            feature_id: featureId,
+            language: selectedLang,
+            label: localTrans.label ?? existingTranslation?.label ?? "",
+            updated_at: new Date().toISOString(),
+          }
+          
+          if (existingTranslation) {
+            await supabase
+              .from("landing_demo_feature_translations")
+              .update(translationData)
+              .eq("id", existingTranslation.id)
+            
+            setTranslations(prev => ({
+              ...prev,
+              [featureId]: { ...existingTranslation, ...translationData }
+            }))
+          } else {
+            const { data, error } = await supabase
+              .from("landing_demo_feature_translations")
+              .insert(translationData)
+              .select()
+              .single()
+            
+            if (data && !error) {
+              setTranslations(prev => ({ ...prev, [featureId]: data }))
+            }
+          }
+        }
+        setLocalTranslations({})
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteFeature = async (id: string) => {
+    if (!confirm("Delete this feature?")) return
+    const { error } = await supabase
+      .from("landing_demo_features")
+      .delete()
+      .eq("id", id)
+
+    if (!error) {
+      setFeatures(features.filter(f => f.id !== id))
+      setLocalFeatures(localFeatures.filter(f => f.id !== id))
+    }
+  }
+
+  const moveFeature = async (index: number, direction: "up" | "down") => {
+    if ((direction === "up" && index === 0) || (direction === "down" && index === localFeatures.length - 1)) return
+
+    const newIndex = direction === "up" ? index - 1 : index + 1
+    const newFeatures = [...localFeatures]
+    ;[newFeatures[index], newFeatures[newIndex]] = [newFeatures[newIndex], newFeatures[index]]
+
+    const updates = newFeatures.map((feature, i) => ({ ...feature, position: i }))
+    setLocalFeatures(updates)
+
+    // Save position changes immediately
+    for (const feature of updates) {
+      await supabase
+        .from("landing_demo_features")
+        .update({ position: feature.position })
+        .eq("id", feature.id)
+    }
+    setFeatures(updates)
+  }
+
+  // Translate all features to the selected language using DeepL
+  const translateAllFeatures = async () => {
+    if (selectedLang === "en") return
+    
+    setTranslating(true)
+    setSaving(true)
+    
+    try {
+      for (const feature of localFeatures) {
+        const translatedLabel = await translateText(feature.label, selectedLang, "en")
+        
+        const existingTranslation = translations[feature.id]
+        const translationData = {
+          feature_id: feature.id,
+          language: selectedLang,
+          label: translatedLabel,
+          updated_at: new Date().toISOString(),
+        }
+        
+        if (existingTranslation) {
+          const { error } = await supabase
+            .from("landing_demo_feature_translations")
+            .update(translationData)
+            .eq("id", existingTranslation.id)
+          
+          if (error) {
+            console.error("Failed to update translation:", error)
+            throw error
+          }
+        } else {
+          const { data, error } = await supabase
+            .from("landing_demo_feature_translations")
+            .insert(translationData)
+            .select()
+            .single()
+          
+          if (error) {
+            console.error("Failed to insert translation:", error)
+            throw error
+          }
+          
+          if (data) {
+            setTranslations(prev => ({ ...prev, [feature.id]: data }))
+          }
+        }
+      }
+      
+      // Reload translations after bulk update
+      await loadTranslations(selectedLang)
+    } catch (e: unknown) {
+      console.error("Translation failed:", e)
+      const errorMessage = e instanceof Error ? e.message : "Translation failed. Please try again."
+      alert(errorMessage)
+    } finally {
+      setTranslating(false)
+      setSaving(false)
+    }
+  }
+
+  // Icon picker state
+  const [iconPickerOpen, setIconPickerOpen] = React.useState(false)
+  const [editingFeatureId, setEditingFeatureId] = React.useState<string | null>(null)
+
+  const openIconPicker = (featureId: string) => {
+    setEditingFeatureId(featureId)
+    setIconPickerOpen(true)
+  }
+
+  const handleIconSelect = (iconName: string) => {
+    if (editingFeatureId) {
+      updateLocalFeature(editingFeatureId, { icon_name: iconName })
+    }
+  }
+
+  const currentEditingFeature = editingFeatureId ? localFeatures.find(f => f.id === editingFeatureId) : null
+
+  return (
+    <div className="space-y-4">
+      <SectionHiddenBanner visible={sectionVisible} />
+
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Demo Wheel Features</h3>
+          <p className="text-sm text-stone-500">Features shown in the interactive demo wheel</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Save Button */}
+          {hasUnsavedChanges && (
+            <Button onClick={saveAllFeatures} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
+          )}
+
+          <LanguageSwitcher
+            selectedLang={selectedLang}
+            onLanguageChange={setSelectedLang}
+            onTranslateAll={translateAllFeatures}
+            translating={translating}
+            disabled={localFeatures.length === 0}
+          />
+          
+          <Button onClick={addFeature} className="rounded-xl" disabled={selectedLang !== "en"}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Feature
+          </Button>
+        </div>
+      </div>
+
+      <TranslationModeBanner language={selectedLang} />
+
+      {/* Icon Picker Dialog */}
+      <IconPickerDialog
+        open={iconPickerOpen}
+        onClose={() => {
+          setIconPickerOpen(false)
+          setEditingFeatureId(null)
+        }}
+        selectedIcon={currentEditingFeature?.icon_name || "Leaf"}
+        onSelect={handleIconSelect}
+        iconMap={DEMO_ICON_MAP}
+        availableIcons={AVAILABLE_ICONS}
+      />
+
+      {loadingTranslations ? (
+        <Card className="rounded-xl">
+          <CardContent className="py-12 text-center">
+            <Loader2 className="h-8 w-8 mx-auto mb-2 text-stone-400 animate-spin" />
+            <p className="text-stone-500">Loading translations...</p>
+          </CardContent>
+        </Card>
+      ) : localFeatures.length === 0 ? (
+        <Card className="rounded-xl border-dashed">
+          <CardContent className="py-12 text-center text-stone-500">
+            No features yet. Add one to get started.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {localFeatures.map((feature, index) => {
+            const displayLabel = getDisplayLabel(feature)
+            const hasTranslation = selectedLang !== "en" && (!!translations[feature.id] || !!localTranslations[feature.id])
+            
+            return (
+              <Card key={feature.id} className="rounded-xl">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    {/* Position Controls */}
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => moveFeature(index, "up")}
+                        disabled={index === 0 || selectedLang !== "en"}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <div className="flex items-center justify-center h-6 w-6 text-xs font-medium text-stone-400">
+                        {index + 1}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => moveFeature(index, "down")}
+                        disabled={index === localFeatures.length - 1 || selectedLang !== "en"}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {/* Icon Preview */}
+                    <div className={cn(
+                      "h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0",
+                      `bg-${feature.color}-500`
+                    )}>
+                      {(() => {
+                        const IconComponent = DEMO_ICON_MAP[feature.icon_name]
+                        return IconComponent ? (
+                          <IconComponent className="h-6 w-6 text-white" />
+                        ) : (
+                          <span className="text-white text-lg">{feature.icon_name.charAt(0)}</span>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <Label className="text-xs text-stone-500 flex items-center gap-1">
+                            Label
+                            {selectedLang !== "en" && !hasTranslation && (
+                              <span className="text-amber-600 dark:text-amber-400">(not translated)</span>
+                            )}
+                          </Label>
+                          <Input
+                            value={displayLabel}
+                            onChange={(e) => updateLocalFeature(feature.id, { label: e.target.value })}
+                            className="rounded-xl"
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Icon and Color selectors (only in English mode) */}
+                      {selectedLang === "en" && (
+                        <div className="flex items-center gap-4">
+                          {/* Icon Picker - Click to open popup */}
+                          <div>
+                            <Label className="text-xs text-stone-500 mb-1.5 block">Icon</Label>
+                            <button
+                              type="button"
+                              onClick={() => openIconPicker(feature.id)}
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all",
+                                "bg-stone-50 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700",
+                                "hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                              )}
+                            >
+                              {(() => {
+                                const IconComponent = DEMO_ICON_MAP[feature.icon_name]
+                                return IconComponent ? (
+                                  <IconComponent className="h-5 w-5 text-stone-600 dark:text-stone-400" />
+                                ) : null
+                              })()}
+                              <span className="text-sm text-stone-600 dark:text-stone-400">{feature.icon_name}</span>
+                              <ChevronDown className="h-4 w-4 text-stone-400" />
+                            </button>
+                          </div>
+
+                          {/* Color Picker */}
+                          <div>
+                            <Label className="text-xs text-stone-500 mb-1.5 block">Color</Label>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {AVAILABLE_COLORS.map(color => (
+                                <button
+                                  key={color.name}
+                                  type="button"
+                                  onClick={() => updateLocalFeature(feature.id, { color: color.name })}
+                                  className={cn(
+                                    "h-7 w-7 rounded-lg transition-all flex items-center justify-center",
+                                    color.class,
+                                    feature.color === color.name 
+                                      ? "ring-2 ring-offset-2 ring-stone-900 dark:ring-white scale-110" 
+                                      : "hover:scale-105"
+                                  )}
+                                >
+                                  {feature.color === color.name && (
+                                    <Check className="h-3.5 w-3.5 text-white" />
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => updateLocalFeature(feature.id, { is_active: !feature.is_active })}
+                        disabled={selectedLang !== "en"}
+                        className={cn(
+                          "rounded-xl",
+                          feature.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
+                        )}
+                      >
+                        {feature.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteFeature(feature.id)}
+                        disabled={selectedLang !== "en"}
+                        className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ========================
+// FAQ TAB WITH TRANSLATION SUPPORT
 // ========================
 const FAQTab: React.FC<{
   items: FAQ[]
@@ -3304,9 +3081,76 @@ const FAQTab: React.FC<{
   setSaving: React.Dispatch<React.SetStateAction<boolean>>
   sectionVisible: boolean
 }> = ({ items, setItems, setSaving, sectionVisible }) => {
+  const [localItems, setLocalItems] = React.useState<FAQ[]>(items)
+  const [selectedLang, setSelectedLang] = React.useState<SupportedLanguage>("en")
+  const [translations, setTranslations] = React.useState<Record<string, FAQTranslation>>({})
+  const [localTranslations, setLocalTranslations] = React.useState<Record<string, Partial<FAQTranslation>>>({})
+  const [translating, setTranslating] = React.useState(false)
+  const [loadingTranslations, setLoadingTranslations] = React.useState(false)
+
+  // Sync local items when parent changes
+  React.useEffect(() => {
+    setLocalItems(items)
+  }, [items])
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = selectedLang === "en" 
+    ? JSON.stringify(localItems) !== JSON.stringify(items)
+    : Object.keys(localTranslations).length > 0
+
+  // Load translations for the selected language
+  const loadTranslations = React.useCallback(async (lang: SupportedLanguage) => {
+    if (lang === "en") {
+      setTranslations({})
+      setLocalTranslations({})
+      return
+    }
+    
+    setLoadingTranslations(true)
+    try {
+      const { data, error } = await supabase
+        .from("landing_faq_translations")
+        .select("*")
+        .eq("language", lang)
+      
+      if (data && !error) {
+        const translationMap: Record<string, FAQTranslation> = {}
+        data.forEach((t: FAQTranslation) => {
+          translationMap[t.faq_id] = t
+        })
+        setTranslations(translationMap)
+        setLocalTranslations({})
+      }
+    } catch (e) {
+      console.error("Failed to load translations:", e)
+    } finally {
+      setLoadingTranslations(false)
+    }
+  }, [])
+
+  // Load translations when language changes
+  React.useEffect(() => {
+    loadTranslations(selectedLang)
+  }, [selectedLang, loadTranslations])
+
+  // Get the display content for an FAQ item based on selected language
+  const getDisplayContent = (item: FAQ) => {
+    if (selectedLang === "en") {
+      const localItem = localItems.find(i => i.id === item.id)
+      return { question: localItem?.question || item.question, answer: localItem?.answer || item.answer }
+    }
+    // Check local translations first, then fall back to saved translations
+    const localTrans = localTranslations[item.id]
+    const savedTrans = translations[item.id]
+    return {
+      question: localTrans?.question ?? savedTrans?.question ?? item.question,
+      answer: localTrans?.answer ?? savedTrans?.answer ?? item.answer,
+    }
+  }
+
   const addFAQ = async () => {
     const newFAQ: Partial<FAQ> = {
-      position: items.length,
+      position: localItems.length,
       question: "New Question?",
       answer: "Answer goes here...",
       is_active: true,
@@ -3320,24 +3164,87 @@ const FAQTab: React.FC<{
 
     if (data && !error) {
       setItems([...items, data])
+      setLocalItems([...localItems, data])
     }
   }
 
-  const updateFAQ = async (id: string, updates: Partial<FAQ>) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from("landing_faq")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
-
-    if (!error) {
-      setItems(items.map(i => i.id === id ? { ...i, ...updates } : i))
+  // Update local state only
+  const updateLocalFAQ = (id: string, updates: Partial<FAQ>) => {
+    if (selectedLang === "en") {
+      setLocalItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i))
+    } else {
+      // Update local translations
+      setLocalTranslations(prev => ({
+        ...prev,
+        [id]: {
+          ...prev[id],
+          ...updates,
+          faq_id: id,
+          language: selectedLang,
+        }
+      }))
     }
-    setSaving(false)
+  }
+
+  // Save all changes to database
+  const saveAllFAQs = async () => {
+    setSaving(true)
+    try {
+      if (selectedLang === "en") {
+        // Save English base content
+        for (const item of localItems) {
+          const originalItem = items.find(i => i.id === item.id)
+          if (originalItem && JSON.stringify(originalItem) !== JSON.stringify(item)) {
+            await supabase
+              .from("landing_faq")
+              .update({ ...item, updated_at: new Date().toISOString() })
+              .eq("id", item.id)
+          }
+        }
+        setItems(localItems)
+      } else {
+        // Save translations
+        for (const [faqId, localTrans] of Object.entries(localTranslations)) {
+          const existingTranslation = translations[faqId]
+          const translationData = {
+            faq_id: faqId,
+            language: selectedLang,
+            question: localTrans.question ?? existingTranslation?.question ?? "",
+            answer: localTrans.answer ?? existingTranslation?.answer ?? "",
+            updated_at: new Date().toISOString(),
+          }
+          
+          if (existingTranslation) {
+            await supabase
+              .from("landing_faq_translations")
+              .update(translationData)
+              .eq("id", existingTranslation.id)
+            
+            setTranslations(prev => ({
+              ...prev,
+              [faqId]: { ...existingTranslation, ...translationData }
+            }))
+          } else {
+            const { data, error } = await supabase
+              .from("landing_faq_translations")
+              .insert(translationData)
+              .select()
+              .single()
+            
+            if (data && !error) {
+              setTranslations(prev => ({ ...prev, [faqId]: data }))
+            }
+          }
+        }
+        setLocalTranslations({})
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const deleteFAQ = async (id: string) => {
-    if (!confirm("Delete this FAQ?")) return
+    if (!confirm("Delete this FAQ? This will also delete all translations.")) return
     const { error } = await supabase
       .from("landing_faq")
       .delete()
@@ -3345,24 +3252,108 @@ const FAQTab: React.FC<{
 
     if (!error) {
       setItems(items.filter(i => i.id !== id))
+      setLocalItems(localItems.filter(i => i.id !== id))
+      // Remove from translations state
+      setTranslations(prev => {
+        const newTranslations = { ...prev }
+        delete newTranslations[id]
+        return newTranslations
+      })
+      setLocalTranslations(prev => {
+        const newTranslations = { ...prev }
+        delete newTranslations[id]
+        return newTranslations
+      })
     }
   }
 
   const moveFAQ = async (index: number, direction: "up" | "down") => {
-    if ((direction === "up" && index === 0) || (direction === "down" && index === items.length - 1)) return
+    if ((direction === "up" && index === 0) || (direction === "down" && index === localItems.length - 1)) return
 
     const newIndex = direction === "up" ? index - 1 : index + 1
-    const newItems = [...items]
+    const newItems = [...localItems]
     ;[newItems[index], newItems[newIndex]] = [newItems[newIndex], newItems[index]]
 
     const updates = newItems.map((item, i) => ({ ...item, position: i }))
-    setItems(updates)
+    setLocalItems(updates)
 
+    // Save position changes immediately
     for (const item of updates) {
       await supabase
         .from("landing_faq")
         .update({ position: item.position })
         .eq("id", item.id)
+    }
+    setItems(updates)
+  }
+
+  // Translate all FAQs to the selected language using DeepL
+  const translateAllFAQs = async () => {
+    if (selectedLang === "en") return
+    
+    setTranslating(true)
+    setSaving(true)
+    
+    try {
+      for (const item of localItems) {
+        // Translate question and answer from English
+        const [translatedQuestion, translatedAnswer] = await Promise.all([
+          translateText(item.question, selectedLang, "en"),
+          translateText(item.answer, selectedLang, "en"),
+        ])
+        
+        const existingTranslation = translations[item.id]
+        const translationData = {
+          faq_id: item.id,
+          language: selectedLang,
+          question: translatedQuestion,
+          answer: translatedAnswer,
+          updated_at: new Date().toISOString(),
+        }
+        
+        if (existingTranslation) {
+          const { error } = await supabase
+            .from("landing_faq_translations")
+            .update(translationData)
+            .eq("id", existingTranslation.id)
+          
+          if (error) {
+            console.error("Failed to update translation:", error)
+            if (error.code === "42P01" || error.message?.includes("does not exist")) {
+              throw new Error("Translation table not found. Please run the database sync to create landing_faq_translations table.")
+            }
+            throw error
+          }
+        } else {
+          const { data, error } = await supabase
+            .from("landing_faq_translations")
+            .insert(translationData)
+            .select()
+            .single()
+          
+          if (error) {
+            console.error("Failed to insert translation:", error)
+            if (error.code === "42P01" || error.message?.includes("does not exist")) {
+              throw new Error("Translation table not found. Please run the database sync to create landing_faq_translations table.")
+            }
+            throw error
+          }
+          
+          if (data) {
+            setTranslations(prev => ({ ...prev, [item.id]: data }))
+          }
+        }
+      }
+      
+      // Reload translations after bulk update
+      await loadTranslations(selectedLang)
+    } catch (e: unknown) {
+      console.error("Translation failed:", e)
+      const errorMessage = e instanceof Error ? e.message : "Translation failed. Please try again."
+      alert(errorMessage)
+    } finally {
+      setTranslating(false)
+      setSaving(false)
     }
   }
 
@@ -3370,18 +3361,45 @@ const FAQTab: React.FC<{
     <div className="space-y-4">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h3 className="text-lg font-semibold text-stone-900 dark:text-white">FAQ Items</h3>
           <p className="text-sm text-stone-500">Questions and answers shown in the FAQ section</p>
         </div>
-        <Button onClick={addFAQ} className="rounded-xl">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Question
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Save Button */}
+          {hasUnsavedChanges && (
+            <Button onClick={saveAllFAQs} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
+          )}
+
+          <LanguageSwitcher
+            selectedLang={selectedLang}
+            onLanguageChange={setSelectedLang}
+            onTranslateAll={translateAllFAQs}
+            translating={translating}
+            disabled={localItems.length === 0}
+          />
+          
+          <Button onClick={addFAQ} className="rounded-xl" disabled={selectedLang !== "en"}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Question
+          </Button>
+        </div>
       </div>
 
-      {items.length === 0 ? (
+      <TranslationModeBanner language={selectedLang} />
+
+      {loadingTranslations ? (
+        <Card className="rounded-xl">
+          <CardContent className="py-12 text-center">
+            <Loader2 className="h-8 w-8 mx-auto mb-2 text-stone-400 animate-spin" />
+            <p className="text-stone-500">Loading translations...</p>
+          </CardContent>
+        </Card>
+      ) : localItems.length === 0 ? (
         <Card className="rounded-xl border-dashed">
           <CardContent className="py-12 text-center text-stone-500">
             No FAQ items yet. Add one to get started.
@@ -3389,82 +3407,94 @@ const FAQTab: React.FC<{
         </Card>
       ) : (
         <div className="space-y-3">
-          {items.map((item, index) => (
-            <Card key={item.id} className="rounded-xl">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  {/* Position Controls */}
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => moveFAQ(index, "up")}
-                      disabled={index === 0}
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </Button>
-                    <div className="flex items-center justify-center h-6 w-6 text-xs font-medium text-stone-400">
-                      {index + 1}
+          {localItems.map((item, index) => {
+            const displayContent = getDisplayContent(item)
+            const hasTranslation = selectedLang !== "en" && (!!translations[item.id] || !!localTranslations[item.id])
+            
+            return (
+              <Card key={item.id} className="rounded-xl">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    {/* Position Controls */}
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => moveFAQ(index, "up")}
+                        disabled={index === 0 || selectedLang !== "en"}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <div className="flex items-center justify-center h-6 w-6 text-xs font-medium text-stone-400">
+                        {index + 1}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => moveFAQ(index, "down")}
+                        disabled={index === localItems.length - 1 || selectedLang !== "en"}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => moveFAQ(index, "down")}
-                      disabled={index === items.length - 1}
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </div>
 
-                  {/* Content */}
-                  <div className="flex-1 space-y-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-stone-500">Question</Label>
-                      <Input
-                        value={item.question}
-                        onChange={(e) => updateFAQ(item.id, { question: e.target.value })}
-                        className="rounded-xl font-medium"
-                      />
+                    {/* Content */}
+                    <div className="flex-1 space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs text-stone-500">Question</Label>
+                          {selectedLang !== "en" && !hasTranslation && (
+                            <span className="text-xs text-amber-600 dark:text-amber-400">(not translated)</span>
+                          )}
+                        </div>
+                        <Input
+                          value={displayContent.question}
+                          onChange={(e) => updateLocalFAQ(item.id, { question: e.target.value })}
+                          className="rounded-xl font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-stone-500">Answer</Label>
+                        <Textarea
+                          value={displayContent.answer}
+                          onChange={(e) => updateLocalFAQ(item.id, { answer: e.target.value })}
+                          className="rounded-xl"
+                          rows={3}
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-stone-500">Answer</Label>
-                      <Textarea
-                        value={item.answer}
-                        onChange={(e) => updateFAQ(item.id, { answer: e.target.value })}
-                        className="rounded-xl"
-                        rows={3}
-                      />
-                    </div>
-                  </div>
 
-                  {/* Actions */}
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => updateFAQ(item.id, { is_active: !item.is_active })}
-                      className={cn(
-                        "rounded-xl",
-                        item.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
-                      )}
-                    >
-                      {item.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteFAQ(item.id)}
-                      className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {/* Actions */}
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => updateLocalFAQ(item.id, { is_active: !item.is_active })}
+                        disabled={selectedLang !== "en"}
+                        className={cn(
+                          "rounded-xl",
+                          item.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
+                        )}
+                      >
+                        {item.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteFAQ(item.id)}
+                        disabled={selectedLang !== "en"}
+                        className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>

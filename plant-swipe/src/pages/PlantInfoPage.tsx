@@ -1091,9 +1091,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         
         if (ignore) return
         
-        const plantsData = results[0].data
-        const imagesData = results[1].data
-        const translationsData = currentLang !== 'en' ? results[2]?.data : null
+        const plantsData = plantsRes.data
+        const imagesData = imagesRes.data
+        const translationsData = translationsRes.data
         
         if (!plantsData?.length) {
           setCompanionPlants([])
@@ -1103,7 +1103,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         
         const imageMap = new Map<string, string>()
         if (imagesData) {
-          imagesData.forEach((img: { plant_id?: string; link?: string }) => {
+          imagesData.forEach((img) => {
             if (img.plant_id && img.link) {
               imageMap.set(img.plant_id, img.link)
             }
@@ -1112,14 +1112,14 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         
         const nameTranslations: Record<string, string> = {}
         if (translationsData) {
-          translationsData.forEach((trans: { plant_id?: string; name?: string }) => {
+          (translationsData as Array<{ plant_id: string; name: string }>).forEach((trans) => {
             if (trans.plant_id && trans.name) {
               nameTranslations[trans.plant_id] = trans.name
             }
           })
         }
         
-        const companions = plantsData.map((p: { id: string; name: string }) => ({
+        const companions = plantsData.map((p) => ({
           id: p.id,
           name: nameTranslations[p.id] || p.name,
           imageUrl: imageMap.get(p.id),
