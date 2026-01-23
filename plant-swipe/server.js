@@ -824,11 +824,15 @@ if (vapidPublicKey && vapidPrivateKey) {
   try {
     webpush.setVapidDetails('mailto:support@aphylia.app', vapidPublicKey, vapidPrivateKey)
     pushNotificationsEnabled = true
+    console.log('[notifications] ✓ VAPID keys configured successfully - push notifications ENABLED')
+    console.log('[notifications]   Public key prefix:', vapidPublicKey.slice(0, 20) + '...')
   } catch (err) {
-    console.error('[notifications] Failed to configure VAPID keys:', err)
+    console.error('[notifications] ✗ Failed to configure VAPID keys:', err)
   }
 } else {
-  console.warn('[notifications] VAPID keys not configured — push notifications disabled')
+  console.warn('[notifications] ✗ VAPID keys not configured — push notifications DISABLED')
+  if (!vapidPublicKey) console.warn('[notifications]   Missing: VAPID_PUBLIC_KEY')
+  if (!vapidPrivateKey) console.warn('[notifications]   Missing: VAPID_PRIVATE_KEY')
 }
 
 // Admin bypass configuration
@@ -17742,6 +17746,15 @@ app.post('/api/push/subscribe', async (req, res) => {
   const authKey = subscription.keys?.auth || subscription.auth_key || null
   const p256dhKey = subscription.keys?.p256dh || subscription.p256dh_key || null
   const userAgent = req.get('user-agent') || null
+  
+  // Extract endpoint domain for logging
+  let endpointDomain = 'unknown'
+  try {
+    endpointDomain = new URL(subscription.endpoint).hostname
+  } catch {}
+  
+  console.log(`[push/subscribe] Storing subscription for user ${user.id.slice(0, 8)}... (endpoint: ${endpointDomain})`)
+  
   try {
     await sql`
       insert into public.user_push_subscriptions (user_id, endpoint, auth_key, p256dh_key, user_agent, subscription, updated_at, last_used_at)
@@ -17755,9 +17768,10 @@ app.post('/api/push/subscribe', async (req, res) => {
           updated_at = now(),
           last_used_at = now()
     `
+    console.log(`[push/subscribe] ✓ Subscription stored successfully for user ${user.id.slice(0, 8)}...`)
     res.json({ ok: true, pushConfigured: pushNotificationsEnabled })
   } catch (err) {
-    console.error('[notifications] failed to store push subscription', err)
+    console.error('[push/subscribe] ✗ Failed to store subscription:', err?.message || err)
     res.status(500).json({ error: err?.message || 'Failed to store subscription' })
   }
 })
