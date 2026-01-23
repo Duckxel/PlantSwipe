@@ -2683,6 +2683,14 @@
     },
     "errors": {
       "failedToLoad": "Failed to load conversations"
+    },
+    "linkPreview": {
+      "plant": "Plant",
+      "garden": "Garden",
+      "profile": "Profile",
+      "bookmark": "Collection",
+      "blog": "Article",
+      "link": "Link"
     }
   },
   "moderation": {
