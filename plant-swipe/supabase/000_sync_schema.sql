@@ -2047,7 +2047,8 @@ create table if not exists public.garden_plants (
   plants_on_hand integer not null default 0,
   override_water_freq_unit text check (override_water_freq_unit in ('day','week','month','year')),
   override_water_freq_value integer,
-  sort_index integer
+  sort_index integer,
+  created_at timestamptz not null default now()
 );
 
 -- Ensure new columns exist on existing deployments
@@ -2065,6 +2066,8 @@ alter table if exists public.garden_plants
   add column if not exists notes text;
 alter table if exists public.garden_plants
   add column if not exists last_health_update timestamptz;
+alter table if exists public.garden_plants
+  add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.garden_plant_events (
   id uuid primary key default gen_random_uuid(),

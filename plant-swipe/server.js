@@ -15132,8 +15132,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         p.name as plant_name, p.scientific_name, p.plant_type,
         p.utility as plant_utility, p.comestible_part,
         -- Care requirements
-        p.watering_type, p.water_freq_amount, p.water_freq_period,
-        p.light_level, p.hardiness_min, p.hardiness_max,
+        p.watering_type, p.level_sun,
         p.temperature_min, p.temperature_max, p.temperature_ideal,
         p.hygrometry, p.soil, p.nutrition_need, p.fertilizer,
         -- Growing info
@@ -15141,17 +15140,31 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         p.height_cm, p.wingspan_cm, p.separation_cm,
         p.tutoring, p.transplanting, p.sow_type, p.division,
         -- Characteristics
-        p.is_edible, p.is_poisonous, p.spiked, p.scent, p.multicolor,
+        p.spiked, p.scent, p.multicolor,
         p.melliferous, p.conservation_status,
-        -- Problems and companions
-        p.pests, p.diseases, p.companions, p.tags,
-        -- Translated overview
+        p.toxicity_human, p.toxicity_pets,
+        ('comestible' = ANY(p.utility)) as is_edible,
+        -- Companions (pests/diseases now in plant_translations)
+        p.companions,
+        -- Translated fields including pests and diseases
         (
           select pt.overview 
           from public.plant_translations pt 
           where pt.plant_id = p.id and pt.language = 'en'
           limit 1
-        ) as plant_overview
+        ) as plant_overview,
+        (
+          select pt.pests 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as pests,
+        (
+          select pt.diseases 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as diseases
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
@@ -15322,23 +15335,27 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         .filter(Boolean)
     } catch { }
 
-    // Get previous week's advice to avoid repetition
-    let previousAdvice = null
+    // Get previous 4 weeks of advice to avoid repetition and build on progress
+    let previousAdviceList = []
     try {
-      const prevWeekStart = new Date(weekStart)
-      prevWeekStart.setDate(prevWeekStart.getDate() - 7)
-      const prevWeekStartIso = prevWeekStart.toISOString().slice(0, 10)
+      const fourWeeksAgo = new Date(weekStart)
+      fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28)
+      const fourWeeksAgoIso = fourWeeksAgo.toISOString().slice(0, 10)
 
       const prevAdviceRows = await sql`
-        select advice_text, advice_summary, focus_areas, plant_specific_tips
+        select week_start, advice_text, advice_summary, focus_areas, plant_specific_tips
         from public.garden_ai_advice
-        where garden_id = ${gardenId} and week_start = ${prevWeekStartIso}
-        limit 1
+        where garden_id = ${gardenId} 
+          and week_start >= ${fourWeeksAgoIso}
+          and week_start < ${weekStartIso}
+        order by week_start desc
+        limit 4
       `
       if (prevAdviceRows && prevAdviceRows.length > 0) {
-        previousAdvice = prevAdviceRows[0]
+        previousAdviceList = prevAdviceRows
       }
     } catch { }
+    const previousAdvice = previousAdviceList[0] || null
 
     // Build COMPREHENSIVE plant list with ALL details for AI advice
     const plantList = plants.map(p => {
@@ -15362,10 +15379,8 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       const careInfo = []
       if (p.override_water_freq_value) {
         careInfo.push(`Watering: ${p.override_water_freq_value}x per ${p.override_water_freq_unit || 'week'} (custom)`)
-      } else if (p.water_freq_amount) {
-        careInfo.push(`Watering: ${p.water_freq_amount}x per ${p.water_freq_period || 'week'}`)
       }
-      if (p.light_level) careInfo.push(`Light: ${p.light_level}`)
+      if (p.level_sun) careInfo.push(`Light: ${p.level_sun}`)
       if (p.temperature_min && p.temperature_max) {
         careInfo.push(`Temp: ${p.temperature_min}°C-${p.temperature_max}°C${p.temperature_ideal ? ` (ideal: ${p.temperature_ideal}°C)` : ''}`)
       }
@@ -15382,7 +15397,8 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       // Characteristics
       const chars = []
       if (p.is_edible) chars.push('Edible')
-      if (p.is_poisonous) chars.push('⚠️ Poisonous')
+      if (p.toxicity_human === 'highly toxic' || p.toxicity_human === 'lethally toxic') chars.push('⚠️ Toxic to humans')
+      if (p.toxicity_pets === 'highly toxic' || p.toxicity_pets === 'lethally toxic') chars.push('⚠️ Toxic to pets')
       if (p.melliferous) chars.push('Melliferous')
       if (chars.length > 0) lines.push(`- Traits: ${chars.join(', ')}`)
       
@@ -15550,38 +15566,72 @@ ${weatherContext}
 ${journalContext}
 ${photoContext}
 ${plantImages.length > 0 ? `\n📷 The gardener has uploaded ${plantImages.length} plant photos.` : ''}
-${previousAdvice ? `
+${previousAdviceList.length > 0 ? `
 ═══════════════════════════════════════════════════════════════
-📋 LAST WEEK'S ADVICE (DO NOT REPEAT THIS)
+📋 PREVIOUS ADVICE HISTORY (DO NOT REPEAT - BUILD UPON IT)
 ═══════════════════════════════════════════════════════════════
-Summary: ${previousAdvice.advice_summary || 'N/A'}
-Focus areas given: ${(previousAdvice.focus_areas || []).join(', ') || 'N/A'}
-${previousAdvice.advice_text ? `Full text: "${previousAdvice.advice_text.slice(0, 500)}${previousAdvice.advice_text.length > 500 ? '...' : ''}"` : ''}
+${previousAdviceList.map((adv, i) => {
+  const weeksAgo = i + 1
+  return `
+--- ${weeksAgo} week${weeksAgo > 1 ? 's' : ''} ago (${adv.week_start}) ---
+Summary: ${adv.advice_summary || 'N/A'}
+Focus areas: ${(adv.focus_areas || []).join(', ') || 'N/A'}
+Plant tips given: ${Array.isArray(adv.plant_specific_tips) ? adv.plant_specific_tips.map(t => typeof t === 'object' ? t.plantName : t).join(', ') : 'N/A'}`
+}).join('\n')}
 ` : ''}
 ═══════════════════════════════════════════════════════════════
-YOUR ADVICE
+🎯 YOUR COMPREHENSIVE WEEKLY ADVICE
 ═══════════════════════════════════════════════════════════════
-Based on ALL the above data, provide personalized advice. Consider:
-- The weather forecast and how it affects care needs
-- The gardener's observations and concerns from their journal
-- Task completion patterns and timing
-- Specific plant needs based on their characteristics
-- Seasonal considerations for the current date and location
-${previousAdvice ? `
-IMPORTANT: The gardener received advice last week (shown above). DO NOT repeat the same tips or focus areas. Provide FRESH, NEW advice that builds on or differs from last week. If a previous tip is still relevant, phrase it differently and add new context.
+
+You are providing PERSONALIZED, ACTIONABLE weekly advice. Your advice should be:
+1. SPECIFIC to this garden's plants, location, weather, and the gardener's habits
+2. FRESH and DIFFERENT from previous weeks (shown above) - never repeat the same tips
+3. DETAILED with clear explanations of WHY and HOW
+4. ENCOURAGING while being practical and honest
+
+ANALYZE AND CONSIDER:
+• Current weather forecast and its impact on each plant
+• Seasonal timing - what needs attention THIS week specifically
+• Plant health status and any concerning trends
+• Task completion patterns - help optimize their routine
+• Journal observations - address any concerns they've noted
+• Pest/disease risks for their specific plants
+• Growth stages and upcoming milestones (flowering, fruiting, etc.)
+• Companion planting opportunities
+• Soil and nutrition needs based on the season
+
+${previousAdviceList.length > 0 ? `
+⚠️ CRITICAL: You gave advice in previous weeks (shown above). 
+- DO NOT repeat the same focus areas or plant tips
+- If a concern persists, provide NEW strategies or escalate urgency
+- Build on previous advice - acknowledge progress or changes
+- Rotate focus to different plants unless urgent issues exist
 ` : ''}
-Format your response as JSON with this structure:
+
+Provide your response as JSON with this COMPREHENSIVE structure:
 {
-  "summary": "A warm, encouraging 2-3 sentence overview of the garden's status",
-  "weeklyFocus": "What the gardener should prioritize this specific week based on weather and plant needs",
-  "focusAreas": ["3-4 specific action items for this week"],
-  "plantTips": [
-    {"plantName": "name", "tip": "specific, actionable advice", "priority": "high|medium|low", "reason": "why this matters now"}
+  "summary": "A warm, personalized 2-3 sentence overview acknowledging their specific garden and progress",
+  "weeklyFocus": "The ONE most important thing to focus on this week with specific reasoning",
+  "focusAreas": [
+    "4-6 specific, actionable tasks for this week - each should be different from previous weeks"
   ],
-  "weatherAdvice": "How the upcoming weather affects plant care (be specific about the forecast)",
+  "plantTips": [
+    {
+      "plantName": "exact plant name from their garden",
+      "tip": "Detailed, specific advice (2-3 sentences minimum)",
+      "priority": "high|medium|low",
+      "reason": "Why this matters RIGHT NOW for this specific plant",
+      "timing": "When exactly to do this (e.g., 'early morning', 'before Friday's rain')"
+    }
+  ],
+  "seasonalInsights": "What's happening in the garden world this time of year and how it applies to their plants",
+  "weatherAdvice": "Detailed analysis of the 7-day forecast and specific actions to take",
+  "preventiveCare": "Proactive tips to prevent common issues this season",
   "improvementScore": 85,
-  "encouragement": "A personalized, motivating message based on their progress",
-  "fullAdvice": "A detailed, friendly paragraph covering all your recommendations"
+  "scoreExplanation": "Brief explanation of what contributes to the score and how to improve",
+  "encouragement": "A genuinely personalized, motivating message referencing their specific achievements",
+  "lookingAhead": "What to prepare for in the coming 2-3 weeks",
+  "fullAdvice": "A comprehensive, friendly 3-4 paragraph summary covering all your recommendations with specific details"
 }`
 
     const buildRuleBased = () =>
@@ -15597,14 +15647,37 @@ Format your response as JSON with this structure:
 
     let parsed = null
     let tokensUsed = 0
-    let modelUsed = 'gpt-4o-mini'
+    let modelUsed = openaiModel // Use the same model as AI Plant Fill
 
     if (openai) {
       try {
         // Build messages with optional images for vision analysis
         const useVision = journalPhotoUrls.length > 0
         let messages = [
-          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
+          { role: 'system', content: `You are an expert horticulturist and plant care specialist with decades of experience. You provide detailed, scientifically-informed yet accessible gardening advice.
+
+Your personality:
+- Warm, encouraging, and genuinely invested in the gardener's success
+- Practical and specific - never vague or generic
+- Proactive - anticipate problems before they occur
+- Educational - explain the "why" behind recommendations
+
+Your expertise includes:
+- Plant biology, growth cycles, and optimal care conditions
+- Pest and disease identification and organic/integrated management
+- Soil science, composting, and plant nutrition
+- Climate adaptation and seasonal gardening strategies
+- Companion planting and garden ecosystem design
+- Water management and irrigation optimization
+
+Guidelines:
+- ALWAYS respond with valid JSON matching the requested structure
+- Be SPECIFIC to the plants in this garden - reference them by name
+- Consider the LOCAL weather forecast when giving advice
+- Acknowledge their progress and build on previous advice
+- Provide ACTIONABLE tips with clear timing (e.g., "water deeply Tuesday before the heat wave")
+- When analyzing photos, look for: leaf color/texture, stem health, soil moisture, pest damage, nutrient deficiencies
+- Prioritize urgent issues but also include maintenance and optimization tips` },
         ]
 
         if (useVision) {
@@ -15637,10 +15710,10 @@ Include specific observations from the photos in your advice.` }
         }
 
         const completionOptions = {
-          model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
+          model: openaiModel, // Use the bigger model (same as AI Plant Fill)
           messages,
           temperature: 0.7,
-          max_tokens: useVision ? 2000 : 1500,
+          max_tokens: useVision ? 3500 : 3000, // Increased for more comprehensive advice
         }
         // Only use json_object response format when not using vision (compatibility)
         if (!useVision) {
@@ -18578,7 +18651,6 @@ async function buildGardenContextString(context) {
         careRequirements.push(`- Temperature range: ${plant.temperatureRange.min}°C to ${plant.temperatureRange.max}°C (ideal: ${plant.temperatureRange.ideal}°C)`)
       }
       if (plant.humidity) careRequirements.push(`- Humidity needs: ${plant.humidity}%`)
-      if (plant.hardinessZone) careRequirements.push(`- Hardiness zone: ${plant.hardinessZone}`)
       if (plant.soilType && plant.soilType.length > 0) careRequirements.push(`- Soil types: ${plant.soilType.join(', ')}`)
       if (plant.nutritionNeeds && plant.nutritionNeeds.length > 0) careRequirements.push(`- Nutrition needs: ${plant.nutritionNeeds.join(', ')}`)
       if (plant.fertilizerTypes && plant.fertilizerTypes.length > 0) careRequirements.push(`- Fertilizer types: ${plant.fertilizerTypes.join(', ')}`)
@@ -18603,7 +18675,8 @@ async function buildGardenContextString(context) {
       // Characteristics
       const characteristics = []
       if (plant.isEdible) characteristics.push('Edible')
-      if (plant.isPoisonous) characteristics.push('⚠️ Poisonous')
+      if (plant.toxicityHuman === 'highly toxic' || plant.toxicityHuman === 'lethally toxic') characteristics.push('⚠️ Toxic to humans')
+      if (plant.toxicityPets === 'highly toxic' || plant.toxicityPets === 'lethally toxic') characteristics.push('⚠️ Toxic to pets')
       if (plant.hasSpikes) characteristics.push('Has spikes')
       if (plant.hasScent) characteristics.push('Fragrant')
       if (plant.isMulticolor) characteristics.push('Multicolor')
@@ -18618,9 +18691,6 @@ async function buildGardenContextString(context) {
       if (plant.commonPests && plant.commonPests.length > 0) parts.push(`- Common pests: ${plant.commonPests.join(', ')}`)
       if (plant.commonDiseases && plant.commonDiseases.length > 0) parts.push(`- Common diseases: ${plant.commonDiseases.join(', ')}`)
       if (plant.companionPlants && plant.companionPlants.length > 0) parts.push(`- Companion plants: ${plant.companionPlants.join(', ')}`)
-      
-      // Tags
-      if (plant.tags && plant.tags.length > 0) parts.push(`- Tags: ${plant.tags.join(', ')}`)
       
       // Schedule and tasks
       if (plant.schedule) {
@@ -19116,11 +19186,7 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.utility as plant_utility,
         p.comestible_part,
         -- Care requirements
-        p.water_freq_amount,
-        p.water_freq_period,
-        p.light_level,
-        p.hardiness_min,
-        p.hardiness_max,
+        p.level_sun,
         p.temperature_min,
         p.temperature_max,
         p.temperature_ideal,
@@ -19141,25 +19207,35 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.sow_type,
         p.division,
         -- Characteristics
-        p.is_edible,
-        p.is_poisonous,
+        ('comestible' = ANY(p.utility)) as is_edible,
+        p.toxicity_human,
+        p.toxicity_pets,
         p.spiked,
         p.scent,
         p.multicolor,
         p.melliferous,
         p.conservation_status,
-        -- Problems and companions
-        p.pests,
-        p.diseases,
+        -- Companions (pests/diseases now in plant_translations)
         p.companions,
-        p.tags as plant_tags,
-        -- Get translated overview if available
+        -- Get translated fields including pests and diseases
         (
           select pt.overview 
           from public.plant_translations pt 
           where pt.plant_id = p.id and pt.language = 'en'
           limit 1
-        ) as plant_overview
+        ) as plant_overview,
+        (
+          select pt.pests 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as pests,
+        (
+          select pt.diseases 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as diseases
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
@@ -19236,9 +19312,8 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       // Care info - including overrides
       waterFrequency: row.override_water_freq_value 
         ? `${row.override_water_freq_value}x per ${row.override_water_freq_unit || 'week'} (custom)`
-        : (row.water_freq_amount ? `${row.water_freq_amount}x per ${row.water_freq_period || 'week'}` : null),
-      lightLevel: row.light_level,
-      hardinessZone: row.hardiness_min && row.hardiness_max ? `${row.hardiness_min}-${row.hardiness_max}` : null,
+        : null,
+      lightLevel: row.level_sun,
       temperatureRange: row.temperature_min && row.temperature_max 
         ? { min: row.temperature_min, max: row.temperature_max, ideal: row.temperature_ideal }
         : null,
@@ -19260,7 +19335,8 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       propagationMethods: row.division,
       // Characteristics
       isEdible: row.is_edible,
-      isPoisonous: row.is_poisonous,
+      toxicityHuman: row.toxicity_human,
+      toxicityPets: row.toxicity_pets,
       hasSpikes: row.spiked,
       hasScent: row.scent,
       isMulticolor: row.multicolor,
@@ -19273,7 +19349,6 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       commonPests: row.pests,
       commonDiseases: row.diseases,
       companionPlants: row.companions,
-      tags: row.plant_tags,
       // Instance data
       taskCount: taskCounts[row.garden_plant_id] || 0,
       schedule: schedules[row.garden_plant_id] || null,
@@ -19895,7 +19970,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         if (gardenIdForTools) {
           // Only enable tools if we have a garden context
           const initialResponse = await openai.chat.completions.create({
-            model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+            model: openaiModelNano, // Use fast model for chat
             messages: messagesWithTools,
             tools: APHYLIA_TOOLS,
             tool_choice: 'auto',
@@ -19954,7 +20029,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         
         // Now stream the final response (with tool results if any)
         const streamResponse = await openai.chat.completions.create({
-          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          model: openaiModelNano, // Use fast model for chat
           messages: messagesWithTools,
           stream: true,
           max_tokens: 2048,
@@ -20006,7 +20081,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       
       if (gardenIdForTools) {
         const initialResponse = await openai.chat.completions.create({
-          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          model: openaiModel, // Use the same powerful model as Gardener Advice
           messages: messagesWithTools,
           tools: APHYLIA_TOOLS,
           tool_choice: 'auto',
@@ -20049,7 +20124,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       
       // Final response
       const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+        model: openaiModelNano, // Use fast model for chat
         messages: messagesWithTools,
         max_tokens: 2048,
         temperature: 0.7
