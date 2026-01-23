@@ -850,7 +850,7 @@ export async function sendMessagePushNotification(
   messagePreview: string,
   conversationId: string,
   language: string = 'en'
-): Promise<{ sent: boolean; reason?: string }> {
+): Promise<{ sent: boolean; reason?: string; devicesReached?: number }> {
   const translations: Record<string, { title: string; body: string }> = {
     en: {
       title: `${senderDisplayName}`,
@@ -868,11 +868,14 @@ export async function sendMessagePushNotification(
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
   const conversationUrl = `${baseUrl}/messages?conversation=${conversationId}`
   
+  console.log('[messaging] Sending push notification:', { recipientId, conversationId, senderDisplayName })
+  
   try {
     const session = (await supabase.auth.getSession()).data.session
     const token = session?.access_token
     
     if (!token) {
+      console.warn('[messaging] Cannot send push notification: not authenticated')
       return { sent: false, reason: 'NOT_AUTHENTICATED' }
     }
     
@@ -902,13 +905,31 @@ export async function sendMessagePushNotification(
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
+      console.error('[messaging] Push notification request failed:', response.status, errorData)
       return { sent: false, reason: errorData?.error || 'REQUEST_FAILED' }
     }
     
     const result = await response.json()
-    return { sent: result.sent ?? false, reason: result.reason }
+    
+    if (result.sent) {
+      console.log('[messaging] Push notification sent successfully:', { 
+        recipientId, 
+        devicesReached: result.devicesReached 
+      })
+    } else {
+      console.log('[messaging] Push notification not sent:', { 
+        recipientId, 
+        reason: result.reason 
+      })
+    }
+    
+    return { 
+      sent: result.sent ?? false, 
+      reason: result.reason,
+      devicesReached: result.devicesReached
+    }
   } catch (err) {
-    console.warn('[messaging] Error sending push notification:', (err as Error)?.message)
+    console.error('[messaging] Error sending push notification:', (err as Error)?.message)
     return { sent: false, reason: 'ERROR' }
   }
 }

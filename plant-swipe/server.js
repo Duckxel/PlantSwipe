@@ -17794,7 +17794,7 @@ app.delete('/api/push/subscribe', async (req, res) => {
 })
 
 // ========== Instant Push Notification API ==========
-// Sends an immediate push notification for social events (friend requests, garden invites)
+// Sends an immediate push notification for social events (friend requests, garden invites, messages)
 // This is called internally when creating these events
 app.post('/api/push/instant', async (req, res) => {
   const user = await getUserFromRequestOrToken(req)
@@ -17807,7 +17807,7 @@ app.post('/api/push/instant', async (req, res) => {
     return
   }
   
-  const { recipientId, type, title, body, data } = req.body || {}
+  const { recipientId, type, title, body, data, tag: clientTag, renotify } = req.body || {}
   
   if (!recipientId || !type || !title || !body) {
     res.status(400).json({ error: 'Missing required fields: recipientId, type, title, body' })
@@ -17829,6 +17829,33 @@ app.post('/api/push/instant', async (req, res) => {
       return
     }
     
+    // For message notifications, check if conversation is muted
+    if (type === 'new_message' && data?.conversationId) {
+      try {
+        const conversation = await sql`
+          select id, participant_1, participant_2, muted_by_1, muted_by_2
+          from public.conversations
+          where id = ${data.conversationId}::uuid
+          limit 1
+        `
+        
+        if (conversation && conversation.length > 0) {
+          const conv = conversation[0]
+          const isRecipientParticipant1 = conv.participant_1 === recipientId
+          const isMuted = isRecipientParticipant1 ? conv.muted_by_1 : conv.muted_by_2
+          
+          if (isMuted) {
+            console.log(`[push/instant] Conversation ${data.conversationId} is muted by recipient ${recipientId}, skipping notification`)
+            res.json({ ok: true, sent: false, reason: 'CONVERSATION_MUTED' })
+            return
+          }
+        }
+      } catch (muteCheckErr) {
+        // Don't fail the whole request if mute check fails, just log and continue
+        console.warn('[push/instant] Failed to check conversation mute status:', muteCheckErr?.message)
+      }
+    }
+    
     // Get recipient's push subscriptions
     const subscriptions = await sql`
       select id::text as id, user_id::text as user_id, endpoint, subscription
@@ -17842,8 +17869,14 @@ app.post('/api/push/instant', async (req, res) => {
       return
     }
     
+    console.log(`[push/instant] Found ${subscriptions.length} subscription(s) for user ${recipientId}, sending ${type} notification`)
+    
+    // Use client-provided tag if available, otherwise generate one
+    const notificationTag = clientTag || `${type}-${user.id}`
+    
     // Send notification to all of recipient's subscriptions
     let sent = false
+    let successCount = 0
     const staleSubscriptionIds = []
     
     for (const sub of subscriptions) {
@@ -17851,21 +17884,31 @@ app.post('/api/push/instant', async (req, res) => {
         const payload = sub.subscription && typeof sub.subscription === 'string'
           ? JSON.parse(sub.subscription)
           : sub.subscription
+        
+        // Build notification payload with all necessary fields
+        const notificationPayload = {
+          title,
+          body,
+          tag: notificationTag,
+          renotify: renotify === true, // Ensure it's a boolean
+          data: {
+            type,
+            senderId: user.id,
+            ...data,
+          },
+        }
+        
+        // Add vibration pattern for message notifications
+        if (type === 'new_message') {
+          notificationPayload.vibrate = [200, 100, 200]
+        }
           
         await webpush.sendNotification(
           payload,
-          JSON.stringify({
-            title,
-            body,
-            tag: `${type}-${user.id}`,
-            data: {
-              type,
-              senderId: user.id,
-              ...data,
-            },
-          })
+          JSON.stringify(notificationPayload)
         )
         sent = true
+        successCount++
         
         // Update last_used_at
         await sql`
@@ -17878,8 +17921,9 @@ app.post('/api/push/instant', async (req, res) => {
         if (statusCode === 404 || statusCode === 410) {
           // Subscription expired, mark for cleanup
           staleSubscriptionIds.push(sub.id)
+          console.log(`[push/instant] Subscription ${sub.id} expired (${statusCode}), marking for cleanup`)
         } else {
-          console.warn('[push/instant] Push delivery failed:', err?.message || err)
+          console.warn(`[push/instant] Push delivery failed for subscription ${sub.id}:`, err?.message || err)
         }
       }
     }
@@ -17894,13 +17938,90 @@ app.post('/api/push/instant', async (req, res) => {
     }
     
     if (sent) {
-      console.log(`[push/instant] Successfully sent ${type} notification to user ${recipientId}`)
+      console.log(`[push/instant] Successfully sent ${type} notification to user ${recipientId} (${successCount}/${subscriptions.length} devices)`)
+    } else {
+      console.warn(`[push/instant] Failed to deliver ${type} notification to any device for user ${recipientId}`)
     }
     
-    res.json({ ok: true, sent, type })
+    res.json({ ok: true, sent, type, devicesReached: successCount })
   } catch (err) {
     console.error('[push/instant] Failed to send notification:', err)
     res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// ========== Push Notification Debug Endpoint ==========
+// Returns info about the user's push notification setup for debugging
+app.get('/api/push/debug', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  try {
+    // Get user's push subscriptions
+    const subscriptions = await sql`
+      select 
+        id::text as id,
+        endpoint,
+        created_at,
+        updated_at,
+        last_used_at,
+        user_agent
+      from public.user_push_subscriptions
+      where user_id = ${user.id}::uuid
+      order by updated_at desc
+    `
+    
+    // Mask the endpoint for privacy (show only domain)
+    const maskedSubscriptions = (subscriptions || []).map(sub => {
+      let endpointDomain = 'unknown'
+      try {
+        const url = new URL(sub.endpoint)
+        endpointDomain = url.hostname
+      } catch {}
+      
+      return {
+        id: sub.id,
+        endpointDomain,
+        endpointPreview: sub.endpoint ? sub.endpoint.slice(0, 50) + '...' : null,
+        createdAt: sub.created_at,
+        updatedAt: sub.updated_at,
+        lastUsedAt: sub.last_used_at,
+        userAgent: sub.user_agent ? sub.user_agent.slice(0, 100) : null
+      }
+    })
+    
+    res.json({
+      ok: true,
+      userId: user.id,
+      serverPushEnabled: pushNotificationsEnabled,
+      vapidConfigured: Boolean(vapidPublicKey && vapidPrivateKey),
+      subscriptionCount: subscriptions?.length || 0,
+      subscriptions: maskedSubscriptions,
+      troubleshooting: {
+        noSubscriptions: (subscriptions?.length || 0) === 0 
+          ? 'No push subscriptions found. Enable notifications in the app settings.'
+          : null,
+        pushDisabled: !pushNotificationsEnabled 
+          ? 'Push notifications are disabled on the server (VAPID keys not configured).'
+          : null,
+        staleSubscription: subscriptions?.some(s => {
+          const lastUsed = new Date(s.last_used_at || s.updated_at)
+          const daysSinceLastUse = (Date.now() - lastUsed.getTime()) / (1000 * 60 * 60 * 24)
+          return daysSinceLastUse > 30
+        }) ? 'Some subscriptions may be expired. Try disabling and re-enabling notifications.'
+          : null
+      }
+    })
+  } catch (err) {
+    console.error('[push/debug] Failed to get debug info:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get debug info' })
   }
 })
 

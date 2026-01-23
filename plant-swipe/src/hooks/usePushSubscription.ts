@@ -51,12 +51,37 @@ export function usePushSubscription(userId: string | null) {
     const tryResync = async () => {
       try {
         const existing = await getExistingSubscription()
-        if (existing && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const permissionStatus = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+        
+        console.log('[push] Checking subscription status:', {
+          hasExistingSubscription: !!existing,
+          permissionStatus,
+          userId: userId.slice(0, 8) + '...'
+        })
+        
+        if (existing && permissionStatus === 'granted') {
           // Browser has a subscription and permission is granted
           // Try to re-sync with server (this will update/insert the subscription)
           resyncAttempted.add(userId)
+          console.log('[push] Re-syncing existing subscription with server...')
           await registerPushSubscription(false) // Don't force, just sync existing
-          console.log('[push] Re-synced existing subscription with server')
+          console.log('[push] Successfully re-synced subscription with server')
+          setSynced(true)
+          setSubscribed(true)
+        } else if (permissionStatus === 'granted' && !existing) {
+          // Permission granted but no subscription - try to create one
+          console.log('[push] Permission granted but no subscription, attempting to create one...')
+          resyncAttempted.add(userId)
+          try {
+            await registerPushSubscription(true) // Force create new subscription
+            console.log('[push] Successfully created new subscription')
+            setSynced(true)
+            setSubscribed(true)
+          } catch (createErr) {
+            console.warn('[push] Failed to create subscription:', (createErr as Error)?.message)
+            setSynced(true)
+          }
+        } else {
           setSynced(true)
         }
       } catch (err) {

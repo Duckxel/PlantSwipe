@@ -462,12 +462,19 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         // Broadcast to other devices
         broadcastEvent('message', { type: 'image' })
         
+        // Send push notification to recipient (fire and forget but log result)
         sendMessagePushNotification(
           otherUser.id,
           currentUserDisplayName || 'Someone',
           '📷 ' + t('messages.sentImage', { defaultValue: 'Sent an image' }),
           conversationId
-        ).catch(() => {})
+        ).then(result => {
+          if (!result.sent) {
+            console.log('[conversation] Push notification not delivered:', result.reason)
+          }
+        }).catch(err => {
+          console.warn('[conversation] Failed to send push notification:', err)
+        })
         
         return
       }
@@ -503,12 +510,19 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       // Broadcast to other devices
       broadcastEvent('message', { messageId: msg.id })
       
+      // Send push notification to recipient (fire and forget but log result)
       sendMessagePushNotification(
         otherUser.id,
         currentUserDisplayName || 'Someone',
         content.slice(0, 50),
         conversationId
-      ).catch(() => {})
+      ).then(result => {
+        if (!result.sent) {
+          console.log('[conversation] Push notification not delivered:', result.reason)
+        }
+      }).catch(err => {
+        console.warn('[conversation] Failed to send push notification:', err)
+      })
     } catch (e: any) {
       console.error('[conversation] Failed to send message:', e)
       setError(e?.message || 'Failed to send message')
