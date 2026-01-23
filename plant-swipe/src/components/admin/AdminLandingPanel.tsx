@@ -3619,9 +3619,6 @@ const ShowcaseTab: React.FC<{
   const [plantResults, setPlantResults] = React.useState<PlantSearchResult[]>([])
   const [searchingPlants, setSearchingPlants] = React.useState(false)
   const [editingPlantIndex, setEditingPlantIndex] = React.useState<number | null>(null)
-  const [imageSearchQuery, setImageSearchQuery] = React.useState("")
-  const [imageSearchResults, setImageSearchResults] = React.useState<string[]>([])
-  const [searchingImages, setSearchingImages] = React.useState(false)
 
   React.useEffect(() => {
     setLocalConfig(config)
@@ -3679,26 +3676,6 @@ const ShowcaseTab: React.FC<{
     }, 300)
     return () => clearTimeout(timer)
   }, [plantSearch, searchPlants])
-
-  // Search for cover images (using Unsplash-like free images)
-  const searchImages = React.useCallback(async (query: string) => {
-    if (!query || query.length < 2) {
-      setImageSearchResults([])
-      return
-    }
-    setSearchingImages(true)
-    // Use predefined garden/plant images for demo
-    const sampleImages = [
-      "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800",
-      "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=800",
-      "https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=800",
-      "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800",
-      "https://images.unsplash.com/photo-1491147334573-44cbb4602074?w=800",
-      "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=800",
-    ]
-    setImageSearchResults(sampleImages)
-    setSearchingImages(false)
-  }, [])
 
   // Save configuration
   const saveConfig = async () => {

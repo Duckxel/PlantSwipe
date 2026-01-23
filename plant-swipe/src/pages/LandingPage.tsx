@@ -1456,7 +1456,7 @@ const ShowcaseSection: React.FC = () => {
                 <span className="text-xs text-stone-500">{config.plants_count} plants</span>
               </div>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                {config.plant_cards.slice(0, 6).map((plant, i) => (
+                {config.plant_cards.slice(0, 6).map((plant) => (
                   <div key={plant.id} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
                     {plant.image_url ? (
                       <img src={plant.image_url} alt={plant.name} className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
