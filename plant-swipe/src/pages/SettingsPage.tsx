@@ -12,6 +12,7 @@ import { useTheme } from "@/context/ThemeContext"
 import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar } from "lucide-react"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
+import { sendTestPushNotification, getPushDebugInfo, type PushDebugInfo } from "@/lib/pushNotifications"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
 
@@ -60,6 +61,12 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = React.useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
+  
+  // Push notification testing states
+  const [testingPush, setTestingPush] = React.useState(false)
+  const [showPushDebug, setShowPushDebug] = React.useState(false)
+  const [pushDebugInfo, setPushDebugInfo] = React.useState<PushDebugInfo | null>(null)
+  const [loadingDebug, setLoadingDebug] = React.useState(false)
 
   // Get detected timezone from browser
   const detectedTimezone = React.useMemo(() => {
@@ -500,6 +507,43 @@ export default function SettingsPage() {
     } catch (e: any) {
       setError(e?.message || t('settings.dangerZone.failedToDelete'))
       setDeleting(false)
+    }
+  }
+
+  // Handle sending a test push notification
+  const handleTestNotification = async () => {
+    setTestingPush(true)
+    setError(null)
+    setSuccess(null)
+    
+    try {
+      const result = await sendTestPushNotification()
+      if (result.sent) {
+        setSuccess(t('settings.notifications.testSent', { defaultValue: 'Test notification sent! You should receive it shortly.' }))
+      } else {
+        setError(t('settings.notifications.testFailed', { 
+          defaultValue: 'Failed to send test notification: {{reason}}',
+          reason: result.error || 'Unknown error'
+        }))
+      }
+    } catch (err) {
+      setError((err as Error)?.message || 'Failed to send test notification')
+    } finally {
+      setTestingPush(false)
+    }
+  }
+  
+  // Load push debug info
+  const loadPushDebugInfo = async () => {
+    setLoadingDebug(true)
+    try {
+      const info = await getPushDebugInfo()
+      setPushDebugInfo(info)
+      setShowPushDebug(true)
+    } catch (err) {
+      setError((err as Error)?.message || 'Failed to load debug info')
+    } finally {
+      setLoadingDebug(false)
     }
   }
 
@@ -944,6 +988,124 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+          
+          {/* Test Push Notifications */}
+          {pushSubscribed && pushPermission === 'granted' && (
+            <Card className={glassCard}>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-emerald-600" />
+                  <CardTitle>{t('settings.notifications.testTitle', { defaultValue: 'Test Push Notifications' })}</CardTitle>
+                </div>
+                <CardDescription>
+                  {t('settings.notifications.testDescription', { defaultValue: 'Send a test notification to verify everything is working correctly.' })}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={handleTestNotification}
+                    disabled={testingPush}
+                    className="rounded-2xl"
+                  >
+                    {testingPush 
+                      ? t('settings.notifications.sendingTest', { defaultValue: 'Sending...' })
+                      : t('settings.notifications.sendTest', { defaultValue: 'Send Test Notification' })
+                    }
+                  </Button>
+                  <Button
+                    onClick={loadPushDebugInfo}
+                    variant="outline"
+                    disabled={loadingDebug}
+                    className="rounded-2xl"
+                  >
+                    {loadingDebug 
+                      ? t('settings.notifications.loadingDebug', { defaultValue: 'Loading...' })
+                      : t('settings.notifications.showDebugInfo', { defaultValue: 'Show Debug Info' })
+                    }
+                  </Button>
+                </div>
+                
+                {/* Debug Info Panel */}
+                {showPushDebug && pushDebugInfo && (
+                  <div className="mt-4 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-sm">{t('settings.notifications.debugTitle', { defaultValue: 'Push Notification Debug Info' })}</h4>
+                      <button 
+                        onClick={() => setShowPushDebug(false)}
+                        className="text-xs text-stone-500 hover:text-stone-700 dark:hover:text-stone-300"
+                      >
+                        {t('common.close', { defaultValue: 'Close' })}
+                      </button>
+                    </div>
+                    
+                    <div className="grid gap-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="opacity-70">{t('settings.notifications.debugBrowserSupport', { defaultValue: 'Browser Support' })}</span>
+                        <span className={pushDebugInfo.browserSupport.notifications && pushDebugInfo.browserSupport.serviceWorker && pushDebugInfo.browserSupport.pushManager ? 'text-emerald-600' : 'text-red-600'}>
+                          {pushDebugInfo.browserSupport.notifications && pushDebugInfo.browserSupport.serviceWorker && pushDebugInfo.browserSupport.pushManager 
+                            ? '✓ Supported' 
+                            : '✗ Not fully supported'
+                          }
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="opacity-70">{t('settings.notifications.debugPermission', { defaultValue: 'Permission' })}</span>
+                        <span className={pushDebugInfo.permission === 'granted' ? 'text-emerald-600' : 'text-amber-600'}>
+                          {pushDebugInfo.permission}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="opacity-70">{t('settings.notifications.debugSubscription', { defaultValue: 'Browser Subscription' })}</span>
+                        <span className={pushDebugInfo.hasSubscription ? 'text-emerald-600' : 'text-red-600'}>
+                          {pushDebugInfo.hasSubscription ? `✓ Active (${pushDebugInfo.subscriptionEndpoint})` : '✗ None'}
+                        </span>
+                      </div>
+                      
+                      {pushDebugInfo.serverStatus && (
+                        <>
+                          <hr className="border-stone-200 dark:border-[#3e3e42] my-1" />
+                          <div className="flex justify-between">
+                            <span className="opacity-70">{t('settings.notifications.debugServerPush', { defaultValue: 'Server Push Enabled' })}</span>
+                            <span className={pushDebugInfo.serverStatus.pushEnabled ? 'text-emerald-600' : 'text-red-600'}>
+                              {pushDebugInfo.serverStatus.pushEnabled ? '✓ Yes' : '✗ No'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="opacity-70">{t('settings.notifications.debugServerSubs', { defaultValue: 'Server Subscriptions' })}</span>
+                            <span className={pushDebugInfo.serverStatus.subscriptionCount > 0 ? 'text-emerald-600' : 'text-red-600'}>
+                              {pushDebugInfo.serverStatus.subscriptionCount} device(s)
+                            </span>
+                          </div>
+                          
+                          {/* Troubleshooting hints */}
+                          {Object.entries(pushDebugInfo.serverStatus.troubleshooting || {}).map(([key, value]) => 
+                            value ? (
+                              <div key={key} className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-xs">
+                                ⚠️ {value}
+                              </div>
+                            ) : null
+                          )}
+                        </>
+                      )}
+                      
+                      {pushDebugInfo.error && (
+                        <div className="p-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-xs">
+                          Error: {pushDebugInfo.error}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                <p className="text-xs opacity-60">
+                  {t('settings.notifications.testNote', { 
+                    defaultValue: 'Note: Test notifications may not appear if the app is in the foreground. Minimize the app or lock your screen to test background delivery.' 
+                  })}
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 

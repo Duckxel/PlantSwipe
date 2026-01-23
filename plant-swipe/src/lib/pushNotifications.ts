@@ -126,3 +126,151 @@ export async function getExistingSubscription(): Promise<PushSubscription | null
     return null
   }
 }
+
+export interface PushDebugInfo {
+  browserSupport: {
+    notifications: boolean
+    serviceWorker: boolean
+    pushManager: boolean
+  }
+  permission: NotificationPermission | 'unsupported'
+  hasSubscription: boolean
+  subscriptionEndpoint: string | null
+  serverStatus?: {
+    pushEnabled: boolean
+    vapidConfigured: boolean
+    subscriptionCount: number
+    subscriptions: Array<{
+      id: string
+      endpointDomain: string
+      lastUsedAt: string | null
+    }>
+    troubleshooting: Record<string, string | null>
+  }
+  error?: string
+}
+
+/**
+ * Get debug information about the push notification setup.
+ * Useful for troubleshooting notification delivery issues.
+ */
+export async function getPushDebugInfo(): Promise<PushDebugInfo> {
+  const info: PushDebugInfo = {
+    browserSupport: {
+      notifications: typeof Notification !== 'undefined',
+      serviceWorker: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
+      pushManager: typeof window !== 'undefined' && 'PushManager' in window
+    },
+    permission: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
+    hasSubscription: false,
+    subscriptionEndpoint: null
+  }
+  
+  // Check browser subscription
+  try {
+    const subscription = await getExistingSubscription()
+    info.hasSubscription = !!subscription
+    if (subscription) {
+      // Only show domain for privacy
+      try {
+        const url = new URL(subscription.endpoint)
+        info.subscriptionEndpoint = url.hostname
+      } catch {
+        info.subscriptionEndpoint = 'unknown'
+      }
+    }
+  } catch (err) {
+    info.error = `Failed to get subscription: ${(err as Error)?.message}`
+  }
+  
+  // Check server status
+  try {
+    const session = (await supabase.auth.getSession()).data.session
+    const token = session?.access_token
+    
+    if (token) {
+      const response = await fetch('/api/push/debug', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        info.serverStatus = {
+          pushEnabled: data.serverPushEnabled,
+          vapidConfigured: data.vapidConfigured,
+          subscriptionCount: data.subscriptionCount,
+          subscriptions: data.subscriptions || [],
+          troubleshooting: data.troubleshooting || {}
+        }
+      }
+    }
+  } catch (err) {
+    // Don't fail if server debug fails
+    console.warn('[push] Failed to get server debug info:', (err as Error)?.message)
+  }
+  
+  return info
+}
+
+/**
+ * Send a test push notification to the current user.
+ * This helps verify that notifications are working end-to-end.
+ */
+export async function sendTestPushNotification(): Promise<{ sent: boolean; error?: string }> {
+  try {
+    const session = (await supabase.auth.getSession()).data.session
+    const token = session?.access_token
+    const userId = session?.user?.id
+    
+    if (!token || !userId) {
+      return { sent: false, error: 'Not authenticated' }
+    }
+    
+    // Check if we have permission and subscription
+    if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+      return { sent: false, error: 'Notification permission not granted' }
+    }
+    
+    const subscription = await getExistingSubscription()
+    if (!subscription) {
+      return { sent: false, error: 'No push subscription found. Try enabling notifications first.' }
+    }
+    
+    // Send test notification via the instant API
+    const response = await fetch('/api/push/instant', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        recipientId: userId,
+        type: 'new_message',
+        title: 'Test Notification',
+        body: 'If you see this, push notifications are working! 🎉',
+        tag: 'test-notification',
+        renotify: true,
+        data: {
+          type: 'test',
+          url: '/settings'
+        }
+      })
+    })
+    
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      return { sent: false, error: data.error || `Request failed (${response.status})` }
+    }
+    
+    const result = await response.json()
+    if (!result.sent) {
+      return { sent: false, error: result.reason || 'Notification not delivered' }
+    }
+    
+    return { sent: true }
+  } catch (err) {
+    return { sent: false, error: (err as Error)?.message || 'Unknown error' }
+  }
+}
