@@ -1017,6 +1017,18 @@ export const AdminLandingPanel: React.FC = () => {
       if (showcaseData) {
         setShowcaseConfig(showcaseData)
       } else {
+        // Generate default calendar (last 30 days, all completed)
+        const defaultCalendar: CalendarDay[] = []
+        const today = new Date()
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(today)
+          date.setDate(date.getDate() - i)
+          defaultCalendar.push({
+            date: date.toISOString().split('T')[0],
+            status: 'completed'
+          })
+        }
+        
         // Initialize with defaults
         setShowcaseConfig({
           id: '',
@@ -1046,6 +1058,7 @@ export const AdminLandingPanel: React.FC = () => {
           completion_rate: 92,
           analytics_streak: 14,
           chart_data: [3, 5, 2, 6, 4, 5, 6],
+          calendar_data: defaultCalendar,
         })
       }
     } catch (e) {
