@@ -15132,7 +15132,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         p.name as plant_name, p.scientific_name, p.plant_type,
         p.utility as plant_utility, p.comestible_part,
         -- Care requirements
-        p.watering_type, p.water_freq_amount, p.water_freq_period,
+        p.watering_type,
         p.light_level, p.hardiness_min, p.hardiness_max,
         p.temperature_min, p.temperature_max, p.temperature_ideal,
         p.hygrometry, p.soil, p.nutrition_need, p.fertilizer,
@@ -15362,8 +15362,6 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       const careInfo = []
       if (p.override_water_freq_value) {
         careInfo.push(`Watering: ${p.override_water_freq_value}x per ${p.override_water_freq_unit || 'week'} (custom)`)
-      } else if (p.water_freq_amount) {
-        careInfo.push(`Watering: ${p.water_freq_amount}x per ${p.water_freq_period || 'week'}`)
       }
       if (p.light_level) careInfo.push(`Light: ${p.light_level}`)
       if (p.temperature_min && p.temperature_max) {
@@ -19116,8 +19114,6 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.utility as plant_utility,
         p.comestible_part,
         -- Care requirements
-        p.water_freq_amount,
-        p.water_freq_period,
         p.light_level,
         p.hardiness_min,
         p.hardiness_max,
@@ -19236,7 +19232,7 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       // Care info - including overrides
       waterFrequency: row.override_water_freq_value 
         ? `${row.override_water_freq_value}x per ${row.override_water_freq_unit || 'week'} (custom)`
-        : (row.water_freq_amount ? `${row.water_freq_amount}x per ${row.water_freq_period || 'week'}` : null),
+        : null,
       lightLevel: row.light_level,
       hardinessZone: row.hardiness_min && row.hardiness_max ? `${row.hardiness_min}-${row.hardiness_max}` : null,
       temperatureRange: row.temperature_min && row.temperature_max 
