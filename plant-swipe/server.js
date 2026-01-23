@@ -15144,15 +15144,27 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         p.melliferous, p.conservation_status,
         p.toxicity_human, p.toxicity_pets,
         ('comestible' = ANY(p.utility)) as is_edible,
-        -- Problems and companions
-        p.pests, p.diseases, p.companions,
-        -- Translated overview
+        -- Companions (pests/diseases now in plant_translations)
+        p.companions,
+        -- Translated fields including pests and diseases
         (
           select pt.overview 
           from public.plant_translations pt 
           where pt.plant_id = p.id and pt.language = 'en'
           limit 1
-        ) as plant_overview
+        ) as plant_overview,
+        (
+          select pt.pests 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as pests,
+        (
+          select pt.diseases 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as diseases
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
@@ -19142,17 +19154,27 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.multicolor,
         p.melliferous,
         p.conservation_status,
-        -- Problems and companions
-        p.pests,
-        p.diseases,
+        -- Companions (pests/diseases now in plant_translations)
         p.companions,
-        -- Get translated overview if available
+        -- Get translated fields including pests and diseases
         (
           select pt.overview 
           from public.plant_translations pt 
           where pt.plant_id = p.id and pt.language = 'en'
           limit 1
-        ) as plant_overview
+        ) as plant_overview,
+        (
+          select pt.pests 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as pests,
+        (
+          select pt.diseases 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as diseases
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
@@ -19887,7 +19909,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         if (gardenIdForTools) {
           // Only enable tools if we have a garden context
           const initialResponse = await openai.chat.completions.create({
-            model: openaiModel, // Use the same powerful model as Gardener Advice
+            model: openaiModelNano, // Use fast model for chat
             messages: messagesWithTools,
             tools: APHYLIA_TOOLS,
             tool_choice: 'auto',
@@ -19946,7 +19968,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         
         // Now stream the final response (with tool results if any)
         const streamResponse = await openai.chat.completions.create({
-          model: openaiModel, // Use the same powerful model as Gardener Advice
+          model: openaiModelNano, // Use fast model for chat
           messages: messagesWithTools,
           stream: true,
           max_tokens: 2048,
@@ -20041,7 +20063,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       
       // Final response
       const response = await openai.chat.completions.create({
-        model: openaiModel, // Use the same powerful model as Gardener Advice
+        model: openaiModelNano, // Use fast model for chat
         messages: messagesWithTools,
         max_tokens: 2048,
         temperature: 0.7
