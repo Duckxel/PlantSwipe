@@ -384,6 +384,7 @@ export async function deleteMessage(messageId: string): Promise<void> {
 
 /**
  * Mark all messages in a conversation as read.
+ * Also closes any pending notifications for this conversation and refreshes the app badge.
  */
 export async function markMessagesAsRead(conversationId: string): Promise<number> {
   const { data, error } = await supabase.rpc('mark_messages_as_read', {
@@ -391,6 +392,29 @@ export async function markMessagesAsRead(conversationId: string): Promise<number
   })
   
   if (error) throw new Error(error.message)
+  
+  // Close any active notifications for this conversation
+  try {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      const registration = await navigator.serviceWorker.ready
+      const notifications = await registration.getNotifications({ tag: `message-${conversationId}` })
+      notifications.forEach(notification => notification.close())
+    }
+  } catch (err) {
+    // Silently fail - notification dismissal is best effort
+  }
+  
+  // Refresh app badge to reflect read messages
+  try {
+    const session = (await supabase.auth.getSession()).data.session
+    if (session?.user?.id) {
+      // Dynamically import to avoid circular dependencies
+      const { refreshAppBadge } = await import('./notifications')
+      await refreshAppBadge(session.user.id)
+    }
+  } catch (err) {
+    // Silently fail - badge update is best effort
+  }
   
   return data || 0
 }

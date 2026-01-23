@@ -88,6 +88,9 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     previewUrl: string
   } | null>(null)
   
+  // Recipient's language for localized notifications
+  const [recipientLanguage, setRecipientLanguage] = React.useState<string>('en')
+  
   // Pagination state
   const [hasMoreMessages, setHasMoreMessages] = React.useState(true)
   const [loadingMore, setLoadingMore] = React.useState(false)
@@ -126,6 +129,25 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       }
     }
   }, [])
+  
+  // Fetch recipient's language for localized notifications
+  React.useEffect(() => {
+    const fetchRecipientLanguage = async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('language')
+          .eq('id', otherUser.id)
+          .maybeSingle()
+        if (data?.language) {
+          setRecipientLanguage(data.language)
+        }
+      } catch (err) {
+        // Silently fail, default to 'en'
+      }
+    }
+    fetchRecipientLanguage()
+  }, [otherUser.id])
   
   // Broadcast a message event to other clients
   const broadcastEvent = React.useCallback(async (event: 'message' | 'reaction', data?: any) => {
@@ -467,7 +489,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           otherUser.id,
           currentUserDisplayName || 'Someone',
           '📷 ' + t('messages.sentImage', { defaultValue: 'Sent an image' }),
-          conversationId
+          conversationId,
+          recipientLanguage
         ).then(result => {
           if (!result.sent) {
             console.log('[conversation] Push notification not delivered:', result.reason)
@@ -515,7 +538,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         otherUser.id,
         currentUserDisplayName || 'Someone',
         content.slice(0, 50),
-        conversationId
+        conversationId,
+        recipientLanguage
       ).then(result => {
         if (!result.sent) {
           console.log('[conversation] Push notification not delivered:', result.reason)
