@@ -13,6 +13,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { SearchInput } from "@/components/ui/search-input"
 import { supabase } from "@/lib/supabaseClient"
 import { translateText } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
@@ -479,21 +480,22 @@ const ImportPlantModal: React.FC<{
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSearch} className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-          <Input
+        <form onSubmit={handleSearch} className="flex gap-2">
+          <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search plants by name..."
-            className="pl-10 pr-20 rounded-xl"
+            loading={loading}
+            onClear={() => setSearch("")}
+            className="flex-1"
           />
           <Button
             type="submit"
             size="sm"
-            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg"
+            className="rounded-xl px-4"
             disabled={loading}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
+            Search
           </Button>
         </form>
 
@@ -734,23 +736,13 @@ const ImagePickerModal: React.FC<{
 
         {tab === "library" && (
           <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search images..."
-                className="pl-10 rounded-xl"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                >
-                  <X className="h-4 w-4 text-stone-400 hover:text-stone-600" />
-                </button>
-              )}
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search images..."
+              onClear={() => setSearchQuery("")}
+              loading={loadingLibrary}
+            />
 
             {loadingLibrary ? (
               <div className="flex items-center justify-center py-12">
@@ -2621,15 +2613,13 @@ const TestimonialsTab: React.FC<{
                 </Button>
               </div>
               
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                <Input
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  className="rounded-xl pl-9"
-                  placeholder="Search users..."
-                />
-              </div>
+              <SearchInput
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                placeholder="Search users..."
+                onClear={() => setUserSearchQuery("")}
+                loading={loadingUsers}
+              />
 
               <div className="max-h-60 overflow-y-auto space-y-2">
                 {loadingUsers ? (
@@ -4216,16 +4206,14 @@ const ShowcaseTab: React.FC<{
                 <DialogDescription>Search and click plants to add them to your showcase</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                  <Input
-                    value={plantSearch}
-                    onChange={(e) => setPlantSearch(e.target.value)}
-                    placeholder="Search plants by name..."
-                    className="pl-10 rounded-xl"
-                    autoFocus
-                  />
-                </div>
+                <SearchInput
+                  value={plantSearch}
+                  onChange={(e) => setPlantSearch(e.target.value)}
+                  placeholder="Search plants by name..."
+                  onClear={() => setPlantSearch("")}
+                  loading={searchingPlants}
+                  autoFocus
+                />
                 {loadingAllPlants || searchingPlants ? (
                   <div className="flex justify-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
