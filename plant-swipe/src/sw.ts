@@ -331,17 +331,25 @@ self.addEventListener('notificationclick', (event) => {
   // Close notification first
   event.notification?.close()
   
-  // Determine the target URL
+  // Determine the target URL based on notification type
   let target: string
   
-  // For message notifications (or reply action), navigate to the conversation
-  if ((notificationData.type === 'new_message' || action === 'reply') && notificationData.conversationId) {
+  // First, try to use the URL from the notification data
+  if (notificationData.url || notificationData.ctaUrl) {
+    target = resolveNotificationUrl(notificationData.url || notificationData.ctaUrl)
+  } 
+  // Fallback: route based on notification type
+  else if (notificationData.type === 'new_message' && notificationData.conversationId) {
     target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
+  } else if (notificationData.type === 'friend_request' || notificationData.type === 'friend_request_accepted') {
+    target = resolveNotificationUrl('/friends')
+  } else if (notificationData.type === 'garden_invite' || notificationData.type === 'garden_invite_accepted') {
+    target = resolveNotificationUrl('/gardens')
   } else if (notificationData.conversationId) {
-    // Fallback: if we have conversationId, go to messages
     target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
   } else {
-    target = resolveNotificationUrl(notificationData.ctaUrl || notificationData.url)
+    // Default to home page
+    target = resolveNotificationUrl('/')
   }
   
   event.waitUntil(

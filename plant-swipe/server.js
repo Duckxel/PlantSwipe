@@ -17888,6 +17888,26 @@ app.post('/api/push/instant', async (req, res) => {
     // Use client-provided tag if available, otherwise generate one
     const notificationTag = clientTag || `${type}-${user.id}`
     
+    // Determine the target URL based on notification type
+    let targetUrl = '/'
+    switch (type) {
+      case 'friend_request':
+      case 'friend_request_accepted':
+        targetUrl = '/friends'
+        break
+      case 'garden_invite':
+      case 'garden_invite_accepted':
+        targetUrl = '/gardens'
+        break
+      case 'new_message':
+        if (data?.conversationId) {
+          targetUrl = `/messages?conversation=${data.conversationId}`
+        } else {
+          targetUrl = '/messages'
+        }
+        break
+    }
+    
     // Send notification to all of recipient's subscriptions
     let sent = false
     let successCount = 0
@@ -17908,6 +17928,7 @@ app.post('/api/push/instant', async (req, res) => {
           data: {
             type,
             senderId: user.id,
+            url: targetUrl,
             ...data,
           },
         }
