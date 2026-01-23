@@ -248,13 +248,13 @@ self.addEventListener('push', (event) => {
         ? payload.tag
         : (data as any)?.campaignId || 'aphylia',
     data,
-    // Use badge for small icon, skip large icon for cleaner message notifications
+    // Only use badge for small status bar icon
     badge: typeof payload.badge === 'string' && payload.badge.length ? payload.badge : notificationBadgeUrl,
   }
   
-  // Only add icon for non-message notifications (messages look cleaner without the large logo)
-  if (!isMessageNotification) {
-    options.icon = typeof payload.icon === 'string' && payload.icon.length ? payload.icon : notificationIconUrl
+  // Only add icon if explicitly provided in the payload - no default image
+  if (typeof payload.icon === 'string' && payload.icon.length) {
+    options.icon = payload.icon
   }
   
   // Add actions for notifications (skip for messages - just tap to open conversation)
