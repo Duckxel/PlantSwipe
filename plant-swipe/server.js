@@ -21833,6 +21833,21 @@ async function generateCrawlerHtml(req, pagePath) {
     return `${siteUrl.replace(/\/+$/, '')}/${url}`
   }
 
+  // Helper to check if an image URL is from our media domain (for Google image indexing)
+  const isAphyliaMediaUrl = (url) => {
+    if (!url) return false
+    return url.includes('media.aphylia.app')
+  }
+
+  // Helper to generate an img tag for media.aphylia.app images (for Google image indexing)
+  const generateImageTag = (url, alt, options = {}) => {
+    if (!url || !isAphyliaMediaUrl(url)) return ''
+    const { width, height, style = 'max-width: 100%; height: auto; border-radius: 12px; margin: 16px 0;' } = options
+    const widthAttr = width ? ` width="${width}"` : ''
+    const heightAttr = height ? ` height="${height}"` : ''
+    return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt || 'Aphylia')}"${widthAttr}${heightAttr} style="${style}" loading="lazy" />`
+  }
+
   // Default meta tags
   let title = 'Aphylia - Discover, Swipe and Manage Plants for Your Garden'
   let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
@@ -22459,10 +22474,18 @@ async function generateCrawlerHtml(req, pagePath) {
           if (difficulty) careInfo.push(difficulty)
           if (plant.season?.length) careInfo.push(`🌿 ${plant.season.map(s => escapeHtml(s)).join(', ')}`)
 
+          // Generate image tag if we have an image from media.aphylia.app
+          const plantImageTag = generateImageTag(image, `${plant.name} - Plant photo on Aphylia`)
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Product">
               <h1 itemprop="name">${emoji} ${escapeHtml(plant.name)}</h1>
               ${quickFacts.length ? `<div class="plant-meta">${quickFacts.join(' · ')}</div>` : ''}
+              
+              ${plantImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
+                ${plantImageTag}
+                <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(plant.name)}</figcaption>
+              </figure>` : ''}
               
               ${plant.overview ? `
                 <div itemprop="description">
@@ -22594,6 +22617,9 @@ async function generateCrawlerHtml(req, pagePath) {
           day: 'numeric'
         }) : null
 
+        // Generate blog cover image tag if from media.aphylia.app
+        const blogImageTag = generateImageTag(image, `${post.title} - Aphylia Blog`)
+
         pageContent = `
           <article itemscope itemtype="https://schema.org/BlogPosting">
             <h1 itemprop="headline">📖 ${escapeHtml(post.title)}</h1>
@@ -22602,6 +22628,12 @@ async function generateCrawlerHtml(req, pagePath) {
               ${publishDate ? ` · 📅 <time itemprop="datePublished" datetime="${post.published_at}">${publishDate}</time>` : ''}
               ${readTime > 0 ? ` · 📚 ${readTime} ${tr.blogMinRead}` : ''}
             </div>
+            
+            ${blogImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
+              ${blogImageTag}
+              <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(post.title)}</figcaption>
+            </figure>` : ''}
+            
             ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadFull} →</a></p>
             
@@ -22844,10 +22876,22 @@ async function generateCrawlerHtml(req, pagePath) {
             month: 'long',
           }) : null
 
+          // Generate avatar image tag if from media.aphylia.app
+          const profileImageTag = generateImageTag(image, `${displayName} - Profile on Aphylia`, { 
+            width: 150, 
+            height: 150, 
+            style: 'border-radius: 50%; margin: 16px 0;' 
+          })
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Person">
               <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
               ${roleBadges.length > 0 ? `<div style="margin-bottom: 12px;">${roleBadges.join(' ')}</div>` : ''}
+              
+              ${profileImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject" style="text-align: center;">
+                ${profileImageTag}
+              </figure>` : ''}
+              
               <div class="profile-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
                 ${profile.country ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
                 ${isOnline ? `<span>🟢 ${detectedLang === 'fr' ? 'En ligne' : 'Online'}</span>` : ''}
@@ -23132,6 +23176,9 @@ async function generateCrawlerHtml(req, pagePath) {
           // Calculate task progress percentage
           const progressPercent = todayProgress.due > 0 ? Math.round((todayProgress.completed / todayProgress.due) * 100) : 100
 
+          // Generate garden image tag if from media.aphylia.app
+          const gardenImageTag = generateImageTag(image, `${gardenName} - Garden on Aphylia`)
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Place">
               <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
@@ -23142,6 +23189,11 @@ async function generateCrawlerHtml(req, pagePath) {
                 ${gardenAge ? `<span>🕐 ${gardenAge}</span>` : ''}
                 ${memberCount > 1 ? `<span>👥 ${memberCount} ${detectedLang === 'fr' ? 'membres' : 'members'}</span>` : ''}
               </div>
+              
+              ${gardenImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
+                ${gardenImageTag}
+                <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(gardenName)}</figcaption>
+              </figure>` : ''}
               
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 20px 0; padding: 16px; background: #f0fdf4; border-radius: 12px;">
                 <div style="text-align: center;">
@@ -23680,6 +23732,9 @@ async function generateCrawlerHtml(req, pagePath) {
         }
         // If no image found, image stays null - no fallback
 
+        // Generate bookmark image tag if from media.aphylia.app
+        const bookmarkImageTag = generateImageTag(listImage, `${bookmarkName} - Plant Collection on Aphylia`)
+
         pageContent = `
           <article>
             <h1>🔖 ${escapeHtml(bookmarkName)} - ${tr.bookmarkTitle}</h1>
@@ -23687,6 +23742,12 @@ async function generateCrawlerHtml(req, pagePath) {
               🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved}
               ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a>` : ''}
             </div>
+            
+            ${bookmarkImageTag ? `<figure itemscope itemtype="https://schema.org/ImageObject">
+              ${bookmarkImageTag}
+              <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(bookmarkName)}</figcaption>
+            </figure>` : ''}
+            
             <p>${tr.bookmarksCarefully} 🌱</p>
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
             
@@ -23832,10 +23893,19 @@ async function generateCrawlerHtml(req, pagePath) {
         }
       } catch { }
 
+      // Generate landing banner image tag (always from media.aphylia.app)
+      const landingBannerTag = generateImageTag(LANDING_BANNER_IMAGE, 'Aphylia - Your Personal Plant Companion', {
+        style: 'width: 100%; max-width: 600px; height: auto; border-radius: 16px; margin: 20px auto; display: block;'
+      })
+
       pageContent = `
         <article itemscope itemtype="https://schema.org/WebApplication">
           <h1 itemprop="name">🌱 ${tr.homeWelcome}</h1>
           <p itemprop="description">${tr.homePersonal}</p>
+          
+          ${landingBannerTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject" style="text-align: center; margin: 24px 0;">
+            ${landingBannerTag}
+          </figure>` : ''}
           
           <div class="stats-banner" style="display: flex; flex-wrap: wrap; gap: 20px; margin: 24px 0; padding: 20px; background: #f0fdf4; border-radius: 12px;">
             <div style="text-align: center; flex: 1; min-width: 120px;">
