@@ -3793,31 +3793,69 @@ const ShowcaseTab: React.FC<{
     if (!localConfig) return
     setSaving(true)
     try {
-      const { error } = await supabase
-        .from("landing_showcase_config")
-        .upsert({
-          id: localConfig.id || undefined,
-          garden_name: localConfig.garden_name,
-          plants_count: localConfig.plant_cards.length, // Auto-calculated
-          species_count: localConfig.species_count,
-          streak_count: localConfig.streak_count,
-          progress_percent: localConfig.progress_percent,
-          cover_image_url: localConfig.cover_image_url,
-          tasks: localConfig.tasks,
-          members: localConfig.members,
-          plant_cards: localConfig.plant_cards,
-          completion_rate: localConfig.completion_rate,
-          analytics_streak: localConfig.analytics_streak,
-          chart_data: localConfig.chart_data,
-          calendar_data: localConfig.calendar_data,
-        })
-      
-      if (error) {
-        console.error("Save error:", error)
+      const dataToSave = {
+        garden_name: localConfig.garden_name,
+        plants_count: localConfig.plant_cards.length, // Auto-calculated
+        species_count: localConfig.species_count,
+        streak_count: localConfig.streak_count,
+        progress_percent: localConfig.progress_percent,
+        cover_image_url: localConfig.cover_image_url,
+        tasks: localConfig.tasks,
+        members: localConfig.members,
+        plant_cards: localConfig.plant_cards,
+        completion_rate: localConfig.completion_rate,
+        analytics_streak: localConfig.analytics_streak,
+        chart_data: localConfig.chart_data,
+        calendar_data: localConfig.calendar_data,
       }
-      setConfig(localConfig)
+
+      let result
+      if (localConfig.id && localConfig.id.length > 0) {
+        // Update existing row
+        result = await supabase
+          .from("landing_showcase_config")
+          .update(dataToSave)
+          .eq("id", localConfig.id)
+          .select()
+          .single()
+      } else {
+        // Insert new row (first check if any row exists)
+        const { data: existing } = await supabase
+          .from("landing_showcase_config")
+          .select("id")
+          .limit(1)
+          .maybeSingle()
+        
+        if (existing) {
+          // Update the existing row
+          result = await supabase
+            .from("landing_showcase_config")
+            .update(dataToSave)
+            .eq("id", existing.id)
+            .select()
+            .single()
+        } else {
+          // Insert new row
+          result = await supabase
+            .from("landing_showcase_config")
+            .insert(dataToSave)
+            .select()
+            .single()
+        }
+      }
+      
+      if (result.error) {
+        console.error("Save error:", result.error)
+        alert("Failed to save: " + result.error.message)
+      } else if (result.data) {
+        // Update local state with the saved data (including the ID)
+        setLocalConfig(result.data)
+        setConfig(result.data)
+        alert("Showcase configuration saved successfully!")
+      }
     } catch (e) {
       console.error("Failed to save showcase config:", e)
+      alert("Failed to save configuration. Check console for details.")
     } finally {
       setSaving(false)
     }
