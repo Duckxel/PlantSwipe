@@ -15132,8 +15132,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         p.name as plant_name, p.scientific_name, p.plant_type,
         p.utility as plant_utility, p.comestible_part,
         -- Care requirements
-        p.watering_type,
-        p.light_level, p.hardiness_min, p.hardiness_max,
+        p.watering_type, p.level_sun,
         p.temperature_min, p.temperature_max, p.temperature_ideal,
         p.hygrometry, p.soil, p.nutrition_need, p.fertilizer,
         -- Growing info
@@ -15141,10 +15140,12 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         p.height_cm, p.wingspan_cm, p.separation_cm,
         p.tutoring, p.transplanting, p.sow_type, p.division,
         -- Characteristics
-        p.is_edible, p.is_poisonous, p.spiked, p.scent, p.multicolor,
+        p.spiked, p.scent, p.multicolor,
         p.melliferous, p.conservation_status,
+        p.toxicity_human, p.toxicity_pets,
+        ('comestible' = ANY(p.utility)) as is_edible,
         -- Problems and companions
-        p.pests, p.diseases, p.companions, p.tags,
+        p.pests, p.diseases, p.companions,
         -- Translated overview
         (
           select pt.overview 
@@ -15363,7 +15364,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       if (p.override_water_freq_value) {
         careInfo.push(`Watering: ${p.override_water_freq_value}x per ${p.override_water_freq_unit || 'week'} (custom)`)
       }
-      if (p.light_level) careInfo.push(`Light: ${p.light_level}`)
+      if (p.level_sun) careInfo.push(`Light: ${p.level_sun}`)
       if (p.temperature_min && p.temperature_max) {
         careInfo.push(`Temp: ${p.temperature_min}°C-${p.temperature_max}°C${p.temperature_ideal ? ` (ideal: ${p.temperature_ideal}°C)` : ''}`)
       }
@@ -15380,7 +15381,8 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       // Characteristics
       const chars = []
       if (p.is_edible) chars.push('Edible')
-      if (p.is_poisonous) chars.push('⚠️ Poisonous')
+      if (p.toxicity_human === 'highly toxic' || p.toxicity_human === 'lethally toxic') chars.push('⚠️ Toxic to humans')
+      if (p.toxicity_pets === 'highly toxic' || p.toxicity_pets === 'lethally toxic') chars.push('⚠️ Toxic to pets')
       if (p.melliferous) chars.push('Melliferous')
       if (chars.length > 0) lines.push(`- Traits: ${chars.join(', ')}`)
       
@@ -19114,9 +19116,7 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.utility as plant_utility,
         p.comestible_part,
         -- Care requirements
-        p.light_level,
-        p.hardiness_min,
-        p.hardiness_max,
+        p.level_sun,
         p.temperature_min,
         p.temperature_max,
         p.temperature_ideal,
@@ -19137,8 +19137,9 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.sow_type,
         p.division,
         -- Characteristics
-        p.is_edible,
-        p.is_poisonous,
+        ('comestible' = ANY(p.utility)) as is_edible,
+        p.toxicity_human,
+        p.toxicity_pets,
         p.spiked,
         p.scent,
         p.multicolor,
@@ -19148,7 +19149,6 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.pests,
         p.diseases,
         p.companions,
-        p.tags as plant_tags,
         -- Get translated overview if available
         (
           select pt.overview 
@@ -19233,8 +19233,7 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       waterFrequency: row.override_water_freq_value 
         ? `${row.override_water_freq_value}x per ${row.override_water_freq_unit || 'week'} (custom)`
         : null,
-      lightLevel: row.light_level,
-      hardinessZone: row.hardiness_min && row.hardiness_max ? `${row.hardiness_min}-${row.hardiness_max}` : null,
+      lightLevel: row.level_sun,
       temperatureRange: row.temperature_min && row.temperature_max 
         ? { min: row.temperature_min, max: row.temperature_max, ideal: row.temperature_ideal }
         : null,
@@ -19256,7 +19255,8 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       propagationMethods: row.division,
       // Characteristics
       isEdible: row.is_edible,
-      isPoisonous: row.is_poisonous,
+      toxicityHuman: row.toxicity_human,
+      toxicityPets: row.toxicity_pets,
       hasSpikes: row.spiked,
       hasScent: row.scent,
       isMulticolor: row.multicolor,
@@ -19269,7 +19269,6 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       commonPests: row.pests,
       commonDiseases: row.diseases,
       companionPlants: row.companions,
-      tags: row.plant_tags,
       // Instance data
       taskCount: taskCounts[row.garden_plant_id] || 0,
       schedule: schedules[row.garden_plant_id] || null,
