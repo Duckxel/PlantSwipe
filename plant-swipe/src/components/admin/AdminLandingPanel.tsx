@@ -13,6 +13,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { SearchInput } from "@/components/ui/search-input"
 import { supabase } from "@/lib/supabaseClient"
 import { translateText } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
@@ -164,6 +165,65 @@ type UserProfile = {
   avatar_url: string | null
 }
 
+// Showcase Configuration Types
+type ShowcaseConfig = {
+  id: string
+  // Garden Card
+  garden_name: string
+  plants_count: number
+  species_count: number
+  streak_count: number
+  progress_percent: number
+  cover_image_url: string | null
+  // Tasks
+  tasks: ShowcaseTask[]
+  // Members
+  members: ShowcaseMember[]
+  // Plant Cards
+  plant_cards: ShowcasePlantCard[]
+  // Analytics
+  completion_rate: number
+  analytics_streak: number
+  chart_data: number[]
+  // Calendar (30 days history: 'completed' | 'missed' | 'none')
+  calendar_data: CalendarDay[]
+}
+
+type CalendarDay = {
+  date: string // ISO date string
+  status: 'completed' | 'missed' | 'none'
+}
+
+type ShowcaseTask = {
+  id: string
+  text: string
+  completed: boolean
+}
+
+type ShowcaseMember = {
+  id: string
+  name: string
+  role: 'owner' | 'member'
+  avatar_url: string | null
+  color: string
+}
+
+type ShowcasePlantCard = {
+  id: string
+  plant_id: string | null
+  name: string
+  image_url: string | null
+  gradient: string
+  tasks_due: number
+}
+
+type PlantSearchResult = {
+  id: string
+  name: string
+  scientific_name: string | null
+  image: string | null
+}
+
 type LandingPageSettings = {
   id: string
   // Hero Section
@@ -208,7 +268,7 @@ type LandingPageSettings = {
   meta_description: string
 }
 
-type LandingTab = "settings" | "hero" | "stats" | "testimonials" | "faq" | "demo"
+type LandingTab = "settings" | "hero" | "stats" | "testimonials" | "faq" | "demo" | "showcase"
 
 // ========================
 // SHARED TRANSLATION COMPONENTS
@@ -227,16 +287,16 @@ const LanguageSwitcher: React.FC<{
   disabled?: boolean
 }> = ({ selectedLang, onLanguageChange, onTranslateAll, translating, disabled }) => {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {/* Language Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
+      <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 bg-stone-100 dark:bg-stone-800 rounded-xl overflow-x-auto">
         {SUPPORTED_LANGUAGES.map((lang) => (
           <button
             key={lang}
             onClick={() => onLanguageChange(lang)}
             disabled={disabled}
             className={cn(
-              "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+              "px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex-shrink-0",
               selectedLang === lang
                 ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
                 : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white",
@@ -255,14 +315,14 @@ const LanguageSwitcher: React.FC<{
           size="sm"
           onClick={onTranslateAll}
           disabled={translating || disabled}
-          className="rounded-xl"
+          className="rounded-xl text-xs sm:text-sm"
         >
           {translating ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
           ) : (
-            <Languages className="h-4 w-4 mr-2" />
+            <Languages className="h-4 w-4 sm:mr-2" />
           )}
-          {translating ? "Translating..." : "DeepL Translate"}
+          <span className="hidden sm:inline">{translating ? "Translating..." : "Translate"}</span>
         </Button>
       )}
     </div>
@@ -273,10 +333,10 @@ const LanguageSwitcher: React.FC<{
 const TranslationModeBanner: React.FC<{ language: SupportedLanguage }> = ({ language }) => {
   if (language === "en") return null
   return (
-    <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+    <div className="flex items-center gap-2 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
       <Languages className="h-4 w-4 text-blue-500 flex-shrink-0" />
-      <span className="text-sm text-blue-700 dark:text-blue-300">
-        Editing <strong>{ADMIN_LANGUAGE_LABELS[language].full}</strong> translations. Base content is managed in English.
+      <span className="text-xs sm:text-sm text-blue-700 dark:text-blue-300">
+        Editing <strong>{ADMIN_LANGUAGE_LABELS[language].full}</strong> translations
       </span>
     </div>
   )
@@ -420,21 +480,22 @@ const ImportPlantModal: React.FC<{
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSearch} className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-          <Input
+        <form onSubmit={handleSearch} className="flex gap-2">
+          <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search plants by name..."
-            className="pl-10 pr-20 rounded-xl"
+            loading={loading}
+            onClear={() => setSearch("")}
+            className="flex-1"
           />
           <Button
             type="submit"
             size="sm"
-            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg"
+            className="rounded-xl px-4"
             disabled={loading}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
+            Search
           </Button>
         </form>
 
@@ -675,23 +736,13 @@ const ImagePickerModal: React.FC<{
 
         {tab === "library" && (
           <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search images..."
-                className="pl-10 rounded-xl"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                >
-                  <X className="h-4 w-4 text-stone-400 hover:text-stone-600" />
-                </button>
-              )}
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search images..."
+              onClear={() => setSearchQuery("")}
+              loading={loadingLibrary}
+            />
 
             {loadingLibrary ? (
               <div className="flex items-center justify-center py-12">
@@ -889,6 +940,7 @@ export const AdminLandingPanel: React.FC = () => {
   const [testimonials, setTestimonials] = React.useState<Testimonial[]>([])
   const [faqItems, setFaqItems] = React.useState<FAQ[]>([])
   const [demoFeatures, setDemoFeatures] = React.useState<DemoFeature[]>([])
+  const [showcaseConfig, setShowcaseConfig] = React.useState<ShowcaseConfig | null>(null)
 
   // Load all data
   const loadData = React.useCallback(async () => {
@@ -946,6 +998,61 @@ export const AdminLandingPanel: React.FC = () => {
       if (testimonialsRes.data) setTestimonials(testimonialsRes.data)
       if (faqRes.data) setFaqItems(faqRes.data)
       if (demoRes.data) setDemoFeatures(demoRes.data)
+
+      // Load showcase config
+      const { data: showcaseData } = await supabase
+        .from("landing_showcase_config")
+        .select("*")
+        .limit(1)
+        .maybeSingle()
+      
+      if (showcaseData) {
+        setShowcaseConfig(showcaseData)
+      } else {
+        // Generate default calendar (last 30 days, all completed)
+        const defaultCalendar: CalendarDay[] = []
+        const today = new Date()
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(today)
+          date.setDate(date.getDate() - i)
+          defaultCalendar.push({
+            date: date.toISOString().split('T')[0],
+            status: 'completed'
+          })
+        }
+        
+        // Initialize with defaults
+        setShowcaseConfig({
+          id: '',
+          garden_name: "My Indoor Jungle",
+          plants_count: 12,
+          species_count: 8,
+          streak_count: 7,
+          progress_percent: 85,
+          cover_image_url: null,
+          tasks: [
+            { id: '1', text: "Water your Pothos", completed: true },
+            { id: '2', text: "Fertilize Monstera", completed: false },
+            { id: '3', text: "Mist your Fern", completed: false },
+          ],
+          members: [
+            { id: '1', name: "Sophie", role: 'owner', avatar_url: null, color: "#10b981" },
+            { id: '2', name: "Marcus", role: 'member', avatar_url: null, color: "#3b82f6" },
+          ],
+          plant_cards: [
+            { id: '1', plant_id: null, name: "Monstera", image_url: null, gradient: "from-emerald-400 to-teal-500", tasks_due: 1 },
+            { id: '2', plant_id: null, name: "Pothos", image_url: null, gradient: "from-lime-400 to-green-500", tasks_due: 2 },
+            { id: '3', plant_id: null, name: "Snake Plant", image_url: null, gradient: "from-green-400 to-emerald-500", tasks_due: 0 },
+            { id: '4', plant_id: null, name: "Fern", image_url: null, gradient: "from-teal-400 to-cyan-500", tasks_due: 0 },
+            { id: '5', plant_id: null, name: "Peace Lily", image_url: null, gradient: "from-emerald-500 to-green-600", tasks_due: 0 },
+            { id: '6', plant_id: null, name: "Calathea", image_url: null, gradient: "from-green-500 to-teal-600", tasks_due: 0 },
+          ],
+          completion_rate: 92,
+          analytics_streak: 14,
+          chart_data: [3, 5, 2, 6, 4, 5, 6],
+          calendar_data: defaultCalendar,
+        })
+      }
     } catch (e) {
       console.error("Failed to load landing data:", e)
       setSettingsError("Failed to load landing data. Please try again.")
@@ -963,6 +1070,7 @@ export const AdminLandingPanel: React.FC = () => {
     { id: "hero" as const, label: "Hero Cards", icon: Smartphone, count: heroCards.length },
     { id: "stats" as const, label: "Stats", icon: BarChart3 },
     { id: "demo" as const, label: "Wheel Features", icon: CirclePlay, count: demoFeatures.length },
+    { id: "showcase" as const, label: "Showcase", icon: Grid3X3 },
     { id: "testimonials" as const, label: "Reviews", icon: Star, count: testimonials.length },
     { id: "faq" as const, label: "FAQ", icon: HelpCircle, count: faqItems.length },
   ]
@@ -970,75 +1078,77 @@ export const AdminLandingPanel: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
             <Layout className="h-5 w-5 text-emerald-500" />
             Landing Page Editor
           </h2>
-          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-            Customize your public landing page content
+          <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
+            Customize your public landing page
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowPreview(!showPreview)}
-            className={cn("rounded-xl", showPreview && "bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20")}
+            className={cn("rounded-xl text-xs sm:text-sm", showPreview && "bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20")}
           >
-            <Monitor className="h-4 w-4 mr-2" />
-            {showPreview ? "Hide Preview" : "Show Preview"}
+            <Monitor className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">{showPreview ? "Hide Preview" : "Show Preview"}</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={loadData}
             disabled={loading}
-            className="rounded-xl"
+            className="rounded-xl text-xs sm:text-sm"
           >
-            <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
-            Refresh
+            <RefreshCw className={cn("h-4 w-4 sm:mr-2", loading && "animate-spin")} />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => window.open("/", "_blank")}
-            className="rounded-xl"
+            className="rounded-xl text-xs sm:text-sm"
           >
-            <ExternalLink className="h-4 w-4 mr-2" />
-            View Live
+            <ExternalLink className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">View Live</span>
           </Button>
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap",
-              activeTab === tab.id
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
-                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
-            )}
-          >
-            <tab.icon className="h-4 w-4" />
-            {tab.label}
-            {tab.count !== undefined && (
-              <span className={cn(
-                "px-1.5 py-0.5 rounded-md text-xs",
+      {/* Tab Navigation - Horizontal scroll on mobile */}
+      <div className="-mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
                 activeTab === tab.id
-                  ? "bg-white/20"
-                  : "bg-stone-200 dark:bg-stone-700"
-              )}>
-                {tab.count}
-              </span>
-            )}
-          </button>
-        ))}
+                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+              )}
+            >
+              <tab.icon className="h-4 w-4" />
+              <span className="hidden xs:inline">{tab.label}</span>
+              {tab.count !== undefined && (
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded-md text-[10px] sm:text-xs",
+                  activeTab === tab.id
+                    ? "bg-white/20"
+                    : "bg-stone-200 dark:bg-stone-700"
+                )}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Content */}
@@ -1098,6 +1208,14 @@ export const AdminLandingPanel: React.FC = () => {
               setItems={setFaqItems}
               setSaving={setSaving}
               sectionVisible={settings?.show_faq_section ?? true}
+            />
+          )}
+          {activeTab === "showcase" && (
+            <ShowcaseTab
+              config={showcaseConfig}
+              setConfig={setShowcaseConfig}
+              setSaving={setSaving}
+              sectionVisible={settings?.show_showcase_section ?? true}
             />
           )}
         </>
@@ -1209,30 +1327,30 @@ const GlobalSettingsTab: React.FC<{
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header with Save Button */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+          <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white flex items-center gap-2">
             <Settings className="h-5 w-5 text-emerald-500" />
             Section Visibility
           </h3>
-          <p className="text-sm text-stone-500 mt-1">
-            Toggle sections on or off to customize your landing page. Text content is managed via translation files.
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">
+            Toggle sections on/off. Text content is managed via translation files.
           </p>
         </div>
-        <Button onClick={saveSettings} disabled={saving} className="rounded-xl">
+        <Button onClick={saveSettings} disabled={saving} className="rounded-xl w-full sm:w-auto">
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-          Save All Changes
+          Save Changes
         </Button>
       </div>
 
       {/* Section Visibility Content */}
       <Card className="rounded-xl">
-        <CardContent className="p-6">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-stone-200 dark:border-stone-700">
-              <div className="flex items-center gap-2 text-xs text-stone-500">
+        <CardContent className="p-3 sm:p-6">
+          <div className="space-y-4 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200 dark:border-stone-700">
+              <div className="flex items-center gap-3 text-xs text-stone-500">
                 <span className="flex items-center gap-1">
                   <div className="h-2 w-2 rounded-full bg-emerald-500" />
                   Visible
@@ -1248,59 +1366,60 @@ const GlobalSettingsTab: React.FC<{
                   variant="outline"
                   size="sm"
                   onClick={() => setAllVisibility(true)}
-                  className="rounded-xl"
+                  className="rounded-xl flex-1 sm:flex-none text-xs"
                 >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Show All
+                  <Eye className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Show All</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setAllVisibility(false)}
-                  className="rounded-xl"
+                  className="rounded-xl flex-1 sm:flex-none text-xs"
                 >
-                  <EyeOff className="h-4 w-4 mr-2" />
-                  Hide All
+                  <EyeOff className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Hide All</span>
                 </Button>
               </div>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-2 sm:gap-3">
               {visibilityItems.map((item) => {
                 const isVisible = localSettings[item.key]
                 return (
                   <div
                     key={item.key}
                     className={cn(
-                      "flex items-center justify-between p-4 rounded-xl border transition-all",
+                      "flex items-center justify-between p-3 sm:p-4 rounded-xl border transition-all",
                       isVisible
                         ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800"
                         : "bg-stone-50 dark:bg-stone-900/50 border-stone-200 dark:border-stone-700 opacity-75"
                     )}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <div className={cn(
-                        "h-10 w-10 rounded-xl flex items-center justify-center",
+                        "h-8 w-8 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center flex-shrink-0",
                         isVisible ? "bg-emerald-500/10" : "bg-stone-200 dark:bg-stone-800"
                       )}>
                         <item.icon className={cn(
-                          "h-5 w-5",
+                          "h-4 w-4 sm:h-5 sm:w-5",
                           isVisible ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400"
                         )} />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className={cn(
-                          "font-medium",
+                          "font-medium text-sm sm:text-base truncate",
                           isVisible ? "text-stone-900 dark:text-white" : "text-stone-500"
                         )}>
                           {item.label}
                         </p>
-                        <p className="text-xs text-stone-500">{item.description}</p>
+                        <p className="text-[10px] sm:text-xs text-stone-500 truncate">{item.description}</p>
                       </div>
                     </div>
                     <Switch
                       checked={isVisible}
                       onCheckedChange={(checked) => updateSetting(item.key, checked)}
+                      className="flex-shrink-0 ml-2"
                     />
                   </div>
                 )
@@ -1312,15 +1431,17 @@ const GlobalSettingsTab: React.FC<{
 
       {/* Unsaved Changes Warning */}
       {settings && localSettings && JSON.stringify(settings) !== JSON.stringify(localSettings) && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500 text-white shadow-lg z-50">
-          <AlertCircle className="h-5 w-5" />
-          <span className="text-sm font-medium">You have unsaved changes</span>
+        <div className="fixed bottom-4 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex flex-col sm:flex-row items-center gap-2 sm:gap-3 px-4 py-3 rounded-xl bg-amber-500 text-white shadow-lg z-50">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+            <span className="text-sm font-medium">Unsaved changes</span>
+          </div>
           <Button
             size="sm"
             variant="secondary"
             onClick={saveSettings}
             disabled={saving}
-            className="rounded-lg bg-white/20 hover:bg-white/30 text-white"
+            className="rounded-lg bg-white/20 hover:bg-white/30 text-white w-full sm:w-auto"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Now"}
           </Button>
@@ -1484,45 +1605,45 @@ const HeroCardsTab: React.FC<{
   const editingCard = localCards.find(c => c.id === editingCardId)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Section Hidden Warning */}
       <SectionHiddenBanner visible={sectionVisible} />
 
       {/* Info Banner */}
-      <div className="rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-green-500/10 border border-emerald-500/20 p-4">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-            <Shuffle className="h-5 w-5 text-emerald-600" />
+      <div className="rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-green-500/10 border border-emerald-500/20 p-3 sm:p-4">
+        <div className="flex items-start gap-2 sm:gap-3">
+          <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+            <Shuffle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-stone-900 dark:text-white">Hero Card Display</h3>
-            <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
-              Active cards will automatically cycle on the landing page. The first active card is shown by default, then they rotate every 5 seconds. Drag to reorder.
+            <h3 className="font-semibold text-sm sm:text-base text-stone-900 dark:text-white">Hero Card Display</h3>
+            <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 mt-1">
+              Active cards cycle automatically on the landing page every 5 seconds.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Hero Cards</h3>
-          <p className="text-sm text-stone-500">
+          <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Hero Cards</h3>
+          <p className="text-xs sm:text-sm text-stone-500">
             {localCards.filter(c => c.is_active).length} active of {localCards.length} total
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {hasUnsavedChanges && (
-            <Button onClick={saveAllCards} className="rounded-xl bg-amber-500 hover:bg-amber-600">
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
+            <Button onClick={saveAllCards} className="rounded-xl bg-amber-500 hover:bg-amber-600 text-xs sm:text-sm flex-1 sm:flex-none">
+              <Save className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Save Changes</span>
             </Button>
           )}
-          <Button onClick={() => setImportPlantOpen(true)} variant="outline" className="rounded-xl">
-            <Download className="h-4 w-4 mr-2" />
-            Import from Plants
+          <Button onClick={() => setImportPlantOpen(true)} variant="outline" className="rounded-xl text-xs sm:text-sm flex-1 sm:flex-none">
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Import</span>
           </Button>
-          <Button onClick={addCard} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
+          <Button onClick={addCard} className="rounded-xl text-xs sm:text-sm flex-1 sm:flex-none">
+            <Plus className="h-4 w-4 sm:mr-2" />
             Add Hero Card
           </Button>
         </div>
@@ -1530,10 +1651,10 @@ const HeroCardsTab: React.FC<{
 
       {localCards.length === 0 ? (
         <Card className="rounded-xl border-dashed">
-          <CardContent className="py-16 text-center">
-            <Smartphone className="h-12 w-12 mx-auto mb-4 text-stone-300" />
+          <CardContent className="py-12 sm:py-16 text-center">
+            <Smartphone className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-4 text-stone-300" />
             <h3 className="font-semibold text-stone-900 dark:text-white mb-2">No hero cards yet</h3>
-            <p className="text-sm text-stone-500 mb-4">Add your first hero card to showcase on the landing page</p>
+            <p className="text-xs sm:text-sm text-stone-500 mb-4">Add your first hero card to showcase on the landing page</p>
             <Button onClick={addCard} className="rounded-xl">
               <Plus className="h-4 w-4 mr-2" />
               Add First Card
@@ -1542,11 +1663,11 @@ const HeroCardsTab: React.FC<{
         </Card>
       ) : (
         <div className={cn(
-          "grid gap-6",
-          showPreview ? "lg:grid-cols-[1fr,300px]" : "grid-cols-1"
+          "grid gap-4 sm:gap-6",
+          showPreview ? "xl:grid-cols-[1fr,280px]" : "grid-cols-1"
         )}>
           {/* Cards List */}
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {localCards.map((card, index) => (
               <Card
                 key={card.id}
@@ -1555,10 +1676,10 @@ const HeroCardsTab: React.FC<{
                   expandedCardId === card.id && "ring-2 ring-emerald-500"
                 )}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    {/* Reorder Controls */}
-                    <div className="flex flex-col gap-1 pt-1">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-start gap-2 sm:gap-4">
+                    {/* Reorder Controls - Hidden on mobile */}
+                    <div className="hidden sm:flex flex-col gap-1 pt-1">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1588,7 +1709,7 @@ const HeroCardsTab: React.FC<{
                         setEditingCardId(card.id)
                         setImagePickerOpen(true)
                       }}
-                      className="relative h-20 w-20 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20 flex-shrink-0 group"
+                      className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20 flex-shrink-0 group"
                     >
                       {card.image_url ? (
                         <img
@@ -1598,11 +1719,11 @@ const HeroCardsTab: React.FC<{
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <Leaf className="h-8 w-8 text-emerald-500/50" />
+                          <Leaf className="h-6 w-6 sm:h-8 sm:w-8 text-emerald-500/50" />
                         </div>
                       )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Camera className="h-5 w-5 text-white" />
+                        <Camera className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                       </div>
                     </button>
 
@@ -1612,14 +1733,14 @@ const HeroCardsTab: React.FC<{
                         <Input
                           value={card.plant_name}
                           onChange={(e) => updateLocalCard(card.id, { plant_name: e.target.value })}
-                          className="rounded-xl font-semibold text-lg h-9"
+                          className="rounded-xl font-semibold text-sm sm:text-lg h-8 sm:h-9"
                           placeholder="Plant name"
                         />
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => setExpandedCardId(expandedCardId === card.id ? null : card.id)}
-                          className="rounded-xl flex-shrink-0"
+                          className="rounded-xl flex-shrink-0 h-8 w-8"
                         >
                           <ChevronDown className={cn(
                             "h-4 w-4 transition-transform",
@@ -2283,44 +2404,44 @@ const TestimonialsTab: React.FC<{
     <div className="space-y-4">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Customer Reviews</h3>
-          <p className="text-sm text-stone-500">Testimonials shown in the reviews section</p>
+          <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Customer Reviews</h3>
+          <p className="text-xs sm:text-sm text-stone-500">Testimonials shown in the reviews section</p>
         </div>
         <div className="flex gap-2">
           {hasUnsavedChanges && (
-            <Button onClick={saveAllTestimonials} className="rounded-xl bg-amber-500 hover:bg-amber-600">
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
+            <Button onClick={saveAllTestimonials} className="rounded-xl bg-amber-500 hover:bg-amber-600 text-xs sm:text-sm flex-1 sm:flex-none">
+              <Save className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Save Changes</span>
             </Button>
           )}
-          <Button onClick={addTestimonial} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Review
+          <Button onClick={addTestimonial} className="rounded-xl text-xs sm:text-sm flex-1 sm:flex-none">
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add Review</span>
           </Button>
         </div>
       </div>
 
       {localTestimonials.length === 0 ? (
         <Card className="rounded-xl border-dashed">
-          <CardContent className="py-12 text-center text-stone-500">
+          <CardContent className="py-12 text-center text-stone-500 text-sm">
             No testimonials yet. Add one to get started.
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           {localTestimonials.map((testimonial) => (
             <Card key={testimonial.id} className="rounded-xl">
-              <CardContent className="p-4 space-y-4">
+              <CardContent className="p-3 sm:p-4 space-y-3 sm:space-y-4">
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <button
                       onClick={() => {
                         setEditingId(testimonial.id)
                         setImagePickerOpen(true)
                       }}
-                      className="relative h-12 w-12 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold overflow-hidden group"
+                      className="relative h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold overflow-hidden group flex-shrink-0"
                     >
                       {testimonial.author_avatar_url ? (
                         <img
@@ -2492,15 +2613,13 @@ const TestimonialsTab: React.FC<{
                 </Button>
               </div>
               
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                <Input
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  className="rounded-xl pl-9"
-                  placeholder="Search users..."
-                />
-              </div>
+              <SearchInput
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                placeholder="Search users..."
+                onClear={() => setUserSearchQuery("")}
+                loading={loadingUsers}
+              />
 
               <div className="max-h-60 overflow-y-auto space-y-2">
                 {loadingUsers ? (
@@ -2858,20 +2977,29 @@ const DemoFeaturesTab: React.FC<{
     <div className="space-y-4">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Demo Wheel Features</h3>
-          <p className="text-sm text-stone-500">Features shown in the interactive demo wheel</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Save Button */}
-          {hasUnsavedChanges && (
-            <Button onClick={saveAllFeatures} className="rounded-xl bg-amber-500 hover:bg-amber-600">
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Demo Wheel Features</h3>
+            <p className="text-xs sm:text-sm text-stone-500">Features shown in the interactive demo wheel</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Save Button */}
+            {hasUnsavedChanges && (
+              <Button onClick={saveAllFeatures} className="rounded-xl bg-amber-500 hover:bg-amber-600 text-xs sm:text-sm">
+                <Save className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Save</span>
+              </Button>
+            )}
+            
+            <Button onClick={addFeature} className="rounded-xl text-xs sm:text-sm" disabled={selectedLang !== "en"}>
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add</span>
             </Button>
-          )}
-
+          </div>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-2">
           <LanguageSwitcher
             selectedLang={selectedLang}
             onLanguageChange={setSelectedLang}
@@ -2879,11 +3007,6 @@ const DemoFeaturesTab: React.FC<{
             translating={translating}
             disabled={localFeatures.length === 0}
           />
-          
-          <Button onClick={addFeature} className="rounded-xl" disabled={selectedLang !== "en"}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Feature
-          </Button>
         </div>
       </div>
 
@@ -3361,20 +3484,29 @@ const FAQTab: React.FC<{
     <div className="space-y-4">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">FAQ Items</h3>
-          <p className="text-sm text-stone-500">Questions and answers shown in the FAQ section</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Save Button */}
-          {hasUnsavedChanges && (
-            <Button onClick={saveAllFAQs} className="rounded-xl bg-amber-500 hover:bg-amber-600">
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">FAQ Items</h3>
+            <p className="text-xs sm:text-sm text-stone-500">Questions and answers shown in the FAQ section</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Save Button */}
+            {hasUnsavedChanges && (
+              <Button onClick={saveAllFAQs} className="rounded-xl bg-amber-500 hover:bg-amber-600 text-xs sm:text-sm">
+                <Save className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Save</span>
+              </Button>
+            )}
+            
+            <Button onClick={addFAQ} className="rounded-xl text-xs sm:text-sm" disabled={selectedLang !== "en"}>
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add</span>
             </Button>
-          )}
-
+          </div>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-2">
           <LanguageSwitcher
             selectedLang={selectedLang}
             onLanguageChange={setSelectedLang}
@@ -3382,11 +3514,6 @@ const FAQTab: React.FC<{
             translating={translating}
             disabled={localItems.length === 0}
           />
-          
-          <Button onClick={addFAQ} className="rounded-xl" disabled={selectedLang !== "en"}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Question
-          </Button>
         </div>
       </div>
 
@@ -3497,6 +3624,895 @@ const FAQTab: React.FC<{
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+// ========================
+// SHOWCASE TAB
+// ========================
+const ShowcaseTab: React.FC<{
+  config: ShowcaseConfig | null
+  setConfig: React.Dispatch<React.SetStateAction<ShowcaseConfig | null>>
+  setSaving: React.Dispatch<React.SetStateAction<boolean>>
+  sectionVisible: boolean
+}> = ({ config, setConfig, setSaving, sectionVisible }) => {
+  const [localConfig, setLocalConfig] = React.useState<ShowcaseConfig | null>(config)
+  const [plantSearch, setPlantSearch] = React.useState("")
+  const [plantResults, setPlantResults] = React.useState<PlantSearchResult[]>([])
+  const [searchingPlants, setSearchingPlants] = React.useState(false)
+  const [browseDialogOpen, setBrowseDialogOpen] = React.useState(false)
+  const [allPlants, setAllPlants] = React.useState<PlantSearchResult[]>([])
+  const [loadingAllPlants, setLoadingAllPlants] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    setLocalConfig(config)
+  }, [config])
+
+  // Auto-calculate plants_count from plant_cards length
+  React.useEffect(() => {
+    if (localConfig && localConfig.plants_count !== localConfig.plant_cards.length) {
+      setLocalConfig(prev => prev ? { ...prev, plants_count: prev.plant_cards.length } : null)
+    }
+  }, [localConfig?.plant_cards.length])
+
+  // Generate default calendar data (last 30 days)
+  const generateDefaultCalendar = React.useCallback((): CalendarDay[] => {
+    const days: CalendarDay[] = []
+    const today = new Date()
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today)
+      date.setDate(date.getDate() - i)
+      days.push({
+        date: date.toISOString().split('T')[0],
+        status: 'completed' // Default all to completed
+      })
+    }
+    return days
+  }, [])
+
+  // Initialize calendar_data if not present
+  React.useEffect(() => {
+    if (localConfig && (!localConfig.calendar_data || localConfig.calendar_data.length === 0)) {
+      setLocalConfig(prev => prev ? { ...prev, calendar_data: generateDefaultCalendar() } : null)
+    }
+  }, [localConfig, generateDefaultCalendar])
+
+  // Gradient options for plant cards
+  const gradientOptions = [
+    { value: "from-emerald-400 to-teal-500", label: "Emerald → Teal" },
+    { value: "from-lime-400 to-green-500", label: "Lime → Green" },
+    { value: "from-green-400 to-emerald-500", label: "Green → Emerald" },
+    { value: "from-teal-400 to-cyan-500", label: "Teal → Cyan" },
+    { value: "from-emerald-500 to-green-600", label: "Emerald → Green" },
+    { value: "from-green-500 to-teal-600", label: "Green → Teal" },
+    { value: "from-cyan-400 to-blue-500", label: "Cyan → Blue" },
+    { value: "from-lime-300 to-emerald-400", label: "Lime → Emerald" },
+  ]
+
+  // Color options for member avatars
+  const colorOptions = [
+    { value: "#10b981", label: "Emerald" },
+    { value: "#3b82f6", label: "Blue" },
+    { value: "#ec4899", label: "Pink" },
+    { value: "#f59e0b", label: "Amber" },
+    { value: "#8b5cf6", label: "Purple" },
+    { value: "#06b6d4", label: "Cyan" },
+    { value: "#ef4444", label: "Red" },
+    { value: "#84cc16", label: "Lime" },
+  ]
+
+  // Helper to extract main image from plant_images relation
+  const getPlantImage = (plantImages: any[] | null): string | null => {
+    if (!plantImages || plantImages.length === 0) return null
+    const mainImage = plantImages.find((img: any) => img.use === "main")
+    return mainImage?.link || plantImages[0]?.link || null
+  }
+
+  // Load all plants for browsing
+  const loadAllPlants = React.useCallback(async () => {
+    setLoadingAllPlants(true)
+    try {
+      const { data } = await supabase
+        .from("plants")
+        .select("id, name, scientific_name, plant_images(link, use)")
+        .order("name")
+        .limit(100)
+      
+      // Map to PlantSearchResult format
+      const mappedPlants: PlantSearchResult[] = (data || [])
+        .map((plant: any) => ({
+          id: plant.id,
+          name: plant.name,
+          scientific_name: plant.scientific_name,
+          image: getPlantImage(plant.plant_images),
+        }))
+        .filter(p => p.image) // Only include plants with images
+      
+      setAllPlants(mappedPlants)
+    } catch (e) {
+      console.error("Failed to load plants:", e)
+    } finally {
+      setLoadingAllPlants(false)
+    }
+  }, [])
+
+  // Search plants from database
+  const searchPlants = React.useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setPlantResults([])
+      return
+    }
+    setSearchingPlants(true)
+    try {
+      const { data } = await supabase
+        .from("plants")
+        .select("id, name, scientific_name, plant_images(link, use)")
+        .or(`name.ilike.%${query}%,scientific_name.ilike.%${query}%`)
+        .limit(30)
+      
+      // Map to PlantSearchResult format
+      const mappedPlants: PlantSearchResult[] = (data || []).map((plant: any) => ({
+        id: plant.id,
+        name: plant.name,
+        scientific_name: plant.scientific_name,
+        image: getPlantImage(plant.plant_images),
+      }))
+      
+      setPlantResults(mappedPlants)
+    } catch (e) {
+      console.error("Plant search error:", e)
+    } finally {
+      setSearchingPlants(false)
+    }
+  }, [])
+
+  // Debounced plant search
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      searchPlants(plantSearch)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [plantSearch, searchPlants])
+
+  // Handle cover image file upload
+  const handleCoverImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !localConfig) return
+
+    // For now, create a local URL preview. In production, you'd upload to Supabase storage
+    // and get a permanent URL back
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string
+      setLocalConfig({ ...localConfig, cover_image_url: dataUrl })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Save configuration
+  const saveConfig = async () => {
+    if (!localConfig) return
+    setSaving(true)
+    try {
+      const dataToSave = {
+        garden_name: localConfig.garden_name,
+        plants_count: localConfig.plant_cards.length, // Auto-calculated
+        species_count: localConfig.species_count,
+        streak_count: localConfig.streak_count,
+        progress_percent: localConfig.progress_percent,
+        cover_image_url: localConfig.cover_image_url,
+        tasks: localConfig.tasks,
+        members: localConfig.members,
+        plant_cards: localConfig.plant_cards,
+        completion_rate: localConfig.completion_rate,
+        analytics_streak: localConfig.analytics_streak,
+        chart_data: localConfig.chart_data,
+        calendar_data: localConfig.calendar_data,
+      }
+
+      let result
+      if (localConfig.id && localConfig.id.length > 0) {
+        // Update existing row
+        result = await supabase
+          .from("landing_showcase_config")
+          .update(dataToSave)
+          .eq("id", localConfig.id)
+          .select()
+          .single()
+      } else {
+        // Insert new row (first check if any row exists)
+        const { data: existing } = await supabase
+          .from("landing_showcase_config")
+          .select("id")
+          .limit(1)
+          .maybeSingle()
+        
+        if (existing) {
+          // Update the existing row
+          result = await supabase
+            .from("landing_showcase_config")
+            .update(dataToSave)
+            .eq("id", existing.id)
+            .select()
+            .single()
+        } else {
+          // Insert new row
+          result = await supabase
+            .from("landing_showcase_config")
+            .insert(dataToSave)
+            .select()
+            .single()
+        }
+      }
+      
+      if (result.error) {
+        console.error("Save error:", result.error)
+        alert("Failed to save: " + result.error.message)
+      } else if (result.data) {
+        // Update local state with the saved data (including the ID)
+        setLocalConfig(result.data)
+        setConfig(result.data)
+        alert("Showcase configuration saved successfully!")
+      }
+    } catch (e) {
+      console.error("Failed to save showcase config:", e)
+      alert("Failed to save configuration. Check console for details.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Add plant from browse dialog
+  const addPlantFromBrowse = (plant: PlantSearchResult) => {
+    if (!localConfig) return
+    const newCard: ShowcasePlantCard = {
+      id: crypto.randomUUID(),
+      plant_id: plant.id,
+      name: plant.name,
+      image_url: plant.image,
+      gradient: gradientOptions[localConfig.plant_cards.length % gradientOptions.length].value,
+      tasks_due: 0,
+    }
+    setLocalConfig({ ...localConfig, plant_cards: [...localConfig.plant_cards, newCard] })
+  }
+
+  // Add new task
+  const addTask = () => {
+    if (!localConfig) return
+    const newTask: ShowcaseTask = {
+      id: crypto.randomUUID(),
+      text: "New task",
+      completed: false,
+    }
+    setLocalConfig({ ...localConfig, tasks: [...localConfig.tasks, newTask] })
+  }
+
+  // Remove task
+  const removeTask = (taskId: string) => {
+    if (!localConfig) return
+    setLocalConfig({ ...localConfig, tasks: localConfig.tasks.filter(t => t.id !== taskId) })
+  }
+
+  // Update task
+  const updateTask = (taskId: string, updates: Partial<ShowcaseTask>) => {
+    if (!localConfig) return
+    setLocalConfig({
+      ...localConfig,
+      tasks: localConfig.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
+    })
+  }
+
+  // Add new member
+  const addMember = () => {
+    if (!localConfig) return
+    const newMember: ShowcaseMember = {
+      id: crypto.randomUUID(),
+      name: "New Member",
+      role: 'member',
+      avatar_url: null,
+      color: colorOptions[localConfig.members.length % colorOptions.length].value,
+    }
+    setLocalConfig({ ...localConfig, members: [...localConfig.members, newMember] })
+  }
+
+  // Remove member
+  const removeMember = (memberId: string) => {
+    if (!localConfig) return
+    setLocalConfig({ ...localConfig, members: localConfig.members.filter(m => m.id !== memberId) })
+  }
+
+  // Update member
+  const updateMember = (memberId: string, updates: Partial<ShowcaseMember>) => {
+    if (!localConfig) return
+    setLocalConfig({
+      ...localConfig,
+      members: localConfig.members.map(m => m.id === memberId ? { ...m, ...updates } : m)
+    })
+  }
+
+  // Open browse dialog to add plant
+  const openAddPlantDialog = () => {
+    setBrowseDialogOpen(true)
+    loadAllPlants()
+  }
+
+  // Remove plant card
+  const removePlantCard = (cardId: string) => {
+    if (!localConfig) return
+    setLocalConfig({ ...localConfig, plant_cards: localConfig.plant_cards.filter(c => c.id !== cardId) })
+  }
+
+  // Update plant card
+  const updatePlantCard = (cardId: string, updates: Partial<ShowcasePlantCard>) => {
+    if (!localConfig) return
+    setLocalConfig({
+      ...localConfig,
+      plant_cards: localConfig.plant_cards.map(c => c.id === cardId ? { ...c, ...updates } : c)
+    })
+  }
+
+  // Toggle calendar day status
+  const toggleCalendarDay = (dateStr: string) => {
+    if (!localConfig) return
+    const statusOrder: Array<'completed' | 'missed' | 'none'> = ['completed', 'missed', 'none']
+    setLocalConfig({
+      ...localConfig,
+      calendar_data: localConfig.calendar_data.map(day => {
+        if (day.date === dateStr) {
+          const currentIndex = statusOrder.indexOf(day.status)
+          const nextIndex = (currentIndex + 1) % statusOrder.length
+          return { ...day, status: statusOrder[nextIndex] }
+        }
+        return day
+      })
+    })
+  }
+
+  // Set all calendar days to a status
+  const setAllCalendarDays = (status: 'completed' | 'missed' | 'none') => {
+    if (!localConfig) return
+    setLocalConfig({
+      ...localConfig,
+      calendar_data: localConfig.calendar_data.map(day => ({ ...day, status }))
+    })
+  }
+
+  if (!localConfig) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Section Visibility Warning */}
+      {!sectionVisible && (
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <EyeOff className="h-5 w-5 text-amber-500" />
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            This section is currently hidden. Enable it in Global Settings.
+          </p>
+        </div>
+      )}
+
+      {/* Garden Card Settings */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+              <Leaf className="h-5 w-5 text-emerald-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-stone-900 dark:text-white">Garden Card</h3>
+              <p className="text-xs text-stone-500">Main garden dashboard preview</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Garden Name */}
+            <div className="space-y-1.5 col-span-2">
+              <Label className="text-xs sm:text-sm">Garden Name</Label>
+              <Input
+                value={localConfig.garden_name}
+                onChange={(e) => setLocalConfig({ ...localConfig, garden_name: e.target.value })}
+                placeholder="My Indoor Jungle"
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Plants Count - Auto-calculated */}
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Plants <span className="text-emerald-500">(auto)</span></Label>
+              <Input
+                type="number"
+                value={localConfig.plant_cards.length}
+                disabled
+                className="rounded-xl bg-stone-50 dark:bg-stone-800"
+              />
+            </div>
+
+            {/* Species Count */}
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Species</Label>
+              <Input
+                type="number"
+                value={localConfig.species_count}
+                onChange={(e) => setLocalConfig({ ...localConfig, species_count: parseInt(e.target.value) || 0 })}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Streak Count */}
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Day Streak</Label>
+              <Input
+                type="number"
+                value={localConfig.streak_count}
+                onChange={(e) => setLocalConfig({ ...localConfig, streak_count: parseInt(e.target.value) || 0 })}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Progress Percent */}
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Progress %</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={localConfig.progress_percent}
+                onChange={(e) => setLocalConfig({ ...localConfig, progress_percent: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Cover Image */}
+            <div className="space-y-1.5 col-span-2">
+              <Label className="text-xs sm:text-sm">Cover Image</Label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={localConfig.cover_image_url || ""}
+                  onChange={(e) => setLocalConfig({ ...localConfig, cover_image_url: e.target.value || null })}
+                  placeholder="Paste image URL..."
+                  className="rounded-xl flex-1"
+                />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCoverImageUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-xl gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload
+                </Button>
+                {localConfig.cover_image_url && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setLocalConfig({ ...localConfig, cover_image_url: null })}
+                    className="rounded-xl"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {localConfig.cover_image_url && (
+                <div className="mt-2 rounded-xl overflow-hidden h-40 bg-stone-100 dark:bg-stone-800">
+                  <img src={localConfig.cover_image_url} alt="Cover preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Plant Cards */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-xl bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                <Grid3X3 className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-stone-900 dark:text-white">Plant Cards ({localConfig.plant_cards.length})</h3>
+                <p className="text-xs text-stone-500">Click to add plants from database</p>
+              </div>
+            </div>
+            <Button onClick={openAddPlantDialog} size="sm" className="rounded-xl gap-1 w-full sm:w-auto">
+              <Plus className="h-4 w-4" /> Add Plant
+            </Button>
+          </div>
+
+          {localConfig.plant_cards.length === 0 ? (
+            <div className="text-center py-8 border-2 border-dashed border-stone-200 dark:border-stone-700 rounded-xl">
+              <Leaf className="h-10 w-10 mx-auto text-stone-300 dark:text-stone-600 mb-2" />
+              <p className="text-sm text-stone-500">No plants added yet</p>
+              <Button onClick={openAddPlantDialog} variant="link" className="mt-2">
+                Browse plants to add
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {localConfig.plant_cards.map((card) => (
+                <div key={card.id} className="relative group">
+                  {/* Plant Image */}
+                  <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-emerald-400 to-teal-500">
+                    {card.image_url ? (
+                      <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Leaf className="h-8 w-8 text-white/50" />
+                      </div>
+                    )}
+                    
+                    {/* Tasks Badge */}
+                    {card.tasks_due > 0 && (
+                      <div className="absolute top-1.5 right-1.5 h-5 w-5 bg-amber-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md">
+                        {card.tasks_due}
+                      </div>
+                    )}
+                    
+                    {/* Delete button overlay */}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        className="h-8 w-8 rounded-lg"
+                        onClick={() => removePlantCard(card.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    {/* Plant Name Overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                      <p className="text-[10px] sm:text-xs text-white font-medium truncate">{card.name}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Tasks Due Input */}
+                  <div className="flex items-center gap-1 mt-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={card.tasks_due}
+                      onChange={(e) => updatePlantCard(card.id, { tasks_due: parseInt(e.target.value) || 0 })}
+                      className="rounded-lg text-xs h-7 flex-1"
+                      placeholder="Tasks"
+                    />
+                    <span className="text-[10px] text-stone-500">due</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Browse Plants Dialog */}
+          <Dialog open={browseDialogOpen} onOpenChange={setBrowseDialogOpen}>
+            <DialogContent className="rounded-[20px] max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Add Plants from Database</DialogTitle>
+                <DialogDescription>Search and click plants to add them to your showcase</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
+                <SearchInput
+                  value={plantSearch}
+                  onChange={(e) => setPlantSearch(e.target.value)}
+                  placeholder="Search plants by name..."
+                  onClear={() => setPlantSearch("")}
+                  loading={searchingPlants}
+                  autoFocus
+                />
+                {loadingAllPlants || searchingPlants ? (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 overflow-y-auto flex-1 p-1">
+                    {(plantSearch.length >= 2 ? plantResults : allPlants).map(plant => {
+                      const isAdded = localConfig.plant_cards.some(c => c.plant_id === plant.id)
+                      return (
+                        <button
+                          key={plant.id}
+                          onClick={() => {
+                            if (!isAdded) {
+                              addPlantFromBrowse(plant)
+                            }
+                          }}
+                          disabled={isAdded}
+                          className={cn(
+                            "flex flex-col items-center gap-1.5 p-2 rounded-xl border text-center transition-colors",
+                            isAdded
+                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 opacity-60 cursor-not-allowed"
+                              : "border-stone-200 dark:border-stone-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-500"
+                          )}
+                        >
+                          <div className="relative h-14 w-14 rounded-lg bg-stone-100 dark:bg-stone-800 overflow-hidden flex-shrink-0">
+                            {plant.image ? (
+                              <img src={plant.image} alt={plant.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Leaf className="h-5 w-5 text-stone-400" />
+                              </div>
+                            )}
+                            {isAdded && (
+                              <div className="absolute inset-0 bg-emerald-500/30 flex items-center justify-center">
+                                <Check className="h-5 w-5 text-emerald-600" />
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[10px] font-medium truncate w-full">{plant.name}</p>
+                        </button>
+                      )
+                    })}
+                    {(plantSearch.length >= 2 ? plantResults : allPlants).length === 0 && (
+                      <div className="col-span-full text-center py-8 text-stone-500">
+                        {plantSearch.length >= 2 ? `No plants found matching "${plantSearch}"` : "No plants with images found"}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardContent>
+      </Card>
+
+      {/* Calendar / History */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-xl bg-teal-500/10 flex items-center justify-center flex-shrink-0">
+                <Clock className="h-5 w-5 text-teal-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-stone-900 dark:text-white">Last 30 Days</h3>
+                <p className="text-xs text-stone-500">Click tiles to toggle status</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="rounded-xl text-xs gap-1 flex-1 sm:flex-none" onClick={() => setAllCalendarDays('completed')}>
+                <div className="w-3 h-3 rounded bg-emerald-500" /> Completed
+              </Button>
+              <Button variant="outline" size="sm" className="rounded-xl text-xs gap-1 flex-1 sm:flex-none" onClick={() => setAllCalendarDays('missed')}>
+                <div className="w-3 h-3 rounded bg-stone-400" /> Missed
+              </Button>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-3 mb-4 text-[10px] sm:text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-emerald-500" />
+              <span className="text-stone-600 dark:text-stone-400">Completed</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-stone-300 dark:bg-stone-600" />
+              <span className="text-stone-600 dark:text-stone-400">Missed</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded border border-dashed border-stone-300 dark:border-stone-600" />
+              <span className="text-stone-600 dark:text-stone-400">None</span>
+            </div>
+          </div>
+
+          {/* Calendar Grid - responsive columns */}
+          <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5 sm:gap-2">
+            {localConfig.calendar_data?.map((day) => {
+              const date = new Date(day.date)
+              const dayNum = date.getDate()
+              const isToday = day.date === new Date().toISOString().split('T')[0]
+              
+              return (
+                <button
+                  key={day.date}
+                  onClick={() => toggleCalendarDay(day.date)}
+                  className={cn(
+                    "aspect-square rounded-lg sm:rounded-xl flex items-center justify-center text-xs sm:text-sm font-medium transition-all hover:scale-105",
+                    day.status === 'completed' && "bg-emerald-500 text-white",
+                    day.status === 'missed' && "bg-stone-300 dark:bg-stone-600 text-stone-700 dark:text-stone-300",
+                    day.status === 'none' && "border border-dashed border-stone-300 dark:border-stone-600 text-stone-400",
+                    isToday && "ring-2 ring-emerald-400 ring-offset-1 dark:ring-offset-stone-900"
+                  )}
+                  title={`${day.date} - ${day.status}`}
+                >
+                  {dayNum}
+                </button>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tasks */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                <Check className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-stone-900 dark:text-white">Tasks ({localConfig.tasks.length})</h3>
+                <p className="text-xs text-stone-500">Configure the task list</p>
+              </div>
+            </div>
+            <Button onClick={addTask} size="sm" className="rounded-xl gap-1 w-full sm:w-auto">
+              <Plus className="h-4 w-4" /> Add Task
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {localConfig.tasks.map((task) => (
+              <div key={task.id} className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50">
+                <Switch
+                  checked={task.completed}
+                  onCheckedChange={(checked) => updateTask(task.id, { completed: checked })}
+                />
+                <Input
+                  value={task.text}
+                  onChange={(e) => updateTask(task.id, { text: e.target.value })}
+                  className={cn("flex-1 rounded-lg text-sm", task.completed && "line-through text-stone-400")}
+                  placeholder="Task description"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeTask(task.id)}
+                  className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Members */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                <Users className="h-5 w-5 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-stone-900 dark:text-white">Members ({localConfig.members.length})</h3>
+                <p className="text-xs text-stone-500">Garden team members</p>
+              </div>
+            </div>
+            <Button onClick={addMember} size="sm" className="rounded-xl gap-1 w-full sm:w-auto">
+              <Plus className="h-4 w-4" /> Add Member
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {localConfig.members.map((member) => (
+              <div key={member.id} className="flex items-center gap-2 sm:gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50">
+                {/* Avatar preview */}
+                <div
+                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 text-sm"
+                  style={{ backgroundColor: member.color }}
+                >
+                  {member.name.slice(0, 2).toUpperCase()}
+                </div>
+
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <Input
+                    value={member.name}
+                    onChange={(e) => updateMember(member.id, { name: e.target.value })}
+                    className="rounded-lg h-8 text-sm"
+                    placeholder="Member name"
+                  />
+                  <div className="flex gap-1.5">
+                    <select
+                      value={member.role}
+                      onChange={(e) => updateMember(member.id, { role: e.target.value as 'owner' | 'member' })}
+                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5 min-w-0"
+                    >
+                      <option value="owner">Owner</option>
+                      <option value="member">Member</option>
+                    </select>
+                    <select
+                      value={member.color}
+                      onChange={(e) => updateMember(member.id, { color: e.target.value })}
+                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5 min-w-0"
+                    >
+                      {colorOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeMember(member.id)}
+                  className="text-red-500 hover:text-red-600 hover:bg-red-50 flex-shrink-0"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Analytics */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-10 w-10 rounded-xl bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+              <BarChart3 className="h-5 w-5 text-orange-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-stone-900 dark:text-white">Analytics</h3>
+              <p className="text-xs text-stone-500">Stats for analytics card</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Completion %</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={localConfig.completion_rate}
+                onChange={(e) => setLocalConfig({ ...localConfig, completion_rate: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                className="rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Streak Days</Label>
+              <Input
+                type="number"
+                min={0}
+                value={localConfig.analytics_streak}
+                onChange={(e) => setLocalConfig({ ...localConfig, analytics_streak: parseInt(e.target.value) || 0 })}
+                className="rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-1.5 col-span-2">
+              <Label className="text-xs sm:text-sm">Chart Data (7 days)</Label>
+              <Input
+                value={localConfig.chart_data.join(", ")}
+                onChange={(e) => {
+                  const values = e.target.value.split(",").map(v => parseInt(v.trim()) || 0)
+                  setLocalConfig({ ...localConfig, chart_data: values.slice(0, 7) })
+                }}
+                placeholder="3, 5, 2, 6, 4, 5, 6"
+                className="rounded-xl"
+              />
+              <p className="text-[10px] sm:text-xs text-stone-500">7 numbers for activity chart (M-S)</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Save Button */}
+      <div className="flex justify-end sticky bottom-4">
+        <Button onClick={saveConfig} className="rounded-xl gap-2 shadow-lg">
+          <Save className="h-4 w-4" />
+          Save Configuration
+        </Button>
+      </div>
     </div>
   )
 }
