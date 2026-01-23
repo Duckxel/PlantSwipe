@@ -9247,6 +9247,9 @@ create table if not exists public.landing_showcase_config (
   analytics_streak integer not null default 14,
   chart_data jsonb not null default '[3, 5, 2, 6, 4, 5, 6]'::jsonb,
   
+  -- Calendar (30 days history: array of {date, status})
+  calendar_data jsonb not null default '[]'::jsonb,
+  
   -- Timestamps
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

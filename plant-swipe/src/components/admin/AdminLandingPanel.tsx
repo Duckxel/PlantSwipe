@@ -184,6 +184,13 @@ type ShowcaseConfig = {
   completion_rate: number
   analytics_streak: number
   chart_data: number[]
+  // Calendar (30 days history: 'completed' | 'missed' | 'none')
+  calendar_data: CalendarDay[]
+}
+
+type CalendarDay = {
+  date: string // ISO date string
+  status: 'completed' | 'missed' | 'none'
 }
 
 type ShowcaseTask = {
@@ -3619,10 +3626,43 @@ const ShowcaseTab: React.FC<{
   const [plantResults, setPlantResults] = React.useState<PlantSearchResult[]>([])
   const [searchingPlants, setSearchingPlants] = React.useState(false)
   const [editingPlantIndex, setEditingPlantIndex] = React.useState<number | null>(null)
+  const [browseDialogOpen, setBrowseDialogOpen] = React.useState(false)
+  const [allPlants, setAllPlants] = React.useState<PlantSearchResult[]>([])
+  const [loadingAllPlants, setLoadingAllPlants] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     setLocalConfig(config)
   }, [config])
+
+  // Auto-calculate plants_count from plant_cards length
+  React.useEffect(() => {
+    if (localConfig && localConfig.plants_count !== localConfig.plant_cards.length) {
+      setLocalConfig(prev => prev ? { ...prev, plants_count: prev.plant_cards.length } : null)
+    }
+  }, [localConfig?.plant_cards.length])
+
+  // Generate default calendar data (last 30 days)
+  const generateDefaultCalendar = React.useCallback((): CalendarDay[] => {
+    const days: CalendarDay[] = []
+    const today = new Date()
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today)
+      date.setDate(date.getDate() - i)
+      days.push({
+        date: date.toISOString().split('T')[0],
+        status: 'completed' // Default all to completed
+      })
+    }
+    return days
+  }, [])
+
+  // Initialize calendar_data if not present
+  React.useEffect(() => {
+    if (localConfig && (!localConfig.calendar_data || localConfig.calendar_data.length === 0)) {
+      setLocalConfig(prev => prev ? { ...prev, calendar_data: generateDefaultCalendar() } : null)
+    }
+  }, [localConfig, generateDefaultCalendar])
 
   // Gradient options for plant cards
   const gradientOptions = [
@@ -3648,6 +3688,24 @@ const ShowcaseTab: React.FC<{
     { value: "#84cc16", label: "Lime" },
   ]
 
+  // Load all plants for browsing
+  const loadAllPlants = React.useCallback(async () => {
+    setLoadingAllPlants(true)
+    try {
+      const { data } = await supabase
+        .from("plants")
+        .select("id, name, scientific_name, image")
+        .not("image", "is", null)
+        .order("name")
+        .limit(50)
+      setAllPlants(data || [])
+    } catch (e) {
+      console.error("Failed to load plants:", e)
+    } finally {
+      setLoadingAllPlants(false)
+    }
+  }, [])
+
   // Search plants from database
   const searchPlants = React.useCallback(async (query: string) => {
     if (!query || query.length < 2) {
@@ -3660,7 +3718,7 @@ const ShowcaseTab: React.FC<{
         .from("plants")
         .select("id, name, scientific_name, image")
         .or(`name.ilike.%${query}%,scientific_name.ilike.%${query}%`)
-        .limit(10)
+        .limit(20)
       setPlantResults(data || [])
     } catch (e) {
       console.error("Plant search error:", e)
@@ -3677,18 +3735,32 @@ const ShowcaseTab: React.FC<{
     return () => clearTimeout(timer)
   }, [plantSearch, searchPlants])
 
+  // Handle cover image file upload
+  const handleCoverImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !localConfig) return
+
+    // For now, create a local URL preview. In production, you'd upload to Supabase storage
+    // and get a permanent URL back
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string
+      setLocalConfig({ ...localConfig, cover_image_url: dataUrl })
+    }
+    reader.readAsDataURL(file)
+  }
+
   // Save configuration
   const saveConfig = async () => {
     if (!localConfig) return
     setSaving(true)
     try {
-      // Try to upsert the config
       const { error } = await supabase
         .from("landing_showcase_config")
         .upsert({
           id: localConfig.id || undefined,
           garden_name: localConfig.garden_name,
-          plants_count: localConfig.plants_count,
+          plants_count: localConfig.plant_cards.length, // Auto-calculated
           species_count: localConfig.species_count,
           streak_count: localConfig.streak_count,
           progress_percent: localConfig.progress_percent,
@@ -3699,11 +3771,11 @@ const ShowcaseTab: React.FC<{
           completion_rate: localConfig.completion_rate,
           analytics_streak: localConfig.analytics_streak,
           chart_data: localConfig.chart_data,
+          calendar_data: localConfig.calendar_data,
         })
       
       if (error) {
         console.error("Save error:", error)
-        // Table might not exist - that's ok, we use defaults
       }
       setConfig(localConfig)
     } catch (e) {
@@ -3727,6 +3799,20 @@ const ShowcaseTab: React.FC<{
     setEditingPlantIndex(null)
     setPlantSearch("")
     setPlantResults([])
+  }
+
+  // Add plant from browse dialog
+  const addPlantFromBrowse = (plant: PlantSearchResult) => {
+    if (!localConfig) return
+    const newCard: ShowcasePlantCard = {
+      id: crypto.randomUUID(),
+      plant_id: plant.id,
+      name: plant.name,
+      image_url: plant.image,
+      gradient: gradientOptions[localConfig.plant_cards.length % gradientOptions.length].value,
+      tasks_due: 0,
+    }
+    setLocalConfig({ ...localConfig, plant_cards: [...localConfig.plant_cards, newCard] })
   }
 
   // Add new task
@@ -3812,6 +3898,32 @@ const ShowcaseTab: React.FC<{
     })
   }
 
+  // Toggle calendar day status
+  const toggleCalendarDay = (dateStr: string) => {
+    if (!localConfig) return
+    const statusOrder: Array<'completed' | 'missed' | 'none'> = ['completed', 'missed', 'none']
+    setLocalConfig({
+      ...localConfig,
+      calendar_data: localConfig.calendar_data.map(day => {
+        if (day.date === dateStr) {
+          const currentIndex = statusOrder.indexOf(day.status)
+          const nextIndex = (currentIndex + 1) % statusOrder.length
+          return { ...day, status: statusOrder[nextIndex] }
+        }
+        return day
+      })
+    })
+  }
+
+  // Set all calendar days to a status
+  const setAllCalendarDays = (status: 'completed' | 'missed' | 'none') => {
+    if (!localConfig) return
+    setLocalConfig({
+      ...localConfig,
+      calendar_data: localConfig.calendar_data.map(day => ({ ...day, status }))
+    })
+  }
+
   if (!localConfig) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -3857,14 +3969,14 @@ const ShowcaseTab: React.FC<{
               />
             </div>
 
-            {/* Plants Count */}
+            {/* Plants Count - Auto-calculated */}
             <div className="space-y-2">
-              <Label className="text-sm">Plants Count</Label>
+              <Label className="text-sm">Plants Count <span className="text-xs text-emerald-500">(auto-calculated)</span></Label>
               <Input
                 type="number"
-                value={localConfig.plants_count}
-                onChange={(e) => setLocalConfig({ ...localConfig, plants_count: parseInt(e.target.value) || 0 })}
-                className="rounded-xl"
+                value={localConfig.plant_cards.length}
+                disabled
+                className="rounded-xl bg-stone-50 dark:bg-stone-800"
               />
             </div>
 
@@ -3903,16 +4015,31 @@ const ShowcaseTab: React.FC<{
               />
             </div>
 
-            {/* Cover Image URL */}
+            {/* Cover Image */}
             <div className="space-y-2 md:col-span-2">
-              <Label className="text-sm">Cover Image URL (optional)</Label>
+              <Label className="text-sm">Cover Image</Label>
               <div className="flex gap-2">
                 <Input
                   value={localConfig.cover_image_url || ""}
                   onChange={(e) => setLocalConfig({ ...localConfig, cover_image_url: e.target.value || null })}
-                  placeholder="https://example.com/image.jpg"
+                  placeholder="https://example.com/image.jpg or upload below"
                   className="rounded-xl flex-1"
                 />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCoverImageUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-xl gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload
+                </Button>
                 {localConfig.cover_image_url && (
                   <Button
                     variant="outline"
@@ -3925,7 +4052,7 @@ const ShowcaseTab: React.FC<{
                 )}
               </div>
               {localConfig.cover_image_url && (
-                <div className="mt-2 rounded-xl overflow-hidden h-32 bg-stone-100 dark:bg-stone-800">
+                <div className="mt-2 rounded-xl overflow-hidden h-40 bg-stone-100 dark:bg-stone-800">
                   <img src={localConfig.cover_image_url} alt="Cover preview" className="w-full h-full object-cover" />
                 </div>
               )}
@@ -3944,12 +4071,25 @@ const ShowcaseTab: React.FC<{
               </div>
               <div>
                 <h3 className="font-semibold text-stone-900 dark:text-white">Plant Cards ({localConfig.plant_cards.length})</h3>
-                <p className="text-xs text-stone-500">Configure the plant grid display</p>
+                <p className="text-xs text-stone-500">Add plants from database or create custom cards</p>
               </div>
             </div>
-            <Button onClick={addPlantCard} size="sm" className="rounded-xl gap-1">
-              <Plus className="h-4 w-4" /> Add Plant
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="rounded-xl gap-1"
+                onClick={() => {
+                  setBrowseDialogOpen(true)
+                  loadAllPlants()
+                }}
+              >
+                <Search className="h-4 w-4" /> Browse Plants
+              </Button>
+              <Button onClick={addPlantCard} size="sm" className="rounded-xl gap-1">
+                <Plus className="h-4 w-4" /> Add Custom
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -4019,10 +4159,10 @@ const ShowcaseTab: React.FC<{
                   ))}
                 </select>
 
-                {/* Plant search dialog */}
+                {/* Plant search dialog for individual card */}
                 {editingPlantIndex === index && (
                   <Dialog open={true} onOpenChange={() => setEditingPlantIndex(null)}>
-                    <DialogContent className="rounded-[20px]">
+                    <DialogContent className="rounded-[20px] max-w-2xl">
                       <DialogHeader>
                         <DialogTitle>Select Plant from Database</DialogTitle>
                         <DialogDescription>Search and select a plant to use its image</DialogDescription>
@@ -4033,32 +4173,33 @@ const ShowcaseTab: React.FC<{
                           <Input
                             value={plantSearch}
                             onChange={(e) => setPlantSearch(e.target.value)}
-                            placeholder="Search plants..."
+                            placeholder="Search plants by name..."
                             className="pl-10 rounded-xl"
+                            autoFocus
                           />
                         </div>
                         {searchingPlants ? (
-                          <div className="flex justify-center py-4">
+                          <div className="flex justify-center py-8">
                             <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
                           </div>
                         ) : plantResults.length > 0 ? (
-                          <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                          <div className="grid grid-cols-3 gap-3 max-h-80 overflow-y-auto p-1">
                             {plantResults.map(plant => (
                               <button
                                 key={plant.id}
                                 onClick={() => selectPlantForCard(index, plant)}
-                                className="flex items-center gap-2 p-2 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-left transition-colors"
+                                className="flex flex-col items-center gap-2 p-3 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-500 text-center transition-colors"
                               >
-                                <div className="h-10 w-10 rounded-lg bg-stone-100 dark:bg-stone-800 overflow-hidden flex-shrink-0">
+                                <div className="h-16 w-16 rounded-xl bg-stone-100 dark:bg-stone-800 overflow-hidden">
                                   {plant.image ? (
                                     <img src={plant.image} alt={plant.name} className="w-full h-full object-cover" />
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center">
-                                      <Leaf className="h-5 w-5 text-stone-400" />
+                                      <Leaf className="h-6 w-6 text-stone-400" />
                                     </div>
                                   )}
                                 </div>
-                                <div className="min-w-0">
+                                <div className="min-w-0 w-full">
                                   <p className="text-sm font-medium truncate">{plant.name}</p>
                                   {plant.scientific_name && (
                                     <p className="text-xs text-stone-500 italic truncate">{plant.scientific_name}</p>
@@ -4068,9 +4209,9 @@ const ShowcaseTab: React.FC<{
                             ))}
                           </div>
                         ) : plantSearch.length >= 2 ? (
-                          <p className="text-center text-sm text-stone-500 py-4">No plants found</p>
+                          <p className="text-center text-sm text-stone-500 py-8">No plants found matching "{plantSearch}"</p>
                         ) : (
-                          <p className="text-center text-sm text-stone-500 py-4">Type at least 2 characters to search</p>
+                          <p className="text-center text-sm text-stone-500 py-8">Type at least 2 characters to search</p>
                         )}
                       </div>
                     </DialogContent>
@@ -4078,6 +4219,136 @@ const ShowcaseTab: React.FC<{
                 )}
               </div>
             ))}
+          </div>
+
+          {/* Browse Plants Dialog */}
+          <Dialog open={browseDialogOpen} onOpenChange={setBrowseDialogOpen}>
+            <DialogContent className="rounded-[20px] max-w-3xl max-h-[80vh]">
+              <DialogHeader>
+                <DialogTitle>Browse Plants from Database</DialogTitle>
+                <DialogDescription>Click on plants to add them to your showcase</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                  <Input
+                    value={plantSearch}
+                    onChange={(e) => setPlantSearch(e.target.value)}
+                    placeholder="Search plants by name..."
+                    className="pl-10 rounded-xl"
+                  />
+                </div>
+                {loadingAllPlants || searchingPlants ? (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-3 max-h-96 overflow-y-auto p-1">
+                    {(plantSearch.length >= 2 ? plantResults : allPlants).map(plant => {
+                      const isAdded = localConfig.plant_cards.some(c => c.plant_id === plant.id)
+                      return (
+                        <button
+                          key={plant.id}
+                          onClick={() => !isAdded && addPlantFromBrowse(plant)}
+                          disabled={isAdded}
+                          className={cn(
+                            "flex flex-col items-center gap-2 p-3 rounded-xl border text-center transition-colors",
+                            isAdded
+                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 opacity-60"
+                              : "border-stone-200 dark:border-stone-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-500"
+                          )}
+                        >
+                          <div className="relative h-16 w-16 rounded-xl bg-stone-100 dark:bg-stone-800 overflow-hidden">
+                            {plant.image ? (
+                              <img src={plant.image} alt={plant.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Leaf className="h-6 w-6 text-stone-400" />
+                              </div>
+                            )}
+                            {isAdded && (
+                              <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
+                                <Check className="h-6 w-6 text-emerald-600" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 w-full">
+                            <p className="text-xs font-medium truncate">{plant.name}</p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardContent>
+      </Card>
+
+      {/* Calendar / History */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-xl bg-teal-500/10 flex items-center justify-center">
+                <Clock className="h-5 w-5 text-teal-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-stone-900 dark:text-white">Last 30 Days Calendar</h3>
+                <p className="text-xs text-stone-500">Click tiles to toggle: Completed → Missed → None</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="rounded-xl text-xs gap-1" onClick={() => setAllCalendarDays('completed')}>
+                <div className="w-3 h-3 rounded bg-emerald-500" /> All Completed
+              </Button>
+              <Button variant="outline" size="sm" className="rounded-xl text-xs gap-1" onClick={() => setAllCalendarDays('missed')}>
+                <div className="w-3 h-3 rounded bg-stone-400" /> All Missed
+              </Button>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-emerald-500" />
+              <span className="text-xs text-stone-600 dark:text-stone-400">Completed</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-stone-300 dark:bg-stone-600" />
+              <span className="text-xs text-stone-600 dark:text-stone-400">Missed</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded border-2 border-dashed border-stone-300 dark:border-stone-600" />
+              <span className="text-xs text-stone-600 dark:text-stone-400">None</span>
+            </div>
+          </div>
+
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-10 gap-2">
+            {localConfig.calendar_data?.map((day) => {
+              const date = new Date(day.date)
+              const dayNum = date.getDate()
+              const isToday = day.date === new Date().toISOString().split('T')[0]
+              
+              return (
+                <button
+                  key={day.date}
+                  onClick={() => toggleCalendarDay(day.date)}
+                  className={cn(
+                    "aspect-square rounded-xl flex items-center justify-center text-sm font-medium transition-all hover:scale-105",
+                    day.status === 'completed' && "bg-emerald-500 text-white",
+                    day.status === 'missed' && "bg-stone-300 dark:bg-stone-600 text-stone-700 dark:text-stone-300",
+                    day.status === 'none' && "border-2 border-dashed border-stone-300 dark:border-stone-600 text-stone-400",
+                    isToday && "ring-2 ring-emerald-400 ring-offset-2 dark:ring-offset-stone-900"
+                  )}
+                  title={`${day.date} - ${day.status}`}
+                >
+                  {dayNum}
+                </button>
+              )
+            })}
           </div>
         </CardContent>
       </Card>

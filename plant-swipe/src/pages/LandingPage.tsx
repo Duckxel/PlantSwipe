@@ -161,6 +161,12 @@ type ShowcaseConfig = {
   completion_rate: number
   analytics_streak: number
   chart_data: number[]
+  calendar_data: CalendarDay[]
+}
+
+type CalendarDay = {
+  date: string
+  status: 'completed' | 'missed' | 'none'
 }
 
 type LandingPageSettings = {
@@ -1264,6 +1270,21 @@ const ShowcaseSection: React.FC = () => {
   const { t } = useTranslation("Landing")
   const { showcaseConfig } = useLandingData()
 
+  // Generate default calendar (last 30 days, all completed)
+  const defaultCalendar = React.useMemo((): CalendarDay[] => {
+    const days: CalendarDay[] = []
+    const today = new Date()
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today)
+      date.setDate(date.getDate() - i)
+      days.push({
+        date: date.toISOString().split('T')[0],
+        status: 'completed'
+      })
+    }
+    return days
+  }, [])
+
   // Default values if config is not loaded
   const config = showcaseConfig || {
     garden_name: "My Indoor Jungle",
@@ -1292,7 +1313,11 @@ const ShowcaseSection: React.FC = () => {
     completion_rate: 92,
     analytics_streak: 14,
     chart_data: [3, 5, 2, 6, 4, 5, 6],
+    calendar_data: defaultCalendar,
   }
+
+  // Use calendar_data from config or default
+  const calendarData = config.calendar_data?.length > 0 ? config.calendar_data : defaultCalendar
 
   // Generate chart points from config data
   const chartPoints = React.useMemo(() => {
@@ -1477,6 +1502,48 @@ const ShowcaseSection: React.FC = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Last 30 Days Calendar */}
+            <div className="p-5 border-t border-stone-200/50 dark:border-stone-700/50">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
+                  <Calendar className="h-4 w-4" /> Last 30 days
+                </h4>
+                <div className="flex items-center gap-3 text-[10px]">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-emerald-500" />
+                    <span className="text-stone-500">Completed</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-stone-300 dark:bg-stone-600" />
+                    <span className="text-stone-500">Missed</span>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-10 gap-1.5">
+                {calendarData.map((day) => {
+                  const date = new Date(day.date)
+                  const dayNum = date.getDate()
+                  const isToday = day.date === new Date().toISOString().split('T')[0]
+                  
+                  return (
+                    <div
+                      key={day.date}
+                      className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-medium ${
+                        day.status === 'completed' 
+                          ? 'bg-emerald-500 text-white' 
+                          : day.status === 'missed'
+                          ? 'bg-stone-300 dark:bg-stone-600 text-stone-600 dark:text-stone-300'
+                          : 'bg-stone-100 dark:bg-stone-800 text-stone-400'
+                      } ${isToday ? 'ring-2 ring-emerald-400 ring-offset-1 dark:ring-offset-stone-900' : ''}`}
+                      title={day.date}
+                    >
+                      {dayNum}
+                    </div>
+                  )
+                })}
               </div>
             </div>
 

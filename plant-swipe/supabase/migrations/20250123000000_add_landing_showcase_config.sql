@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS landing_showcase_config (
   analytics_streak INTEGER NOT NULL DEFAULT 14,
   chart_data JSONB NOT NULL DEFAULT '[3, 5, 2, 6, 4, 5, 6]'::jsonb,
   
+  -- Calendar (30 days history: array of {date, status})
+  calendar_data JSONB NOT NULL DEFAULT '[]'::jsonb,
+  
   -- Timestamps
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
