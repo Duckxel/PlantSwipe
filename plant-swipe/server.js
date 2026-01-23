@@ -6639,6 +6639,24 @@ async function ensureDefaultAutomations() {
       },
     ]
 
+    // Valid automation types (cron-based only)
+    const validTriggerTypes = defaultAutomations.map(a => a.trigger_type)
+    
+    // First, delete any invalid automation types (action-based notifications that shouldn't be here)
+    try {
+      const deleted = await sql`
+        delete from public.notification_automations
+        where trigger_type not in ${sql(validTriggerTypes)}
+        returning trigger_type
+      `
+      if (deleted && deleted.length > 0) {
+        console.log(`[notification-automations] Cleaned up invalid automation types:`, deleted.map(d => d.trigger_type))
+      }
+    } catch (deleteErr) {
+      console.warn('[notification-automations] Could not clean up invalid types:', deleteErr?.message)
+    }
+
+    // Then ensure the valid automations exist
     for (const auto of defaultAutomations) {
       try {
         // First check if it exists
