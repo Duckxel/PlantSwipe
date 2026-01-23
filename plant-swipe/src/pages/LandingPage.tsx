@@ -1019,128 +1019,402 @@ const FeatureCard: React.FC<{
 )
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   INTERACTIVE DEMO SECTION
+   INTERACTIVE DEMO SECTION - Garden Dashboard Preview
    ═══════════════════════════════════════════════════════════════════════════════ */
-// Icon mapping for database features
-const demoIconMap: Record<string, React.ElementType> = {
-  Leaf, Clock, TrendingUp, Shield, Camera, NotebookPen, Users, Sparkles,
-  Bell, Heart, Star, Zap, Globe, Search, BookMarked, Flower2, TreeDeciduous, Sprout, Sun, Droplets
+
+// Demo data for the Garden Dashboard preview
+const demoGarden = {
+  name: "My Indoor Jungle",
+  plants: 12,
+  species: 8,
+  streak: 7,
+  progress: 85,
+  tasksCompleted: 10,
+  tasksDue: 12,
 }
+
+const demoMembers = [
+  { id: "1", name: "Sophie", role: "owner", color: "#10b981" },
+  { id: "2", name: "Marcus", role: "member", color: "#3b82f6" },
+  { id: "3", name: "Elena", role: "member", color: "#ec4899" },
+]
+
+const demoPlants = [
+  { 
+    id: "1", 
+    name: "Monstera", 
+    image: "https://images.unsplash.com/photo-1614594975525-e45190c55d0b?w=300&h=300&fit=crop", 
+    tasks: 2,
+    tasksDue: 1,
+  },
+  { 
+    id: "2", 
+    name: "Fiddle Leaf", 
+    image: "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=300&h=300&fit=crop", 
+    tasks: 1,
+    tasksDue: 0,
+  },
+  { 
+    id: "3", 
+    name: "Snake Plant", 
+    image: "https://images.unsplash.com/photo-1593482892290-f54927ae1bb6?w=300&h=300&fit=crop", 
+    tasks: 1,
+    tasksDue: 1,
+  },
+  { 
+    id: "4", 
+    name: "Pothos", 
+    image: "https://images.unsplash.com/photo-1602923668104-8f9e03e77e62?w=300&h=300&fit=crop", 
+    tasks: 2,
+    tasksDue: 0,
+  },
+  { 
+    id: "5", 
+    name: "Peace Lily", 
+    image: "https://images.unsplash.com/photo-1616690248297-85e4ef6d4693?w=300&h=300&fit=crop", 
+    tasks: 1,
+    tasksDue: 1,
+  },
+  { 
+    id: "6", 
+    name: "Calathea", 
+    image: "https://images.unsplash.com/photo-1632321089030-e72b4e47aca3?w=300&h=300&fit=crop", 
+    tasks: 3,
+    tasksDue: 2,
+  },
+]
+
+const demoActivity = [
+  { day: 1, completed: 3, success: true },
+  { day: 2, completed: 4, success: true },
+  { day: 3, completed: 2, success: true },
+  { day: 4, completed: 5, success: true },
+  { day: 5, completed: 3, success: true },
+  { day: 6, completed: 4, success: true },
+  { day: 7, completed: 5, success: true },
+]
 
 const InteractiveDemoSection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { demoFeatures } = useLandingData()
-  const [activeFeature, setActiveFeature] = React.useState(0)
-
-  // Default features from translations (fallback if no database features)
-  const defaultFeatures = [
-    { icon: Leaf, label: t("demo.discover", { defaultValue: "Discover Plants" }), color: "emerald" },
-    { icon: Clock, label: t("demo.schedule", { defaultValue: "Schedule Care" }), color: "blue" },
-    { icon: TrendingUp, label: t("demo.track", { defaultValue: "Track Growth" }), color: "purple" },
-    { icon: Shield, label: t("demo.protect", { defaultValue: "Get Alerts" }), color: "rose" },
-    { icon: Camera, label: t("demo.identify", { defaultValue: "Identify Plants" }), color: "pink" },
-    { icon: NotebookPen, label: t("demo.journal", { defaultValue: "Keep Journal" }), color: "amber" },
-    { icon: Users, label: t("demo.community", { defaultValue: "Join Community" }), color: "teal" },
-    { icon: Sparkles, label: t("demo.assistant", { defaultValue: "Smart Assistant" }), color: "indigo" },
-  ]
-
-  // Use database features if available, otherwise use defaults
-  const features = demoFeatures.length > 0
-    ? demoFeatures.map(f => ({
-        icon: demoIconMap[f.icon_name] || Leaf,
-        label: f.label,
-        color: f.color,
-      }))
-    : defaultFeatures
-
+  const [hoveredPlant, setHoveredPlant] = React.useState<string | null>(null)
+  const [isAnimating, setIsAnimating] = React.useState(false)
+  
+  // Simulate progress animation on mount
   React.useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % features.length)
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [features.length])
+    const timer = setTimeout(() => setIsAnimating(true), 500)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const progressPct = isAnimating ? demoGarden.progress : 0
 
   return (
     <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-50/30 to-transparent dark:via-emerald-950/20">
       <div className="max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-          {/* Left: Demo Visual */}
-          <div className="relative order-2 lg:order-1">
-            <div className="relative aspect-square max-w-md mx-auto">
-              {/* Center Circle */}
-              <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30" />
-              <div className="absolute inset-[25%] rounded-full bg-white dark:bg-stone-900 shadow-2xl shadow-emerald-500/20 flex items-center justify-center">
-                <div className="text-center p-4 sm:p-6">
-                  {features[activeFeature] && (
-                    <>
-                      <div className={`inline-flex h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-${features[activeFeature].color}-500 items-center justify-center mb-3`}>
-                        {React.createElement(features[activeFeature].icon, { className: "h-7 w-7 sm:h-8 sm:w-8 text-white" })}
-                      </div>
-                      <p className="text-xs sm:text-sm font-medium text-stone-900 dark:text-white">{features[activeFeature].label}</p>
-                    </>
-                  )}
+        {/* Section Header */}
+        <div className="text-center max-w-3xl mx-auto mb-12">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
+            <Globe className="h-4 w-4 text-emerald-500" />
+            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+              {t("demo.badge", { defaultValue: "Garden Dashboard" })}
+            </span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
+            {t("demo.title", { defaultValue: "Your Complete Plant Care Hub" })}
+          </h2>
+          <p className="text-lg text-stone-600 dark:text-stone-400">
+            {t("demo.description", { defaultValue: "Track progress, manage tasks, and watch your garden thrive - all in one beautiful dashboard." })}
+          </p>
+        </div>
+
+        {/* Garden Dashboard Preview */}
+        <div className="relative max-w-5xl mx-auto">
+          {/* Decorative glow */}
+          <div className="absolute -inset-4 bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-green-500/20 rounded-[40px] blur-2xl opacity-60" />
+          
+          {/* Main Dashboard Card */}
+          <div className="relative rounded-[32px] overflow-hidden border border-stone-200/50 dark:border-stone-700/50 shadow-2xl shadow-emerald-900/10 dark:shadow-black/30">
+            {/* Dashboard Header with Stats */}
+            <div className="relative bg-gradient-to-br from-[#1a2e1a] via-[#1a1f1a] to-[#1a2a1a] p-6 sm:p-8">
+              {/* Subtle pattern overlay */}
+              <div className="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMSIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuMyIvPjwvc3ZnPg==')]" />
+              
+              {/* Badge */}
+              <div className="absolute top-4 left-4 sm:top-6 sm:left-8">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 backdrop-blur-sm">
+                  <Globe className="h-3.5 w-3.5 text-emerald-400" />
+                  <span className="text-xs font-medium text-emerald-300">
+                    {t("demo.badge", { defaultValue: "Garden Dashboard" })}
+                  </span>
                 </div>
               </div>
-              
-              {/* Orbiting Elements - Ferris wheel style: icons stay upright */}
-              <div className="absolute inset-0 animate-spin-slow" style={{ transformOrigin: 'center center' }}>
-                {features.map((feature, i) => {
-                  const angleStep = 360 / features.length
-                  const angle = (i * angleStep - 90) * (Math.PI / 180) // Start from top
-                  const x = 50 + 42 * Math.cos(angle)
-                  const y = 50 + 42 * Math.sin(angle)
-                  const IconComponent = feature.icon
-                  const colorClass = `bg-${feature.color}-500`
-                  return (
-                    <div
-                      key={i}
-                      className="absolute -translate-x-1/2 -translate-y-1/2"
-                      style={{ left: `${x}%`, top: `${y}%` }}
-                    >
-                      <button
-                        onClick={() => setActiveFeature(i)}
-                        className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-all duration-300 animate-counter-spin-slow ${
-                          activeFeature === i 
-                            ? `${colorClass} scale-110 shadow-lg` 
-                            : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:scale-105'
-                        }`}
-                      >
-                        <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${activeFeature === i ? 'text-white' : 'text-stone-600 dark:text-stone-400'}`} />
-                      </button>
+
+              <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 pt-8">
+                {/* Garden Name & Stats */}
+                <div className="space-y-4">
+                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-emerald-400">
+                    {demoGarden.name}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Plants pill */}
+                    <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/10">
+                      <span className="text-base">🌱</span>
+                      <span className="font-semibold text-white">{demoGarden.plants}</span>
+                      <span className="text-sm text-white/70">{t("demo.plants", { defaultValue: "plants" })}</span>
                     </div>
-                  )
-                })}
+                    {/* Streak pill */}
+                    <div className="flex items-center gap-2 bg-orange-500/20 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-500/30">
+                      <span className="text-base">🔥</span>
+                      <span className="font-semibold text-orange-300">{demoGarden.streak}</span>
+                      <span className="text-sm text-orange-200/70">{t("demo.dayStreak", { defaultValue: "day streak" })}</span>
+                    </div>
+                    {/* Species pill */}
+                    <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/10">
+                      <span className="text-base">🌿</span>
+                      <span className="font-semibold text-white">{demoGarden.species}</span>
+                      <span className="text-sm text-white/70">{t("demo.species", { defaultValue: "species" })}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Ring */}
+                <div className="flex items-center gap-4">
+                  <div className="relative w-20 h-20 sm:w-24 sm:h-24">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 80 80">
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r="34"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.1)"
+                        strokeWidth="8"
+                      />
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r="34"
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="8"
+                        strokeLinecap="round"
+                        strokeDasharray={`${(progressPct / 100) * 213.6} 213.6`}
+                        className="transition-all duration-1000 ease-out drop-shadow-lg"
+                        style={{ filter: 'drop-shadow(0 0 8px rgba(16, 185, 129, 0.5))' }}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-xl sm:text-2xl font-bold text-emerald-400">{isAnimating ? demoGarden.progress : 0}%</span>
+                    </div>
+                  </div>
+                  <div className="text-white">
+                    <div className="text-sm text-white/70">{t("demo.todaysProgress", { defaultValue: "Today's progress" })}</div>
+                    <div className="font-semibold text-lg">{demoGarden.tasksCompleted}/{demoGarden.tasksDue} {t("demo.tasks", { defaultValue: "tasks" })}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Dashboard Content */}
+            <div className="bg-white dark:bg-[#141414] p-6 sm:p-8 space-y-6">
+              {/* Garden Members Section */}
+              <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-stone-50/50 dark:bg-stone-900/30 p-4 sm:p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-lg">👥</span>
+                  <h4 className="font-semibold text-stone-900 dark:text-white">
+                    {t("demo.gardenMembers", { defaultValue: "Garden members" })}
+                  </h4>
+                  <span className="text-sm text-stone-500 dark:text-stone-400">({demoMembers.length})</span>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {demoMembers.map((member) => (
+                    <div
+                      key={member.id}
+                      className="group flex items-center gap-3 bg-white dark:bg-stone-800/50 rounded-2xl px-3 py-2 transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer"
+                    >
+                      <div className="relative">
+                        <div
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-sm"
+                          style={{ backgroundColor: member.color }}
+                        >
+                          {member.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        {member.role === "owner" && (
+                          <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-gradient-to-br from-amber-300 to-orange-400 rounded-full flex items-center justify-center shadow-md">
+                            <span className="text-[10px]">👑</span>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="font-medium text-sm text-stone-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                          {member.name}
+                        </div>
+                        <div className="text-xs text-stone-500 dark:text-stone-400 capitalize">
+                          {member.role === "owner" ? t("demo.owner", { defaultValue: "Owner" }) : t("demo.member", { defaultValue: "Member" })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Garden Plants Gallery */}
+              <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-stone-50/50 dark:bg-stone-900/30 p-4 sm:p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🌿</span>
+                    <h4 className="font-semibold text-stone-900 dark:text-white">
+                      {t("demo.gardenPlants", { defaultValue: "Garden plants" })}
+                    </h4>
+                    <span className="text-sm text-stone-500 dark:text-stone-400">({demoPlants.length})</span>
+                  </div>
+                  <button className="text-sm text-emerald-600 dark:text-emerald-400 font-medium hover:underline flex items-center gap-1">
+                    {t("demo.viewAll", { defaultValue: "View all" })}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                
+                {/* Plants Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4">
+                  {demoPlants.map((plant) => (
+                    <div
+                      key={plant.id}
+                      className="group relative aspect-[4/5] rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.03] hover:shadow-xl"
+                      onMouseEnter={() => setHoveredPlant(plant.id)}
+                      onMouseLeave={() => setHoveredPlant(null)}
+                    >
+                      {/* Plant Image */}
+                      <img
+                        src={plant.image}
+                        alt={plant.name}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        loading="lazy"
+                      />
+                      
+                      {/* Gradient Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                      
+                      {/* Task Badge */}
+                      {plant.tasksDue > 0 && (
+                        <div className="absolute top-2 right-2 flex items-center gap-1 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-lg shadow-lg animate-bounce-subtle">
+                          <span>{plant.tasksDue}</span>
+                          <Droplets className="h-3 w-3" />
+                        </div>
+                      )}
+                      
+                      {/* Multiple plants badge */}
+                      {plant.tasks > 1 && plant.tasksDue === 0 && (
+                        <div className="absolute top-2 left-2 bg-emerald-500/90 text-white text-xs font-semibold px-2 py-1 rounded-lg backdrop-blur-sm">
+                          ×{plant.tasks}
+                        </div>
+                      )}
+                      
+                      {/* Plant Info */}
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <p className="font-semibold text-white text-sm truncate drop-shadow-lg">
+                          {plant.name}
+                        </p>
+                        <p className="text-white/70 text-xs">
+                          {plant.tasksDue > 0 
+                            ? `${plant.tasksDue} ${t("demo.tasksDue", { defaultValue: "task due" })}`
+                            : t("demo.noTasks", { defaultValue: "No tasks" })
+                          }
+                        </p>
+                      </div>
+                      
+                      {/* Hover Effect */}
+                      <div className={`absolute inset-0 bg-emerald-500/20 transition-opacity duration-300 ${hoveredPlant === plant.id ? 'opacity-100' : 'opacity-0'}`} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Activity Preview - Mini Heatmap */}
+              <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-stone-50/50 dark:bg-stone-900/30 p-4 sm:p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📊</span>
+                    <h4 className="font-semibold text-stone-900 dark:text-white">
+                      {t("demo.weeklyActivity", { defaultValue: "Weekly activity" })}
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-stone-500">Less</span>
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <div
+                        key={level}
+                        className={`w-3 h-3 rounded-sm ${
+                          level === 1 ? 'bg-emerald-200 dark:bg-emerald-900' :
+                          level === 2 ? 'bg-emerald-300 dark:bg-emerald-800' :
+                          level === 3 ? 'bg-emerald-400 dark:bg-emerald-700' :
+                          level === 4 ? 'bg-emerald-500 dark:bg-emerald-600' :
+                          'bg-emerald-600 dark:bg-emerald-500'
+                        }`}
+                      />
+                    ))}
+                    <span className="text-xs text-stone-500">More</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 justify-center sm:justify-start">
+                  {demoActivity.map((day, i) => {
+                    const intensity = Math.min(5, Math.ceil(day.completed / 1.2))
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-1">
+                        <div
+                          className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg transition-all duration-300 hover:scale-110 cursor-pointer ${
+                            intensity === 1 ? 'bg-emerald-200 dark:bg-emerald-900' :
+                            intensity === 2 ? 'bg-emerald-300 dark:bg-emerald-800' :
+                            intensity === 3 ? 'bg-emerald-400 dark:bg-emerald-700' :
+                            intensity === 4 ? 'bg-emerald-500 dark:bg-emerald-600' :
+                            'bg-emerald-600 dark:bg-emerald-500'
+                          }`}
+                          title={`${day.completed} tasks completed`}
+                        />
+                        <span className="text-[10px] text-stone-400">
+                          {['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Right: Content */}
-          <div className="order-1 lg:order-2 text-center lg:text-left">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
-              {t("demo.title", { defaultValue: "Your Complete Plant Care Companion" })}
-            </h2>
-            <p className="text-lg text-stone-600 dark:text-stone-400 mb-8 max-w-lg mx-auto lg:mx-0">
-              {t("demo.description", { defaultValue: "From discovery to daily care, we've got everything you need to help your plants thrive." })}
-            </p>
-            
-            {/* Feature Tabs */}
-            <div className="flex flex-wrap gap-3 justify-center lg:justify-start">
-              {features.map((feature, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveFeature(i)}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 ${
-                    activeFeature === i
-                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                      : 'bg-white dark:bg-white/10 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-white/10 hover:border-emerald-500/30'
-                  }`}
-                >
-                  <feature.icon className="h-4 w-4" />
-                  <span className="text-sm font-medium">{feature.label}</span>
-                </button>
-              ))}
+          {/* Floating action hints */}
+          <div className="hidden lg:block absolute -right-4 top-1/3 transform translate-x-full">
+            <div className="bg-white dark:bg-stone-800 rounded-2xl p-4 shadow-xl border border-stone-200 dark:border-stone-700 max-w-[180px] animate-float-slow">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Bell className="h-4 w-4 text-blue-500" />
+                </div>
+                <span className="text-sm font-medium text-stone-900 dark:text-white">{t("demo.smartReminders", { defaultValue: "Smart reminders" })}</span>
+              </div>
+              <p className="text-xs text-stone-500 dark:text-stone-400">{t("demo.smartRemindersDesc", { defaultValue: "Get notified when your plants need care" })}</p>
             </div>
           </div>
+
+          <div className="hidden lg:block absolute -left-4 bottom-1/3 transform -translate-x-full">
+            <div className="bg-white dark:bg-stone-800 rounded-2xl p-4 shadow-xl border border-stone-200 dark:border-stone-700 max-w-[180px] animate-float-delayed">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-8 w-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                  <Users className="h-4 w-4 text-purple-500" />
+                </div>
+                <span className="text-sm font-medium text-stone-900 dark:text-white">{t("demo.shareGarden", { defaultValue: "Share your garden" })}</span>
+              </div>
+              <p className="text-xs text-stone-500 dark:text-stone-400">{t("demo.shareGardenDesc", { defaultValue: "Invite friends & family to help care" })}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* CTA below the dashboard */}
+        <div className="text-center mt-12">
+          <Link
+            to="/discovery"
+            className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-all duration-300 hover:-translate-y-0.5 shadow-lg shadow-emerald-500/25 hover:shadow-xl hover:shadow-emerald-500/30"
+          >
+            <Sprout className="h-5 w-5" />
+            {t("demo.cta", { defaultValue: "Create Your Garden" })}
+            <ArrowRight className="h-5 w-5" />
+          </Link>
         </div>
       </div>
     </section>
