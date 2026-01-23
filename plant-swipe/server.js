@@ -21390,7 +21390,7 @@ async function processDueAutomations() {
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and un.scheduled_for::date = current_date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               )
             limit 1000
           `
@@ -21402,14 +21402,14 @@ async function processDueAutomations() {
             join public.garden_plant_tasks t on t.garden_id = gm.garden_id
             join public.garden_plant_task_occurrences occ on occ.task_id = t.id
             where (p.notify_push is null or p.notify_push = true)
-              and occ.due_at::date = current_date
+              and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               and (occ.completed_count < occ.required_count or occ.completed_count = 0)
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and un.scheduled_for::date = current_date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               )
             limit 1000
           `
@@ -21421,13 +21421,13 @@ async function processDueAutomations() {
             join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
             where (p.notify_push is null or p.notify_push = true)
               and gal.kind = 'note'
-              and gal.occurred_at::date = current_date - interval '1 day'
+              and (gal.occurred_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date - interval '1 day'
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and un.scheduled_for::date = current_date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               )
             limit 1000
           `
