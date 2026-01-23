@@ -1286,7 +1286,7 @@ const ShowcaseSection: React.FC = () => {
   }, [])
 
   // Default values if config is not loaded
-  const config = showcaseConfig || {
+  const rawConfig = showcaseConfig || {
     garden_name: "My Indoor Jungle",
     plants_count: 12,
     species_count: 8,
@@ -1314,6 +1314,12 @@ const ShowcaseSection: React.FC = () => {
     analytics_streak: 14,
     chart_data: [3, 5, 2, 6, 4, 5, 6],
     calendar_data: defaultCalendar,
+  }
+
+  // Calculate plants_count from plant_cards length (auto-calculated)
+  const config = {
+    ...rawConfig,
+    plants_count: rawConfig.plant_cards?.length || rawConfig.plants_count || 0,
   }
 
   // Use calendar_data from config or default

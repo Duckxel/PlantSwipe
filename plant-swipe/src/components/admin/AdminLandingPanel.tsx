@@ -3638,7 +3638,6 @@ const ShowcaseTab: React.FC<{
   const [plantSearch, setPlantSearch] = React.useState("")
   const [plantResults, setPlantResults] = React.useState<PlantSearchResult[]>([])
   const [searchingPlants, setSearchingPlants] = React.useState(false)
-  const [editingPlantIndex, setEditingPlantIndex] = React.useState<number | null>(null)
   const [browseDialogOpen, setBrowseDialogOpen] = React.useState(false)
   const [allPlants, setAllPlants] = React.useState<PlantSearchResult[]>([])
   const [loadingAllPlants, setLoadingAllPlants] = React.useState(false)
@@ -3701,17 +3700,34 @@ const ShowcaseTab: React.FC<{
     { value: "#84cc16", label: "Lime" },
   ]
 
+  // Helper to extract main image from plant_images relation
+  const getPlantImage = (plantImages: any[] | null): string | null => {
+    if (!plantImages || plantImages.length === 0) return null
+    const mainImage = plantImages.find((img: any) => img.use === "main")
+    return mainImage?.link || plantImages[0]?.link || null
+  }
+
   // Load all plants for browsing
   const loadAllPlants = React.useCallback(async () => {
     setLoadingAllPlants(true)
     try {
       const { data } = await supabase
         .from("plants")
-        .select("id, name, scientific_name, image")
-        .not("image", "is", null)
+        .select("id, name, scientific_name, plant_images(link, use)")
         .order("name")
-        .limit(50)
-      setAllPlants(data || [])
+        .limit(100)
+      
+      // Map to PlantSearchResult format
+      const mappedPlants: PlantSearchResult[] = (data || [])
+        .map((plant: any) => ({
+          id: plant.id,
+          name: plant.name,
+          scientific_name: plant.scientific_name,
+          image: getPlantImage(plant.plant_images),
+        }))
+        .filter(p => p.image) // Only include plants with images
+      
+      setAllPlants(mappedPlants)
     } catch (e) {
       console.error("Failed to load plants:", e)
     } finally {
@@ -3729,10 +3745,19 @@ const ShowcaseTab: React.FC<{
     try {
       const { data } = await supabase
         .from("plants")
-        .select("id, name, scientific_name, image")
+        .select("id, name, scientific_name, plant_images(link, use)")
         .or(`name.ilike.%${query}%,scientific_name.ilike.%${query}%`)
-        .limit(20)
-      setPlantResults(data || [])
+        .limit(30)
+      
+      // Map to PlantSearchResult format
+      const mappedPlants: PlantSearchResult[] = (data || []).map((plant: any) => ({
+        id: plant.id,
+        name: plant.name,
+        scientific_name: plant.scientific_name,
+        image: getPlantImage(plant.plant_images),
+      }))
+      
+      setPlantResults(mappedPlants)
     } catch (e) {
       console.error("Plant search error:", e)
     } finally {
@@ -3796,22 +3821,6 @@ const ShowcaseTab: React.FC<{
     } finally {
       setSaving(false)
     }
-  }
-
-  // Select plant for a card
-  const selectPlantForCard = (index: number, plant: PlantSearchResult) => {
-    if (!localConfig) return
-    const newCards = [...localConfig.plant_cards]
-    newCards[index] = {
-      ...newCards[index],
-      plant_id: plant.id,
-      name: plant.name,
-      image_url: plant.image,
-    }
-    setLocalConfig({ ...localConfig, plant_cards: newCards })
-    setEditingPlantIndex(null)
-    setPlantSearch("")
-    setPlantResults([])
   }
 
   // Add plant from browse dialog
@@ -3882,18 +3891,10 @@ const ShowcaseTab: React.FC<{
     })
   }
 
-  // Add new plant card
-  const addPlantCard = () => {
-    if (!localConfig) return
-    const newCard: ShowcasePlantCard = {
-      id: crypto.randomUUID(),
-      plant_id: null,
-      name: "New Plant",
-      image_url: null,
-      gradient: gradientOptions[localConfig.plant_cards.length % gradientOptions.length].value,
-      tasks_due: 0,
-    }
-    setLocalConfig({ ...localConfig, plant_cards: [...localConfig.plant_cards, newCard] })
+  // Open browse dialog to add plant
+  const openAddPlantDialog = () => {
+    setBrowseDialogOpen(true)
+    loadAllPlants()
   }
 
   // Remove plant card
@@ -3959,21 +3960,21 @@ const ShowcaseTab: React.FC<{
 
       {/* Garden Card Settings */}
       <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
               <Leaf className="h-5 w-5 text-emerald-500" />
             </div>
             <div>
               <h3 className="font-semibold text-stone-900 dark:text-white">Garden Card</h3>
-              <p className="text-xs text-stone-500">Configure the main garden dashboard preview</p>
+              <p className="text-xs text-stone-500">Main garden dashboard preview</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             {/* Garden Name */}
-            <div className="space-y-2">
-              <Label className="text-sm">Garden Name</Label>
+            <div className="space-y-1.5 col-span-2">
+              <Label className="text-xs sm:text-sm">Garden Name</Label>
               <Input
                 value={localConfig.garden_name}
                 onChange={(e) => setLocalConfig({ ...localConfig, garden_name: e.target.value })}
@@ -3983,8 +3984,8 @@ const ShowcaseTab: React.FC<{
             </div>
 
             {/* Plants Count - Auto-calculated */}
-            <div className="space-y-2">
-              <Label className="text-sm">Plants Count <span className="text-xs text-emerald-500">(auto-calculated)</span></Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Plants <span className="text-emerald-500">(auto)</span></Label>
               <Input
                 type="number"
                 value={localConfig.plant_cards.length}
@@ -3994,8 +3995,8 @@ const ShowcaseTab: React.FC<{
             </div>
 
             {/* Species Count */}
-            <div className="space-y-2">
-              <Label className="text-sm">Species Count</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Species</Label>
               <Input
                 type="number"
                 value={localConfig.species_count}
@@ -4005,8 +4006,8 @@ const ShowcaseTab: React.FC<{
             </div>
 
             {/* Streak Count */}
-            <div className="space-y-2">
-              <Label className="text-sm">Day Streak</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Day Streak</Label>
               <Input
                 type="number"
                 value={localConfig.streak_count}
@@ -4016,8 +4017,8 @@ const ShowcaseTab: React.FC<{
             </div>
 
             {/* Progress Percent */}
-            <div className="space-y-2">
-              <Label className="text-sm">Progress %</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Progress %</Label>
               <Input
                 type="number"
                 min={0}
@@ -4029,13 +4030,13 @@ const ShowcaseTab: React.FC<{
             </div>
 
             {/* Cover Image */}
-            <div className="space-y-2 md:col-span-2">
-              <Label className="text-sm">Cover Image</Label>
-              <div className="flex gap-2">
+            <div className="space-y-1.5 col-span-2">
+              <Label className="text-xs sm:text-sm">Cover Image</Label>
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   value={localConfig.cover_image_url || ""}
                   onChange={(e) => setLocalConfig({ ...localConfig, cover_image_url: e.target.value || null })}
-                  placeholder="https://example.com/image.jpg or upload below"
+                  placeholder="Paste image URL..."
                   className="rounded-xl flex-1"
                 />
                 <input
@@ -4076,172 +4077,94 @@ const ShowcaseTab: React.FC<{
 
       {/* Plant Cards */}
       <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-6">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
             <div className="flex items-center gap-2">
-              <div className="h-10 w-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-green-500/10 flex items-center justify-center flex-shrink-0">
                 <Grid3X3 className="h-5 w-5 text-green-500" />
               </div>
               <div>
                 <h3 className="font-semibold text-stone-900 dark:text-white">Plant Cards ({localConfig.plant_cards.length})</h3>
-                <p className="text-xs text-stone-500">Add plants from database or create custom cards</p>
+                <p className="text-xs text-stone-500">Click to add plants from database</p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="rounded-xl gap-1"
-                onClick={() => {
-                  setBrowseDialogOpen(true)
-                  loadAllPlants()
-                }}
-              >
-                <Search className="h-4 w-4" /> Browse Plants
-              </Button>
-              <Button onClick={addPlantCard} size="sm" className="rounded-xl gap-1">
-                <Plus className="h-4 w-4" /> Add Custom
-              </Button>
-            </div>
+            <Button onClick={openAddPlantDialog} size="sm" className="rounded-xl gap-1 w-full sm:w-auto">
+              <Plus className="h-4 w-4" /> Add Plant
+            </Button>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {localConfig.plant_cards.map((card, index) => (
-              <div key={card.id} className="space-y-2">
-                {/* Preview */}
-                <div className={`relative aspect-square rounded-2xl bg-gradient-to-br ${card.gradient} flex items-center justify-center overflow-hidden group`}>
-                  {card.image_url ? (
-                    <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <Leaf className="h-8 w-8 text-white/50" />
-                  )}
-                  {card.tasks_due > 0 && (
-                    <div className="absolute top-1 right-1 h-5 w-5 bg-amber-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
-                      {card.tasks_due}
+          {localConfig.plant_cards.length === 0 ? (
+            <div className="text-center py-8 border-2 border-dashed border-stone-200 dark:border-stone-700 rounded-xl">
+              <Leaf className="h-10 w-10 mx-auto text-stone-300 dark:text-stone-600 mb-2" />
+              <p className="text-sm text-stone-500">No plants added yet</p>
+              <Button onClick={openAddPlantDialog} variant="link" className="mt-2">
+                Browse plants to add
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {localConfig.plant_cards.map((card) => (
+                <div key={card.id} className="relative group">
+                  {/* Plant Image */}
+                  <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-emerald-400 to-teal-500">
+                    {card.image_url ? (
+                      <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Leaf className="h-8 w-8 text-white/50" />
+                      </div>
+                    )}
+                    
+                    {/* Tasks Badge */}
+                    {card.tasks_due > 0 && (
+                      <div className="absolute top-1.5 right-1.5 h-5 w-5 bg-amber-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md">
+                        {card.tasks_due}
+                      </div>
+                    )}
+                    
+                    {/* Delete button overlay */}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        className="h-8 w-8 rounded-lg"
+                        onClick={() => removePlantCard(card.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                  )}
-                  {/* Overlay buttons */}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <Button
-                      size="icon"
-                      variant="secondary"
-                      className="h-8 w-8 rounded-lg"
-                      onClick={() => setEditingPlantIndex(index)}
-                    >
-                      <Search className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="destructive"
-                      className="h-8 w-8 rounded-lg"
-                      onClick={() => removePlantCard(card.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    
+                    {/* Plant Name Overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                      <p className="text-[10px] sm:text-xs text-white font-medium truncate">{card.name}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Tasks Due Input */}
+                  <div className="flex items-center gap-1 mt-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={card.tasks_due}
+                      onChange={(e) => updatePlantCard(card.id, { tasks_due: parseInt(e.target.value) || 0 })}
+                      className="rounded-lg text-xs h-7 flex-1"
+                      placeholder="Tasks"
+                    />
+                    <span className="text-[10px] text-stone-500">due</span>
                   </div>
                 </div>
-
-                {/* Name */}
-                <Input
-                  value={card.name}
-                  onChange={(e) => updatePlantCard(card.id, { name: e.target.value })}
-                  className="rounded-lg text-xs h-8"
-                  placeholder="Plant name"
-                />
-
-                {/* Tasks Due */}
-                <div className="flex items-center gap-1">
-                  <Input
-                    type="number"
-                    min={0}
-                    value={card.tasks_due}
-                    onChange={(e) => updatePlantCard(card.id, { tasks_due: parseInt(e.target.value) || 0 })}
-                    className="rounded-lg text-xs h-8 w-16"
-                  />
-                  <span className="text-xs text-stone-500">due</span>
-                </div>
-
-                {/* Gradient selector */}
-                <select
-                  value={card.gradient}
-                  onChange={(e) => updatePlantCard(card.id, { gradient: e.target.value })}
-                  className="w-full text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5"
-                >
-                  {gradientOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-
-                {/* Plant search dialog for individual card */}
-                {editingPlantIndex === index && (
-                  <Dialog open={true} onOpenChange={() => setEditingPlantIndex(null)}>
-                    <DialogContent className="rounded-[20px] max-w-2xl">
-                      <DialogHeader>
-                        <DialogTitle>Select Plant from Database</DialogTitle>
-                        <DialogDescription>Search and select a plant to use its image</DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                          <Input
-                            value={plantSearch}
-                            onChange={(e) => setPlantSearch(e.target.value)}
-                            placeholder="Search plants by name..."
-                            className="pl-10 rounded-xl"
-                            autoFocus
-                          />
-                        </div>
-                        {searchingPlants ? (
-                          <div className="flex justify-center py-8">
-                            <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
-                          </div>
-                        ) : plantResults.length > 0 ? (
-                          <div className="grid grid-cols-3 gap-3 max-h-80 overflow-y-auto p-1">
-                            {plantResults.map(plant => (
-                              <button
-                                key={plant.id}
-                                onClick={() => selectPlantForCard(index, plant)}
-                                className="flex flex-col items-center gap-2 p-3 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-500 text-center transition-colors"
-                              >
-                                <div className="h-16 w-16 rounded-xl bg-stone-100 dark:bg-stone-800 overflow-hidden">
-                                  {plant.image ? (
-                                    <img src={plant.image} alt={plant.name} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                      <Leaf className="h-6 w-6 text-stone-400" />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="min-w-0 w-full">
-                                  <p className="text-sm font-medium truncate">{plant.name}</p>
-                                  {plant.scientific_name && (
-                                    <p className="text-xs text-stone-500 italic truncate">{plant.scientific_name}</p>
-                                  )}
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        ) : plantSearch.length >= 2 ? (
-                          <p className="text-center text-sm text-stone-500 py-8">No plants found matching "{plantSearch}"</p>
-                        ) : (
-                          <p className="text-center text-sm text-stone-500 py-8">Type at least 2 characters to search</p>
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Browse Plants Dialog */}
           <Dialog open={browseDialogOpen} onOpenChange={setBrowseDialogOpen}>
-            <DialogContent className="rounded-[20px] max-w-3xl max-h-[80vh]">
+            <DialogContent className="rounded-[20px] max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
               <DialogHeader>
-                <DialogTitle>Browse Plants from Database</DialogTitle>
-                <DialogDescription>Click on plants to add them to your showcase</DialogDescription>
+                <DialogTitle>Add Plants from Database</DialogTitle>
+                <DialogDescription>Search and click plants to add them to your showcase</DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                   <Input
@@ -4249,6 +4172,7 @@ const ShowcaseTab: React.FC<{
                     onChange={(e) => setPlantSearch(e.target.value)}
                     placeholder="Search plants by name..."
                     className="pl-10 rounded-xl"
+                    autoFocus
                   />
                 </div>
                 {loadingAllPlants || searchingPlants ? (
@@ -4256,41 +4180,48 @@ const ShowcaseTab: React.FC<{
                     <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
                   </div>
                 ) : (
-                  <div className="grid grid-cols-4 gap-3 max-h-96 overflow-y-auto p-1">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 overflow-y-auto flex-1 p-1">
                     {(plantSearch.length >= 2 ? plantResults : allPlants).map(plant => {
                       const isAdded = localConfig.plant_cards.some(c => c.plant_id === plant.id)
                       return (
                         <button
                           key={plant.id}
-                          onClick={() => !isAdded && addPlantFromBrowse(plant)}
+                          onClick={() => {
+                            if (!isAdded) {
+                              addPlantFromBrowse(plant)
+                            }
+                          }}
                           disabled={isAdded}
                           className={cn(
-                            "flex flex-col items-center gap-2 p-3 rounded-xl border text-center transition-colors",
+                            "flex flex-col items-center gap-1.5 p-2 rounded-xl border text-center transition-colors",
                             isAdded
-                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 opacity-60"
+                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 opacity-60 cursor-not-allowed"
                               : "border-stone-200 dark:border-stone-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-500"
                           )}
                         >
-                          <div className="relative h-16 w-16 rounded-xl bg-stone-100 dark:bg-stone-800 overflow-hidden">
+                          <div className="relative h-14 w-14 rounded-lg bg-stone-100 dark:bg-stone-800 overflow-hidden flex-shrink-0">
                             {plant.image ? (
                               <img src={plant.image} alt={plant.name} className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
-                                <Leaf className="h-6 w-6 text-stone-400" />
+                                <Leaf className="h-5 w-5 text-stone-400" />
                               </div>
                             )}
                             {isAdded && (
-                              <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
-                                <Check className="h-6 w-6 text-emerald-600" />
+                              <div className="absolute inset-0 bg-emerald-500/30 flex items-center justify-center">
+                                <Check className="h-5 w-5 text-emerald-600" />
                               </div>
                             )}
                           </div>
-                          <div className="min-w-0 w-full">
-                            <p className="text-xs font-medium truncate">{plant.name}</p>
-                          </div>
+                          <p className="text-[10px] font-medium truncate w-full">{plant.name}</p>
                         </button>
                       )
                     })}
+                    {(plantSearch.length >= 2 ? plantResults : allPlants).length === 0 && (
+                      <div className="col-span-full text-center py-8 text-stone-500">
+                        {plantSearch.length >= 2 ? `No plants found matching "${plantSearch}"` : "No plants with images found"}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -4301,45 +4232,45 @@ const ShowcaseTab: React.FC<{
 
       {/* Calendar / History */}
       <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-6">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
-              <div className="h-10 w-10 rounded-xl bg-teal-500/10 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-teal-500/10 flex items-center justify-center flex-shrink-0">
                 <Clock className="h-5 w-5 text-teal-500" />
               </div>
               <div>
-                <h3 className="font-semibold text-stone-900 dark:text-white">Last 30 Days Calendar</h3>
-                <p className="text-xs text-stone-500">Click tiles to toggle: Completed → Missed → None</p>
+                <h3 className="font-semibold text-stone-900 dark:text-white">Last 30 Days</h3>
+                <p className="text-xs text-stone-500">Click tiles to toggle status</p>
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="rounded-xl text-xs gap-1" onClick={() => setAllCalendarDays('completed')}>
-                <div className="w-3 h-3 rounded bg-emerald-500" /> All Completed
+              <Button variant="outline" size="sm" className="rounded-xl text-xs gap-1 flex-1 sm:flex-none" onClick={() => setAllCalendarDays('completed')}>
+                <div className="w-3 h-3 rounded bg-emerald-500" /> Completed
               </Button>
-              <Button variant="outline" size="sm" className="rounded-xl text-xs gap-1" onClick={() => setAllCalendarDays('missed')}>
-                <div className="w-3 h-3 rounded bg-stone-400" /> All Missed
+              <Button variant="outline" size="sm" className="rounded-xl text-xs gap-1 flex-1 sm:flex-none" onClick={() => setAllCalendarDays('missed')}>
+                <div className="w-3 h-3 rounded bg-stone-400" /> Missed
               </Button>
             </div>
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-emerald-500" />
-              <span className="text-xs text-stone-600 dark:text-stone-400">Completed</span>
+          <div className="flex flex-wrap items-center gap-3 mb-4 text-[10px] sm:text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-emerald-500" />
+              <span className="text-stone-600 dark:text-stone-400">Completed</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-stone-300 dark:bg-stone-600" />
-              <span className="text-xs text-stone-600 dark:text-stone-400">Missed</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-stone-300 dark:bg-stone-600" />
+              <span className="text-stone-600 dark:text-stone-400">Missed</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded border-2 border-dashed border-stone-300 dark:border-stone-600" />
-              <span className="text-xs text-stone-600 dark:text-stone-400">None</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded border border-dashed border-stone-300 dark:border-stone-600" />
+              <span className="text-stone-600 dark:text-stone-400">None</span>
             </div>
           </div>
 
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-10 gap-2">
+          {/* Calendar Grid - responsive columns */}
+          <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5 sm:gap-2">
             {localConfig.calendar_data?.map((day) => {
               const date = new Date(day.date)
               const dayNum = date.getDate()
@@ -4350,11 +4281,11 @@ const ShowcaseTab: React.FC<{
                   key={day.date}
                   onClick={() => toggleCalendarDay(day.date)}
                   className={cn(
-                    "aspect-square rounded-xl flex items-center justify-center text-sm font-medium transition-all hover:scale-105",
+                    "aspect-square rounded-lg sm:rounded-xl flex items-center justify-center text-xs sm:text-sm font-medium transition-all hover:scale-105",
                     day.status === 'completed' && "bg-emerald-500 text-white",
                     day.status === 'missed' && "bg-stone-300 dark:bg-stone-600 text-stone-700 dark:text-stone-300",
-                    day.status === 'none' && "border-2 border-dashed border-stone-300 dark:border-stone-600 text-stone-400",
-                    isToday && "ring-2 ring-emerald-400 ring-offset-2 dark:ring-offset-stone-900"
+                    day.status === 'none' && "border border-dashed border-stone-300 dark:border-stone-600 text-stone-400",
+                    isToday && "ring-2 ring-emerald-400 ring-offset-1 dark:ring-offset-stone-900"
                   )}
                   title={`${day.date} - ${day.status}`}
                 >
@@ -4368,25 +4299,25 @@ const ShowcaseTab: React.FC<{
 
       {/* Tasks */}
       <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-6">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
-              <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
                 <Check className="h-5 w-5 text-blue-500" />
               </div>
               <div>
                 <h3 className="font-semibold text-stone-900 dark:text-white">Tasks ({localConfig.tasks.length})</h3>
-                <p className="text-xs text-stone-500">Configure the task list display</p>
+                <p className="text-xs text-stone-500">Configure the task list</p>
               </div>
             </div>
-            <Button onClick={addTask} size="sm" className="rounded-xl gap-1">
+            <Button onClick={addTask} size="sm" className="rounded-xl gap-1 w-full sm:w-auto">
               <Plus className="h-4 w-4" /> Add Task
             </Button>
           </div>
 
           <div className="space-y-2">
             {localConfig.tasks.map((task) => (
-              <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50">
+              <div key={task.id} className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50">
                 <Switch
                   checked={task.completed}
                   onCheckedChange={(checked) => updateTask(task.id, { completed: checked })}
@@ -4394,7 +4325,7 @@ const ShowcaseTab: React.FC<{
                 <Input
                   value={task.text}
                   onChange={(e) => updateTask(task.id, { text: e.target.value })}
-                  className={cn("flex-1 rounded-lg", task.completed && "line-through text-stone-400")}
+                  className={cn("flex-1 rounded-lg text-sm", task.completed && "line-through text-stone-400")}
                   placeholder="Task description"
                 />
                 <Button
@@ -4413,45 +4344,45 @@ const ShowcaseTab: React.FC<{
 
       {/* Members */}
       <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-6">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
-              <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
                 <Users className="h-5 w-5 text-purple-500" />
               </div>
               <div>
                 <h3 className="font-semibold text-stone-900 dark:text-white">Members ({localConfig.members.length})</h3>
-                <p className="text-xs text-stone-500">Configure the members display</p>
+                <p className="text-xs text-stone-500">Garden team members</p>
               </div>
             </div>
-            <Button onClick={addMember} size="sm" className="rounded-xl gap-1">
+            <Button onClick={addMember} size="sm" className="rounded-xl gap-1 w-full sm:w-auto">
               <Plus className="h-4 w-4" /> Add Member
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3">
             {localConfig.members.map((member) => (
-              <div key={member.id} className="flex items-center gap-3 p-4 rounded-xl bg-stone-50 dark:bg-stone-800/50">
+              <div key={member.id} className="flex items-center gap-2 sm:gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50">
                 {/* Avatar preview */}
                 <div
-                  className="h-12 w-12 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
+                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 text-sm"
                   style={{ backgroundColor: member.color }}
                 >
                   {member.name.slice(0, 2).toUpperCase()}
                 </div>
 
-                <div className="flex-1 space-y-2">
+                <div className="flex-1 min-w-0 space-y-1.5">
                   <Input
                     value={member.name}
                     onChange={(e) => updateMember(member.id, { name: e.target.value })}
                     className="rounded-lg h-8 text-sm"
                     placeholder="Member name"
                   />
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     <select
                       value={member.role}
                       onChange={(e) => updateMember(member.id, { role: e.target.value as 'owner' | 'member' })}
-                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5"
+                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5 min-w-0"
                     >
                       <option value="owner">Owner</option>
                       <option value="member">Member</option>
@@ -4459,7 +4390,7 @@ const ShowcaseTab: React.FC<{
                     <select
                       value={member.color}
                       onChange={(e) => updateMember(member.id, { color: e.target.value })}
-                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5"
+                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5 min-w-0"
                     >
                       {colorOptions.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -4472,7 +4403,7 @@ const ShowcaseTab: React.FC<{
                   variant="ghost"
                   size="icon"
                   onClick={() => removeMember(member.id)}
-                  className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                  className="text-red-500 hover:text-red-600 hover:bg-red-50 flex-shrink-0"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -4484,20 +4415,20 @@ const ShowcaseTab: React.FC<{
 
       {/* Analytics */}
       <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="h-10 w-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-10 w-10 rounded-xl bg-orange-500/10 flex items-center justify-center flex-shrink-0">
               <BarChart3 className="h-5 w-5 text-orange-500" />
             </div>
             <div>
-              <h3 className="font-semibold text-stone-900 dark:text-white">Analytics Card</h3>
-              <p className="text-xs text-stone-500">Configure the analytics display</p>
+              <h3 className="font-semibold text-stone-900 dark:text-white">Analytics</h3>
+              <p className="text-xs text-stone-500">Stats for analytics card</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm">Completion Rate %</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Completion %</Label>
               <Input
                 type="number"
                 min={0}
@@ -4508,8 +4439,8 @@ const ShowcaseTab: React.FC<{
               />
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-sm">Analytics Streak</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Streak Days</Label>
               <Input
                 type="number"
                 min={0}
@@ -4519,8 +4450,8 @@ const ShowcaseTab: React.FC<{
               />
             </div>
 
-            <div className="space-y-2 md:col-span-2">
-              <Label className="text-sm">Chart Data (7 days, comma separated)</Label>
+            <div className="space-y-1.5 col-span-2">
+              <Label className="text-xs sm:text-sm">Chart Data (7 days)</Label>
               <Input
                 value={localConfig.chart_data.join(", ")}
                 onChange={(e) => {
@@ -4530,17 +4461,17 @@ const ShowcaseTab: React.FC<{
                 placeholder="3, 5, 2, 6, 4, 5, 6"
                 className="rounded-xl"
               />
-              <p className="text-xs text-stone-500">Enter 7 numbers for the activity chart (M, T, W, T, F, S, S)</p>
+              <p className="text-[10px] sm:text-xs text-stone-500">7 numbers for activity chart (M-S)</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Save Button */}
-      <div className="flex justify-end">
-        <Button onClick={saveConfig} className="rounded-xl gap-2">
+      <div className="flex justify-end sticky bottom-4">
+        <Button onClick={saveConfig} className="rounded-xl gap-2 shadow-lg">
           <Save className="h-4 w-4" />
-          Save Showcase Configuration
+          Save Configuration
         </Button>
       </div>
     </div>
