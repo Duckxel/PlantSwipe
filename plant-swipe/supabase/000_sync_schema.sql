@@ -168,6 +168,7 @@ do $$ declare
     'landing_faq_translations',
     'landing_demo_features',
     'landing_demo_feature_translations',
+    'landing_showcase_config',
     -- Plant Scanning
     'plant_scans',
     -- Bug Catcher System
@@ -9206,6 +9207,67 @@ select * from (values
 ) as v(position, icon_name, label, color)
 where not exists (select 1 from public.landing_demo_features limit 1);
 
+-- Landing Showcase Config: Configuration for the landing page showcase section
+create table if not exists public.landing_showcase_config (
+  id uuid primary key default gen_random_uuid(),
+  
+  -- Garden Card Settings
+  garden_name text not null default 'My Indoor Jungle',
+  plants_count integer not null default 12,
+  species_count integer not null default 8,
+  streak_count integer not null default 7,
+  progress_percent integer not null default 85 check (progress_percent >= 0 and progress_percent <= 100),
+  cover_image_url text,
+  
+  -- Tasks (JSONB array of {id, text, completed})
+  tasks jsonb not null default '[
+    {"id": "1", "text": "Water your Pothos", "completed": true},
+    {"id": "2", "text": "Fertilize Monstera", "completed": false},
+    {"id": "3", "text": "Mist your Fern", "completed": false}
+  ]'::jsonb,
+  
+  -- Members (JSONB array of {id, name, role, avatar_url, color})
+  members jsonb not null default '[
+    {"id": "1", "name": "Sophie", "role": "owner", "avatar_url": null, "color": "#10b981"},
+    {"id": "2", "name": "Marcus", "role": "member", "avatar_url": null, "color": "#3b82f6"}
+  ]'::jsonb,
+  
+  -- Plant Cards (JSONB array of {id, plant_id, name, image_url, gradient, tasks_due})
+  plant_cards jsonb not null default '[
+    {"id": "1", "plant_id": null, "name": "Monstera", "image_url": null, "gradient": "from-emerald-400 to-teal-500", "tasks_due": 1},
+    {"id": "2", "plant_id": null, "name": "Pothos", "image_url": null, "gradient": "from-lime-400 to-green-500", "tasks_due": 2},
+    {"id": "3", "plant_id": null, "name": "Snake Plant", "image_url": null, "gradient": "from-green-400 to-emerald-500", "tasks_due": 0},
+    {"id": "4", "plant_id": null, "name": "Fern", "image_url": null, "gradient": "from-teal-400 to-cyan-500", "tasks_due": 0},
+    {"id": "5", "plant_id": null, "name": "Peace Lily", "image_url": null, "gradient": "from-emerald-500 to-green-600", "tasks_due": 0},
+    {"id": "6", "plant_id": null, "name": "Calathea", "image_url": null, "gradient": "from-green-500 to-teal-600", "tasks_due": 0}
+  ]'::jsonb,
+  
+  -- Analytics Card Settings
+  completion_rate integer not null default 92 check (completion_rate >= 0 and completion_rate <= 100),
+  analytics_streak integer not null default 14,
+  chart_data jsonb not null default '[3, 5, 2, 6, 4, 5, 6]'::jsonb,
+  
+  -- Timestamps
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Ensure only one row exists for showcase config
+create or replace function public.ensure_single_landing_showcase_config()
+returns trigger as $$
+begin
+  if (select count(*) from public.landing_showcase_config) > 0 and TG_OP = 'INSERT' then
+    raise exception 'Only one landing_showcase_config row allowed';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists ensure_single_landing_showcase_config_trigger on public.landing_showcase_config;
+create trigger ensure_single_landing_showcase_config_trigger
+  before insert on public.landing_showcase_config
+  for each row execute function public.ensure_single_landing_showcase_config();
+
 -- RLS Policies for Landing Page Tables
 -- All landing tables are publicly readable but only admin-writable
 
@@ -9285,6 +9347,19 @@ drop policy if exists "Admins can manage landing demo feature translations" on p
 create policy "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
+
+alter table public.landing_showcase_config enable row level security;
+drop policy if exists "Landing showcase config is publicly readable" on public.landing_showcase_config;
+create policy "Landing showcase config is publicly readable" on public.landing_showcase_config for select using (true);
+drop policy if exists "Admins can manage landing showcase config" on public.landing_showcase_config;
+create policy "Admins can manage landing showcase config" on public.landing_showcase_config for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+-- Insert default showcase config row if not exists
+insert into public.landing_showcase_config (id)
+select gen_random_uuid()
+where not exists (select 1 from public.landing_showcase_config limit 1);
 
 -- =============================================
 -- PLANT SCANS TABLE
