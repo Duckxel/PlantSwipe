@@ -15597,7 +15597,7 @@ Format your response as JSON with this structure:
 
     let parsed = null
     let tokensUsed = 0
-    let modelUsed = 'gpt-4o-mini'
+    let modelUsed = openaiModel // Use the same model as AI Plant Fill
 
     if (openai) {
       try {
@@ -15637,7 +15637,7 @@ Include specific observations from the photos in your advice.` }
         }
 
         const completionOptions = {
-          model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
+          model: openaiModel, // Use the bigger model (same as AI Plant Fill)
           messages,
           temperature: 0.7,
           max_tokens: useVision ? 2000 : 1500,
