@@ -59,7 +59,6 @@ const resolveScopedPath = (pathname: string) => {
 const offlinePagePath = new URL('offline.html', self.registration.scope).pathname
 const offlineImagePath = new URL('icons/icon-192x192.png', self.registration.scope).pathname
 const scopeBasePath = new URL('.', self.registration.scope).pathname
-const notificationIconUrl = new URL('icons/icon-192x192.png', self.registration.scope).href
 const notificationBadgeUrl = new URL('icons/icon-96x96.png', self.registration.scope).href
 const defaultNotificationTarget = new URL('.', self.registration.scope).href
 
