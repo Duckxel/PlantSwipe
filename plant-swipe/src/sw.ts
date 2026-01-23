@@ -248,17 +248,17 @@ self.addEventListener('push', (event) => {
         ? payload.tag
         : (data as any)?.campaignId || 'aphylia',
     data,
-    icon: typeof payload.icon === 'string' && payload.icon.length ? payload.icon : notificationIconUrl,
+    // Use badge for small icon, skip large icon for cleaner message notifications
     badge: typeof payload.badge === 'string' && payload.badge.length ? payload.badge : notificationBadgeUrl,
   }
   
-  // Add reply action for message notifications
-  if (isMessageNotification) {
-    options.actions = [
-      { action: 'reply', title: 'Reply' },
-      { action: 'dismiss', title: 'Dismiss' }
-    ]
-  } else if (Array.isArray(payload.actions) && payload.actions.length) {
+  // Only add icon for non-message notifications (messages look cleaner without the large logo)
+  if (!isMessageNotification) {
+    options.icon = typeof payload.icon === 'string' && payload.icon.length ? payload.icon : notificationIconUrl
+  }
+  
+  // Add actions for notifications (skip for messages - just tap to open conversation)
+  if (!isMessageNotification && Array.isArray(payload.actions) && payload.actions.length) {
     const normalizedActions = payload.actions
       .map((action: any, index: number) => {
         if (!action) return null
@@ -322,7 +322,7 @@ self.addEventListener('notificationclick', (event) => {
   }
   const action = event.action
   
-  // Handle dismiss action
+  // Handle dismiss action (if present on non-message notifications)
   if (action === 'dismiss') {
     event.notification?.close()
     return
@@ -331,7 +331,7 @@ self.addEventListener('notificationclick', (event) => {
   // Determine the target URL
   let target: string
   
-  // For message notifications, navigate to the conversation
+  // For message notifications, always navigate to the conversation
   if (notificationData.type === 'new_message' && notificationData.conversationId) {
     target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
   } else {
