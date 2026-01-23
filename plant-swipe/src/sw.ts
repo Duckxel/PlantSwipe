@@ -322,23 +322,27 @@ self.addEventListener('notificationclick', (event) => {
   }
   const action = event.action
   
-  // Handle dismiss action (if present on non-message notifications)
+  // Handle dismiss action - just close the notification
   if (action === 'dismiss') {
     event.notification?.close()
     return
   }
   
+  // Close notification first
+  event.notification?.close()
+  
   // Determine the target URL
   let target: string
   
-  // For message notifications, always navigate to the conversation
-  if (notificationData.type === 'new_message' && notificationData.conversationId) {
+  // For message notifications (or reply action), navigate to the conversation
+  if ((notificationData.type === 'new_message' || action === 'reply') && notificationData.conversationId) {
+    target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
+  } else if (notificationData.conversationId) {
+    // Fallback: if we have conversationId, go to messages
     target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
   } else {
     target = resolveNotificationUrl(notificationData.ctaUrl || notificationData.url)
   }
-  
-  event.notification?.close()
   
   event.waitUntil(
     (async () => {
