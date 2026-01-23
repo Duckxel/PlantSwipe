@@ -123,6 +123,46 @@ type ShowcaseGarden = {
   }>
 }
 
+// Showcase Configuration from Admin Panel
+type ShowcaseTask = {
+  id: string
+  text: string
+  completed: boolean
+}
+
+type ShowcaseMember = {
+  id: string
+  name: string
+  role: 'owner' | 'member'
+  avatar_url: string | null
+  color: string
+}
+
+type ShowcasePlantCard = {
+  id: string
+  plant_id: string | null
+  name: string
+  image_url: string | null
+  gradient: string
+  tasks_due: number
+}
+
+type ShowcaseConfig = {
+  id: string
+  garden_name: string
+  plants_count: number
+  species_count: number
+  streak_count: number
+  progress_percent: number
+  cover_image_url: string | null
+  tasks: ShowcaseTask[]
+  members: ShowcaseMember[]
+  plant_cards: ShowcasePlantCard[]
+  completion_rate: number
+  analytics_streak: number
+  chart_data: number[]
+}
+
 type LandingPageSettings = {
   // Hero Section
   hero_badge_text: string
@@ -175,6 +215,7 @@ type LandingDataContextType = {
   demoFeatures: DemoFeature[]
   showcaseCards: ShowcaseCard[]
   showcaseGardens: ShowcaseGarden[]
+  showcaseConfig: ShowcaseConfig | null
   settings: LandingPageSettings | null
   loading: boolean
 }
@@ -187,6 +228,7 @@ const LandingDataContext = React.createContext<LandingDataContextType>({
   demoFeatures: [],
   showcaseCards: [],
   showcaseGardens: [],
+  showcaseConfig: null,
   settings: null,
   loading: true,
 })
@@ -285,6 +327,7 @@ const LandingPage: React.FC = () => {
     demoFeatures: [],
     showcaseCards: [],
     showcaseGardens: [],
+    showcaseConfig: null,
     settings: null,
     loading: true,
   })
@@ -405,6 +448,23 @@ const LandingPage: React.FC = () => {
             console.error("Failed to load stats translations:", e)
           }
         }
+
+        // Load Showcase Configuration
+        let showcaseConfig: ShowcaseConfig | null = null
+        try {
+          const { data: showcaseData } = await supabase
+            .from("landing_showcase_config")
+            .select("*")
+            .limit(1)
+            .maybeSingle()
+          
+          if (showcaseData) {
+            showcaseConfig = showcaseData
+          }
+        } catch (e) {
+          // Table may not exist yet, use defaults in component
+          console.error("Failed to load showcase config:", e)
+        }
         
         setLandingData({
           heroCards: heroCards || [],
@@ -414,6 +474,7 @@ const LandingPage: React.FC = () => {
           demoFeatures: demoFeatures || [],
           showcaseCards: [],
           showcaseGardens: [],
+          showcaseConfig,
           settings: settings || null,
           loading: false,
         })
@@ -1197,373 +1258,57 @@ const InteractiveDemoSection: React.FC = () => {
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    SHOWCASE SECTION - Realistic UI Previews matching actual app components
+   Fully configurable via Admin Panel
    ═══════════════════════════════════════════════════════════════════════════════ */
 const ShowcaseSection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { showcaseCards, showcaseGardens } = useLandingData()
+  const { showcaseConfig } = useLandingData()
 
-  // Default chart data for analytics preview
-  const chartData = [
-    { day: 'M', completed: 3, due: 4 },
-    { day: 'T', completed: 5, due: 5 },
-    { day: 'W', completed: 2, due: 4 },
-    { day: 'T', completed: 6, due: 6 },
-    { day: 'F', completed: 4, due: 5 },
-    { day: 'S', completed: 5, due: 5 },
-    { day: 'S', completed: 6, due: 6 },
-  ]
-
-  // Find specific card types from database
-  const mainCard = showcaseCards.find(c => c.card_type === 'main' || c.card_type === 'garden')
-  const analyticsCard = showcaseCards.find(c => c.card_type === 'analytics')
-  const tasksCard = showcaseCards.find(c => c.card_type === 'tasks')
-
-  // Get selected gardens for the main card
-  const selectedGardenIds = mainCard?.selected_garden_ids || []
-  const selectedGardens = selectedGardenIds
-    .map(id => showcaseGardens.find(g => g.id === id))
-    .filter((g): g is ShowcaseGarden => g !== undefined)
-
-  // Helper to render a single real garden card
-  const renderRealGardenCard = (garden: ShowcaseGarden, _index: number, isLarge: boolean = true) => {
-    const gardenName = garden.name
-    const plantsCount = garden.plantCount
-    const streakCount = garden.streak
-    const coverImage = garden.coverImageUrl
-    const previewPlants = garden.previewPlants
-    const progressPercent = 85 // Default progress for display
-
-    return (
-      <Link
-        key={garden.id}
-        to={`/garden/${garden.id}`}
-        className={`group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 block ${
-          isLarge ? 'md:col-span-2 md:row-span-2' : ''
-        }`}
-      >
-        {/* Hero Section with cover image */}
-        <div className="relative overflow-hidden">
-          {coverImage ? (
-            <>
-              <div className="absolute inset-0">
-                <img src={coverImage} alt={gardenName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
-              </div>
-              <div className={`relative z-10 p-6 ${isLarge ? 'md:p-8 min-h-[200px]' : 'min-h-[140px]'} flex flex-col justify-end`}>
-                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-                  <div className="space-y-3">
-                    <h3 className={`${isLarge ? 'text-2xl md:text-3xl' : 'text-xl'} font-bold text-white drop-shadow-lg`}>
-                      {gardenName}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <span className="text-base">🌱</span>
-                        <span className="font-semibold text-white text-sm">{plantsCount}</span>
-                        <span className="text-xs text-white/80">plants</span>
-                      </div>
-                      {streakCount > 0 && (
-                        <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                          <span className="text-base">🔥</span>
-                          <span className="font-semibold text-white text-sm">{streakCount}</span>
-                          <span className="text-xs text-white/80">day streak</span>
-                        </div>
-                      )}
-                    </div>
-                    {garden.ownerDisplayName && (
-                      <div className="text-xs text-white/70">by {garden.ownerDisplayName}</div>
-                    )}
-                  </div>
-                  {isLarge && (
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-16 h-16">
-                        <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                          <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
-                          <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-lg" />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-lg font-bold text-white">{progressPercent}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
-              <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
-              <div className={`relative z-10 p-6 ${isLarge ? 'md:p-8' : ''}`}>
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="space-y-3">
-                    <h3 className={`${isLarge ? 'text-2xl md:text-3xl' : 'text-xl'} font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent`}>
-                      {gardenName}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
-                        <span className="text-base">🌱</span>
-                        <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">{plantsCount}</span>
-                        <span className="text-xs text-stone-600 dark:text-stone-300">plants</span>
-                      </div>
-                      {streakCount > 0 && (
-                        <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
-                          <span className="text-base">🔥</span>
-                          <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{streakCount}</span>
-                          <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
-                        </div>
-                      )}
-                    </div>
-                    {garden.ownerDisplayName && (
-                      <div className="text-xs text-stone-500 dark:text-stone-400">by {garden.ownerDisplayName}</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Plants Gallery - Show real plant images */}
-        {isLarge && (
-          <div className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
-                <span>🌿</span> Plants in Garden
-              </h4>
-              <span className="text-xs text-stone-500">{plantsCount} plants</span>
-            </div>
-            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-              {previewPlants.length > 0 ? (
-                previewPlants.slice(0, 6).map((plant) => (
-                  <div key={plant.id} className="relative aspect-square rounded-2xl overflow-hidden group/plant border border-stone-200/50 dark:border-stone-700/50">
-                    {plant.imageUrl ? (
-                      <img src={plant.imageUrl} alt={plant.nickname || plant.name} className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
-                    ) : (
-                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
-                        <Leaf className="h-6 w-6 text-white/60" />
-                      </div>
-                    )}
-                    {plant.nickname && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
-                        <span className="text-[9px] text-white font-medium truncate block">{plant.nickname}</span>
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                [1, 2, 3, 4, 5, 6].map((_, i) => (
-                  <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
-                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
-                      <Leaf className="h-6 w-6 text-white/60" />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Badge */}
-        <div className="absolute top-3 left-3">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
-            <Globe className="h-3 w-3" />
-            Public Garden
-          </span>
-        </div>
-      </Link>
-    )
+  // Default values if config is not loaded
+  const config = showcaseConfig || {
+    garden_name: "My Indoor Jungle",
+    plants_count: 12,
+    species_count: 8,
+    streak_count: 7,
+    progress_percent: 85,
+    cover_image_url: null,
+    tasks: [
+      { id: '1', text: "Water your Pothos", completed: true },
+      { id: '2', text: "Fertilize Monstera", completed: false },
+      { id: '3', text: "Mist your Fern", completed: false },
+    ],
+    members: [
+      { id: '1', name: "Sophie", role: 'owner' as const, avatar_url: null, color: "#10b981" },
+      { id: '2', name: "Marcus", role: 'member' as const, avatar_url: null, color: "#3b82f6" },
+    ],
+    plant_cards: [
+      { id: '1', plant_id: null, name: "Monstera", image_url: null, gradient: "from-emerald-400 to-teal-500", tasks_due: 1 },
+      { id: '2', plant_id: null, name: "Pothos", image_url: null, gradient: "from-lime-400 to-green-500", tasks_due: 2 },
+      { id: '3', plant_id: null, name: "Snake Plant", image_url: null, gradient: "from-green-400 to-emerald-500", tasks_due: 0 },
+      { id: '4', plant_id: null, name: "Fern", image_url: null, gradient: "from-teal-400 to-cyan-500", tasks_due: 0 },
+      { id: '5', plant_id: null, name: "Peace Lily", image_url: null, gradient: "from-emerald-500 to-green-600", tasks_due: 0 },
+      { id: '6', plant_id: null, name: "Calathea", image_url: null, gradient: "from-green-500 to-teal-600", tasks_due: 0 },
+    ],
+    completion_rate: 92,
+    analytics_streak: 14,
+    chart_data: [3, 5, 2, 6, 4, 5, 6],
   }
 
-  // Helper to render a manual garden card (fallback when no gardens selected)
-  const renderManualGardenCard = (card: ShowcaseCard | undefined) => {
-    const gardenName = card?.garden_name || "My Indoor Jungle"
-    const plantsCount = card?.plants_count || 12
-    const speciesCount = card?.species_count || 8
-    const streakCount = card?.streak_count || 7
-    const progressPercent = card?.progress_percent || 85
-    const coverImage = card?.cover_image_url
-    const plantImages = card?.plant_images || []
+  // Generate chart points from config data
+  const chartPoints = React.useMemo(() => {
+    const data = config.chart_data.length === 7 ? config.chart_data : [3, 5, 2, 6, 4, 5, 6]
+    const maxVal = Math.max(...data, 1)
+    return data.map((val, i) => {
+      const x = (i / 6) * 280
+      const y = 70 - (val / maxVal) * 60
+      return [x, y]
+    })
+  }, [config.chart_data])
 
-    return (
-      <div className="md:col-span-2 md:row-span-2 group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]">
-        {/* Hero Section with optional cover image */}
-        <div className="relative overflow-hidden">
-          {coverImage ? (
-            <>
-              <div className="absolute inset-0">
-                <img src={coverImage} alt={gardenName} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
-              </div>
-              <div className="relative z-10 p-6 md:p-8 min-h-[200px] flex flex-col justify-end">
-                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-                  <div className="space-y-3">
-                    <h3 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
-                      {gardenName}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <span className="text-base">🌱</span>
-                        <span className="font-semibold text-white text-sm">{plantsCount}</span>
-                        <span className="text-xs text-white/80">plants</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <span className="text-base">🔥</span>
-                        <span className="font-semibold text-white text-sm">{streakCount}</span>
-                        <span className="text-xs text-white/80">day streak</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <span className="text-base">🌿</span>
-                        <span className="font-semibold text-white text-sm">{speciesCount}</span>
-                        <span className="text-xs text-white/80">species</span>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Progress Ring */}
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-16 h-16">
-                      <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                        <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
-                        <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-lg" />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-lg font-bold text-white">{progressPercent}%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
-              <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
-              <div className="relative z-10 p-6 md:p-8">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="space-y-3">
-                    <h3 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
-                      {gardenName}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
-                        <span className="text-base">🌱</span>
-                        <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">{plantsCount}</span>
-                        <span className="text-xs text-stone-600 dark:text-stone-300">plants</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
-                        <span className="text-base">🔥</span>
-                        <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{streakCount}</span>
-                        <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-stone-200/50 dark:border-stone-500/20">
-                        <span className="text-base">🌿</span>
-                        <span className="font-semibold text-stone-700 dark:text-stone-300 text-sm">{speciesCount}</span>
-                        <span className="text-xs text-stone-600 dark:text-stone-300">species</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-16 h-16">
-                      <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                        <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" className="text-stone-200 dark:text-stone-700" strokeWidth="6" />
-                        <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-sm" />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{progressPercent}%</span>
-                      </div>
-                    </div>
-                    <div className="hidden sm:block">
-                      <div className="text-xs text-stone-500 dark:text-stone-400">Today's progress</div>
-                      <div className="font-semibold text-stone-700 dark:text-stone-200 text-sm">{Math.round(plantsCount * progressPercent / 100)}/{plantsCount} tasks</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+  const chartPath = chartPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]},${p[1]}`).join(' ')
+  const areaPath = `${chartPath} L 280,80 L 0,80 Z`
 
-        {/* Plants Gallery */}
-        <div className="p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
-              <span>🌿</span> Plants in Garden
-            </h4>
-            <span className="text-xs text-stone-500">{plantsCount} plants</span>
-          </div>
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-            {plantImages.length > 0 ? (
-              // Use real plant images from database
-              plantImages.slice(0, 6).map((plant, i) => (
-                <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
-                  <img src={plant.url} alt={plant.name} className="w-full h-full object-cover" />
-                  {i < 2 && (
-                    <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">
-                      {i + 1}
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              // Fallback gradient plants
-              [
-                { color: 'from-emerald-400 to-teal-500' },
-                { color: 'from-green-400 to-emerald-500' },
-                { color: 'from-lime-400 to-green-500' },
-                { color: 'from-teal-400 to-cyan-500' },
-                { color: 'from-emerald-500 to-green-600' },
-                { color: 'from-green-500 to-teal-600' },
-              ].map((plant, i) => (
-                <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
-                  <div className={`absolute inset-0 bg-gradient-to-br ${plant.color}`}>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Leaf className="h-6 w-6 text-white/60" />
-                    </div>
-                  </div>
-                  {i < 2 && (
-                    <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">
-                      {i + 1}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Badge */}
-        <div className="absolute top-3 left-3">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
-            <Globe className="h-3 w-3" />
-            {card?.badge_text || "Garden Dashboard"}
-          </span>
-        </div>
-      </div>
-    )
-  }
-
-  // Render garden cards - use selected gardens if available, otherwise fall back to manual
-  const renderGardenShowcase = () => {
-    if (selectedGardens.length > 0) {
-      // Show selected real gardens
-      if (selectedGardens.length === 1) {
-        // Single garden - show large
-        return renderRealGardenCard(selectedGardens[0], 0, true)
-      } else {
-        // Multiple gardens - show in a grid
-        return (
-          <div className="md:col-span-2 md:row-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {selectedGardens.slice(0, 4).map((garden, i) => (
-              <div key={garden.id} className={i === 0 ? 'md:col-span-2' : ''}>
-                {renderRealGardenCard(garden, i, i === 0)}
-              </div>
-            ))}
-          </div>
-        )
-      }
-    }
-    // Fall back to manual card
-    return renderManualGardenCard(mainCard)
-  }
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
   return (
     <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-stone-100/50 to-transparent dark:via-stone-900/30">
@@ -1578,8 +1323,171 @@ const ShowcaseSection: React.FC = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {/* Garden Dashboard Card(s) - uses selected real gardens or manual fallback */}
-          {renderGardenShowcase()}
+          {/* Main Garden Dashboard Card */}
+          <div className="md:col-span-2 md:row-span-2 group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]">
+            {/* Hero Section with optional cover image */}
+            <div className="relative overflow-hidden">
+              {config.cover_image_url ? (
+                <>
+                  <div className="absolute inset-0">
+                    <img src={config.cover_image_url} alt={config.garden_name} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+                  </div>
+                  <div className="relative z-10 p-6 md:p-8 min-h-[200px] flex flex-col justify-end">
+                    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                      <div className="space-y-3">
+                        <h3 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                          {config.garden_name}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                            <span className="text-base">🌱</span>
+                            <span className="font-semibold text-white text-sm">{config.plants_count}</span>
+                            <span className="text-xs text-white/80">plants</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                            <span className="text-base">🔥</span>
+                            <span className="font-semibold text-white text-sm">{config.streak_count}</span>
+                            <span className="text-xs text-white/80">day streak</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                            <span className="text-base">🌿</span>
+                            <span className="font-semibold text-white text-sm">{config.species_count}</span>
+                            <span className="text-xs text-white/80">species</span>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Progress Ring */}
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-16 h-16">
+                          <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                            <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
+                            <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(config.progress_percent / 100) * 163.4} 163.4`} className="drop-shadow-lg" />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-lg font-bold text-white">{config.progress_percent}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
+                  <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
+                  <div className="relative z-10 p-6 md:p-8">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-3">
+                        <h3 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+                          {config.garden_name}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
+                            <span className="text-base">🌱</span>
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">{config.plants_count}</span>
+                            <span className="text-xs text-stone-600 dark:text-stone-300">plants</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
+                            <span className="text-base">🔥</span>
+                            <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{config.streak_count}</span>
+                            <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-stone-200/50 dark:border-stone-500/20">
+                            <span className="text-base">🌿</span>
+                            <span className="font-semibold text-stone-700 dark:text-stone-300 text-sm">{config.species_count}</span>
+                            <span className="text-xs text-stone-600 dark:text-stone-300">species</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-16 h-16">
+                          <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                            <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" className="text-stone-200 dark:text-stone-700" strokeWidth="6" />
+                            <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(config.progress_percent / 100) * 163.4} 163.4`} className="drop-shadow-sm" />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{config.progress_percent}%</span>
+                          </div>
+                        </div>
+                        <div className="hidden sm:block">
+                          <div className="text-xs text-stone-500 dark:text-stone-400">Today's progress</div>
+                          <div className="font-semibold text-stone-700 dark:text-stone-200 text-sm">{Math.round(config.plants_count * config.progress_percent / 100)}/{config.plants_count} tasks</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Members Section */}
+            {config.members.length > 0 && (
+              <div className="px-5 pt-4 pb-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm">👥</span>
+                  <span className="text-xs font-medium text-stone-600 dark:text-stone-400">Garden members ({config.members.length})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {config.members.map((member) => (
+                    <div key={member.id} className="flex items-center gap-2 px-2 py-1 rounded-full bg-stone-100 dark:bg-stone-800">
+                      <div
+                        className="h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold"
+                        style={{ backgroundColor: member.color }}
+                      >
+                        {member.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="text-xs text-stone-700 dark:text-stone-300">{member.name}</span>
+                      {member.role === 'owner' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">Owner</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Plants Gallery */}
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
+                  <span>🌿</span> Plants in Garden
+                </h4>
+                <span className="text-xs text-stone-500">{config.plants_count} plants</span>
+              </div>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {config.plant_cards.slice(0, 6).map((plant, i) => (
+                  <div key={plant.id} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
+                    {plant.image_url ? (
+                      <img src={plant.image_url} alt={plant.name} className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
+                    ) : (
+                      <div className={`absolute inset-0 bg-gradient-to-br ${plant.gradient}`}>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Leaf className="h-6 w-6 text-white/60" />
+                        </div>
+                      </div>
+                    )}
+                    {plant.tasks_due > 0 && (
+                      <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center shadow-lg">
+                        {plant.tasks_due}
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                      <span className="text-[9px] text-white font-medium truncate block">{plant.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Badge */}
+            <div className="absolute top-3 left-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
+                <Globe className="h-3 w-3" />
+                Garden Dashboard
+              </span>
+            </div>
+          </div>
 
           {/* Tasks Card */}
           <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
@@ -1588,24 +1496,24 @@ const ShowcaseSection: React.FC = () => {
                 <Droplets className="h-6 w-6 text-white" />
               </div>
               <span className="px-2 py-1 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-medium">
-                {tasksCard?.badge_text || t("showcase.tasksText", { defaultValue: "3 plants need attention" })}
+                {config.tasks.filter(t => !t.completed).length} plants need attention
               </span>
             </div>
-            <p className="font-semibold text-stone-900 dark:text-white mb-3">{tasksCard?.title || t("showcase.tasksReminder", { defaultValue: "Today's Tasks" })}</p>
+            <p className="font-semibold text-stone-900 dark:text-white mb-3">{t("showcase.tasksReminder", { defaultValue: "Today's Tasks" })}</p>
             
             <div className="space-y-2">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                <span className="text-xs text-stone-600 dark:text-stone-400 line-through">{t("showcase.taskWater", { defaultValue: "Water your Pothos" })}</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
-                <CircleDot className="h-4 w-4 text-blue-500" />
-                <span className="text-xs text-stone-700 dark:text-stone-300">{t("showcase.taskFertilize", { defaultValue: "Fertilize Monstera" })}</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
-                <CircleDot className="h-4 w-4 text-blue-500" />
-                <span className="text-xs text-stone-700 dark:text-stone-300">{t("showcase.taskMist", { defaultValue: "Mist your Fern" })}</span>
-              </div>
+              {config.tasks.map((task) => (
+                <div key={task.id} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
+                  {task.completed ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <CircleDot className="h-4 w-4 text-blue-500" />
+                  )}
+                  <span className={`text-xs ${task.completed ? 'text-stone-600 dark:text-stone-400 line-through' : 'text-stone-700 dark:text-stone-300'}`}>
+                    {task.text}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -1614,7 +1522,7 @@ const ShowcaseSection: React.FC = () => {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-emerald-500" />
-                <span className="font-semibold text-stone-900 dark:text-white text-sm">{analyticsCard?.title || t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</span>
+                <span className="font-semibold text-stone-900 dark:text-white text-sm">{t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</span>
               </div>
               <div className="flex bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5">
                 <span className="px-2 py-1 text-[10px] font-medium rounded-md bg-white dark:bg-stone-700 shadow-sm text-emerald-600 dark:text-emerald-400">Overview</span>
@@ -1630,7 +1538,7 @@ const ShowcaseSection: React.FC = () => {
                     <Target className="w-3 h-3" />
                     <span>Completion Rate</span>
                   </div>
-                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{analyticsCard?.progress_percent || 92}%</div>
+                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{config.completion_rate}%</div>
                   <div className="flex items-center gap-1 mt-0.5">
                     <TrendingUp className="w-3 h-3 text-emerald-500" />
                     <span className="text-[10px] text-emerald-500">+8%</span>
@@ -1646,7 +1554,7 @@ const ShowcaseSection: React.FC = () => {
                     <Flame className="w-3 h-3" />
                     <span>Current Streak</span>
                   </div>
-                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{analyticsCard?.streak_count || 14}</div>
+                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{config.analytics_streak}</div>
                   <div className="text-[10px] text-stone-500 mt-0.5">Best: 21 days</div>
                 </div>
               </div>
@@ -1669,15 +1577,15 @@ const ShowcaseSection: React.FC = () => {
                       <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
                     </linearGradient>
                   </defs>
-                  <path d="M 0,50 L 40,35 L 80,55 L 120,20 L 160,40 L 200,25 L 240,15 L 280,10 L 280,80 L 0,80 Z" fill="url(#showcaseAreaGradient)" />
-                  <path d="M 0,50 L 40,35 L 80,55 L 120,20 L 160,40 L 200,25 L 240,15 L 280,10" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  {[[0, 50], [40, 35], [80, 55], [120, 20], [160, 40], [200, 25], [240, 15], [280, 10]].map(([x, y], i) => (
+                  <path d={areaPath} fill="url(#showcaseAreaGradient)" />
+                  <path d={chartPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  {chartPoints.map(([x, y], i) => (
                     <circle key={i} cx={x} cy={y} r="3" fill="#10b981" className="drop-shadow-sm" />
                   ))}
                 </svg>
                 <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1 -mb-4">
-                  {chartData.map((d, i) => (
-                    <span key={i} className="text-[8px] text-stone-400">{d.day}</span>
+                  {dayLabels.map((d, i) => (
+                    <span key={i} className="text-[8px] text-stone-400">{d}</span>
                   ))}
                 </div>
               </div>

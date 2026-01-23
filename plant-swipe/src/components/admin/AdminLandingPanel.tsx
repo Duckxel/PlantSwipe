@@ -164,6 +164,58 @@ type UserProfile = {
   avatar_url: string | null
 }
 
+// Showcase Configuration Types
+type ShowcaseConfig = {
+  id: string
+  // Garden Card
+  garden_name: string
+  plants_count: number
+  species_count: number
+  streak_count: number
+  progress_percent: number
+  cover_image_url: string | null
+  // Tasks
+  tasks: ShowcaseTask[]
+  // Members
+  members: ShowcaseMember[]
+  // Plant Cards
+  plant_cards: ShowcasePlantCard[]
+  // Analytics
+  completion_rate: number
+  analytics_streak: number
+  chart_data: number[]
+}
+
+type ShowcaseTask = {
+  id: string
+  text: string
+  completed: boolean
+}
+
+type ShowcaseMember = {
+  id: string
+  name: string
+  role: 'owner' | 'member'
+  avatar_url: string | null
+  color: string
+}
+
+type ShowcasePlantCard = {
+  id: string
+  plant_id: string | null
+  name: string
+  image_url: string | null
+  gradient: string
+  tasks_due: number
+}
+
+type PlantSearchResult = {
+  id: string
+  name: string
+  scientific_name: string | null
+  image: string | null
+}
+
 type LandingPageSettings = {
   id: string
   // Hero Section
@@ -208,7 +260,7 @@ type LandingPageSettings = {
   meta_description: string
 }
 
-type LandingTab = "settings" | "hero" | "stats" | "testimonials" | "faq" | "demo"
+type LandingTab = "settings" | "hero" | "stats" | "testimonials" | "faq" | "demo" | "showcase"
 
 // ========================
 // SHARED TRANSLATION COMPONENTS
@@ -889,6 +941,7 @@ export const AdminLandingPanel: React.FC = () => {
   const [testimonials, setTestimonials] = React.useState<Testimonial[]>([])
   const [faqItems, setFaqItems] = React.useState<FAQ[]>([])
   const [demoFeatures, setDemoFeatures] = React.useState<DemoFeature[]>([])
+  const [showcaseConfig, setShowcaseConfig] = React.useState<ShowcaseConfig | null>(null)
 
   // Load all data
   const loadData = React.useCallback(async () => {
@@ -946,6 +999,48 @@ export const AdminLandingPanel: React.FC = () => {
       if (testimonialsRes.data) setTestimonials(testimonialsRes.data)
       if (faqRes.data) setFaqItems(faqRes.data)
       if (demoRes.data) setDemoFeatures(demoRes.data)
+
+      // Load showcase config
+      const { data: showcaseData } = await supabase
+        .from("landing_showcase_config")
+        .select("*")
+        .limit(1)
+        .maybeSingle()
+      
+      if (showcaseData) {
+        setShowcaseConfig(showcaseData)
+      } else {
+        // Initialize with defaults
+        setShowcaseConfig({
+          id: '',
+          garden_name: "My Indoor Jungle",
+          plants_count: 12,
+          species_count: 8,
+          streak_count: 7,
+          progress_percent: 85,
+          cover_image_url: null,
+          tasks: [
+            { id: '1', text: "Water your Pothos", completed: true },
+            { id: '2', text: "Fertilize Monstera", completed: false },
+            { id: '3', text: "Mist your Fern", completed: false },
+          ],
+          members: [
+            { id: '1', name: "Sophie", role: 'owner', avatar_url: null, color: "#10b981" },
+            { id: '2', name: "Marcus", role: 'member', avatar_url: null, color: "#3b82f6" },
+          ],
+          plant_cards: [
+            { id: '1', plant_id: null, name: "Monstera", image_url: null, gradient: "from-emerald-400 to-teal-500", tasks_due: 1 },
+            { id: '2', plant_id: null, name: "Pothos", image_url: null, gradient: "from-lime-400 to-green-500", tasks_due: 2 },
+            { id: '3', plant_id: null, name: "Snake Plant", image_url: null, gradient: "from-green-400 to-emerald-500", tasks_due: 0 },
+            { id: '4', plant_id: null, name: "Fern", image_url: null, gradient: "from-teal-400 to-cyan-500", tasks_due: 0 },
+            { id: '5', plant_id: null, name: "Peace Lily", image_url: null, gradient: "from-emerald-500 to-green-600", tasks_due: 0 },
+            { id: '6', plant_id: null, name: "Calathea", image_url: null, gradient: "from-green-500 to-teal-600", tasks_due: 0 },
+          ],
+          completion_rate: 92,
+          analytics_streak: 14,
+          chart_data: [3, 5, 2, 6, 4, 5, 6],
+        })
+      }
     } catch (e) {
       console.error("Failed to load landing data:", e)
       setSettingsError("Failed to load landing data. Please try again.")
@@ -963,6 +1058,7 @@ export const AdminLandingPanel: React.FC = () => {
     { id: "hero" as const, label: "Hero Cards", icon: Smartphone, count: heroCards.length },
     { id: "stats" as const, label: "Stats", icon: BarChart3 },
     { id: "demo" as const, label: "Wheel Features", icon: CirclePlay, count: demoFeatures.length },
+    { id: "showcase" as const, label: "Showcase", icon: Grid3X3 },
     { id: "testimonials" as const, label: "Reviews", icon: Star, count: testimonials.length },
     { id: "faq" as const, label: "FAQ", icon: HelpCircle, count: faqItems.length },
   ]
@@ -1098,6 +1194,14 @@ export const AdminLandingPanel: React.FC = () => {
               setItems={setFaqItems}
               setSaving={setSaving}
               sectionVisible={settings?.show_faq_section ?? true}
+            />
+          )}
+          {activeTab === "showcase" && (
+            <ShowcaseTab
+              config={showcaseConfig}
+              setConfig={setShowcaseConfig}
+              setSaving={setSaving}
+              sectionVisible={settings?.show_showcase_section ?? true}
             />
           )}
         </>
@@ -3497,6 +3601,687 @@ const FAQTab: React.FC<{
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+// ========================
+// SHOWCASE TAB
+// ========================
+const ShowcaseTab: React.FC<{
+  config: ShowcaseConfig | null
+  setConfig: React.Dispatch<React.SetStateAction<ShowcaseConfig | null>>
+  setSaving: React.Dispatch<React.SetStateAction<boolean>>
+  sectionVisible: boolean
+}> = ({ config, setConfig, setSaving, sectionVisible }) => {
+  const [localConfig, setLocalConfig] = React.useState<ShowcaseConfig | null>(config)
+  const [plantSearch, setPlantSearch] = React.useState("")
+  const [plantResults, setPlantResults] = React.useState<PlantSearchResult[]>([])
+  const [searchingPlants, setSearchingPlants] = React.useState(false)
+  const [editingPlantIndex, setEditingPlantIndex] = React.useState<number | null>(null)
+  const [imageSearchQuery, setImageSearchQuery] = React.useState("")
+  const [imageSearchResults, setImageSearchResults] = React.useState<string[]>([])
+  const [searchingImages, setSearchingImages] = React.useState(false)
+
+  React.useEffect(() => {
+    setLocalConfig(config)
+  }, [config])
+
+  // Gradient options for plant cards
+  const gradientOptions = [
+    { value: "from-emerald-400 to-teal-500", label: "Emerald → Teal" },
+    { value: "from-lime-400 to-green-500", label: "Lime → Green" },
+    { value: "from-green-400 to-emerald-500", label: "Green → Emerald" },
+    { value: "from-teal-400 to-cyan-500", label: "Teal → Cyan" },
+    { value: "from-emerald-500 to-green-600", label: "Emerald → Green" },
+    { value: "from-green-500 to-teal-600", label: "Green → Teal" },
+    { value: "from-cyan-400 to-blue-500", label: "Cyan → Blue" },
+    { value: "from-lime-300 to-emerald-400", label: "Lime → Emerald" },
+  ]
+
+  // Color options for member avatars
+  const colorOptions = [
+    { value: "#10b981", label: "Emerald" },
+    { value: "#3b82f6", label: "Blue" },
+    { value: "#ec4899", label: "Pink" },
+    { value: "#f59e0b", label: "Amber" },
+    { value: "#8b5cf6", label: "Purple" },
+    { value: "#06b6d4", label: "Cyan" },
+    { value: "#ef4444", label: "Red" },
+    { value: "#84cc16", label: "Lime" },
+  ]
+
+  // Search plants from database
+  const searchPlants = React.useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setPlantResults([])
+      return
+    }
+    setSearchingPlants(true)
+    try {
+      const { data } = await supabase
+        .from("plants")
+        .select("id, name, scientific_name, image")
+        .or(`name.ilike.%${query}%,scientific_name.ilike.%${query}%`)
+        .limit(10)
+      setPlantResults(data || [])
+    } catch (e) {
+      console.error("Plant search error:", e)
+    } finally {
+      setSearchingPlants(false)
+    }
+  }, [])
+
+  // Debounced plant search
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      searchPlants(plantSearch)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [plantSearch, searchPlants])
+
+  // Search for cover images (using Unsplash-like free images)
+  const searchImages = React.useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setImageSearchResults([])
+      return
+    }
+    setSearchingImages(true)
+    // Use predefined garden/plant images for demo
+    const sampleImages = [
+      "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800",
+      "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=800",
+      "https://images.unsplash.com/photo-1463936575829-25148e1db1b8?w=800",
+      "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800",
+      "https://images.unsplash.com/photo-1491147334573-44cbb4602074?w=800",
+      "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=800",
+    ]
+    setImageSearchResults(sampleImages)
+    setSearchingImages(false)
+  }, [])
+
+  // Save configuration
+  const saveConfig = async () => {
+    if (!localConfig) return
+    setSaving(true)
+    try {
+      // Try to upsert the config
+      const { error } = await supabase
+        .from("landing_showcase_config")
+        .upsert({
+          id: localConfig.id || undefined,
+          garden_name: localConfig.garden_name,
+          plants_count: localConfig.plants_count,
+          species_count: localConfig.species_count,
+          streak_count: localConfig.streak_count,
+          progress_percent: localConfig.progress_percent,
+          cover_image_url: localConfig.cover_image_url,
+          tasks: localConfig.tasks,
+          members: localConfig.members,
+          plant_cards: localConfig.plant_cards,
+          completion_rate: localConfig.completion_rate,
+          analytics_streak: localConfig.analytics_streak,
+          chart_data: localConfig.chart_data,
+        })
+      
+      if (error) {
+        console.error("Save error:", error)
+        // Table might not exist - that's ok, we use defaults
+      }
+      setConfig(localConfig)
+    } catch (e) {
+      console.error("Failed to save showcase config:", e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Select plant for a card
+  const selectPlantForCard = (index: number, plant: PlantSearchResult) => {
+    if (!localConfig) return
+    const newCards = [...localConfig.plant_cards]
+    newCards[index] = {
+      ...newCards[index],
+      plant_id: plant.id,
+      name: plant.name,
+      image_url: plant.image,
+    }
+    setLocalConfig({ ...localConfig, plant_cards: newCards })
+    setEditingPlantIndex(null)
+    setPlantSearch("")
+    setPlantResults([])
+  }
+
+  // Add new task
+  const addTask = () => {
+    if (!localConfig) return
+    const newTask: ShowcaseTask = {
+      id: crypto.randomUUID(),
+      text: "New task",
+      completed: false,
+    }
+    setLocalConfig({ ...localConfig, tasks: [...localConfig.tasks, newTask] })
+  }
+
+  // Remove task
+  const removeTask = (taskId: string) => {
+    if (!localConfig) return
+    setLocalConfig({ ...localConfig, tasks: localConfig.tasks.filter(t => t.id !== taskId) })
+  }
+
+  // Update task
+  const updateTask = (taskId: string, updates: Partial<ShowcaseTask>) => {
+    if (!localConfig) return
+    setLocalConfig({
+      ...localConfig,
+      tasks: localConfig.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
+    })
+  }
+
+  // Add new member
+  const addMember = () => {
+    if (!localConfig) return
+    const newMember: ShowcaseMember = {
+      id: crypto.randomUUID(),
+      name: "New Member",
+      role: 'member',
+      avatar_url: null,
+      color: colorOptions[localConfig.members.length % colorOptions.length].value,
+    }
+    setLocalConfig({ ...localConfig, members: [...localConfig.members, newMember] })
+  }
+
+  // Remove member
+  const removeMember = (memberId: string) => {
+    if (!localConfig) return
+    setLocalConfig({ ...localConfig, members: localConfig.members.filter(m => m.id !== memberId) })
+  }
+
+  // Update member
+  const updateMember = (memberId: string, updates: Partial<ShowcaseMember>) => {
+    if (!localConfig) return
+    setLocalConfig({
+      ...localConfig,
+      members: localConfig.members.map(m => m.id === memberId ? { ...m, ...updates } : m)
+    })
+  }
+
+  // Add new plant card
+  const addPlantCard = () => {
+    if (!localConfig) return
+    const newCard: ShowcasePlantCard = {
+      id: crypto.randomUUID(),
+      plant_id: null,
+      name: "New Plant",
+      image_url: null,
+      gradient: gradientOptions[localConfig.plant_cards.length % gradientOptions.length].value,
+      tasks_due: 0,
+    }
+    setLocalConfig({ ...localConfig, plant_cards: [...localConfig.plant_cards, newCard] })
+  }
+
+  // Remove plant card
+  const removePlantCard = (cardId: string) => {
+    if (!localConfig) return
+    setLocalConfig({ ...localConfig, plant_cards: localConfig.plant_cards.filter(c => c.id !== cardId) })
+  }
+
+  // Update plant card
+  const updatePlantCard = (cardId: string, updates: Partial<ShowcasePlantCard>) => {
+    if (!localConfig) return
+    setLocalConfig({
+      ...localConfig,
+      plant_cards: localConfig.plant_cards.map(c => c.id === cardId ? { ...c, ...updates } : c)
+    })
+  }
+
+  if (!localConfig) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Section Visibility Warning */}
+      {!sectionVisible && (
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <EyeOff className="h-5 w-5 text-amber-500" />
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            This section is currently hidden. Enable it in Global Settings.
+          </p>
+        </div>
+      )}
+
+      {/* Garden Card Settings */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+              <Leaf className="h-5 w-5 text-emerald-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-stone-900 dark:text-white">Garden Card</h3>
+              <p className="text-xs text-stone-500">Configure the main garden dashboard preview</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Garden Name */}
+            <div className="space-y-2">
+              <Label className="text-sm">Garden Name</Label>
+              <Input
+                value={localConfig.garden_name}
+                onChange={(e) => setLocalConfig({ ...localConfig, garden_name: e.target.value })}
+                placeholder="My Indoor Jungle"
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Plants Count */}
+            <div className="space-y-2">
+              <Label className="text-sm">Plants Count</Label>
+              <Input
+                type="number"
+                value={localConfig.plants_count}
+                onChange={(e) => setLocalConfig({ ...localConfig, plants_count: parseInt(e.target.value) || 0 })}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Species Count */}
+            <div className="space-y-2">
+              <Label className="text-sm">Species Count</Label>
+              <Input
+                type="number"
+                value={localConfig.species_count}
+                onChange={(e) => setLocalConfig({ ...localConfig, species_count: parseInt(e.target.value) || 0 })}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Streak Count */}
+            <div className="space-y-2">
+              <Label className="text-sm">Day Streak</Label>
+              <Input
+                type="number"
+                value={localConfig.streak_count}
+                onChange={(e) => setLocalConfig({ ...localConfig, streak_count: parseInt(e.target.value) || 0 })}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Progress Percent */}
+            <div className="space-y-2">
+              <Label className="text-sm">Progress %</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={localConfig.progress_percent}
+                onChange={(e) => setLocalConfig({ ...localConfig, progress_percent: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Cover Image URL */}
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-sm">Cover Image URL (optional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={localConfig.cover_image_url || ""}
+                  onChange={(e) => setLocalConfig({ ...localConfig, cover_image_url: e.target.value || null })}
+                  placeholder="https://example.com/image.jpg"
+                  className="rounded-xl flex-1"
+                />
+                {localConfig.cover_image_url && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setLocalConfig({ ...localConfig, cover_image_url: null })}
+                    className="rounded-xl"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {localConfig.cover_image_url && (
+                <div className="mt-2 rounded-xl overflow-hidden h-32 bg-stone-100 dark:bg-stone-800">
+                  <img src={localConfig.cover_image_url} alt="Cover preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Plant Cards */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+                <Grid3X3 className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-stone-900 dark:text-white">Plant Cards ({localConfig.plant_cards.length})</h3>
+                <p className="text-xs text-stone-500">Configure the plant grid display</p>
+              </div>
+            </div>
+            <Button onClick={addPlantCard} size="sm" className="rounded-xl gap-1">
+              <Plus className="h-4 w-4" /> Add Plant
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {localConfig.plant_cards.map((card, index) => (
+              <div key={card.id} className="space-y-2">
+                {/* Preview */}
+                <div className={`relative aspect-square rounded-2xl bg-gradient-to-br ${card.gradient} flex items-center justify-center overflow-hidden group`}>
+                  {card.image_url ? (
+                    <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Leaf className="h-8 w-8 text-white/50" />
+                  )}
+                  {card.tasks_due > 0 && (
+                    <div className="absolute top-1 right-1 h-5 w-5 bg-amber-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
+                      {card.tasks_due}
+                    </div>
+                  )}
+                  {/* Overlay buttons */}
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <Button
+                      size="icon"
+                      variant="secondary"
+                      className="h-8 w-8 rounded-lg"
+                      onClick={() => setEditingPlantIndex(index)}
+                    >
+                      <Search className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      className="h-8 w-8 rounded-lg"
+                      onClick={() => removePlantCard(card.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Name */}
+                <Input
+                  value={card.name}
+                  onChange={(e) => updatePlantCard(card.id, { name: e.target.value })}
+                  className="rounded-lg text-xs h-8"
+                  placeholder="Plant name"
+                />
+
+                {/* Tasks Due */}
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={card.tasks_due}
+                    onChange={(e) => updatePlantCard(card.id, { tasks_due: parseInt(e.target.value) || 0 })}
+                    className="rounded-lg text-xs h-8 w-16"
+                  />
+                  <span className="text-xs text-stone-500">due</span>
+                </div>
+
+                {/* Gradient selector */}
+                <select
+                  value={card.gradient}
+                  onChange={(e) => updatePlantCard(card.id, { gradient: e.target.value })}
+                  className="w-full text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5"
+                >
+                  {gradientOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+
+                {/* Plant search dialog */}
+                {editingPlantIndex === index && (
+                  <Dialog open={true} onOpenChange={() => setEditingPlantIndex(null)}>
+                    <DialogContent className="rounded-[20px]">
+                      <DialogHeader>
+                        <DialogTitle>Select Plant from Database</DialogTitle>
+                        <DialogDescription>Search and select a plant to use its image</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                          <Input
+                            value={plantSearch}
+                            onChange={(e) => setPlantSearch(e.target.value)}
+                            placeholder="Search plants..."
+                            className="pl-10 rounded-xl"
+                          />
+                        </div>
+                        {searchingPlants ? (
+                          <div className="flex justify-center py-4">
+                            <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
+                          </div>
+                        ) : plantResults.length > 0 ? (
+                          <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                            {plantResults.map(plant => (
+                              <button
+                                key={plant.id}
+                                onClick={() => selectPlantForCard(index, plant)}
+                                className="flex items-center gap-2 p-2 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-left transition-colors"
+                              >
+                                <div className="h-10 w-10 rounded-lg bg-stone-100 dark:bg-stone-800 overflow-hidden flex-shrink-0">
+                                  {plant.image ? (
+                                    <img src={plant.image} alt={plant.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Leaf className="h-5 w-5 text-stone-400" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{plant.name}</p>
+                                  {plant.scientific_name && (
+                                    <p className="text-xs text-stone-500 italic truncate">{plant.scientific_name}</p>
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : plantSearch.length >= 2 ? (
+                          <p className="text-center text-sm text-stone-500 py-4">No plants found</p>
+                        ) : (
+                          <p className="text-center text-sm text-stone-500 py-4">Type at least 2 characters to search</p>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tasks */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                <Check className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-stone-900 dark:text-white">Tasks ({localConfig.tasks.length})</h3>
+                <p className="text-xs text-stone-500">Configure the task list display</p>
+              </div>
+            </div>
+            <Button onClick={addTask} size="sm" className="rounded-xl gap-1">
+              <Plus className="h-4 w-4" /> Add Task
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {localConfig.tasks.map((task) => (
+              <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50">
+                <Switch
+                  checked={task.completed}
+                  onCheckedChange={(checked) => updateTask(task.id, { completed: checked })}
+                />
+                <Input
+                  value={task.text}
+                  onChange={(e) => updateTask(task.id, { text: e.target.value })}
+                  className={cn("flex-1 rounded-lg", task.completed && "line-through text-stone-400")}
+                  placeholder="Task description"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeTask(task.id)}
+                  className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Members */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                <Users className="h-5 w-5 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-stone-900 dark:text-white">Members ({localConfig.members.length})</h3>
+                <p className="text-xs text-stone-500">Configure the members display</p>
+              </div>
+            </div>
+            <Button onClick={addMember} size="sm" className="rounded-xl gap-1">
+              <Plus className="h-4 w-4" /> Add Member
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {localConfig.members.map((member) => (
+              <div key={member.id} className="flex items-center gap-3 p-4 rounded-xl bg-stone-50 dark:bg-stone-800/50">
+                {/* Avatar preview */}
+                <div
+                  className="h-12 w-12 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
+                  style={{ backgroundColor: member.color }}
+                >
+                  {member.name.slice(0, 2).toUpperCase()}
+                </div>
+
+                <div className="flex-1 space-y-2">
+                  <Input
+                    value={member.name}
+                    onChange={(e) => updateMember(member.id, { name: e.target.value })}
+                    className="rounded-lg h-8 text-sm"
+                    placeholder="Member name"
+                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={member.role}
+                      onChange={(e) => updateMember(member.id, { role: e.target.value as 'owner' | 'member' })}
+                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5"
+                    >
+                      <option value="owner">Owner</option>
+                      <option value="member">Member</option>
+                    </select>
+                    <select
+                      value={member.color}
+                      onChange={(e) => updateMember(member.id, { color: e.target.value })}
+                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5"
+                    >
+                      {colorOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeMember(member.id)}
+                  className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Analytics */}
+      <Card className="rounded-[20px] border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="h-10 w-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
+              <BarChart3 className="h-5 w-5 text-orange-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-stone-900 dark:text-white">Analytics Card</h3>
+              <p className="text-xs text-stone-500">Configure the analytics display</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm">Completion Rate %</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={localConfig.completion_rate}
+                onChange={(e) => setLocalConfig({ ...localConfig, completion_rate: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                className="rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm">Analytics Streak</Label>
+              <Input
+                type="number"
+                min={0}
+                value={localConfig.analytics_streak}
+                onChange={(e) => setLocalConfig({ ...localConfig, analytics_streak: parseInt(e.target.value) || 0 })}
+                className="rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-sm">Chart Data (7 days, comma separated)</Label>
+              <Input
+                value={localConfig.chart_data.join(", ")}
+                onChange={(e) => {
+                  const values = e.target.value.split(",").map(v => parseInt(v.trim()) || 0)
+                  setLocalConfig({ ...localConfig, chart_data: values.slice(0, 7) })
+                }}
+                placeholder="3, 5, 2, 6, 4, 5, 6"
+                className="rounded-xl"
+              />
+              <p className="text-xs text-stone-500">Enter 7 numbers for the activity chart (M, T, W, T, F, S, S)</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <Button onClick={saveConfig} className="rounded-xl gap-2">
+          <Save className="h-4 w-4" />
+          Save Showcase Configuration
+        </Button>
+      </div>
     </div>
   )
 }
