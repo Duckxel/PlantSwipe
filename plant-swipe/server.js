@@ -18578,7 +18578,6 @@ async function buildGardenContextString(context) {
         careRequirements.push(`- Temperature range: ${plant.temperatureRange.min}°C to ${plant.temperatureRange.max}°C (ideal: ${plant.temperatureRange.ideal}°C)`)
       }
       if (plant.humidity) careRequirements.push(`- Humidity needs: ${plant.humidity}%`)
-      if (plant.hardinessZone) careRequirements.push(`- Hardiness zone: ${plant.hardinessZone}`)
       if (plant.soilType && plant.soilType.length > 0) careRequirements.push(`- Soil types: ${plant.soilType.join(', ')}`)
       if (plant.nutritionNeeds && plant.nutritionNeeds.length > 0) careRequirements.push(`- Nutrition needs: ${plant.nutritionNeeds.join(', ')}`)
       if (plant.fertilizerTypes && plant.fertilizerTypes.length > 0) careRequirements.push(`- Fertilizer types: ${plant.fertilizerTypes.join(', ')}`)
@@ -18603,7 +18602,8 @@ async function buildGardenContextString(context) {
       // Characteristics
       const characteristics = []
       if (plant.isEdible) characteristics.push('Edible')
-      if (plant.isPoisonous) characteristics.push('⚠️ Poisonous')
+      if (plant.toxicityHuman === 'highly toxic' || plant.toxicityHuman === 'lethally toxic') characteristics.push('⚠️ Toxic to humans')
+      if (plant.toxicityPets === 'highly toxic' || plant.toxicityPets === 'lethally toxic') characteristics.push('⚠️ Toxic to pets')
       if (plant.hasSpikes) characteristics.push('Has spikes')
       if (plant.hasScent) characteristics.push('Fragrant')
       if (plant.isMulticolor) characteristics.push('Multicolor')
@@ -18618,9 +18618,6 @@ async function buildGardenContextString(context) {
       if (plant.commonPests && plant.commonPests.length > 0) parts.push(`- Common pests: ${plant.commonPests.join(', ')}`)
       if (plant.commonDiseases && plant.commonDiseases.length > 0) parts.push(`- Common diseases: ${plant.commonDiseases.join(', ')}`)
       if (plant.companionPlants && plant.companionPlants.length > 0) parts.push(`- Companion plants: ${plant.companionPlants.join(', ')}`)
-      
-      // Tags
-      if (plant.tags && plant.tags.length > 0) parts.push(`- Tags: ${plant.tags.join(', ')}`)
       
       // Schedule and tasks
       if (plant.schedule) {
@@ -19890,7 +19887,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         if (gardenIdForTools) {
           // Only enable tools if we have a garden context
           const initialResponse = await openai.chat.completions.create({
-            model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+            model: openaiModel, // Use the same powerful model as Gardener Advice
             messages: messagesWithTools,
             tools: APHYLIA_TOOLS,
             tool_choice: 'auto',
@@ -19949,7 +19946,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         
         // Now stream the final response (with tool results if any)
         const streamResponse = await openai.chat.completions.create({
-          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          model: openaiModel, // Use the same powerful model as Gardener Advice
           messages: messagesWithTools,
           stream: true,
           max_tokens: 2048,
@@ -20001,7 +19998,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       
       if (gardenIdForTools) {
         const initialResponse = await openai.chat.completions.create({
-          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          model: openaiModel, // Use the same powerful model as Gardener Advice
           messages: messagesWithTools,
           tools: APHYLIA_TOOLS,
           tool_choice: 'auto',
@@ -20044,7 +20041,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       
       // Final response
       const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+        model: openaiModel, // Use the same powerful model as Gardener Advice
         messages: messagesWithTools,
         max_tokens: 2048,
         temperature: 0.7
