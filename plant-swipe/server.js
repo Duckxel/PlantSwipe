@@ -22631,7 +22631,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: profileByDisplayName, error: err1 } = await ssrQuery(
           supabaseServer
             .from('profiles')
-            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant')
+            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
             .ilike('display_name', username)
             .maybeSingle(),
           'profile_lookup_by_display_name'
@@ -22644,7 +22644,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: profileByUsername, error: err2 } = await ssrQuery(
             supabaseServer
               .from('profiles')
-              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant')
+              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
               .ilike('username', username)
               .maybeSingle(),
             'profile_lookup_by_username'
@@ -22697,48 +22697,93 @@ async function generateCrawlerHtml(req, pagePath) {
           // Get garden and plant counts (with timeouts to avoid blocking)
           let gardenCount = 0
           let plantCount = 0
+          let currentStreak = 0
+          let bestStreak = 0
+          let friendsCount = 0
+          let joinedDate = null
+          let isOnline = false
+          let lastSeen = null
+          
           try {
-            const { count: gCount } = await ssrQuery(
-              supabaseServer
-                .from('gardens')
-                .select('id', { count: 'exact', head: true })
-                .eq('created_by', profile.id),
-              'profile_garden_count'
+            // Get stats using the same RPC as frontend
+            const { data: statsData } = await ssrQuery(
+              supabaseServer.rpc('get_user_profile_public_stats', { _user_id: profile.id }),
+              'profile_stats'
             )
-            gardenCount = gCount || 0
+            if (statsData) {
+              const statRow = Array.isArray(statsData) ? statsData[0] : statsData
+              gardenCount = Number(statRow?.gardens_count || 0)
+              plantCount = Number(statRow?.plants_total || 0)
+              currentStreak = Number(statRow?.current_streak || 0)
+              bestStreak = Number(statRow?.longest_streak || 0)
+            }
+            
+            // Get friend count
+            const { data: friendCountData } = await ssrQuery(
+              supabaseServer.rpc('get_friend_count', { _user_id: profile.id }),
+              'profile_friend_count'
+            )
+            if (typeof friendCountData === 'number') {
+              friendsCount = friendCountData
+            }
 
-            // Get total plants across all gardens
-            const { data: gardens } = await ssrQuery(
-              supabaseServer
-                .from('gardens')
-                .select('id')
-                .eq('created_by', profile.id),
-              'profile_gardens'
-            )
-            if (gardens?.length) {
-              const gardenIds = gardens.map(g => g.id)
-              const { count: pCount } = await ssrQuery(
+            // Fallback for garden/plant counts if RPC didn't return them
+            if (gardenCount === 0) {
+              const { count: gCount } = await ssrQuery(
                 supabaseServer
-                  .from('garden_plants')
+                  .from('gardens')
                   .select('id', { count: 'exact', head: true })
-                  .in('garden_id', gardenIds),
-                'profile_plant_count'
+                  .eq('created_by', profile.id),
+                'profile_garden_count'
               )
-              plantCount = pCount || 0
+              gardenCount = gCount || 0
+            }
+
+            if (plantCount === 0 && gardenCount > 0) {
+              const { data: gardens } = await ssrQuery(
+                supabaseServer
+                  .from('gardens')
+                  .select('id')
+                  .eq('created_by', profile.id),
+                'profile_gardens'
+              )
+              if (gardens?.length) {
+                const gardenIds = gardens.map(g => g.id)
+                const { count: pCount } = await ssrQuery(
+                  supabaseServer
+                    .from('garden_plants')
+                    .select('id', { count: 'exact', head: true })
+                    .in('garden_id', gardenIds),
+                  'profile_plant_count'
+                )
+                plantCount = pCount || 0
+              }
             }
           } catch { }
 
-          // Create rich description
+          // Extract joined date and online status from RPC result if available
+          if (profile.joined_at) {
+            joinedDate = profile.joined_at
+          }
+          if (profile.is_online !== undefined) {
+            isOnline = Boolean(profile.is_online)
+          }
+          if (profile.last_seen_at) {
+            lastSeen = profile.last_seen_at
+          }
+
+          // Create rich description with all stats
           const descParts = []
           if (profile.bio) {
-            descParts.push(profile.bio.slice(0, 100))
+            descParts.push(profile.bio.slice(0, 80))
           } else {
             descParts.push(`${tr.profileCheckOut} ${displayName}'s ${tr.profileGrowingJourney}`)
           }
           if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} ${tr.profileGardens}`)
           if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
+          if (currentStreak > 0) descParts.push(`🔥 ${currentStreak} ${detectedLang === 'fr' ? 'jours de série' : 'day streak'}`)
+          if (friendsCount > 0) descParts.push(`👥 ${friendsCount} ${detectedLang === 'fr' ? 'amis' : 'friends'}`)
           if (profile.country) descParts.push(`📍 ${profile.country}`)
-          if (profile.favorite_plant) descParts.push(`❤️ ${profile.favorite_plant}`)
 
           description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
 
@@ -22749,15 +22794,62 @@ async function generateCrawlerHtml(req, pagePath) {
           }
           // If no avatar, image stays null - no fallback
 
+          // Build role badges
+          const roleBadges = []
+          if (profile.is_admin) roleBadges.push('👑 Admin')
+          if (Array.isArray(profile.roles)) {
+            if (profile.roles.includes('team_member')) roleBadges.push('🌟 Team')
+            if (profile.roles.includes('beta_tester')) roleBadges.push('🧪 Beta')
+            if (profile.roles.includes('bug_catcher')) roleBadges.push('🐛 Bug Catcher')
+            if (profile.roles.includes('early_adopter')) roleBadges.push('🌱 Early Adopter')
+          }
+
+          // Locale-specific date formatting
+          const dateLocales = { en: 'en-US', fr: 'fr-FR' }
+          const joinedDateFormatted = joinedDate ? new Date(joinedDate).toLocaleDateString(dateLocales[detectedLang] || 'en-US', {
+            year: 'numeric',
+            month: 'long',
+          }) : null
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Person">
               <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
-              <div class="plant-meta">
-                ${gardenCount > 0 ? `🏡 ${gardenCount} ${tr.profileGardens}` : ''}
-                ${plantCount > 0 ? ` · 🌿 ${plantCount} ${tr.profilePlants}` : ''}
-                ${profile.country ? ` · 📍 ${escapeHtml(profile.country)}` : ''}
+              ${roleBadges.length > 0 ? `<div style="margin-bottom: 12px;">${roleBadges.join(' ')}</div>` : ''}
+              <div class="profile-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
+                ${profile.country ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
+                ${isOnline ? `<span>🟢 ${detectedLang === 'fr' ? 'En ligne' : 'Online'}</span>` : ''}
+                ${joinedDateFormatted ? `<span>📅 ${detectedLang === 'fr' ? 'Membre depuis' : 'Member since'} ${joinedDateFormatted}</span>` : ''}
               </div>
-              ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
+              
+              ${profile.bio ? `<p itemprop="description" style="font-style: italic; margin-bottom: 20px;">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
+              
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 20px 0; padding: 16px; background: #f0fdf4; border-radius: 12px;">
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${tr.profilePlants}</div>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🏡 ${gardenCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${tr.profileGardens}</div>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #f97316;">🔥 ${currentStreak}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Série actuelle' : 'Current Streak'}</div>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #eab308;">🏆 ${bestStreak}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Meilleure série' : 'Best Streak'}</div>
+                </div>
+                ${friendsCount > 0 ? `
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #8b5cf6;">👥 ${friendsCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Amis' : 'Friends'}</div>
+                </div>
+                ` : ''}
+              </div>
+              
+              ${profile.favorite_plant ? `<p>❤️ ${detectedLang === 'fr' ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
+              
               <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileExploreGardens} ${escapeHtml(displayName)} →</a></p>
             </article>
           `
@@ -22801,8 +22893,9 @@ async function generateCrawlerHtml(req, pagePath) {
         const gardenName = garden.name || tr.gardenBeautiful
         console.log(`[ssr] ✓ Found garden: ${gardenName} (privacy: ${garden.privacy || 'public'})`)
 
-        // Get owner name (needed for both public and private gardens)
+        // Get owner info (needed for both public and private gardens)
         let ownerName = null
+        let ownerAvatarUrl = null
         if (garden.created_by) {
           const { data: owner } = await ssrQuery(
             dbClient
@@ -22814,6 +22907,7 @@ async function generateCrawlerHtml(req, pagePath) {
           )
           if (owner) {
             ownerName = owner.display_name
+            ownerAvatarUrl = owner.avatar_url
           }
         }
 
@@ -22841,7 +22935,12 @@ async function generateCrawlerHtml(req, pagePath) {
         } else {
           // Public garden - show full details
           let plantCount = 0
+          let speciesCount = 0
           let gardenImage = null
+          let gardenStreak = 0
+          let memberCount = 1
+          let recentPlants = []
+          let todayProgress = { due: 0, completed: 0 }
 
           try {
             // Use garden cover image if available
@@ -22850,50 +22949,94 @@ async function generateCrawlerHtml(req, pagePath) {
             }
 
             // Get owner avatar if no garden cover
-            if (!gardenImage && garden.created_by) {
-              const { data: ownerForAvatar } = await ssrQuery(
-                dbClient
-                  .from('profiles')
-                  .select('avatar_url')
-                  .eq('id', garden.created_by)
-                  .maybeSingle(),
-                'garden_owner_avatar'
-              )
-              if (ownerForAvatar?.avatar_url) gardenImage = ensureAbsoluteUrl(ownerForAvatar.avatar_url)
+            if (!gardenImage && ownerAvatarUrl) {
+              gardenImage = ensureAbsoluteUrl(ownerAvatarUrl)
             }
 
-            // Get plant count (with timeout)
-            const { count } = await ssrQuery(
+            // Get plant count and species count
+            const { data: gardenPlants } = await ssrQuery(
               dbClient
                 .from('garden_plants')
+                .select('id, plant_id, nickname')
+                .eq('garden_id', gardenId),
+              'garden_plants'
+            )
+            
+            if (gardenPlants?.length) {
+              plantCount = gardenPlants.length
+              // Count unique species
+              const uniquePlantIds = new Set(gardenPlants.map(p => p.plant_id).filter(Boolean))
+              speciesCount = uniquePlantIds.size
+              
+              // Get plant names for recent plants preview
+              const plantIds = [...uniquePlantIds].slice(0, 4)
+              if (plantIds.length > 0) {
+                const { data: plantDetails } = await ssrQuery(
+                  dbClient
+                    .from('plants')
+                    .select('id, name')
+                    .in('id', plantIds),
+                  'garden_plant_names'
+                )
+                if (plantDetails) {
+                  recentPlants = plantDetails.map(p => p.name).filter(Boolean).slice(0, 4)
+                }
+              }
+            }
+
+            // Get garden streak
+            const { data: gardenData } = await ssrQuery(
+              dbClient
+                .from('gardens')
+                .select('current_streak')
+                .eq('id', gardenId)
+                .maybeSingle(),
+              'garden_streak'
+            )
+            if (gardenData?.current_streak) {
+              gardenStreak = gardenData.current_streak
+            }
+
+            // Get member count
+            const { count: mCount } = await ssrQuery(
+              dbClient
+                .from('garden_members')
                 .select('id', { count: 'exact', head: true })
                 .eq('garden_id', gardenId),
-              'garden_plant_count'
+              'garden_member_count'
             )
-            plantCount = count || 0
+            memberCount = (mCount || 0) + 1 // +1 for owner
+
+            // Try to get today's task progress
+            try {
+              const today = new Date().toISOString().slice(0, 10)
+              const { data: taskOccs } = await ssrQuery(
+                dbClient
+                  .from('task_occurrences')
+                  .select('required_count, completed_count')
+                  .eq('garden_id', gardenId)
+                  .gte('due_at', today)
+                  .lt('due_at', today + 'T23:59:59'),
+                'garden_today_tasks'
+              )
+              if (taskOccs?.length) {
+                todayProgress.due = taskOccs.reduce((sum, t) => sum + (t.required_count || 0), 0)
+                todayProgress.completed = taskOccs.reduce((sum, t) => sum + (t.completed_count || 0), 0)
+              }
+            } catch { }
 
             // Try to get a plant image from the garden (with timeout)
-            if (!gardenImage) {
-              const { data: gardenPlants } = await ssrQuery(
+            if (!gardenImage && gardenPlants?.[0]?.plant_id) {
+              const { data: plantImg } = await ssrQuery(
                 dbClient
-                  .from('garden_plants')
-                  .select('plant_id')
-                  .eq('garden_id', gardenId)
-                  .limit(1),
-                'garden_plants_for_img'
+                  .from('plant_images')
+                  .select('link')
+                  .eq('plant_id', gardenPlants[0].plant_id)
+                  .eq('use', 'primary')
+                  .maybeSingle(),
+                'garden_plant_img'
               )
-              if (gardenPlants?.[0]?.plant_id) {
-                const { data: plantImg } = await ssrQuery(
-                  dbClient
-                    .from('plant_images')
-                    .select('link')
-                    .eq('plant_id', gardenPlants[0].plant_id)
-                    .eq('use', 'primary')
-                    .maybeSingle(),
-                  'garden_plant_img'
-                )
-                if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
-              }
+              if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
             }
           } catch { }
 
@@ -22911,13 +23054,15 @@ async function generateCrawlerHtml(req, pagePath) {
           const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
           title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
 
-          // Create rich description
+          // Create rich description with all stats
           const descParts = []
           // Build location string from city/country
           const locationParts = [garden.location_city, garden.location_country].filter(Boolean)
           const gardenLocation = locationParts.length > 0 ? locationParts.join(', ') : null
 
           if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.gardenPlantsGrowing}`)
+          if (speciesCount > 0 && speciesCount !== plantCount) descParts.push(`🌸 ${speciesCount} ${detectedLang === 'fr' ? 'espèces' : 'species'}`)
+          if (gardenStreak > 0) descParts.push(`🔥 ${gardenStreak} ${detectedLang === 'fr' ? 'jours de série' : 'day streak'}`)
           if (ownerName) descParts.push(`👤 ${tr.gardenBy} ${ownerName}`)
           if (gardenLocation) descParts.push(`📍 ${gardenLocation}`)
           if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
@@ -22933,15 +23078,50 @@ async function generateCrawlerHtml(req, pagePath) {
           }
           // If no image found, image stays null - no fallback
 
+          // Calculate task progress percentage
+          const progressPercent = todayProgress.due > 0 ? Math.round((todayProgress.completed / todayProgress.due) * 100) : 100
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Place">
               <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
-              <div class="plant-meta">
-                ${plantCount > 0 ? `🌿 ${plantCount} ${tr.gardenPlantsGrowing}` : `🌱 ${tr.gardenStartingFresh}`}
-                ${ownerName ? ` · 👤 ${tr.gardenBy} ${escapeHtml(ownerName)}` : ''}
-                ${gardenLocation ? ` · 📍 ${escapeHtml(gardenLocation)}` : ''}
-                ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
+              
+              <div class="garden-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
+                ${ownerName ? `<span>👤 ${tr.gardenBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a></span>` : ''}
+                ${gardenLocation ? `<span>📍 ${escapeHtml(gardenLocation)}</span>` : ''}
+                ${gardenAge ? `<span>🕐 ${gardenAge}</span>` : ''}
+                ${memberCount > 1 ? `<span>👥 ${memberCount} ${detectedLang === 'fr' ? 'membres' : 'members'}</span>` : ''}
               </div>
+              
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 20px 0; padding: 16px; background: #f0fdf4; border-radius: 12px;">
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${tr.gardenPlantsGrowing}</div>
+                </div>
+                ${speciesCount > 0 ? `
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🌸 ${speciesCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Espèces' : 'Species'}</div>
+                </div>
+                ` : ''}
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #f97316;">🔥 ${gardenStreak}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Série' : 'Streak'}</div>
+                </div>
+                ${todayProgress.due > 0 ? `
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: ${progressPercent >= 100 ? '#10b981' : '#f59e0b'};">✅ ${progressPercent}%</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Aujourd\'hui' : 'Today'}</div>
+                </div>
+                ` : ''}
+              </div>
+              
+              ${recentPlants.length > 0 ? `
+              <div style="margin: 16px 0;">
+                <strong>${detectedLang === 'fr' ? 'Plantes dans ce jardin' : 'Plants in this garden'}:</strong>
+                <p style="color: #6b7280;">${recentPlants.map(p => escapeHtml(p)).join(', ')}${plantCount > 4 ? ` ${detectedLang === 'fr' ? 'et plus...' : 'and more...'}` : ''}</p>
+              </div>
+              ` : ''}
+              
               <p>${tr.gardenFilled} 🌸</p>
               <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenExploreThis} →</a></p>
             </article>
@@ -23308,25 +23488,109 @@ async function generateCrawlerHtml(req, pagePath) {
       image = LANDING_BANNER_IMAGE
       imageAlt = 'Aphylia - Your Personal Plant Companion'
 
-      // Try to get some stats (with timeout to avoid blocking)
+      // Try to get stats from landing_stats table first, fallback to counts
       let plantCountStat = '5,000+'
       let userCount = '10,000+'
+      let taskCount = '50,000+'
+      let ratingValue = '4.9'
+      let ratingLabel = 'App Store Rating'
       try {
         if (supabaseServer) {
-          const { count: pCount } = await ssrQuery(
+          // Try to get landing stats from admin-configured table
+          const { data: landingStats } = await ssrQuery(
             supabaseServer
-              .from('plants')
-              .select('id', { count: 'exact', head: true }),
-            'home_plant_count'
+              .from('landing_stats')
+              .select('plants_count, plants_label, users_count, users_label, tasks_count, tasks_label, rating_value, rating_label')
+              .limit(1)
+              .maybeSingle(),
+            'landing_stats'
           )
-          if (pCount) plantCountStat = pCount.toLocaleString() + '+'
+          
+          if (landingStats) {
+            plantCountStat = landingStats.plants_count || plantCountStat
+            userCount = landingStats.users_count || userCount
+            taskCount = landingStats.tasks_count || taskCount
+            ratingValue = landingStats.rating_value || ratingValue
+            ratingLabel = landingStats.rating_label || ratingLabel
+          } else {
+            // Fallback: count from database
+            const { count: pCount } = await ssrQuery(
+              supabaseServer
+                .from('plants')
+                .select('id', { count: 'exact', head: true }),
+              'home_plant_count'
+            )
+            if (pCount) plantCountStat = pCount.toLocaleString() + '+'
+            
+            // Count users
+            const { count: uCount } = await ssrQuery(
+              supabaseServer
+                .from('profiles')
+                .select('id', { count: 'exact', head: true }),
+              'home_user_count'
+            )
+            if (uCount) userCount = uCount.toLocaleString() + '+'
+          }
         }
       } catch { }
 
+      // Features list for crawlers
+      const features = detectedLang === 'fr' ? [
+        { icon: '🎴', title: 'Découverte de Plantes', desc: 'Swipez pour découvrir des plantes parfaites pour votre jardin' },
+        { icon: '🏡', title: 'Gestion de Jardin', desc: 'Suivez tous vos jardins et plantes en un seul endroit' },
+        { icon: '⏰', title: 'Rappels Intelligents', desc: 'Ne manquez plus jamais l\'arrosage ou l\'entretien' },
+        { icon: '📚', title: 'Guides d\'Entretien', desc: 'Conseils d\'experts pour chaque plante' },
+        { icon: '📸', title: 'Identification', desc: 'Identifiez les plantes avec votre caméra' },
+        { icon: '👥', title: 'Communauté', desc: 'Connectez-vous avec d\'autres passionnés de jardinage' },
+        { icon: '📊', title: 'Analyses', desc: 'Suivez vos progrès et accomplissements' },
+        { icon: '🐾', title: 'Sécurité Animaux', desc: 'Vérifiez la toxicité des plantes pour vos animaux' },
+      ] : [
+        { icon: '🎴', title: 'Plant Discovery', desc: 'Swipe to discover perfect plants for your garden' },
+        { icon: '🏡', title: 'Garden Management', desc: 'Track all your gardens and plants in one place' },
+        { icon: '⏰', title: 'Smart Reminders', desc: 'Never miss watering or care tasks again' },
+        { icon: '📚', title: 'Care Guides', desc: 'Expert tips and advice for every plant' },
+        { icon: '📸', title: 'Plant ID', desc: 'Identify plants using your camera' },
+        { icon: '👥', title: 'Community', desc: 'Connect with fellow gardening enthusiasts' },
+        { icon: '📊', title: 'Analytics', desc: 'Track your progress and achievements' },
+        { icon: '🐾', title: 'Pet Safety', desc: 'Check plant toxicity for your pets' },
+      ]
+
+      // How it works steps
+      const howItWorks = detectedLang === 'fr' ? [
+        { step: '1', title: 'Téléchargez', desc: 'Installez Aphylia gratuitement' },
+        { step: '2', title: 'Créez votre Jardin', desc: 'Ajoutez vos plantes et configurez votre espace' },
+        { step: '3', title: 'Recevez des Rappels', desc: 'Notifications intelligentes pour l\'entretien' },
+        { step: '4', title: 'Regardez-le Grandir', desc: 'Suivez les progrès et célébrez les succès' },
+      ] : [
+        { step: '1', title: 'Download', desc: 'Install Aphylia for free' },
+        { step: '2', title: 'Create Your Garden', desc: 'Add your plants and set up your space' },
+        { step: '3', title: 'Get Reminders', desc: 'Smart notifications for care tasks' },
+        { step: '4', title: 'Watch It Grow', desc: 'Track progress and celebrate success' },
+      ]
+
       pageContent = `
-        <article>
-          <h1>🌱 ${tr.homeWelcome}</h1>
-          <p>${tr.homePersonal}</p>
+        <article itemscope itemtype="https://schema.org/WebApplication">
+          <h1 itemprop="name">🌱 ${tr.homeWelcome}</h1>
+          <p itemprop="description">${tr.homePersonal}</p>
+          
+          <div class="stats-banner" style="display: flex; flex-wrap: wrap; gap: 20px; margin: 24px 0; padding: 20px; background: #f0fdf4; border-radius: 12px;">
+            <div style="text-align: center; flex: 1; min-width: 120px;">
+              <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCountStat}</div>
+              <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Plantes' : 'Plants'}</div>
+            </div>
+            <div style="text-align: center; flex: 1; min-width: 120px;">
+              <div style="font-size: 24px; font-weight: bold; color: #059669;">👥 ${userCount}</div>
+              <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Utilisateurs' : 'Users'}</div>
+            </div>
+            <div style="text-align: center; flex: 1; min-width: 120px;">
+              <div style="font-size: 24px; font-weight: bold; color: #059669;">✅ ${taskCount}</div>
+              <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Tâches complétées' : 'Tasks Completed'}</div>
+            </div>
+            <div style="text-align: center; flex: 1; min-width: 120px;">
+              <div style="font-size: 24px; font-weight: bold; color: #f59e0b;">⭐ ${ratingValue}</div>
+              <div style="font-size: 12px; color: #6b7280;">${ratingLabel}</div>
+            </div>
+          </div>
           
           <h2>${tr.homeWhy}</h2>
           <ul>
@@ -23337,8 +23601,33 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>👥 ${tr.homeCommunityJoin} ${userCount} ${tr.homePlantLovers}</li>
           </ul>
           
+          <h2>✨ ${detectedLang === 'fr' ? 'Fonctionnalités' : 'Features'}</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px;">
+            ${features.map(f => `
+              <div style="padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                <div style="font-size: 24px; margin-bottom: 8px;">${f.icon}</div>
+                <div style="font-weight: 600; margin-bottom: 4px;">${f.title}</div>
+                <div style="font-size: 14px; color: #6b7280;">${f.desc}</div>
+              </div>
+            `).join('')}
+          </div>
+          
+          <h2>🚀 ${detectedLang === 'fr' ? 'Comment ça marche' : 'How It Works'}</h2>
+          <ol>
+            ${howItWorks.map(step => `<li><strong>${step.title}</strong>: ${step.desc}</li>`).join('')}
+          </ol>
+          
           <h2>${tr.homeStart}</h2>
           <p>${tr.homeFree} 🌿</p>
+          
+          <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+            <a href="/download" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #10b981; color: white; border-radius: 12px; text-decoration: none; font-weight: 600;">
+              📲 ${detectedLang === 'fr' ? 'Télécharger l\'App' : 'Download the App'}
+            </a>
+            <a href="/discovery" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: white; color: #374151; border: 2px solid #e5e7eb; border-radius: 12px; text-decoration: none; font-weight: 600;">
+              🌐 ${detectedLang === 'fr' ? 'Essayer dans le navigateur' : 'Try in Browser'}
+            </a>
+          </div>
         </article>
       `
     }
