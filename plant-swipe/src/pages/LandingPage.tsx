@@ -1911,60 +1911,88 @@ const FAQSection: React.FC = () => {
           ))}
         </div>
 
-        {/* Support CTA - Enhanced with Social Links */}
+        {/* Support CTA - Enhanced with Vibrant Gradients */}
         <div className="mt-16">
-          <div className="rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-green-500/10 border border-emerald-500/20 p-8 lg:p-10">
-            <div className="text-center max-w-2xl mx-auto space-y-6">
-              <div className="inline-flex h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 items-center justify-center shadow-lg shadow-emerald-500/30">
-                <HandHeart className="h-8 w-8 text-white" />
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-2xl font-bold text-stone-900 dark:text-white">
-                  {t("faq.supportTitle", { defaultValue: "We'd love to hear from you!" })}
-                </h3>
-                <p className="text-stone-600 dark:text-stone-400 text-lg">
-                  {t("faq.supportSubtitle", { defaultValue: "Questions, feedback, or just want to say hi? Reach out anytime - it's always a pleasure to connect with plant lovers!" })}
-                </p>
-              </div>
+          <div className="relative rounded-[32px] overflow-hidden">
+            {/* Animated gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 via-teal-500 to-cyan-500" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-pink-500/30 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-purple-500/30 via-transparent to-transparent" />
+            
+            {/* Glowing orbs */}
+            <div className="absolute -top-20 -left-20 w-60 h-60 bg-emerald-400/40 rounded-full blur-3xl animate-pulse" />
+            <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-cyan-400/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-teal-300/20 rounded-full blur-3xl" />
+            
+            {/* Grid pattern overlay */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px]" />
+            
+            <div className="relative z-10 p-8 lg:p-12">
+              <div className="text-center max-w-2xl mx-auto space-y-8">
+                {/* Icon with glow */}
+                <div className="relative inline-block">
+                  <div className="absolute inset-0 bg-white/30 rounded-3xl blur-xl scale-150" />
+                  <div className="relative inline-flex h-20 w-20 rounded-3xl bg-white/20 backdrop-blur-sm border border-white/30 items-center justify-center shadow-2xl">
+                    <HandHeart className="h-10 w-10 text-white drop-shadow-lg" />
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <h3 className="text-3xl lg:text-4xl font-bold text-white drop-shadow-lg">
+                    {t("faq.supportTitle", { defaultValue: "We're here to help!" })}
+                  </h3>
+                  <p className="text-white/90 text-lg max-w-xl mx-auto">
+                    {t("faq.supportSubtitle", { defaultValue: "Questions, feedback, or just want to say hi? We'd love to connect with fellow plant enthusiasts!" })}
+                  </p>
+                </div>
 
-              {/* Social Links */}
-              <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-                <a
-                  href="https://instagram.com/aphylia_app"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium hover:shadow-lg hover:shadow-pink-500/25 hover:-translate-y-0.5 transition-all"
-                >
-                  <Instagram className="h-5 w-5" />
-                  <span>Instagram</span>
-                </a>
-                <a
-                  href="https://twitter.com/aphylia_app"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-sky-500/25 hover:-translate-y-0.5 transition-all"
-                >
-                  <Twitter className="h-5 w-5" />
-                  <span>Twitter</span>
-                </a>
-                <a
-                  href="mailto:hello@aphylia.app"
-                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium hover:shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-0.5 transition-all"
-                >
-                  <Mail className="h-5 w-5" />
-                  <span>Email Us</span>
-                </a>
-              </div>
+                {/* Social Links - Glass morphism cards */}
+                <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
+                  <a
+                    href="https://instagram.com/aphylia_app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative flex items-center gap-3 px-6 py-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-semibold hover:bg-white/20 hover:scale-105 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300"
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/50 to-purple-500/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/30">
+                      <Instagram className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="relative">Instagram</span>
+                  </a>
+                  <a
+                    href="https://twitter.com/aphylia_app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative flex items-center gap-3 px-6 py-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-semibold hover:bg-white/20 hover:scale-105 hover:shadow-2xl hover:shadow-sky-500/20 transition-all duration-300"
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-sky-500/50 to-blue-500/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/30">
+                      <Twitter className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="relative">Twitter</span>
+                  </a>
+                  <a
+                    href="mailto:hello@aphylia.app"
+                    className="group relative flex items-center gap-3 px-6 py-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-semibold hover:bg-white/20 hover:scale-105 hover:shadow-2xl hover:shadow-amber-500/20 transition-all duration-300"
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-amber-500/50 to-orange-500/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                      <Mail className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="relative">Email Us</span>
+                  </a>
+                </div>
 
-              <div className="pt-4 border-t border-emerald-500/10">
-                <Link
-                  to="/contact"
-                  className="inline-flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium hover:underline"
-                >
-                  {t("faq.supportButton", { defaultValue: "Or visit our contact page" })}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
+                <div className="pt-6">
+                  <Link
+                    to="/contact"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 text-white font-medium hover:bg-white/30 transition-all group"
+                  >
+                    {t("faq.supportButton", { defaultValue: "Contact Support" })}
+                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
