@@ -21051,10 +21051,11 @@ async function deliverPushNotifications(notifications, campaign) {
           JSON.stringify({
             title: notification.title || campaign.title || 'Aphylia',
             body: notification.message,
-            tag: campaign.id,
+            tag: campaign.id || `notification-${notification.id}`,
             data: {
               campaignId: campaign.id,
               notificationId: notification.id,
+              url: notification.cta_url || null,
               ctaUrl: notification.cta_url || null,
             },
           }),
@@ -21435,13 +21436,42 @@ async function processDueAutomations() {
         }
 
         const recipients = await recipientQuery
-        if (!recipients || !recipients.length) continue
+        
+        // Log automation check even if no recipients (helps with debugging)
+        if (!recipients || !recipients.length) {
+          // Only log once per hour to avoid spam
+          const lastLogKey = `automation_log_${automation.id}`
+          const now = Date.now()
+          if (!global[lastLogKey] || now - global[lastLogKey] > 3600000) {
+            console.log(`[automations] ${automation.trigger_type}: No eligible recipients at this hour`)
+            global[lastLogKey] = now
+          }
+          continue
+        }
 
         // Default message variants (English)
         const defaultVariants = toStringArray(automation.message_variants)
-        if (!defaultVariants.length) continue
+        if (!defaultVariants.length) {
+          console.warn(`[automations] ${automation.trigger_type}: No message template configured, skipping`)
+          continue
+        }
 
         console.log(`[automations] Processing ${automation.trigger_type}: ${recipients.length} recipients`)
+
+        // Determine default URL based on automation type
+        let defaultUrl = '/'
+        switch (automation.trigger_type) {
+          case 'daily_task_reminder':
+            defaultUrl = '/gardens'
+            break
+          case 'journal_continue_reminder':
+            defaultUrl = '/gardens'
+            break
+          case 'weekly_inactive_reminder':
+            defaultUrl = '/'
+            break
+        }
+        const targetUrl = automation.cta_url || defaultUrl
 
         for (const recipient of recipients) {
           // Get message variants for user's language (with fallback to default)
@@ -21467,7 +21497,7 @@ async function processDueAutomations() {
                 ${recipient.user_id},
                 ${automation.display_name || 'Reminder'},
                 ${message},
-                ${automation.cta_url || null},
+                ${targetUrl},
                 now(),
                 'pending'
               )
@@ -21494,10 +21524,20 @@ async function processDueAutomations() {
 }
 
 function scheduleNotificationWorker() {
-  if (!sql) return
-  if (notificationWorkerTimer) return
+  if (!sql) {
+    console.log('[notifications] Worker not started - no database connection')
+    return
+  }
+  if (notificationWorkerTimer) {
+    console.log('[notifications] Worker already running')
+    return
+  }
+  console.log(`[notifications] Starting notification worker (interval: ${notificationWorkerIntervalMs}ms)`)
+  console.log('[notifications] Automations will be processed every tick based on user timezone and send_hour')
   const tick = () => {
-    runNotificationWorkerTick().catch(() => { })
+    runNotificationWorkerTick().catch((err) => {
+      console.error('[notifications] Worker tick error:', err?.message || err)
+    })
     notificationWorkerTimer = setTimeout(tick, notificationWorkerIntervalMs)
   }
   notificationWorkerTimer = setTimeout(tick, 2000)
