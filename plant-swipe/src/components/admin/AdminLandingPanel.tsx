@@ -286,16 +286,16 @@ const LanguageSwitcher: React.FC<{
   disabled?: boolean
 }> = ({ selectedLang, onLanguageChange, onTranslateAll, translating, disabled }) => {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {/* Language Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-stone-800 rounded-xl">
+      <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 bg-stone-100 dark:bg-stone-800 rounded-xl overflow-x-auto">
         {SUPPORTED_LANGUAGES.map((lang) => (
           <button
             key={lang}
             onClick={() => onLanguageChange(lang)}
             disabled={disabled}
             className={cn(
-              "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+              "px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex-shrink-0",
               selectedLang === lang
                 ? "bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
                 : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white",
@@ -314,14 +314,14 @@ const LanguageSwitcher: React.FC<{
           size="sm"
           onClick={onTranslateAll}
           disabled={translating || disabled}
-          className="rounded-xl"
+          className="rounded-xl text-xs sm:text-sm"
         >
           {translating ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
           ) : (
-            <Languages className="h-4 w-4 mr-2" />
+            <Languages className="h-4 w-4 sm:mr-2" />
           )}
-          {translating ? "Translating..." : "DeepL Translate"}
+          <span className="hidden sm:inline">{translating ? "Translating..." : "Translate"}</span>
         </Button>
       )}
     </div>
@@ -332,10 +332,10 @@ const LanguageSwitcher: React.FC<{
 const TranslationModeBanner: React.FC<{ language: SupportedLanguage }> = ({ language }) => {
   if (language === "en") return null
   return (
-    <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+    <div className="flex items-center gap-2 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
       <Languages className="h-4 w-4 text-blue-500 flex-shrink-0" />
-      <span className="text-sm text-blue-700 dark:text-blue-300">
-        Editing <strong>{ADMIN_LANGUAGE_LABELS[language].full}</strong> translations. Base content is managed in English.
+      <span className="text-xs sm:text-sm text-blue-700 dark:text-blue-300">
+        Editing <strong>{ADMIN_LANGUAGE_LABELS[language].full}</strong> translations
       </span>
     </div>
   )
@@ -1086,75 +1086,77 @@ export const AdminLandingPanel: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
             <Layout className="h-5 w-5 text-emerald-500" />
             Landing Page Editor
           </h2>
-          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-            Customize your public landing page content
+          <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
+            Customize your public landing page
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowPreview(!showPreview)}
-            className={cn("rounded-xl", showPreview && "bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20")}
+            className={cn("rounded-xl text-xs sm:text-sm", showPreview && "bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20")}
           >
-            <Monitor className="h-4 w-4 mr-2" />
-            {showPreview ? "Hide Preview" : "Show Preview"}
+            <Monitor className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">{showPreview ? "Hide Preview" : "Show Preview"}</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={loadData}
             disabled={loading}
-            className="rounded-xl"
+            className="rounded-xl text-xs sm:text-sm"
           >
-            <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
-            Refresh
+            <RefreshCw className={cn("h-4 w-4 sm:mr-2", loading && "animate-spin")} />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => window.open("/", "_blank")}
-            className="rounded-xl"
+            className="rounded-xl text-xs sm:text-sm"
           >
-            <ExternalLink className="h-4 w-4 mr-2" />
-            View Live
+            <ExternalLink className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">View Live</span>
           </Button>
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap",
-              activeTab === tab.id
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
-                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
-            )}
-          >
-            <tab.icon className="h-4 w-4" />
-            {tab.label}
-            {tab.count !== undefined && (
-              <span className={cn(
-                "px-1.5 py-0.5 rounded-md text-xs",
+      {/* Tab Navigation - Horizontal scroll on mobile */}
+      <div className="-mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
                 activeTab === tab.id
-                  ? "bg-white/20"
-                  : "bg-stone-200 dark:bg-stone-700"
-              )}>
-                {tab.count}
-              </span>
-            )}
-          </button>
-        ))}
+                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+              )}
+            >
+              <tab.icon className="h-4 w-4" />
+              <span className="hidden xs:inline">{tab.label}</span>
+              {tab.count !== undefined && (
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded-md text-[10px] sm:text-xs",
+                  activeTab === tab.id
+                    ? "bg-white/20"
+                    : "bg-stone-200 dark:bg-stone-700"
+                )}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Content */}
@@ -1333,30 +1335,30 @@ const GlobalSettingsTab: React.FC<{
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header with Save Button */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+          <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white flex items-center gap-2">
             <Settings className="h-5 w-5 text-emerald-500" />
             Section Visibility
           </h3>
-          <p className="text-sm text-stone-500 mt-1">
-            Toggle sections on or off to customize your landing page. Text content is managed via translation files.
+          <p className="text-xs sm:text-sm text-stone-500 mt-1">
+            Toggle sections on/off. Text content is managed via translation files.
           </p>
         </div>
-        <Button onClick={saveSettings} disabled={saving} className="rounded-xl">
+        <Button onClick={saveSettings} disabled={saving} className="rounded-xl w-full sm:w-auto">
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-          Save All Changes
+          Save Changes
         </Button>
       </div>
 
       {/* Section Visibility Content */}
       <Card className="rounded-xl">
-        <CardContent className="p-6">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-stone-200 dark:border-stone-700">
-              <div className="flex items-center gap-2 text-xs text-stone-500">
+        <CardContent className="p-3 sm:p-6">
+          <div className="space-y-4 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200 dark:border-stone-700">
+              <div className="flex items-center gap-3 text-xs text-stone-500">
                 <span className="flex items-center gap-1">
                   <div className="h-2 w-2 rounded-full bg-emerald-500" />
                   Visible
@@ -1372,59 +1374,60 @@ const GlobalSettingsTab: React.FC<{
                   variant="outline"
                   size="sm"
                   onClick={() => setAllVisibility(true)}
-                  className="rounded-xl"
+                  className="rounded-xl flex-1 sm:flex-none text-xs"
                 >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Show All
+                  <Eye className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Show All</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setAllVisibility(false)}
-                  className="rounded-xl"
+                  className="rounded-xl flex-1 sm:flex-none text-xs"
                 >
-                  <EyeOff className="h-4 w-4 mr-2" />
-                  Hide All
+                  <EyeOff className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Hide All</span>
                 </Button>
               </div>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-2 sm:gap-3">
               {visibilityItems.map((item) => {
                 const isVisible = localSettings[item.key]
                 return (
                   <div
                     key={item.key}
                     className={cn(
-                      "flex items-center justify-between p-4 rounded-xl border transition-all",
+                      "flex items-center justify-between p-3 sm:p-4 rounded-xl border transition-all",
                       isVisible
                         ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800"
                         : "bg-stone-50 dark:bg-stone-900/50 border-stone-200 dark:border-stone-700 opacity-75"
                     )}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <div className={cn(
-                        "h-10 w-10 rounded-xl flex items-center justify-center",
+                        "h-8 w-8 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center flex-shrink-0",
                         isVisible ? "bg-emerald-500/10" : "bg-stone-200 dark:bg-stone-800"
                       )}>
                         <item.icon className={cn(
-                          "h-5 w-5",
+                          "h-4 w-4 sm:h-5 sm:w-5",
                           isVisible ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400"
                         )} />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className={cn(
-                          "font-medium",
+                          "font-medium text-sm sm:text-base truncate",
                           isVisible ? "text-stone-900 dark:text-white" : "text-stone-500"
                         )}>
                           {item.label}
                         </p>
-                        <p className="text-xs text-stone-500">{item.description}</p>
+                        <p className="text-[10px] sm:text-xs text-stone-500 truncate">{item.description}</p>
                       </div>
                     </div>
                     <Switch
                       checked={isVisible}
                       onCheckedChange={(checked) => updateSetting(item.key, checked)}
+                      className="flex-shrink-0 ml-2"
                     />
                   </div>
                 )
@@ -1436,15 +1439,17 @@ const GlobalSettingsTab: React.FC<{
 
       {/* Unsaved Changes Warning */}
       {settings && localSettings && JSON.stringify(settings) !== JSON.stringify(localSettings) && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500 text-white shadow-lg z-50">
-          <AlertCircle className="h-5 w-5" />
-          <span className="text-sm font-medium">You have unsaved changes</span>
+        <div className="fixed bottom-4 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex flex-col sm:flex-row items-center gap-2 sm:gap-3 px-4 py-3 rounded-xl bg-amber-500 text-white shadow-lg z-50">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+            <span className="text-sm font-medium">Unsaved changes</span>
+          </div>
           <Button
             size="sm"
             variant="secondary"
             onClick={saveSettings}
             disabled={saving}
-            className="rounded-lg bg-white/20 hover:bg-white/30 text-white"
+            className="rounded-lg bg-white/20 hover:bg-white/30 text-white w-full sm:w-auto"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Now"}
           </Button>
@@ -1608,45 +1613,45 @@ const HeroCardsTab: React.FC<{
   const editingCard = localCards.find(c => c.id === editingCardId)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Section Hidden Warning */}
       <SectionHiddenBanner visible={sectionVisible} />
 
       {/* Info Banner */}
-      <div className="rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-green-500/10 border border-emerald-500/20 p-4">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-            <Shuffle className="h-5 w-5 text-emerald-600" />
+      <div className="rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-green-500/10 border border-emerald-500/20 p-3 sm:p-4">
+        <div className="flex items-start gap-2 sm:gap-3">
+          <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+            <Shuffle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-stone-900 dark:text-white">Hero Card Display</h3>
-            <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
-              Active cards will automatically cycle on the landing page. The first active card is shown by default, then they rotate every 5 seconds. Drag to reorder.
+            <h3 className="font-semibold text-sm sm:text-base text-stone-900 dark:text-white">Hero Card Display</h3>
+            <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 mt-1">
+              Active cards cycle automatically on the landing page every 5 seconds.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Hero Cards</h3>
-          <p className="text-sm text-stone-500">
+          <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Hero Cards</h3>
+          <p className="text-xs sm:text-sm text-stone-500">
             {localCards.filter(c => c.is_active).length} active of {localCards.length} total
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {hasUnsavedChanges && (
-            <Button onClick={saveAllCards} className="rounded-xl bg-amber-500 hover:bg-amber-600">
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
+            <Button onClick={saveAllCards} className="rounded-xl bg-amber-500 hover:bg-amber-600 text-xs sm:text-sm flex-1 sm:flex-none">
+              <Save className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Save Changes</span>
             </Button>
           )}
-          <Button onClick={() => setImportPlantOpen(true)} variant="outline" className="rounded-xl">
-            <Download className="h-4 w-4 mr-2" />
-            Import from Plants
+          <Button onClick={() => setImportPlantOpen(true)} variant="outline" className="rounded-xl text-xs sm:text-sm flex-1 sm:flex-none">
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Import</span>
           </Button>
-          <Button onClick={addCard} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
+          <Button onClick={addCard} className="rounded-xl text-xs sm:text-sm flex-1 sm:flex-none">
+            <Plus className="h-4 w-4 sm:mr-2" />
             Add Hero Card
           </Button>
         </div>
@@ -1654,10 +1659,10 @@ const HeroCardsTab: React.FC<{
 
       {localCards.length === 0 ? (
         <Card className="rounded-xl border-dashed">
-          <CardContent className="py-16 text-center">
-            <Smartphone className="h-12 w-12 mx-auto mb-4 text-stone-300" />
+          <CardContent className="py-12 sm:py-16 text-center">
+            <Smartphone className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-4 text-stone-300" />
             <h3 className="font-semibold text-stone-900 dark:text-white mb-2">No hero cards yet</h3>
-            <p className="text-sm text-stone-500 mb-4">Add your first hero card to showcase on the landing page</p>
+            <p className="text-xs sm:text-sm text-stone-500 mb-4">Add your first hero card to showcase on the landing page</p>
             <Button onClick={addCard} className="rounded-xl">
               <Plus className="h-4 w-4 mr-2" />
               Add First Card
@@ -1666,11 +1671,11 @@ const HeroCardsTab: React.FC<{
         </Card>
       ) : (
         <div className={cn(
-          "grid gap-6",
-          showPreview ? "lg:grid-cols-[1fr,300px]" : "grid-cols-1"
+          "grid gap-4 sm:gap-6",
+          showPreview ? "xl:grid-cols-[1fr,280px]" : "grid-cols-1"
         )}>
           {/* Cards List */}
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {localCards.map((card, index) => (
               <Card
                 key={card.id}
@@ -1679,10 +1684,10 @@ const HeroCardsTab: React.FC<{
                   expandedCardId === card.id && "ring-2 ring-emerald-500"
                 )}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    {/* Reorder Controls */}
-                    <div className="flex flex-col gap-1 pt-1">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-start gap-2 sm:gap-4">
+                    {/* Reorder Controls - Hidden on mobile */}
+                    <div className="hidden sm:flex flex-col gap-1 pt-1">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1712,7 +1717,7 @@ const HeroCardsTab: React.FC<{
                         setEditingCardId(card.id)
                         setImagePickerOpen(true)
                       }}
-                      className="relative h-20 w-20 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20 flex-shrink-0 group"
+                      className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20 flex-shrink-0 group"
                     >
                       {card.image_url ? (
                         <img
@@ -1722,11 +1727,11 @@ const HeroCardsTab: React.FC<{
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <Leaf className="h-8 w-8 text-emerald-500/50" />
+                          <Leaf className="h-6 w-6 sm:h-8 sm:w-8 text-emerald-500/50" />
                         </div>
                       )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Camera className="h-5 w-5 text-white" />
+                        <Camera className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                       </div>
                     </button>
 
@@ -1736,14 +1741,14 @@ const HeroCardsTab: React.FC<{
                         <Input
                           value={card.plant_name}
                           onChange={(e) => updateLocalCard(card.id, { plant_name: e.target.value })}
-                          className="rounded-xl font-semibold text-lg h-9"
+                          className="rounded-xl font-semibold text-sm sm:text-lg h-8 sm:h-9"
                           placeholder="Plant name"
                         />
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => setExpandedCardId(expandedCardId === card.id ? null : card.id)}
-                          className="rounded-xl flex-shrink-0"
+                          className="rounded-xl flex-shrink-0 h-8 w-8"
                         >
                           <ChevronDown className={cn(
                             "h-4 w-4 transition-transform",
@@ -2407,44 +2412,44 @@ const TestimonialsTab: React.FC<{
     <div className="space-y-4">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Customer Reviews</h3>
-          <p className="text-sm text-stone-500">Testimonials shown in the reviews section</p>
+          <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Customer Reviews</h3>
+          <p className="text-xs sm:text-sm text-stone-500">Testimonials shown in the reviews section</p>
         </div>
         <div className="flex gap-2">
           {hasUnsavedChanges && (
-            <Button onClick={saveAllTestimonials} className="rounded-xl bg-amber-500 hover:bg-amber-600">
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
+            <Button onClick={saveAllTestimonials} className="rounded-xl bg-amber-500 hover:bg-amber-600 text-xs sm:text-sm flex-1 sm:flex-none">
+              <Save className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Save Changes</span>
             </Button>
           )}
-          <Button onClick={addTestimonial} className="rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Review
+          <Button onClick={addTestimonial} className="rounded-xl text-xs sm:text-sm flex-1 sm:flex-none">
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add Review</span>
           </Button>
         </div>
       </div>
 
       {localTestimonials.length === 0 ? (
         <Card className="rounded-xl border-dashed">
-          <CardContent className="py-12 text-center text-stone-500">
+          <CardContent className="py-12 text-center text-stone-500 text-sm">
             No testimonials yet. Add one to get started.
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           {localTestimonials.map((testimonial) => (
             <Card key={testimonial.id} className="rounded-xl">
-              <CardContent className="p-4 space-y-4">
+              <CardContent className="p-3 sm:p-4 space-y-3 sm:space-y-4">
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <button
                       onClick={() => {
                         setEditingId(testimonial.id)
                         setImagePickerOpen(true)
                       }}
-                      className="relative h-12 w-12 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold overflow-hidden group"
+                      className="relative h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold overflow-hidden group flex-shrink-0"
                     >
                       {testimonial.author_avatar_url ? (
                         <img
@@ -2982,20 +2987,29 @@ const DemoFeaturesTab: React.FC<{
     <div className="space-y-4">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">Demo Wheel Features</h3>
-          <p className="text-sm text-stone-500">Features shown in the interactive demo wheel</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Save Button */}
-          {hasUnsavedChanges && (
-            <Button onClick={saveAllFeatures} className="rounded-xl bg-amber-500 hover:bg-amber-600">
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Demo Wheel Features</h3>
+            <p className="text-xs sm:text-sm text-stone-500">Features shown in the interactive demo wheel</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Save Button */}
+            {hasUnsavedChanges && (
+              <Button onClick={saveAllFeatures} className="rounded-xl bg-amber-500 hover:bg-amber-600 text-xs sm:text-sm">
+                <Save className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Save</span>
+              </Button>
+            )}
+            
+            <Button onClick={addFeature} className="rounded-xl text-xs sm:text-sm" disabled={selectedLang !== "en"}>
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add</span>
             </Button>
-          )}
-
+          </div>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-2">
           <LanguageSwitcher
             selectedLang={selectedLang}
             onLanguageChange={setSelectedLang}
@@ -3003,11 +3017,6 @@ const DemoFeaturesTab: React.FC<{
             translating={translating}
             disabled={localFeatures.length === 0}
           />
-          
-          <Button onClick={addFeature} className="rounded-xl" disabled={selectedLang !== "en"}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Feature
-          </Button>
         </div>
       </div>
 
@@ -3485,20 +3494,29 @@ const FAQTab: React.FC<{
     <div className="space-y-4">
       <SectionHiddenBanner visible={sectionVisible} />
 
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-stone-900 dark:text-white">FAQ Items</h3>
-          <p className="text-sm text-stone-500">Questions and answers shown in the FAQ section</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Save Button */}
-          {hasUnsavedChanges && (
-            <Button onClick={saveAllFAQs} className="rounded-xl bg-amber-500 hover:bg-amber-600">
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">FAQ Items</h3>
+            <p className="text-xs sm:text-sm text-stone-500">Questions and answers shown in the FAQ section</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Save Button */}
+            {hasUnsavedChanges && (
+              <Button onClick={saveAllFAQs} className="rounded-xl bg-amber-500 hover:bg-amber-600 text-xs sm:text-sm">
+                <Save className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Save</span>
+              </Button>
+            )}
+            
+            <Button onClick={addFAQ} className="rounded-xl text-xs sm:text-sm" disabled={selectedLang !== "en"}>
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add</span>
             </Button>
-          )}
-
+          </div>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-2">
           <LanguageSwitcher
             selectedLang={selectedLang}
             onLanguageChange={setSelectedLang}
@@ -3506,11 +3524,6 @@ const FAQTab: React.FC<{
             translating={translating}
             disabled={localItems.length === 0}
           />
-          
-          <Button onClick={addFAQ} className="rounded-xl" disabled={selectedLang !== "en"}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Question
-          </Button>
         </div>
       </div>
 
