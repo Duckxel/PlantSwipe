@@ -22486,6 +22486,15 @@ async function generateCrawlerHtml(req, pagePath) {
               <p style="margin-top: 20px;">
                 <a href="${escapeHtml(canonicalUrl)}">📖 ${tr.plantViewFull} →</a>
               </p>
+              
+              <h2>🔗 ${detectedLang === 'fr' ? 'Découvrir plus' : 'Discover More'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher des plantes' : 'Search Plants'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+                <a href="/blog">📚 Blog</a>
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+              </nav>
             </article>
           `
 
@@ -22595,6 +22604,15 @@ async function generateCrawlerHtml(req, pagePath) {
             </div>
             ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadFull} →</a></p>
+            
+            <h2>🔗 ${detectedLang === 'fr' ? 'Plus d\'articles' : 'More Articles'}</h2>
+            <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <a href="/blog">📚 ${detectedLang === 'fr' ? 'Tous les articles' : 'All Articles'}</a>
+              <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
+              <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+              <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+              <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            </nav>
           </article>
         `
         console.log(`[ssr] Blog image: ${image}`)
@@ -22772,6 +22790,21 @@ async function generateCrawlerHtml(req, pagePath) {
             lastSeen = profile.last_seen_at
           }
 
+          // Fetch user's public gardens for internal links
+          let userGardens = []
+          try {
+            const { data: gardens } = await ssrQuery(
+              supabaseServer
+                .from('gardens')
+                .select('id, name')
+                .eq('created_by', profile.id)
+                .eq('privacy', 'public')
+                .limit(6),
+              'profile_user_gardens'
+            )
+            if (gardens) userGardens = gardens
+          } catch { }
+
           // Create rich description with all stats
           const descParts = []
           if (profile.bio) {
@@ -22850,7 +22883,21 @@ async function generateCrawlerHtml(req, pagePath) {
               
               ${profile.favorite_plant ? `<p>❤️ ${detectedLang === 'fr' ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
               
-              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileExploreGardens} ${escapeHtml(displayName)} →</a></p>
+              ${userGardens.length > 0 ? `
+              <h2>🏡 ${detectedLang === 'fr' ? 'Jardins de' : 'Gardens by'} ${escapeHtml(displayName)}</h2>
+              <ul>
+                ${userGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+              </ul>
+              ` : ''}
+              
+              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+                <a href="/blog">📚 Blog</a>
+              </nav>
             </article>
           `
           console.log(`[ssr] Profile image: ${image}`)
@@ -22962,14 +23009,17 @@ async function generateCrawlerHtml(req, pagePath) {
               'garden_plants'
             )
             
+            // Array to store plant details with IDs for linking
+            let gardenPlantDetails = []
+            
             if (gardenPlants?.length) {
               plantCount = gardenPlants.length
               // Count unique species
               const uniquePlantIds = new Set(gardenPlants.map(p => p.plant_id).filter(Boolean))
               speciesCount = uniquePlantIds.size
               
-              // Get plant names for recent plants preview
-              const plantIds = [...uniquePlantIds].slice(0, 4)
+              // Get plant names and IDs for linking
+              const plantIds = [...uniquePlantIds].slice(0, 8)
               if (plantIds.length > 0) {
                 const { data: plantDetails } = await ssrQuery(
                   dbClient
@@ -22979,6 +23029,7 @@ async function generateCrawlerHtml(req, pagePath) {
                   'garden_plant_names'
                 )
                 if (plantDetails) {
+                  gardenPlantDetails = plantDetails.filter(p => p.name)
                   recentPlants = plantDetails.map(p => p.name).filter(Boolean).slice(0, 4)
                 }
               }
@@ -23115,15 +23166,24 @@ async function generateCrawlerHtml(req, pagePath) {
                 ` : ''}
               </div>
               
-              ${recentPlants.length > 0 ? `
-              <div style="margin: 16px 0;">
-                <strong>${detectedLang === 'fr' ? 'Plantes dans ce jardin' : 'Plants in this garden'}:</strong>
-                <p style="color: #6b7280;">${recentPlants.map(p => escapeHtml(p)).join(', ')}${plantCount > 4 ? ` ${detectedLang === 'fr' ? 'et plus...' : 'and more...'}` : ''}</p>
-              </div>
+              ${gardenPlantDetails.length > 0 ? `
+              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans ce jardin' : 'Plants in this garden'}</h2>
+              <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+                ${gardenPlantDetails.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+              </ul>
+              ${plantCount > gardenPlantDetails.length ? `<p style="color: #6b7280; font-size: 14px;">${detectedLang === 'fr' ? `Et ${plantCount - gardenPlantDetails.length} autres plantes...` : `And ${plantCount - gardenPlantDetails.length} more plants...`}</p>` : ''}
               ` : ''}
               
               <p>${tr.gardenFilled} 🌸</p>
-              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenExploreThis} →</a></p>
+              
+              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
+                ${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">👤 ${detectedLang === 'fr' ? 'Profil de' : 'Profile of'} ${escapeHtml(ownerName)}</a>` : ''}
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Tous les jardins' : 'All Gardens'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+              </nav>
             </article>
           `
           console.log(`[ssr] Garden image: ${image}`)
@@ -23143,16 +23203,40 @@ async function generateCrawlerHtml(req, pagePath) {
           <p>${tr.aboutBelieve}</p>
           <h2>${tr.aboutOffer}</h2>
           <ul>
-            <li>🔍 ${tr.aboutDatabase}</li>
-            <li>🏡 ${tr.aboutGarden}</li>
+            <li>🔍 <a href="/search">${tr.aboutDatabase}</a></li>
+            <li>🏡 <a href="/gardens">${tr.aboutGarden}</a></li>
             <li>⏰ ${tr.aboutReminders}</li>
             <li>👥 ${tr.aboutCommunity}</li>
           </ul>
+          <h2>🔗 ${detectedLang === 'fr' ? 'En savoir plus' : 'Learn More'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/blog">📚 Blog</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+            <a href="/contact">💬 Contact</a>
+          </nav>
         </article>
       `
     }
 
     else if (effectivePath[0] === 'search' || pagePath === '/search') {
+      // Fetch some popular plants to link from search page
+      let searchPopularPlants = []
+      try {
+        if (supabaseServer) {
+          const { data: plants } = await ssrQuery(
+            supabaseServer
+              .from('plants')
+              .select('id, name')
+              .limit(10),
+            'search_popular_plants'
+          )
+          if (plants) searchPopularPlants = plants
+        }
+      } catch { }
+      
       title = `🔍 ${tr.searchTitle} | Aphylia`
       description = tr.searchDesc
       pageContent = `
@@ -23168,6 +23252,19 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>🌡️ ${tr.searchClimate}</li>
             <li>🎯 ${tr.searchDifficulty}</li>
           </ul>
+          ${searchPopularPlants.length > 0 ? `
+          <h2>🌿 ${detectedLang === 'fr' ? 'Plantes Populaires' : 'Popular Plants'}</h2>
+          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+            ${searchPopularPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+          </ul>
+          ` : ''}
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
+          </nav>
         </article>
       `
     }
@@ -23203,14 +23300,36 @@ async function generateCrawlerHtml(req, pagePath) {
               <p>${tr.blogDesc}</p>
               <h2>${tr.blogLatest}</h2>
               <ul>
-                ${posts.slice(0, 5).map(p => `
+                ${posts.map(p => `
                   <li>
                     <a href="/blog/${escapeHtml(p.slug)}"><strong>${escapeHtml(p.title)}</strong></a>
-                    ${p.excerpt ? `<br><em>${escapeHtml(p.excerpt.slice(0, 80))}...</em>` : ''}
+                    ${p.excerpt ? `<br><em>${escapeHtml(p.excerpt.slice(0, 100))}...</em>` : ''}
                   </li>
                 `).join('')}
               </ul>
-              <p><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadAll} →</a></p>
+              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+                <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+              </nav>
+            </article>
+          `
+        } else {
+          pageContent = `
+            <article>
+              <h1>📚 ${tr.blogTitle}</h1>
+              <p>${tr.blogDesc}</p>
+              <p>${detectedLang === 'fr' ? 'Les articles arrivent bientôt!' : 'Articles coming soon!'}</p>
+              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+              </nav>
             </article>
           `
         }
@@ -23219,6 +23338,22 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Gardens listing page
     else if (effectivePath[0] === 'gardens' && !effectivePath[1]) {
+      // Fetch some public gardens to list
+      let listGardens = []
+      try {
+        if (supabaseServer) {
+          const { data: gardens } = await ssrQuery(
+            supabaseServer
+              .from('gardens')
+              .select('id, name')
+              .eq('privacy', 'public')
+              .limit(12),
+            'gardens_list'
+          )
+          if (gardens) listGardens = gardens
+        }
+      } catch { }
+      
       title = `🏡 ${tr.gardensTitle} | Aphylia`
       description = tr.gardensDesc
       pageContent = `
@@ -23232,12 +23367,40 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>💡 ${tr.gardensIdeas}</li>
             <li>🤝 ${tr.gardensConnect}</li>
           </ul>
+          ${listGardens.length > 0 ? `
+          <h2>🌳 ${detectedLang === 'fr' ? 'Jardins de la Communauté' : 'Community Gardens'}</h2>
+          <ul>
+            ${listGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+          </ul>
+          ` : ''}
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/blog">📚 Blog</a>
+          </nav>
         </article>
       `
     }
 
     // Discovery/Swipe page
     else if (effectivePath[0] === 'discovery') {
+      // Fetch some featured plants for discovery page
+      let discoveryPlants = []
+      try {
+        if (supabaseServer) {
+          const { data: plants } = await ssrQuery(
+            supabaseServer
+              .from('plants')
+              .select('id, name')
+              .limit(8),
+            'discovery_plants'
+          )
+          if (plants) discoveryPlants = plants
+        }
+      } catch { }
+      
       title = `🎴 ${tr.discoveryTitle}`
       description = tr.discoveryDesc
       pageContent = `
@@ -23252,6 +23415,20 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>🔄 ${tr.discoveryKeep}</li>
           </ul>
           <p>${tr.discoveryStart} 🌿</p>
+          ${discoveryPlants.length > 0 ? `
+          <h2>🌿 ${detectedLang === 'fr' ? 'Plantes à Découvrir' : 'Plants to Discover'}</h2>
+          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+            ${discoveryPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+          </ul>
+          ` : ''}
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+          </nav>
         </article>
       `
     }
@@ -23266,8 +23443,8 @@ async function generateCrawlerHtml(req, pagePath) {
           <h2>🆓 ${tr.pricingFree}</h2>
           <p>${tr.pricingEverything}</p>
           <ul>
-            <li>✅ ${tr.pricingDiscovery}</li>
-            <li>✅ ${tr.pricingTracking}</li>
+            <li>✅ <a href="/discovery">${tr.pricingDiscovery}</a></li>
+            <li>✅ <a href="/gardens">${tr.pricingTracking}</a></li>
             <li>✅ ${tr.pricingCare}</li>
             <li>✅ ${tr.pricingIdentify}</li>
             <li>✅ ${tr.pricingAccess}</li>
@@ -23279,6 +23456,14 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>🌟 ${tr.pricingSupport}</li>
             <li>🌟 ${tr.pricingExclusive}</li>
           </ul>
+          <p style="margin-top: 20px;"><a href="/download" style="display: inline-block; padding: 12px 24px; background: #10b981; color: white; border-radius: 12px; text-decoration: none; font-weight: 600;">📲 ${detectedLang === 'fr' ? 'Commencer Gratuitement' : 'Get Started Free'}</a></p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'En savoir plus' : 'Learn More'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/contact">💬 Contact</a>
+            <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+          </nav>
         </article>
       `
     }
@@ -23292,6 +23477,7 @@ async function generateCrawlerHtml(req, pagePath) {
           <h1>📲 ${tr.downloadGet}</h1>
           <h2>🌐 ${tr.downloadWeb}</h2>
           <p>${tr.downloadWebDesc}</p>
+          <p><a href="/discovery" style="display: inline-block; padding: 10px 20px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: 600;">🎴 ${detectedLang === 'fr' ? 'Lancer l\'App Web' : 'Launch Web App'}</a></p>
           <h2>📱 ${tr.downloadPwa}</h2>
           <p>${tr.downloadPwaDesc}</p>
           <ul>
@@ -23300,6 +23486,14 @@ async function generateCrawlerHtml(req, pagePath) {
           </ul>
           <h2>🚀 ${tr.downloadNative}</h2>
           <p>${tr.downloadNativeDesc}</p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+          </nav>
         </article>
       `
     }
@@ -23321,7 +23515,13 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>✅ ${tr.termsSecure}</li>
             <li>✅ ${tr.termsEnjoy}</li>
           </ul>
-          <p><a href="${escapeHtml(canonicalUrl)}">${tr.termsRead} →</a></p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Liens Utiles' : 'Useful Links'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/contact">💬 Contact</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+          </nav>
         </article>
       `
     }
@@ -23341,6 +23541,13 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>📚 ${tr.businessCreators}</li>
           </ul>
           <p>${tr.businessExplore}</p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Liens Utiles' : 'Useful Links'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/contact">💬 ${detectedLang === 'fr' ? 'Contact Général' : 'General Contact'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/blog">📚 Blog</a>
+          </nav>
         </article>
       `
     }
@@ -23357,10 +23564,18 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>❓ ${tr.contactQuestions}</li>
             <li>💡 ${tr.contactFeatures}</li>
             <li>🐛 ${tr.contactBugs}</li>
-            <li>🤝 ${tr.contactPartnership}</li>
+            <li>🤝 <a href="/contact/business">${tr.contactPartnership}</a></li>
             <li>👋 ${tr.contactHello}</li>
           </ul>
           <p>${tr.contactRespond} 🌱</p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/blog">📚 Blog</a>
+            <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+          </nav>
         </article>
       `
     }
@@ -23470,10 +23685,18 @@ async function generateCrawlerHtml(req, pagePath) {
             <h1>🔖 ${escapeHtml(bookmarkName)} - ${tr.bookmarkTitle}</h1>
             <div class="plant-meta">
               🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved}
-              ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} ${escapeHtml(ownerName)}` : ''}
+              ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a>` : ''}
             </div>
             <p>${tr.bookmarksCarefully} 🌱</p>
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
+            
+            <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+            <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
+              <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+              <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+              <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            </nav>
           </article>
         `
       }
@@ -23568,6 +23791,47 @@ async function generateCrawlerHtml(req, pagePath) {
         { step: '4', title: 'Watch It Grow', desc: 'Track progress and celebrate success' },
       ]
 
+      // Fetch popular plants for internal links
+      let popularPlants = []
+      let recentBlogPosts = []
+      let publicGardens = []
+      try {
+        if (supabaseServer) {
+          // Get popular plants (by name for linking)
+          const { data: plants } = await ssrQuery(
+            supabaseServer
+              .from('plants')
+              .select('id, name')
+              .limit(12),
+            'home_popular_plants'
+          )
+          if (plants) popularPlants = plants
+
+          // Get recent blog posts
+          const { data: posts } = await ssrQuery(
+            supabaseServer
+              .from('blog_posts')
+              .select('slug, title')
+              .eq('is_published', true)
+              .order('published_at', { ascending: false })
+              .limit(6),
+            'home_recent_blog'
+          )
+          if (posts) recentBlogPosts = posts
+
+          // Get public gardens with names
+          const { data: gardens } = await ssrQuery(
+            supabaseServer
+              .from('gardens')
+              .select('id, name')
+              .eq('privacy', 'public')
+              .limit(6),
+            'home_public_gardens'
+          )
+          if (gardens) publicGardens = gardens
+        }
+      } catch { }
+
       pageContent = `
         <article itemscope itemtype="https://schema.org/WebApplication">
           <h1 itemprop="name">🌱 ${tr.homeWelcome}</h1>
@@ -23594,10 +23858,10 @@ async function generateCrawlerHtml(req, pagePath) {
           
           <h2>${tr.homeWhy}</h2>
           <ul>
-            <li>🎴 ${tr.homeSwipe}</li>
-            <li>🏡 ${tr.homeTracker}</li>
+            <li>🎴 <a href="/discovery">${tr.homeSwipe}</a></li>
+            <li>🏡 <a href="/gardens">${tr.homeTracker}</a></li>
             <li>⏰ ${tr.homeReminders}</li>
-            <li>📚 ${tr.homeCareGuides} ${plantCountStat} ${tr.homePlants}</li>
+            <li>📚 <a href="/search">${tr.homeCareGuides} ${plantCountStat} ${tr.homePlants}</a></li>
             <li>👥 ${tr.homeCommunityJoin} ${userCount} ${tr.homePlantLovers}</li>
           </ul>
           
@@ -23617,6 +23881,32 @@ async function generateCrawlerHtml(req, pagePath) {
             ${howItWorks.map(step => `<li><strong>${step.title}</strong>: ${step.desc}</li>`).join('')}
           </ol>
           
+          ${popularPlants.length > 0 ? `
+          <h2>🌿 ${detectedLang === 'fr' ? 'Plantes Populaires' : 'Popular Plants'}</h2>
+          <p>${detectedLang === 'fr' ? 'Découvrez nos guides de soins pour ces plantes:' : 'Explore our care guides for these plants:'}</p>
+          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+            ${popularPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+          </ul>
+          <p><a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher plus de plantes' : 'Search more plants'} →</a></p>
+          ` : ''}
+          
+          ${recentBlogPosts.length > 0 ? `
+          <h2>📚 ${detectedLang === 'fr' ? 'Articles Récents' : 'Recent Articles'}</h2>
+          <ul>
+            ${recentBlogPosts.map(post => `<li><a href="/blog/${escapeHtml(post.slug)}">${escapeHtml(post.title)}</a></li>`).join('')}
+          </ul>
+          <p><a href="/blog">📖 ${detectedLang === 'fr' ? 'Voir tous les articles' : 'View all articles'} →</a></p>
+          ` : ''}
+          
+          ${publicGardens.length > 0 ? `
+          <h2>🏡 ${detectedLang === 'fr' ? 'Jardins de la Communauté' : 'Community Gardens'}</h2>
+          <p>${detectedLang === 'fr' ? 'Découvrez ce que les autres jardiniers cultivent:' : 'See what other gardeners are growing:'}</p>
+          <ul>
+            ${publicGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+          </ul>
+          <p><a href="/gardens">🌳 ${detectedLang === 'fr' ? 'Explorer tous les jardins' : 'Explore all gardens'} →</a></p>
+          ` : ''}
+          
           <h2>${tr.homeStart}</h2>
           <p>${tr.homeFree} 🌿</p>
           
@@ -23628,6 +23918,19 @@ async function generateCrawlerHtml(req, pagePath) {
               🌐 ${detectedLang === 'fr' ? 'Essayer dans le navigateur' : 'Try in Browser'}
             </a>
           </div>
+          
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;">
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des Plantes' : 'Discover Plants'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+            <a href="/contact">💬 Contact</a>
+            <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+          </nav>
         </article>
       `
     }
