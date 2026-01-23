@@ -1084,8 +1084,51 @@ const FeaturesSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Regular Feature Cards */}
-          <FeatureCard icon={Bell} title={t("features.careReminders.title")} description={t("features.careReminders.description")} gradient="from-blue-500/10 to-indigo-500/10" iconBg="bg-blue-500" />
+          {/* Care Reminders - Enhanced Card */}
+          <div className="group relative rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-blue-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+            <div className="inline-flex h-12 w-12 rounded-xl bg-blue-500 items-center justify-center mb-4 shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
+              <Bell className="h-6 w-6 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">{t("features.careReminders.title")}</h3>
+            <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed mb-4">{t("features.careReminders.description")}</p>
+            
+            {/* Visual Preview - Mini Notification Stack */}
+            <div className="space-y-2">
+              {/* Notification 1 */}
+              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-200/50 dark:border-blue-500/20 backdrop-blur-sm group-hover:translate-x-1 transition-transform">
+                <div className="h-8 w-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                  <Droplets className="h-4 w-4 text-blue-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">Water your Monstera</p>
+                  <p className="text-[10px] text-stone-500">Today at 9:00 AM</p>
+                </div>
+                <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+              </div>
+              
+              {/* Notification 2 */}
+              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/40 dark:bg-white/5 border border-amber-200/50 dark:border-amber-500/20 backdrop-blur-sm group-hover:translate-x-1 transition-transform delay-75">
+                <div className="h-8 w-8 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                  <Sun className="h-4 w-4 text-amber-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">Fertilize Snake Plant</p>
+                  <p className="text-[10px] text-stone-500">Tomorrow</p>
+                </div>
+              </div>
+              
+              {/* Notification 3 - Faded */}
+              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/20 dark:bg-white/5 border border-emerald-200/30 dark:border-emerald-500/10 backdrop-blur-sm opacity-60 group-hover:translate-x-1 transition-transform delay-100">
+                <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                  <Leaf className="h-4 w-4 text-emerald-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">Mist your Fern</p>
+                  <p className="text-[10px] text-stone-500">In 2 days</p>
+                </div>
+              </div>
+            </div>
+          </div>
           <FeatureCard icon={Camera} title={t("features.plantId.title")} description={t("features.plantId.description")} gradient="from-pink-500/10 to-rose-500/10" iconBg="bg-pink-500" />
           <FeatureCard icon={NotebookPen} title={t("features.journal.title")} description={t("features.journal.description")} gradient="from-amber-500/10 to-orange-500/10" iconBg="bg-amber-500" />
           
