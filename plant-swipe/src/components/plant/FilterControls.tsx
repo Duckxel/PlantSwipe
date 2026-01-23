@@ -46,7 +46,7 @@ interface FilterControlsProps {
   usageOptions: string[]
 }
 
-export const FilterControls: React.FC<FilterControlsProps> = ({
+const FilterControlsBase: React.FC<FilterControlsProps> = ({
   searchSort,
   setSearchSort,
   seasonFilter,
@@ -540,3 +540,13 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
     </div>
   )
 }
+
+/**
+ * ⚡ Performance Optimization:
+ * Wrapped in React.memo to prevent expensive re-renders when parent state (like search query)
+ * updates but filter props remain unchanged.
+ *
+ * Impact: Reduces main thread work during typing in the search bar by avoiding
+ * virtual DOM generation for the complex filter UI.
+ */
+export const FilterControls = React.memo(FilterControlsBase)
