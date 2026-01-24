@@ -98,20 +98,37 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, className }
     let isDragging = false
     let lastMouseX = 0
     let lastTouchX = 0
+    let lastInteractionTime = 0
+    let currentVelocity = 0 // Current rotation velocity from user interaction
     const rotationSpeed = 0.005
     const autoRotationSpeed = 0.0012
+    const inertiaDecayRate = 0.03 // How fast velocity blends back to auto rotation (higher = faster)
 
     const handleMouseDown = (event: MouseEvent) => {
       isDragging = true
       lastMouseX = event.clientX
+      lastInteractionTime = performance.now()
+      currentVelocity = 0 // Reset velocity on new interaction
       renderer.domElement.style.cursor = 'grabbing'
     }
 
     const handleMouseMove = (event: MouseEvent) => {
       if (!isDragging) return
       const deltaX = event.clientX - lastMouseX
-      userRotation += deltaX * rotationSpeed
+      const deltaRotation = deltaX * rotationSpeed
+      userRotation += deltaRotation
+      
+      // Track velocity based on recent movement
+      const now = performance.now()
+      const deltaTime = now - lastInteractionTime
+      if (deltaTime > 0) {
+        // Use exponential smoothing for velocity to reduce jitter
+        const instantVelocity = deltaRotation / Math.max(deltaTime, 16) * 16 // Normalize to ~60fps
+        currentVelocity = currentVelocity * 0.5 + instantVelocity * 0.5
+      }
+      
       lastMouseX = event.clientX
+      lastInteractionTime = now
     }
 
     const handleMouseUp = () => {
@@ -123,6 +140,8 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, className }
       if (event.touches.length === 1) {
         isDragging = true
         lastTouchX = event.touches[0]?.clientX ?? 0
+        lastInteractionTime = performance.now()
+        currentVelocity = 0 // Reset velocity on new interaction
         renderer.domElement.style.cursor = 'grabbing'
       }
     }
@@ -130,9 +149,22 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, className }
     const handleTouchMove = (event: TouchEvent) => {
       if (!isDragging || event.touches.length !== 1) return
       event.preventDefault()
-      const deltaX = event.touches[0]?.clientX ?? 0 - lastTouchX
-      userRotation += deltaX * rotationSpeed
-      lastTouchX = event.touches[0]?.clientX ?? 0
+      const currentX = event.touches[0]?.clientX ?? 0
+      const deltaX = currentX - lastTouchX
+      const deltaRotation = deltaX * rotationSpeed
+      userRotation += deltaRotation
+      
+      // Track velocity based on recent movement
+      const now = performance.now()
+      const deltaTime = now - lastInteractionTime
+      if (deltaTime > 0) {
+        // Use exponential smoothing for velocity to reduce jitter
+        const instantVelocity = deltaRotation / Math.max(deltaTime, 16) * 16 // Normalize to ~60fps
+        currentVelocity = currentVelocity * 0.5 + instantVelocity * 0.5
+      }
+      
+      lastTouchX = currentX
+      lastInteractionTime = now
     }
 
     const handleTouchEnd = () => {
@@ -152,9 +184,26 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, className }
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     const animate = () => {
-      if (!isDragging) {
-        autoAngle += autoRotationSpeed
+      if (isDragging) {
+        // While dragging, rotation is handled in move handlers
+      } else {
+        // Not dragging - apply inertia with smooth blend back to auto rotation
+        // Check if velocity has settled close to auto rotation speed
+        const velocityDiff = Math.abs(currentVelocity - autoRotationSpeed)
+        
+        if (velocityDiff > 0.00001) {
+          // Inertia phase: smoothly blend velocity toward auto rotation speed
+          // This creates the effect of fast swipes having momentum that slowly
+          // decays back to the normal rotation speed
+          currentVelocity = currentVelocity + (autoRotationSpeed - currentVelocity) * inertiaDecayRate
+          userRotation += currentVelocity
+        } else {
+          // Velocity has settled - switch to standard auto rotation
+          currentVelocity = autoRotationSpeed
+          autoAngle += autoRotationSpeed
+        }
       }
+      
       const totalRotation = autoAngle + userRotation
       camera.position.x = cubeCenter.x + cameraDistance * Math.cos(totalRotation)
       camera.position.z = cubeCenter.z + cameraDistance * Math.sin(totalRotation)
