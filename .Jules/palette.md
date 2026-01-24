@@ -13,3 +13,7 @@
 ## 2025-05-24 - Mobile-Specific Accessibility Gaps
 **Learning:** The mobile layout in `SwipePage` used raw `<button>` elements instead of the accessible `Button` component used in desktop, resulting in missing ARIA labels on icon-only buttons.
 **Action:** When implementing separate mobile/desktop layouts, verify that accessibility attributes (aria-label, title) are synchronized or that shared components are used.
+
+## 2025-05-24 - Complex UI Sections & Hidden Buttons
+**Learning:** Complex, custom UI sections (like the Journal timelapse viewer) often use raw `<button>` elements or `Button` components in `size="icon"` mode without `aria-label`, as they are visually obvious but invisible to screen readers.
+**Action:** Systematically audit complex interactive sections (modals, viewers, editors) for icon-only buttons and ensure every interactive element has an accessible name.
