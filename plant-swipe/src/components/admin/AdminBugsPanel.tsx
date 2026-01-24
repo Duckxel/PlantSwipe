@@ -29,6 +29,9 @@ import {
   Play,
   Save,
   Search,
+  Trophy,
+  Medal,
+  Crown,
 } from "lucide-react"
 
 type BugAction = {
@@ -80,6 +83,15 @@ type BugCatcherStats = {
   total_points_awarded: number
 }
 
+type LeaderboardEntry = {
+  rank: number
+  user_id: string
+  display_name: string | null
+  avatar_url: string | null
+  bug_points: number
+  actions_completed: number
+}
+
 type AdminView = 'overview' | 'actions' | 'reports'
 
 export const AdminBugsPanel: React.FC = () => {
@@ -90,6 +102,9 @@ export const AdminBugsPanel: React.FC = () => {
   
   // Stats
   const [stats, setStats] = React.useState<BugCatcherStats | null>(null)
+  
+  // Leaderboard
+  const [leaderboard, setLeaderboard] = React.useState<LeaderboardEntry[]>([])
   
   // Actions
   const [actions, setActions] = React.useState<BugAction[]>([])
@@ -121,6 +136,12 @@ export const AdminBugsPanel: React.FC = () => {
       const { data: statsData } = await supabase.rpc('get_bug_catcher_stats')
       if (statsData && statsData[0]) {
         setStats(statsData[0])
+      }
+
+      // Load leaderboard (top 10)
+      const { data: leaderboardData } = await supabase.rpc('get_bug_catcher_leaderboard', { _limit: 10 })
+      if (leaderboardData) {
+        setLeaderboard(leaderboardData)
       }
 
       // Load all actions (admins can see all)
@@ -414,6 +435,13 @@ export const AdminBugsPanel: React.FC = () => {
     return filtered
   }, [actions, actionStatusFilter, actionSearch])
 
+  const getRankIcon = (rank: number) => {
+    if (rank === 1) return <Crown className="h-5 w-5 text-yellow-500" />
+    if (rank === 2) return <Medal className="h-5 w-5 text-gray-400" />
+    if (rank === 3) return <Medal className="h-5 w-5 text-amber-600" />
+    return <span className="text-sm font-medium opacity-60">#{rank}</span>
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'draft':
@@ -499,47 +527,109 @@ export const AdminBugsPanel: React.FC = () => {
 
       {/* Overview */}
       {view === 'overview' && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="space-y-6">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <Card className={glassCard}>
+              <CardContent className="p-4 text-center">
+                <Users className="h-6 w-6 mx-auto mb-2 text-orange-500" />
+                <div className="text-2xl font-bold tabular-nums">{stats?.total_bug_catchers || 0}</div>
+                <div className="text-xs opacity-60">Bug Catchers</div>
+              </CardContent>
+            </Card>
+            <Card className={glassCard}>
+              <CardContent className="p-4 text-center">
+                <Target className="h-6 w-6 mx-auto mb-2 text-emerald-500" />
+                <div className="text-2xl font-bold tabular-nums">{stats?.total_actions || 0}</div>
+                <div className="text-xs opacity-60">Total Actions</div>
+              </CardContent>
+            </Card>
+            <Card className={glassCard}>
+              <CardContent className="p-4 text-center">
+                <Play className="h-6 w-6 mx-auto mb-2 text-blue-500" />
+                <div className="text-2xl font-bold tabular-nums">{stats?.active_actions || 0}</div>
+                <div className="text-xs opacity-60">Active Actions</div>
+              </CardContent>
+            </Card>
+            <Card className={glassCard}>
+              <CardContent className="p-4 text-center">
+                <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-purple-500" />
+                <div className="text-2xl font-bold tabular-nums">{stats?.total_responses || 0}</div>
+                <div className="text-xs opacity-60">Completions</div>
+              </CardContent>
+            </Card>
+            <Card className={glassCard}>
+              <CardContent className="p-4 text-center">
+                <Bug className="h-6 w-6 mx-auto mb-2 text-yellow-500" />
+                <div className="text-2xl font-bold tabular-nums">{stats?.pending_bug_reports || 0}</div>
+                <div className="text-xs opacity-60">Pending Reports</div>
+              </CardContent>
+            </Card>
+            <Card className={glassCard}>
+              <CardContent className="p-4 text-center">
+                <Zap className="h-6 w-6 mx-auto mb-2 text-amber-500" />
+                <div className="text-2xl font-bold tabular-nums">{stats?.total_points_awarded || 0}</div>
+                <div className="text-xs opacity-60">Points Awarded</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Bug Catcher Leaderboard - Top 10 */}
           <Card className={glassCard}>
-            <CardContent className="p-4 text-center">
-              <Users className="h-6 w-6 mx-auto mb-2 text-orange-500" />
-              <div className="text-2xl font-bold tabular-nums">{stats?.total_bug_catchers || 0}</div>
-              <div className="text-xs opacity-60">Bug Catchers</div>
-            </CardContent>
-          </Card>
-          <Card className={glassCard}>
-            <CardContent className="p-4 text-center">
-              <Target className="h-6 w-6 mx-auto mb-2 text-emerald-500" />
-              <div className="text-2xl font-bold tabular-nums">{stats?.total_actions || 0}</div>
-              <div className="text-xs opacity-60">Total Actions</div>
-            </CardContent>
-          </Card>
-          <Card className={glassCard}>
-            <CardContent className="p-4 text-center">
-              <Play className="h-6 w-6 mx-auto mb-2 text-blue-500" />
-              <div className="text-2xl font-bold tabular-nums">{stats?.active_actions || 0}</div>
-              <div className="text-xs opacity-60">Active Actions</div>
-            </CardContent>
-          </Card>
-          <Card className={glassCard}>
-            <CardContent className="p-4 text-center">
-              <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-purple-500" />
-              <div className="text-2xl font-bold tabular-nums">{stats?.total_responses || 0}</div>
-              <div className="text-xs opacity-60">Completions</div>
-            </CardContent>
-          </Card>
-          <Card className={glassCard}>
-            <CardContent className="p-4 text-center">
-              <Bug className="h-6 w-6 mx-auto mb-2 text-yellow-500" />
-              <div className="text-2xl font-bold tabular-nums">{stats?.pending_bug_reports || 0}</div>
-              <div className="text-xs opacity-60">Pending Reports</div>
-            </CardContent>
-          </Card>
-          <Card className={glassCard}>
-            <CardContent className="p-4 text-center">
-              <Zap className="h-6 w-6 mx-auto mb-2 text-amber-500" />
-              <div className="text-2xl font-bold tabular-nums">{stats?.total_points_awarded || 0}</div>
-              <div className="text-xs opacity-60">Points Awarded</div>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Trophy className="h-5 w-5 text-amber-500" />
+                <h3 className="text-lg font-semibold">Bug Catcher Leaderboard</h3>
+                <Badge variant="secondary" className="ml-auto">Top 10</Badge>
+              </div>
+              
+              {leaderboard.length === 0 ? (
+                <div className="text-center py-8 opacity-60">
+                  <Medal className="h-8 w-8 mx-auto mb-2" />
+                  <p className="text-sm">No rankings yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {leaderboard.map((entry) => (
+                    <div
+                      key={entry.user_id}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                        entry.rank <= 3 
+                          ? 'bg-gradient-to-r from-amber-50/50 to-orange-50/50 dark:from-amber-900/10 dark:to-orange-900/10 border border-amber-200/50 dark:border-amber-700/30' 
+                          : 'bg-stone-50/50 dark:bg-stone-800/30 border border-stone-200/50 dark:border-stone-700/30'
+                      }`}
+                    >
+                      <div className="w-8 flex justify-center shrink-0">
+                        {getRankIcon(entry.rank)}
+                      </div>
+                      {entry.avatar_url ? (
+                        <img 
+                          src={entry.avatar_url} 
+                          alt="" 
+                          className="h-9 w-9 rounded-full object-cover shrink-0"
+                        />
+                      ) : (
+                        <div className="h-9 w-9 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center shrink-0">
+                          <Users className="h-4 w-4 opacity-50" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">
+                          {entry.display_name || 'Anonymous'}
+                        </div>
+                        <div className="text-xs opacity-60">
+                          {entry.actions_completed} actions completed
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400 shrink-0">
+                        <Zap className="h-4 w-4" />
+                        <span className="font-semibold tabular-nums">{entry.bug_points}</span>
+                        <span className="text-xs opacity-70">pts</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
