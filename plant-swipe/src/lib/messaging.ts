@@ -844,7 +844,7 @@ export async function getConversationImages(
  * Internal link types for aphylia.app resources
  */
 export interface InternalLink {
-  type: 'plant' | 'garden' | 'profile' | 'bookmark' | 'blog'
+  type: 'plant' | 'garden' | 'profile' | 'bookmark' | 'blog' | 'media'
   id: string
   url: string
   fullMatch: string // The original matched text
@@ -857,6 +857,59 @@ export interface InternalLinkPreviewData {
   description?: string
   imageUrl?: string
   subtitle?: string
+}
+
+/**
+ * Media domains for aphylia.app
+ */
+const MEDIA_DOMAINS = [
+  'media.aphylia.app'
+]
+
+/**
+ * Check if a URL is a media.aphylia.app link
+ */
+export function isMediaUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.toLowerCase()
+    return MEDIA_DOMAINS.some(domain => hostname === domain)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Check if a URL points to an image file
+ */
+export function isImageUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const path = parsed.pathname.toLowerCase()
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg', '.heic', '.heif']
+    return imageExtensions.some(ext => path.endsWith(ext))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get a friendly filename from a media URL
+ */
+export function getMediaFilename(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const path = parsed.pathname
+    const segments = path.split('/')
+    const filename = segments[segments.length - 1] || 'media'
+    // Remove UUID-like suffixes for cleaner display
+    const cleanName = filename.replace(/-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '')
+    // Get just the name part without extension for display
+    const nameOnly = cleanName.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ')
+    return nameOnly || 'Image'
+  } catch {
+    return 'Image'
+  }
 }
 
 /**
@@ -898,7 +951,14 @@ export function isInternalUrl(url: string): boolean {
 export function parseInternalUrl(url: string): InternalLink | null {
   try {
     const parsed = new URL(url)
+    const hostname = parsed.hostname.toLowerCase()
     let path = parsed.pathname
+    
+    // Check if it's a media URL (media.aphylia.app)
+    if (MEDIA_DOMAINS.some(domain => hostname === domain)) {
+      // It's a media file
+      return { type: 'media', id: url, url, fullMatch: url }
+    }
     
     // Strip language prefix (e.g., /en/, /fr/)
     const langMatch = path.match(/^\/([a-z]{2})(\/.*)$/)
@@ -1233,6 +1293,22 @@ async function fetchBlogPreview(slug: string): Promise<InternalLinkPreviewData |
 }
 
 /**
+ * Fetch preview data for a media file
+ */
+function fetchMediaPreview(url: string): InternalLinkPreviewData {
+  const filename = getMediaFilename(url)
+  const isImage = isImageUrl(url)
+  
+  return {
+    type: 'media',
+    id: url,
+    title: filename,
+    subtitle: isImage ? '📷 Image' : '📁 File',
+    imageUrl: isImage ? url : undefined
+  }
+}
+
+/**
  * Fetch preview data for an internal link
  */
 export async function fetchInternalLinkPreview(link: InternalLink): Promise<InternalLinkPreviewData | null> {
@@ -1247,6 +1323,8 @@ export async function fetchInternalLinkPreview(link: InternalLink): Promise<Inte
       return fetchBookmarkPreview(link.id)
     case 'blog':
       return fetchBlogPreview(link.id)
+    case 'media':
+      return fetchMediaPreview(link.id)
     default:
       return null
   }

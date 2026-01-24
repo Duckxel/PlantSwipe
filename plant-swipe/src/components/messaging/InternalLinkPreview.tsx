@@ -15,12 +15,15 @@ import {
   Bookmark, 
   FileText,
   ExternalLink,
-  Loader2
+  Loader2,
+  Image as ImageIcon,
+  Download
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { 
   extractInternalLinks, 
   fetchInternalLinkPreview,
+  isImageUrl,
   type InternalLink,
   type InternalLinkPreviewData
 } from '@/lib/messaging'
@@ -46,6 +49,8 @@ function getResourceIcon(type: InternalLink['type']) {
       return <Bookmark className="h-4 w-4" />
     case 'blog':
       return <FileText className="h-4 w-4" />
+    case 'media':
+      return <ImageIcon className="h-4 w-4" />
     default:
       return <ExternalLink className="h-4 w-4" />
   }
@@ -66,6 +71,8 @@ function getResourceLabel(type: InternalLink['type'], t: (key: string, options?:
       return t('messages.linkPreview.bookmark', { defaultValue: 'Collection' })
     case 'blog':
       return t('messages.linkPreview.blog', { defaultValue: 'Article' })
+    case 'media':
+      return t('messages.linkPreview.media', { defaultValue: 'Media' })
     default:
       return t('messages.linkPreview.link', { defaultValue: 'Link' })
   }
@@ -86,6 +93,8 @@ function getResourceGradient(type: InternalLink['type']): string {
       return 'from-purple-400 to-purple-600'
     case 'blog':
       return 'from-rose-400 to-rose-600'
+    case 'media':
+      return 'from-cyan-400 to-cyan-600'
     default:
       return 'from-stone-400 to-stone-600'
   }
@@ -103,6 +112,7 @@ const LinkPreviewCard: React.FC<{
   const [preview, setPreview] = React.useState<InternalLinkPreviewData | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState(false)
+  const [imageLoaded, setImageLoaded] = React.useState(false)
   
   // Fetch preview data
   React.useEffect(() => {
@@ -130,7 +140,7 @@ const LinkPreviewCard: React.FC<{
     }
   }, [link])
   
-  // Handle navigation
+  // Handle navigation/action
   const handleClick = () => {
     switch (link.type) {
       case 'plant':
@@ -148,7 +158,21 @@ const LinkPreviewCard: React.FC<{
       case 'blog':
         navigate(`/blog/${link.id}`)
         break
+      case 'media':
+        // Open media in new tab
+        window.open(link.url, '_blank', 'noopener,noreferrer')
+        break
     }
+  }
+  
+  // Handle download for media
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const a = document.createElement('a')
+    a.href = link.url
+    a.download = ''
+    a.target = '_blank'
+    a.click()
   }
   
   // Don't show anything if there was an error loading
@@ -160,6 +184,100 @@ const LinkPreviewCard: React.FC<{
   const icon = getResourceIcon(link.type)
   const gradient = getResourceGradient(link.type)
   
+  // Check if this is a media image that should be shown large
+  const isMediaImage = link.type === 'media' && isImageUrl(link.url)
+  
+  // For media images, show a larger preview
+  if (isMediaImage) {
+    return (
+      <div className="mt-2 rounded-xl overflow-hidden">
+        {/* Large image preview */}
+        <div 
+          className={cn(
+            'relative cursor-pointer',
+            isOwn ? 'bg-blue-500/20' : 'bg-stone-100 dark:bg-[#2a2a2d]'
+          )}
+          onClick={handleClick}
+        >
+          {!imageLoaded && (
+            <div className="w-full h-[200px] flex items-center justify-center animate-pulse">
+              <Loader2 className={cn(
+                "h-8 w-8 animate-spin",
+                isOwn ? "text-blue-200" : "text-stone-400"
+              )} />
+            </div>
+          )}
+          <img
+            src={link.url}
+            alt=""
+            className={cn(
+              "max-w-full max-h-[300px] object-contain mx-auto",
+              !imageLoaded && "hidden"
+            )}
+            onLoad={() => setImageLoaded(true)}
+            loading="lazy"
+          />
+          
+          {/* Overlay with actions on hover */}
+          {imageLoaded && (
+            <div className={cn(
+              "absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors",
+              "flex items-center justify-center gap-3 opacity-0 hover:opacity-100"
+            )}>
+              <button
+                onClick={handleDownload}
+                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110"
+                title={t('messages.download', { defaultValue: 'Download' })}
+              >
+                <Download className="h-5 w-5" />
+              </button>
+              <button
+                onClick={handleClick}
+                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110"
+                title={t('messages.openInNewTab', { defaultValue: 'Open in new tab' })}
+              >
+                <ExternalLink className="h-5 w-5" />
+              </button>
+            </div>
+          )}
+        </div>
+        
+        {/* Caption bar below image */}
+        <div className={cn(
+          'flex items-center gap-2 px-3 py-2',
+          isOwn 
+            ? 'bg-blue-400/20 border-t border-blue-400/20' 
+            : 'bg-stone-50 dark:bg-[#1a1a1c] border-t border-stone-200/50 dark:border-[#3a3a3d]/50'
+        )}>
+          <div className={cn(
+            'p-1.5 rounded-lg',
+            isOwn ? 'bg-blue-300/30' : 'bg-cyan-100 dark:bg-cyan-900/30'
+          )}>
+            <ImageIcon className={cn(
+              'h-4 w-4',
+              isOwn ? 'text-blue-100' : 'text-cyan-600 dark:text-cyan-400'
+            )} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={cn(
+              'text-sm font-medium truncate',
+              isOwn ? 'text-white' : 'text-stone-900 dark:text-white'
+            )}>
+              {preview?.title || 'Image'}
+            </p>
+            <p className={cn(
+              'text-xs truncate',
+              isOwn ? 'text-blue-100/70' : 'text-stone-500 dark:text-stone-400'
+            )}>
+              media.aphylia.app
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  // Standard preview card for other types
   return (
     <button
       onClick={handleClick}

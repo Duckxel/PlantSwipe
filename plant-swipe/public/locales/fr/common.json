@@ -2690,8 +2690,11 @@
       "profile": "Profil",
       "bookmark": "Collection",
       "blog": "Article",
+      "media": "Média",
       "link": "Lien"
-    }
+    },
+    "download": "Télécharger",
+    "openInNewTab": "Ouvrir dans un nouvel onglet"
   },
   "moderation": {
     "report": {
