@@ -986,7 +986,7 @@ async function fetchPlantPreview(plantId: string): Promise<InternalLinkPreviewDa
   try {
     const { data: plant, error } = await supabase
       .from('plants')
-      .select('id, name, scientific_name, meaning')
+      .select('id, name, scientific_name, meaning, identity')
       .eq('id', plantId)
       .single()
     
@@ -1000,11 +1000,26 @@ async function fetchPlantPreview(plantId: string): Promise<InternalLinkPreviewDa
       .eq('is_primary', true)
       .single()
     
+    // Build description from plant identity
+    const identity = plant.identity as { maintenanceLevel?: string; livingSpace?: string } | null
+    let description = plant.scientific_name || ''
+    if (identity?.maintenanceLevel) {
+      const maintenanceLabels: Record<string, string> = {
+        'low': '🌱 Easy care',
+        'medium': '🌿 Moderate care', 
+        'high': '🌺 Expert care'
+      }
+      const careLabel = maintenanceLabels[identity.maintenanceLevel.toLowerCase()] || ''
+      if (careLabel) {
+        description = description ? `${description} · ${careLabel}` : careLabel
+      }
+    }
+    
     return {
       type: 'plant',
       id: plantId,
       title: plant.name,
-      subtitle: plant.scientific_name || undefined,
+      subtitle: description || undefined,
       description: plant.meaning || undefined,
       imageUrl: imageData?.url || undefined
     }
@@ -1026,10 +1041,32 @@ async function fetchGardenPreview(gardenId: string): Promise<InternalLinkPreview
     
     if (error || !garden) return null
     
+    // Get plant count in this garden
+    const { count: plantCount } = await supabase
+      .from('garden_plants')
+      .select('*', { count: 'exact', head: true })
+      .eq('garden_id', gardenId)
+    
+    // Get member count
+    const { count: memberCount } = await supabase
+      .from('garden_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('garden_id', gardenId)
+    
+    // Build subtitle with counts
+    const parts: string[] = []
+    if (plantCount !== null && plantCount > 0) {
+      parts.push(`🌱 ${plantCount} plant${plantCount !== 1 ? 's' : ''}`)
+    }
+    if (memberCount !== null && memberCount > 1) {
+      parts.push(`👥 ${memberCount} members`)
+    }
+    
     return {
       type: 'garden',
       id: gardenId,
       title: garden.name,
+      subtitle: parts.length > 0 ? parts.join(' · ') : undefined,
       description: garden.description || undefined,
       imageUrl: garden.cover_image_url || undefined
     }
@@ -1045,16 +1082,43 @@ async function fetchProfilePreview(username: string): Promise<InternalLinkPrevie
   try {
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('id, display_name, avatar_url, bio')
+      .select('id, display_name, avatar_url, bio, liked_plant_ids')
       .eq('display_name', username)
       .single()
     
     if (error || !profile) return null
     
+    // Get friend count (friends where this user is either user_id or friend_id with status accepted)
+    const { count: friendCount } = await supabase
+      .from('friends')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', profile.id)
+      .eq('status', 'accepted')
+    
+    // Get garden count
+    const { count: gardenCount } = await supabase
+      .from('garden_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', profile.id)
+    
+    // Build subtitle with counts
+    const parts: string[] = []
+    const likedCount = Array.isArray(profile.liked_plant_ids) ? profile.liked_plant_ids.length : 0
+    if (likedCount > 0) {
+      parts.push(`❤️ ${likedCount} favorite${likedCount !== 1 ? 's' : ''}`)
+    }
+    if (gardenCount !== null && gardenCount > 0) {
+      parts.push(`🏡 ${gardenCount} garden${gardenCount !== 1 ? 's' : ''}`)
+    }
+    if (friendCount !== null && friendCount > 0) {
+      parts.push(`👥 ${friendCount} friend${friendCount !== 1 ? 's' : ''}`)
+    }
+    
     return {
       type: 'profile',
       id: username,
       title: profile.display_name || username,
+      subtitle: parts.length > 0 ? parts.join(' · ') : undefined,
       description: profile.bio || undefined,
       imageUrl: profile.avatar_url || undefined
     }
@@ -1070,16 +1134,43 @@ async function fetchBookmarkPreview(bookmarkId: string): Promise<InternalLinkPre
   try {
     const { data: bookmark, error } = await supabase
       .from('bookmarks')
-      .select('id, name, description, cover_image_url')
+      .select('id, name, description, cover_image_url, user_id')
       .eq('id', bookmarkId)
       .single()
     
     if (error || !bookmark) return null
     
+    // Get plant count in this bookmark
+    const { count: plantCount } = await supabase
+      .from('bookmark_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('bookmark_id', bookmarkId)
+    
+    // Get owner's display name
+    let ownerName: string | undefined
+    if (bookmark.user_id) {
+      const { data: owner } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', bookmark.user_id)
+        .single()
+      ownerName = owner?.display_name || undefined
+    }
+    
+    // Build subtitle
+    const parts: string[] = []
+    if (plantCount !== null && plantCount > 0) {
+      parts.push(`🌱 ${plantCount} plant${plantCount !== 1 ? 's' : ''}`)
+    }
+    if (ownerName) {
+      parts.push(`by ${ownerName}`)
+    }
+    
     return {
       type: 'bookmark',
       id: bookmarkId,
       title: bookmark.name,
+      subtitle: parts.length > 0 ? parts.join(' · ') : undefined,
       description: bookmark.description || undefined,
       imageUrl: bookmark.cover_image_url || undefined
     }
@@ -1095,16 +1186,44 @@ async function fetchBlogPreview(slug: string): Promise<InternalLinkPreviewData |
   try {
     const { data: post, error } = await supabase
       .from('blog_posts')
-      .select('id, title, excerpt, cover_image_url')
+      .select('id, title, excerpt, cover_image_url, author_id, published_at')
       .eq('slug', slug)
       .single()
     
     if (error || !post) return null
     
+    // Get author's display name
+    let authorName: string | undefined
+    if (post.author_id) {
+      const { data: author } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', post.author_id)
+        .single()
+      authorName = author?.display_name || undefined
+    }
+    
+    // Format published date
+    let dateStr: string | undefined
+    if (post.published_at) {
+      const date = new Date(post.published_at)
+      dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    }
+    
+    // Build subtitle
+    const parts: string[] = []
+    if (authorName) {
+      parts.push(`by ${authorName}`)
+    }
+    if (dateStr) {
+      parts.push(dateStr)
+    }
+    
     return {
       type: 'blog',
       id: slug,
       title: post.title,
+      subtitle: parts.length > 0 ? parts.join(' · ') : undefined,
       description: post.excerpt || undefined,
       imageUrl: post.cover_image_url || undefined
     }

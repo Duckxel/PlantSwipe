@@ -214,17 +214,27 @@ const LinkPreviewCard: React.FC<{
           {loading ? (
             <span className="animate-pulse bg-current/20 rounded inline-block w-24 h-4" />
           ) : (
-            preview?.title || link.id
+            preview?.title || resourceLabel
           )}
         </p>
         
-        {/* Subtitle or description */}
-        {!loading && (preview?.subtitle || preview?.description) && (
+        {/* Subtitle (stats like plant count, friend count) */}
+        {!loading && preview?.subtitle && (
+          <p className={cn(
+            'text-xs mt-0.5',
+            isOwn ? 'text-blue-100/90' : 'text-stone-600 dark:text-stone-300'
+          )}>
+            {preview.subtitle}
+          </p>
+        )}
+        
+        {/* Description (bio, meaning, etc) - only show if no subtitle or truncate */}
+        {!loading && preview?.description && !preview?.subtitle && (
           <p className={cn(
             'text-xs truncate mt-0.5',
-            isOwn ? 'text-blue-100/80' : 'text-stone-500 dark:text-stone-400'
+            isOwn ? 'text-blue-100/70' : 'text-stone-500 dark:text-stone-400'
           )}>
-            {preview.subtitle || preview.description}
+            {preview.description}
           </p>
         )}
       </div>
