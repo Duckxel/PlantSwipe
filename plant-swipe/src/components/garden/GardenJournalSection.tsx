@@ -846,7 +846,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                           <button
                             onClick={() => generateVideo('timelapse')}
                             disabled={exporting !== null}
-                            className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left disabled:opacity-50"
+                            className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                           >
                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
                               <Film className="w-5 h-5 text-white" />
@@ -875,7 +875,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                           <button
                             onClick={() => generateVideo('montage')}
                             disabled={exporting !== null}
-                            className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left disabled:opacity-50"
+                            className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                           >
                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center flex-shrink-0">
                               <Images className="w-5 h-5 text-white" />
@@ -904,7 +904,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                           <button
                             onClick={downloadPhotosAsZip}
                             disabled={exporting !== null}
-                            className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left disabled:opacity-50"
+                            className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                           >
                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center flex-shrink-0">
                               <Download className="w-5 h-5 text-white" />
@@ -1019,8 +1019,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                       <button
                         key={mood.key}
                         type="button"
+                        aria-pressed={entryMood === mood.key}
                         onClick={() => setEntryMood(entryMood === mood.key ? null : mood.key)}
-                        className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
+                        className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
                           entryMood === mood.key
                             ? `${mood.bg} border-current ${mood.color} shadow-md scale-105`
                             : "border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 hover:scale-102"
@@ -1077,8 +1078,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         <button
                           type="button"
                           onClick={() => removePendingPhoto(index)}
-                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500"
                           aria-label={t("common.remove", "Remove")}
+                          title={t("common.remove", "Remove")}
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -1087,7 +1089,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-24 h-24 border-2 border-dashed border-stone-300 dark:border-stone-600 rounded-xl flex flex-col items-center justify-center gap-1 text-stone-400 hover:border-amber-400 hover:text-amber-500 transition-colors"
+                      className="w-24 h-24 border-2 border-dashed border-stone-300 dark:border-stone-600 rounded-xl flex flex-col items-center justify-center gap-1 text-stone-400 hover:border-amber-400 hover:text-amber-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                     >
                       <Upload className="w-6 h-6" />
                       <span className="text-xs">{t("gardenDashboard.journalSection.addPhoto", "Add")}</span>
@@ -1119,7 +1121,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRemoveTag(tag)}
-                          className="hover:text-red-500"
+                          className="hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
                           aria-label={`${t("common.remove", "Remove")} ${tag}`}
                         >
                           <X className="w-3 h-3" />
