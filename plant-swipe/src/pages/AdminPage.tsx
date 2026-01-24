@@ -365,6 +365,70 @@ const toPromotionMonthSlug = (
     : null;
 };
 
+// Constants for persisting admin plants list state in sessionStorage
+const ADMIN_PLANTS_STATE_KEY = "admin-plants-list-state";
+const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name"];
+
+// Type for persisted plant list state
+type AdminPlantsListState = {
+  searchQuery: string;
+  sortOption: PlantSortOption;
+  promotionMonth: PromotionMonthSlug | "none" | "all";
+  statuses: NormalizedPlantStatus[];
+  scrollPosition: number;
+};
+
+// Load persisted state from sessionStorage
+const loadAdminPlantsState = (): Partial<AdminPlantsListState> => {
+  try {
+    const saved = sessionStorage.getItem(ADMIN_PLANTS_STATE_KEY);
+    if (!saved) return {};
+    const parsed = JSON.parse(saved);
+    
+    // Validate and sanitize the loaded state
+    const result: Partial<AdminPlantsListState> = {};
+    
+    if (typeof parsed.searchQuery === "string") {
+      result.searchQuery = parsed.searchQuery;
+    }
+    
+    if (parsed.sortOption && VALID_SORT_OPTIONS.includes(parsed.sortOption)) {
+      result.sortOption = parsed.sortOption;
+    }
+    
+    if (parsed.promotionMonth === "all" || parsed.promotionMonth === "none" || 
+        (PROMOTION_MONTH_SLUGS as readonly string[]).includes(parsed.promotionMonth)) {
+      result.promotionMonth = parsed.promotionMonth;
+    }
+    
+    if (Array.isArray(parsed.statuses)) {
+      const validStatuses = parsed.statuses.filter((s: string) =>
+        PLANT_STATUS_KEYS.includes(s as NormalizedPlantStatus)
+      ) as NormalizedPlantStatus[];
+      if (validStatuses.length > 0) {
+        result.statuses = validStatuses;
+      }
+    }
+    
+    if (typeof parsed.scrollPosition === "number" && parsed.scrollPosition >= 0) {
+      result.scrollPosition = parsed.scrollPosition;
+    }
+    
+    return result;
+  } catch {
+    return {};
+  }
+};
+
+// Save state to sessionStorage
+const saveAdminPlantsState = (state: AdminPlantsListState): void => {
+  try {
+    sessionStorage.setItem(ADMIN_PLANTS_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage errors
+  }
+};
+
 export const AdminPage: React.FC = () => {
   const navigate = useLanguageNavigate();
   const location = useLocation();
@@ -1640,15 +1704,20 @@ export const AdminPage: React.FC = () => {
   >(null);
   const [plantDashboardInitialized, setPlantDashboardInitialized] =
     React.useState<boolean>(false);
+  
+  // Initialize plant list filter state from sessionStorage for persistence
+  const savedPlantsState = React.useMemo(() => loadAdminPlantsState(), []);
   const [visiblePlantStatuses, setVisiblePlantStatuses] = React.useState<
     NormalizedPlantStatus[]
-  >(DEFAULT_VISIBLE_PLANT_STATUSES);
+  >(savedPlantsState.statuses ?? DEFAULT_VISIBLE_PLANT_STATUSES);
   const [selectedPromotionMonth, setSelectedPromotionMonth] = React.useState<
     PromotionMonthSlug | "none" | "all"
-  >("all");
+  >(savedPlantsState.promotionMonth ?? "all");
   const [plantSearchQuery, setPlantSearchQuery] =
-    React.useState<string>("");
-  const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>("status");
+    React.useState<string>(savedPlantsState.searchQuery ?? "");
+  const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>(
+    savedPlantsState.sortOption ?? "status"
+  );
   const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
   const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
   const [deletingPlant, setDeletingPlant] = React.useState(false);
@@ -1664,6 +1733,40 @@ export const AdminPage: React.FC = () => {
   const [addFromDuplicating, setAddFromDuplicating] = React.useState(false);
   const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
   const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
+
+  // Track whether we've restored the scroll position (to avoid doing it multiple times)
+  const scrollRestoredRef = React.useRef(false);
+  
+  // Restore scroll position when returning to the plants tab AFTER data has loaded
+  React.useEffect(() => {
+    // Only restore once, and only when on plants tab with data loaded
+    if (scrollRestoredRef.current) return;
+    if (!currentPath.includes("/admin/plants")) return;
+    if (!plantDashboardInitialized) return;
+    
+    // Check if we have a saved scroll position
+    const saved = loadAdminPlantsState();
+    if (saved.scrollPosition && saved.scrollPosition > 0) {
+      // Mark as restored before scrolling
+      scrollRestoredRef.current = true;
+      
+      // Use setTimeout to ensure the DOM has rendered with the data
+      setTimeout(() => {
+        window.scrollTo(0, saved.scrollPosition!);
+        // Clear the scroll position after restoring (but keep other state)
+        saveAdminPlantsState({
+          searchQuery: plantSearchQuery,
+          sortOption: plantSortOption,
+          promotionMonth: selectedPromotionMonth,
+          statuses: visiblePlantStatuses,
+          scrollPosition: 0,
+        });
+      }, 100);
+    } else {
+      // No scroll to restore, but mark as done
+      scrollRestoredRef.current = true;
+    }
+  }, [currentPath, plantDashboardInitialized, plantSearchQuery, plantSortOption, selectedPromotionMonth, visiblePlantStatuses]);
 
   // AI Prefill All state
   const [aiPrefillRunning, setAiPrefillRunning] = React.useState<boolean>(false);
@@ -2006,9 +2109,17 @@ export const AdminPage: React.FC = () => {
   const handleOpenPlantEditor = React.useCallback(
     (plantId: string) => {
       if (!plantId) return;
+      // Save all filter state and scroll position before navigating to plant editor
+      saveAdminPlantsState({
+        searchQuery: plantSearchQuery,
+        sortOption: plantSortOption,
+        promotionMonth: selectedPromotionMonth,
+        statuses: visiblePlantStatuses,
+        scrollPosition: window.scrollY,
+      });
       navigate(`/create/${plantId}`);
     },
-    [navigate],
+    [navigate, plantSearchQuery, plantSortOption, selectedPromotionMonth, visiblePlantStatuses],
   );
   const togglePlantStatusFilter = React.useCallback(
     (status: NormalizedPlantStatus) => {
