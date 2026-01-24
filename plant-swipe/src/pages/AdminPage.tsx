@@ -1734,27 +1734,39 @@ export const AdminPage: React.FC = () => {
   const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
   const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
 
-  // Restore scroll position when returning to the plants tab
+  // Track whether we've restored the scroll position (to avoid doing it multiple times)
+  const scrollRestoredRef = React.useRef(false);
+  
+  // Restore scroll position when returning to the plants tab AFTER data has loaded
   React.useEffect(() => {
+    // Only restore once, and only when on plants tab with data loaded
+    if (scrollRestoredRef.current) return;
     if (!currentPath.includes("/admin/plants")) return;
+    if (!plantDashboardInitialized) return;
     
     // Check if we have a saved scroll position
     const saved = loadAdminPlantsState();
     if (saved.scrollPosition && saved.scrollPosition > 0) {
-      // Use requestAnimationFrame to ensure DOM is ready
-      requestAnimationFrame(() => {
+      // Mark as restored before scrolling
+      scrollRestoredRef.current = true;
+      
+      // Use setTimeout to ensure the DOM has rendered with the data
+      setTimeout(() => {
         window.scrollTo(0, saved.scrollPosition!);
-      });
-      // Clear the scroll position after restoring (but keep other state)
-      saveAdminPlantsState({
-        searchQuery: plantSearchQuery,
-        sortOption: plantSortOption,
-        promotionMonth: selectedPromotionMonth,
-        statuses: visiblePlantStatuses,
-        scrollPosition: 0,
-      });
+        // Clear the scroll position after restoring (but keep other state)
+        saveAdminPlantsState({
+          searchQuery: plantSearchQuery,
+          sortOption: plantSortOption,
+          promotionMonth: selectedPromotionMonth,
+          statuses: visiblePlantStatuses,
+          scrollPosition: 0,
+        });
+      }, 100);
+    } else {
+      // No scroll to restore, but mark as done
+      scrollRestoredRef.current = true;
     }
-  }, []);
+  }, [currentPath, plantDashboardInitialized, plantSearchQuery, plantSortOption, selectedPromotionMonth, visiblePlantStatuses]);
 
   // AI Prefill All state
   const [aiPrefillRunning, setAiPrefillRunning] = React.useState<boolean>(false);
