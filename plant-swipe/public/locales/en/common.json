@@ -2683,7 +2683,18 @@
     },
     "errors": {
       "failedToLoad": "Failed to load conversations"
-    }
+    },
+    "linkPreview": {
+      "plant": "Plant",
+      "garden": "Garden",
+      "profile": "Profile",
+      "bookmark": "Collection",
+      "blog": "Article",
+      "media": "Media",
+      "link": "Link"
+    },
+    "download": "Download",
+    "openInNewTab": "Open in new tab"
   },
   "moderation": {
     "report": {

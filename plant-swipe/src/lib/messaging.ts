@@ -862,6 +862,503 @@ export async function getConversationImages(
   return results
 }
 
+// ===== Internal Link Detection & Preview =====
+
+/**
+ * Internal link types for aphylia.app resources
+ */
+export interface InternalLink {
+  type: 'plant' | 'garden' | 'profile' | 'bookmark' | 'blog' | 'media'
+  id: string
+  url: string
+  fullMatch: string // The original matched text
+}
+
+export interface InternalLinkPreviewData {
+  type: InternalLink['type']
+  id: string
+  title: string
+  description?: string
+  imageUrl?: string
+  subtitle?: string
+}
+
+/**
+ * Media domains for aphylia.app
+ */
+const MEDIA_DOMAINS = [
+  'media.aphylia.app'
+]
+
+/**
+ * Check if a URL is a media.aphylia.app link
+ */
+export function isMediaUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.toLowerCase()
+    return MEDIA_DOMAINS.some(domain => hostname === domain)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Check if a URL points to an image file
+ */
+export function isImageUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const path = parsed.pathname.toLowerCase()
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg', '.heic', '.heif']
+    return imageExtensions.some(ext => path.endsWith(ext))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get a friendly filename from a media URL
+ */
+export function getMediaFilename(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const path = parsed.pathname
+    const segments = path.split('/')
+    const filename = segments[segments.length - 1] || 'media'
+    // Remove UUID-like suffixes for cleaner display
+    const cleanName = filename.replace(/-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '')
+    // Get just the name part without extension for display
+    const nameOnly = cleanName.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ')
+    return nameOnly || 'Image'
+  } catch {
+    return 'Image'
+  }
+}
+
+/**
+ * Domains that should be treated as internal (aphylia.app links)
+ */
+const INTERNAL_DOMAINS = [
+  'aphylia.app',
+  'www.aphylia.app',
+  'staging.aphylia.app',
+  'dev.aphylia.app',
+  'localhost'
+]
+
+/**
+ * Check if a URL is an internal aphylia.app link
+ */
+export function isInternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.toLowerCase()
+    
+    // Check if it's the current origin
+    if (parsed.origin === window.location.origin) {
+      return true
+    }
+    
+    // Check if it's a media URL
+    if (MEDIA_DOMAINS.some(domain => hostname === domain)) {
+      return true
+    }
+    
+    // Check if it matches known internal domains
+    return INTERNAL_DOMAINS.some(domain => 
+      hostname === domain || hostname.endsWith(`.${domain}`)
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Parse an internal URL to extract resource type and ID
+ */
+export function parseInternalUrl(url: string): InternalLink | null {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.toLowerCase()
+    let path = parsed.pathname
+    
+    // Check if it's a media URL (media.aphylia.app)
+    if (MEDIA_DOMAINS.some(domain => hostname === domain)) {
+      // It's a media file
+      return { type: 'media', id: url, url, fullMatch: url }
+    }
+    
+    // Strip language prefix (e.g., /en/, /fr/)
+    const langMatch = path.match(/^\/([a-z]{2})(\/.*)$/)
+    if (langMatch) {
+      path = langMatch[2]
+    }
+    
+    // Match different resource types
+    const plantMatch = path.match(/^\/plants\/([^/]+)(?:\/.*)?$/)
+    if (plantMatch) {
+      return { type: 'plant', id: plantMatch[1], url, fullMatch: url }
+    }
+    
+    const gardenMatch = path.match(/^\/garden\/([^/]+)(?:\/.*)?$/)
+    if (gardenMatch) {
+      return { type: 'garden', id: gardenMatch[1], url, fullMatch: url }
+    }
+    
+    const bookmarkMatch = path.match(/^\/bookmarks\/([^/]+)(?:\/.*)?$/)
+    if (bookmarkMatch) {
+      return { type: 'bookmark', id: bookmarkMatch[1], url, fullMatch: url }
+    }
+    
+    const profileMatch = path.match(/^\/u\/([^/]+)(?:\/.*)?$/)
+    if (profileMatch) {
+      return { type: 'profile', id: decodeURIComponent(profileMatch[1]), url, fullMatch: url }
+    }
+    
+    const blogMatch = path.match(/^\/blog\/([^/]+)(?:\/.*)?$/)
+    if (blogMatch && blogMatch[1] !== 'create') {
+      return { type: 'blog', id: blogMatch[1], url, fullMatch: url }
+    }
+    
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Extract all URLs from text content
+ */
+export function extractUrlsFromText(text: string): string[] {
+  // Regex to match URLs - supports http, https, and URLs without protocol
+  const urlRegex = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_+.~#?&/=]*)/gi
+  const matches = text.match(urlRegex) || []
+  
+  // Normalize URLs - add https:// if missing protocol
+  return matches.map(url => {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return `https://${url}`
+    }
+    return url
+  })
+}
+
+/**
+ * Extract internal links from message content
+ */
+export function extractInternalLinks(content: string): InternalLink[] {
+  const urls = extractUrlsFromText(content)
+  const links: InternalLink[] = []
+  
+  for (const url of urls) {
+    if (isInternalUrl(url)) {
+      const parsed = parseInternalUrl(url)
+      if (parsed) {
+        // Update fullMatch to the original text
+        const originalMatch = urls.find(u => u === url || `https://${u}` === url)
+        if (originalMatch) {
+          parsed.fullMatch = originalMatch
+        }
+        links.push(parsed)
+      }
+    }
+  }
+  
+  return links
+}
+
+/**
+ * Fetch preview data for a plant
+ */
+async function fetchPlantPreview(plantId: string): Promise<InternalLinkPreviewData | null> {
+  try {
+    const { data: plant, error } = await supabase
+      .from('plants')
+      .select('id, name, scientific_name, meaning, identity')
+      .eq('id', plantId)
+      .single()
+    
+    if (error || !plant) return null
+    
+    // Get primary image
+    const { data: imageData } = await supabase
+      .from('plant_images')
+      .select('url')
+      .eq('plant_id', plantId)
+      .eq('is_primary', true)
+      .single()
+    
+    // Build description from plant identity
+    const identity = plant.identity as { maintenanceLevel?: string; livingSpace?: string } | null
+    let description = plant.scientific_name || ''
+    if (identity?.maintenanceLevel) {
+      const maintenanceLabels: Record<string, string> = {
+        'low': '🌱 Easy care',
+        'medium': '🌿 Moderate care', 
+        'high': '🌺 Expert care'
+      }
+      const careLabel = maintenanceLabels[identity.maintenanceLevel.toLowerCase()] || ''
+      if (careLabel) {
+        description = description ? `${description} · ${careLabel}` : careLabel
+      }
+    }
+    
+    return {
+      type: 'plant',
+      id: plantId,
+      title: plant.name,
+      subtitle: description || undefined,
+      description: plant.meaning || undefined,
+      imageUrl: imageData?.url || undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fetch preview data for a garden
+ */
+async function fetchGardenPreview(gardenId: string): Promise<InternalLinkPreviewData | null> {
+  try {
+    const { data: garden, error } = await supabase
+      .from('gardens')
+      .select('id, name, description, cover_image_url')
+      .eq('id', gardenId)
+      .single()
+    
+    if (error || !garden) return null
+    
+    // Get plant count in this garden
+    const { count: plantCount } = await supabase
+      .from('garden_plants')
+      .select('*', { count: 'exact', head: true })
+      .eq('garden_id', gardenId)
+    
+    // Get member count
+    const { count: memberCount } = await supabase
+      .from('garden_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('garden_id', gardenId)
+    
+    // Build subtitle with counts
+    const parts: string[] = []
+    if (plantCount !== null && plantCount > 0) {
+      parts.push(`🌱 ${plantCount} plant${plantCount !== 1 ? 's' : ''}`)
+    }
+    if (memberCount !== null && memberCount > 1) {
+      parts.push(`👥 ${memberCount} members`)
+    }
+    
+    return {
+      type: 'garden',
+      id: gardenId,
+      title: garden.name,
+      subtitle: parts.length > 0 ? parts.join(' · ') : undefined,
+      description: garden.description || undefined,
+      imageUrl: garden.cover_image_url || undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fetch preview data for a user profile
+ */
+async function fetchProfilePreview(username: string): Promise<InternalLinkPreviewData | null> {
+  try {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('id, display_name, avatar_url, bio, liked_plant_ids')
+      .eq('display_name', username)
+      .single()
+    
+    if (error || !profile) return null
+    
+    // Get friend count (friends where this user is either user_id or friend_id with status accepted)
+    const { count: friendCount } = await supabase
+      .from('friends')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', profile.id)
+      .eq('status', 'accepted')
+    
+    // Get garden count
+    const { count: gardenCount } = await supabase
+      .from('garden_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', profile.id)
+    
+    // Build subtitle with counts
+    const parts: string[] = []
+    const likedCount = Array.isArray(profile.liked_plant_ids) ? profile.liked_plant_ids.length : 0
+    if (likedCount > 0) {
+      parts.push(`❤️ ${likedCount} favorite${likedCount !== 1 ? 's' : ''}`)
+    }
+    if (gardenCount !== null && gardenCount > 0) {
+      parts.push(`🏡 ${gardenCount} garden${gardenCount !== 1 ? 's' : ''}`)
+    }
+    if (friendCount !== null && friendCount > 0) {
+      parts.push(`👥 ${friendCount} friend${friendCount !== 1 ? 's' : ''}`)
+    }
+    
+    return {
+      type: 'profile',
+      id: username,
+      title: profile.display_name || username,
+      subtitle: parts.length > 0 ? parts.join(' · ') : undefined,
+      description: profile.bio || undefined,
+      imageUrl: profile.avatar_url || undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fetch preview data for a bookmark list
+ */
+async function fetchBookmarkPreview(bookmarkId: string): Promise<InternalLinkPreviewData | null> {
+  try {
+    const { data: bookmark, error } = await supabase
+      .from('bookmarks')
+      .select('id, name, description, cover_image_url, user_id')
+      .eq('id', bookmarkId)
+      .single()
+    
+    if (error || !bookmark) return null
+    
+    // Get plant count in this bookmark
+    const { count: plantCount } = await supabase
+      .from('bookmark_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('bookmark_id', bookmarkId)
+    
+    // Get owner's display name
+    let ownerName: string | undefined
+    if (bookmark.user_id) {
+      const { data: owner } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', bookmark.user_id)
+        .single()
+      ownerName = owner?.display_name || undefined
+    }
+    
+    // Build subtitle
+    const parts: string[] = []
+    if (plantCount !== null && plantCount > 0) {
+      parts.push(`🌱 ${plantCount} plant${plantCount !== 1 ? 's' : ''}`)
+    }
+    if (ownerName) {
+      parts.push(`by ${ownerName}`)
+    }
+    
+    return {
+      type: 'bookmark',
+      id: bookmarkId,
+      title: bookmark.name,
+      subtitle: parts.length > 0 ? parts.join(' · ') : undefined,
+      description: bookmark.description || undefined,
+      imageUrl: bookmark.cover_image_url || undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fetch preview data for a blog post
+ */
+async function fetchBlogPreview(slug: string): Promise<InternalLinkPreviewData | null> {
+  try {
+    const { data: post, error } = await supabase
+      .from('blog_posts')
+      .select('id, title, excerpt, cover_image_url, author_id, published_at')
+      .eq('slug', slug)
+      .single()
+    
+    if (error || !post) return null
+    
+    // Get author's display name
+    let authorName: string | undefined
+    if (post.author_id) {
+      const { data: author } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', post.author_id)
+        .single()
+      authorName = author?.display_name || undefined
+    }
+    
+    // Format published date
+    let dateStr: string | undefined
+    if (post.published_at) {
+      const date = new Date(post.published_at)
+      dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    }
+    
+    // Build subtitle
+    const parts: string[] = []
+    if (authorName) {
+      parts.push(`by ${authorName}`)
+    }
+    if (dateStr) {
+      parts.push(dateStr)
+    }
+    
+    return {
+      type: 'blog',
+      id: slug,
+      title: post.title,
+      subtitle: parts.length > 0 ? parts.join(' · ') : undefined,
+      description: post.excerpt || undefined,
+      imageUrl: post.cover_image_url || undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fetch preview data for a media file
+ */
+function fetchMediaPreview(url: string): InternalLinkPreviewData {
+  const filename = getMediaFilename(url)
+  const isImage = isImageUrl(url)
+  
+  return {
+    type: 'media',
+    id: url,
+    title: filename,
+    subtitle: isImage ? '📷 Image' : '📁 File',
+    imageUrl: isImage ? url : undefined
+  }
+}
+
+/**
+ * Fetch preview data for an internal link
+ */
+export async function fetchInternalLinkPreview(link: InternalLink): Promise<InternalLinkPreviewData | null> {
+  switch (link.type) {
+    case 'plant':
+      return fetchPlantPreview(link.id)
+    case 'garden':
+      return fetchGardenPreview(link.id)
+    case 'profile':
+      return fetchProfilePreview(link.id)
+    case 'bookmark':
+      return fetchBookmarkPreview(link.id)
+    case 'blog':
+      return fetchBlogPreview(link.id)
+    case 'media':
+      return fetchMediaPreview(link.id)
+    default:
+      return null
+  }
+}
+
 // ===== Push Notifications =====
 
 /**
