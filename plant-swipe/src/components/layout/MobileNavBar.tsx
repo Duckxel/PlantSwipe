@@ -18,14 +18,15 @@ import {
   Bell, 
   MessageCircle,
   ChevronRight,
-  ScanLine
+  ScanLine,
+  Bug
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { useNotifications } from "@/hooks/useNotifications"
 import { useTranslation } from "react-i18next"
-import { checkEditorAccess } from "@/constants/userRoles"
+import { checkEditorAccess, checkBugCatcherAccess } from "@/constants/userRoles"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { MobileNotificationSheet } from "@/components/layout/MobileNotificationSheet"
 
@@ -306,6 +307,17 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                     }}
                   />
                 )}
+                {checkBugCatcherAccess(profile) && (
+                  <MenuButton
+                    icon={<Bug className="h-5 w-5" />}
+                    label={t("common.bugCatcher", { defaultValue: "Bug Catching" })}
+                    onClick={() => {
+                      setProfileMenuOpen(false)
+                      navigate("/bug-catcher")
+                    }}
+                    bugCatcher
+                  />
+                )}
                 <MenuButton
                   icon={<Crown className="h-5 w-5" />}
                   label={t("common.membership", { defaultValue: "Membership" })}
@@ -524,13 +536,15 @@ function MenuButton({
   label,
   onClick,
   highlight,
-  destructive
+  destructive,
+  bugCatcher
 }: {
   icon: React.ReactNode
   label: string
   onClick: () => void
   highlight?: boolean
   destructive?: boolean
+  bugCatcher?: boolean
 }) {
   return (
     <button
@@ -541,9 +555,11 @@ function MenuButton({
         transition-all duration-150 active:scale-[0.98]
         ${destructive 
           ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20' 
-          : highlight 
-            ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
-            : 'text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#2a2a2d]'
+          : bugCatcher
+            ? 'text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20'
+            : highlight 
+              ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+              : 'text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#2a2a2d]'
         }
       `}
     >
