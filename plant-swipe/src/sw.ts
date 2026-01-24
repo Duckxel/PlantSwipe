@@ -60,7 +60,8 @@ const offlinePagePath = new URL('offline.html', self.registration.scope).pathnam
 const offlineImagePath = new URL('icons/icon-192x192.png', self.registration.scope).pathname
 const scopeBasePath = new URL('.', self.registration.scope).pathname
 const notificationBadgeUrl = new URL('icons/icon-192x192.png', self.registration.scope).href
-const notificationIconUrl = new URL('icons/icon-192x192.png', self.registration.scope).href
+// 1x1 transparent PNG as data URI - prevents system-generated placeholder letters while showing nothing
+const transparentIconDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 const defaultNotificationTarget = new URL('.', self.registration.scope).href
 
 const resolveNotificationUrl = (target?: string | null) => {
@@ -250,8 +251,9 @@ self.addEventListener('push', (event) => {
     data,
     // Small icon for status bar (monochrome on most devices)
     badge: typeof payload.badge === 'string' && payload.badge.length ? payload.badge : notificationBadgeUrl,
-    // Main notification icon - always show app icon to prevent system-generated placeholders
-    icon: typeof payload.icon === 'string' && payload.icon.length ? payload.icon : notificationIconUrl,
+    // Use transparent icon to prevent system-generated placeholder letters (like "D")
+    // while showing no visible icon in the notification
+    icon: typeof payload.icon === 'string' && payload.icon.length ? payload.icon : transparentIconDataUri,
   }
   
   // Add actions for notifications (skip for messages - just tap to open conversation)
