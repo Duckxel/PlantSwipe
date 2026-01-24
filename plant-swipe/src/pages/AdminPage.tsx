@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from "react";
 import { createPortal } from "react-dom";
-import { useLocation } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -365,9 +365,47 @@ const toPromotionMonthSlug = (
     : null;
 };
 
+// Constants for persisting admin plants list state
+const ADMIN_PLANTS_SCROLL_KEY = "admin-plants-scroll-position";
+const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name"];
+
+// Parse statuses from URL param (comma-separated)
+const parseStatusesFromParam = (param: string | null): NormalizedPlantStatus[] | null => {
+  if (!param) return null;
+  const statuses = param.split(",").map((s) => s.trim().toLowerCase());
+  const validStatuses = statuses.filter((s) =>
+    PLANT_STATUS_KEYS.includes(s as NormalizedPlantStatus)
+  ) as NormalizedPlantStatus[];
+  return validStatuses.length > 0 ? validStatuses : null;
+};
+
+// Serialize statuses to URL param
+const statusesToParam = (statuses: NormalizedPlantStatus[]): string => {
+  return statuses.join(",");
+};
+
+// Parse sort option from URL param
+const parseSortFromParam = (param: string | null): PlantSortOption | null => {
+  if (!param) return null;
+  const normalized = param.toLowerCase() as PlantSortOption;
+  return VALID_SORT_OPTIONS.includes(normalized) ? normalized : null;
+};
+
+// Parse promotion month from URL param
+const parsePromotionMonthFromParam = (param: string | null): PromotionMonthSlug | "none" | "all" | null => {
+  if (!param) return null;
+  const normalized = param.toLowerCase();
+  if (normalized === "all" || normalized === "none") return normalized;
+  if ((PROMOTION_MONTH_SLUGS as readonly string[]).includes(normalized)) {
+    return normalized as PromotionMonthSlug;
+  }
+  return null;
+};
+
 export const AdminPage: React.FC = () => {
   const navigate = useLanguageNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const currentPath = location.pathname;
   const { effectiveTheme } = useTheme();
   const { user, profile } = useAuth();
@@ -1640,15 +1678,19 @@ export const AdminPage: React.FC = () => {
   >(null);
   const [plantDashboardInitialized, setPlantDashboardInitialized] =
     React.useState<boolean>(false);
+  
+  // Initialize plant list filter state from URL params for persistence
   const [visiblePlantStatuses, setVisiblePlantStatuses] = React.useState<
     NormalizedPlantStatus[]
-  >(DEFAULT_VISIBLE_PLANT_STATUSES);
+  >(() => parseStatusesFromParam(searchParams.get("statuses")) ?? DEFAULT_VISIBLE_PLANT_STATUSES);
   const [selectedPromotionMonth, setSelectedPromotionMonth] = React.useState<
     PromotionMonthSlug | "none" | "all"
-  >("all");
+  >(() => parsePromotionMonthFromParam(searchParams.get("month")) ?? "all");
   const [plantSearchQuery, setPlantSearchQuery] =
-    React.useState<string>("");
-  const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>("status");
+    React.useState<string>(() => searchParams.get("q") ?? "");
+  const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>(
+    () => parseSortFromParam(searchParams.get("sort")) ?? "status"
+  );
   const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
   const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
   const [deletingPlant, setDeletingPlant] = React.useState(false);
@@ -1664,6 +1706,75 @@ export const AdminPage: React.FC = () => {
   const [addFromDuplicating, setAddFromDuplicating] = React.useState(false);
   const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
   const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
+
+  // Sync plant list filter state to URL params for persistence across navigation
+  React.useEffect(() => {
+    // Only update URL params when on the plants tab
+    if (!currentPath.includes("/admin/plants")) return;
+    
+    const newParams = new URLSearchParams(searchParams);
+    
+    // Update or remove each param based on state
+    // Search query
+    if (plantSearchQuery) {
+      newParams.set("q", plantSearchQuery);
+    } else {
+      newParams.delete("q");
+    }
+    
+    // Sort option (only set if not default)
+    if (plantSortOption !== "status") {
+      newParams.set("sort", plantSortOption);
+    } else {
+      newParams.delete("sort");
+    }
+    
+    // Promotion month (only set if not default)
+    if (selectedPromotionMonth !== "all") {
+      newParams.set("month", selectedPromotionMonth);
+    } else {
+      newParams.delete("month");
+    }
+    
+    // Status filters (only set if different from default)
+    const defaultStatusesSet = new Set(DEFAULT_VISIBLE_PLANT_STATUSES);
+    const currentStatusesSet = new Set(visiblePlantStatuses);
+    const isDifferentFromDefault = 
+      defaultStatusesSet.size !== currentStatusesSet.size ||
+      [...defaultStatusesSet].some((s) => !currentStatusesSet.has(s));
+    
+    if (isDifferentFromDefault) {
+      newParams.set("statuses", statusesToParam(visiblePlantStatuses));
+    } else {
+      newParams.delete("statuses");
+    }
+    
+    // Only update if params actually changed (to avoid infinite loop)
+    const newParamsString = newParams.toString();
+    const currentParamsString = searchParams.toString();
+    if (newParamsString !== currentParamsString) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [plantSearchQuery, plantSortOption, selectedPromotionMonth, visiblePlantStatuses, currentPath, searchParams, setSearchParams]);
+
+  // Restore scroll position when returning to the plants tab
+  React.useEffect(() => {
+    if (!currentPath.includes("/admin/plants")) return;
+    
+    // Check if we have a saved scroll position
+    const savedScrollPosition = sessionStorage.getItem(ADMIN_PLANTS_SCROLL_KEY);
+    if (savedScrollPosition) {
+      const scrollY = parseInt(savedScrollPosition, 10);
+      if (!isNaN(scrollY)) {
+        // Use requestAnimationFrame to ensure DOM is ready
+        requestAnimationFrame(() => {
+          window.scrollTo(0, scrollY);
+        });
+      }
+      // Clear the saved position after restoring
+      sessionStorage.removeItem(ADMIN_PLANTS_SCROLL_KEY);
+    }
+  }, [currentPath]);
 
   // AI Prefill All state
   const [aiPrefillRunning, setAiPrefillRunning] = React.useState<boolean>(false);
@@ -2006,6 +2117,8 @@ export const AdminPage: React.FC = () => {
   const handleOpenPlantEditor = React.useCallback(
     (plantId: string) => {
       if (!plantId) return;
+      // Save scroll position before navigating to plant editor
+      sessionStorage.setItem(ADMIN_PLANTS_SCROLL_KEY, String(window.scrollY));
       navigate(`/create/${plantId}`);
     },
     [navigate],
