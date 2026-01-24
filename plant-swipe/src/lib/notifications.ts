@@ -529,6 +529,31 @@ export async function canSendGardenInvite(
 
 // ===== App Badge Management =====
 
+// Custom event name for notification refresh broadcasts
+const NOTIFICATION_REFRESH_EVENT = 'aphylia:notification-refresh'
+
+/**
+ * Broadcast a notification refresh event
+ * Components using useNotifications hook will listen for this and refresh
+ */
+export function broadcastNotificationRefresh(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(NOTIFICATION_REFRESH_EVENT))
+  }
+}
+
+/**
+ * Subscribe to notification refresh events
+ * Returns an unsubscribe function
+ */
+export function onNotificationRefresh(callback: () => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+  
+  const handler = () => callback()
+  window.addEventListener(NOTIFICATION_REFRESH_EVENT, handler)
+  return () => window.removeEventListener(NOTIFICATION_REFRESH_EVENT, handler)
+}
+
 /**
  * Clear the app badge (notification count indicator on app icon)
  * Call this when user has viewed/dismissed notifications
@@ -565,6 +590,7 @@ export async function setAppBadge(count: number): Promise<void> {
 
 /**
  * Refresh the app badge based on current unread counts
+ * Also broadcasts a refresh event for in-app notification UI
  * Fetches friend requests, garden invites, and unread messages to update badge
  */
 export async function refreshAppBadge(userId: string): Promise<void> {
@@ -572,6 +598,8 @@ export async function refreshAppBadge(userId: string): Promise<void> {
     const counts = await getNotificationCounts(userId)
     const totalUnread = counts.total + counts.unreadMessages
     await setAppBadge(totalUnread)
+    // Also broadcast to update in-app notification UI
+    broadcastNotificationRefresh()
   } catch (err) {
     console.debug('[badge] Could not refresh app badge:', err)
   }
