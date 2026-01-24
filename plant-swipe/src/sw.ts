@@ -59,7 +59,6 @@ const resolveScopedPath = (pathname: string) => {
 const offlinePagePath = new URL('offline.html', self.registration.scope).pathname
 const offlineImagePath = new URL('icons/icon-192x192.png', self.registration.scope).pathname
 const scopeBasePath = new URL('.', self.registration.scope).pathname
-const notificationIconUrl = new URL('icons/icon-192x192.png', self.registration.scope).href
 const notificationBadgeUrl = new URL('icons/icon-96x96.png', self.registration.scope).href
 const defaultNotificationTarget = new URL('.', self.registration.scope).href
 
@@ -248,17 +247,17 @@ self.addEventListener('push', (event) => {
         ? payload.tag
         : (data as any)?.campaignId || 'aphylia',
     data,
-    icon: typeof payload.icon === 'string' && payload.icon.length ? payload.icon : notificationIconUrl,
+    // Only use badge for small status bar icon
     badge: typeof payload.badge === 'string' && payload.badge.length ? payload.badge : notificationBadgeUrl,
   }
   
-  // Add reply action for message notifications
-  if (isMessageNotification) {
-    options.actions = [
-      { action: 'reply', title: 'Reply' },
-      { action: 'dismiss', title: 'Dismiss' }
-    ]
-  } else if (Array.isArray(payload.actions) && payload.actions.length) {
+  // Only add icon if explicitly provided in the payload - no default image
+  if (typeof payload.icon === 'string' && payload.icon.length) {
+    options.icon = payload.icon
+  }
+  
+  // Add actions for notifications (skip for messages - just tap to open conversation)
+  if (!isMessageNotification && Array.isArray(payload.actions) && payload.actions.length) {
     const normalizedActions = payload.actions
       .map((action: any, index: number) => {
         if (!action) return null
@@ -322,23 +321,35 @@ self.addEventListener('notificationclick', (event) => {
   }
   const action = event.action
   
-  // Handle dismiss action
+  // Handle dismiss action - just close the notification
   if (action === 'dismiss') {
     event.notification?.close()
     return
   }
   
-  // Determine the target URL
+  // Close notification first
+  event.notification?.close()
+  
+  // Determine the target URL based on notification type
   let target: string
   
-  // For message notifications, navigate to the conversation
-  if (notificationData.type === 'new_message' && notificationData.conversationId) {
+  // First, try to use the URL from the notification data
+  if (notificationData.url || notificationData.ctaUrl) {
+    target = resolveNotificationUrl(notificationData.url || notificationData.ctaUrl)
+  } 
+  // Fallback: route based on notification type
+  else if (notificationData.type === 'new_message' && notificationData.conversationId) {
+    target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
+  } else if (notificationData.type === 'friend_request' || notificationData.type === 'friend_request_accepted') {
+    target = resolveNotificationUrl('/friends')
+  } else if (notificationData.type === 'garden_invite' || notificationData.type === 'garden_invite_accepted') {
+    target = resolveNotificationUrl('/gardens')
+  } else if (notificationData.conversationId) {
     target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
   } else {
-    target = resolveNotificationUrl(notificationData.ctaUrl || notificationData.url)
+    // Default to home page
+    target = resolveNotificationUrl('/')
   }
-  
-  event.notification?.close()
   
   event.waitUntil(
     (async () => {

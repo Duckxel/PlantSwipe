@@ -824,11 +824,15 @@ if (vapidPublicKey && vapidPrivateKey) {
   try {
     webpush.setVapidDetails('mailto:support@aphylia.app', vapidPublicKey, vapidPrivateKey)
     pushNotificationsEnabled = true
+    console.log('[notifications] ✓ VAPID keys configured successfully - push notifications ENABLED')
+    console.log('[notifications]   Public key prefix:', vapidPublicKey.slice(0, 20) + '...')
   } catch (err) {
-    console.error('[notifications] Failed to configure VAPID keys:', err)
+    console.error('[notifications] ✗ Failed to configure VAPID keys:', err)
   }
 } else {
-  console.warn('[notifications] VAPID keys not configured — push notifications disabled')
+  console.warn('[notifications] ✗ VAPID keys not configured — push notifications DISABLED')
+  if (!vapidPublicKey) console.warn('[notifications]   Missing: VAPID_PUBLIC_KEY')
+  if (!vapidPrivateKey) console.warn('[notifications]   Missing: VAPID_PRIVATE_KEY')
 }
 
 // Admin bypass configuration
@@ -6635,6 +6639,24 @@ async function ensureDefaultAutomations() {
       },
     ]
 
+    // Valid automation types (cron-based only)
+    const validTriggerTypes = defaultAutomations.map(a => a.trigger_type)
+    
+    // First, delete any invalid automation types (action-based notifications that shouldn't be here)
+    try {
+      const deleted = await sql`
+        delete from public.notification_automations
+        where trigger_type not in ${sql(validTriggerTypes)}
+        returning trigger_type
+      `
+      if (deleted && deleted.length > 0) {
+        console.log(`[notification-automations] Cleaned up invalid automation types:`, deleted.map(d => d.trigger_type))
+      }
+    } catch (deleteErr) {
+      console.warn('[notification-automations] Could not clean up invalid types:', deleteErr?.message)
+    }
+
+    // Then ensure the valid automations exist
     for (const auto of defaultAutomations) {
       try {
         // First check if it exists
@@ -17742,6 +17764,15 @@ app.post('/api/push/subscribe', async (req, res) => {
   const authKey = subscription.keys?.auth || subscription.auth_key || null
   const p256dhKey = subscription.keys?.p256dh || subscription.p256dh_key || null
   const userAgent = req.get('user-agent') || null
+  
+  // Extract endpoint domain for logging
+  let endpointDomain = 'unknown'
+  try {
+    endpointDomain = new URL(subscription.endpoint).hostname
+  } catch {}
+  
+  console.log(`[push/subscribe] Storing subscription for user ${user.id.slice(0, 8)}... (endpoint: ${endpointDomain})`)
+  
   try {
     await sql`
       insert into public.user_push_subscriptions (user_id, endpoint, auth_key, p256dh_key, user_agent, subscription, updated_at, last_used_at)
@@ -17755,9 +17786,10 @@ app.post('/api/push/subscribe', async (req, res) => {
           updated_at = now(),
           last_used_at = now()
     `
+    console.log(`[push/subscribe] ✓ Subscription stored successfully for user ${user.id.slice(0, 8)}...`)
     res.json({ ok: true, pushConfigured: pushNotificationsEnabled })
   } catch (err) {
-    console.error('[notifications] failed to store push subscription', err)
+    console.error('[push/subscribe] ✗ Failed to store subscription:', err?.message || err)
     res.status(500).json({ error: err?.message || 'Failed to store subscription' })
   }
 })
@@ -17794,7 +17826,7 @@ app.delete('/api/push/subscribe', async (req, res) => {
 })
 
 // ========== Instant Push Notification API ==========
-// Sends an immediate push notification for social events (friend requests, garden invites)
+// Sends an immediate push notification for social events (friend requests, garden invites, messages)
 // This is called internally when creating these events
 app.post('/api/push/instant', async (req, res) => {
   const user = await getUserFromRequestOrToken(req)
@@ -17807,7 +17839,7 @@ app.post('/api/push/instant', async (req, res) => {
     return
   }
   
-  const { recipientId, type, title, body, data } = req.body || {}
+  const { recipientId, type, title, body, data, tag: clientTag, renotify } = req.body || {}
   
   if (!recipientId || !type || !title || !body) {
     res.status(400).json({ error: 'Missing required fields: recipientId, type, title, body' })
@@ -17829,6 +17861,33 @@ app.post('/api/push/instant', async (req, res) => {
       return
     }
     
+    // For message notifications, check if conversation is muted
+    if (type === 'new_message' && data?.conversationId) {
+      try {
+        const conversation = await sql`
+          select id, participant_1, participant_2, muted_by_1, muted_by_2
+          from public.conversations
+          where id = ${data.conversationId}::uuid
+          limit 1
+        `
+        
+        if (conversation && conversation.length > 0) {
+          const conv = conversation[0]
+          const isRecipientParticipant1 = conv.participant_1 === recipientId
+          const isMuted = isRecipientParticipant1 ? conv.muted_by_1 : conv.muted_by_2
+          
+          if (isMuted) {
+            console.log(`[push/instant] Conversation ${data.conversationId} is muted by recipient ${recipientId}, skipping notification`)
+            res.json({ ok: true, sent: false, reason: 'CONVERSATION_MUTED' })
+            return
+          }
+        }
+      } catch (muteCheckErr) {
+        // Don't fail the whole request if mute check fails, just log and continue
+        console.warn('[push/instant] Failed to check conversation mute status:', muteCheckErr?.message)
+      }
+    }
+    
     // Get recipient's push subscriptions
     const subscriptions = await sql`
       select id::text as id, user_id::text as user_id, endpoint, subscription
@@ -17842,8 +17901,34 @@ app.post('/api/push/instant', async (req, res) => {
       return
     }
     
+    console.log(`[push/instant] Found ${subscriptions.length} subscription(s) for user ${recipientId}, sending ${type} notification`)
+    
+    // Use client-provided tag if available, otherwise generate one
+    const notificationTag = clientTag || `${type}-${user.id}`
+    
+    // Determine the target URL based on notification type
+    let targetUrl = '/'
+    switch (type) {
+      case 'friend_request':
+      case 'friend_request_accepted':
+        targetUrl = '/friends'
+        break
+      case 'garden_invite':
+      case 'garden_invite_accepted':
+        targetUrl = '/gardens'
+        break
+      case 'new_message':
+        if (data?.conversationId) {
+          targetUrl = `/messages?conversation=${data.conversationId}`
+        } else {
+          targetUrl = '/messages'
+        }
+        break
+    }
+    
     // Send notification to all of recipient's subscriptions
     let sent = false
+    let successCount = 0
     const staleSubscriptionIds = []
     
     for (const sub of subscriptions) {
@@ -17851,21 +17936,32 @@ app.post('/api/push/instant', async (req, res) => {
         const payload = sub.subscription && typeof sub.subscription === 'string'
           ? JSON.parse(sub.subscription)
           : sub.subscription
+        
+        // Build notification payload with all necessary fields
+        const notificationPayload = {
+          title,
+          body,
+          tag: notificationTag,
+          renotify: renotify === true, // Ensure it's a boolean
+          data: {
+            type,
+            senderId: user.id,
+            url: targetUrl,
+            ...data,
+          },
+        }
+        
+        // Add vibration pattern for message notifications
+        if (type === 'new_message') {
+          notificationPayload.vibrate = [200, 100, 200]
+        }
           
         await webpush.sendNotification(
           payload,
-          JSON.stringify({
-            title,
-            body,
-            tag: `${type}-${user.id}`,
-            data: {
-              type,
-              senderId: user.id,
-              ...data,
-            },
-          })
+          JSON.stringify(notificationPayload)
         )
         sent = true
+        successCount++
         
         // Update last_used_at
         await sql`
@@ -17878,8 +17974,9 @@ app.post('/api/push/instant', async (req, res) => {
         if (statusCode === 404 || statusCode === 410) {
           // Subscription expired, mark for cleanup
           staleSubscriptionIds.push(sub.id)
+          console.log(`[push/instant] Subscription ${sub.id} expired (${statusCode}), marking for cleanup`)
         } else {
-          console.warn('[push/instant] Push delivery failed:', err?.message || err)
+          console.warn(`[push/instant] Push delivery failed for subscription ${sub.id}:`, err?.message || err)
         }
       }
     }
@@ -17894,13 +17991,90 @@ app.post('/api/push/instant', async (req, res) => {
     }
     
     if (sent) {
-      console.log(`[push/instant] Successfully sent ${type} notification to user ${recipientId}`)
+      console.log(`[push/instant] Successfully sent ${type} notification to user ${recipientId} (${successCount}/${subscriptions.length} devices)`)
+    } else {
+      console.warn(`[push/instant] Failed to deliver ${type} notification to any device for user ${recipientId}`)
     }
     
-    res.json({ ok: true, sent, type })
+    res.json({ ok: true, sent, type, devicesReached: successCount })
   } catch (err) {
     console.error('[push/instant] Failed to send notification:', err)
     res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// ========== Push Notification Debug Endpoint ==========
+// Returns info about the user's push notification setup for debugging
+app.get('/api/push/debug', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  try {
+    // Get user's push subscriptions
+    const subscriptions = await sql`
+      select 
+        id::text as id,
+        endpoint,
+        created_at,
+        updated_at,
+        last_used_at,
+        user_agent
+      from public.user_push_subscriptions
+      where user_id = ${user.id}::uuid
+      order by updated_at desc
+    `
+    
+    // Mask the endpoint for privacy (show only domain)
+    const maskedSubscriptions = (subscriptions || []).map(sub => {
+      let endpointDomain = 'unknown'
+      try {
+        const url = new URL(sub.endpoint)
+        endpointDomain = url.hostname
+      } catch {}
+      
+      return {
+        id: sub.id,
+        endpointDomain,
+        endpointPreview: sub.endpoint ? sub.endpoint.slice(0, 50) + '...' : null,
+        createdAt: sub.created_at,
+        updatedAt: sub.updated_at,
+        lastUsedAt: sub.last_used_at,
+        userAgent: sub.user_agent ? sub.user_agent.slice(0, 100) : null
+      }
+    })
+    
+    res.json({
+      ok: true,
+      userId: user.id,
+      serverPushEnabled: pushNotificationsEnabled,
+      vapidConfigured: Boolean(vapidPublicKey && vapidPrivateKey),
+      subscriptionCount: subscriptions?.length || 0,
+      subscriptions: maskedSubscriptions,
+      troubleshooting: {
+        noSubscriptions: (subscriptions?.length || 0) === 0 
+          ? 'No push subscriptions found. Enable notifications in the app settings.'
+          : null,
+        pushDisabled: !pushNotificationsEnabled 
+          ? 'Push notifications are disabled on the server (VAPID keys not configured).'
+          : null,
+        staleSubscription: subscriptions?.some(s => {
+          const lastUsed = new Date(s.last_used_at || s.updated_at)
+          const daysSinceLastUse = (Date.now() - lastUsed.getTime()) / (1000 * 60 * 60 * 24)
+          return daysSinceLastUse > 30
+        }) ? 'Some subscriptions may be expired. Try disabling and re-enabling notifications.'
+          : null
+      }
+    })
+  } catch (err) {
+    console.error('[push/debug] Failed to get debug info:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get debug info' })
   }
 })
 
@@ -20895,10 +21069,11 @@ async function deliverPushNotifications(notifications, campaign) {
           JSON.stringify({
             title: notification.title || campaign.title || 'Aphylia',
             body: notification.message,
-            tag: campaign.id,
+            tag: campaign.id || `notification-${notification.id}`,
             data: {
               campaignId: campaign.id,
               notificationId: notification.id,
+              url: notification.cta_url || null,
               ctaUrl: notification.cta_url || null,
             },
           }),
@@ -21233,7 +21408,7 @@ async function processDueAutomations() {
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and un.scheduled_for::date = current_date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               )
             limit 1000
           `
@@ -21245,14 +21420,14 @@ async function processDueAutomations() {
             join public.garden_plant_tasks t on t.garden_id = gm.garden_id
             join public.garden_plant_task_occurrences occ on occ.task_id = t.id
             where (p.notify_push is null or p.notify_push = true)
-              and occ.due_at::date = current_date
+              and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               and (occ.completed_count < occ.required_count or occ.completed_count = 0)
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and un.scheduled_for::date = current_date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               )
             limit 1000
           `
@@ -21264,13 +21439,13 @@ async function processDueAutomations() {
             join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
             where (p.notify_push is null or p.notify_push = true)
               and gal.kind = 'note'
-              and gal.occurred_at::date = current_date - interval '1 day'
+              and (gal.occurred_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date - interval '1 day'
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and un.scheduled_for::date = current_date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               )
             limit 1000
           `
@@ -21279,13 +21454,42 @@ async function processDueAutomations() {
         }
 
         const recipients = await recipientQuery
-        if (!recipients || !recipients.length) continue
+        
+        // Log automation check even if no recipients (helps with debugging)
+        if (!recipients || !recipients.length) {
+          // Only log once per hour to avoid spam
+          const lastLogKey = `automation_log_${automation.id}`
+          const now = Date.now()
+          if (!global[lastLogKey] || now - global[lastLogKey] > 3600000) {
+            console.log(`[automations] ${automation.trigger_type}: No eligible recipients at this hour`)
+            global[lastLogKey] = now
+          }
+          continue
+        }
 
         // Default message variants (English)
         const defaultVariants = toStringArray(automation.message_variants)
-        if (!defaultVariants.length) continue
+        if (!defaultVariants.length) {
+          console.warn(`[automations] ${automation.trigger_type}: No message template configured, skipping`)
+          continue
+        }
 
         console.log(`[automations] Processing ${automation.trigger_type}: ${recipients.length} recipients`)
+
+        // Determine default URL based on automation type
+        let defaultUrl = '/'
+        switch (automation.trigger_type) {
+          case 'daily_task_reminder':
+            defaultUrl = '/gardens'
+            break
+          case 'journal_continue_reminder':
+            defaultUrl = '/gardens'
+            break
+          case 'weekly_inactive_reminder':
+            defaultUrl = '/'
+            break
+        }
+        const targetUrl = automation.cta_url || defaultUrl
 
         for (const recipient of recipients) {
           // Get message variants for user's language (with fallback to default)
@@ -21311,7 +21515,7 @@ async function processDueAutomations() {
                 ${recipient.user_id},
                 ${automation.display_name || 'Reminder'},
                 ${message},
-                ${automation.cta_url || null},
+                ${targetUrl},
                 now(),
                 'pending'
               )
@@ -21338,10 +21542,20 @@ async function processDueAutomations() {
 }
 
 function scheduleNotificationWorker() {
-  if (!sql) return
-  if (notificationWorkerTimer) return
+  if (!sql) {
+    console.log('[notifications] Worker not started - no database connection')
+    return
+  }
+  if (notificationWorkerTimer) {
+    console.log('[notifications] Worker already running')
+    return
+  }
+  console.log(`[notifications] Starting notification worker (interval: ${notificationWorkerIntervalMs}ms)`)
+  console.log('[notifications] Automations will be processed every tick based on user timezone and send_hour')
   const tick = () => {
-    runNotificationWorkerTick().catch(() => { })
+    runNotificationWorkerTick().catch((err) => {
+      console.error('[notifications] Worker tick error:', err?.message || err)
+    })
     notificationWorkerTimer = setTimeout(tick, notificationWorkerIntervalMs)
   }
   notificationWorkerTimer = setTimeout(tick, 2000)

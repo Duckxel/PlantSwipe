@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabaseClient'
-import { acceptGardenInvite, declineGardenInvite } from '@/lib/notifications'
+import { acceptGardenInvite, declineGardenInvite, refreshAppBadge } from '@/lib/notifications'
 import type { GardenInvite } from '@/types/notification'
 
 type FriendRequest = {
@@ -95,6 +95,21 @@ export function MobileNotificationSheet({
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
   const [processingId, setProcessingId] = React.useState<string | null>(null)
+  const [userId, setUserId] = React.useState<string | null>(null)
+
+  // Get current user ID for badge updates
+  React.useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id || null)
+    })
+  }, [])
+
+  // Helper to refresh badge after actions
+  const refreshBadge = React.useCallback(() => {
+    if (userId) {
+      refreshAppBadge(userId).catch(() => {})
+    }
+  }, [userId])
 
   // Friend request actions
   const handleAcceptFriendRequest = async (requestId: string) => {
@@ -102,6 +117,7 @@ export function MobileNotificationSheet({
     try {
       await supabase.rpc('accept_friend_request', { _request_id: requestId })
       await onRefresh(true) // Force refresh to bypass throttle
+      refreshBadge()
     } catch (e: any) {
       console.error('Failed to accept friend request:', e)
     } finally {
@@ -117,6 +133,7 @@ export function MobileNotificationSheet({
         .update({ status: 'rejected' })
         .eq('id', requestId)
       await onRefresh(true) // Force refresh to bypass throttle
+      refreshBadge()
     } catch (e: any) {
       console.error('Failed to reject friend request:', e)
     } finally {
@@ -130,6 +147,7 @@ export function MobileNotificationSheet({
     try {
       await acceptGardenInvite(inviteId)
       await onRefresh(true) // Force refresh to bypass throttle
+      refreshBadge()
     } catch (e: any) {
       console.error('Failed to accept garden invite:', e)
     } finally {
@@ -142,6 +160,7 @@ export function MobileNotificationSheet({
     try {
       await declineGardenInvite(inviteId)
       await onRefresh(true) // Force refresh to bypass throttle
+      refreshBadge()
     } catch (e: any) {
       console.error('Failed to decline garden invite:', e)
     } finally {

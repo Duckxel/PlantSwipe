@@ -527,6 +527,100 @@ export async function canSendGardenInvite(
   }
 }
 
+// ===== App Badge Management =====
+
+// Custom event name for notification refresh broadcasts
+const NOTIFICATION_REFRESH_EVENT = 'aphylia:notification-refresh'
+
+/**
+ * Broadcast a notification refresh event
+ * Components using useNotifications hook will listen for this and refresh
+ */
+export function broadcastNotificationRefresh(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(NOTIFICATION_REFRESH_EVENT))
+  }
+}
+
+/**
+ * Subscribe to notification refresh events
+ * Returns an unsubscribe function
+ */
+export function onNotificationRefresh(callback: () => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+  
+  const handler = () => callback()
+  window.addEventListener(NOTIFICATION_REFRESH_EVENT, handler)
+  return () => window.removeEventListener(NOTIFICATION_REFRESH_EVENT, handler)
+}
+
+/**
+ * Clear the app badge (notification count indicator on app icon)
+ * Call this when user has viewed/dismissed notifications
+ */
+export async function clearAppBadge(): Promise<void> {
+  try {
+    if ('clearAppBadge' in navigator) {
+      await (navigator as any).clearAppBadge()
+    }
+  } catch (err) {
+    // Badge API not supported or permission denied - silently fail
+    console.debug('[badge] Could not clear app badge:', err)
+  }
+}
+
+/**
+ * Set the app badge count
+ * @param count - Number to display on app icon (0 clears the badge)
+ */
+export async function setAppBadge(count: number): Promise<void> {
+  try {
+    if (count <= 0) {
+      await clearAppBadge()
+      return
+    }
+    if ('setAppBadge' in navigator) {
+      await (navigator as any).setAppBadge(count)
+    }
+  } catch (err) {
+    // Badge API not supported or permission denied - silently fail
+    console.debug('[badge] Could not set app badge:', err)
+  }
+}
+
+/**
+ * Refresh the app badge based on current unread counts
+ * Also broadcasts a refresh event for in-app notification UI
+ * Fetches friend requests, garden invites, and unread messages to update badge
+ */
+export async function refreshAppBadge(userId: string): Promise<void> {
+  try {
+    const counts = await getNotificationCounts(userId)
+    const totalUnread = counts.total + counts.unreadMessages
+    await setAppBadge(totalUnread)
+    // Also broadcast to update in-app notification UI
+    broadcastNotificationRefresh()
+  } catch (err) {
+    console.debug('[badge] Could not refresh app badge:', err)
+  }
+}
+
+/**
+ * Close any active notifications for a specific tag (e.g., conversation)
+ * Call this when user reads a message to dismiss the notification
+ */
+export async function closeNotificationsForTag(tag: string): Promise<void> {
+  try {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      const registration = await navigator.serviceWorker.ready
+      const notifications = await registration.getNotifications({ tag })
+      notifications.forEach(notification => notification.close())
+    }
+  } catch (err) {
+    console.debug('[badge] Could not close notifications:', err)
+  }
+}
+
 // ===== Push Notifications =====
 
 type InstantPushType = 'friend_request' | 'garden_invite' | 'friend_request_accepted' | 'garden_invite_accepted'

@@ -8,7 +8,8 @@ import React from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import {
   getNotificationCounts,
-  getPendingGardenInvites
+  getPendingGardenInvites,
+  onNotificationRefresh
 } from '@/lib/notifications'
 import { getUnreadMessageCount } from '@/lib/messaging'
 import type { GardenInvite, NotificationCounts } from '@/types/notification'
@@ -173,6 +174,15 @@ export function useNotifications(
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [userId, refresh])
+
+  // Listen for broadcast refresh events from other components
+  React.useEffect(() => {
+    if (!userId) return
+    
+    return onNotificationRefresh(() => {
+      refresh(true)
+    })
   }, [userId, refresh])
 
   // Realtime subscriptions

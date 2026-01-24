@@ -384,6 +384,7 @@ export async function deleteMessage(messageId: string): Promise<void> {
 
 /**
  * Mark all messages in a conversation as read.
+ * Also closes any pending notifications for this conversation and refreshes the app badge.
  */
 export async function markMessagesAsRead(conversationId: string): Promise<number> {
   const { data, error } = await supabase.rpc('mark_messages_as_read', {
@@ -391,6 +392,29 @@ export async function markMessagesAsRead(conversationId: string): Promise<number
   })
   
   if (error) throw new Error(error.message)
+  
+  // Close any active notifications for this conversation
+  try {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      const registration = await navigator.serviceWorker.ready
+      const notifications = await registration.getNotifications({ tag: `message-${conversationId}` })
+      notifications.forEach(notification => notification.close())
+    }
+  } catch (err) {
+    // Silently fail - notification dismissal is best effort
+  }
+  
+  // Refresh app badge to reflect read messages
+  try {
+    const session = (await supabase.auth.getSession()).data.session
+    if (session?.user?.id) {
+      // Dynamically import to avoid circular dependencies
+      const { refreshAppBadge } = await import('./notifications')
+      await refreshAppBadge(session.user.id)
+    }
+  } catch (err) {
+    // Silently fail - badge update is best effort
+  }
   
   return data || 0
 }
@@ -850,7 +874,7 @@ export async function sendMessagePushNotification(
   messagePreview: string,
   conversationId: string,
   language: string = 'en'
-): Promise<{ sent: boolean; reason?: string }> {
+): Promise<{ sent: boolean; reason?: string; devicesReached?: number }> {
   const translations: Record<string, { title: string; body: string }> = {
     en: {
       title: `${senderDisplayName}`,
@@ -868,11 +892,14 @@ export async function sendMessagePushNotification(
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
   const conversationUrl = `${baseUrl}/messages?conversation=${conversationId}`
   
+  console.log('[messaging] Sending push notification:', { recipientId, conversationId, senderDisplayName })
+  
   try {
     const session = (await supabase.auth.getSession()).data.session
     const token = session?.access_token
     
     if (!token) {
+      console.warn('[messaging] Cannot send push notification: not authenticated')
       return { sent: false, reason: 'NOT_AUTHENTICATED' }
     }
     
@@ -902,13 +929,31 @@ export async function sendMessagePushNotification(
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
+      console.error('[messaging] Push notification request failed:', response.status, errorData)
       return { sent: false, reason: errorData?.error || 'REQUEST_FAILED' }
     }
     
     const result = await response.json()
-    return { sent: result.sent ?? false, reason: result.reason }
+    
+    if (result.sent) {
+      console.log('[messaging] Push notification sent successfully:', { 
+        recipientId, 
+        devicesReached: result.devicesReached 
+      })
+    } else {
+      console.log('[messaging] Push notification not sent:', { 
+        recipientId, 
+        reason: result.reason 
+      })
+    }
+    
+    return { 
+      sent: result.sent ?? false, 
+      reason: result.reason,
+      devicesReached: result.devicesReached
+    }
   } catch (err) {
-    console.warn('[messaging] Error sending push notification:', (err as Error)?.message)
+    console.error('[messaging] Error sending push notification:', (err as Error)?.message)
     return { sent: false, reason: 'ERROR' }
   }
 }
