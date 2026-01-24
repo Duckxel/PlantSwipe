@@ -936,6 +936,11 @@ export function isInternalUrl(url: string): boolean {
       return true
     }
     
+    // Check if it's a media URL
+    if (MEDIA_DOMAINS.some(domain => hostname === domain)) {
+      return true
+    }
+    
     // Check if it matches known internal domains
     return INTERNAL_DOMAINS.some(domain => 
       hostname === domain || hostname.endsWith(`.${domain}`)
