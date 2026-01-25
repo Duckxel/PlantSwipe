@@ -1041,7 +1041,9 @@ export const FriendsPage: React.FC = () => {
               placeholder={t("friends.addFriendDialog.searchPlaceholder")}
               value={dialogSearchQuery}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDialogSearchQuery(e.target.value)}
+              onClear={() => setDialogSearchQuery("")}
               loading={dialogSearching}
+              className="[&::-webkit-search-cancel-button]:appearance-none"
             />
 
             {dialogSearchResults.length > 0 && (
