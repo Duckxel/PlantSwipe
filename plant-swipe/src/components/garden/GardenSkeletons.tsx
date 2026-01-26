@@ -1,24 +1,7 @@
 import React from 'react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Loader2 } from 'lucide-react'
-
-// Enhanced Skeleton component with shimmer animation
-const Skeleton = ({ className = '' }: { className?: string }) => (
-  <div 
-    className={`relative overflow-hidden bg-stone-200/80 dark:bg-stone-700/60 rounded ${className}`}
-  >
-    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent" />
-  </div>
-)
-
-// Add shimmer keyframes to the component
-const ShimmerStyles = () => (
-  <style>{`
-    @keyframes shimmer {
-      100% { transform: translateX(100%); }
-    }
-  `}</style>
-)
 
 // Glass card style matching the app's design system
 const glassCardClass = "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#17171a]/90 backdrop-blur-sm shadow-lg"
@@ -27,7 +10,6 @@ const glassCardClass = "rounded-[24px] border border-stone-200/70 dark:border-[#
 export const GardenCardSkeleton: React.FC = () => {
   return (
     <>
-      <ShimmerStyles />
       <Card className="rounded-[24px] overflow-hidden relative border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-md">
         {/* Progress badge skeleton */}
         <div className="pointer-events-none absolute top-3 right-3 z-20">
@@ -96,7 +78,6 @@ export const GardenListSkeleton: React.FC = () => {
 export const OverviewStatCardSkeleton: React.FC = () => {
   return (
     <>
-      <ShimmerStyles />
       <Card className="rounded-[20px] p-4 border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur-sm">
         <Skeleton className="h-3 w-20 mb-2 rounded-md" />
         <Skeleton className="h-8 w-16 mb-1 rounded-lg" />
@@ -110,7 +91,6 @@ export const OverviewStatCardSkeleton: React.FC = () => {
 export const OverviewSectionSkeleton: React.FC = () => {
   return (
     <>
-      <ShimmerStyles />
       <div className="space-y-6">
         {/* Hero Section skeleton */}
         <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-emerald-50/80 via-white to-stone-100/80 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] border border-stone-200/70 dark:border-[#3e3e42]/70 shadow-lg min-h-[200px] p-8 md:p-10">
@@ -244,7 +224,6 @@ const profileHeroCardClass = "relative overflow-hidden rounded-[32px] border bor
 export const ProfilePageSkeleton: React.FC = () => {
   return (
     <>
-      <ShimmerStyles />
       <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 space-y-6">
         {/* Main profile card skeleton */}
         <Card className={profileHeroCardClass}>
@@ -385,7 +364,6 @@ export const ProfilePageSkeleton: React.FC = () => {
 export const PlantInfoPageSkeleton: React.FC<{ label?: string }> = ({ label = 'Loading...' }) => {
   return (
     <>
-      <ShimmerStyles />
       <div
         role="status"
         aria-live="polite"
