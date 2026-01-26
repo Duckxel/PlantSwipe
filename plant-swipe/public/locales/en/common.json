@@ -1082,6 +1082,10 @@
     "gallery": {
       "title": "Image Gallery"
     },
+    "companions": {
+      "title": "Companion & Related Plants",
+      "subtitle": "Plants that grow well together or are related varieties. Click to explore."
+    },
     "sections": {
       "careHighlights": "Care Highlights",
       "careDetails": "Care Details",
