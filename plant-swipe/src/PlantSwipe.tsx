@@ -83,6 +83,7 @@ type PreparedPlant = Plant & {
   _seasonsSet: Set<string>         // O(1) season lookups
   _createdAtTs: number             // Pre-parsed timestamp for sorting
   _popularityLikes: number         // Pre-extracted popularity for sorting
+  _isInProgress: boolean           // Pre-computed status check
   _hasImage: boolean               // Pre-computed image availability
 }
 
@@ -714,6 +715,10 @@ export default function PlantSwipe() {
       // Pre-extract popularity for faster sorting
       const popularityLikes = p.popularity?.likes ?? 0
 
+      // Pre-compute status for faster sorting
+      const status = p.meta?.status?.toLowerCase()
+      const isInProgress = status === 'in progres' || status === 'in progress'
+
       // Pre-compute image availability for Discovery page filtering
       const hasLegacyImage = Boolean(p.image)
       const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
@@ -736,6 +741,7 @@ export default function PlantSwipe() {
         _seasonsSet: seasonsSet,
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
+        _isInProgress: isInProgress,
         _hasImage: hasImage
       } as PreparedPlant
     })
@@ -957,18 +963,13 @@ export default function PlantSwipe() {
   }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
-    // Helper to check if a plant is "in progress"
-    const isPlantInProgress = (p: Plant) => {
-      const status = p.meta?.status?.toLowerCase()
-      return status === 'in progres' || status === 'in progress'
-    }
-
     // For default sort, push "in progress" plants to the bottom
+    // Uses pre-computed _isInProgress flag for O(1) comparison
     if (searchSort === "default") {
       const arr = filtered.slice() as PreparedPlant[]
       arr.sort((a, b) => {
-        const aInProgress = isPlantInProgress(a) ? 1 : 0
-        const bInProgress = isPlantInProgress(b) ? 1 : 0
+        const aInProgress = a._isInProgress ? 1 : 0
+        const bInProgress = b._isInProgress ? 1 : 0
         if (aInProgress !== bInProgress) return aInProgress - bInProgress
         // Maintain original order for same status
         return 0
