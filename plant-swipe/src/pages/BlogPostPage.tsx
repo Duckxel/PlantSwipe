@@ -1,13 +1,15 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import DOMPurify from 'dompurify'
-import { ArrowLeft, CalendarClock, UserRound } from 'lucide-react'
+import { ArrowLeft, CalendarClock, CalendarDays, Clock, UserRound, X, ZoomIn } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Link } from '@/components/i18n/Link'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import type { BlogPost } from '@/types/blog'
+import { extractFirstImageFromHtml } from '@/types/blog'
 import { fetchBlogPost } from '@/lib/blogs'
 import { useAuth } from '@/context/AuthContext'
 import { checkEditorAccess } from '@/constants/userRoles'
@@ -19,6 +21,13 @@ const formatDateTime = (value?: string | null) => {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short' }).format(date)
 }
 
+const formatDateOnly = (value?: string | null) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
+}
+
 export default function BlogPostPage() {
   const { slug } = useParams<{ slug: string }>()
   const { t } = useTranslation('common')
@@ -26,6 +35,8 @@ export default function BlogPostPage() {
   const [post, setPost] = React.useState<BlogPost | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const [fullscreenImage, setFullscreenImage] = React.useState<string | null>(null)
+  const contentRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
     if (!slug) return
@@ -67,6 +78,44 @@ export default function BlogPostPage() {
     return DOMPurify.sanitize(post.bodyHtml, { ADD_ATTR: ['style', 'class'], ADD_TAGS: ['style'] })
   }, [post?.bodyHtml])
 
+  // Determine the effective cover image URL (explicit or first from content)
+  const effectiveCoverImageUrl = React.useMemo(() => {
+    if (post?.coverImageUrl) return post.coverImageUrl
+    // Fallback to first image in content for SEO/social sharing
+    return extractFirstImageFromHtml(post?.bodyHtml ?? '')
+  }, [post?.coverImageUrl, post?.bodyHtml])
+
+  // Whether to display cover at top (only if showCoverImage is true AND we have an explicit cover OR fallback)
+  const shouldShowCoverAtTop = post?.showCoverImage !== false && effectiveCoverImageUrl
+
+  // Add click handlers to images in the blog content for fullscreen viewing
+  React.useEffect(() => {
+    if (!contentRef.current) return
+
+    const handleImageClick = (e: Event) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'IMG') {
+        const img = target as HTMLImageElement
+        if (img.src) {
+          setFullscreenImage(img.src)
+        }
+      }
+    }
+
+    const container = contentRef.current
+    container.addEventListener('click', handleImageClick)
+
+    // Add visual cue that images are clickable
+    const images = container.querySelectorAll('img')
+    images.forEach((img) => {
+      img.style.cursor = 'zoom-in'
+    })
+
+    return () => {
+      container.removeEventListener('click', handleImageClick)
+    }
+  }, [sanitizedHtml])
+
   const seoTitle = post
     ? t('seo.blog.postTitle', { title: post.title, defaultValue: `${post.title} · Aphylia Blog` })
     : t('seo.blog.listTitle', { defaultValue: 'Aphylia Blog' })
@@ -80,9 +129,15 @@ export default function BlogPostPage() {
   usePageMetadata({ 
     title: seoTitle, 
     description: seoDescription,
-    image: post?.coverImageUrl ?? undefined,
+    image: effectiveCoverImageUrl ?? undefined,
     url: slug ? `/blog/${slug}` : '/blog',
   })
+
+  // Footer attribution info
+  const createdDate = formatDateOnly(post?.createdAt)
+  const updatedDate = formatDateOnly(post?.updatedAt)
+  const updatedByLabel = post?.updatedByName
+  const hasBeenModified = post?.updatedAt && post?.createdAt && post.updatedAt !== post.createdAt
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 pb-20 space-y-8">
@@ -137,17 +192,23 @@ export default function BlogPostPage() {
               </div>
             </div>
 
-            {post.coverImageUrl ? (
-              <div className="rounded-[28px] overflow-hidden border border-stone-200 dark:border-[#3e3e42]">
+            {shouldShowCoverAtTop && (
+              <div 
+                className="rounded-[28px] overflow-hidden border border-stone-200 dark:border-[#3e3e42] cursor-zoom-in group relative"
+                onClick={() => setFullscreenImage(effectiveCoverImageUrl)}
+              >
                 <img
-                  src={post.coverImageUrl}
+                  src={effectiveCoverImageUrl}
                   alt={post.title}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   loading="lazy"
                   decoding="async"
                 />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                  <ZoomIn className="h-8 w-8 text-white drop-shadow-lg" />
+                </div>
               </div>
-            ) : null}
+            )}
 
             {(isDraft || isScheduled) && (
               <div className="rounded-2xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50/60 dark:bg-[#1b1b1b] p-4 text-sm text-stone-600 dark:text-stone-300">
@@ -158,12 +219,54 @@ export default function BlogPostPage() {
             )}
 
             <div
-              className="blog-article-content prose prose-stone dark:prose-invert max-w-none text-base leading-relaxed"
+              ref={contentRef}
+              className="blog-article-content prose prose-stone dark:prose-invert max-w-none text-base leading-relaxed [&_img]:rounded-2xl [&_img]:cursor-zoom-in [&_img:hover]:opacity-90 [&_img]:transition-opacity"
               dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
             />
           </article>
+
+          {/* Footer attribution section */}
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 py-3 border-t border-stone-200 dark:border-[#3e3e42]">
+            {(createdDate || authorLabel) && (
+              <span className="flex items-center gap-1.5">
+                <CalendarDays className="h-3 w-3" />
+                <span>{t('blogPage.footer.created', { defaultValue: 'Created' })}</span>
+                <span className="text-stone-500 dark:text-stone-400">{createdDate || '—'}</span>
+                {authorLabel && <span>· {authorLabel}</span>}
+              </span>
+            )}
+            {hasBeenModified && (
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-3 w-3" />
+                <span>{t('blogPage.footer.updated', { defaultValue: 'Updated' })}</span>
+                <span className="text-stone-500 dark:text-stone-400">{updatedDate || '—'}</span>
+                {updatedByLabel && <span>· {updatedByLabel}</span>}
+              </span>
+            )}
+          </div>
         </>
       )}
+
+      {/* Fullscreen Image Viewer */}
+      <Dialog open={!!fullscreenImage} onOpenChange={(open) => !open && setFullscreenImage(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none rounded-2xl overflow-hidden">
+          <button
+            onClick={() => setFullscreenImage(null)}
+            className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          {fullscreenImage && (
+            <div className="flex items-center justify-center w-full h-full min-h-[50vh]">
+              <img 
+                src={fullscreenImage}
+                alt="Fullscreen view"
+                className="max-w-full max-h-[90vh] object-contain"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Link } from '@/components/i18n/Link'
 import { useTranslation } from 'react-i18next'
 import type { BlogPost } from '@/types/blog'
+import { extractFirstImageFromHtml } from '@/types/blog'
 
 type BlogCardProps = {
   post: BlogPost
@@ -36,12 +37,18 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
     post.excerpt ||
     t("blogPage.card.excerptFallback", { defaultValue: "Pull up the full article to explore every detail." })
 
+  // Use cover image or fallback to first image from content
+  const displayImageUrl = React.useMemo(() => {
+    if (post.coverImageUrl) return post.coverImageUrl
+    return extractFirstImageFromHtml(post.bodyHtml)
+  }, [post.coverImageUrl, post.bodyHtml])
+
   return (
     <Card className="rounded-3xl overflow-hidden border border-stone-200 dark:border-[#3e3e42] flex flex-col bg-white/80 dark:bg-[#1f1f1f] shadow-sm hover:shadow-lg transition-shadow">
       <div className="relative h-48 bg-stone-100 dark:bg-[#2b2b2b]">
-        {post.coverImageUrl ? (
+        {displayImageUrl ? (
           <img
-            src={post.coverImageUrl}
+            src={displayImageUrl}
             alt={post.title}
             className="absolute inset-0 h-full w-full object-cover"
             loading="lazy"

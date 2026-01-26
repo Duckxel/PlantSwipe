@@ -1,12 +1,13 @@
 import { supabase, type BlogPostRow } from '@/lib/supabaseClient'
 import type { BlogPost, BlogPostInput } from '@/types/blog'
 
-const BLOG_POST_SELECT = 'id, title, slug, body_html, editor_data, author_id, author_name, cover_image_url, excerpt, is_published, published_at, created_at, updated_at'
+const BLOG_POST_SELECT = 'id, title, slug, body_html, editor_data, author_id, author_name, cover_image_url, excerpt, is_published, published_at, created_at, updated_at, show_cover_image, updated_by_name'
 const MAX_SLUG_ATTEMPTS = 15
 
 export type SaveBlogPostParams = BlogPostInput & {
   authorId: string
   authorName: string | null
+  updatedByName?: string | null
 }
 
 export function mapBlogPostRow(row: BlogPostRow): BlogPost {
@@ -24,6 +25,8 @@ export function mapBlogPostRow(row: BlogPostRow): BlogPost {
     publishedAt: row.published_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    showCoverImage: row.show_cover_image ?? false, // Default to false - auto-enabled when cover image is added
+    updatedByName: row.updated_by_name ?? null,
   }
 }
 
@@ -129,6 +132,8 @@ export async function saveBlogPost(params: SaveBlogPostParams) {
     cover_image_url: params.coverImageUrl ?? null,
     excerpt: params.excerpt ?? normalizeExcerpt(params.bodyHtml),
     is_published: params.isPublished ?? true,
+    show_cover_image: params.showCoverImage ?? false,
+    updated_by_name: isUpdate ? (params.updatedByName ?? params.authorName) : null,
   }
 
   const payload = isUpdate

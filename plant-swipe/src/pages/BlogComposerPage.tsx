@@ -88,6 +88,7 @@ export default function BlogComposerPage() {
   const [summaryError, setSummaryError] = React.useState<string | null>(null)
   const [coverUploading, setCoverUploading] = React.useState(false)
   const [coverUploadError, setCoverUploadError] = React.useState<string | null>(null)
+  const [showCoverImage, setShowCoverImage] = React.useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
 
@@ -121,6 +122,7 @@ export default function BlogComposerPage() {
     setEditorContent({ html: "", doc: null, plainText: "" })
     setAssetFolder(createDraftFolder())
     setCoverUploadError(null)
+    setShowCoverImage(false)
     setSummaryError(null)
     setSummaryStatus("idle")
     summarySourceRef.current = ""
@@ -158,6 +160,7 @@ export default function BlogComposerPage() {
         setEditorContent({ html: post.bodyHtml, doc: (post.editorData as JSONContent | null) ?? null, plainText: "" })
         setAssetFolder(folderForPost(post, post.title))
         setCoverUploadError(null)
+        setShowCoverImage(post.showCoverImage ?? true)
         setSummaryError(null)
         setSummaryStatus("idle")
         summarySourceRef.current = post.bodyHtml
@@ -199,8 +202,10 @@ export default function BlogComposerPage() {
         const result = await uploadBlogImage(file, { folder: assetFolder })
         if (result?.url) {
           setCoverUrl(result.url)
+          setShowCoverImage(true) // Auto-check when image is uploaded
         } else if (result?.path) {
           setCoverUrl(result.path)
+          setShowCoverImage(true) // Auto-check when image is uploaded
         }
       } catch (err) {
         const message =
@@ -331,6 +336,7 @@ export default function BlogComposerPage() {
         }
       }
       const publishDateIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString()
+      const currentUserName = profile?.display_name || profile?.username || user?.email || "Aphylia Team"
       const { data, error: saveError } = await saveBlogPost({
         id: editingPost?.id,
         slug: editingPost?.slug,
@@ -341,8 +347,10 @@ export default function BlogComposerPage() {
         isPublished: publishMode === "scheduled",
         publishedAt: publishDateIso,
         authorId,
-        authorName: profile?.display_name || profile?.username || user?.email || "Aphylia Team",
+        authorName: isEditing ? editingPost?.authorName ?? currentUserName : currentUserName,
         editorData: doc ?? undefined,
+        showCoverImage,
+        updatedByName: isEditing ? currentUserName : undefined,
       })
 
       if (saveError || !data) {
@@ -500,7 +508,14 @@ export default function BlogComposerPage() {
                   id="blog-cover"
                   type="url"
                   value={coverUrl}
-                  onChange={(event) => setCoverUrl(event.target.value)}
+                  onChange={(event) => {
+                    const newUrl = event.target.value
+                    setCoverUrl(newUrl)
+                    // Auto-check show cover image when a URL is added
+                    if (newUrl.trim() && !coverUrl.trim()) {
+                      setShowCoverImage(true)
+                    }
+                  }}
                   placeholder="https://..."
                   className="flex-1"
                 />
@@ -522,8 +537,22 @@ export default function BlogComposerPage() {
                 </div>
               </div>
               {coverUploadError && <p className="text-xs text-red-500">{coverUploadError}</p>}
+              <label className="flex items-center gap-2 mt-3">
+                <input
+                  type="checkbox"
+                  checked={showCoverImage}
+                  onChange={(e) => setShowCoverImage(e.target.checked)}
+                  className="h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="text-sm text-stone-600 dark:text-stone-400">
+                  {t("blogPage.editor.showCoverAtTop", { defaultValue: "Display cover image at the top of the article" })}
+                </span>
+              </label>
               <p className="text-xs text-stone-500">
                 {t("blogPage.editor.coverHelper", { defaultValue: "Paste a public image URL or upload to the shared blog folder." })}
+              </p>
+              <p className="text-[11px] text-stone-400">
+                {t("blogPage.editor.coverHelperFallback", { defaultValue: "If no cover image is set, the first image in the blog content will be used for social sharing." })}
               </p>
               <p className="text-[11px] text-stone-400">
                 {t("blogPage.editor.assetFolderHelper", { defaultValue: "Uploads stored in" })} <code className="font-mono">{assetFolder}</code>
