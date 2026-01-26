@@ -807,6 +807,7 @@
       "viewFullScreen": "View image in full screen",
         "viewPhoto": "View photo {{index}}",
       "viewFullDetails": "View full details",
+      "viewPlant": "View Plant →",
       "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
       "day": "day",
       "week": "week",

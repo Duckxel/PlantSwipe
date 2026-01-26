@@ -2385,38 +2385,42 @@ type CompanionPlantCardProps = {
   onClick: () => void
 }
 
-const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ name, imageUrl, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="flex-shrink-0 snap-start group relative overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-    style={{ width: 'min(180px, 45vw)' }}
-  >
-    {/* Image container with aspect ratio */}
-    <div className="relative w-full aspect-[4/3] overflow-hidden bg-stone-100 dark:bg-[#2d2d30]">
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={name}
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
-          loading="lazy"
-        />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center text-stone-400 dark:text-stone-600">
-          <Leaf className="h-12 w-12" />
-        </div>
-      )}
-    </div>
-    <div className="p-3 text-left">
-      <h4 className="text-sm font-semibold text-stone-900 dark:text-stone-100 line-clamp-2 leading-tight">
-        {name}
-      </h4>
-      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wide">
-        View Plant →
-      </p>
-    </div>
-  </button>
-)
+const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ name, imageUrl, onClick }) => {
+  const { t } = useTranslation('common')
+  
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex-shrink-0 snap-start group relative overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+      style={{ width: 'min(180px, 45vw)' }}
+    >
+      {/* Image container with aspect ratio */}
+      <div className="relative w-full aspect-[4/3] overflow-hidden bg-stone-100 dark:bg-[#2d2d30]">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={name}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+            loading="lazy"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-stone-400 dark:text-stone-600">
+            <Leaf className="h-12 w-12" />
+          </div>
+        )}
+      </div>
+      <div className="p-3 text-left">
+        <h4 className="text-sm font-semibold text-stone-900 dark:text-stone-100 line-clamp-2 leading-tight">
+          {name}
+        </h4>
+        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wide">
+          {t('plantInfo.viewPlant')}
+        </p>
+      </div>
+    </button>
+  )
+}
 
 type CompanionPlantsCarouselProps = {
   companions: Array<{ id: string; name: string; imageUrl?: string }>
