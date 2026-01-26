@@ -17,3 +17,7 @@
 ## 2025-05-24 - Complex UI Sections & Hidden Buttons
 **Learning:** Complex, custom UI sections (like the Journal timelapse viewer) often use raw `<button>` elements or `Button` components in `size="icon"` mode without `aria-label`, as they are visually obvious but invisible to screen readers.
 **Action:** Systematically audit complex interactive sections (modals, viewers, editors) for icon-only buttons and ensure every interactive element has an accessible name.
+
+## 2025-05-24 - Invisible Focusable Elements
+**Learning:** The "Remove Photo" button in the journal upload section was only visible on hover (`opacity-0`), making it invisible to keyboard users even when focused.
+**Action:** Always ensure interactive elements that are hidden by default become fully visible on focus (`focus:opacity-100`) to support keyboard navigation.
