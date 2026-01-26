@@ -117,6 +117,28 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     const DOUBLE_TAP_THRESHOLD = 300
     const DOUBLE_TAP_DISTANCE_THRESHOLD = 50 // Max distance between taps in pixels
     
+    // Double-tap detection for mobile - refs must be declared before callbacks that use them
+    const lastTapTimeRef = React.useRef<number>(0)
+    const lastTapPosRef = React.useRef<{ x: number; y: number } | null>(null)
+    
+    // CRITICAL: Track button interactions to prevent tap detection interference
+    // This uses an explicit timestamp-until approach which is more reliable than cooldown duration
+    const blockTapsUntilRef = React.useRef<number>(0)
+    
+    // How long to block ALL tap processing after any button interaction (in ms)
+    // This must be longer than the time between button press and swipe start
+    const TAP_BLOCK_DURATION = 600
+    
+    // Block all tap processing for the specified duration
+    // Called when any button on the card is interacted with
+    const blockTapProcessing = React.useCallback(() => {
+      // Set the "block until" timestamp
+      blockTapsUntilRef.current = Date.now() + TAP_BLOCK_DURATION
+      // Also clear any stored tap data to prevent double-tap detection
+      lastTapTimeRef.current = 0
+      lastTapPosRef.current = null
+    }, [])
+    
     // Trigger heart animation and like action
     const triggerDoubleTapLike = React.useCallback((clientX: number, clientY: number) => {
       // Add heart animation at tap position
@@ -149,13 +171,21 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       lastTapTimeRef.current = 0
     }, [current?.id])
     
-    // Double-tap detection for mobile - using a simple tap counter approach
-    const lastTapTimeRef = React.useRef<number>(0)
-    const lastTapPosRef = React.useRef<{ x: number; y: number } | null>(null)
-    
     // Handle tap on the card area (for double-tap detection and heart spam)
     const handleCardTap = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
-      // Don't trigger on button clicks
+      const now = Date.now()
+      
+      // CRITICAL: First check if taps are blocked due to recent button interaction
+      // This is the primary defense against button taps interfering with swipe gestures
+      // Must be checked BEFORE any other logic, including target checks
+      if (now < blockTapsUntilRef.current) {
+        // Taps are currently blocked - don't process this tap at all
+        // Also don't record it as a potential first tap
+        return
+      }
+      
+      // Secondary check: Don't trigger on button clicks (backup safety)
+      // This uses the event target, but Framer Motion's onTap might not preserve the original target
       if ((e.target as HTMLElement).closest('button')) {
         return
       }
@@ -174,7 +204,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         clientY = e.clientY
       }
       
-      const now = Date.now()
       const timeSinceLastTap = now - lastTapTimeRef.current
       const lastPos = lastTapPosRef.current
       
@@ -449,29 +478,28 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                   )}
                   
                   {/* Like button - inside card so it moves with swipe */}
-                  <div className="absolute top-4 right-4 z-[100]">
+                  {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
+                  <div 
+                    className="absolute top-4 right-4 z-[100]"
+                    onPointerDownCapture={(e) => {
+                      e.stopPropagation()
+                      blockTapProcessing()
+                    }}
+                    onPointerMoveCapture={(e) => e.stopPropagation()}
+                    onPointerUpCapture={(e) => e.stopPropagation()}
+                    onTouchStartCapture={(e) => {
+                      e.stopPropagation()
+                      blockTapProcessing()
+                    }}
+                    onTouchMoveCapture={(e) => e.stopPropagation()}
+                    onTouchEndCapture={(e) => e.stopPropagation()}
+                  >
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        e.preventDefault()
+                        blockTapProcessing()
                         if (onToggleLike) onToggleLike()
-                      }}
-                      onPointerDown={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                      }}
-                      onPointerUp={(e) => {
-                        e.stopPropagation()
-                      }}
-                      onTouchStart={(e) => {
-                        e.stopPropagation()
-                      }}
-                      onTouchEnd={(e) => {
-                        e.stopPropagation()
-                      }}
-                      onMouseDown={(e) => {
-                        e.stopPropagation()
                       }}
                       aria-pressed={liked}
                       aria-label={liked ? "Unlike" : "Like"}
@@ -508,13 +536,26 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
                     
                     {/* Navigation buttons - inside card so they move with swipe */}
-                    <div className="mt-5 grid w-full gap-2 grid-cols-3">
+                    {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
+                    <div 
+                      className="mt-5 grid w-full gap-2 grid-cols-3"
+                      onPointerDownCapture={(e) => {
+                        e.stopPropagation()
+                        blockTapProcessing()
+                      }}
+                      onPointerMoveCapture={(e) => e.stopPropagation()}
+                      onPointerUpCapture={(e) => e.stopPropagation()}
+                      onTouchStartCapture={(e) => {
+                        e.stopPropagation()
+                        blockTapProcessing()
+                      }}
+                      onTouchMoveCapture={(e) => e.stopPropagation()}
+                      onTouchEndCapture={(e) => e.stopPropagation()}
+                    >
                       <button
                         type="button"
                         className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
                         onClick={(e) => { e.stopPropagation(); handlePrevious() }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onTouchStart={(e) => e.stopPropagation()}
                         aria-label={t("plant.back")}
                         title={t("plant.back")}
                       >
@@ -524,8 +565,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         type="button"
                         className="rounded-2xl h-11 bg-white text-black active:scale-95 flex items-center justify-center shadow-lg"
                         onClick={(e) => { e.stopPropagation(); handleInfo() }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onTouchStart={(e) => e.stopPropagation()}
                       >
                         {t("plant.info")}
                         <ChevronUp className="h-4 w-4 ml-1" />
@@ -534,8 +573,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         type="button"
                         className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
                         onClick={(e) => { e.stopPropagation(); handlePass() }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onTouchStart={(e) => e.stopPropagation()}
                         aria-label={t("plant.next")}
                         title={t("plant.next")}
                       >
