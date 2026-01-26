@@ -1,17 +1,24 @@
 import React from "react"
 import { useParams } from "react-router-dom"
-import { ArrowLeft, RefreshCcw, Sparkles, UploadCloud } from "lucide-react"
+import { ArrowLeft, RefreshCcw, Sparkles, Trash2, UploadCloud } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
 import type { JSONContent } from "@tiptap/core"
 import { useAuth } from "@/context/AuthContext"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import type { BlogPost } from "@/types/blog"
-import { fetchBlogPost, saveBlogPost } from "@/lib/blogs"
+import { fetchBlogPost, saveBlogPost, deleteBlogPost } from "@/lib/blogs"
 import { uploadBlogImage } from "@/lib/blogMedia"
 import { buildAdminRequestHeaders } from "@/lib/adminAuth"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
@@ -81,6 +88,8 @@ export default function BlogComposerPage() {
   const [summaryError, setSummaryError] = React.useState<string | null>(null)
   const [coverUploading, setCoverUploading] = React.useState(false)
   const [coverUploadError, setCoverUploadError] = React.useState<string | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
 
   const editorRef = React.useRef<BlogEditorHandle | null>(null)
   const coverInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -356,6 +365,25 @@ export default function BlogComposerPage() {
     navigate("/blog")
   }
 
+  const handleDeletePost = async () => {
+    if (!editingPost?.id) return
+
+    setDeleting(true)
+    setFormError(null)
+    try {
+      await deleteBlogPost(editingPost.id)
+      setDeleteDialogOpen(false)
+      navigate("/blog", { replace: true })
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : t("blogPage.editor.deleteError", { defaultValue: "Failed to delete post." }),
+      )
+      setDeleting(false)
+    }
+  }
+
   const summaryText =
     summaryStatus === "generating"
       ? t("blogPage.editor.summaryPending", { defaultValue: "Summarizing this article…" })
@@ -567,8 +595,81 @@ export default function BlogComposerPage() {
                   : t("blogPage.editor.save", { defaultValue: "Publish post" })}
             </Button>
           </div>
+
+          {/* Delete Section - Only shown when editing */}
+          {isEditing && editingPost && (
+            <div className="mt-12 pt-8 border-t border-red-200 dark:border-red-900/40">
+              <div className="rounded-2xl border border-red-200 bg-red-50/50 dark:border-red-900/40 dark:bg-red-900/10 p-6 space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold text-red-700 dark:text-red-400">
+                    {t("blogPage.editor.dangerZone", { defaultValue: "Danger zone" })}
+                  </h3>
+                  <p className="text-sm text-red-600/80 dark:text-red-300/80">
+                    {t("blogPage.editor.deleteWarning", {
+                      defaultValue: "Deleting this blog post is permanent and cannot be undone.",
+                    })}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="rounded-2xl"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  disabled={saving || deleting}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {t("blogPage.editor.deletePost", { defaultValue: "Delete this post" })}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => !deleting && setDeleteDialogOpen(open)}>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <Trash2 className="h-5 w-5" />
+              {t("blogPage.editor.deleteDialogTitle", { defaultValue: "Delete blog post?" })}
+            </DialogTitle>
+            <DialogDescription>
+              {t("blogPage.editor.deleteDialogDescription", {
+                defaultValue:
+                  "This will permanently delete the blog post. This action cannot be undone.",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 p-3 rounded-xl bg-stone-100 dark:bg-stone-800/50">
+            <p className="text-sm font-medium text-stone-700 dark:text-stone-200 truncate">
+              {editingPost?.title || t("blogPage.editor.untitled", { defaultValue: "Untitled post" })}
+            </p>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 rounded-2xl"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              {t("blogPage.editor.cancel", { defaultValue: "Cancel" })}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="flex-1 rounded-2xl"
+              onClick={handleDeletePost}
+              disabled={deleting}
+            >
+              {deleting
+                ? t("blogPage.editor.deleting", { defaultValue: "Deleting…" })
+                : t("blogPage.editor.confirmDelete", { defaultValue: "Yes, delete" })}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
