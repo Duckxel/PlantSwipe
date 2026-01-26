@@ -91,6 +91,9 @@ type ExtendedWindow = Window & {
   cancelIdleCallback?: (handle: number) => void
 }
 
+const RE_SPLIT_COLOR = /[-_/]+/g
+const RE_WHITESPACE = /\s+/
+
 const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
   if (typeof window === "undefined") {
     return () => {}
@@ -412,12 +415,19 @@ export default function PlantSwipe() {
     // Translation map: any translated name (lowercase) -> ColorOption
     // This enables users to filter by colors in their language
     const translationMap = new Map<string, ColorOption>()
+    // Alias map: any color token -> Set of all aliases (canonical + translations)
+    // This allows O(1) expansion of a color token into all its localized forms
+    const aliasMap = new Map<string, Set<string>>()
 
     colorOptions.forEach(c => {
       const normalizedName = c.name.toLowerCase()
       nameMap.set(normalizedName, c)
       idMap.set(c.id, c)
       
+      // Collect all aliases for this color
+      const aliases = new Set<string>()
+      aliases.add(normalizedName)
+
       // Build children map for primary color expansion
       c.parentIds.forEach(pid => {
         const existing = childrenMap.get(pid)
@@ -431,11 +441,19 @@ export default function PlantSwipe() {
       // Index all translations for multi-language matching
       Object.values(c.translations).forEach(translatedName => {
         if (translatedName) {
-          translationMap.set(translatedName.toLowerCase().trim(), c)
+          const tName = translatedName.toLowerCase().trim()
+          translationMap.set(tName, c)
+          aliases.add(tName)
         }
       })
+
+      // Populate alias map for all aliases of this color
+      // All aliases point to the SAME Set instance to save memory
+      aliases.forEach(alias => {
+        aliasMap.set(alias, aliases)
+      })
     })
-    return { nameMap, idMap, childrenMap, translationMap }
+    return { nameMap, idMap, childrenMap, translationMap, aliasMap }
   }, [colorOptions])
 
   // Global refresh for plant lists without full reload
@@ -616,7 +634,7 @@ export default function PlantSwipe() {
   // All Set-based lookups enable O(1) membership tests instead of O(n) array scans
   // Enhanced: Now includes color translations for bi-directional language matching
   const preparedPlants = useMemo(() => {
-    const { nameMap, translationMap } = colorLookups
+    const { aliasMap } = colorLookups
     
     return plants.map((p) => {
       // Colors - build both array (for iteration) and Sets (for O(1) lookups)
@@ -634,23 +652,28 @@ export default function PlantSwipe() {
       const colorTokens = new Set<string>()
       normalizedColors.forEach(color => {
         colorTokens.add(color)
+
+        // Check aliases for the full color string (e.g. "dark-green" -> "vert fonce")
+        const fullColorAliases = aliasMap.get(color)
+        if (fullColorAliases) {
+          for (const alias of fullColorAliases) {
+            colorTokens.add(alias)
+          }
+        }
+
         // Split compound colors and add individual tokens
-        const tokens = color.replace(/[-_/]+/g, ' ').split(/\s+/).filter(Boolean)
+        const tokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
         tokens.forEach(token => {
           colorTokens.add(token)
-          
-          // Try to find this token in the color database
-          // If found, add all its translations for bi-directional matching
-          const matchedColor = nameMap.get(token) || translationMap.get(token)
-          if (matchedColor) {
-            // Add canonical name
-            colorTokens.add(matchedColor.name.toLowerCase())
-            // Add all translations
-            Object.values(matchedColor.translations).forEach(translatedName => {
-              if (translatedName) {
-                colorTokens.add(translatedName.toLowerCase().trim())
-              }
-            })
+
+          // O(1) expansion of tokens to all their aliases (canonical + translations)
+          // Uses the pre-calculated aliasMap to avoid object iteration
+          const aliases = aliasMap.get(token)
+          if (aliases) {
+            // Fast add of all aliases
+            for (const alias of aliases) {
+              colorTokens.add(alias)
+            }
           }
         })
       })
