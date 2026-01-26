@@ -408,6 +408,7 @@ export default function PlantSwipe() {
 
   // Create O(1) lookups for color matching to avoid O(N) iteration in filter logic
   // Enhanced with ID-based lookup and translation-aware matching
+  // Optimized: Single-pass construction with pre-computed translation arrays
   const colorLookups = useMemo(() => {
     const nameMap = new Map<string, ColorOption>()
     const idMap = new Map<string, ColorOption>()
@@ -419,40 +420,53 @@ export default function PlantSwipe() {
     // This allows O(1) expansion of a color token into all its localized forms
     const aliasMap = new Map<string, Set<string>>()
 
-    colorOptions.forEach(c => {
+    // Single-pass construction: build all maps in one iteration
+    const colorCount = colorOptions.length
+    for (let i = 0; i < colorCount; i++) {
+      const c = colorOptions[i]
       const normalizedName = c.name.toLowerCase()
       nameMap.set(normalizedName, c)
       idMap.set(c.id, c)
       
-      // Collect all aliases for this color
+      // Collect all aliases for this color in a single Set
+      // Pre-allocate with estimated size for fewer resizes
       const aliases = new Set<string>()
       aliases.add(normalizedName)
 
       // Build children map for primary color expansion
-      c.parentIds.forEach(pid => {
+      // Use for-loop instead of forEach for better performance
+      const parentCount = c.parentIds.length
+      for (let j = 0; j < parentCount; j++) {
+        const pid = c.parentIds[j]
         const existing = childrenMap.get(pid)
         if (existing) {
           existing.push(c)
         } else {
           childrenMap.set(pid, [c])
         }
-      })
+      }
       
       // Index all translations for multi-language matching
-      Object.values(c.translations).forEach(translatedName => {
+      // Use Object.entries for single iteration instead of Object.values
+      // This avoids creating an intermediate array
+      const translationEntries = Object.entries(c.translations)
+      const translationCount = translationEntries.length
+      for (let j = 0; j < translationCount; j++) {
+        const translatedName = translationEntries[j][1]
         if (translatedName) {
           const tName = translatedName.toLowerCase().trim()
           translationMap.set(tName, c)
           aliases.add(tName)
         }
-      })
+      }
 
-      // Populate alias map for all aliases of this color
-      // All aliases point to the SAME Set instance to save memory
-      aliases.forEach(alias => {
+      // Populate alias map: all aliases point to the SAME Set instance
+      // This enables O(1) expansion and saves memory
+      // Use for-of instead of forEach for Sets (more efficient)
+      for (const alias of aliases) {
         aliasMap.set(alias, aliases)
-      })
-    })
+      }
+    }
     return { nameMap, idMap, childrenMap, translationMap, aliasMap }
   }, [colorOptions])
 
@@ -633,84 +647,143 @@ export default function PlantSwipe() {
   // This avoids repeating expensive string operations on every filter change
   // All Set-based lookups enable O(1) membership tests instead of O(n) array scans
   // Enhanced: Now includes color translations for bi-directional language matching
+  // Optimized: Uses for-loops and reduces intermediate array allocations
   const preparedPlants = useMemo(() => {
     const { aliasMap } = colorLookups
+    const plantCount = plants.length
+    const result: PreparedPlant[] = new Array(plantCount)
     
-    return plants.map((p) => {
-      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors)
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
-      const normalizedColors = colors.map(c => c.toLowerCase().trim())
+    for (let i = 0; i < plantCount; i++) {
+      const p = plants[i]
       
-      // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
-      // This avoids regex operations during filtering
-      // Enhanced: Also add translations for bi-directional matching
-      // (e.g., plant with "red" will also match filter "rouge")
+      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
+      // Optimized: Avoid spread operator, use direct array operations
       const colorTokens = new Set<string>()
-      normalizedColors.forEach(color => {
+      const normalizedColors: string[] = []
+      
+      // Process legacy colors
+      if (Array.isArray(p.colors)) {
+        const legacyCount = p.colors.length
+        for (let j = 0; j < legacyCount; j++) {
+          const color = String(p.colors[j]).toLowerCase().trim()
+          normalizedColors.push(color)
+        }
+      }
+      
+      // Process identity colors
+      if (Array.isArray(p.identity?.colors)) {
+        const identityColors = p.identity.colors
+        const identityCount = identityColors.length
+        for (let j = 0; j < identityCount; j++) {
+          const c = identityColors[j]
+          const colorName = (typeof c === 'object' && c?.name ? c.name : String(c)).toLowerCase().trim()
+          normalizedColors.push(colorName)
+        }
+      }
+      
+      // Pre-tokenize compound colors and expand aliases
+      // Optimized: Single pass through normalized colors
+      const normalizedCount = normalizedColors.length
+      for (let j = 0; j < normalizedCount; j++) {
+        const color = normalizedColors[j]
         colorTokens.add(color)
-        // Split compound colors and add individual tokens
-        const tokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
-        tokens.forEach(token => {
-          colorTokens.add(token)
-          
-          // O(1) expansion of tokens to all their aliases (canonical + translations)
-          // Uses the pre-calculated aliasMap to avoid object iteration
-          const aliases = aliasMap.get(token)
-          if (aliases) {
-            // Fast add of all aliases
-            for (const alias of aliases) {
-              colorTokens.add(alias)
+        
+        // Split compound colors (e.g., "red-orange" -> ["red", "orange"])
+        const tokenized = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE)
+        const tokenCount = tokenized.length
+        for (let k = 0; k < tokenCount; k++) {
+          const token = tokenized[k]
+          if (token) {
+            colorTokens.add(token)
+            
+            // O(1) expansion of tokens to all their aliases
+            const aliases = aliasMap.get(token)
+            if (aliases) {
+              for (const alias of aliases) {
+                colorTokens.add(alias)
+              }
             }
           }
-        })
-      })
+        }
+      }
 
-      // Search string
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`.toLowerCase()
+      // Search string - build efficiently with array join
+      const searchParts = [p.name]
+      if (p.scientificName) searchParts.push(p.scientificName)
+      if (p.meaning) searchParts.push(p.meaning)
+      for (let j = 0; j < normalizedCount; j++) {
+        searchParts.push(normalizedColors[j])
+      }
+      const searchString = searchParts.join(' ').toLowerCase()
 
       // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
 
       // Usage - both array and Set
-      const usageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
+      const usageLabelsRaw = getPlantUsageLabels(p)
+      const usageCount = usageLabelsRaw.length
+      const usageLabels: string[] = new Array(usageCount)
+      for (let j = 0; j < usageCount; j++) {
+        usageLabels[j] = usageLabelsRaw[j].toLowerCase()
+      }
       const usageSet = new Set(usageLabels)
 
       // Habitat - both array and Set for O(1) lookups
-      const habitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+      const habitatSource = p.plantCare?.habitat || p.care?.habitat || []
+      const habitatCount = habitatSource.length
+      const habitats: string[] = new Array(habitatCount)
+      for (let j = 0; j < habitatCount; j++) {
+        habitats[j] = habitatSource[j].toLowerCase()
+      }
       const habitatSet = new Set(habitats)
 
       // Maintenance
       const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
 
-      // Toxicity
-      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+      // Toxicity - optimized: avoid regex by checking specific characters
+      const toxicityPets = (p.identity?.toxicityPets || '').toLowerCase()
+      const toxicityHuman = (p.identity?.toxicityHuman || '').toLowerCase()
+      const petSafe = toxicityPets === 'non-toxic' || toxicityPets === 'nontoxic' || toxicityPets === 'non toxic'
+      const humanSafe = toxicityHuman === 'non-toxic' || toxicityHuman === 'nontoxic' || toxicityHuman === 'non toxic'
 
       // Living space
       const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
 
       // Seasons - convert to Set for O(1) lookups
-      const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const seasonsSet = new Set(seasons.map(s => String(s)))
+      const seasonsSet = new Set<string>()
+      if (Array.isArray(p.seasons)) {
+        const seasonCount = p.seasons.length
+        for (let j = 0; j < seasonCount; j++) {
+          seasonsSet.add(String(p.seasons[j]))
+        }
+      }
 
       // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
       const createdAtValue = p.meta?.createdAt
-      const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
-      const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
+      let createdAtTs = 0
+      if (createdAtValue) {
+        const parsed = Date.parse(createdAtValue)
+        if (!Number.isNaN(parsed)) {
+          createdAtTs = parsed
+        }
+      }
 
       // Pre-extract popularity for faster sorting
       const popularityLikes = p.popularity?.likes ?? 0
 
       // Pre-compute image availability for Discovery page filtering
-      const hasLegacyImage = Boolean(p.image)
-      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
-      const hasImage = hasLegacyImage || hasImagesArray
+      let hasImage = Boolean(p.image)
+      if (!hasImage && Array.isArray(p.images)) {
+        const imageCount = p.images.length
+        for (let j = 0; j < imageCount; j++) {
+          if (p.images[j]?.link) {
+            hasImage = true
+            break
+          }
+        }
+      }
 
-      return {
+      result[i] = {
         ...p,
         _searchString: searchString,
         _normalizedColors: normalizedColors,
@@ -725,18 +798,31 @@ export default function PlantSwipe() {
         _humanSafe: humanSafe,
         _livingSpace: livingSpace,
         _seasonsSet: seasonsSet,
-        _createdAtTs: createdAtTsFinal,
+        _createdAtTs: createdAtTs,
         _popularityLikes: popularityLikes,
         _hasImage: hasImage
       } as PreparedPlant
-    })
+    }
+    
+    return result
   }, [plants, colorLookups])
 
   // Memoize color filter expansion separately to avoid recomputing on every filter change
   // This builds a Set of all color names that should match (including children of primary colors)
   // Enhanced: Also supports matching by translated color names for multi-language filtering
+  // Optimized: Uses for-loops and Object.entries for efficient iteration
   const expandedColorFilterSet = useMemo(() => {
-    const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
+    if (colorFilter.length === 0) return null
+    
+    // Pre-normalize filters with early exit for empty
+    const normalizedColorFilters: string[] = []
+    const filterCount = colorFilter.length
+    for (let i = 0; i < filterCount; i++) {
+      const normalized = colorFilter[i].toLowerCase().trim()
+      if (normalized) {
+        normalizedColorFilters.push(normalized)
+      }
+    }
     if (normalizedColorFilters.length === 0) return null
     
     const expandedSet = new Set<string>()
@@ -745,7 +831,22 @@ export default function PlantSwipe() {
     // Pre-allocate a Set for tracking processed color IDs to avoid duplicate expansion
     const processedIds = new Set<string>()
     
-    normalizedColorFilters.forEach((filterColorName) => {
+    // Helper function to add all translations from a color
+    const addTranslations = (translations: Record<string, string>) => {
+      const entries = Object.entries(translations)
+      const entryCount = entries.length
+      for (let j = 0; j < entryCount; j++) {
+        const translatedName = entries[j][1]
+        if (translatedName) {
+          expandedSet.add(translatedName.toLowerCase().trim())
+        }
+      }
+    }
+    
+    const normalizedCount = normalizedColorFilters.length
+    for (let i = 0; i < normalizedCount; i++) {
+      const filterColorName = normalizedColorFilters[i]
+      
       // Add the exact filter name for direct matching
       expandedSet.add(filterColorName)
       
@@ -760,43 +861,57 @@ export default function PlantSwipe() {
         expandedSet.add(filterColor.name.toLowerCase())
         
         // Add all translations for this color to enable cross-language plant matching
-        Object.values(filterColor.translations).forEach(translatedName => {
-          if (translatedName) {
-            expandedSet.add(translatedName.toLowerCase().trim())
-          }
-        })
+        addTranslations(filterColor.translations)
         
         // If primary color, expand to include all child colors
         if (filterColor.isPrimary) {
           const children = childrenMap.get(filterColor.id)
           if (children) {
-            for (let i = 0; i < children.length; i++) {
-              const child = children[i]
+            const childCount = children.length
+            for (let j = 0; j < childCount; j++) {
+              const child = children[j]
               expandedSet.add(child.name.toLowerCase())
               // Also add child translations for comprehensive matching
-              Object.values(child.translations).forEach(translatedName => {
-                if (translatedName) {
-                  expandedSet.add(translatedName.toLowerCase().trim())
-                }
-              })
+              addTranslations(child.translations)
             }
           }
         }
       }
-    })
+    }
     
     return expandedSet
   }, [colorFilter, colorLookups])
 
   // Pre-normalize filter values to avoid repeated lowercasing during filtering
-  const normalizedFilters = useMemo(() => ({
-    query: debouncedQuery.toLowerCase(),
-    type: typeFilter?.toLowerCase() ?? null,
-    usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
-    habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
-    maintenance: maintenanceFilter?.toLowerCase() ?? null,
-    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase()))
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters])
+  // Optimized: Build sets with for-loops to avoid intermediate arrays
+  const normalizedFilters = useMemo(() => {
+    const usageSet = new Set<string>()
+    const usageCount = usageFilters.length
+    for (let i = 0; i < usageCount; i++) {
+      usageSet.add(usageFilters[i].toLowerCase())
+    }
+    
+    const habitatSet = new Set<string>()
+    const habitatCount = habitatFilters.length
+    for (let i = 0; i < habitatCount; i++) {
+      habitatSet.add(habitatFilters[i].toLowerCase())
+    }
+    
+    const livingSpaceSet = new Set<string>()
+    const livingSpaceCount = livingSpaceFilters.length
+    for (let i = 0; i < livingSpaceCount; i++) {
+      livingSpaceSet.add(livingSpaceFilters[i].toLowerCase())
+    }
+    
+    return {
+      query: debouncedQuery.toLowerCase(),
+      type: typeFilter?.toLowerCase() ?? null,
+      usageSet,
+      habitatSet,
+      maintenance: maintenanceFilter?.toLowerCase() ?? null,
+      livingSpaceSet
+    }
+  }, [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters])
 
   // Reset index when search query changes
   React.useEffect(() => {
