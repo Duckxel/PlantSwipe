@@ -1043,7 +1043,6 @@ export const FriendsPage: React.FC = () => {
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDialogSearchQuery(e.target.value)}
               onClear={() => setDialogSearchQuery("")}
               loading={dialogSearching}
-              className="[&::-webkit-search-cancel-button]:appearance-none"
             />
 
             {dialogSearchResults.length > 0 && (
