@@ -25,7 +25,7 @@ export function mapBlogPostRow(row: BlogPostRow): BlogPost {
     publishedAt: row.published_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    showCoverImage: row.show_cover_image ?? true, // Default to true for backwards compatibility
+    showCoverImage: row.show_cover_image ?? false, // Default to false - auto-enabled when cover image is added
     updatedByName: row.updated_by_name ?? null,
   }
 }
@@ -132,7 +132,7 @@ export async function saveBlogPost(params: SaveBlogPostParams) {
     cover_image_url: params.coverImageUrl ?? null,
     excerpt: params.excerpt ?? normalizeExcerpt(params.bodyHtml),
     is_published: params.isPublished ?? true,
-    show_cover_image: params.showCoverImage ?? true,
+    show_cover_image: params.showCoverImage ?? false,
     updated_by_name: isUpdate ? (params.updatedByName ?? params.authorName) : null,
   }
 

@@ -88,7 +88,7 @@ export default function BlogComposerPage() {
   const [summaryError, setSummaryError] = React.useState<string | null>(null)
   const [coverUploading, setCoverUploading] = React.useState(false)
   const [coverUploadError, setCoverUploadError] = React.useState<string | null>(null)
-  const [showCoverImage, setShowCoverImage] = React.useState(true)
+  const [showCoverImage, setShowCoverImage] = React.useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
 
@@ -122,7 +122,7 @@ export default function BlogComposerPage() {
     setEditorContent({ html: "", doc: null, plainText: "" })
     setAssetFolder(createDraftFolder())
     setCoverUploadError(null)
-    setShowCoverImage(true)
+    setShowCoverImage(false)
     setSummaryError(null)
     setSummaryStatus("idle")
     summarySourceRef.current = ""
@@ -202,8 +202,10 @@ export default function BlogComposerPage() {
         const result = await uploadBlogImage(file, { folder: assetFolder })
         if (result?.url) {
           setCoverUrl(result.url)
+          setShowCoverImage(true) // Auto-check when image is uploaded
         } else if (result?.path) {
           setCoverUrl(result.path)
+          setShowCoverImage(true) // Auto-check when image is uploaded
         }
       } catch (err) {
         const message =
@@ -506,7 +508,14 @@ export default function BlogComposerPage() {
                   id="blog-cover"
                   type="url"
                   value={coverUrl}
-                  onChange={(event) => setCoverUrl(event.target.value)}
+                  onChange={(event) => {
+                    const newUrl = event.target.value
+                    setCoverUrl(newUrl)
+                    // Auto-check show cover image when a URL is added
+                    if (newUrl.trim() && !coverUrl.trim()) {
+                      setShowCoverImage(true)
+                    }
+                  }}
                   placeholder="https://..."
                   className="flex-1"
                 />

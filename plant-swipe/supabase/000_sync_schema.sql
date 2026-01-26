@@ -4390,7 +4390,7 @@ create table if not exists public.blog_posts (
   published_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  show_cover_image boolean not null default true,
+  show_cover_image boolean not null default false,
   updated_by_name text,
   unique(slug)
 );
@@ -4398,7 +4398,7 @@ create table if not exists public.blog_posts (
 -- Add new columns if they don't exist (for existing deployments)
 do $$ begin
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'blog_posts' and column_name = 'show_cover_image') then
-    alter table public.blog_posts add column show_cover_image boolean not null default true;
+    alter table public.blog_posts add column show_cover_image boolean not null default false;
   end if;
 end $$;
 
