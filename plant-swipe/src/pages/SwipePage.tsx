@@ -1,5 +1,5 @@
 import React from "react"
-import { motion, AnimatePresence, type MotionValue } from "framer-motion"
+import { motion, AnimatePresence, type MotionValue, useDragControls } from "framer-motion"
 import {
   ChevronLeft,
   ChevronRight,
@@ -138,6 +138,22 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       lastTapTimeRef.current = 0
       lastTapPosRef.current = null
     }, [])
+    
+    // Drag controls for mobile - allows us to prevent drag when interacting with buttons
+    const dragControls = useDragControls()
+    
+    // Start drag only if the pointer is not on a button
+    // This prevents the card from moving when clicking buttons
+    const handleDragStart = React.useCallback((e: React.PointerEvent) => {
+      // Check if the pointer is on a button or interactive element
+      const target = e.target as HTMLElement
+      if (target.closest('button') || target.closest('a') || target.closest('[data-no-drag]')) {
+        // Don't start drag if clicking on a button
+        return
+      }
+      // Start the drag
+      dragControls.start(e)
+    }, [dragControls])
     
     // Trigger heart animation and like action
     const triggerDoubleTapLike = React.useCallback((clientX: number, clientY: number) => {
@@ -434,6 +450,9 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               <motion.div
                 key={current.id}
                 drag
+                dragControls={dragControls}
+                dragListener={false}
+                onPointerDown={handleDragStart}
                 dragElastic={{ left: 0.25, right: 0.25, top: 0.15, bottom: 0.05 }}
                 dragMomentum={false}
                 style={{ x, y }}
