@@ -1082,6 +1082,10 @@
     "gallery": {
       "title": "Galerie d'images"
     },
+    "companions": {
+      "title": "Plantes compagnes et apparentées",
+      "subtitle": "Plantes qui poussent bien ensemble ou variétés apparentées. Cliquez pour explorer."
+    },
     "sections": {
       "careHighlights": "Soins essentiels",
       "careDetails": "Détails d'entretien",
