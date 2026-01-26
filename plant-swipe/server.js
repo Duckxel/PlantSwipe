@@ -8210,7 +8210,7 @@ app.get('/api/admin/member', async (req, res) => {
       // Profile (best-effort; may be null without Authorization due to RLS)
       let profile = null
       try {
-        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin,roles,threat_level`, {
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin,roles,threat_level,bug_points`, {
           headers: baseHeaders,
         })
         if (pr.ok) {
@@ -8497,6 +8497,63 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch { }
 
+      // Bug Catcher stats (REST fallback path)
+      let bugPoints = null
+      let bugCatcherRank = null
+      let bugActionsCompleted = null
+      let bugCompletedActions = []
+      try {
+        const userRoles = Array.isArray(profile?.roles) ? profile.roles : []
+        if (userRoles.includes('bug_catcher')) {
+          // Get bug points from profile (already fetched)
+          bugPoints = typeof profile?.bug_points === 'number' ? profile.bug_points : 0
+          
+          // Get rank using RPC function
+          try {
+            const rankResp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_bug_catcher_rank`, {
+              method: 'POST',
+              headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ _user_id: targetId }),
+            })
+            if (rankResp.ok) {
+              const rankData = await rankResp.json().catch(() => null)
+              if (typeof rankData === 'number') {
+                bugCatcherRank = rankData
+              }
+            }
+          } catch { }
+          
+          // Get actions completed with details
+          try {
+            const actionsResp = await fetch(`${supabaseUrlEnv}/rest/v1/bug_action_responses?user_id=eq.${encodeURIComponent(targetId)}&select=id,action_id,answers,points_earned,completed_at,bug_actions(id,title,description,questions,status)&order=completed_at.desc`, {
+              headers: { ...baseHeaders, 'Prefer': 'count=exact' },
+            })
+            if (actionsResp.ok) {
+              const cr = actionsResp.headers.get('content-range') || ''
+              const m = cr.match(/\/(\d+)$/)
+              if (m) bugActionsCompleted = Number(m[1])
+              
+              const actionsData = await actionsResp.json().catch(() => [])
+              if (Array.isArray(actionsData) && actionsData.length > 0) {
+                bugCompletedActions = actionsData.map(action => ({
+                  id: action.id,
+                  actionId: action.action_id,
+                  title: action.bug_actions?.title || 'Unknown Action',
+                  description: action.bug_actions?.description || null,
+                  questions: action.bug_actions?.questions || [],
+                  answers: action.answers || {},
+                  pointsEarned: action.points_earned || 0,
+                  completedAt: action.completed_at,
+                  actionStatus: action.bug_actions?.status || 'unknown'
+                }))
+              }
+            }
+          } catch { }
+        }
+      } catch (bugCatcherErr) {
+        console.error('[member-lookup REST] failed to fetch bug catcher stats', bugCatcherErr)
+      }
+
       const threatLevel = typeof profile?.threat_level === 'number' ? profile.threat_level : null
       res.json({
         ok: true,
@@ -8529,6 +8586,10 @@ app.get('/api/admin/member', async (req, res) => {
         topDevices: memberTopDevices.slice(0, 5),
         meanRpm5m,
         adminNotes,
+        bugPoints,
+        bugCatcherRank,
+        bugActionsCompleted,
+        bugCompletedActions,
       })
     }
 
@@ -8561,7 +8622,7 @@ app.get('/api/admin/member', async (req, res) => {
     }
     let profile = null
     try {
-      const rows = await sql`select id, display_name, is_admin, roles, threat_level from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin, roles, threat_level, bug_points from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
       threatLevel = profile?.threat_level ?? null
     } catch { }
