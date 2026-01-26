@@ -89,6 +89,8 @@ export type BlogPostRow = {
   published_at: string
   created_at: string
   updated_at: string
+  show_cover_image: boolean
+  updated_by_name: string | null
 }
 
 // Garden-related table row types matching Supabase schema expectations
