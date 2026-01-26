@@ -117,19 +117,26 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     const DOUBLE_TAP_THRESHOLD = 300
     const DOUBLE_TAP_DISTANCE_THRESHOLD = 50 // Max distance between taps in pixels
     
-    // Cooldown period after button interactions to prevent swipe-start from triggering double-tap
-    const BUTTON_INTERACTION_COOLDOWN = 400
-    
     // Double-tap detection for mobile - refs must be declared before callbacks that use them
     const lastTapTimeRef = React.useRef<number>(0)
     const lastTapPosRef = React.useRef<{ x: number; y: number } | null>(null)
-    const lastButtonInteractionRef = React.useRef<number>(0)
     
-    // Reset double-tap tracking (called when buttons are interacted with)
-    const resetDoubleTapTracking = React.useCallback(() => {
+    // CRITICAL: Track button interactions to prevent tap detection interference
+    // This uses an explicit timestamp-until approach which is more reliable than cooldown duration
+    const blockTapsUntilRef = React.useRef<number>(0)
+    
+    // How long to block ALL tap processing after any button interaction (in ms)
+    // This must be longer than the time between button press and swipe start
+    const TAP_BLOCK_DURATION = 600
+    
+    // Block all tap processing for the specified duration
+    // Called when any button on the card is interacted with
+    const blockTapProcessing = React.useCallback(() => {
+      // Set the "block until" timestamp
+      blockTapsUntilRef.current = Date.now() + TAP_BLOCK_DURATION
+      // Also clear any stored tap data to prevent double-tap detection
       lastTapTimeRef.current = 0
       lastTapPosRef.current = null
-      lastButtonInteractionRef.current = Date.now()
     }, [])
     
     // Trigger heart animation and like action
@@ -166,17 +173,20 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     
     // Handle tap on the card area (for double-tap detection and heart spam)
     const handleCardTap = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
-      // Don't trigger on button clicks
-      if ((e.target as HTMLElement).closest('button')) {
+      const now = Date.now()
+      
+      // CRITICAL: First check if taps are blocked due to recent button interaction
+      // This is the primary defense against button taps interfering with swipe gestures
+      // Must be checked BEFORE any other logic, including target checks
+      if (now < blockTapsUntilRef.current) {
+        // Taps are currently blocked - don't process this tap at all
+        // Also don't record it as a potential first tap
         return
       }
       
-      const now = Date.now()
-      
-      // Skip tap processing if we're in the cooldown period after a button interaction
-      // This prevents swipe-start gestures from being registered as taps after using the like button
-      const timeSinceButtonInteraction = now - lastButtonInteractionRef.current
-      if (timeSinceButtonInteraction < BUTTON_INTERACTION_COOLDOWN) {
+      // Secondary check: Don't trigger on button clicks (backup safety)
+      // This uses the event target, but Framer Motion's onTap might not preserve the original target
+      if ((e.target as HTMLElement).closest('button')) {
         return
       }
       
@@ -216,7 +226,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       // Store this tap for potential double-tap
       lastTapTimeRef.current = now
       lastTapPosRef.current = { x: clientX, y: clientY }
-    }, [triggerDoubleTapLike, DOUBLE_TAP_THRESHOLD, DOUBLE_TAP_DISTANCE_THRESHOLD, BUTTON_INTERACTION_COOLDOWN])
+    }, [triggerDoubleTapLike, DOUBLE_TAP_THRESHOLD, DOUBLE_TAP_DISTANCE_THRESHOLD])
 
     React.useEffect(() => {
       if (typeof window === "undefined") return
@@ -474,29 +484,34 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       onClick={(e) => {
                         e.stopPropagation()
                         e.preventDefault()
-                        // Reset double-tap tracking to prevent swipe interference after button use
-                        resetDoubleTapTracking()
+                        // Block all tap processing to prevent swipe from triggering double-tap
+                        blockTapProcessing()
                         if (onToggleLike) onToggleLike()
                       }}
                       onPointerDown={(e) => {
                         e.stopPropagation()
                         e.preventDefault()
-                        // Also reset on pointer down to catch the interaction as early as possible
-                        resetDoubleTapTracking()
+                        // Block taps immediately on pointer down - this is the earliest we can catch it
+                        blockTapProcessing()
                       }}
                       onPointerUp={(e) => {
                         e.stopPropagation()
+                        // Re-block on pointer up in case there was any race condition
+                        blockTapProcessing()
                       }}
                       onTouchStart={(e) => {
                         e.stopPropagation()
-                        // Reset on touch start to prevent any timing issues
-                        resetDoubleTapTracking()
+                        // Block taps on touch start for mobile
+                        blockTapProcessing()
                       }}
                       onTouchEnd={(e) => {
                         e.stopPropagation()
+                        // Re-block on touch end to ensure protection extends after the touch
+                        blockTapProcessing()
                       }}
                       onMouseDown={(e) => {
                         e.stopPropagation()
+                        blockTapProcessing()
                       }}
                       aria-pressed={liked}
                       aria-label={liked ? "Unlike" : "Like"}
@@ -537,9 +552,11 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       <button
                         type="button"
                         className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
-                        onClick={(e) => { e.stopPropagation(); resetDoubleTapTracking(); handlePrevious() }}
-                        onPointerDown={(e) => { e.stopPropagation(); resetDoubleTapTracking() }}
-                        onTouchStart={(e) => { e.stopPropagation(); resetDoubleTapTracking() }}
+                        onClick={(e) => { e.stopPropagation(); blockTapProcessing(); handlePrevious() }}
+                        onPointerDown={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onPointerUp={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onTouchStart={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onTouchEnd={(e) => { e.stopPropagation(); blockTapProcessing() }}
                         aria-label={t("plant.back")}
                         title={t("plant.back")}
                       >
@@ -548,9 +565,11 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       <button
                         type="button"
                         className="rounded-2xl h-11 bg-white text-black active:scale-95 flex items-center justify-center shadow-lg"
-                        onClick={(e) => { e.stopPropagation(); resetDoubleTapTracking(); handleInfo() }}
-                        onPointerDown={(e) => { e.stopPropagation(); resetDoubleTapTracking() }}
-                        onTouchStart={(e) => { e.stopPropagation(); resetDoubleTapTracking() }}
+                        onClick={(e) => { e.stopPropagation(); blockTapProcessing(); handleInfo() }}
+                        onPointerDown={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onPointerUp={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onTouchStart={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onTouchEnd={(e) => { e.stopPropagation(); blockTapProcessing() }}
                       >
                         {t("plant.info")}
                         <ChevronUp className="h-4 w-4 ml-1" />
@@ -558,9 +577,11 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       <button
                         type="button"
                         className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
-                        onClick={(e) => { e.stopPropagation(); resetDoubleTapTracking(); handlePass() }}
-                        onPointerDown={(e) => { e.stopPropagation(); resetDoubleTapTracking() }}
-                        onTouchStart={(e) => { e.stopPropagation(); resetDoubleTapTracking() }}
+                        onClick={(e) => { e.stopPropagation(); blockTapProcessing(); handlePass() }}
+                        onPointerDown={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onPointerUp={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onTouchStart={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onTouchEnd={(e) => { e.stopPropagation(); blockTapProcessing() }}
                         aria-label={t("plant.next")}
                         title={t("plant.next")}
                       >
