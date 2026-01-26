@@ -1,5 +1,5 @@
 import React from "react"
-import { motion, AnimatePresence, type MotionValue, useDragControls } from "framer-motion"
+import { motion, AnimatePresence, type MotionValue } from "framer-motion"
 import {
   ChevronLeft,
   ChevronRight,
@@ -138,22 +138,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       lastTapTimeRef.current = 0
       lastTapPosRef.current = null
     }, [])
-    
-    // Drag controls for mobile - allows us to prevent drag when interacting with buttons
-    const dragControls = useDragControls()
-    
-    // Start drag only if the pointer is not on a button
-    // This prevents the card from moving when clicking buttons
-    const handleDragStart = React.useCallback((e: React.PointerEvent) => {
-      // Check if the pointer is on a button or interactive element
-      const target = e.target as HTMLElement
-      if (target.closest('button') || target.closest('a') || target.closest('[data-no-drag]')) {
-        // Don't start drag if clicking on a button
-        return
-      }
-      // Start the drag
-      dragControls.start(e)
-    }, [dragControls])
     
     // Trigger heart animation and like action
     const triggerDoubleTapLike = React.useCallback((clientX: number, clientY: number) => {
@@ -450,9 +434,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
               <motion.div
                 key={current.id}
                 drag
-                dragControls={dragControls}
-                dragListener={false}
-                onPointerDown={handleDragStart}
                 dragElastic={{ left: 0.25, right: 0.25, top: 0.15, bottom: 0.05 }}
                 dragMomentum={false}
                 style={{ x, y }}
@@ -497,40 +478,28 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                   )}
                   
                   {/* Like button - inside card so it moves with swipe */}
-                  <div className="absolute top-4 right-4 z-[100]">
+                  {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
+                  <div 
+                    className="absolute top-4 right-4 z-[100]"
+                    onPointerDownCapture={(e) => {
+                      e.stopPropagation()
+                      blockTapProcessing()
+                    }}
+                    onPointerMoveCapture={(e) => e.stopPropagation()}
+                    onPointerUpCapture={(e) => e.stopPropagation()}
+                    onTouchStartCapture={(e) => {
+                      e.stopPropagation()
+                      blockTapProcessing()
+                    }}
+                    onTouchMoveCapture={(e) => e.stopPropagation()}
+                    onTouchEndCapture={(e) => e.stopPropagation()}
+                  >
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        e.preventDefault()
-                        // Block all tap processing to prevent swipe from triggering double-tap
                         blockTapProcessing()
                         if (onToggleLike) onToggleLike()
-                      }}
-                      onPointerDown={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                        // Block taps immediately on pointer down - this is the earliest we can catch it
-                        blockTapProcessing()
-                      }}
-                      onPointerUp={(e) => {
-                        e.stopPropagation()
-                        // Re-block on pointer up in case there was any race condition
-                        blockTapProcessing()
-                      }}
-                      onTouchStart={(e) => {
-                        e.stopPropagation()
-                        // Block taps on touch start for mobile
-                        blockTapProcessing()
-                      }}
-                      onTouchEnd={(e) => {
-                        e.stopPropagation()
-                        // Re-block on touch end to ensure protection extends after the touch
-                        blockTapProcessing()
-                      }}
-                      onMouseDown={(e) => {
-                        e.stopPropagation()
-                        blockTapProcessing()
                       }}
                       aria-pressed={liked}
                       aria-label={liked ? "Unlike" : "Like"}
@@ -567,15 +536,26 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
                     
                     {/* Navigation buttons - inside card so they move with swipe */}
-                    <div className="mt-5 grid w-full gap-2 grid-cols-3">
+                    {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
+                    <div 
+                      className="mt-5 grid w-full gap-2 grid-cols-3"
+                      onPointerDownCapture={(e) => {
+                        e.stopPropagation()
+                        blockTapProcessing()
+                      }}
+                      onPointerMoveCapture={(e) => e.stopPropagation()}
+                      onPointerUpCapture={(e) => e.stopPropagation()}
+                      onTouchStartCapture={(e) => {
+                        e.stopPropagation()
+                        blockTapProcessing()
+                      }}
+                      onTouchMoveCapture={(e) => e.stopPropagation()}
+                      onTouchEndCapture={(e) => e.stopPropagation()}
+                    >
                       <button
                         type="button"
                         className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
-                        onClick={(e) => { e.stopPropagation(); blockTapProcessing(); handlePrevious() }}
-                        onPointerDown={(e) => { e.stopPropagation(); blockTapProcessing() }}
-                        onPointerUp={(e) => { e.stopPropagation(); blockTapProcessing() }}
-                        onTouchStart={(e) => { e.stopPropagation(); blockTapProcessing() }}
-                        onTouchEnd={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onClick={(e) => { e.stopPropagation(); handlePrevious() }}
                         aria-label={t("plant.back")}
                         title={t("plant.back")}
                       >
@@ -584,11 +564,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       <button
                         type="button"
                         className="rounded-2xl h-11 bg-white text-black active:scale-95 flex items-center justify-center shadow-lg"
-                        onClick={(e) => { e.stopPropagation(); blockTapProcessing(); handleInfo() }}
-                        onPointerDown={(e) => { e.stopPropagation(); blockTapProcessing() }}
-                        onPointerUp={(e) => { e.stopPropagation(); blockTapProcessing() }}
-                        onTouchStart={(e) => { e.stopPropagation(); blockTapProcessing() }}
-                        onTouchEnd={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onClick={(e) => { e.stopPropagation(); handleInfo() }}
                       >
                         {t("plant.info")}
                         <ChevronUp className="h-4 w-4 ml-1" />
@@ -596,11 +572,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       <button
                         type="button"
                         className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
-                        onClick={(e) => { e.stopPropagation(); blockTapProcessing(); handlePass() }}
-                        onPointerDown={(e) => { e.stopPropagation(); blockTapProcessing() }}
-                        onPointerUp={(e) => { e.stopPropagation(); blockTapProcessing() }}
-                        onTouchStart={(e) => { e.stopPropagation(); blockTapProcessing() }}
-                        onTouchEnd={(e) => { e.stopPropagation(); blockTapProcessing() }}
+                        onClick={(e) => { e.stopPropagation(); handlePass() }}
                         aria-label={t("plant.next")}
                         title={t("plant.next")}
                       >
