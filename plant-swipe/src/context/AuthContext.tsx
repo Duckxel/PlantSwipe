@@ -143,10 +143,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try { applyAccentByKey((data as any).accent_key) } catch {}
       }
       // Set Sentry user context for error tracking
+      // GDPR: Only send anonymous ID and display name, NOT email
       try {
         setSentryUser({
           id: currentId,
+          // Only include display name (not real name or email)
           username: (data as any)?.display_name || undefined,
+          // email is intentionally omitted for GDPR compliance
         })
       } catch {}
     }

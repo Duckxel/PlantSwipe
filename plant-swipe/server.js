@@ -1,10 +1,27 @@
 // Sentry error monitoring - must be imported first
+// GDPR Compliance: No PII is sent automatically
 import * as Sentry from '@sentry/bun';
 
 const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520';
 
 // Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
 const SERVER_NAME = process.env.PLANTSWIPE_SERVER_NAME || process.env.SERVER_NAME || 'unknown';
+
+/**
+ * Scrub PII from strings before sending to Sentry
+ */
+function scrubPII(value) {
+  if (!value || typeof value !== 'string') return value;
+  // Scrub email addresses
+  value = value.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL_REDACTED]');
+  // Scrub potential passwords in URLs or logs
+  value = value.replace(/password[=:][^\s&"']+/gi, 'password=[REDACTED]');
+  // Scrub bearer tokens
+  value = value.replace(/Bearer\s+[A-Za-z0-9\-_\.]+/g, 'Bearer [REDACTED]');
+  // Scrub API keys
+  value = value.replace(/[a-f0-9]{32,}/gi, '[TOKEN_REDACTED]');
+  return value;
+}
 
 Sentry.init({
   dsn: SENTRY_DSN,
@@ -15,8 +32,10 @@ Sentry.init({
   _experiments: {
     enableLogs: true,
   },
-  // Tracing - capture 100% of transactions
-  tracesSampleRate: 1.0,
+  // GDPR: Sample 20% of transactions in production (cost-effective)
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+  // GDPR: Do NOT send PII automatically (IP addresses, cookies, etc.)
+  sendDefaultPii: false,
   // Add server tag to all events
   initialScope: {
     tags: {
@@ -24,7 +43,7 @@ Sentry.init({
       app: 'plant-swipe-server',
     },
   },
-  // Filter out common non-actionable errors
+  // Filter and scrub events before sending to Sentry
   beforeSend(event, hint) {
     const error = hint.originalException;
     if (error instanceof Error) {
@@ -36,12 +55,78 @@ Sentry.init({
       if (error.message?.includes('socket hang up')) {
         return null;
       }
+      // Ignore cancelled requests
+      if (error.name === 'AbortError') {
+        return null;
+      }
+    }
+    
+    // GDPR: Scrub PII from exception messages
+    if (event.exception?.values) {
+      event.exception.values = event.exception.values.map(exc => ({
+        ...exc,
+        value: scrubPII(exc.value),
+      }));
+    }
+    
+    // GDPR: Scrub request data
+    if (event.request) {
+      // Remove IP address
+      delete event.request.ip;
+      // Remove cookies
+      delete event.request.cookies;
+      // Only keep safe headers
+      if (event.request.headers) {
+        const safeHeaders = ['content-type', 'accept', 'user-agent', 'accept-language'];
+        event.request.headers = Object.fromEntries(
+          Object.entries(event.request.headers)
+            .filter(([k]) => safeHeaders.includes(k.toLowerCase()))
+        );
+      }
+      // Scrub URL query params (may contain tokens)
+      if (event.request.url && event.request.url.includes('?')) {
+        event.request.url = event.request.url.split('?')[0] + '?[PARAMS_REDACTED]';
+      }
+      // Scrub request body
+      if (event.request.data) {
+        event.request.data = typeof event.request.data === 'string' 
+          ? scrubPII(event.request.data)
+          : '[BODY_REDACTED]';
+      }
+    }
+    
+    // GDPR: Remove user email if present
+    if (event.user) {
+      delete event.user.email;
+      delete event.user.ip_address;
+    }
+    
+    // Add useful server context
+    event.contexts = event.contexts || {};
+    event.contexts.server = {
+      name: SERVER_NAME,
+      node_version: process.version,
+      platform: process.platform,
+    };
+    
+    return event;
+  },
+  // GDPR: Also filter transactions
+  beforeSendTransaction(event) {
+    // Scrub URL query parameters
+    if (event.request?.url && event.request.url.includes('?')) {
+      event.request.url = event.request.url.split('?')[0] + '?[PARAMS_REDACTED]';
+    }
+    // Remove user PII
+    if (event.user) {
+      delete event.user.email;
+      delete event.user.ip_address;
     }
     return event;
   },
 });
 
-console.log(`[Sentry] Initialized for server: ${SERVER_NAME}`);
+console.log(`[Sentry] Initialized for server: ${SERVER_NAME} (GDPR-compliant)`);
 
 // Global error handlers for uncaught exceptions and unhandled rejections
 process.on('uncaughtException', (error) => {
@@ -26754,17 +26839,44 @@ app.get('*', async (req, res) => {
 
 // Sentry error handling middleware - must be after all routes
 // This catches any errors thrown in route handlers
+// GDPR Compliant: Does not send PII (headers, cookies, full request body)
 app.use((err, req, res, next) => {
-  // Log error for debugging
+  // Log error for debugging (server-side only)
   console.error('[Server] Express error:', err?.message || err)
   
-  // Capture error in Sentry with request context
+  // Capture error in Sentry with GDPR-compliant context
   Sentry.withScope((scope) => {
-    scope.setExtra('url', req.originalUrl)
+    // Only include path without query params (may contain tokens)
+    const safePath = (req.originalUrl || req.path || '/').split('?')[0]
+    scope.setExtra('path', safePath)
     scope.setExtra('method', req.method)
-    scope.setExtra('headers', req.headers)
-    scope.setExtra('query', req.query)
-    scope.setExtra('body', req.body)
+    
+    // Only include safe headers (no auth, cookies, etc.)
+    const safeHeaders = {
+      'content-type': req.headers['content-type'],
+      'accept': req.headers['accept'],
+      'accept-language': req.headers['accept-language'],
+    }
+    scope.setExtra('headers', safeHeaders)
+    
+    // Don't include query params or body (may contain PII/tokens)
+    // scope.setExtra('query', req.query) // GDPR: Removed
+    // scope.setExtra('body', req.body)   // GDPR: Removed
+    
+    // Add error categorization for easier filtering
+    if (err.statusCode === 400 || err.status === 400) {
+      scope.setTag('error.type', 'client_error')
+    } else if (err.statusCode === 401 || err.status === 401) {
+      scope.setTag('error.type', 'auth_error')
+    } else if (err.statusCode === 403 || err.status === 403) {
+      scope.setTag('error.type', 'permission_error')
+    } else if (err.statusCode === 404 || err.status === 404) {
+      scope.setTag('error.type', 'not_found')
+    } else {
+      scope.setTag('error.type', 'server_error')
+    }
+    
+    scope.setTag('route', safePath)
     Sentry.captureException(err)
   })
   

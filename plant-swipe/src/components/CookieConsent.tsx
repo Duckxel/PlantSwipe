@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Link } from '@/components/i18n/Link'
 import { Cookie, Shield, BarChart3, X, Lock } from 'lucide-react'
 import { disableAnalytics, enableAnalytics } from '@/lib/gdprAnalytics'
+import { updateSentryConsent } from '@/lib/sentry'
 
 type ConsentLevel = 'essential' | 'analytics' | 'all' | 'rejected'
 
@@ -110,11 +111,13 @@ export function CookieConsent() {
     
     setShow(false)
     
-    // Handle analytics based on consent level
+    // Handle analytics and error tracking based on consent level
     if (level === 'rejected') {
       // Clear all third-party cookies and disable analytics
       clearThirdPartyCookies()
       disableAnalytics()
+      // Update Sentry to stop sending data
+      updateSentryConsent()
     } else {
       // Dispatch event for script loading
       window.dispatchEvent(new CustomEvent('cookie_consent_granted', { detail: { level } }))
@@ -122,6 +125,8 @@ export function CookieConsent() {
       // Enable analytics if appropriate level
       if (level === 'analytics' || level === 'all') {
         enableAnalytics()
+        // Update Sentry to start sending data (with consent)
+        updateSentryConsent()
       }
     }
   }

@@ -22,7 +22,13 @@ SENTRY_DSN = "https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.
 SERVER_NAME = os.environ.get("PLANTSWIPE_SERVER_NAME") or os.environ.get("SERVER_NAME") or "unknown"
 
 def _init_sentry() -> None:
-    """Initialize Sentry for error tracking in the Admin API."""
+    """Initialize Sentry for error tracking in the Admin API.
+    
+    GDPR Compliance Notes:
+    - send_default_pii is False to avoid capturing user IP addresses and cookies
+    - Error scrubbing removes email patterns from error messages
+    - Only operational metadata is captured, no personal data
+    """
     try:
         sentry_sdk.init(
             dsn=SENTRY_DSN,
@@ -34,23 +40,46 @@ def _init_sentry() -> None:
             _experiments={
                 "enable_logs": True,
             },
-            # Tracing - capture 100% of transactions
-            traces_sample_rate=1.0,
-            # Send PII for better debugging (admin API is internal)
-            send_default_pii=True,
+            # Tracing - capture 20% of transactions in production (cost-effective)
+            traces_sample_rate=0.2,
+            # GDPR: Do NOT send PII automatically
+            # This prevents IP addresses, cookies, and request data from being sent
+            send_default_pii=False,
             # Filter out common non-actionable errors
             before_send=_sentry_before_send,
+            # GDPR: Scrub sensitive data from events
+            before_send_transaction=_sentry_before_send_transaction,
         )
         # Set server tag on all events
         sentry_sdk.set_tag("server", SERVER_NAME)
         sentry_sdk.set_tag("app", "plant-swipe-admin-api")
-        print(f"[Sentry] Admin API initialized for server: {SERVER_NAME}")
+        print(f"[Sentry] Admin API initialized for server: {SERVER_NAME} (GDPR-compliant)")
     except Exception as e:
         print(f"[Sentry] Failed to initialize: {e}")
 
 
+def _scrub_pii_from_string(value: str) -> str:
+    """Scrub PII patterns from a string."""
+    import re
+    if not value:
+        return value
+    # Scrub email addresses
+    value = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL_REDACTED]', value)
+    # Scrub potential passwords in URLs or logs
+    value = re.sub(r'password[=:][^\s&"\']+', 'password=[REDACTED]', value, flags=re.IGNORECASE)
+    # Scrub bearer tokens
+    value = re.sub(r'Bearer\s+[A-Za-z0-9\-_\.]+', 'Bearer [REDACTED]', value)
+    return value
+
+
 def _sentry_before_send(event, hint):
-    """Filter out non-actionable errors before sending to Sentry."""
+    """Filter out non-actionable errors and scrub PII before sending to Sentry.
+    
+    GDPR Compliance:
+    - Scrubs email addresses from error messages
+    - Scrubs passwords and tokens
+    - Filters out expected client errors
+    """
     if "exc_info" in hint:
         exc_type, exc_value, _ = hint["exc_info"]
         # Don't report 401 Unauthorized errors (expected for auth failures)
@@ -59,6 +88,46 @@ def _sentry_before_send(event, hint):
         # Don't report 400 Bad Request errors (client errors)
         if hasattr(exc_value, "code") and exc_value.code == 400:
             return None
+    
+    # Scrub PII from exception message
+    if event.get("exception", {}).get("values"):
+        for exc in event["exception"]["values"]:
+            if exc.get("value"):
+                exc["value"] = _scrub_pii_from_string(exc["value"])
+    
+    # Scrub PII from request data if present
+    if event.get("request", {}).get("data"):
+        data = event["request"]["data"]
+        if isinstance(data, str):
+            event["request"]["data"] = _scrub_pii_from_string(data)
+    
+    # Don't send request headers (may contain auth tokens)
+    if event.get("request", {}).get("headers"):
+        # Only keep safe headers
+        safe_headers = {"Content-Type", "Accept", "User-Agent"}
+        event["request"]["headers"] = {
+            k: v for k, v in event["request"]["headers"].items() 
+            if k in safe_headers
+        }
+    
+    # Add operational context for debugging
+    event.setdefault("contexts", {})
+    event["contexts"]["server"] = {
+        "name": SERVER_NAME,
+        "type": "admin-api",
+    }
+    
+    return event
+
+
+def _sentry_before_send_transaction(event, hint):
+    """Filter transactions and scrub any PII."""
+    # Scrub URL query parameters that might contain PII
+    if event.get("request", {}).get("url"):
+        url = event["request"]["url"]
+        # Remove query string entirely (may contain tokens/ids)
+        if "?" in url:
+            event["request"]["url"] = url.split("?")[0] + "?[PARAMS_REDACTED]"
     return event
 
 
