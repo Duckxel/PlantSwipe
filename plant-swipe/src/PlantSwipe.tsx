@@ -35,6 +35,7 @@ import { useTranslation } from "react-i18next";
 
 import { SwipePage } from "@/pages/SwipePage"
 import { FilterControls } from "@/components/plant/FilterControls"
+import { SwipeCardSkeleton } from "@/components/plant/SwipeCardSkeleton"
 import type { ColorOption } from "@/types/plant"
 
 // Lazy load heavy pages for code splitting
@@ -1868,7 +1869,7 @@ export default function PlantSwipe() {
             <Route
               path="/discovery"
               element={plants.length > 0 ? (
-                <Suspense fallback={routeLoadingFallback}>
+                <Suspense fallback={<SwipeCardSkeleton />}>
                   <SwipePage
                     current={current}
                     index={index}
@@ -1888,7 +1889,7 @@ export default function PlantSwipe() {
                 </Suspense>
               ) : (
                 <>
-                  {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
+                  {loading && <SwipeCardSkeleton />}
                   {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
                   {!loading && !loadError && (
                     <>
