@@ -828,6 +828,7 @@ const rateLimitStores = {
   gardenActivity: new Map(), // Garden activity logging
   gardenJournal: new Map(),  // Journal entries
   pushNotify: new Map(),     // Push notification sending
+  authAttempt: new Map(),    // Authentication attempts (brute force protection)
 }
 
 /**
@@ -884,6 +885,13 @@ const rateLimitConfig = {
     windowMs: 60 * 60 * 1000,  // 1 hour
     maxAttempts: 300,
     perUser: true,
+  },
+  // Authentication attempts: 10 per 15 minutes per IP (brute force protection)
+  // After 10 failed attempts, IP is blocked for 15 minutes
+  authAttempt: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 10,
+    perUser: false,  // Per IP to catch credential stuffing
   },
 }
 
@@ -3203,8 +3211,32 @@ const CSP_POLICY = [
   "manifest-src 'self' *.aphylia.app"
 ].join('; ')
 
+// Security headers middleware
 app.use((_req, res, next) => {
+  // Content Security Policy
   res.setHeader('Content-Security-Policy', CSP_POLICY)
+  
+  // Prevent MIME type sniffing
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  
+  // Prevent clickjacking (in addition to CSP frame-ancestors)
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  
+  // XSS protection (legacy browsers)
+  res.setHeader('X-XSS-Protection', '1; mode=block')
+  
+  // Referrer policy - don't leak URLs to external sites
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  
+  // Permissions policy - disable unnecessary browser features
+  res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(self), microphone=()')
+  
+  // HSTS - enforce HTTPS (only in production)
+  if (process.env.NODE_ENV === 'production') {
+    // max-age=31536000 (1 year), includeSubDomains
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
+  
   next()
 })
 
@@ -11969,6 +12001,83 @@ app.get('/api/banned/check', async (req, res) => {
   }
 })
 
+// =============================================================================
+// AUTHENTICATION RATE LIMITING (Brute Force Protection)
+// =============================================================================
+
+/**
+ * Check if an IP is blocked due to too many auth attempts
+ * GET /api/auth/check-rate-limit
+ */
+app.get('/api/auth/check-rate-limit', (req, res) => {
+  const ip = getClientIp(req) || 'unknown'
+  const identifier = `ip:${ip}`
+  const store = rateLimitStores.authAttempt
+  const config = rateLimitConfig.authAttempt
+  
+  const now = Date.now()
+  const history = store.get(identifier) || []
+  const recent = history.filter((ts) => now - ts < config.windowMs)
+  
+  const isBlocked = recent.length >= config.maxAttempts
+  const remainingAttempts = Math.max(0, config.maxAttempts - recent.length)
+  const resetTime = recent.length > 0 ? new Date(recent[0] + config.windowMs).toISOString() : null
+  
+  res.json({
+    blocked: isBlocked,
+    remainingAttempts,
+    resetTime: isBlocked ? resetTime : null,
+    windowMinutes: config.windowMs / 60000
+  })
+})
+
+/**
+ * Record an authentication attempt
+ * POST /api/auth/record-attempt
+ * Body: { success: boolean }
+ * 
+ * Only failed attempts count toward the rate limit.
+ * This should be called AFTER authentication result is known.
+ */
+app.post('/api/auth/record-attempt', (req, res) => {
+  const { success } = req.body || {}
+  const ip = getClientIp(req) || 'unknown'
+  const identifier = `ip:${ip}`
+  
+  // Only track failed attempts
+  if (success === true) {
+    // On successful login, optionally clear the failed attempt history
+    // This allows legitimate users to recover immediately after logging in
+    rateLimitStores.authAttempt.delete(identifier)
+    res.json({ ok: true, message: 'Attempt history cleared on success' })
+    return
+  }
+  
+  // Record failed attempt
+  const store = rateLimitStores.authAttempt
+  const config = rateLimitConfig.authAttempt
+  const now = Date.now()
+  const history = store.get(identifier) || []
+  const recent = history.filter((ts) => now - ts < config.windowMs)
+  recent.push(now)
+  store.set(identifier, recent)
+  
+  const remainingAttempts = Math.max(0, config.maxAttempts - recent.length)
+  const isBlocked = remainingAttempts === 0
+  
+  if (isBlocked) {
+    console.log(`[auth-rate-limit] IP ${ip} blocked after ${config.maxAttempts} failed attempts`)
+  }
+  
+  res.json({
+    ok: true,
+    blocked: isBlocked,
+    remainingAttempts,
+    windowMinutes: config.windowMs / 60000
+  })
+})
+
+// =============================================================================
 // reCAPTCHA Enterprise v3 verification endpoint
 // Uses GOOGLE_API_KEY for authentication with Google Cloud
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || ''
