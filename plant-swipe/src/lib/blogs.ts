@@ -1,7 +1,7 @@
 import { supabase, type BlogPostRow } from '@/lib/supabaseClient'
 import type { BlogPost, BlogPostInput } from '@/types/blog'
 
-const BLOG_POST_SELECT = 'id, title, slug, body_html, editor_data, author_id, author_name, cover_image_url, excerpt, meta_description, seo_title, tags, is_published, published_at, created_at, updated_at'
+const BLOG_POST_SELECT = 'id, title, slug, body_html, editor_data, author_id, author_name, cover_image_url, excerpt, is_published, published_at, created_at, updated_at'
 const MAX_SLUG_ATTEMPTS = 15
 
 export type SaveBlogPostParams = BlogPostInput & {
@@ -20,9 +20,6 @@ export function mapBlogPostRow(row: BlogPostRow): BlogPost {
     authorName: row.author_name,
     coverImageUrl: row.cover_image_url,
     excerpt: row.excerpt,
-    metaDescription: row.meta_description,
-    seoTitle: row.seo_title,
-    tags: row.tags ?? [],
     isPublished: row.is_published,
     publishedAt: row.published_at,
     createdAt: row.created_at,
@@ -79,19 +76,7 @@ async function ensureUniqueSlug(base: string, existingId?: string) {
   return `${base}-${Date.now()}`
 }
 
-export type FetchBlogPostsOptions = {
-  includeDrafts?: boolean
-  limit?: number
-  offset?: number
-}
-
-export type FetchBlogPostsResult = {
-  posts: BlogPost[]
-  hasMore: boolean
-  total: number
-}
-
-export async function fetchBlogPosts(opts?: FetchBlogPostsOptions): Promise<BlogPost[]> {
+export async function fetchBlogPosts(opts?: { includeDrafts?: boolean; limit?: number }) {
   const query = supabase
     .from('blog_posts')
     .select(BLOG_POST_SELECT)
@@ -100,10 +85,6 @@ export async function fetchBlogPosts(opts?: FetchBlogPostsOptions): Promise<Blog
 
   if (opts?.limit) {
     query.limit(opts.limit)
-  }
-
-  if (opts?.offset) {
-    query.range(opts.offset, opts.offset + (opts.limit || 10) - 1)
   }
 
   if (!opts?.includeDrafts) {
@@ -115,36 +96,6 @@ export async function fetchBlogPosts(opts?: FetchBlogPostsOptions): Promise<Blog
     throw new Error(error.message)
   }
   return (data ?? []).map((row) => mapBlogPostRow(row as BlogPostRow))
-}
-
-export async function fetchBlogPostsPaginated(opts?: FetchBlogPostsOptions): Promise<FetchBlogPostsResult> {
-  const limit = opts?.limit || 10
-  const offset = opts?.offset || 0
-
-  // Get total count for pagination info
-  const countQuery = supabase
-    .from('blog_posts')
-    .select('id', { count: 'exact', head: true })
-
-  if (!opts?.includeDrafts) {
-    countQuery.eq('is_published', true).lte('published_at', new Date().toISOString())
-  }
-
-  const { count, error: countError } = await countQuery
-  if (countError) {
-    throw new Error(countError.message)
-  }
-
-  const total = count || 0
-
-  // Fetch the posts
-  const posts = await fetchBlogPosts({ ...opts, limit, offset })
-
-  return {
-    posts,
-    hasMore: offset + posts.length < total,
-    total,
-  }
 }
 
 export async function fetchBlogPost(identifier: string) {
@@ -168,14 +119,6 @@ export async function saveBlogPost(params: SaveBlogPostParams) {
   const baseSlug = params.slug?.trim() || slugifyTitle(params.title)
   const slug = await ensureUniqueSlug(baseSlug, params.id)
 
-  // Validate tags: limit to 5 and ensure they're valid strings
-  const validTags = Array.isArray(params.tags)
-    ? params.tags
-        .filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
-        .map(tag => tag.trim().toLowerCase().slice(0, 30))
-        .slice(0, 5)
-    : []
-
   const basePayload = {
     title: params.title.trim(),
     slug,
@@ -185,9 +128,6 @@ export async function saveBlogPost(params: SaveBlogPostParams) {
     author_name: params.authorName,
     cover_image_url: params.coverImageUrl ?? null,
     excerpt: params.excerpt ?? normalizeExcerpt(params.bodyHtml),
-    meta_description: params.metaDescription ?? null,
-    seo_title: params.seoTitle ?? null,
-    tags: validTags,
     is_published: params.isPublished ?? true,
   }
 

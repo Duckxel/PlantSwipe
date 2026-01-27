@@ -1,7 +1,7 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import DOMPurify from 'dompurify'
-import { ArrowLeft, CalendarClock, UserRound, Tag } from 'lucide-react'
+import { ArrowLeft, CalendarClock, UserRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -67,12 +67,10 @@ export default function BlogPostPage() {
     return DOMPurify.sanitize(post.bodyHtml, { ADD_ATTR: ['style', 'class'], ADD_TAGS: ['style'] })
   }, [post?.bodyHtml])
 
-  // Use AI-generated SEO title if available, otherwise use post title
   const seoTitle = post
-    ? (post.seoTitle || t('seo.blog.postTitle', { title: post.title, defaultValue: `${post.title} · Aphylia Blog` }))
+    ? t('seo.blog.postTitle', { title: post.title, defaultValue: `${post.title} · Aphylia Blog` })
     : t('seo.blog.listTitle', { defaultValue: 'Aphylia Blog' })
-  // Prefer meta description for SEO, then excerpt, then fallback
-  const seoDescription = post?.metaDescription || post?.excerpt
+  const seoDescription = post?.excerpt
     || t('seo.blog.postDescription', {
       title: post?.title ?? '',
       author: authorLabel,
@@ -163,27 +161,6 @@ export default function BlogPostPage() {
               className="blog-article-content prose prose-stone dark:prose-invert max-w-none text-base leading-relaxed"
               dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
             />
-
-            {/* Display tags if available */}
-            {post.tags && post.tags.length > 0 && (
-              <div className="pt-6 mt-6 border-t border-stone-200 dark:border-[#3e3e42]">
-                <div className="flex items-center gap-2 mb-3 text-sm text-stone-500 dark:text-stone-400">
-                  <Tag className="h-4 w-4" />
-                  <span>{t('blogPage.detail.tagsLabel', { defaultValue: 'Topics' })}</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {post.tags.map((tag, index) => (
-                    <Badge
-                      key={`${tag}-${index}`}
-                      variant="secondary"
-                      className="rounded-2xl px-3 py-1 text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
           </article>
         </>
       )}

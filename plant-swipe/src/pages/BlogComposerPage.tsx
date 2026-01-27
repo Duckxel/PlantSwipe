@@ -1,6 +1,6 @@
 import React from "react"
 import { useParams } from "react-router-dom"
-import { ArrowLeft, RefreshCcw, Sparkles, UploadCloud, X, Tag } from "lucide-react"
+import { ArrowLeft, RefreshCcw, Sparkles, UploadCloud } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -65,9 +65,6 @@ export default function BlogComposerPage() {
   const [formTitle, setFormTitle] = React.useState("")
   const [coverUrl, setCoverUrl] = React.useState("")
   const [autoSummary, setAutoSummary] = React.useState("")
-  const [metaDescription, setMetaDescription] = React.useState("")
-  const [seoTitle, setSeoTitle] = React.useState("")
-  const [tags, setTags] = React.useState<string[]>([])
   const [publishMode, setPublishMode] = React.useState<"draft" | "scheduled">("scheduled")
   const [publishAt, setPublishAt] = React.useState(formatDateTimeLocal(new Date()))
   const [formError, setFormError] = React.useState<string | null>(null)
@@ -107,9 +104,6 @@ export default function BlogComposerPage() {
     setFormTitle("")
     setCoverUrl("")
     setAutoSummary("")
-    setMetaDescription("")
-    setSeoTitle("")
-    setTags([])
     setPublishMode("scheduled")
     setPublishAt(formatDateTimeLocal(new Date()))
     setFormError(null)
@@ -148,9 +142,6 @@ export default function BlogComposerPage() {
         setFormTitle(post.title)
         setCoverUrl(post.coverImageUrl ?? "")
         setAutoSummary(post.excerpt ?? "")
-        setMetaDescription(post.metaDescription ?? "")
-        setSeoTitle(post.seoTitle ?? "")
-        setTags(post.tags ?? [])
         setPublishMode(post.isPublished ? "scheduled" : "draft")
         setPublishAt(formatDateTimeLocal(post.publishedAt))
         setInitialHtml(post.bodyHtml || DEFAULT_EDITOR_HTML)
@@ -237,30 +228,18 @@ export default function BlogComposerPage() {
     latestHtmlRef.current = payload.html
   }, [])
 
-  type SummaryResult = {
-    summary: string
-    metaDescription: string
-    seoTitle: string
-    tags: string[]
-  }
-
   const runSummary = React.useCallback(
-    async (html: string, options?: { force?: boolean }): Promise<SummaryResult> => {
+    async (html: string, options?: { force?: boolean }) => {
       const source = html.trim()
-      const emptyResult: SummaryResult = { summary: "", metaDescription: "", seoTitle: "", tags: [] }
-      
       if (!source) {
         summarySourceRef.current = ""
         setAutoSummary("")
-        setMetaDescription("")
-        setSeoTitle("")
-        setTags([])
         setSummaryStatus("idle")
         setSummaryError(null)
-        return emptyResult
+        return ""
       }
       if (!options?.force && summarySourceRef.current === source) {
-        return { summary: autoSummary, metaDescription, seoTitle, tags }
+        return autoSummary
       }
       summaryAbortRef.current?.abort()
       const controller = new AbortController()
@@ -280,24 +259,14 @@ export default function BlogComposerPage() {
         if (!response.ok) {
           throw new Error(payload?.error || t("blogPage.editor.summaryError", { defaultValue: "Failed to generate summary." }))
         }
-        
-        // Extract all SEO fields from the AI response
         const summaryText = (payload?.summary as string) || ""
-        const metaDescText = (payload?.metaDescription as string) || ""
-        const seoTitleText = (payload?.seoTitle as string) || ""
-        const tagsArray = Array.isArray(payload?.tags) ? (payload.tags as string[]).slice(0, 5) : []
-        
         setAutoSummary(summaryText)
-        setMetaDescription(metaDescText)
-        setSeoTitle(seoTitleText)
-        setTags(tagsArray)
         summarySourceRef.current = source
         setSummaryStatus("idle")
-        
-        return { summary: summaryText, metaDescription: metaDescText, seoTitle: seoTitleText, tags: tagsArray }
+        return summaryText
       } catch (err) {
         if ((err as Error).name === "AbortError") {
-          return emptyResult
+          return ""
         }
         const message =
           err instanceof Error
@@ -312,7 +281,7 @@ export default function BlogComposerPage() {
         }
       }
     },
-    [autoSummary, metaDescription, seoTitle, tags, formTitle, t],
+    [autoSummary, formTitle, t],
   )
 
   const handleSavePost = async () => {
@@ -343,18 +312,15 @@ export default function BlogComposerPage() {
       latestHtmlRef.current = html
       const trimmedHtml = html.trim()
       summaryAbortRef.current?.abort()
-      
-      // Generate AI content (summary, meta description, SEO title, tags)
-      let summaryResult = { summary: autoSummary, metaDescription, seoTitle, tags }
+      let summaryText = autoSummary
       if (trimmedHtml) {
         try {
-          summaryResult = await runSummary(trimmedHtml, { force: true })
-          setAutoSummary(summaryResult.summary)
+          summaryText = await runSummary(trimmedHtml, { force: true })
+          setAutoSummary(summaryText)
         } catch {
-          // Keep existing values on error
+          summaryText = autoSummary
         }
       }
-      
       const publishDateIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString()
       const { data, error: saveError } = await saveBlogPost({
         id: editingPost?.id,
@@ -362,10 +328,7 @@ export default function BlogComposerPage() {
         title: formTitle,
         bodyHtml: html,
         coverImageUrl: coverUrl || null,
-        excerpt: summaryResult.summary?.trim() || undefined,
-        metaDescription: summaryResult.metaDescription?.trim() || undefined,
-        seoTitle: summaryResult.seoTitle?.trim() || undefined,
-        tags: summaryResult.tags,
+        excerpt: summaryText?.trim() || undefined,
         isPublished: publishMode === "scheduled",
         publishedAt: publishDateIso,
         authorId,
@@ -546,7 +509,7 @@ export default function BlogComposerPage() {
                     {t("blogPage.editor.summaryLabel", { defaultValue: "Short description" })}
                   </p>
                   <p className="text-xs text-stone-500 dark:text-stone-400">
-                    {t("blogPage.editor.summaryHelper", { defaultValue: "AI-generated teaser to entice readers. Click regenerate after writing your content." })}
+                    {t("blogPage.editor.summaryHelper", { defaultValue: "Generated automatically from the article body." })}
                   </p>
                 </div>
                 <Button
@@ -573,76 +536,6 @@ export default function BlogComposerPage() {
                 {summaryText}
               </div>
               {summaryError && <p className="text-xs text-red-500">{summaryError}</p>}
-              
-              {/* SEO Metadata Section */}
-              {(metaDescription || seoTitle) && (
-                <div className="mt-4 pt-4 border-t border-stone-200 dark:border-[#3e3e42] space-y-3">
-                  <p className="text-xs font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wide">
-                    {t("blogPage.editor.seoSection", { defaultValue: "SEO Metadata (auto-generated)" })}
-                  </p>
-                  {seoTitle && (
-                    <div>
-                      <p className="text-[11px] text-stone-400 dark:text-stone-500">
-                        {t("blogPage.editor.seoTitleLabel", { defaultValue: "SEO Title" })}
-                      </p>
-                      <p className="text-sm text-stone-600 dark:text-stone-300">{seoTitle}</p>
-                    </div>
-                  )}
-                  {metaDescription && (
-                    <div>
-                      <p className="text-[11px] text-stone-400 dark:text-stone-500">
-                        {t("blogPage.editor.metaDescLabel", { defaultValue: "Meta Description" })}
-                      </p>
-                      <p className="text-sm text-stone-600 dark:text-stone-300">{metaDescription}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Tags Section */}
-            <div className="space-y-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium flex items-center gap-2">
-                    <Tag className="h-4 w-4" />
-                    {t("blogPage.editor.tagsLabel", { defaultValue: "Tags" })}
-                  </p>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">
-                    {t("blogPage.editor.tagsHelper", { defaultValue: "AI-generated tags for better discoverability (max 5)." })}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {tags.length > 0 ? (
-                  tags.map((tag, index) => (
-                    <Badge
-                      key={`${tag}-${index}`}
-                      variant="secondary"
-                      className="rounded-2xl px-3 py-1 text-xs flex items-center gap-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
-                    >
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => setTags(tags.filter((_, i) => i !== index))}
-                        className="hover:bg-emerald-200 dark:hover:bg-emerald-800 rounded-full p-0.5 transition-colors"
-                        aria-label={t("blogPage.editor.removeTag", { defaultValue: "Remove tag" })}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))
-                ) : (
-                  <p className="text-sm text-stone-400 dark:text-stone-500 italic">
-                    {t("blogPage.editor.noTags", { defaultValue: "Tags will be generated when you click Regenerate above." })}
-                  </p>
-                )}
-              </div>
-              {tags.length > 0 && (
-                <p className="text-[11px] text-stone-400">
-                  {t("blogPage.editor.tagsCount", { count: tags.length, defaultValue: `${tags.length} of 5 tags` })}
-                </p>
-              )}
             </div>
 
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-3 text-xs text-stone-500 dark:text-stone-400">
