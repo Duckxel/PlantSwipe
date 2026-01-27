@@ -17,11 +17,20 @@ const parseDate = (value?: string): Date | null => {
   return new Date(timestamp)
 }
 
+/**
+ * Checks if a plant should be featured as "Plant of the Month"
+ * 
+ * Database schema (000_sync_schema.sql):
+ *   promotion_month text check (promotion_month in ('january','february',...,'december'))
+ * 
+ * The loaders convert text slugs to numbers (1-12) via monthSlugToNumber().
+ * This function checks if the plant's promotion month matches the current month.
+ */
 export const isPlantOfTheMonth = (plant?: Plant | null, referenceDate: Date = new Date()): boolean => {
   if (!plant) return false
-  // Check both possible locations for promotionMonth
-  // - planting.calendar.promotionMonth (used by loadPlantPreviews)
-  // - identity.promotionMonth (used by loadPlantsWithTranslations)
+  // Check both possible locations for promotionMonth (number 1-12)
+  // - planting.calendar.promotionMonth (used by loadPlantPreviews & loadPlantsWithTranslations)
+  // - identity.promotionMonth (legacy location)
   const promotionMonth = normalizeMonth(
     plant.planting?.calendar?.promotionMonth ?? plant.identity?.promotionMonth
   )
