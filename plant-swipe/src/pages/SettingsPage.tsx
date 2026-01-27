@@ -252,16 +252,23 @@ export default function SettingsPage() {
     setSuccess(null)
 
     try {
-      // Get CSRF token for security-sensitive operations
+      // Get CSRF token and auth session for security-sensitive operations
       const csrfToken = await getCsrfToken()
+      const session = (await supabase.auth.getSession()).data.session
       
-      // Check if email is already in use by another user (CSRF protected)
+      // Build secure headers with both CSRF and Authorization
+      const secureHeaders: Record<string, string> = { 
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      }
+      if (session?.access_token) {
+        secureHeaders['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      // Check if email is already in use by another user (CSRF + Auth protected)
       const checkResponse = await fetch('/api/security/check-email-available', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken,
-        },
+        headers: secureHeaders,
         body: JSON.stringify({ 
           email: newEmail,
           currentUserId: user?.id 
@@ -269,12 +276,17 @@ export default function SettingsPage() {
         credentials: 'same-origin',
       })
       
-      // Handle CSRF error specifically
-      if (checkResponse.status === 403) {
+      // Handle security errors (CSRF, Auth)
+      if (checkResponse.status === 401 || checkResponse.status === 403) {
         const errorData = await checkResponse.json().catch(() => ({}))
         if (errorData.code === 'CSRF_INVALID') {
           throw new Error(t('settings.security.csrfError', { defaultValue: 'Security validation failed. Please refresh the page and try again.' }))
         }
+        if (errorData.code === 'AUTH_REQUIRED' || errorData.code === 'AUTH_MISMATCH') {
+          throw new Error(t('settings.security.authError', { defaultValue: 'Authentication failed. Please sign in again and retry.' }))
+        }
+        // Generic auth error
+        throw new Error(errorData.error || t('settings.security.authError', { defaultValue: 'Authentication failed. Please sign in again and retry.' }))
       }
       
       const checkResult = await checkResponse.json().catch(() => ({ available: true }))
@@ -291,16 +303,20 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError
 
-      // Send notification to OLD email about the change (CSRF protected, non-blocking)
+      // Send notification to OLD email about the change (CSRF + Auth protected, non-blocking)
       // Need a fresh CSRF token since the previous one was used
       if (user?.id && oldEmailAddress) {
-        getCsrfToken().then(notifCsrfToken => {
+        Promise.all([getCsrfToken(), supabase.auth.getSession()]).then(([notifCsrfToken, sessionRes]) => {
+          const notifHeaders: Record<string, string> = { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': notifCsrfToken,
+          }
+          if (sessionRes.data.session?.access_token) {
+            notifHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
+          }
           fetch('/api/security/email-changed-notification', {
             method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'X-CSRF-Token': notifCsrfToken,
-            },
+            headers: notifHeaders,
             body: JSON.stringify({
               userId: user.id,
               oldEmail: oldEmailAddress,
@@ -370,15 +386,19 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError
 
-      // Send password change confirmation email (CSRF protected, non-blocking)
+      // Send password change confirmation email (CSRF + Auth protected, non-blocking)
       if (user?.id && email) {
-        getCsrfToken().then(csrfToken => {
+        Promise.all([getCsrfToken(), supabase.auth.getSession()]).then(([csrfToken, sessionRes]) => {
+          const pwHeaders: Record<string, string> = { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken,
+          }
+          if (sessionRes.data.session?.access_token) {
+            pwHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
+          }
           fetch('/api/security/password-changed', {
             method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'X-CSRF-Token': csrfToken,
-            },
+            headers: pwHeaders,
             body: JSON.stringify({
               userId: user.id,
               userEmail: email,

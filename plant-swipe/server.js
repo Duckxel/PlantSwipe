@@ -8548,12 +8548,24 @@ app.post('/api/send-security-email', async (req, res) => {
 
 // Convenience endpoint: Send password change confirmation email
 // CSRF protected - requires X-CSRF-Token header
+// Auth protected - requires authenticated user to match userId
 app.post('/api/security/password-changed', requireCsrfToken, async (req, res) => {
   const { userId, userEmail, userDisplayName, userLanguage, device, location, ipAddress } = req.body || {}
   
   if (!userId || !userEmail) {
     res.status(400).json({ error: 'Missing required fields: userId, userEmail' })
     return
+  }
+
+  // Verify authenticated user matches the userId in the request
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id || authUser.id !== userId) {
+    console.warn('[security/password-changed] User ID mismatch or not authenticated', { 
+      authUserId: authUser?.id, 
+      requestUserId: userId,
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
   }
 
   const result = await sendSecurityEmail('PASSWORD_CHANGE_CONFIRMATION', {
@@ -8574,12 +8586,24 @@ app.post('/api/security/password-changed', requireCsrfToken, async (req, res) =>
 
 // Convenience endpoint: Send email change notification to OLD email
 // CSRF protected - requires X-CSRF-Token header
+// Auth protected - requires authenticated user to match userId
 app.post('/api/security/email-changed-notification', requireCsrfToken, async (req, res) => {
   const { userId, oldEmail, newEmail, userDisplayName, userLanguage } = req.body || {}
   
   if (!userId || !oldEmail || !newEmail) {
     res.status(400).json({ error: 'Missing required fields: userId, oldEmail, newEmail' })
     return
+  }
+
+  // Verify authenticated user matches the userId in the request
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id || authUser.id !== userId) {
+    console.warn('[security/email-changed-notification] User ID mismatch or not authenticated', { 
+      authUserId: authUser?.id, 
+      requestUserId: userId,
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
   }
 
   const result = await sendSecurityEmail('EMAIL_CHANGE_NOTIFICATION', {
@@ -8599,6 +8623,7 @@ app.post('/api/security/email-changed-notification', requireCsrfToken, async (re
 
 // Check if email is already in use by another user
 // CSRF protected - requires X-CSRF-Token header
+// Auth protected - requires authenticated user
 app.post('/api/security/check-email-available', requireCsrfToken, async (req, res) => {
   const { email, currentUserId } = req.body || {}
   
@@ -8607,16 +8632,33 @@ app.post('/api/security/check-email-available', requireCsrfToken, async (req, re
     return
   }
 
+  // Verify user is authenticated
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    console.warn('[security/check-email-available] Not authenticated', { 
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(401).json({ error: 'Unauthorized: Authentication required', code: 'AUTH_REQUIRED' })
+  }
+
+  // If currentUserId provided, verify it matches the authenticated user
+  if (currentUserId && authUser.id !== currentUserId) {
+    console.warn('[security/check-email-available] User ID mismatch', { 
+      authUserId: authUser.id, 
+      requestUserId: currentUserId,
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
+  }
+
+  // Use the authenticated user's ID to exclude from the check
+  const userIdToExclude = authUser.id
   const normalizedEmail = email.toLowerCase().trim()
 
   try {
     if (sql) {
-      // Check if email exists in auth.users (excluding the current user if provided)
-      const query = currentUserId
-        ? sql`SELECT id FROM auth.users WHERE lower(email) = ${normalizedEmail} AND id != ${currentUserId} LIMIT 1`
-        : sql`SELECT id FROM auth.users WHERE lower(email) = ${normalizedEmail} LIMIT 1`
-      
-      const rows = await query
+      // Check if email exists in auth.users (excluding the current authenticated user)
+      const rows = await sql`SELECT id FROM auth.users WHERE lower(email) = ${normalizedEmail} AND id != ${userIdToExclude} LIMIT 1`
       const isAvailable = !rows || rows.length === 0
       
       res.json({ available: isAvailable, email: normalizedEmail })
