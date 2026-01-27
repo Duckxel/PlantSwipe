@@ -1230,12 +1230,17 @@ export default function PlantSwipe() {
     try {
       console.log('[auth] submit start', { mode: authMode })
       
-      // Execute reCAPTCHA v3 Enterprise
+      // Execute reCAPTCHA v3 Enterprise (consent-aware, may return null)
       let recaptchaToken: string | undefined
       try {
         const action = authMode === 'signup' ? 'signup' : 'login'
-        recaptchaToken = await executeRecaptcha(action)
-        console.log('[auth] reCAPTCHA token obtained')
+        const token = await executeRecaptcha(action)
+        recaptchaToken = token ?? undefined
+        if (token) {
+          console.log('[auth] reCAPTCHA token obtained')
+        } else {
+          console.log('[auth] reCAPTCHA skipped (no consent or unavailable)')
+        }
       } catch (recaptchaError) {
         console.warn('[auth] reCAPTCHA execution failed', recaptchaError)
         // Continue without token - backend will decide how to handle

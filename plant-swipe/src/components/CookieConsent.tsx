@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Link } from '@/components/i18n/Link'
-import { Cookie, Shield, BarChart3, X } from 'lucide-react'
+import { Cookie, Shield, BarChart3, X, Lock } from 'lucide-react'
+import { disableAnalytics, enableAnalytics } from '@/lib/gdprAnalytics'
 
 type ConsentLevel = 'essential' | 'analytics' | 'all' | 'rejected'
 
@@ -50,8 +51,27 @@ export function getConsentLevel(): ConsentLevel | null {
 export function clearConsent(): void {
   try {
     localStorage.removeItem('cookie_consent')
+    disableAnalytics()
   } catch {
     // Ignore localStorage errors
+  }
+}
+
+// Clear all third-party cookies
+function clearThirdPartyCookies(): void {
+  try {
+    // Clear GA cookies
+    const cookies = document.cookie.split(';')
+    for (const cookie of cookies) {
+      const [name] = cookie.trim().split('=')
+      if (name.startsWith('_ga') || name.startsWith('_gid') || name.startsWith('_gat') || name.startsWith('_grecaptcha')) {
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname}`
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${window.location.hostname}`
+      }
+    }
+  } catch {
+    // Ignore cookie errors
   }
 }
 
@@ -90,9 +110,19 @@ export function CookieConsent() {
     
     setShow(false)
     
-    // Dispatch event for analytics initialization
-    if (level === 'analytics' || level === 'all') {
+    // Handle analytics based on consent level
+    if (level === 'rejected') {
+      // Clear all third-party cookies and disable analytics
+      clearThirdPartyCookies()
+      disableAnalytics()
+    } else {
+      // Dispatch event for script loading
       window.dispatchEvent(new CustomEvent('cookie_consent_granted', { detail: { level } }))
+      
+      // Enable analytics if appropriate level
+      if (level === 'analytics' || level === 'all') {
+        enableAnalytics()
+      }
     }
   }
 
@@ -127,7 +157,18 @@ export function CookieConsent() {
                     {t('cookieConsent.essentialTitle', 'Essential Cookies')}
                   </p>
                   <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
-                    {t('cookieConsent.essentialDesc', 'Required for basic site functionality. These cannot be disabled.')}
+                    {t('cookieConsent.essentialDesc', 'Required for basic site functionality like authentication and preferences. These cannot be disabled.')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Lock className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-stone-800 dark:text-stone-200 text-sm">
+                    {t('cookieConsent.securityTitle', 'Security (reCAPTCHA)')}
+                  </p>
+                  <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
+                    {t('cookieConsent.securityDesc', 'Google reCAPTCHA protects against spam and abuse. Loaded only when you accept cookies.')}
                   </p>
                 </div>
               </div>
@@ -135,10 +176,10 @@ export function CookieConsent() {
                 <BarChart3 className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium text-stone-800 dark:text-stone-200 text-sm">
-                    {t('cookieConsent.analyticsTitle', 'Analytics Cookies')}
+                    {t('cookieConsent.analyticsTitle', 'Analytics (Google Analytics)')}
                   </p>
                   <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
-                    {t('cookieConsent.analyticsDesc', 'Help us understand how visitors interact with our website.')}
+                    {t('cookieConsent.analyticsDesc', 'Help us understand how visitors interact with our website. Your IP is anonymized.')}
                   </p>
                 </div>
               </div>
