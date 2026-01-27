@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@sentry/bun": "^9.0.0",
+    "@sentry/node": "^9.0.0",
     "@sentry/react": "^9.0.0",
     "@floating-ui/react": "^0.27.16",
     "@radix-ui/react-dialog": "^1.1.15",

@@ -753,6 +753,38 @@ verify_sentry_client_config() {
 verify_sentry_server_config
 verify_sentry_client_config
 
+# Verify Sentry configuration in Admin API (Python)
+verify_sentry_admin_api_config() {
+  local admin_app="$REPO_DIR/admin_api/app.py"
+  local admin_requirements="$REPO_DIR/admin_api/requirements.txt"
+  
+  if [[ -f "$admin_requirements" ]] && grep -q "sentry-sdk" "$admin_requirements" 2>/dev/null; then
+    log "Sentry SDK is configured in Admin API requirements.txt"
+  else
+    log "[WARN] Sentry SDK not found in Admin API requirements.txt"
+  fi
+  
+  if [[ -f "$admin_app" ]] && grep -q "sentry_sdk" "$admin_app" 2>/dev/null; then
+    log "Sentry is initialized in Admin API app.py"
+  else
+    log "[WARN] Sentry initialization not found in Admin API app.py"
+  fi
+}
+
+# Verify Sentry configuration in Sitemap generator
+verify_sentry_sitemap_config() {
+  local sitemap_script="$NODE_DIR/scripts/generate-sitemap.js"
+  
+  if [[ -f "$sitemap_script" ]] && grep -q "@sentry/node" "$sitemap_script" 2>/dev/null; then
+    log "Sentry is configured in sitemap generator"
+  else
+    log "[WARN] Sentry not found in sitemap generator script"
+  fi
+}
+
+verify_sentry_admin_api_config
+verify_sentry_sitemap_config
+
 # Build frontend and API bundle using Bun
 # Delegate to refresh script if available (avoids code duplication and uses optimized build)
 REFRESH_SCRIPT="$REPO_DIR/scripts/refresh-plant-swipe.sh"

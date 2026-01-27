@@ -7,6 +7,28 @@ import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
+// Sentry error monitoring for sitemap generation
+const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520'
+
+let Sentry = null
+try {
+  // Try to import Sentry (may not be available in all environments)
+  const sentryModule = await import('@sentry/node').catch(() => null)
+  if (sentryModule) {
+    Sentry = sentryModule
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      environment: process.env.NODE_ENV || 'production',
+      // Lower sample rate for batch jobs
+      tracesSampleRate: 0.1,
+    })
+    console.log('[sitemap] Sentry initialized')
+  }
+} catch {
+  // Sentry not available, continue without it
+  console.log('[sitemap] Sentry not available, continuing without error tracking')
+}
+
 const startedAt = Date.now()
 
 const __filename = fileURLToPath(import.meta.url)
@@ -166,7 +188,14 @@ async function main() {
 
 main().catch((error) => {
   console.error('[sitemap] Generation failed:', error)
-  process.exit(1)
+  // Report error to Sentry if available
+  if (Sentry) {
+    Sentry.captureException(error)
+    // Give Sentry time to send the error before exiting
+    setTimeout(() => process.exit(1), 2000)
+  } else {
+    process.exit(1)
+  }
 })
 
 async function detectLanguages(localesDir, fallback) {
