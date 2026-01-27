@@ -7836,34 +7836,34 @@ const DEFAULT_EMAIL_TRIGGERS = [
   {
     triggerType: 'EMAIL_CHANGE_VERIFICATION',
     displayName: 'Email Change Verification',
-    description: 'Sent to the NEW email address with a verification link when user requests to change their email. Variables: {{verification_link}}, {{new_email}}, {{old_email}}',
+    description: 'Sent to the NEW email address with a verification link when user requests to change their email. Variables: {{url}}, {{new_email}}, {{old_email}}',
   },
   {
     triggerType: 'EMAIL_CHANGE_NOTIFICATION',
     displayName: 'Email Changed Notification',
-    description: 'Sent to the OLD email address to inform that the email has been changed. Variables: {{new_email}}, {{old_email}}, {{timestamp}}',
+    description: 'Sent to the OLD email address to inform that the email has been changed. Variables: {{new_email}}, {{old_email}}, {{time}}',
   },
   // Security Emails - Password
   {
     triggerType: 'PASSWORD_RESET_REQUEST',
     displayName: 'Password Reset Request',
-    description: 'Sent when user requests a password reset. Contains a secure reset link. Variables: {{reset_link}}, {{timestamp}}',
+    description: 'Sent when user requests a password reset. Contains a secure reset link. Variables: {{url}}, {{time}}',
   },
   {
     triggerType: 'PASSWORD_CHANGE_CONFIRMATION',
     displayName: 'Password Changed Confirmation',
-    description: 'Sent after password has been successfully changed. Variables: {{timestamp}}, {{device}}, {{location}}',
+    description: 'Sent after password has been successfully changed. Variables: {{time}}, {{device}}, {{location}}',
   },
   // Security Emails - Login Security
   {
     triggerType: 'SUSPICIOUS_LOGIN_ALERT',
     displayName: 'Suspicious Login Alert',
-    description: 'Sent when a login is detected from an unusual location or device. Variables: {{location}}, {{device}}, {{ip_address}}, {{timestamp}}',
+    description: 'Sent when a login is detected from an unusual location or device. Variables: {{location}}, {{device}}, {{ip_address}}, {{time}}',
   },
   {
     triggerType: 'NEW_DEVICE_LOGIN',
     displayName: 'New Device Login',
-    description: 'Sent when user logs in from a new device. Variables: {{device}}, {{location}}, {{ip_address}}, {{timestamp}}',
+    description: 'Sent when user logs in from a new device. Variables: {{device}}, {{location}}, {{ip_address}}, {{time}}',
   },
 ]
 
@@ -8274,21 +8274,21 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
     }) + ' UTC'
 
     // Merge standard context with extra security context
+    // Note: {{url}} is used for verification links, reset links, and website URL
+    // The extraContext.url takes precedence if provided (for security links)
     const context = {
       user: userCap,
       email: recipientEmail,
       random: randomStr,
-      url: websiteUrl.replace(/^https?:\/\//, ''),
+      url: extraContext.url || websiteUrl.replace(/^https?:\/\//, ''),
       code: extraContext.code || 'XXXXXX',
       // Security-specific variables
-      verification_link: extraContext.verification_link || websiteUrl,
-      reset_link: extraContext.reset_link || websiteUrl,
       old_email: extraContext.old_email || '',
       new_email: extraContext.new_email || '',
       location: extraContext.location || 'Unknown location',
       device: extraContext.device || 'Unknown device',
       ip_address: extraContext.ip_address || 'Unknown',
-      timestamp: extraContext.timestamp || currentTimestamp,
+      time: extraContext.time || currentTimestamp,
     }
 
     const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
@@ -8418,7 +8418,7 @@ app.post('/api/security/password-changed', async (req, res) => {
       device: device || req.headers['user-agent'] || 'Unknown device',
       location: location || 'Unknown location',
       ip_address: ipAddress || req.ip || req.headers['x-forwarded-for'] || 'Unknown',
-      timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
+      time: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
     }
   })
 
@@ -8442,7 +8442,7 @@ app.post('/api/security/email-changed-notification', async (req, res) => {
     extraContext: {
       old_email: oldEmail,
       new_email: newEmail,
-      timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
+      time: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
     }
   })
 

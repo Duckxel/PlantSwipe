@@ -63,10 +63,9 @@ const TRIGGER_VARIABLES: Record<string, {
     category: 'security',
     variables: [
       { token: '{{user}}', description: "User's display name", required: true },
-      { token: '{{verification_link}}', description: 'Secure link to verify new email', required: true },
+      { token: '{{url}}', description: 'Secure link to verify new email (verification URL)', required: true },
       { token: '{{new_email}}', description: 'The new email address being verified' },
       { token: '{{old_email}}', description: 'The previous email address' },
-      { token: '{{url}}', description: 'Website URL' },
     ]
   },
   EMAIL_CHANGE_NOTIFICATION: {
@@ -75,7 +74,7 @@ const TRIGGER_VARIABLES: Record<string, {
       { token: '{{user}}', description: "User's display name", required: true },
       { token: '{{old_email}}', description: 'The previous email address (recipient)', required: true },
       { token: '{{new_email}}', description: 'The new email address', required: true },
-      { token: '{{timestamp}}', description: 'When the change occurred (UTC)' },
+      { token: '{{time}}', description: 'When the change occurred (UTC)' },
       { token: '{{url}}', description: 'Website URL' },
     ]
   },
@@ -84,10 +83,9 @@ const TRIGGER_VARIABLES: Record<string, {
     category: 'security',
     variables: [
       { token: '{{user}}', description: "User's display name", required: true },
-      { token: '{{reset_link}}', description: 'Secure password reset link', required: true },
+      { token: '{{url}}', description: 'Secure password reset link', required: true },
       { token: '{{email}}', description: "User's email address" },
-      { token: '{{timestamp}}', description: 'When the request was made (UTC)' },
-      { token: '{{url}}', description: 'Website URL' },
+      { token: '{{time}}', description: 'When the request was made (UTC)' },
     ]
   },
   PASSWORD_CHANGE_CONFIRMATION: {
@@ -95,7 +93,7 @@ const TRIGGER_VARIABLES: Record<string, {
     variables: [
       { token: '{{user}}', description: "User's display name", required: true },
       { token: '{{email}}', description: "User's email address" },
-      { token: '{{timestamp}}', description: 'When the password was changed (UTC)', required: true },
+      { token: '{{time}}', description: 'When the password was changed (UTC)', required: true },
       { token: '{{device}}', description: 'Device/browser used (e.g., Chrome on Windows)' },
       { token: '{{location}}', description: 'Geographic location (city, country)' },
       { token: '{{ip_address}}', description: 'IP address of the request' },
@@ -111,7 +109,7 @@ const TRIGGER_VARIABLES: Record<string, {
       { token: '{{location}}', description: 'Login location (city, country)', required: true },
       { token: '{{device}}', description: 'Device/browser used', required: true },
       { token: '{{ip_address}}', description: 'IP address of the login' },
-      { token: '{{timestamp}}', description: 'When the login occurred (UTC)' },
+      { token: '{{time}}', description: 'When the login occurred (UTC)' },
       { token: '{{url}}', description: 'Website URL' },
     ]
   },
@@ -123,7 +121,7 @@ const TRIGGER_VARIABLES: Record<string, {
       { token: '{{device}}', description: 'New device/browser detected', required: true },
       { token: '{{location}}', description: 'Login location (city, country)' },
       { token: '{{ip_address}}', description: 'IP address of the login' },
-      { token: '{{timestamp}}', description: 'When the login occurred (UTC)' },
+      { token: '{{time}}', description: 'When the login occurred (UTC)' },
       { token: '{{url}}', description: 'Website URL' },
     ]
   },
