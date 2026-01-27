@@ -63,6 +63,9 @@ domain.json
 .bun/
 *.bun
 
+# Admin API environment file (created locally, contains secrets)
+admin_env
+
 # Editor settings that may auto-generate
 *.sublime-workspace
 *.sublime-project
