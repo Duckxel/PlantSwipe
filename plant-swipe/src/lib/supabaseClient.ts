@@ -73,6 +73,11 @@ export type ProfileRow = {
   notify_push?: boolean | null
   notify_email?: boolean | null
   threat_level?: number | null
+  // GDPR consent tracking
+  marketing_consent?: boolean | null
+  marketing_consent_date?: string | null
+  terms_accepted_date?: string | null
+  privacy_policy_accepted_date?: string | null
 }
 
 export type BlogPostRow = {

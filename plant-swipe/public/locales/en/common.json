@@ -2907,6 +2907,29 @@
         "notAPlant": "This doesn't appear to be a plant. Please try a different image.",
         "identifyFailed": "Failed to identify plant. Please try again."
       }
+    },
+    "cookieConsent": {
+      "title": "Cookie Preferences",
+      "description": "We use cookies to improve your experience. You can choose which cookies to accept.",
+      "essentialTitle": "Essential Cookies",
+      "essentialDesc": "Required for basic site functionality. These cannot be disabled.",
+      "analyticsTitle": "Analytics Cookies",
+      "analyticsDesc": "Help us understand how visitors interact with our website.",
+      "rejectAll": "Reject All",
+      "essentialOnly": "Essential Only",
+      "acceptAll": "Accept All",
+      "hideDetails": "Hide details",
+      "showDetails": "Show details",
+      "privacyPolicy": "Privacy Policy"
+    },
+    "gdpr": {
+      "exportData": "Export My Data",
+      "exportDataDescription": "Download all data we have about you in a machine-readable format.",
+      "deleteAccount": "Delete My Account",
+      "deleteAccountDescription": "Permanently delete your account and all associated data. This action cannot be undone.",
+      "marketingConsent": "Marketing Communications",
+      "marketingConsentDescription": "Receive occasional emails about new features and updates.",
+      "consentUpdated": "Your preferences have been saved."
     }
   }
 }

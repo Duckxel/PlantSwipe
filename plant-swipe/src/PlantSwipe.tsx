@@ -19,6 +19,7 @@ import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
+import { CookieConsent } from "@/components/CookieConsent";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -1401,6 +1402,9 @@ export default function PlantSwipe() {
               </div>
             </DialogContent>
           </Dialog>
+          
+          {/* GDPR Cookie Consent Banner */}
+          <CookieConsent />
         </AuthActionsProvider>
       )
     }
@@ -2024,6 +2028,9 @@ export default function PlantSwipe() {
           navigate(`/messages?conversation=${conversationId}`)
         }}
       />
+      
+      {/* GDPR Cookie Consent Banner */}
+      <CookieConsent />
     </div>
     </AuthActionsProvider>
   )

@@ -2907,6 +2907,29 @@
         "notAPlant": "Ceci ne semble pas être une plante. Veuillez essayer une autre image.",
         "identifyFailed": "Échec de l'identification de la plante. Veuillez réessayer."
       }
+    },
+    "cookieConsent": {
+      "title": "Préférences de Cookies",
+      "description": "Nous utilisons des cookies pour améliorer votre expérience. Vous pouvez choisir quels cookies accepter.",
+      "essentialTitle": "Cookies Essentiels",
+      "essentialDesc": "Nécessaires au fonctionnement de base du site. Ceux-ci ne peuvent pas être désactivés.",
+      "analyticsTitle": "Cookies Analytiques",
+      "analyticsDesc": "Nous aident à comprendre comment les visiteurs interagissent avec notre site.",
+      "rejectAll": "Tout Refuser",
+      "essentialOnly": "Essentiels Uniquement",
+      "acceptAll": "Tout Accepter",
+      "hideDetails": "Masquer les détails",
+      "showDetails": "Afficher les détails",
+      "privacyPolicy": "Politique de Confidentialité"
+    },
+    "gdpr": {
+      "exportData": "Exporter Mes Données",
+      "exportDataDescription": "Téléchargez toutes les données que nous avons sur vous dans un format lisible par machine.",
+      "deleteAccount": "Supprimer Mon Compte",
+      "deleteAccountDescription": "Supprimez définitivement votre compte et toutes les données associées. Cette action est irréversible.",
+      "marketingConsent": "Communications Marketing",
+      "marketingConsentDescription": "Recevoir des emails occasionnels sur les nouvelles fonctionnalités et mises à jour.",
+      "consentUpdated": "Vos préférences ont été enregistrées."
     }
   }
 }

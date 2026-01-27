@@ -13240,6 +13240,905 @@ app.post('/api/account/delete', async (req, res) => {
   }
 })
 
+// ========== GDPR COMPLIANCE ENDPOINTS ==========
+
+// Helper: Delete a storage object by public URL
+async function deleteStorageObjectByUrl(publicUrl) {
+  if (!publicUrl || !supabaseServiceClient) return { deleted: false, reason: 'unavailable' }
+  const info = parseStoragePublicUrl(publicUrl)
+  if (!info) return { deleted: false, reason: 'not_managed' }
+  try {
+    const { error } = await supabaseServiceClient.storage.from(info.bucket).remove([info.path])
+    if (error) throw error
+    return { deleted: true }
+  } catch (err) {
+    console.warn('[gdpr] Failed to delete storage object:', publicUrl, err?.message)
+    return { deleted: false, reason: err?.message || 'delete_failed' }
+  }
+}
+
+// Helper: Log GDPR-related actions for compliance audit
+async function logGdprAccess(userId, action, details = {}, req = null) {
+  try {
+    const ip = req ? getClientIp(req) : null
+    const userAgent = req ? (req.get('user-agent') || null) : null
+    
+    if (sql) {
+      await sql`
+        INSERT INTO public.gdpr_audit_log (user_id, action, details, ip_address, user_agent, created_at)
+        VALUES (${userId}, ${action}, ${sql.json(details)}, ${ip}::inet, ${userAgent}, NOW())
+      `
+    } else if (supabaseServiceClient) {
+      await supabaseServiceClient.from('gdpr_audit_log').insert({
+        user_id: userId,
+        action,
+        details,
+        ip_address: ip,
+        user_agent: userAgent
+      })
+    }
+  } catch (err) {
+    console.error('[gdpr] Audit log failed:', err?.message || err)
+  }
+}
+
+// GDPR: Enhanced account deletion with COMPLETE data removal
+app.options('/api/account/delete-gdpr', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+app.post('/api/account/delete-gdpr', async (req, res) => {
+  try {
+    if (!supabaseServiceClient) {
+      res.status(503).json({ error: 'Account deletion is not configured on this server' })
+      return
+    }
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    const userId = user.id
+
+    // Log the deletion request for GDPR audit
+    await logGdprAccess(userId, 'ACCOUNT_DELETION_STARTED', { userId: userId.slice(0, 8) + '...' }, req)
+
+    const stats = {
+      messagesDeleted: 0,
+      conversationsDeleted: 0,
+      friendsDeleted: 0,
+      friendRequestsDeleted: 0,
+      pushSubscriptionsDeleted: 0,
+      notificationsDeleted: 0,
+      journalEntriesDeleted: 0,
+      journalPhotosDeleted: 0,
+      plantScansDeleted: 0,
+      bugReportsDeleted: 0,
+      bookmarksDeleted: 0,
+      activityLogsDeleted: 0,
+      webVisitsAnonymized: 0,
+      avatarDeleted: false,
+      profileDeleted: false,
+      gardensProcessed: 0,
+      authUserDeleted: false,
+      storageObjectsDeleted: 0
+    }
+
+    try {
+      // 1. Delete messages (sender only - cascade handles conversation cleanup)
+      if (sql) {
+        const msgResult = await sql`DELETE FROM public.messages WHERE sender_id = ${userId}`
+        stats.messagesDeleted = msgResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('messages').delete().eq('sender_id', userId)
+        stats.messagesDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Messages deletion partial:', err?.message) }
+
+    try {
+      // 2. Delete conversations where user is a participant
+      if (sql) {
+        const convResult = await sql`DELETE FROM public.conversations WHERE participant_1 = ${userId} OR participant_2 = ${userId}`
+        stats.conversationsDeleted = convResult?.count || 0
+      } else {
+        const { count: c1 } = await supabaseServiceClient.from('conversations').delete().eq('participant_1', userId)
+        const { count: c2 } = await supabaseServiceClient.from('conversations').delete().eq('participant_2', userId)
+        stats.conversationsDeleted = (c1 || 0) + (c2 || 0)
+      }
+    } catch (err) { console.warn('[gdpr] Conversations deletion partial:', err?.message) }
+
+    try {
+      // 3. Delete friend relationships
+      if (sql) {
+        const friendResult = await sql`DELETE FROM public.friends WHERE user_id = ${userId} OR friend_id = ${userId}`
+        stats.friendsDeleted = friendResult?.count || 0
+      } else {
+        const { count: f1 } = await supabaseServiceClient.from('friends').delete().eq('user_id', userId)
+        const { count: f2 } = await supabaseServiceClient.from('friends').delete().eq('friend_id', userId)
+        stats.friendsDeleted = (f1 || 0) + (f2 || 0)
+      }
+    } catch (err) { console.warn('[gdpr] Friends deletion partial:', err?.message) }
+
+    try {
+      // 4. Delete friend requests
+      if (sql) {
+        const reqResult = await sql`DELETE FROM public.friend_requests WHERE requester_id = ${userId} OR recipient_id = ${userId}`
+        stats.friendRequestsDeleted = reqResult?.count || 0
+      } else {
+        const { count: r1 } = await supabaseServiceClient.from('friend_requests').delete().eq('requester_id', userId)
+        const { count: r2 } = await supabaseServiceClient.from('friend_requests').delete().eq('recipient_id', userId)
+        stats.friendRequestsDeleted = (r1 || 0) + (r2 || 0)
+      }
+    } catch (err) { console.warn('[gdpr] Friend requests deletion partial:', err?.message) }
+
+    try {
+      // 5. Delete push subscriptions
+      if (sql) {
+        const pushResult = await sql`DELETE FROM public.user_push_subscriptions WHERE user_id = ${userId}`
+        stats.pushSubscriptionsDeleted = pushResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('user_push_subscriptions').delete().eq('user_id', userId)
+        stats.pushSubscriptionsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Push subscriptions deletion partial:', err?.message) }
+
+    try {
+      // 6. Delete notifications
+      if (sql) {
+        const notifResult = await sql`DELETE FROM public.user_notifications WHERE user_id = ${userId}`
+        stats.notificationsDeleted = notifResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('user_notifications').delete().eq('user_id', userId)
+        stats.notificationsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Notifications deletion partial:', err?.message) }
+
+    try {
+      // 7. Delete journal photos from storage, then journal entries
+      let journalPhotos = []
+      if (sql) {
+        journalPhotos = await sql`
+          SELECT gjp.image_url, gjp.thumbnail_url 
+          FROM public.garden_journal_photos gjp
+          JOIN public.garden_journal_entries gje ON gje.id = gjp.entry_id
+          WHERE gje.user_id = ${userId}
+        `
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('garden_journal_photos')
+          .select('image_url, thumbnail_url, entry_id')
+          .in('entry_id', 
+            supabaseServiceClient.from('garden_journal_entries').select('id').eq('user_id', userId)
+          )
+        journalPhotos = data || []
+      }
+      
+      // Delete photos from storage
+      for (const photo of journalPhotos) {
+        if (photo.image_url) {
+          const result = await deleteStorageObjectByUrl(photo.image_url)
+          if (result.deleted) stats.storageObjectsDeleted++
+        }
+        if (photo.thumbnail_url) {
+          const result = await deleteStorageObjectByUrl(photo.thumbnail_url)
+          if (result.deleted) stats.storageObjectsDeleted++
+        }
+      }
+      stats.journalPhotosDeleted = journalPhotos.length
+      
+      // Delete journal entries
+      if (sql) {
+        const journalResult = await sql`DELETE FROM public.garden_journal_entries WHERE user_id = ${userId}`
+        stats.journalEntriesDeleted = journalResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_journal_entries').delete().eq('user_id', userId)
+        stats.journalEntriesDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Journal deletion partial:', err?.message) }
+
+    try {
+      // 8. Delete plant scans and their images
+      let scans = []
+      if (sql) {
+        scans = await sql`SELECT image_url, image_path FROM public.plant_scans WHERE user_id = ${userId}`
+      } else {
+        const { data } = await supabaseServiceClient.from('plant_scans').select('image_url, image_path').eq('user_id', userId)
+        scans = data || []
+      }
+      
+      for (const scan of scans) {
+        if (scan.image_url) {
+          const result = await deleteStorageObjectByUrl(scan.image_url)
+          if (result.deleted) stats.storageObjectsDeleted++
+        }
+      }
+      
+      if (sql) {
+        const scanResult = await sql`DELETE FROM public.plant_scans WHERE user_id = ${userId}`
+        stats.plantScansDeleted = scanResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('plant_scans').delete().eq('user_id', userId)
+        stats.plantScansDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Plant scans deletion partial:', err?.message) }
+
+    try {
+      // 9. Delete bug reports and screenshots
+      let bugReports = []
+      if (sql) {
+        bugReports = await sql`SELECT id, screenshots FROM public.bug_reports WHERE user_id = ${userId}`
+      } else {
+        const { data } = await supabaseServiceClient.from('bug_reports').select('id, screenshots').eq('user_id', userId)
+        bugReports = data || []
+      }
+      
+      for (const bug of bugReports) {
+        if (bug.screenshots && Array.isArray(bug.screenshots)) {
+          for (const screenshotUrl of bug.screenshots) {
+            if (typeof screenshotUrl === 'string') {
+              const result = await deleteStorageObjectByUrl(screenshotUrl)
+              if (result.deleted) stats.storageObjectsDeleted++
+            }
+          }
+        }
+      }
+      
+      if (sql) {
+        const bugResult = await sql`DELETE FROM public.bug_reports WHERE user_id = ${userId}`
+        stats.bugReportsDeleted = bugResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('bug_reports').delete().eq('user_id', userId)
+        stats.bugReportsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Bug reports deletion partial:', err?.message) }
+
+    try {
+      // 10. Delete bookmarks (items cascade via FK)
+      if (sql) {
+        const bookmarkResult = await sql`DELETE FROM public.bookmarks WHERE user_id = ${userId}`
+        stats.bookmarksDeleted = bookmarkResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('bookmarks').delete().eq('user_id', userId)
+        stats.bookmarksDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Bookmarks deletion partial:', err?.message) }
+
+    try {
+      // 11. Delete activity logs
+      if (sql) {
+        const actResult = await sql`DELETE FROM public.garden_activity_logs WHERE actor_id = ${userId}`
+        stats.activityLogsDeleted = actResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_activity_logs').delete().eq('actor_id', userId)
+        stats.activityLogsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Activity logs deletion partial:', err?.message) }
+
+    try {
+      // 12. Anonymize web visits (retain for analytics, remove PII)
+      if (sql) {
+        const visitResult = await sql`
+          UPDATE public.web_visits 
+          SET user_id = NULL, ip_address = NULL, user_agent = NULL 
+          WHERE user_id = ${userId}
+        `
+        stats.webVisitsAnonymized = visitResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient
+          .from('web_visits')
+          .update({ user_id: null, ip_address: null, user_agent: null })
+          .eq('user_id', userId)
+        stats.webVisitsAnonymized = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Web visits anonymization partial:', err?.message) }
+
+    try {
+      // 13. Delete user blocks (both as blocker and blocked)
+      if (sql) {
+        await sql`DELETE FROM public.user_blocks WHERE blocker_id = ${userId} OR blocked_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('user_blocks').delete().eq('blocker_id', userId)
+        await supabaseServiceClient.from('user_blocks').delete().eq('blocked_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] User blocks deletion partial:', err?.message) }
+
+    try {
+      // 14. Delete message reactions
+      if (sql) {
+        await sql`DELETE FROM public.message_reactions WHERE user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('message_reactions').delete().eq('user_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] Message reactions deletion partial:', err?.message) }
+
+    try {
+      // 15. Delete avatar image and profile
+      let profile = null
+      if (sql) {
+        const profiles = await sql`SELECT avatar_url FROM public.profiles WHERE id = ${userId}`
+        profile = profiles?.[0]
+      } else {
+        const { data } = await supabaseServiceClient.from('profiles').select('avatar_url').eq('id', userId).maybeSingle()
+        profile = data
+      }
+      
+      if (profile?.avatar_url) {
+        const result = await deleteStorageObjectByUrl(profile.avatar_url)
+        if (result.deleted) {
+          stats.avatarDeleted = true
+          stats.storageObjectsDeleted++
+        }
+      }
+      
+      if (sql) {
+        await sql`DELETE FROM public.profiles WHERE id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('profiles').delete().eq('id', userId)
+      }
+      stats.profileDeleted = true
+    } catch (err) { console.warn('[gdpr] Profile deletion partial:', err?.message) }
+
+    try {
+      // 16. Process gardens (existing logic)
+      const { data: userMemberships, error: memberErr } = await supabaseServiceClient
+        .from('garden_members')
+        .select('garden_id, role')
+        .eq('user_id', userId)
+      if (!memberErr && userMemberships) {
+        for (const membership of userMemberships) {
+          const gardenId = membership.garden_id
+          const userRole = membership.role
+          
+          const { data: allMembers } = await supabaseServiceClient
+            .from('garden_members')
+            .select('user_id, role')
+            .eq('garden_id', gardenId)
+          
+          const otherMembers = (allMembers || []).filter(m => m.user_id !== userId)
+          const otherOwners = otherMembers.filter(m => m.role === 'owner')
+          
+          if (userRole === 'owner' && otherOwners.length === 0) {
+            if (otherMembers.length > 0) {
+              // Promote another member to owner
+              await supabaseServiceClient
+                .from('garden_members')
+                .update({ role: 'owner' })
+                .eq('garden_id', gardenId)
+                .eq('user_id', otherMembers[0].user_id)
+              // Remove user from garden
+              await supabaseServiceClient
+                .from('garden_members')
+                .delete()
+                .eq('garden_id', gardenId)
+                .eq('user_id', userId)
+            } else {
+              // Delete garden (no other members)
+              const { data: gardenRow } = await supabaseServiceClient
+                .from('gardens')
+                .select('cover_image_url')
+                .eq('id', gardenId)
+                .maybeSingle()
+              
+              if (gardenRow?.cover_image_url) {
+                const result = await deleteStorageObjectByUrl(gardenRow.cover_image_url)
+                if (result.deleted) stats.storageObjectsDeleted++
+              }
+              
+              await supabaseServiceClient.from('gardens').delete().eq('id', gardenId)
+            }
+          } else {
+            // Just remove user from garden
+            await supabaseServiceClient
+              .from('garden_members')
+              .delete()
+              .eq('garden_id', gardenId)
+              .eq('user_id', userId)
+          }
+          stats.gardensProcessed++
+        }
+      }
+    } catch (err) { console.warn('[gdpr] Gardens processing partial:', err?.message) }
+
+    try {
+      // 17. Clear task cache
+      if (sql) {
+        await sql`DELETE FROM public.user_task_daily_cache WHERE user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('user_task_daily_cache').delete().eq('user_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] Task cache deletion partial:', err?.message) }
+
+    try {
+      // 18. Finally delete auth user
+      const { error: deleteUserError } = await supabaseServiceClient.auth.admin.deleteUser(userId)
+      if (deleteUserError) throw deleteUserError
+      stats.authUserDeleted = true
+    } catch (err) {
+      console.error('[gdpr] Failed to delete auth user:', err?.message)
+      // Log partial failure for audit
+      await logGdprAccess(userId, 'ACCOUNT_DELETION_PARTIAL', { ...stats, error: err?.message }, req)
+      res.status(500).json({ error: 'Failed to complete account deletion', stats })
+      return
+    }
+
+    // Log successful deletion for GDPR audit
+    await logGdprAccess(userId, 'ACCOUNT_DELETION_COMPLETED', stats, req)
+
+    res.json({
+      ok: true,
+      message: 'All personal data deleted',
+      stats
+    })
+  } catch (err) {
+    console.error('[gdpr] Complete deletion failed:', err)
+    res.status(500).json({ error: 'Failed to complete deletion' })
+  }
+})
+
+// GDPR: Export all user data (Data Portability - Article 20)
+app.options('/api/account/export', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+app.get('/api/account/export', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    const userId = user.id
+
+    // Log the export request for GDPR audit
+    await logGdprAccess(userId, 'DATA_EXPORT', { ip: getClientIp(req) }, req)
+
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      dataSubject: {},
+      profile: null,
+      gardens: [],
+      plants: [],
+      tasks: [],
+      journal: [],
+      messages: [],
+      conversations: [],
+      friends: [],
+      friendRequests: [],
+      bookmarks: [],
+      scans: [],
+      notifications: [],
+      activityLogs: [],
+      bugReports: [],
+      cookieConsent: null
+    }
+
+    try {
+      // 1. Profile data
+      if (sql) {
+        const profiles = await sql`
+          SELECT id, display_name, username, bio, country, timezone, language, 
+                 favorite_plant, avatar_url, is_private, disable_friend_requests,
+                 notify_push, notify_email, experience_years, accent_key, roles,
+                 marketing_consent, marketing_consent_date, terms_accepted_date, 
+                 privacy_policy_accepted_date, created_at
+          FROM public.profiles WHERE id = ${userId}
+        `
+        exportData.profile = profiles?.[0] || null
+      } else {
+        const { data } = await supabaseServiceClient.from('profiles')
+          .select('id, display_name, username, bio, country, timezone, language, favorite_plant, avatar_url, is_private, disable_friend_requests, notify_push, notify_email, experience_years, accent_key, roles, marketing_consent, marketing_consent_date, terms_accepted_date, privacy_policy_accepted_date')
+          .eq('id', userId)
+          .maybeSingle()
+        exportData.profile = data
+      }
+    } catch (err) { console.warn('[gdpr-export] Profile:', err?.message) }
+
+    try {
+      // 2. Auth user data
+      const { data: authUser } = await supabaseServiceClient.auth.admin.getUserById(userId)
+      exportData.dataSubject = {
+        userId: userId,
+        email: authUser?.user?.email || user.email,
+        emailConfirmedAt: authUser?.user?.email_confirmed_at,
+        createdAt: authUser?.user?.created_at,
+        lastSignIn: authUser?.user?.last_sign_in_at
+      }
+    } catch (err) { console.warn('[gdpr-export] Auth user:', err?.message) }
+
+    try {
+      // 3. Gardens and plants
+      if (sql) {
+        const gardens = await sql`
+          SELECT g.*, gm.role as member_role
+          FROM public.gardens g
+          JOIN public.garden_members gm ON gm.garden_id = g.id
+          WHERE gm.user_id = ${userId}
+        `
+        for (const garden of gardens) {
+          const plants = await sql`
+            SELECT gp.*, p.name as plant_name
+            FROM public.garden_plants gp
+            LEFT JOIN public.plants p ON p.id = gp.plant_id
+            WHERE gp.garden_id = ${garden.id}
+          `
+          const tasks = await sql`
+            SELECT * FROM public.garden_plant_tasks
+            WHERE garden_id = ${garden.id}
+          `
+          exportData.gardens.push({
+            ...garden,
+            plants: plants || [],
+            tasks: tasks || []
+          })
+        }
+      } else {
+        const { data: memberships } = await supabaseServiceClient
+          .from('garden_members')
+          .select('garden_id, role')
+          .eq('user_id', userId)
+        
+        for (const membership of (memberships || [])) {
+          const { data: garden } = await supabaseServiceClient
+            .from('gardens')
+            .select('*')
+            .eq('id', membership.garden_id)
+            .maybeSingle()
+          
+          if (garden) {
+            const { data: plants } = await supabaseServiceClient
+              .from('garden_plants')
+              .select('*')
+              .eq('garden_id', garden.id)
+            
+            const { data: tasks } = await supabaseServiceClient
+              .from('garden_plant_tasks')
+              .select('*')
+              .eq('garden_id', garden.id)
+            
+            exportData.gardens.push({
+              ...garden,
+              member_role: membership.role,
+              plants: plants || [],
+              tasks: tasks || []
+            })
+          }
+        }
+      }
+    } catch (err) { console.warn('[gdpr-export] Gardens:', err?.message) }
+
+    try {
+      // 4. Journal entries
+      if (sql) {
+        const journal = await sql`
+          SELECT gje.*, 
+            (SELECT json_agg(gjp.*) FROM public.garden_journal_photos gjp WHERE gjp.entry_id = gje.id) as photos
+          FROM public.garden_journal_entries gje
+          WHERE gje.user_id = ${userId}
+          ORDER BY gje.created_at DESC
+        `
+        exportData.journal = journal || []
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('garden_journal_entries')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+        exportData.journal = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Journal:', err?.message) }
+
+    try {
+      // 5. Messages
+      if (sql) {
+        const messages = await sql`
+          SELECT m.*, c.participant_1, c.participant_2
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          WHERE m.sender_id = ${userId}
+          ORDER BY m.created_at DESC
+        `
+        exportData.messages = messages || []
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('messages')
+          .select('*, conversation:conversations(participant_1, participant_2)')
+          .eq('sender_id', userId)
+          .order('created_at', { ascending: false })
+        exportData.messages = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Messages:', err?.message) }
+
+    try {
+      // 6. Conversations
+      if (sql) {
+        const conversations = await sql`
+          SELECT * FROM public.conversations
+          WHERE participant_1 = ${userId} OR participant_2 = ${userId}
+        `
+        exportData.conversations = conversations || []
+      } else {
+        const { data: c1 } = await supabaseServiceClient.from('conversations').select('*').eq('participant_1', userId)
+        const { data: c2 } = await supabaseServiceClient.from('conversations').select('*').eq('participant_2', userId)
+        exportData.conversations = [...(c1 || []), ...(c2 || [])]
+      }
+    } catch (err) { console.warn('[gdpr-export] Conversations:', err?.message) }
+
+    try {
+      // 7. Friends
+      if (sql) {
+        const friends = await sql`
+          SELECT f.*, p.display_name as friend_name
+          FROM public.friends f
+          LEFT JOIN public.profiles p ON p.id = CASE
+            WHEN f.user_id = ${userId} THEN f.friend_id
+            ELSE f.user_id
+          END
+          WHERE f.user_id = ${userId} OR f.friend_id = ${userId}
+        `
+        exportData.friends = friends || []
+      } else {
+        const { data: f1 } = await supabaseServiceClient.from('friends').select('*').eq('user_id', userId)
+        const { data: f2 } = await supabaseServiceClient.from('friends').select('*').eq('friend_id', userId)
+        exportData.friends = [...(f1 || []), ...(f2 || [])]
+      }
+    } catch (err) { console.warn('[gdpr-export] Friends:', err?.message) }
+
+    try {
+      // 8. Friend requests
+      if (sql) {
+        const requests = await sql`
+          SELECT * FROM public.friend_requests
+          WHERE requester_id = ${userId} OR recipient_id = ${userId}
+        `
+        exportData.friendRequests = requests || []
+      } else {
+        const { data: r1 } = await supabaseServiceClient.from('friend_requests').select('*').eq('requester_id', userId)
+        const { data: r2 } = await supabaseServiceClient.from('friend_requests').select('*').eq('recipient_id', userId)
+        exportData.friendRequests = [...(r1 || []), ...(r2 || [])]
+      }
+    } catch (err) { console.warn('[gdpr-export] Friend requests:', err?.message) }
+
+    try {
+      // 9. Bookmarks
+      if (sql) {
+        const bookmarks = await sql`
+          SELECT b.*, 
+            (SELECT array_agg(bi.plant_id) FROM public.bookmark_items bi WHERE bi.bookmark_id = b.id) as plant_ids
+          FROM public.bookmarks b
+          WHERE b.user_id = ${userId}
+        `
+        exportData.bookmarks = bookmarks || []
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('bookmarks')
+          .select('*, bookmark_items(plant_id)')
+          .eq('user_id', userId)
+        exportData.bookmarks = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Bookmarks:', err?.message) }
+
+    try {
+      // 10. Plant scans
+      if (sql) {
+        const scans = await sql`SELECT * FROM public.plant_scans WHERE user_id = ${userId}`
+        exportData.scans = scans || []
+      } else {
+        const { data } = await supabaseServiceClient.from('plant_scans').select('*').eq('user_id', userId)
+        exportData.scans = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Scans:', err?.message) }
+
+    try {
+      // 11. Notifications
+      if (sql) {
+        const notifications = await sql`
+          SELECT * FROM public.user_notifications
+          WHERE user_id = ${userId}
+          ORDER BY created_at DESC
+        `
+        exportData.notifications = notifications || []
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('user_notifications')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+        exportData.notifications = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Notifications:', err?.message) }
+
+    try {
+      // 12. Bug reports
+      if (sql) {
+        const bugReports = await sql`SELECT * FROM public.bug_reports WHERE user_id = ${userId}`
+        exportData.bugReports = bugReports || []
+      } else {
+        const { data } = await supabaseServiceClient.from('bug_reports').select('*').eq('user_id', userId)
+        exportData.bugReports = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Bug reports:', err?.message) }
+
+    try {
+      // 13. Cookie consent (if server-tracked)
+      if (sql) {
+        const consent = await sql`
+          SELECT * FROM public.user_cookie_consent 
+          WHERE user_id = ${userId} 
+          ORDER BY consented_at DESC LIMIT 1
+        `
+        exportData.cookieConsent = consent?.[0] || null
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('user_cookie_consent')
+          .select('*')
+          .eq('user_id', userId)
+          .order('consented_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        exportData.cookieConsent = data
+      }
+    } catch (err) { console.warn('[gdpr-export] Cookie consent:', err?.message) }
+
+    // Set headers for download
+    const shortId = userId.slice(0, 8)
+    const timestamp = Date.now()
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', `attachment; filename="aphylia-data-export-${shortId}-${timestamp}.json"`)
+
+    res.json(exportData)
+  } catch (err) {
+    console.error('[gdpr-export] Data export failed:', err)
+    res.status(500).json({ error: 'Failed to export data' })
+  }
+})
+
+// GDPR: Update marketing consent
+app.options('/api/account/consent', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+app.post('/api/account/consent', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    const { marketingConsent } = req.body
+    if (typeof marketingConsent !== 'boolean') {
+      res.status(400).json({ error: 'marketingConsent must be a boolean' })
+      return
+    }
+
+    const userId = user.id
+    const now = new Date().toISOString()
+
+    if (sql) {
+      await sql`
+        UPDATE public.profiles 
+        SET marketing_consent = ${marketingConsent},
+            marketing_consent_date = ${now}
+        WHERE id = ${userId}
+      `
+    } else if (supabaseServiceClient) {
+      await supabaseServiceClient
+        .from('profiles')
+        .update({ 
+          marketing_consent: marketingConsent,
+          marketing_consent_date: now
+        })
+        .eq('id', userId)
+    }
+
+    // Log consent change for GDPR audit
+    await logGdprAccess(userId, 'CONSENT_UPDATE', { 
+      marketingConsent,
+      previousValue: 'unknown'
+    }, req)
+
+    res.json({ ok: true, marketingConsent, updatedAt: now })
+  } catch (err) {
+    console.error('[gdpr] Consent update failed:', err)
+    res.status(500).json({ error: 'Failed to update consent' })
+  }
+})
+
+// GDPR: Data retention cleanup cron job (runs daily at 3 AM)
+cron.schedule('0 3 * * *', async () => {
+  console.log('[gdpr] Running data retention cleanup...')
+  
+  try {
+    // 1. Anonymize web visits older than 90 days (keep for analytics, remove PII)
+    if (sql) {
+      const visitResult = await sql`
+        UPDATE public.web_visits
+        SET ip_address = NULL, user_agent = NULL
+        WHERE occurred_at < NOW() - INTERVAL '90 days'
+          AND ip_address IS NOT NULL
+      `
+      if (visitResult?.count > 0) {
+        console.log(`[gdpr] Anonymized ${visitResult.count} old web visits`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Web visits anonymization failed:', err?.message)
+  }
+
+  try {
+    // 2. Delete orphaned messages from deleted users (older than 30 days)
+    if (sql) {
+      const orphanResult = await sql`
+        DELETE FROM public.messages
+        WHERE sender_id NOT IN (SELECT id FROM auth.users)
+          AND created_at < NOW() - INTERVAL '30 days'
+      `
+      if (orphanResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${orphanResult.count} orphaned messages`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Orphaned messages cleanup failed:', err?.message)
+  }
+
+  try {
+    // 3. Delete expired push subscriptions (inactive for 180 days)
+    if (sql) {
+      const pushResult = await sql`
+        DELETE FROM public.user_push_subscriptions
+        WHERE updated_at < NOW() - INTERVAL '180 days'
+      `
+      if (pushResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${pushResult.count} expired push subscriptions`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Push subscriptions cleanup failed:', err?.message)
+  }
+
+  try {
+    // 4. Delete old delivered notifications (older than 90 days)
+    if (sql) {
+      const notifResult = await sql`
+        DELETE FROM public.user_notifications
+        WHERE delivery_status = 'sent'
+          AND delivered_at < NOW() - INTERVAL '90 days'
+      `
+      if (notifResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${notifResult.count} old notifications`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Notifications cleanup failed:', err?.message)
+  }
+
+  try {
+    // 5. Clean old GDPR audit logs (keep for 3 years as required by GDPR)
+    if (sql) {
+      const auditResult = await sql`
+        DELETE FROM public.gdpr_audit_log
+        WHERE created_at < NOW() - INTERVAL '3 years'
+      `
+      if (auditResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${auditResult.count} old audit log entries`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Audit log cleanup failed:', err?.message)
+  }
+
+  console.log('[gdpr] Data retention cleanup completed')
+})
+
+// ========== END GDPR COMPLIANCE ENDPOINTS ==========
+
 // Admin: unique visitors stats (past 10m and 7 days)
 app.get('/api/admin/visitors-stats', async (req, res) => {
   const uid = "public"
