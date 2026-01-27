@@ -1,4 +1,5 @@
 import React from 'react'
+import { captureException, addBreadcrumb } from '@/lib/sentry'
 
 type ErrorBoundaryProps = {
   children: React.ReactNode
@@ -14,6 +15,7 @@ type ErrorBoundaryState = {
 /**
  * ErrorBoundary component to catch and handle React errors gracefully
  * Particularly useful for catching lazy loading failures
+ * Integrates with Sentry for error reporting
  */
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
@@ -29,6 +31,23 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     // Log error for debugging (but don't spam console in production)
     if (import.meta.env.DEV) {
       console.error('[ErrorBoundary] Caught error:', error, errorInfo)
+    }
+
+    // Check if this is a chunk loading error (don't report these to Sentry as they're handled with retry UI)
+    const isChunkLoadError = 
+      error.message?.includes('dynamically imported module') ||
+      error.message?.includes('Loading chunk') ||
+      error.message?.includes('Failed to fetch')
+
+    // Report to Sentry (unless it's a chunk loading error)
+    if (!isChunkLoadError) {
+      addBreadcrumb('Error boundary caught error', 'error', 'error', {
+        componentStack: errorInfo.componentStack,
+      })
+      captureException(error, {
+        componentStack: errorInfo.componentStack,
+        errorBoundary: true,
+      })
     }
     
     this.props.onError?.(error, errorInfo)

@@ -1,3 +1,61 @@
+// Sentry error monitoring - must be imported first
+import * as Sentry from '@sentry/bun';
+
+const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520';
+
+// Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
+const SERVER_NAME = process.env.PLANTSWIPE_SERVER_NAME || process.env.SERVER_NAME || 'unknown';
+
+Sentry.init({
+  dsn: SENTRY_DSN,
+  environment: process.env.NODE_ENV || 'production',
+  // Server identification
+  serverName: SERVER_NAME,
+  // Send structured logs to Sentry
+  _experiments: {
+    enableLogs: true,
+  },
+  // Tracing - capture 100% of transactions
+  tracesSampleRate: 1.0,
+  // Add server tag to all events
+  initialScope: {
+    tags: {
+      server: SERVER_NAME,
+      app: 'plant-swipe-server',
+    },
+  },
+  // Filter out common non-actionable errors
+  beforeSend(event, hint) {
+    const error = hint.originalException;
+    if (error instanceof Error) {
+      // Ignore connection reset errors (common with load balancers)
+      if (error.message?.includes('ECONNRESET')) {
+        return null;
+      }
+      // Ignore socket hang up errors
+      if (error.message?.includes('socket hang up')) {
+        return null;
+      }
+    }
+    return event;
+  },
+});
+
+console.log(`[Sentry] Initialized for server: ${SERVER_NAME}`);
+
+// Global error handlers for uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error) => {
+  console.error('[Server] Uncaught Exception:', error);
+  Sentry.captureException(error);
+  // Give Sentry time to send the error before exiting
+  setTimeout(() => process.exit(1), 2000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Server] Unhandled Rejection at:', promise, 'reason:', reason);
+  Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
+});
+
 // ESM server to serve API and static assets
 import express from 'express'
 import postgres from 'postgres'
@@ -25651,6 +25709,30 @@ app.get('*', async (req, res) => {
   } catch { }
   res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
   res.sendFile(path.join(distDir, 'index.html'))
+})
+
+// Sentry error handling middleware - must be after all routes
+// This catches any errors thrown in route handlers
+app.use((err, req, res, next) => {
+  // Log error for debugging
+  console.error('[Server] Express error:', err?.message || err)
+  
+  // Capture error in Sentry with request context
+  Sentry.withScope((scope) => {
+    scope.setExtra('url', req.originalUrl)
+    scope.setExtra('method', req.method)
+    scope.setExtra('headers', req.headers)
+    scope.setExtra('query', req.query)
+    scope.setExtra('body', req.body)
+    Sentry.captureException(err)
+  })
+  
+  // Send error response
+  const statusCode = err.statusCode || err.status || 500
+  res.status(statusCode).json({
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+  })
 })
 
 const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase() !== 'true'

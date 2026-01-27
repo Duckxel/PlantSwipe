@@ -2,6 +2,7 @@ import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
 import { validateUsername } from '@/lib/username'
+import { setUser as setSentryUser } from '@/lib/sentry'
 
 // Default timezone for users who haven't set one
 const DEFAULT_TIMEZONE = 'Europe/London'
@@ -134,6 +135,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if ((data as any)?.accent_key) {
         try { applyAccentByKey((data as any).accent_key) } catch {}
       }
+      // Set Sentry user context for error tracking
+      try {
+        setSentryUser({
+          id: currentId,
+          username: (data as any)?.display_name || undefined,
+        })
+      } catch {}
     }
   }, [forceSignOut])
 
@@ -318,6 +326,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearCachedAuth()
     setProfile(null)
     setUser(null)
+    // Clear Sentry user context
+    try { setSentryUser(null) } catch {}
     await supabase.auth.signOut()
   }
 
