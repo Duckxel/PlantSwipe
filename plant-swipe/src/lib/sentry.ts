@@ -8,6 +8,14 @@ import * as Sentry from '@sentry/react'
 
 const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520'
 
+// Server identification: Set VITE_SERVER_NAME to 'DEV' or 'MAIN' in your .env file
+// Note: For client-side, env vars must be prefixed with VITE_ to be exposed
+const SERVER_NAME = (import.meta.env as Record<string, string>).VITE_SERVER_NAME || 
+                    (import.meta.env as Record<string, string>).VITE_PLANTSWIPE_SERVER_NAME ||
+                    // Fallback: try to read from window if server injected it
+                    (typeof window !== 'undefined' && (window as Record<string, unknown>).__SERVER_NAME__ as string) ||
+                    'unknown'
+
 /**
  * Initialize Sentry for error tracking
  * Should be called once at application startup
@@ -85,11 +93,14 @@ export function initSentry(): void {
       // Add additional context
       initialScope: {
         tags: {
+          server: SERVER_NAME,
           app: 'plant-swipe',
           platform: 'web',
         },
       },
     })
+
+    console.log(`[Sentry] Initialized for server: ${SERVER_NAME}`)
 
     console.log('[Sentry] Initialized successfully')
   } catch (error) {

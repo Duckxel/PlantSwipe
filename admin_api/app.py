@@ -18,6 +18,9 @@ from sentry_sdk.integrations.flask import FlaskIntegration
 
 SENTRY_DSN = "https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520"
 
+# Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
+SERVER_NAME = os.environ.get("PLANTSWIPE_SERVER_NAME") or os.environ.get("SERVER_NAME") or "unknown"
+
 def _init_sentry() -> None:
     """Initialize Sentry for error tracking in the Admin API."""
     try:
@@ -25,6 +28,8 @@ def _init_sentry() -> None:
             dsn=SENTRY_DSN,
             integrations=[FlaskIntegration()],
             environment=os.environ.get("FLASK_ENV", "production"),
+            # Server identification
+            server_name=SERVER_NAME,
             # Send structured logs to Sentry
             _experiments={
                 "enable_logs": True,
@@ -36,7 +41,10 @@ def _init_sentry() -> None:
             # Filter out common non-actionable errors
             before_send=_sentry_before_send,
         )
-        print("[Sentry] Admin API initialized successfully")
+        # Set server tag on all events
+        sentry_sdk.set_tag("server", SERVER_NAME)
+        sentry_sdk.set_tag("app", "plant-swipe-admin-api")
+        print(f"[Sentry] Admin API initialized for server: {SERVER_NAME}")
     except Exception as e:
         print(f"[Sentry] Failed to initialize: {e}")
 

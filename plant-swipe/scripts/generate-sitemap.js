@@ -10,6 +10,9 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 // Sentry error monitoring for sitemap generation
 const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520'
 
+// Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
+const SERVER_NAME = process.env.PLANTSWIPE_SERVER_NAME || process.env.SERVER_NAME || 'unknown'
+
 let Sentry = null
 try {
   // Try to import Sentry (may not be available in all environments)
@@ -19,14 +22,23 @@ try {
     Sentry.init({
       dsn: SENTRY_DSN,
       environment: process.env.NODE_ENV || 'production',
+      // Server identification
+      serverName: SERVER_NAME,
       // Send structured logs to Sentry
       _experiments: {
         enableLogs: true,
       },
       // Tracing - capture 100% of transactions
       tracesSampleRate: 1.0,
+      // Add server tag to all events
+      initialScope: {
+        tags: {
+          server: SERVER_NAME,
+          app: 'plant-swipe-sitemap',
+        },
+      },
     })
-    console.log('[sitemap] Sentry initialized')
+    console.log(`[sitemap] Sentry initialized for server: ${SERVER_NAME}`)
   }
 } catch {
   // Sentry not available, continue without it
