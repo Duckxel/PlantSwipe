@@ -234,6 +234,7 @@ const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
 import {
   ADMIN_STATUS_COLORS,
   ADMIN_STATUS_BADGE_CLASSES,
+  ADMIN_STATUS_BUTTON_SELECTED_CLASSES,
 } from "@/constants/plantStatus";
 import {
   USER_ROLES,
@@ -248,6 +249,8 @@ import { UserRoleBadge, ProfileNameBadges } from "@/components/profile/UserRoleB
 const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_COLORS;
 
 const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_BADGE_CLASSES;
+
+const PLANT_STATUS_BUTTON_SELECTED_CLASSES: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_BUTTON_SELECTED_CLASSES;
 
 const PLANT_STATUS_KEYS: NormalizedPlantStatus[] = [
   "approved",
@@ -7601,6 +7604,7 @@ export const AdminPage: React.FC = () => {
                                     {PLANT_STATUS_FILTER_OPTIONS.map((option) => {
                                       const selected = visiblePlantStatusesSet.has(option.value);
                                       const statusColor = PLANT_STATUS_COLORS[option.value];
+                                      const selectedClasses = PLANT_STATUS_BUTTON_SELECTED_CLASSES[option.value];
                                       return (
                                         <button
                                           key={option.value}
@@ -7609,7 +7613,7 @@ export const AdminPage: React.FC = () => {
                                           onClick={() => togglePlantStatusFilter(option.value)}
                                           className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                                             selected
-                                              ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20"
+                                              ? selectedClasses
                                               : "border-stone-200 dark:border-[#3e3e42] text-stone-600 dark:text-stone-300 hover:border-stone-300 dark:hover:border-stone-500 bg-white dark:bg-[#1a1a1d]"
                                           }`}
                                         >
