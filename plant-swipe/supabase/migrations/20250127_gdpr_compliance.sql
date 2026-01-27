@@ -20,6 +20,40 @@ ADD COLUMN IF NOT EXISTS terms_accepted_date timestamptz;
 ALTER TABLE IF EXISTS public.profiles
 ADD COLUMN IF NOT EXISTS privacy_policy_accepted_date timestamptz;
 
+-- ========== 2. Add granular communication preferences ==========
+-- Email notification preferences
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_product_updates boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_tips_advice boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_community_highlights boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_promotions boolean DEFAULT false;
+
+-- Push notification preferences
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_task_reminders boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_friend_activity boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_messages boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_garden_updates boolean DEFAULT true;
+
+-- Personalization preferences
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS personalized_recommendations boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS analytics_improvement boolean DEFAULT true;
+
 -- ========== 2. Create GDPR Audit Log Table ==========
 -- Tracks all GDPR-related actions for compliance and accountability
 
