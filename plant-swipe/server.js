@@ -2857,6 +2857,118 @@ try { app.set('trust proxy', true) } catch { }
 // Increase JSON body limit to handle base64 encoded images (e.g. for plant scan identification)
 app.use(express.json({ limit: '15mb' }))
 
+// =============================================================================
+// CSRF (Cross-Site Request Forgery) Protection
+// Used for high-risk operations like password/email changes
+// =============================================================================
+
+// CSRF token store: Map of token -> { userId, createdAt, used }
+// Tokens expire after 15 minutes and can only be used once
+const csrfTokenStore = new Map()
+const CSRF_TOKEN_EXPIRY_MS = 15 * 60 * 1000 // 15 minutes
+const CSRF_CLEANUP_INTERVAL_MS = 5 * 60 * 1000 // Clean up every 5 minutes
+
+// Cleanup expired tokens periodically
+setInterval(() => {
+  const now = Date.now()
+  for (const [token, data] of csrfTokenStore.entries()) {
+    if (now - data.createdAt > CSRF_TOKEN_EXPIRY_MS) {
+      csrfTokenStore.delete(token)
+    }
+  }
+}, CSRF_CLEANUP_INTERVAL_MS)
+
+/**
+ * Generate a new CSRF token for a user
+ * @param userId - The user ID to associate with the token
+ * @returns The generated token
+ */
+function generateCsrfToken(userId) {
+  const token = crypto.randomBytes(32).toString('hex')
+  csrfTokenStore.set(token, {
+    userId: userId || 'anonymous',
+    createdAt: Date.now(),
+    used: false
+  })
+  return token
+}
+
+/**
+ * Validate a CSRF token
+ * @param token - The token to validate
+ * @param userId - The user ID to match against (optional)
+ * @returns { valid: boolean, reason?: string }
+ */
+function validateCsrfToken(token, userId = null) {
+  if (!token) {
+    return { valid: false, reason: 'No CSRF token provided' }
+  }
+
+  const tokenData = csrfTokenStore.get(token)
+  
+  if (!tokenData) {
+    return { valid: false, reason: 'Invalid or expired CSRF token' }
+  }
+
+  // Check if token has expired
+  if (Date.now() - tokenData.createdAt > CSRF_TOKEN_EXPIRY_MS) {
+    csrfTokenStore.delete(token)
+    return { valid: false, reason: 'CSRF token has expired' }
+  }
+
+  // Check if token was already used (prevent replay attacks)
+  if (tokenData.used) {
+    return { valid: false, reason: 'CSRF token has already been used' }
+  }
+
+  // If userId provided, verify it matches
+  if (userId && tokenData.userId !== 'anonymous' && tokenData.userId !== userId) {
+    return { valid: false, reason: 'CSRF token user mismatch' }
+  }
+
+  // Mark token as used (one-time use)
+  tokenData.used = true
+  
+  return { valid: true }
+}
+
+/**
+ * Middleware to require CSRF token validation
+ * Expects token in X-CSRF-Token header
+ */
+function requireCsrfToken(req, res, next) {
+  const csrfToken = req.headers['x-csrf-token']
+  
+  // Get user ID from Authorization header if present
+  let userId = null
+  const authHeader = req.headers.authorization
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      // Decode JWT to get user ID (without verification - Supabase handles that)
+      const token = authHeader.split(' ')[1]
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
+      userId = payload.sub
+    } catch { }
+  }
+
+  const validation = validateCsrfToken(csrfToken, userId)
+  
+  if (!validation.valid) {
+    console.warn(`[CSRF] Validation failed: ${validation.reason}`, { 
+      path: req.path, 
+      ip: req.ip || req.headers['x-forwarded-for'],
+      userId 
+    })
+    return res.status(403).json({ 
+      error: 'CSRF validation failed', 
+      reason: validation.reason,
+      code: 'CSRF_INVALID'
+    })
+  }
+
+  next()
+}
+
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
   try {
@@ -2872,8 +2984,9 @@ app.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
     }
     if (req.path && req.path.startsWith('/api/')) {
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
+      res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token')
       if (req.method === 'OPTIONS') {
         res.status(204).end()
         return
@@ -2885,8 +2998,9 @@ app.use((req, res, next) => {
 
 // Catch-all OPTIONS for any /api/* route (defense-in-depth)
 app.options('/api/*', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
+  res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token')
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.status(204).end()
 })
@@ -2922,6 +3036,38 @@ app.get('/api/health', async (_req, res) => {
       db: { ok: false, latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' },
     })
   }
+})
+
+// =============================================================================
+// CSRF Token Endpoint - Get a fresh CSRF token for security-sensitive operations
+// =============================================================================
+app.get('/api/csrf-token', (req, res) => {
+  // Extract user ID from Authorization header if present
+  let userId = null
+  const authHeader = req.headers.authorization
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.split(' ')[1]
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
+      userId = payload.sub
+    } catch { }
+  }
+
+  const csrfToken = generateCsrfToken(userId)
+  
+  // Also set as a cookie for additional security layer
+  res.cookie('csrf_token', csrfToken, {
+    httpOnly: false, // Must be readable by JS
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: CSRF_TOKEN_EXPIRY_MS,
+    path: '/'
+  })
+
+  res.json({ 
+    token: csrfToken,
+    expiresIn: CSRF_TOKEN_EXPIRY_MS / 1000 // seconds
+  })
 })
 
 // Admin: System health stats (CPU, memory, disk, uptime, connections)
@@ -8401,7 +8547,8 @@ app.post('/api/send-security-email', async (req, res) => {
 })
 
 // Convenience endpoint: Send password change confirmation email
-app.post('/api/security/password-changed', async (req, res) => {
+// CSRF protected - requires X-CSRF-Token header
+app.post('/api/security/password-changed', requireCsrfToken, async (req, res) => {
   const { userId, userEmail, userDisplayName, userLanguage, device, location, ipAddress } = req.body || {}
   
   if (!userId || !userEmail) {
@@ -8426,7 +8573,8 @@ app.post('/api/security/password-changed', async (req, res) => {
 })
 
 // Convenience endpoint: Send email change notification to OLD email
-app.post('/api/security/email-changed-notification', async (req, res) => {
+// CSRF protected - requires X-CSRF-Token header
+app.post('/api/security/email-changed-notification', requireCsrfToken, async (req, res) => {
   const { userId, oldEmail, newEmail, userDisplayName, userLanguage } = req.body || {}
   
   if (!userId || !oldEmail || !newEmail) {
@@ -8450,7 +8598,8 @@ app.post('/api/security/email-changed-notification', async (req, res) => {
 })
 
 // Check if email is already in use by another user
-app.post('/api/security/check-email-available', async (req, res) => {
+// CSRF protected - requires X-CSRF-Token header
+app.post('/api/security/check-email-available', requireCsrfToken, async (req, res) => {
   const { email, currentUserId } = req.body || {}
   
   if (!email) {

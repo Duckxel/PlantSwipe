@@ -15,6 +15,31 @@ import usePushSubscription from "@/hooks/usePushSubscription"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
 
+/**
+ * Fetch a CSRF token for security-sensitive operations
+ * Tokens are single-use and expire after 15 minutes
+ */
+async function getCsrfToken(): Promise<string> {
+  const session = (await supabase.auth.getSession()).data.session
+  const headers: Record<string, string> = {}
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  
+  const response = await fetch('/api/csrf-token', {
+    method: 'GET',
+    headers,
+    credentials: 'same-origin',
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to get CSRF token')
+  }
+  
+  const data = await response.json()
+  return data.token
+}
+
 export default function SettingsPage() {
   const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
   const navigate = useLanguageNavigate()
@@ -227,16 +252,30 @@ export default function SettingsPage() {
     setSuccess(null)
 
     try {
-      // Check if email is already in use by another user
+      // Get CSRF token for security-sensitive operations
+      const csrfToken = await getCsrfToken()
+      
+      // Check if email is already in use by another user (CSRF protected)
       const checkResponse = await fetch('/api/security/check-email-available', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+        },
         body: JSON.stringify({ 
           email: newEmail,
           currentUserId: user?.id 
         }),
         credentials: 'same-origin',
       })
+      
+      // Handle CSRF error specifically
+      if (checkResponse.status === 403) {
+        const errorData = await checkResponse.json().catch(() => ({}))
+        if (errorData.code === 'CSRF_INVALID') {
+          throw new Error(t('settings.security.csrfError', { defaultValue: 'Security validation failed. Please refresh the page and try again.' }))
+        }
+      }
       
       const checkResult = await checkResponse.json().catch(() => ({ available: true }))
       
@@ -252,19 +291,25 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError
 
-      // Send notification to OLD email about the change (non-blocking)
+      // Send notification to OLD email about the change (CSRF protected, non-blocking)
+      // Need a fresh CSRF token since the previous one was used
       if (user?.id && oldEmailAddress) {
-        fetch('/api/security/email-changed-notification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            oldEmail: oldEmailAddress,
-            newEmail: newEmail,
-            userDisplayName: profile?.display_name || 'User',
-            userLanguage: (profile as any)?.language || 'en',
-          }),
-          credentials: 'same-origin',
+        getCsrfToken().then(notifCsrfToken => {
+          fetch('/api/security/email-changed-notification', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': notifCsrfToken,
+            },
+            body: JSON.stringify({
+              userId: user.id,
+              oldEmail: oldEmailAddress,
+              newEmail: newEmail,
+              userDisplayName: profile?.display_name || 'User',
+              userLanguage: (profile as any)?.language || 'en',
+            }),
+            credentials: 'same-origin',
+          })
         }).catch((err) => {
           console.warn('[email-change] Failed to send notification email:', err)
         })
@@ -325,19 +370,24 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError
 
-      // Send password change confirmation email (non-blocking)
+      // Send password change confirmation email (CSRF protected, non-blocking)
       if (user?.id && email) {
-        fetch('/api/security/password-changed', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            userEmail: email,
-            userDisplayName: profile?.display_name || 'User',
-            userLanguage: (profile as any)?.language || 'en',
-            // Browser will auto-detect device from user-agent on server
-          }),
-          credentials: 'same-origin',
+        getCsrfToken().then(csrfToken => {
+          fetch('/api/security/password-changed', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify({
+              userId: user.id,
+              userEmail: email,
+              userDisplayName: profile?.display_name || 'User',
+              userLanguage: (profile as any)?.language || 'en',
+              // Browser will auto-detect device from user-agent on server
+            }),
+            credentials: 'same-origin',
+          })
         }).catch((err) => {
           console.warn('[password-change] Failed to send confirmation email:', err)
         })
