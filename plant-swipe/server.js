@@ -6,8 +6,12 @@ const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.i
 Sentry.init({
   dsn: SENTRY_DSN,
   environment: process.env.NODE_ENV || 'production',
-  // Performance monitoring - sample 10% of transactions
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  // Send structured logs to Sentry
+  _experiments: {
+    enableLogs: true,
+  },
+  // Tracing - capture 100% of transactions
+  tracesSampleRate: 1.0,
   // Filter out common non-actionable errors
   beforeSend(event, hint) {
     const error = hint.originalException;

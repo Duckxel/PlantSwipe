@@ -19,8 +19,12 @@ try {
     Sentry.init({
       dsn: SENTRY_DSN,
       environment: process.env.NODE_ENV || 'production',
-      // Lower sample rate for batch jobs
-      tracesSampleRate: 0.1,
+      // Send structured logs to Sentry
+      _experiments: {
+        enableLogs: true,
+      },
+      // Tracing - capture 100% of transactions
+      tracesSampleRate: 1.0,
     })
     console.log('[sitemap] Sentry initialized')
   }

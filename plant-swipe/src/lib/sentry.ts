@@ -32,6 +32,11 @@ export function initSentry(): void {
       // Release tracking (if version is available)
       release: (import.meta.env as Record<string, string>).VITE_APP_VERSION || undefined,
       
+      // Send structured logs to Sentry
+      _experiments: {
+        enableLogs: true,
+      },
+      
       // Integrations
       integrations: [
         // Browser tracing for performance monitoring
@@ -44,9 +49,8 @@ export function initSentry(): void {
         }),
       ],
 
-      // Performance monitoring
-      // Capture 10% of transactions in production for performance monitoring
-      tracesSampleRate: isProduction ? 0.1 : 1.0,
+      // Tracing - capture 100% of transactions
+      tracesSampleRate: 1.0,
 
       // Session replay
       // Capture 10% of all sessions, 100% of sessions with errors

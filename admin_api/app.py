@@ -25,8 +25,12 @@ def _init_sentry() -> None:
             dsn=SENTRY_DSN,
             integrations=[FlaskIntegration()],
             environment=os.environ.get("FLASK_ENV", "production"),
-            # Performance monitoring - sample 10% of transactions
-            traces_sample_rate=0.1,
+            # Send structured logs to Sentry
+            _experiments={
+                "enable_logs": True,
+            },
+            # Tracing - capture 100% of transactions
+            traces_sample_rate=1.0,
             # Send PII for better debugging (admin API is internal)
             send_default_pii=True,
             # Filter out common non-actionable errors
