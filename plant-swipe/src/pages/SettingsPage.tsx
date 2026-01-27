@@ -227,6 +227,23 @@ export default function SettingsPage() {
     setSuccess(null)
 
     try {
+      // Check if email is already in use by another user
+      const checkResponse = await fetch('/api/security/check-email-available', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: newEmail,
+          currentUserId: user?.id 
+        }),
+        credentials: 'same-origin',
+      })
+      
+      const checkResult = await checkResponse.json().catch(() => ({ available: true }))
+      
+      if (!checkResult.available) {
+        throw new Error(t('settings.email.emailAlreadyInUse', { defaultValue: 'This email is already in use by another account.' }))
+      }
+
       const oldEmailAddress = email // Store old email before change
       
       const { error: updateError } = await supabase.auth.updateUser({
@@ -279,6 +296,12 @@ export default function SettingsPage() {
 
     if (newPassword !== confirmPassword) {
       setError(t('settings.password.passwordsDontMatch'))
+      return
+    }
+
+    // Check if new password is the same as current password
+    if (newPassword === currentPassword) {
+      setError(t('settings.password.newPasswordSameAsCurrent', { defaultValue: 'New password must be different from your current password.' }))
       return
     }
 

@@ -8449,6 +8449,40 @@ app.post('/api/security/email-changed-notification', async (req, res) => {
   res.json(result)
 })
 
+// Check if email is already in use by another user
+app.post('/api/security/check-email-available', async (req, res) => {
+  const { email, currentUserId } = req.body || {}
+  
+  if (!email) {
+    res.status(400).json({ error: 'Missing required field: email' })
+    return
+  }
+
+  const normalizedEmail = email.toLowerCase().trim()
+
+  try {
+    if (sql) {
+      // Check if email exists in auth.users (excluding the current user if provided)
+      const query = currentUserId
+        ? sql`SELECT id FROM auth.users WHERE lower(email) = ${normalizedEmail} AND id != ${currentUserId} LIMIT 1`
+        : sql`SELECT id FROM auth.users WHERE lower(email) = ${normalizedEmail} LIMIT 1`
+      
+      const rows = await query
+      const isAvailable = !rows || rows.length === 0
+      
+      res.json({ available: isAvailable, email: normalizedEmail })
+    } else {
+      // Fallback: can't check without database connection, assume available
+      // The actual update will fail if email is taken
+      res.json({ available: true, email: normalizedEmail, note: 'Database check unavailable' })
+    }
+  } catch (err) {
+    console.error('[check-email-available] Error:', err)
+    // On error, let the update proceed and handle the error there
+    res.json({ available: true, email: normalizedEmail, note: 'Check failed, proceeding' })
+  }
+})
+
 // Admin: global stats (bypass RLS via server connection)
 app.get('/api/admin/stats', async (req, res) => {
   const uid = "public"
