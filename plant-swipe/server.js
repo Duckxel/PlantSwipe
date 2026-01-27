@@ -7214,7 +7214,23 @@ app.get('/api/admin/notification-automations', async (req, res) => {
       } catch (countErr) {
         console.error('[notification-automations] Error counting recipients for', row.trigger_type, countErr)
       }
-      return { ...row, recipient_count: recipientCount }
+      
+      // Count how many notifications were sent today for this automation
+      let sentTodayCount = 0
+      try {
+        const sentTodayResult = await sql`
+          select count(*)::bigint as cnt
+          from public.user_notifications un
+          where un.automation_id = ${row.id}
+            and un.scheduled_for::date = current_date
+            and un.delivery_status in ('sent', 'pending')
+        `
+        sentTodayCount = Number(sentTodayResult?.[0]?.cnt || 0)
+      } catch (sentErr) {
+        // Ignore errors counting sent notifications
+      }
+      
+      return { ...row, recipient_count: recipientCount, sent_today_count: sentTodayCount }
     }))
 
     const automations = automationsWithCounts.map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
@@ -21447,6 +21463,7 @@ function normalizeNotificationAutomation(row) {
     createdAt: isoOrNull(row.created_at),
     updatedAt: isoOrNull(row.updated_at),
     recipientCount: Number(row.recipient_count || 0),
+    sentTodayCount: Number(row.sent_today_count || 0),
   }
 }
 
