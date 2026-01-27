@@ -5342,12 +5342,24 @@ app.post('/api/blog/summarize', async (req, res) => {
   // If full metadata generation is requested, generate all fields at once
   if (generateFullMetadata) {
     const instructions = [
-      'You are an SEO expert for Aphylia, a plant care and gardening app. Generate metadata for the provided blog article.',
+      'You are an SEO expert. Generate metadata for this blog article from Aphylia (a plant care app).',
+      '',
       'Return a JSON object with exactly these fields:',
-      '- "teaser": A compelling 1-sentence summary under 240 characters for card displays. Active voice, no emojis.',
-      '- "seoTitle": An SEO-optimized title under 60 characters. Should be engaging and include relevant keywords.',
-      '- "seoDescription": An SEO meta description between 120-155 characters. Compelling and informative.',
-      '- "tags": An array of 3-7 lowercase tags relevant to the content. Use existing common tags when possible: gardening, plants, tips, care, seasonal, indoor, outdoor, vegetables, flowers, sustainability.',
+      '',
+      '- "teaser": A compelling 1-sentence summary under 240 characters. Capture the SPECIFIC topic/insight of THIS article. Active voice, no emojis.',
+      '',
+      '- "seoTitle": An SEO-optimized title under 60 characters that is SPECIFIC to this article\'s unique content. Do NOT use generic titles. Include the main subject/plant/technique discussed.',
+      '',
+      '- "seoDescription": An SEO meta description between 120-155 characters. Be SPECIFIC about what readers will learn from THIS article.',
+      '',
+      '- "tags": An array of 5-7 lowercase tags. IMPORTANT: Tags must be SPECIFIC to the article content:',
+      '  * Include specific plant names mentioned (e.g., "monstera", "tomatoes", "succulents")',
+      '  * Include specific techniques discussed (e.g., "propagation", "repotting", "pruning")',
+      '  * Include specific problems/solutions (e.g., "yellow-leaves", "overwatering", "pest-control")',
+      '  * Include seasonal relevance if applicable (e.g., "spring-planting", "winter-care")',
+      '  * Avoid generic tags like "plants", "gardening", "tips" unless the article is truly general',
+      '  * Use hyphens for multi-word tags (e.g., "indoor-plants", "soil-mix")',
+      '',
       'Respond ONLY with valid JSON, no markdown formatting.',
     ].join('\n')
     const promptSections = [

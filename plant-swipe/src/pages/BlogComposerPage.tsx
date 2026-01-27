@@ -363,20 +363,31 @@ export default function BlogComposerPage() {
       latestHtmlRef.current = html
       const trimmedHtml = html.trim()
       summaryAbortRef.current?.abort()
+      
+      // Use current values - preserve admin edits
       let summaryText = autoSummary
       let finalSeoTitle = seoTitle
       let finalSeoDescription = seoDescription
       let finalTags = tags
-      if (trimmedHtml) {
+      
+      // Only auto-generate AI content if ALL metadata fields are empty
+      // This preserves any admin edits to individual fields
+      const hasNoMetadata = !autoSummary.trim() && !seoTitle.trim() && !seoDescription.trim() && tags.length === 0
+      
+      if (trimmedHtml && hasNoMetadata) {
         try {
           const result = await runSummary(trimmedHtml, { force: true, generateFullMetadata: true })
-          summaryText = result.summary || autoSummary
-          finalSeoTitle = result.seoTitle || seoTitle
-          finalSeoDescription = result.seoDescription || seoDescription
-          finalTags = result.tags || tags
+          summaryText = result.summary || ""
+          finalSeoTitle = result.seoTitle || ""
+          finalSeoDescription = result.seoDescription || ""
+          finalTags = result.tags || []
           setAutoSummary(summaryText)
+          setSeoTitle(finalSeoTitle)
+          setSeoDescription(finalSeoDescription)
+          setTags(finalTags)
+          setTagsInput(finalTags.join(", "))
         } catch {
-          summaryText = autoSummary
+          // Keep empty values if generation fails
         }
       }
       const publishDateIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString()
@@ -644,14 +655,36 @@ export default function BlogComposerPage() {
 
             {/* SEO Metadata Section */}
             <div className="space-y-4 rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4">
-              <div className="space-y-1">
-                <p className="text-sm font-medium flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-emerald-600" />
-                  {t("blogPage.editor.seoMetadataLabel", { defaultValue: "SEO & Discoverability" })}
-                </p>
-                <p className="text-xs text-stone-500 dark:text-stone-400">
-                  {t("blogPage.editor.seoMetadataHelper", { defaultValue: "AI-generated metadata to improve search engine visibility and social sharing." })}
-                </p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-emerald-600" />
+                    {t("blogPage.editor.seoMetadataLabel", { defaultValue: "SEO & Discoverability" })}
+                  </p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400">
+                    {t("blogPage.editor.seoMetadataHelper", { defaultValue: "Edit fields manually or generate with AI. Your edits are preserved when saving." })}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-2xl shrink-0"
+                  onClick={() => runSummary(latestHtmlRef.current || editorContent.html, { force: true, generateFullMetadata: true }).catch(() => {})}
+                  disabled={summaryStatus === "generating"}
+                >
+                  {summaryStatus === "generating" ? (
+                    <>
+                      <RefreshCcw className="mr-2 h-3 w-3 animate-spin" />
+                      {t("blogPage.editor.generating", { defaultValue: "Generating…" })}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-3 w-3" />
+                      {t("blogPage.editor.generateWithAI", { defaultValue: "Generate with AI" })}
+                    </>
+                  )}
+                </Button>
               </div>
 
               {/* SEO Title */}
@@ -709,7 +742,7 @@ export default function BlogComposerPage() {
                   className="text-sm"
                 />
                 <p className="text-[11px] text-stone-400">
-                  {t("blogPage.editor.tagsHelper", { defaultValue: "Separate tags with commas. Maximum 7 tags." })}
+                  {t("blogPage.editor.tagsHelper", { defaultValue: "Add specific tags for this article (e.g., plant names, techniques). Separate with commas. Max 7." })}
                 </p>
                 {tags.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
