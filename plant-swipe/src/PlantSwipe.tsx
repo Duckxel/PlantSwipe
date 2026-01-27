@@ -19,6 +19,7 @@ import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
+import { CookieConsent } from "@/components/CookieConsent";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -59,6 +60,7 @@ const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
 const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
 const PricingPageLazy = lazy(() => import("@/pages/PricingPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
+const PrivacyPageLazy = lazy(() => import("@/pages/PrivacyPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
 const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
@@ -1228,12 +1230,17 @@ export default function PlantSwipe() {
     try {
       console.log('[auth] submit start', { mode: authMode })
       
-      // Execute reCAPTCHA v3 Enterprise
+      // Execute reCAPTCHA v3 Enterprise (consent-aware, may return null)
       let recaptchaToken: string | undefined
       try {
         const action = authMode === 'signup' ? 'signup' : 'login'
-        recaptchaToken = await executeRecaptcha(action)
-        console.log('[auth] reCAPTCHA token obtained')
+        const token = await executeRecaptcha(action)
+        recaptchaToken = token ?? undefined
+        if (token) {
+          console.log('[auth] reCAPTCHA token obtained')
+        } else {
+          console.log('[auth] reCAPTCHA skipped (no consent or unavailable)')
+        }
       } catch (recaptchaError) {
         console.warn('[auth] reCAPTCHA execution failed', recaptchaError)
         // Continue without token - backend will decide how to handle
@@ -1401,6 +1408,9 @@ export default function PlantSwipe() {
               </div>
             </DialogContent>
           </Dialog>
+          
+          {/* GDPR Cookie Consent Banner */}
+          <CookieConsent />
         </AuthActionsProvider>
       )
     }
@@ -1731,6 +1741,14 @@ export default function PlantSwipe() {
               }
             />
             <Route
+              path="/privacy"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PrivacyPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
               path="/blog"
               element={
                 <Suspense fallback={routeLoadingFallback}>
@@ -2024,6 +2042,9 @@ export default function PlantSwipe() {
           navigate(`/messages?conversation=${conversationId}`)
         }}
       />
+      
+      {/* GDPR Cookie Consent Banner */}
+      <CookieConsent />
     </div>
     </AuthActionsProvider>
   )
