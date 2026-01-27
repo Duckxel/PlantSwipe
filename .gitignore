@@ -66,6 +66,11 @@ domain.json
 # Admin API environment file (created locally, contains secrets)
 admin_env
 
+# Core dump files (crash artifacts, not needed)
+core
+core.*
+*.core
+
 # Editor settings that may auto-generate
 *.sublime-workspace
 *.sublime-project
