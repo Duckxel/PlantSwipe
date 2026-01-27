@@ -717,6 +717,13 @@ Sentry.init({
   dsn: '$sentry_dsn',
 });
 
+// Test Sentry integration
+try {
+  throw new Error('Sentry Bun test');
+} catch (e) {
+  Sentry.captureException(e);
+}
+
 "
   
   # Prepend Sentry code to server.js
