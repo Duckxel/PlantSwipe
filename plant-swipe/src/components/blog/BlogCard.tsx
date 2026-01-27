@@ -83,7 +83,25 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4">
         <p className="text-sm text-stone-600 dark:text-stone-300 min-h-[3.5rem]">{summaryText}</p>
-        <div className="flex items-center justify-between gap-3 pt-2">
+        {post.tags && post.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {post.tags.slice(0, 4).map((tag) => (
+              <Badge
+                key={tag}
+                variant="outline"
+                className="rounded-xl px-2 py-0.5 text-[10px] text-stone-500 dark:text-stone-400 border-stone-200 dark:border-stone-600"
+              >
+                {tag}
+              </Badge>
+            ))}
+            {post.tags.length > 4 && (
+              <span className="text-[10px] text-stone-400 dark:text-stone-500 self-center">
+                +{post.tags.length - 4}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 pt-2 mt-auto">
           <Button asChild variant="secondary" className="rounded-2xl px-4">
             <Link to={`/blog/${articleTarget}`}>{t("blogPage.card.readMore", { defaultValue: "Read article" })}</Link>
           </Button>

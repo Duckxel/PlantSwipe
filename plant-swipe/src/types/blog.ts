@@ -18,6 +18,12 @@ export type BlogPost = {
   showCoverImage: boolean
   /** User who last modified the post (if different from author) */
   updatedByName: string | null
+  /** AI-generated or custom SEO title for search engines and social sharing */
+  seoTitle: string | null
+  /** AI-generated or custom SEO description for search engines and social sharing */
+  seoDescription: string | null
+  /** AI-generated or custom tags for categorization (limited to 7 tags) */
+  tags: string[]
 }
 
 export type BlogPostInput = {
@@ -32,6 +38,12 @@ export type BlogPostInput = {
   editorData?: JSONContent | null
   showCoverImage?: boolean
   updatedByName?: string | null
+  /** AI-generated or custom SEO title for search engines and social sharing */
+  seoTitle?: string | null
+  /** AI-generated or custom SEO description for search engines and social sharing */
+  seoDescription?: string | null
+  /** AI-generated or custom tags for categorization (limited to 7 tags) */
+  tags?: string[]
 }
 
 /**

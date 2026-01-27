@@ -4392,6 +4392,9 @@ create table if not exists public.blog_posts (
   updated_at timestamptz not null default now(),
   show_cover_image boolean not null default false,
   updated_by_name text,
+  seo_title text,
+  seo_description text,
+  tags text[] default '{}',
   unique(slug)
 );
 
@@ -4407,7 +4410,28 @@ do $$ begin
     alter table public.blog_posts add column updated_by_name text;
   end if;
 end $$;
+
+-- Add SEO metadata columns if they don't exist (for existing deployments)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'blog_posts' and column_name = 'seo_title') then
+    alter table public.blog_posts add column seo_title text;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'blog_posts' and column_name = 'seo_description') then
+    alter table public.blog_posts add column seo_description text;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'blog_posts' and column_name = 'tags') then
+    alter table public.blog_posts add column tags text[] default '{}';
+  end if;
+end $$;
+
 create index if not exists blog_posts_published_idx on public.blog_posts (is_published desc, published_at desc nulls last, created_at desc);
+create index if not exists blog_posts_tags_idx on public.blog_posts using gin (tags);
 create index if not exists blog_posts_author_idx on public.blog_posts (author_id, created_at desc);
 
 create or replace function public.update_blog_posts_updated_at()

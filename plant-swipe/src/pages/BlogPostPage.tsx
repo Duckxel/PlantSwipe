@@ -116,10 +116,12 @@ export default function BlogPostPage() {
     }
   }, [sanitizedHtml])
 
-  const seoTitle = post
-    ? t('seo.blog.postTitle', { title: post.title, defaultValue: `${post.title} · Aphylia Blog` })
-    : t('seo.blog.listTitle', { defaultValue: 'Aphylia Blog' })
-  const seoDescription = post?.excerpt
+  // Use AI-generated SEO title/description if available, otherwise fall back to defaults
+  const seoTitle = post?.seoTitle
+    || (post ? t('seo.blog.postTitle', { title: post.title, defaultValue: `${post.title} · Aphylia Blog` })
+    : t('seo.blog.listTitle', { defaultValue: 'Aphylia Blog' }))
+  const seoDescription = post?.seoDescription
+    || post?.excerpt
     || t('seo.blog.postDescription', {
       title: post?.title ?? '',
       author: authorLabel,
@@ -132,6 +134,9 @@ export default function BlogPostPage() {
     image: effectiveCoverImageUrl ?? undefined,
     url: slug ? `/blog/${slug}` : '/blog',
   })
+
+  // Display tags if present
+  const displayTags = post?.tags ?? []
 
   // Footer attribution info
   const createdDate = formatDateOnly(post?.createdAt)
@@ -190,6 +195,19 @@ export default function BlogPostPage() {
                   </Badge>
                 )}
               </div>
+              {displayTags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {displayTags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="outline"
+                      className="rounded-2xl px-3 py-1 text-xs text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-600"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
 
             {shouldShowCoverAtTop && (

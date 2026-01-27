@@ -91,6 +91,12 @@ export type BlogPostRow = {
   updated_at: string
   show_cover_image: boolean
   updated_by_name: string | null
+  /** AI-generated or custom SEO title for search engines and social sharing */
+  seo_title: string | null
+  /** AI-generated or custom SEO description for search engines and social sharing */
+  seo_description: string | null
+  /** AI-generated or custom tags for categorization (limited to 7 tags) */
+  tags: string[]
 }
 
 // Garden-related table row types matching Supabase schema expectations
