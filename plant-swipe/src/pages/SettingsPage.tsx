@@ -227,11 +227,31 @@ export default function SettingsPage() {
     setSuccess(null)
 
     try {
+      const oldEmailAddress = email // Store old email before change
+      
       const { error: updateError } = await supabase.auth.updateUser({
         email: newEmail
       })
 
       if (updateError) throw updateError
+
+      // Send notification to OLD email about the change (non-blocking)
+      if (user?.id && oldEmailAddress) {
+        fetch('/api/security/email-changed-notification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            oldEmail: oldEmailAddress,
+            newEmail: newEmail,
+            userDisplayName: profile?.display_name || 'User',
+            userLanguage: (profile as any)?.language || 'en',
+          }),
+          credentials: 'same-origin',
+        }).catch((err) => {
+          console.warn('[email-change] Failed to send notification email:', err)
+        })
+      }
 
       setSuccess(t('settings.email.updateRequestSent'))
       setNewEmail("")
@@ -281,6 +301,24 @@ export default function SettingsPage() {
       })
 
       if (updateError) throw updateError
+
+      // Send password change confirmation email (non-blocking)
+      if (user?.id && email) {
+        fetch('/api/security/password-changed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            userEmail: email,
+            userDisplayName: profile?.display_name || 'User',
+            userLanguage: (profile as any)?.language || 'en',
+            // Browser will auto-detect device from user-agent on server
+          }),
+          credentials: 'same-origin',
+        }).catch((err) => {
+          console.warn('[password-change] Failed to send confirmation email:', err)
+        })
+      }
 
       setSuccess(t('settings.password.updated'))
       setCurrentPassword("")
