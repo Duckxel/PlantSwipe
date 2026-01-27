@@ -2890,6 +2890,372 @@ try { app.set('trust proxy', true) } catch { }
 // Increase JSON body limit to handle base64 encoded images (e.g. for plant scan identification)
 app.use(express.json({ limit: '15mb' }))
 
+// =============================================================================
+// SECURITY MIDDLEWARE & HELPERS
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// CONTENT SECURITY POLICY (CSP)
+// Protects against XSS and other injection attacks
+// -----------------------------------------------------------------------------
+
+// Allowed domains for various resource types
+const CSP_TRUSTED_DOMAINS = {
+  // Core application domains
+  self: ["'self'", '*.aphylia.app'],
+  // Image sources - specific trusted CDNs only (not wildcard)
+  images: [
+    "'self'",
+    'data:',
+    'blob:',
+    '*.aphylia.app',
+    '*.supabase.co',
+    '*.supabase.in',
+    'media.aphylia.app',
+    // Plant image sources
+    'images.unsplash.com',
+    '*.wikimedia.org',
+    'upload.wikimedia.org',
+    // Google services (for user avatars via OAuth)
+    '*.googleusercontent.com',
+    '*.ggpht.com',
+  ],
+  // Script sources - no unsafe-inline/eval, use nonces for inline scripts
+  scripts: [
+    "'self'",
+    '*.aphylia.app',
+    'https://www.googletagmanager.com',
+    'https://www.google.com',
+    'https://www.gstatic.com',
+    'https://recaptchaenterprise.googleapis.com',
+  ],
+  // Style sources - allow unsafe-inline for now (CSS-in-JS frameworks need it)
+  styles: [
+    "'self'",
+    "'unsafe-inline'", // Required for styled-components/emotion
+    '*.aphylia.app',
+    'https://fonts.googleapis.com',
+  ],
+  // Connect sources (fetch, XHR, WebSocket)
+  connect: [
+    "'self'",
+    '*.aphylia.app',
+    'wss://*.aphylia.app',
+    'https://*.supabase.co',
+    'wss://*.supabase.co',
+    'https://www.google-analytics.com',
+    'https://analytics.google.com',
+    'https://region1.google-analytics.com',
+    'https://recaptchaenterprise.googleapis.com',
+  ],
+  // Font sources
+  fonts: [
+    "'self'",
+    '*.aphylia.app',
+    'https://fonts.gstatic.com',
+    'data:',
+  ],
+  // Frame sources (iframes)
+  frames: [
+    "'self'",
+    '*.aphylia.app',
+    'https://www.google.com',
+    'https://recaptcha.google.com',
+  ],
+}
+
+// Build CSP header string
+function buildCspPolicy() {
+  const directives = [
+    `default-src ${CSP_TRUSTED_DOMAINS.self.join(' ')}`,
+    `script-src ${CSP_TRUSTED_DOMAINS.scripts.join(' ')}`,
+    `style-src ${CSP_TRUSTED_DOMAINS.styles.join(' ')}`,
+    `img-src ${CSP_TRUSTED_DOMAINS.images.join(' ')}`,
+    `font-src ${CSP_TRUSTED_DOMAINS.fonts.join(' ')}`,
+    `connect-src ${CSP_TRUSTED_DOMAINS.connect.join(' ')}`,
+    `frame-src ${CSP_TRUSTED_DOMAINS.frames.join(' ')}`,
+    `media-src 'self' *.aphylia.app *.supabase.co blob: data:`,
+    `object-src 'none'`,
+    `base-uri 'self'`,
+    `form-action 'self' *.aphylia.app`,
+    `worker-src 'self' *.aphylia.app blob:`,
+    `manifest-src 'self' *.aphylia.app`,
+    `frame-ancestors 'self'`,
+  ]
+  return directives.join('; ')
+}
+
+const CSP_POLICY = buildCspPolicy()
+
+// Apply CSP to all responses
+app.use((_req, res, next) => {
+  // Set CSP header
+  res.setHeader('Content-Security-Policy', CSP_POLICY)
+  // Additional security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.setHeader('X-XSS-Protection', '1; mode=block')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  next()
+})
+
+// -----------------------------------------------------------------------------
+// DISTRIBUTED RATE LIMITING (PostgreSQL-backed)
+// Persists across server restarts and works in load-balanced environments
+// -----------------------------------------------------------------------------
+
+// Rate limit configurations (fallback if DB config unavailable)
+const RATE_LIMIT_DEFAULTS = {
+  scan: { maxRequests: 60, windowSeconds: 3600 },
+  ai_chat: { maxRequests: 120, windowSeconds: 3600 },
+  translate: { maxRequests: 500, windowSeconds: 3600 },
+  image_upload: { maxRequests: 100, windowSeconds: 3600 },
+  bug_report: { maxRequests: 20, windowSeconds: 3600 },
+  garden_activity: { maxRequests: 300, windowSeconds: 3600 },
+  garden_journal: { maxRequests: 50, windowSeconds: 3600 },
+  push_notify: { maxRequests: 300, windowSeconds: 3600 },
+  message_send: { maxRequests: 300, windowSeconds: 3600 },
+  friend_request: { maxRequests: 50, windowSeconds: 3600 },
+  conversation_create: { maxRequests: 30, windowSeconds: 3600 },
+  data_export: { maxRequests: 5, windowSeconds: 3600 },
+  password_reset: { maxRequests: 5, windowSeconds: 3600 },
+}
+
+// In-memory cache for rate limit config (refreshed periodically)
+let rateLimitConfigCache = { ...RATE_LIMIT_DEFAULTS }
+let rateLimitConfigLastFetch = 0
+const RATE_LIMIT_CONFIG_TTL = 60000 // Refresh config every minute
+
+/**
+ * Load rate limit configuration from database
+ */
+async function loadRateLimitConfig() {
+  if (!sql) return
+  const now = Date.now()
+  if (now - rateLimitConfigLastFetch < RATE_LIMIT_CONFIG_TTL) return
+  
+  try {
+    const rows = await sql`
+      SELECT action, max_requests, window_seconds, is_enabled
+      FROM public.rate_limit_config
+      WHERE is_enabled = true
+    `
+    if (rows && rows.length > 0) {
+      for (const row of rows) {
+        rateLimitConfigCache[row.action] = {
+          maxRequests: row.max_requests,
+          windowSeconds: row.window_seconds,
+        }
+      }
+    }
+    rateLimitConfigLastFetch = now
+  } catch (err) {
+    // Config table might not exist yet - use defaults
+    console.warn('[rate-limit] Failed to load config from DB, using defaults:', err?.message)
+  }
+}
+
+/**
+ * Check if an action is rate limited using PostgreSQL
+ * @param {string} action - The action type (scan, ai_chat, translate, etc.)
+ * @param {string} identifier - User ID or IP address
+ * @returns {Promise<{allowed: boolean, remaining?: number, resetIn?: number}>}
+ */
+async function checkRateLimitDB(action, identifier) {
+  // Load config if stale
+  await loadRateLimitConfig()
+  
+  const config = rateLimitConfigCache[action] || RATE_LIMIT_DEFAULTS[action]
+  if (!config) {
+    console.warn(`[rate-limit] Unknown action type: ${action}`)
+    return { allowed: true }
+  }
+  
+  const { maxRequests, windowSeconds } = config
+  
+  // If no database, fall back to allowing (but log warning)
+  if (!sql) {
+    console.warn('[rate-limit] Database not available, allowing request')
+    return { allowed: true }
+  }
+  
+  try {
+    // Use the database function for atomic check-and-record
+    const result = await sql`
+      SELECT public.check_rate_limit(
+        ${identifier}::text,
+        ${action}::text,
+        ${maxRequests}::integer,
+        ${windowSeconds}::integer,
+        true
+      ) as allowed
+    `
+    
+    const allowed = result?.[0]?.allowed === true
+    
+    if (!allowed) {
+      // Log rate limit violation for security monitoring
+      console.log(`[rate-limit] BLOCKED: ${action} for ${identifier} (limit: ${maxRequests}/${windowSeconds}s)`)
+      
+      // Optionally log to audit table for security analysis
+      try {
+        await sql`
+          INSERT INTO public.gdpr_audit_log (user_id, action, details, ip_address, created_at)
+          VALUES (
+            NULL,
+            'RATE_LIMIT_EXCEEDED',
+            ${JSON.stringify({ action, identifier, maxRequests, windowSeconds })}::jsonb,
+            NULL,
+            NOW()
+          )
+        `
+      } catch { /* Ignore audit log failures */ }
+    }
+    
+    return { allowed }
+  } catch (err) {
+    // If rate limit check fails, allow the request but log the error
+    console.error('[rate-limit] Check failed, allowing request:', err?.message)
+    return { allowed: true }
+  }
+}
+
+/**
+ * Get rate limit identifier based on user or IP
+ * @param {object} req - Express request object
+ * @param {object|null} user - User object (if authenticated)
+ * @param {boolean} useIp - Force IP-based limiting (for unauthenticated actions)
+ * @returns {string} - Identifier to use for rate limiting
+ */
+function getRateLimitId(req, user, useIp = false) {
+  if (!useIp && user?.id) {
+    return `user:${user.id}`
+  }
+  const ip = getClientIp(req) || 'unknown'
+  return `ip:${ip}`
+}
+
+/**
+ * Express middleware factory for rate limiting
+ * @param {string} action - The action to rate limit
+ * @param {boolean} useIp - Force IP-based limiting
+ * @returns {Function} - Express middleware
+ */
+function rateLimit(action, useIp = false) {
+  return async (req, res, next) => {
+    try {
+      // Get user if available
+      let user = null
+      if (!useIp) {
+        try {
+          user = await getUserFromRequest(req)
+        } catch { /* Ignore auth errors */ }
+      }
+      
+      const identifier = getRateLimitId(req, user, useIp)
+      const result = await checkRateLimitDB(action, identifier)
+      
+      if (!result.allowed) {
+        return sendSecurityError(res, 429, 'RATE_LIMITED', 'Too many requests')
+      }
+      
+      next()
+    } catch (err) {
+      // On error, allow the request but log
+      console.error('[rate-limit] Middleware error:', err?.message)
+      next()
+    }
+  }
+}
+
+// Periodic cleanup of old rate limit entries (every hour)
+setInterval(async () => {
+  if (!sql) return
+  try {
+    const result = await sql`SELECT public.cleanup_rate_limits(24) as deleted`
+    const deleted = result?.[0]?.deleted || 0
+    if (deleted > 0) {
+      console.log(`[rate-limit] Cleaned up ${deleted} old entries`)
+    }
+  } catch (err) {
+    console.error('[rate-limit] Cleanup failed:', err?.message)
+  }
+}, 60 * 60 * 1000) // Every hour
+
+// -----------------------------------------------------------------------------
+// ERROR MESSAGE SANITIZATION
+// Returns generic messages to users, logs detailed errors server-side
+// -----------------------------------------------------------------------------
+
+// Standard error codes for client responses
+const ERROR_CODES = {
+  RATE_LIMITED: { status: 429, message: 'Too many requests. Please try again later.' },
+  UNAUTHORIZED: { status: 401, message: 'Authentication required.' },
+  FORBIDDEN: { status: 403, message: 'Access denied.' },
+  NOT_FOUND: { status: 404, message: 'Resource not found.' },
+  INVALID_INPUT: { status: 400, message: 'Invalid request.' },
+  SERVER_ERROR: { status: 500, message: 'An unexpected error occurred.' },
+  SERVICE_UNAVAILABLE: { status: 503, message: 'Service temporarily unavailable.' },
+  CSRF_INVALID: { status: 403, message: 'Security validation failed.' },
+  VALIDATION_ERROR: { status: 400, message: 'Validation error.' },
+}
+
+/**
+ * Send a sanitized error response
+ * @param {object} res - Express response object
+ * @param {number} status - HTTP status code
+ * @param {string} code - Error code from ERROR_CODES
+ * @param {string} internalMessage - Detailed message for server logs (not sent to client)
+ * @param {object} additionalData - Optional additional data for the response
+ */
+function sendSecurityError(res, status, code, internalMessage, additionalData = {}) {
+  const errorConfig = ERROR_CODES[code] || ERROR_CODES.SERVER_ERROR
+  const finalStatus = status || errorConfig.status
+  
+  // Log detailed error server-side
+  console.warn(`[security-error] ${code}: ${internalMessage}`, {
+    status: finalStatus,
+    ...additionalData,
+  })
+  
+  // Send generic message to client
+  res.status(finalStatus).json({
+    error: errorConfig.message,
+    code: code,
+    ...additionalData,
+  })
+}
+
+/**
+ * Wrap an async route handler with error sanitization
+ * @param {Function} handler - Async route handler
+ * @returns {Function} - Wrapped handler
+ */
+function secureHandler(handler) {
+  return async (req, res, ...args) => {
+    try {
+      await handler(req, res, ...args)
+    } catch (err) {
+      // Log full error details server-side
+      console.error('[secure-handler] Unhandled error:', {
+        path: req.path,
+        method: req.method,
+        error: err?.message,
+        stack: err?.stack,
+      })
+      
+      // Send generic error to client
+      if (!res.headersSent) {
+        sendSecurityError(res, 500, 'SERVER_ERROR', err?.message || 'Unknown error')
+      }
+    }
+  }
+}
+
+// =============================================================================
+// END SECURITY MIDDLEWARE
+// =============================================================================
+
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
   try {
@@ -2905,8 +3271,9 @@ app.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
     }
     if (req.path && req.path.startsWith('/api/')) {
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
+      res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token, X-RateLimit-Remaining')
       if (req.method === 'OPTIONS') {
         res.status(204).end()
         return
@@ -2918,8 +3285,9 @@ app.use((req, res, next) => {
 
 // Catch-all OPTIONS for any /api/* route (defense-in-depth)
 app.options('/api/*', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
+  res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token, X-RateLimit-Remaining')
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.status(204).end()
 })
@@ -5305,8 +5673,7 @@ app.post('/api/pro-advice/upload-image', async (req, res) => {
 // Messages image upload - for chat images
 app.post('/api/messages/upload-image', async (req, res) => {
   if (!supabaseServiceClient) {
-    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
-    return
+    return sendSecurityError(res, 500, 'SERVICE_UNAVAILABLE', 'Supabase service role key not configured')
   }
   
   // Require authenticated user
@@ -5316,8 +5683,13 @@ app.post('/api/messages/upload-image', async (req, res) => {
   } catch { }
   
   if (!uploader?.id) {
-    res.status(401).json({ error: 'You must be signed in to upload images' })
-    return
+    return sendSecurityError(res, 401, 'UNAUTHORIZED', 'User not authenticated for image upload')
+  }
+
+  // Rate limit: Image uploads (storage costs)
+  const rateLimitResult = await checkRateLimitDB('image_upload', getRateLimitId(req, uploader))
+  if (!rateLimitResult.allowed) {
+    return sendSecurityError(res, 429, 'RATE_LIMITED', `Image upload rate limit exceeded for user ${uploader.id}`)
   }
 
   try {
@@ -11647,14 +12019,22 @@ app.post('/api/contact', async (req, res) => {
 // DeepL Translation API endpoint
 app.post('/api/translate', async (req, res) => {
   try {
+    // Rate limit: Translation API (DeepL costs) - per user or IP
+    let user = null
+    try { user = await getUserFromRequest(req) } catch { }
+    const rateLimitResult = await checkRateLimitDB('translate', getRateLimitId(req, user))
+    if (!rateLimitResult.allowed) {
+      return sendSecurityError(res, 429, 'RATE_LIMITED', 'Translation rate limit exceeded')
+    }
+
     const { text, source_lang, target_lang } = req.body
 
     if (!text || typeof text !== 'string') {
-      return res.status(400).json({ error: 'Missing or invalid text field' })
+      return sendSecurityError(res, 400, 'INVALID_INPUT', 'Missing or invalid text field')
     }
 
     if (!source_lang || !target_lang) {
-      return res.status(400).json({ error: 'Missing source_lang or target_lang' })
+      return sendSecurityError(res, 400, 'INVALID_INPUT', 'Missing source_lang or target_lang')
     }
 
     // Skip translation if source and target are the same
@@ -12640,10 +13020,15 @@ app.get('/api/account/export', async (req, res) => {
   try {
     const user = await getUserFromRequest(req)
     if (!user?.id) {
-      res.status(401).json({ error: 'Unauthorized' })
-      return
+      return sendSecurityError(res, 401, 'UNAUTHORIZED', 'User not authenticated for data export')
     }
     const userId = user.id
+
+    // Rate limit: Data export (expensive operation, prevent abuse)
+    const rateLimitResult = await checkRateLimitDB('data_export', getRateLimitId(req, user))
+    if (!rateLimitResult.allowed) {
+      return sendSecurityError(res, 429, 'RATE_LIMITED', `Data export rate limit exceeded for user ${userId}`)
+    }
 
     // Log GDPR access
     await logGdprAccess(userId, 'DATA_EXPORT', { ip: getClientIp(req) }, req)
@@ -13966,13 +14351,17 @@ app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
 // Optimizes image, uploads to storage, calls Kindwise API, returns everything
 app.post('/api/scan/upload-and-identify', async (req, res) => {
   if (!supabaseServiceClient) {
-    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
-    return
+    return sendSecurityError(res, 500, 'SERVICE_UNAVAILABLE', 'Supabase service role key not configured')
   }
   const user = await getUserFromRequest(req)
   if (!user?.id) {
-    res.status(401).json({ error: 'You must be signed in to scan plants' })
-    return
+    return sendSecurityError(res, 401, 'UNAUTHORIZED', 'User not authenticated for scan')
+  }
+
+  // Rate limit: Plant scans (AI/API costs)
+  const rateLimitResult = await checkRateLimitDB('scan', getRateLimitId(req, user))
+  if (!rateLimitResult.allowed) {
+    return sendSecurityError(res, 429, 'RATE_LIMITED', `Scan rate limit exceeded for user ${user.id}`)
   }
 
   if (!KINDWISE_API_KEY) {
@@ -14209,14 +14598,18 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
 // Endpoint: POST /api/bug-report/upload-screenshot
 app.post('/api/bug-report/upload-screenshot', async (req, res) => {
   if (!supabaseServiceClient) {
-    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
-    return
+    return sendSecurityError(res, 500, 'SERVICE_UNAVAILABLE', 'Supabase service role key not configured')
   }
 
   const user = await getUserFromRequest(req)
   if (!user?.id) {
-    res.status(401).json({ error: 'You must be signed in to upload bug screenshots' })
-    return
+    return sendSecurityError(res, 401, 'UNAUTHORIZED', 'User not authenticated for bug report')
+  }
+
+  // Rate limit: Bug reports (IP-based for spam prevention)
+  const rateLimitResult = await checkRateLimitDB('bug_report', getRateLimitId(req, user, true))
+  if (!rateLimitResult.allowed) {
+    return sendSecurityError(res, 429, 'RATE_LIMITED', 'Bug report rate limit exceeded')
   }
 
   // Verify user has bug_catcher role
@@ -20543,14 +20936,18 @@ app.post('/api/ai/garden-chat', async (req, res) => {
     // Authenticate user
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) {
-      res.status(401).json({ error: 'Unauthorized' })
-      return
+      return sendSecurityError(res, 401, 'UNAUTHORIZED', 'User not authenticated for AI chat')
+    }
+    
+    // Rate limit: AI chat (OpenAI costs)
+    const rateLimitResult = await checkRateLimitDB('ai_chat', getRateLimitId(req, user))
+    if (!rateLimitResult.allowed) {
+      return sendSecurityError(res, 429, 'RATE_LIMITED', `AI chat rate limit exceeded for user ${user.id}`)
     }
     
     // Check if OpenAI is configured
     if (!openai) {
-      res.status(503).json({ error: 'AI service not configured' })
-      return
+      return sendSecurityError(res, 503, 'SERVICE_UNAVAILABLE', 'OpenAI not configured')
     }
     
     const body = req.body || {}
