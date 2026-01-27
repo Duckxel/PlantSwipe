@@ -4588,6 +4588,9 @@ async function ensureNotificationTables() {
     await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
     await sql`create index if not exists user_notifications_automation_idx on public.user_notifications (automation_id);`
     await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
+    // Unique constraint for automation notifications: one notification per automation per user per day (in user's timezone)
+    // Using scheduled_for::date since the automation inserts with scheduled_for = now()
+    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (scheduled_for::date)) where automation_id is not null;`
 
     // User Push Subscriptions
     await sql`
@@ -6712,20 +6715,34 @@ app.get('/api/admin/notification-automations', async (req, res) => {
     console.log('[notification-automations] Query returned:', rows?.length || 0, 'rows')
 
     // Calculate recipient counts separately to avoid query failures
+    // NOTE: These counts show users who will receive notifications TODAY (in their local timezone)
+    // The actual delivery happens when the user's local time matches the send_hour
     const automationsWithCounts = await Promise.all((rows || []).map(async (row) => {
       let recipientCount = 0
+      const sendHour = typeof row.send_hour === 'number' ? row.send_hour : 9
       try {
         if (row.trigger_type === 'weekly_inactive_reminder') {
+          // Count users who are inactive 7+ days, haven't received this notification today,
+          // and have push notifications enabled
           const countResult = await sql`
             select count(*)::bigint as cnt
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and not exists (
+                select 1 from public.user_notifications un
+                where un.automation_id = ${row.id}
+                  and un.user_id = p.id
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+              )
           `
           recipientCount = Number(countResult?.[0]?.cnt || 0)
         } else if (row.trigger_type === 'daily_task_reminder') {
           try {
+            // Count users with incomplete tasks TODAY (in their local timezone),
+            // who haven't received this notification today
+            // This matches the actual delivery query logic
             const countResult = await sql`
               select count(distinct p.id)::bigint as cnt
               from public.profiles p
@@ -6733,16 +6750,24 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_plant_tasks t on t.garden_id = gm.garden_id
               join public.garden_plant_task_occurrences occ on occ.task_id = t.id
               where (p.notify_push is null or p.notify_push = true)
-                and occ.due_at::date = current_date
+                and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
                 and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+                and not exists (
+                  select 1 from public.user_notifications un
+                  where un.automation_id = ${row.id}
+                    and un.user_id = p.id
+                    and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                )
             `
             recipientCount = Number(countResult?.[0]?.cnt || 0)
           } catch (e) {
             // Table might not exist
+            console.warn('[notification-automations] daily_task_reminder count error:', e?.message)
             recipientCount = 0
           }
         } else if (row.trigger_type === 'journal_continue_reminder') {
           try {
+            // Count users who wrote in their journal yesterday (in their local timezone)
             const countResult = await sql`
               select count(distinct p.id)::bigint as cnt
               from public.profiles p
@@ -6750,11 +6775,18 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
               where (p.notify_push is null or p.notify_push = true)
                 and gal.kind = 'note'
-                and gal.occurred_at::date = current_date - interval '1 day'
+                and (gal.occurred_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date - interval '1 day'
+                and not exists (
+                  select 1 from public.user_notifications un
+                  where un.automation_id = ${row.id}
+                    and un.user_id = p.id
+                    and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                )
             `
             recipientCount = Number(countResult?.[0]?.cnt || 0)
           } catch (e) {
             // Table might not exist
+            console.warn('[notification-automations] journal_continue_reminder count error:', e?.message)
             recipientCount = 0
           }
         }
@@ -21143,6 +21175,20 @@ async function deliverPushNotifications(notifications, campaign) {
     `
   }
 
+  // Log delivery summary
+  const failureReasons = new Map()
+  for (const [, reason] of failedWithReason.entries()) {
+    failureReasons.set(reason, (failureReasons.get(reason) || 0) + 1)
+  }
+  if (deliveredIds.length > 0 || failedWithReason.size > 0) {
+    let summary = `[notifications] Delivery complete: ${deliveredIds.length} sent, ${failedWithReason.size} failed`
+    if (failureReasons.size > 0) {
+      const reasons = Array.from(failureReasons.entries()).map(([r, c]) => `${r}=${c}`).join(', ')
+      summary += ` (${reasons})`
+    }
+    console.log(summary)
+  }
+
   return { sent: deliveredIds.length, failed: failedWithReason.size }
 }
 
@@ -21459,10 +21505,33 @@ async function processDueAutomations() {
         if (!recipients || !recipients.length) {
           // Only log once per hour to avoid spam
           const lastLogKey = `automation_log_${automation.id}`
-          const now = Date.now()
-          if (!global[lastLogKey] || now - global[lastLogKey] > 3600000) {
-            console.log(`[automations] ${automation.trigger_type}: No eligible recipients at this hour`)
-            global[lastLogKey] = now
+          const nowTs = Date.now()
+          if (!global[lastLogKey] || nowTs - global[lastLogKey] > 3600000) {
+            // Log debug info about why there might be no recipients
+            console.log(`[automations] ${automation.trigger_type}: No eligible recipients at send_hour=${sendHour}`)
+            
+            // For daily_task_reminder, log how many users have incomplete tasks (without hour filter)
+            if (automation.trigger_type === 'daily_task_reminder') {
+              try {
+                const debugCount = await sql`
+                  select count(distinct p.id)::bigint as total_with_tasks,
+                         count(distinct case when extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour} then p.id end)::bigint as at_send_hour
+                  from public.profiles p
+                  join public.garden_members gm on gm.user_id = p.id
+                  join public.garden_plant_tasks t on t.garden_id = gm.garden_id
+                  join public.garden_plant_task_occurrences occ on occ.task_id = t.id
+                  where (p.notify_push is null or p.notify_push = true)
+                    and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                    and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+                `
+                const totalWithTasks = Number(debugCount?.[0]?.total_with_tasks || 0)
+                const atSendHour = Number(debugCount?.[0]?.at_send_hour || 0)
+                console.log(`[automations] ${automation.trigger_type} debug: ${totalWithTasks} users with tasks, ${atSendHour} at send_hour=${sendHour}`)
+              } catch (debugErr) {
+                // Ignore debug query errors
+              }
+            }
+            global[lastLogKey] = nowTs
           }
           continue
         }
@@ -21491,6 +21560,8 @@ async function processDueAutomations() {
         }
         const targetUrl = automation.cta_url || defaultUrl
 
+        let insertedCount = 0
+        let skippedCount = 0
         for (const recipient of recipients) {
           // Get message variants for user's language (with fallback to default)
           const userLang = (recipient.language || 'en').toLowerCase()
@@ -21506,7 +21577,9 @@ async function processDueAutomations() {
             .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
           try {
-            await sql`
+            // Insert notification with conflict handling for the unique automation constraint
+            // The unique constraint is on (automation_id, user_id, scheduled_for::date)
+            const insertResult = await sql`
               insert into public.user_notifications (
                 automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
               )
@@ -21519,17 +21592,36 @@ async function processDueAutomations() {
                 now(),
                 'pending'
               )
+              on conflict (automation_id, user_id, (scheduled_for::date)) where automation_id is not null
+              do nothing
+              returning id
             `
+            if (insertResult && insertResult.length > 0) {
+              insertedCount++
+            } else {
+              skippedCount++
+            }
           } catch (insertErr) {
-            // Ignore errors (e.g. if notification already exists)
+            // Log errors for debugging (duplicate key violations expected if constraint triggered)
+            if (!insertErr?.message?.includes('duplicate key') && !insertErr?.message?.includes('violates unique constraint')) {
+              console.warn(`[automations] Failed to insert notification for user ${recipient.user_id}:`, insertErr?.message)
+            }
+            skippedCount++
           }
         }
 
-        // Update last_run_at
+        console.log(`[automations] ${automation.trigger_type}: Queued ${insertedCount} notifications (${skippedCount} skipped/duplicates)`)
+
+        // Update last_run_at with detailed summary
         await sql`
           update public.notification_automations
           set last_run_at = now(),
-              last_run_summary = ${sql.json({ recipients: recipients.length, sentAt: new Date().toISOString() })}
+              last_run_summary = ${sql.json({ 
+                recipients: recipients.length, 
+                queued: insertedCount,
+                skipped: skippedCount,
+                sentAt: new Date().toISOString() 
+              })}
           where id = ${automation.id}
         `
       } catch (automationErr) {
