@@ -652,7 +652,7 @@ fi
 
 log "Using Bun $(bun --version 2>/dev/null || echo 'version unknown') as primary package manager."
 
-# Install Sentry for error monitoring
+# Install Sentry for error monitoring (server-side and client-side)
 log "Installing Sentry for error monitoring…"
 install_sentry() {
   local bun_path=""
@@ -667,85 +667,91 @@ install_sentry() {
     fi
   fi
   
-  # Check if @sentry/bun is already installed
-  if [[ -f "$NODE_DIR/package.json" ]] && grep -q '"@sentry/bun"' "$NODE_DIR/package.json" 2>/dev/null; then
-    log "Sentry (@sentry/bun) is already installed."
-    return 0
+  # Check if Sentry packages are already installed
+  local needs_server=true
+  local needs_client=true
+  
+  if [[ -f "$NODE_DIR/package.json" ]]; then
+    if grep -q '"@sentry/bun"' "$NODE_DIR/package.json" 2>/dev/null; then
+      needs_server=false
+      log "Sentry server-side (@sentry/bun) is already installed."
+    fi
+    if grep -q '"@sentry/react"' "$NODE_DIR/package.json" 2>/dev/null; then
+      needs_client=false
+      log "Sentry client-side (@sentry/react) is already installed."
+    fi
   fi
   
-  log "Adding @sentry/bun package…"
-  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
-    if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add @sentry/bun" 2>&1; then
-      log "Sentry (@sentry/bun) installed successfully."
+  # Install missing packages
+  local packages_to_add=""
+  if $needs_server; then
+    packages_to_add="@sentry/bun"
+  fi
+  if $needs_client; then
+    packages_to_add="$packages_to_add @sentry/react"
+  fi
+  
+  if [[ -n "$packages_to_add" ]]; then
+    log "Adding Sentry packages: $packages_to_add"
+    if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+      if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add $packages_to_add" 2>&1; then
+        log "Sentry packages installed successfully."
+      else
+        log "[WARN] Failed to install Sentry packages. You can manually install with: cd $NODE_DIR && bun add $packages_to_add"
+      fi
     else
-      log "[WARN] Failed to install @sentry/bun. You can manually install it with: cd $NODE_DIR && bun add @sentry/bun"
+      if bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add $packages_to_add" 2>&1; then
+        log "Sentry packages installed successfully."
+      else
+        log "[WARN] Failed to install Sentry packages. You can manually install with: cd $NODE_DIR && bun add $packages_to_add"
+      fi
     fi
   else
-    if bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add @sentry/bun" 2>&1; then
-      log "Sentry (@sentry/bun) installed successfully."
-    else
-      log "[WARN] Failed to install @sentry/bun. You can manually install it with: cd $NODE_DIR && bun add @sentry/bun"
-    fi
+    log "All Sentry packages are already installed."
   fi
 }
 
 install_sentry
 
-# Configure Sentry in server.js if not already configured
-configure_sentry_in_server() {
+# Verify Sentry configuration in server.js
+verify_sentry_server_config() {
   local server_file="$NODE_DIR/server.js"
-  local sentry_dsn="https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520"
   
   if [[ ! -f "$server_file" ]]; then
-    log "[WARN] server.js not found at $server_file. Skipping Sentry configuration."
+    log "[WARN] server.js not found at $server_file. Skipping Sentry verification."
     return 1
   fi
   
   # Check if Sentry is already configured
   if grep -q "@sentry/bun" "$server_file" 2>/dev/null; then
-    log "Sentry is already configured in server.js."
+    log "Sentry is configured in server.js."
     return 0
+  else
+    log "[WARN] Sentry is not configured in server.js. Please ensure @sentry/bun is imported and initialized."
+    return 1
   fi
-  
-  log "Configuring Sentry in server.js…"
-  
-  # Create the Sentry import and init code
-  local sentry_code="// Sentry error monitoring - must be imported first
-import * as Sentry from '@sentry/bun';
-
-Sentry.init({
-  dsn: '$sentry_dsn',
-});
-
-// Test Sentry integration
-try {
-  throw new Error('Sentry Bun test');
-} catch (e) {
-  Sentry.captureException(e);
 }
 
-"
+# Verify Sentry configuration in client-side code
+verify_sentry_client_config() {
+  local sentry_lib="$NODE_DIR/src/lib/sentry.ts"
+  local main_file="$NODE_DIR/src/main.tsx"
   
-  # Prepend Sentry code to server.js
-  local tmp_file
-  tmp_file="$(mktemp)"
-  echo "$sentry_code" > "$tmp_file"
-  cat "$server_file" >> "$tmp_file"
-  
-  # Backup original and replace
-  cp "$server_file" "$server_file.bak"
-  mv "$tmp_file" "$server_file"
-  
-  # Fix ownership if needed
-  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
-    chown "$SERVICE_USER:$SERVICE_USER" "$server_file" 2>/dev/null || true
+  if [[ -f "$sentry_lib" ]]; then
+    log "Sentry client configuration found at $sentry_lib"
+  else
+    log "[WARN] Sentry client configuration not found at $sentry_lib"
   fi
   
-  log "Sentry configured in server.js successfully."
-  return 0
+  if [[ -f "$main_file" ]] && grep -q "initSentry" "$main_file" 2>/dev/null; then
+    log "Sentry is initialized in main.tsx"
+  else
+    log "[WARN] Sentry initialization not found in main.tsx"
+  fi
 }
 
-configure_sentry_in_server
+verify_sentry_server_config
+verify_sentry_client_config
 
 # Build frontend and API bundle using Bun
 # Delegate to refresh script if available (avoids code duplication and uses optimized build)
