@@ -1,5 +1,5 @@
 import React from "react"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -7,11 +7,9 @@ import { BlogCard } from "@/components/blog/BlogCard"
 import { useAuth } from "@/context/AuthContext"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import type { BlogPost } from "@/types/blog"
-import { fetchBlogPostsPaginated } from "@/lib/blogs"
+import { fetchBlogPosts } from "@/lib/blogs"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { checkEditorAccess } from "@/constants/userRoles"
-
-const POSTS_PER_PAGE = 10
 
 export default function BlogPage() {
   const { t } = useTranslation("common")
@@ -19,12 +17,8 @@ export default function BlogPage() {
   const { profile } = useAuth()
   const [posts, setPosts] = React.useState<BlogPost[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [loadingMore, setLoadingMore] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const [hasMore, setHasMore] = React.useState(false)
-  const [offset, setOffset] = React.useState(0)
   const isAdmin = checkEditorAccess(profile)
-  const loadMoreRef = React.useRef<HTMLDivElement>(null)
 
   const seoTitle = t("seo.blog.listTitle", { defaultValue: "Aphylia Blog" })
   const seoDescription = t("seo.blog.listDescription", {
@@ -32,16 +26,13 @@ export default function BlogPage() {
   })
   usePageMetadata({ title: seoTitle, description: seoDescription })
 
-  // Initial load
   const loadPosts = React.useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const includeDrafts = checkEditorAccess(profile)
-      const result = await fetchBlogPostsPaginated({ includeDrafts, limit: POSTS_PER_PAGE, offset: 0 })
-      setPosts(result.posts)
-      setHasMore(result.hasMore)
-      setOffset(result.posts.length)
+      const data = await fetchBlogPosts({ includeDrafts })
+      setPosts([...data].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)))
     } catch (err) {
       const message =
         err instanceof Error
@@ -53,49 +44,9 @@ export default function BlogPage() {
     }
   }, [profile, t])
 
-  // Load more posts
-  const loadMorePosts = React.useCallback(async () => {
-    if (loadingMore || !hasMore) return
-    setLoadingMore(true)
-    try {
-      const includeDrafts = checkEditorAccess(profile)
-      const result = await fetchBlogPostsPaginated({ includeDrafts, limit: POSTS_PER_PAGE, offset })
-      setPosts((prev) => [...prev, ...result.posts])
-      setHasMore(result.hasMore)
-      setOffset((prev) => prev + result.posts.length)
-    } catch (err) {
-      console.error("Failed to load more posts:", err)
-    } finally {
-      setLoadingMore(false)
-    }
-  }, [loadingMore, hasMore, offset, profile])
-
   React.useEffect(() => {
     loadPosts().catch(() => {})
   }, [loadPosts])
-
-  // Intersection observer for infinite scroll
-  React.useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && hasMore && !loadingMore && !loading) {
-          loadMorePosts()
-        }
-      },
-      { threshold: 0.1, rootMargin: "100px" }
-    )
-
-    const currentRef = loadMoreRef.current
-    if (currentRef) {
-      observer.observe(currentRef)
-    }
-
-    return () => {
-      if (currentRef) {
-        observer.unobserve(currentRef)
-      }
-    }
-  }, [hasMore, loadingMore, loading, loadMorePosts])
 
   const handleCreate = React.useCallback(() => {
     navigate("/blog/create")
@@ -169,28 +120,11 @@ export default function BlogPage() {
       )}
 
       {!loading && !error && posts.length > 0 && (
-        <>
-          <div className="grid gap-6 md:grid-cols-2">
-            {posts.map((post) => (
-              <BlogCard key={post.id} post={post} isAdmin={isAdmin} onEdit={isAdmin ? handleEdit : undefined} />
-            ))}
-          </div>
-
-          {/* Load more trigger */}
-          <div ref={loadMoreRef} className="flex justify-center py-8">
-            {loadingMore && (
-              <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t("blogPage.state.loadingMore", { defaultValue: "Loading more posts…" })}
-              </div>
-            )}
-            {!hasMore && posts.length > POSTS_PER_PAGE && (
-              <p className="text-sm text-stone-400 dark:text-stone-500">
-                {t("blogPage.state.noMorePosts", { defaultValue: "You've reached the end!" })}
-              </p>
-            )}
-          </div>
-        </>
+        <div className="grid gap-6 md:grid-cols-2">
+          {posts.map((post) => (
+            <BlogCard key={post.id} post={post} isAdmin={isAdmin} onEdit={isAdmin ? handleEdit : undefined} />
+          ))}
+        </div>
       )}
     </div>
   )

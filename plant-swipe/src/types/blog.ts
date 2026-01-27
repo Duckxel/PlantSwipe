@@ -7,9 +7,6 @@ export type BlogPost = {
   bodyHtml: string
   coverImageUrl: string | null
   excerpt: string | null
-  metaDescription: string | null
-  seoTitle: string | null
-  tags: string[]
   publishedAt: string
   createdAt: string
   updatedAt: string
@@ -26,9 +23,6 @@ export type BlogPostInput = {
   slug?: string
   coverImageUrl?: string | null
   excerpt?: string | null
-  metaDescription?: string | null
-  seoTitle?: string | null
-  tags?: string[]
   isPublished?: boolean
   publishedAt?: string | null
   editorData?: JSONContent | null

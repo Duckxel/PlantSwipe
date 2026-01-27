@@ -4358,15 +4358,11 @@ create table if not exists public.blog_posts (
   author_name text,
   cover_image_url text,
   excerpt text,
-  meta_description text,
-  seo_title text,
-  tags text[] default '{}',
   is_published boolean not null default true,
   published_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(slug),
-  constraint blog_posts_tags_limit check (coalesce(array_length(tags, 1), 0) <= 5)
+  unique(slug)
 );
 create index if not exists blog_posts_published_idx on public.blog_posts (is_published desc, published_at desc nulls last, created_at desc);
 create index if not exists blog_posts_author_idx on public.blog_posts (author_id, created_at desc);
