@@ -2891,6 +2891,29 @@ app.options('/api/*', (_req, res) => {
   res.status(204).end()
 })
 
+// Content Security Policy - Allow all *.aphylia.app subdomains EXCEPT for images
+// img-src and media-src allow all sources; other directives restrict to aphylia.app domains
+const CSP_POLICY = [
+  "default-src 'self' *.aphylia.app",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.aphylia.app https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://recaptchaenterprise.googleapis.com",
+  "style-src 'self' 'unsafe-inline' *.aphylia.app https://fonts.googleapis.com",
+  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com",
+  "font-src 'self' *.aphylia.app https://fonts.gstatic.com data:",
+  "frame-src 'self' *.aphylia.app https://www.google.com https://recaptcha.google.com",
+  "img-src * data: blob:",
+  "media-src * data: blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self' *.aphylia.app",
+  "worker-src 'self' *.aphylia.app blob:",
+  "manifest-src 'self' *.aphylia.app"
+].join('; ')
+
+app.use((_req, res, next) => {
+  res.setHeader('Content-Security-Policy', CSP_POLICY)
+  next()
+})
+
 // Supabase service client disabled to avoid using service-role env vars
 const supabaseAdmin = null
 
