@@ -31,7 +31,17 @@ jobs:
       
       - name: Install dependencies
         working-directory: plant-swipe
-        run: bun install --frozen-lockfile
+        run: |
+          # Show current lockfile hash
+          sha256sum bun.lock || true
+          # Try install without frozen to see what changes
+          cp bun.lock bun.lock.original
+          bun install || true
+          # Show diff if any
+          diff bun.lock.original bun.lock | head -100 || true
+          # Restore and try frozen
+          mv bun.lock.original bun.lock
+          bun install --frozen-lockfile
       
       - name: Check translation consistency
         working-directory: plant-swipe
