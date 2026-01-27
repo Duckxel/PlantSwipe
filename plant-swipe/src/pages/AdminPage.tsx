@@ -7247,10 +7247,10 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:shadow-amber-500/5">
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-sky-300 dark:hover:border-sky-800 hover:shadow-lg hover:shadow-sky-500/5">
                                 <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                                    <Sparkles className="h-5 w-5 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                                    <Sparkles className="h-5 w-5 sm:h-5 sm:w-5 text-sky-600 dark:text-sky-400" />
                                   </div>
                                   <div>
                                     <div className="text-xs text-stone-500 dark:text-stone-400">In Review</div>
@@ -7260,10 +7260,10 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-lg hover:shadow-blue-500/5">
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:shadow-amber-500/5">
                                 <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                                    <TrendingUp className="h-5 w-5 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                                    <TrendingUp className="h-5 w-5 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
                                   </div>
                                   <div>
                                     <div className="text-xs text-stone-500 dark:text-stone-400">In Progress</div>
