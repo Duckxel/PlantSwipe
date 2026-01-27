@@ -5356,6 +5356,7 @@ app.post('/api/blog/summarize', async (req, res) => {
     ].filter(Boolean)
 
     try {
+      // Use same model and timeout as AI Plant Fill for best quality metadata
       const response = await openaiClient.responses.create(
         {
           model: openaiModel,
@@ -5364,7 +5365,7 @@ app.post('/api/blog/summarize', async (req, res) => {
           input: promptSections.join('\n\n'),
           max_output_tokens: 500,
         },
-        { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
+        { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) },
       )
       const rawOutput = typeof response?.output_text === 'string' ? response.output_text.trim() : '{}'
       // Parse the JSON response, handling potential markdown code blocks
