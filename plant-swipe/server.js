@@ -809,6 +809,186 @@ const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
 const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
 const contactRateLimitStore = new Map()
 
+// =============================================================================
+// RATE LIMITING SYSTEM
+// Generic rate limiter for various endpoints to prevent abuse
+// All rate limits are invisible to users - requests are silently rejected
+// =============================================================================
+
+/**
+ * Rate limit store for different action types
+ * Each store maps identifiers (user ID or IP) to arrays of timestamps
+ */
+const rateLimitStores = {
+  scan: new Map(),           // Plant identification scans
+  aiChat: new Map(),         // AI garden chat
+  translate: new Map(),      // Translation API
+  imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
+  bugReport: new Map(),      // Bug report submissions
+  gardenActivity: new Map(), // Garden activity logging
+  gardenJournal: new Map(),  // Journal entries
+  pushNotify: new Map(),     // Push notification sending
+}
+
+/**
+ * Rate limit configurations for different actions
+ * windowMs: Time window in milliseconds
+ * maxAttempts: Maximum attempts allowed in the window
+ * perUser: If true, limit per user ID; if false, limit per IP
+ */
+const rateLimitConfig = {
+  // Scan: 30 scans per hour per user (AI/API costs)
+  scan: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 30,
+    perUser: true,
+  },
+  // AI Chat: 60 messages per hour per user (OpenAI costs)
+  aiChat: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 60,
+    perUser: true,
+  },
+  // Translation: 200 requests per hour per user (DeepL costs)
+  translate: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 200,
+    perUser: true,
+  },
+  // Image uploads: 50 per hour per user (storage costs)
+  imageUpload: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 50,
+    perUser: true,
+  },
+  // Bug reports: 10 per hour per IP (spam prevention)
+  bugReport: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 10,
+    perUser: false,
+  },
+  // Garden activity: 100 per hour per user (prevent log spam)
+  gardenActivity: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 100,
+    perUser: true,
+  },
+  // Journal entries: 20 per hour per user
+  gardenJournal: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 20,
+    perUser: true,
+  },
+  // Push notifications: 100 per hour per user
+  pushNotify: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 100,
+    perUser: true,
+  },
+}
+
+/**
+ * Check if an action is rate limited
+ * @param {string} action - The action type (scan, aiChat, translate, etc.)
+ * @param {string} identifier - User ID or IP address
+ * @returns {boolean} - True if rate limited, false if allowed
+ */
+function isRateLimited(action, identifier) {
+  const store = rateLimitStores[action]
+  const config = rateLimitConfig[action]
+  
+  if (!store || !config) {
+    console.warn(`[rate-limit] Unknown action type: ${action}`)
+    return false
+  }
+  
+  const now = Date.now()
+  const { windowMs, maxAttempts } = config
+  const history = store.get(identifier) || []
+  
+  // Filter to only keep timestamps within the window
+  const recent = history.filter((ts) => now - ts < windowMs)
+  
+  if (recent.length >= maxAttempts) {
+    store.set(identifier, recent)
+    return true
+  }
+  
+  // Add current timestamp and update store
+  recent.push(now)
+  store.set(identifier, recent)
+  return false
+}
+
+/**
+ * Get rate limit identifier based on action config
+ * @param {string} action - The action type
+ * @param {object} req - Express request object
+ * @param {object|null} user - User object (if authenticated)
+ * @returns {string} - Identifier to use for rate limiting
+ */
+function getRateLimitIdentifier(action, req, user) {
+  const config = rateLimitConfig[action]
+  if (!config) return getClientIp(req) || 'unknown'
+  
+  if (config.perUser && user?.id) {
+    return `user:${user.id}`
+  }
+  return `ip:${getClientIp(req) || 'unknown'}`
+}
+
+/**
+ * Check rate limit and return 429 if exceeded
+ * Returns true if request should be blocked, false if allowed
+ * @param {string} action - The action type
+ * @param {object} req - Express request object
+ * @param {object} res - Express response object
+ * @param {object|null} user - User object (if authenticated)
+ * @returns {boolean} - True if blocked (429 sent), false if allowed
+ */
+function checkRateLimit(action, req, res, user = null) {
+  const identifier = getRateLimitIdentifier(action, req, user)
+  
+  if (isRateLimited(action, identifier)) {
+    console.log(`[rate-limit] ${action} rate limit exceeded for ${identifier}`)
+    res.status(429).json({ error: 'Too many requests. Please try again later.' })
+    return true
+  }
+  return false
+}
+
+/**
+ * Periodically clean up old entries from rate limit stores
+ * Runs every 10 minutes to prevent memory bloat
+ */
+setInterval(() => {
+  const now = Date.now()
+  let totalCleaned = 0
+  
+  for (const [action, store] of Object.entries(rateLimitStores)) {
+    const config = rateLimitConfig[action]
+    if (!config) continue
+    
+    for (const [key, history] of store.entries()) {
+      const recent = history.filter((ts) => now - ts < config.windowMs)
+      if (recent.length === 0) {
+        store.delete(key)
+        totalCleaned++
+      } else if (recent.length < history.length) {
+        store.set(key, recent)
+      }
+    }
+  }
+  
+  if (totalCleaned > 0) {
+    console.log(`[rate-limit] Cleaned up ${totalCleaned} expired entries`)
+  }
+}, 10 * 60 * 1000) // Every 10 minutes
+
+// =============================================================================
+// END RATE LIMITING SYSTEM
+// =============================================================================
+
 const vapidPublicKey =
   process.env.VAPID_PUBLIC_KEY ||
   process.env.WEB_PUSH_PUBLIC_KEY ||
@@ -5284,6 +5464,11 @@ app.post('/api/messages/upload-image', async (req, res) => {
   
   if (!uploader?.id) {
     res.status(401).json({ error: 'You must be signed in to upload images' })
+    return
+  }
+
+  // Rate limit: 50 image uploads per hour per user
+  if (checkRateLimit('imageUpload', req, res, uploader)) {
     return
   }
 
@@ -11614,6 +11799,13 @@ app.post('/api/contact', async (req, res) => {
 // DeepL Translation API endpoint
 app.post('/api/translate', async (req, res) => {
   try {
+    // Rate limit: 200 translations per hour (per user or IP)
+    let user = null
+    try { user = await getUserFromRequest(req) } catch { }
+    if (checkRateLimit('translate', req, res, user)) {
+      return
+    }
+
     const { text, source_lang, target_lang } = req.body
 
     if (!text || typeof text !== 'string') {
@@ -11672,6 +11864,13 @@ app.post('/api/translate', async (req, res) => {
 // Uses DeepL's translation API with auto-detect (omitting source_lang)
 app.post('/api/detect-language', async (req, res) => {
   try {
+    // Rate limit: 200 requests per hour (per user or IP)
+    let user = null
+    try { user = await getUserFromRequest(req) } catch { }
+    if (checkRateLimit('translate', req, res, user)) {
+      return
+    }
+
     const { text } = req.body
 
     if (!text || typeof text !== 'string') {
@@ -11722,6 +11921,13 @@ app.post('/api/detect-language', async (req, res) => {
 // Translates text AND returns the detected source language
 app.post('/api/translate-detect', async (req, res) => {
   try {
+    // Rate limit: 200 requests per hour (per user or IP)
+    let user = null
+    try { user = await getUserFromRequest(req) } catch { }
+    if (checkRateLimit('translate', req, res, user)) {
+      return
+    }
+
     const { text, target_lang } = req.body
 
     if (!text || typeof text !== 'string') {
@@ -13356,6 +13562,12 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
     res.status(401).json({ error: 'Unauthorized' })
     return
   }
+
+  // Rate limit: 50 image uploads per hour per user
+  if (checkRateLimit('imageUpload', req, res, user)) {
+    return
+  }
+
   const canEdit = await isGardenOwner(req, gardenId, user.id)
   if (!canEdit) {
     res.status(403).json({ error: 'Forbidden' })
@@ -13579,6 +13791,11 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
   const user = await getUserFromRequest(req)
   if (!user?.id) {
     res.status(401).json({ error: 'You must be signed in to scan plants' })
+    return
+  }
+
+  // Rate limit: 30 scans per hour per user
+  if (checkRateLimit('scan', req, res, user)) {
     return
   }
 
@@ -13823,6 +14040,11 @@ app.post('/api/bug-report/upload-screenshot', async (req, res) => {
   const user = await getUserFromRequest(req)
   if (!user?.id) {
     res.status(401).json({ error: 'You must be signed in to upload bug screenshots' })
+    return
+  }
+
+  // Rate limit: 10 bug reports per hour per IP (spam prevention)
+  if (checkRateLimit('bugReport', req, res, user)) {
     return
   }
 
@@ -14244,6 +14466,12 @@ app.post('/api/garden/:id/activity', async (req, res) => {
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequest(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+
+    // Rate limit: 100 activity logs per hour per user
+    if (checkRateLimit('gardenActivity', req, res, user)) {
+      return
+    }
+
     const member = await isGardenMember(req, gardenId, user.id)
     if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
@@ -16910,6 +17138,12 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+
+    // Rate limit: 20 journal entries per hour per user
+    if (checkRateLimit('gardenJournal', req, res, user)) {
+      return
+    }
+
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
     const { title, content, mood, isPrivate, tags, photos } = req.body || {}
@@ -17420,6 +17654,11 @@ app.post('/api/garden/:id/upload', async (req, res) => {
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+
+    // Rate limit: 50 image uploads per hour per user
+    if (checkRateLimit('imageUpload', req, res, user)) {
+      return
+    }
 
     // Verify membership
     if (sql) {
@@ -17994,6 +18233,12 @@ app.post('/api/push/instant', async (req, res) => {
     res.status(401).json({ error: 'Unauthorized' })
     return
   }
+
+  // Rate limit: 100 push notifications per hour per user
+  if (checkRateLimit('pushNotify', req, res, user)) {
+    return
+  }
+
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
     return
@@ -18311,6 +18556,11 @@ app.post('/api/ai/garden-chat/upload', chatImageUpload.single('image'), async (r
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) {
       res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    // Rate limit: 50 image uploads per hour per user
+    if (checkRateLimit('imageUpload', req, res, user)) {
       return
     }
     
@@ -20074,6 +20324,11 @@ app.post('/api/ai/garden-chat', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) {
       res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    // Rate limit: 60 AI chat messages per hour per user
+    if (checkRateLimit('aiChat', req, res, user)) {
       return
     }
     

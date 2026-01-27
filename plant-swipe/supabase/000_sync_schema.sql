@@ -8727,7 +8727,7 @@ END $$;
 
 -- ========== Helper Functions ==========
 
--- Function to get or create a conversation between two users
+-- Function to get or create a conversation between two users (with rate limiting for new conversations)
 CREATE OR REPLACE FUNCTION public.get_or_create_conversation(_user1_id UUID, _user2_id UUID)
 RETURNS UUID
 LANGUAGE plpgsql
@@ -8741,6 +8741,9 @@ DECLARE
   v_conversation_id UUID;
   v_are_friends BOOLEAN;
   v_are_blocked BOOLEAN;
+  v_conversation_count INTEGER;
+  v_rate_limit INTEGER := 20; -- Max new conversations per hour
+  v_window_interval INTERVAL := '1 hour';
 BEGIN
   v_caller := auth.uid();
   IF v_caller IS NULL THEN
@@ -8792,6 +8795,16 @@ BEGIN
     RETURN v_conversation_id;
   END IF;
   
+  -- Rate limiting for NEW conversation creation only
+  SELECT COUNT(*)::INTEGER INTO v_conversation_count
+  FROM public.conversations
+  WHERE participant_1 = v_caller
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_conversation_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before starting more conversations.';
+  END IF;
+  
   -- Create new conversation
   INSERT INTO public.conversations (participant_1, participant_2)
   VALUES (v_p1, v_p2)
@@ -8803,7 +8816,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_or_create_conversation(UUID, UUID) TO authenticated;
 
--- Function to send a message
+-- Function to send a message (with rate limiting)
 CREATE OR REPLACE FUNCTION public.send_message(
   _conversation_id UUID,
   _content TEXT,
@@ -8825,10 +8838,23 @@ DECLARE
   v_p1 UUID;
   v_p2 UUID;
   v_is_muted BOOLEAN;
+  v_message_count INTEGER;
+  v_rate_limit INTEGER := 120; -- Max messages per hour
+  v_window_interval INTERVAL := '1 hour';
 BEGIN
   v_caller := auth.uid();
   IF v_caller IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  
+  -- Rate limiting: Count messages sent by this user in the last hour
+  SELECT COUNT(*)::INTEGER INTO v_message_count
+  FROM public.messages
+  WHERE sender_id = v_caller
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_message_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before sending more messages.';
   END IF;
   
   -- Verify caller is participant
@@ -10247,4 +10273,124 @@ GRANT SELECT, INSERT ON public.bug_points_history TO authenticated;
 -- Admins need full access
 GRANT ALL ON public.bug_actions TO authenticated;
 GRANT ALL ON public.bug_reports TO authenticated;
+
+-- =============================================================================
+-- RATE LIMITING TRIGGERS AND INDEXES
+-- =============================================================================
+
+-- Plant Request Rate Limiting
+CREATE OR REPLACE FUNCTION public.check_plant_request_rate_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_request_count INTEGER;
+  v_rate_limit INTEGER := 10; -- Max plant requests per hour
+  v_window_interval INTERVAL := '1 hour';
+BEGIN
+  -- Count requests by this user in the last hour
+  SELECT COUNT(*)::INTEGER INTO v_request_count
+  FROM public.plant_request_users
+  WHERE user_id = NEW.user_id
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_request_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before requesting more plants.';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS plant_request_rate_limit_trigger ON public.plant_request_users;
+CREATE TRIGGER plant_request_rate_limit_trigger
+  BEFORE INSERT ON public.plant_request_users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_plant_request_rate_limit();
+
+-- Friend Request Rate Limiting
+CREATE OR REPLACE FUNCTION public.check_friend_request_rate_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_request_count INTEGER;
+  v_rate_limit INTEGER := 30; -- Max friend requests per hour
+  v_window_interval INTERVAL := '1 hour';
+BEGIN
+  -- Only check for new pending requests (not status updates)
+  IF NEW.status = 'pending' THEN
+    -- Count pending friend requests sent by this user in the last hour
+    SELECT COUNT(*)::INTEGER INTO v_request_count
+    FROM public.friends
+    WHERE user_id = NEW.user_id
+      AND status = 'pending'
+      AND created_at > NOW() - v_window_interval;
+    
+    IF v_request_count >= v_rate_limit THEN
+      RAISE EXCEPTION 'Rate limit exceeded. Please wait before sending more friend requests.';
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS friend_request_rate_limit_trigger ON public.friends;
+CREATE TRIGGER friend_request_rate_limit_trigger
+  BEFORE INSERT ON public.friends
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_friend_request_rate_limit();
+
+-- Reaction Rate Limiting
+CREATE OR REPLACE FUNCTION public.check_reaction_rate_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_reaction_count INTEGER;
+  v_rate_limit INTEGER := 200; -- Max reactions per hour
+  v_window_interval INTERVAL := '1 hour';
+BEGIN
+  -- Count reactions added by this user in the last hour
+  SELECT COUNT(*)::INTEGER INTO v_reaction_count
+  FROM public.message_reactions
+  WHERE user_id = NEW.user_id
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_reaction_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before adding more reactions.';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS reaction_rate_limit_trigger ON public.message_reactions;
+CREATE TRIGGER reaction_rate_limit_trigger
+  BEFORE INSERT ON public.message_reactions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_reaction_rate_limit();
+
+-- Rate Limiting Indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_messages_sender_created 
+  ON public.messages(sender_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_plant_request_users_user_created
+  ON public.plant_request_users(user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_participant1_created
+  ON public.conversations(participant_1, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_friends_user_status_created
+  ON public.friends(user_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_message_reactions_user_created
+  ON public.message_reactions(user_id, created_at DESC);
 
