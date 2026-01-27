@@ -9,6 +9,7 @@ import MobileNavBar from "@/components/layout/MobileNavBar"
 import { useAuthActions } from "@/context/AuthActionsContext"
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { supabase } from "@/lib/supabaseClient"
+import i18n from "@/lib/i18n"
 import {
   Leaf,
   Droplets,
@@ -23,7 +24,6 @@ import {
   Check,
   Sparkles,
   ArrowRight,
-  MessageCircle,
   Users,
   Zap,
   Shield,
@@ -35,32 +35,20 @@ import {
   Flower2,
   TreeDeciduous,
   Sprout,
-  Palette,
-  Share2,
-  Calendar,
-  Target,
-  Award,
-  Lightbulb,
   Instagram,
   Twitter,
   Mail,
   GraduationCap,
   HandHeart,
-  BarChart3,
   Search,
-  Flame,
   CheckCircle2,
   CircleDot,
+  BarChart3,
+  Target,
+  Flame,
+  Calendar,
   PawPrint,
 } from "lucide-react"
-
-// Icon mapping for dynamic rendering
-const iconMap: Record<string, React.ElementType> = {
-  Leaf, Droplets, Sun, Bell, BookMarked, Camera, NotebookPen, Wifi, Users, Check,
-  Clock, TrendingUp, Shield, Heart, Globe, Zap, MessageCircle, Flower2,
-  TreeDeciduous, Sprout, Star, Sparkles, Palette, Share2, Calendar, Target, Award, Lightbulb,
-  Instagram, Twitter, Mail, GraduationCap, HandHeart, BarChart3, Search, Flame, CheckCircle2, CircleDot, PawPrint,
-}
 
 // Types for database data
 type HeroCard = {
@@ -84,15 +72,6 @@ type LandingStats = {
   rating_label: string
 }
 
-type LandingFeature = {
-  id: string
-  icon_name: string
-  title: string
-  description: string | null
-  color: string
-  is_in_circle: boolean
-}
-
 type Testimonial = {
   id: string
   author_name: string
@@ -107,42 +86,87 @@ type FAQ = {
   answer: string
 }
 
-type ShowcaseCard = {
+type DemoFeature = {
   id: string
-  position: number
-  card_type: string
-  icon_name: string | null
-  title: string
-  description: string | null
-  badge_text: string | null
-  image_url: string | null
-  cover_image_url: string | null
-  plant_images: Array<{ url: string; name: string }> | null
-  garden_name: string | null
-  plants_count: number | null
-  species_count: number | null
-  streak_count: number | null
-  progress_percent: number | null
-  link_url: string | null
+  icon_name: string
+  label: string
   color: string
-  is_active: boolean
-  selected_garden_ids: string[] | null
 }
 
-// Type for fetched garden data to display on landing page
+type ShowcaseCard = {
+  id: string
+  card_type: 'main' | 'garden' | 'analytics' | 'tasks' | 'toxicity' | 'encyclopedia'
+  badge_text?: string
+  title?: string
+  garden_name?: string
+  plants_count?: number
+  species_count?: number
+  streak_count?: number
+  progress_percent?: number
+  cover_image_url?: string
+  plant_images?: Array<{ url: string; name: string }>
+  selected_garden_ids?: string[]
+}
+
 type ShowcaseGarden = {
   id: string
   name: string
-  coverImageUrl: string | null
-  streak: number
   plantCount: number
+  streak: number
+  coverImageUrl?: string
+  ownerDisplayName?: string
   previewPlants: Array<{
     id: string
     name: string
-    nickname: string | null
-    imageUrl: string | null
+    nickname?: string
+    imageUrl?: string
   }>
-  ownerDisplayName: string | null
+}
+
+// Showcase Configuration from Admin Panel
+type ShowcaseTask = {
+  id: string
+  text: string
+  completed: boolean
+}
+
+type ShowcaseMember = {
+  id: string
+  name: string
+  role: 'owner' | 'member'
+  avatar_url: string | null
+  color: string
+}
+
+type ShowcasePlantCard = {
+  id: string
+  plant_id: string | null
+  name: string
+  image_url: string | null
+  gradient: string
+  tasks_due: number
+}
+
+type ShowcaseConfig = {
+  id: string
+  garden_name: string
+  plants_count: number
+  species_count: number
+  streak_count: number
+  progress_percent: number
+  cover_image_url: string | null
+  tasks: ShowcaseTask[]
+  members: ShowcaseMember[]
+  plant_cards: ShowcasePlantCard[]
+  completion_rate: number
+  analytics_streak: number
+  chart_data: number[]
+  calendar_data: CalendarDay[]
+}
+
+type CalendarDay = {
+  date: string
+  status: 'completed' | 'missed' | 'none'
 }
 
 type LandingPageSettings = {
@@ -192,12 +216,12 @@ type LandingPageSettings = {
 type LandingDataContextType = {
   heroCards: HeroCard[]
   stats: LandingStats | null
-  circleFeatures: LandingFeature[]
-  gridFeatures: LandingFeature[]
-  showcaseCards: ShowcaseCard[]
-  showcaseGardens: ShowcaseGarden[]
   testimonials: Testimonial[]
   faqItems: FAQ[]
+  demoFeatures: DemoFeature[]
+  showcaseCards: ShowcaseCard[]
+  showcaseGardens: ShowcaseGarden[]
+  showcaseConfig: ShowcaseConfig | null
   settings: LandingPageSettings | null
   loading: boolean
 }
@@ -205,12 +229,12 @@ type LandingDataContextType = {
 const LandingDataContext = React.createContext<LandingDataContextType>({
   heroCards: [],
   stats: null,
-  circleFeatures: [],
-  gridFeatures: [],
-  showcaseCards: [],
-  showcaseGardens: [],
   testimonials: [],
   faqItems: [],
+  demoFeatures: [],
+  showcaseCards: [],
+  showcaseGardens: [],
+  showcaseConfig: null,
   settings: null,
   loading: true,
 })
@@ -256,6 +280,10 @@ const animationStyles = `
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
+  @keyframes counter-spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(-360deg); }
+  }
   @keyframes bounce-subtle {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-5px); }
@@ -269,6 +297,7 @@ const animationStyles = `
   .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
   .animate-scale-in { animation: scale-in 0.5s ease-out forwards; }
   .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+  .animate-counter-spin-slow { animation: counter-spin-slow 20s linear infinite; }
   .animate-bounce-subtle { animation: bounce-subtle 2s ease-in-out infinite; }
   .plant-icon-theme { filter: brightness(0) saturate(100%); }
   .dark .plant-icon-theme { filter: brightness(0) saturate(100%) invert(100%); }
@@ -299,15 +328,18 @@ const LandingPage: React.FC = () => {
   const [landingData, setLandingData] = React.useState<LandingDataContextType>({
     heroCards: [],
     stats: null,
-    circleFeatures: [],
-    gridFeatures: [],
-    showcaseCards: [],
-    showcaseGardens: [],
     testimonials: [],
     faqItems: [],
+    demoFeatures: [],
+    showcaseCards: [],
+    showcaseGardens: [],
+    showcaseConfig: null,
     settings: null,
     loading: true,
   })
+
+  // Track current language for FAQ translations
+  const currentLang = i18n.language || 'en'
 
   React.useEffect(() => {
     const loadData = async () => {
@@ -318,10 +350,9 @@ const LandingPage: React.FC = () => {
           supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
           supabase.from("landing_hero_cards").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_stats").select("*").limit(1).maybeSingle(),
-          supabase.from("landing_features").select("*").eq("is_active", true).order("position"),
-          supabase.from("landing_showcase_cards").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_testimonials").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_faq").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_demo_features").select("*").eq("is_active", true).order("position"),
         ])
 
         // Extract data safely, using null/empty array as fallback for any failures
@@ -336,120 +367,120 @@ const LandingPage: React.FC = () => {
         const settings = getData(results[0], null)
         const heroCards = getData(results[1], [])
         const stats = getData(results[2], null)
-        const features = getData(results[3], []) as LandingFeature[]
-        const showcaseCards = getData(results[4], []) as ShowcaseCard[]
-        const testimonials = getData(results[5], [])
-        const faqItems = getData(results[6], [])
+        const testimonials = getData(results[3], [])
+        let faqItems = getData(results[4], []) as FAQ[]
+        let demoFeatures = getData(results[5], []) as DemoFeature[]
         
-        // Collect all selected garden IDs from showcase cards
-        const allSelectedGardenIds = (showcaseCards || [])
-          .flatMap(card => card.selected_garden_ids || [])
-          .filter((id, idx, arr) => arr.indexOf(id) === idx) // dedupe
-        
-        // Fetch garden data if there are selected gardens
-        let showcaseGardens: ShowcaseGarden[] = []
-        if (allSelectedGardenIds.length > 0) {
+        // Load FAQ translations for current language (if not English)
+        if (currentLang !== 'en' && faqItems.length > 0) {
           try {
-            // Fetch gardens
-            const { data: gardens } = await supabase
-              .from('gardens')
-              .select('id, name, cover_image_url, streak, created_by')
-              .in('id', allSelectedGardenIds)
+            const { data: translations } = await supabase
+              .from("landing_faq_translations")
+              .select("*")
+              .eq("language", currentLang)
             
-            if (gardens && gardens.length > 0) {
-              // Fetch plant data for each garden
-              const { data: gardenPlants } = await supabase
-                .from('garden_plants')
-                .select('id, garden_id, plant_id, nickname, sort_index')
-                .in('garden_id', allSelectedGardenIds)
-                .order('sort_index', { ascending: true })
+            if (translations && translations.length > 0) {
+              // Create a map of translations by faq_id
+              const translationMap = new Map<string, { question: string; answer: string }>()
+              translations.forEach((t: { faq_id: string; question: string; answer: string }) => {
+                translationMap.set(t.faq_id, { question: t.question, answer: t.answer })
+              })
               
-              // Group plants by garden
-              const plantsByGarden: Record<string, any[]> = {}
-              for (const gp of gardenPlants || []) {
-                const gid = String(gp.garden_id)
-                if (!plantsByGarden[gid]) plantsByGarden[gid] = []
-                plantsByGarden[gid].push(gp)
-              }
-              
-              // Fetch plant images
-              const allPlantIds = [...new Set((gardenPlants || []).map(p => String(p.plant_id)))]
-              const plantsMap: Record<string, { name: string; imageUrl: string | null }> = {}
-              
-              if (allPlantIds.length > 0) {
-                const { data: plantRows } = await supabase
-                  .from('plants')
-                  .select('id, common_name, plant_images(link, use)')
-                  .in('id', allPlantIds)
-                
-                if (plantRows) {
-                  for (const p of plantRows) {
-                    const images = Array.isArray((p as any).plant_images) ? (p as any).plant_images : []
-                    const primaryImg = images.find((img: any) => img.use === 'primary')
-                    const imageUrl = primaryImg?.link || images[0]?.link || null
-                    plantsMap[String(p.id)] = {
-                      name: (p as any).common_name || '',
-                      imageUrl
-                    }
-                  }
+              // Apply translations to FAQ items
+              faqItems = faqItems.map(faq => {
+                const translation = translationMap.get(faq.id)
+                if (translation) {
+                  return { ...faq, question: translation.question, answer: translation.answer }
                 }
-              }
-              
-              // Fetch owner names
-              const ownerIds = [...new Set(gardens.map(g => String(g.created_by)))]
-              const ownerNames: Record<string, string> = {}
-              if (ownerIds.length > 0) {
-                const { data: profiles } = await supabase
-                  .from('profiles')
-                  .select('id, display_name')
-                  .in('id', ownerIds)
-                if (profiles) {
-                  for (const p of profiles) {
-                    ownerNames[p.id] = p.display_name || ''
-                  }
-                }
-              }
-              
-              // Build showcase gardens
-              showcaseGardens = gardens.map((g: any) => {
-                const gid = String(g.id)
-                const gardenPlantsList = plantsByGarden[gid] || []
-                const previewPlants = gardenPlantsList.slice(0, 6).map((gp: any) => {
-                  const plantId = String(gp.plant_id)
-                  const plantData = plantsMap[plantId] || { name: '', imageUrl: null }
-                  return {
-                    id: String(gp.id),
-                    name: plantData.name,
-                    nickname: gp.nickname || null,
-                    imageUrl: plantData.imageUrl
-                  }
-                })
-                
-                return {
-                  id: gid,
-                  name: String(g.name),
-                  coverImageUrl: g.cover_image_url || null,
-                  streak: Number(g.streak ?? 0),
-                  plantCount: gardenPlantsList.length,
-                  previewPlants,
-                  ownerDisplayName: ownerNames[String(g.created_by)] || null
-                }
+                return faq
               })
             }
-          } catch (gardenErr) {
-            console.error("Failed to load showcase gardens:", gardenErr)
+          } catch (e) {
+            console.error("Failed to load FAQ translations:", e)
           }
+        }
+
+        // Load Demo Feature translations for current language (if not English)
+        if (currentLang !== 'en' && demoFeatures.length > 0) {
+          try {
+            const { data: translations } = await supabase
+              .from("landing_demo_feature_translations")
+              .select("*")
+              .eq("language", currentLang)
+            
+            if (translations && translations.length > 0) {
+              // Create a map of translations by feature_id
+              const translationMap = new Map<string, string>()
+              translations.forEach((t: { feature_id: string; label: string }) => {
+                translationMap.set(t.feature_id, t.label)
+              })
+              
+              // Apply translations to demo features
+              demoFeatures = demoFeatures.map(feature => {
+                const translatedLabel = translationMap.get(feature.id)
+                if (translatedLabel) {
+                  return { ...feature, label: translatedLabel }
+                }
+                return feature
+              })
+            }
+          } catch (e) {
+            console.error("Failed to load demo feature translations:", e)
+          }
+        }
+
+        // Load Stats translations for current language (if not English)
+        let translatedStats = stats
+        if (currentLang !== 'en' && stats) {
+          try {
+            const { data: statsTranslation } = await supabase
+              .from("landing_stats_translations")
+              .select("*")
+              .eq("stats_id", stats.id)
+              .eq("language", currentLang)
+              .maybeSingle()
+            
+            if (statsTranslation) {
+              // Apply translations to stats labels
+              translatedStats = {
+                ...stats,
+                plants_label: statsTranslation.plants_label || stats.plants_label,
+                users_label: statsTranslation.users_label || stats.users_label,
+                tasks_label: statsTranslation.tasks_label || stats.tasks_label,
+                rating_label: statsTranslation.rating_label || stats.rating_label,
+              }
+            }
+          } catch (e) {
+            console.error("Failed to load stats translations:", e)
+          }
+        }
+
+        // Load Showcase Configuration
+        let showcaseConfig: ShowcaseConfig | null = null
+        try {
+          const { data: showcaseData } = await supabase
+            .from("landing_showcase_config")
+            .select("*")
+            .limit(1)
+            .maybeSingle()
+          
+          if (showcaseData) {
+            showcaseConfig = showcaseData
+          }
+        } catch (e) {
+          // Table may not exist yet, use defaults in component
+          console.error("Failed to load showcase config:", e)
         }
         
         setLandingData({
           heroCards: heroCards || [],
-          stats: stats || null,
-          circleFeatures: features.filter((f: LandingFeature) => f.is_in_circle),
-          gridFeatures: features.filter((f: LandingFeature) => !f.is_in_circle),
-          showcaseCards: showcaseCards || [],
-          showcaseGardens,
+          stats: translatedStats || null,
           testimonials: testimonials || [],
           faqItems: faqItems || [],
+          demoFeatures: demoFeatures || [],
+          showcaseCards: [],
+          showcaseGardens: [],
+          showcaseConfig,
           settings: settings || null,
           loading: false,
         })
@@ -459,7 +490,7 @@ const LandingPage: React.FC = () => {
       }
     }
     loadData()
-  }, [])
+  }, [currentLang])
 
   const handleProfileNavigation = React.useCallback(() => {
     navigate('/profile')
@@ -477,6 +508,7 @@ const LandingPage: React.FC = () => {
     }
   }, [signOut, navigate, pathWithoutLang])
 
+  // Page metadata from translations
   usePageMetadata({
     title: "Aphylia – " + t("hero.badge"),
     description: t("hero.description"),
@@ -533,14 +565,14 @@ const LandingPage: React.FC = () => {
         {/* Features Grid */}
         {(landingData.settings?.show_features_section ?? true) && <FeaturesSection />}
 
-        {/* Interactive Demo */}
+        {/* Interactive Demo - Feature Wheel */}
         {(landingData.settings?.show_demo_section ?? true) && <InteractiveDemoSection />}
+
+        {/* Showcase Section */}
+        {(landingData.settings?.show_showcase_section ?? true) && <ShowcaseSection />}
 
         {/* How It Works */}
         {(landingData.settings?.show_how_it_works_section ?? true) && <HowItWorksSection />}
-
-        {/* Showcase */}
-        {(landingData.settings?.show_showcase_section ?? true) && <ShowcaseSection />}
 
         {/* Testimonials */}
         {(landingData.settings?.show_testimonials_section ?? true) && <TestimonialsSection />}
@@ -564,19 +596,22 @@ const LandingPage: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const HeroSection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { settings } = useLandingData()
+  const { stats } = useLandingData()
 
-  // Use settings if available, otherwise fall back to translations
-  const badgeText = settings?.hero_badge_text || t("hero.badge")
-  const titleStart = settings?.hero_title || t("hero.title")
-  const titleHighlight = settings?.hero_title_highlight || t("hero.titleHighlight")
-  const titleEnd = settings?.hero_title_end || t("hero.titleEnd")
-  const description = settings?.hero_description || t("hero.description")
-  const ctaPrimaryText = settings?.hero_cta_primary_text || t("hero.ctaDownload")
-  const ctaPrimaryLink = settings?.hero_cta_primary_link || "/download"
-  const ctaSecondaryText = settings?.hero_cta_secondary_text || t("hero.ctaTryBrowser")
-  const ctaSecondaryLink = settings?.hero_cta_secondary_link || "/discovery"
-  const socialProofText = settings?.hero_social_proof_text || t("hero.socialProof")
+  // All text content from translations (not editable via admin)
+  const badgeText = t("hero.badge")
+  const titleStart = t("hero.title")
+  const titleHighlight = t("hero.titleHighlight")
+  const titleEnd = t("hero.titleEnd")
+  const description = t("hero.description")
+  const ctaPrimaryText = t("hero.ctaDownload")
+  const ctaPrimaryLink = "/download"
+  const ctaSecondaryText = t("hero.ctaTryBrowser")
+  const ctaSecondaryLink = "/discovery"
+  const socialProofText = t("hero.socialProof")
+  
+  // Stats from database for social proof (rating is editable via Stats tab)
+  const ratingValue = stats?.rating_value || "4.9"
 
   return (
     <section className="relative pt-24 pb-16 lg:pt-32 lg:pb-24 px-4 sm:px-6 lg:px-8 overflow-visible">
@@ -663,7 +698,7 @@ const HeroSection: React.FC = () => {
                 {[...Array(5)].map((_, i) => (
                   <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
                 ))}
-                <span className="text-sm font-medium text-stone-600 dark:text-stone-300 ml-1">4.9</span>
+                <span className="text-sm font-medium text-stone-600 dark:text-stone-300 ml-1">{ratingValue}</span>
               </div>
             </div>
           </div>
@@ -695,12 +730,13 @@ const HeroVisual: React.FC = () => {
   }, [dbHeroCards.length])
 
   // Use first hero card from database if available, otherwise use translation defaults
+  // Plant name and image come from database, but all other fields use translations for proper localization
   const activeCard = dbHeroCards[activeCardIndex] || null
   const plantName = activeCard?.plant_name || t("heroCard.plantName")
   const plantScientific = activeCard?.plant_scientific_name || t("heroCard.plantSubname")
-  const waterFrequency = activeCard?.water_frequency || t("heroCard.waterFrequency")
-  const lightLevel = activeCard?.light_level || t("heroCard.lightLevel")
-  const reminderText = activeCard?.reminder_text || t("heroCard.waterIn")
+  const waterFrequency = t("heroCard.waterFrequency")
+  const lightLevel = t("heroCard.lightLevel")
+  const reminderText = t("heroCard.waterIn")
   const imageUrl = activeCard?.image_url
 
   // Auto-cycle through cards if multiple exist
@@ -818,7 +854,7 @@ const HeroVisual: React.FC = () => {
           <div className="h-8 w-8 rounded-xl bg-pink-500/20 flex items-center justify-center">
             <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />
           </div>
-          <span className="text-sm font-medium text-stone-900 dark:text-white">+42 today</span>
+          <span className="text-sm font-medium text-stone-900 dark:text-white">{t("floatingCards.newLikes", { defaultValue: "+42 today" })}</span>
         </div>
       </div>
     </div>
@@ -886,13 +922,12 @@ const StatsBanner: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const BeginnerFriendlySection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { settings } = useLandingData()
 
-  // Use settings if available, otherwise fall back to translations
-  const badge = settings?.beginner_badge || t("beginner.badge", { defaultValue: "Perfect for Beginners" })
-  const title = settings?.beginner_title || t("beginner.title", { defaultValue: "Know Nothing About Gardening?" })
-  const titleHighlight = settings?.beginner_title_highlight || t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })
-  const subtitle = settings?.beginner_subtitle || t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany." })
+  // All text content from translations (not editable via admin)
+  const badge = t("beginner.badge", { defaultValue: "Perfect for Beginners" })
+  const title = t("beginner.title", { defaultValue: "Know Nothing About Gardening?" })
+  const titleHighlight = t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })
+  const subtitle = t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany." })
 
   const beginnerFeatures = [
     {
@@ -1043,14 +1078,57 @@ const FeaturesSection: React.FC = () => {
                   </div>
                 ))}
                 <div className="h-16 w-16 rounded-xl bg-stone-100 dark:bg-white/5 border border-stone-200 dark:border-white/10 flex items-center justify-center">
-                  <span className="text-sm font-medium text-stone-400">+10K</span>
+                  <span className="text-sm font-medium text-stone-400">{t("floatingCards.morePlants", { defaultValue: "+10K" })}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Regular Feature Cards */}
-          <FeatureCard icon={Bell} title={t("features.careReminders.title")} description={t("features.careReminders.description")} gradient="from-blue-500/10 to-indigo-500/10" iconBg="bg-blue-500" />
+          {/* Care Reminders - Enhanced Card */}
+          <div className="group relative rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-blue-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+            <div className="inline-flex h-12 w-12 rounded-xl bg-blue-500 items-center justify-center mb-4 shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
+              <Bell className="h-6 w-6 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">{t("features.careReminders.title")}</h3>
+            <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed mb-4">{t("features.careReminders.description")}</p>
+            
+            {/* Visual Preview - Mini Notification Stack */}
+            <div className="space-y-2">
+              {/* Notification 1 */}
+              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-200/50 dark:border-blue-500/20 backdrop-blur-sm group-hover:translate-x-1 transition-transform">
+                <div className="h-8 w-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                  <Droplets className="h-4 w-4 text-blue-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">Water your Monstera</p>
+                  <p className="text-[10px] text-stone-500">Today at 9:00 AM</p>
+                </div>
+                <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+              </div>
+              
+              {/* Notification 2 */}
+              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/40 dark:bg-white/5 border border-amber-200/50 dark:border-amber-500/20 backdrop-blur-sm group-hover:translate-x-1 transition-transform delay-75">
+                <div className="h-8 w-8 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                  <Sun className="h-4 w-4 text-amber-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">Fertilize Snake Plant</p>
+                  <p className="text-[10px] text-stone-500">Tomorrow</p>
+                </div>
+              </div>
+              
+              {/* Notification 3 - Faded */}
+              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/20 dark:bg-white/5 border border-emerald-200/30 dark:border-emerald-500/10 backdrop-blur-sm opacity-60 group-hover:translate-x-1 transition-transform delay-100">
+                <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                  <Leaf className="h-4 w-4 text-emerald-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">Mist your Fern</p>
+                  <p className="text-[10px] text-stone-500">In 2 days</p>
+                </div>
+              </div>
+            </div>
+          </div>
           <FeatureCard icon={Camera} title={t("features.plantId.title")} description={t("features.plantId.description")} gradient="from-pink-500/10 to-rose-500/10" iconBg="bg-pink-500" />
           <FeatureCard icon={NotebookPen} title={t("features.journal.title")} description={t("features.journal.description")} gradient="from-amber-500/10 to-orange-500/10" iconBg="bg-amber-500" />
           
@@ -1099,14 +1177,20 @@ const FeatureCard: React.FC<{
 )
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   INTERACTIVE DEMO SECTION
+   INTERACTIVE DEMO SECTION - Feature Wheel
    ═══════════════════════════════════════════════════════════════════════════════ */
+// Icon mapping for database features
+const demoIconMap: Record<string, React.ElementType> = {
+  Leaf, Clock, TrendingUp, Shield, Camera, NotebookPen, Users, Sparkles,
+  Bell, Heart, Star, Zap, Globe, Search, BookMarked, Flower2, TreeDeciduous, Sprout, Sun, Droplets
+}
+
 const InteractiveDemoSection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { circleFeatures: dbFeatures } = useLandingData()
+  const { demoFeatures } = useLandingData()
   const [activeFeature, setActiveFeature] = React.useState(0)
 
-  // Default features - 8 features for a fuller circle
+  // Default features from translations (fallback if no database features)
   const defaultFeatures = [
     { icon: Leaf, label: t("demo.discover", { defaultValue: "Discover Plants" }), color: "emerald" },
     { icon: Clock, label: t("demo.schedule", { defaultValue: "Schedule Care" }), color: "blue" },
@@ -1119,10 +1203,10 @@ const InteractiveDemoSection: React.FC = () => {
   ]
 
   // Use database features if available, otherwise use defaults
-  const features = dbFeatures.length > 0 
-    ? dbFeatures.map(f => ({
-        icon: iconMap[f.icon_name] || Leaf,
-        label: f.title,
+  const features = demoFeatures.length > 0
+    ? demoFeatures.map(f => ({
+        icon: demoIconMap[f.icon_name] || Leaf,
+        label: f.label,
         color: f.color,
       }))
     : defaultFeatures
@@ -1156,8 +1240,8 @@ const InteractiveDemoSection: React.FC = () => {
                 </div>
               </div>
               
-              {/* Orbiting Elements */}
-              <div className="absolute inset-0 animate-spin-slow">
+              {/* Orbiting Elements - Ferris wheel style: icons stay upright */}
+              <div className="absolute inset-0 animate-spin-slow" style={{ transformOrigin: 'center center' }}>
                 {features.map((feature, i) => {
                   const angleStep = 360 / features.length
                   const angle = (i * angleStep - 90) * (Math.PI / 180) // Start from top
@@ -1166,18 +1250,22 @@ const InteractiveDemoSection: React.FC = () => {
                   const IconComponent = feature.icon
                   const colorClass = `bg-${feature.color}-500`
                   return (
-                    <button
+                    <div
                       key={i}
-                      onClick={() => setActiveFeature(i)}
+                      className="absolute -translate-x-1/2 -translate-y-1/2"
                       style={{ left: `${x}%`, top: `${y}%` }}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                        activeFeature === i 
-                          ? `${colorClass} scale-110 shadow-lg` 
-                          : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:scale-105'
-                      }`}
                     >
-                      <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${activeFeature === i ? 'text-white' : 'text-stone-600 dark:text-stone-400'}`} />
-                    </button>
+                      <button
+                        onClick={() => setActiveFeature(i)}
+                        className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center transition-all duration-300 animate-counter-spin-slow ${
+                          activeFeature === i 
+                            ? `${colorClass} scale-110 shadow-lg` 
+                            : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:scale-105'
+                        }`}
+                      >
+                        <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${activeFeature === i ? 'text-white' : 'text-stone-600 dark:text-stone-400'}`} />
+                      </button>
+                    </div>
                   )
                 })}
               </div>
@@ -1218,428 +1306,83 @@ const InteractiveDemoSection: React.FC = () => {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   HOW IT WORKS - Redesigned
-   ═══════════════════════════════════════════════════════════════════════════════ */
-const HowItWorksSection: React.FC = () => {
-  const { t } = useTranslation("Landing")
-
-  const steps = [
-    { num: 1, icon: Camera, titleKey: "howItWorks.step1.title", descKey: "howItWorks.step1.description" },
-    { num: 2, icon: BookMarked, titleKey: "howItWorks.step2.title", descKey: "howItWorks.step2.description" },
-    { num: 3, icon: Sparkles, titleKey: "howItWorks.step3.title", descKey: "howItWorks.step3.description" },
-  ]
-
-  return (
-    <section id="how-it-works" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
-            {t("howItWorks.title")}
-          </h2>
-          <p className="text-lg text-stone-600 dark:text-stone-400">
-            {t("howItWorks.subtitle")}
-          </p>
-        </div>
-
-        <div className="relative">
-          {/* Connecting Line */}
-          <div className="hidden lg:block absolute top-24 left-[calc(16.67%+24px)] right-[calc(16.67%+24px)] h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 rounded-full" />
-
-          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
-            {steps.map((step, i) => (
-              <div key={i} className="relative text-center group">
-                {/* Step Number with Icon */}
-                <div className="relative z-10 mx-auto mb-8">
-                  <div className="relative inline-flex">
-                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-xl shadow-emerald-500/30 group-hover:scale-110 transition-transform">
-                      <step.icon className="h-8 w-8 text-white" />
-                    </div>
-                    <div className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-white dark:bg-stone-900 border-2 border-emerald-500 flex items-center justify-center">
-                      <span className="text-sm font-bold text-emerald-600">{step.num}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <h3 className="text-xl font-bold text-stone-900 dark:text-white mb-3">{t(step.titleKey)}</h3>
-                <p className="text-stone-600 dark:text-stone-400 max-w-xs mx-auto">{t(step.descKey)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════════
    SHOWCASE SECTION - Realistic UI Previews matching actual app components
+   Fully configurable via Admin Panel
    ═══════════════════════════════════════════════════════════════════════════════ */
 const ShowcaseSection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { showcaseCards, showcaseGardens } = useLandingData()
+  const { showcaseConfig } = useLandingData()
 
-  // Default chart data for analytics preview
-  const chartData = [
-    { day: 'M', completed: 3, due: 4 },
-    { day: 'T', completed: 5, due: 5 },
-    { day: 'W', completed: 2, due: 4 },
-    { day: 'T', completed: 6, due: 6 },
-    { day: 'F', completed: 4, due: 5 },
-    { day: 'S', completed: 5, due: 5 },
-    { day: 'S', completed: 6, due: 6 },
-  ]
-
-  // Find specific card types from database
-  const mainCard = showcaseCards.find(c => c.card_type === 'main' || c.card_type === 'garden')
-  const analyticsCard = showcaseCards.find(c => c.card_type === 'analytics')
-  const tasksCard = showcaseCards.find(c => c.card_type === 'tasks')
-
-  // Get selected gardens for the main card
-  const selectedGardenIds = mainCard?.selected_garden_ids || []
-  const selectedGardens = selectedGardenIds
-    .map(id => showcaseGardens.find(g => g.id === id))
-    .filter((g): g is ShowcaseGarden => g !== undefined)
-
-  // Helper to render a single real garden card
-  const renderRealGardenCard = (garden: ShowcaseGarden, _index: number, isLarge: boolean = true) => {
-    const gardenName = garden.name
-    const plantsCount = garden.plantCount
-    const streakCount = garden.streak
-    const coverImage = garden.coverImageUrl
-    const previewPlants = garden.previewPlants
-    const progressPercent = 85 // Default progress for display
-
-    return (
-      <Link
-        key={garden.id}
-        to={`/garden/${garden.id}`}
-        className={`group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 block ${
-          isLarge ? 'md:col-span-2 md:row-span-2' : ''
-        }`}
-      >
-        {/* Hero Section with cover image */}
-        <div className="relative overflow-hidden">
-          {coverImage ? (
-            <>
-              <div className="absolute inset-0">
-                <img src={coverImage} alt={gardenName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
-              </div>
-              <div className={`relative z-10 p-6 ${isLarge ? 'md:p-8 min-h-[200px]' : 'min-h-[140px]'} flex flex-col justify-end`}>
-                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-                  <div className="space-y-3">
-                    <h3 className={`${isLarge ? 'text-2xl md:text-3xl' : 'text-xl'} font-bold text-white drop-shadow-lg`}>
-                      {gardenName}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <span className="text-base">🌱</span>
-                        <span className="font-semibold text-white text-sm">{plantsCount}</span>
-                        <span className="text-xs text-white/80">plants</span>
-                      </div>
-                      {streakCount > 0 && (
-                        <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                          <span className="text-base">🔥</span>
-                          <span className="font-semibold text-white text-sm">{streakCount}</span>
-                          <span className="text-xs text-white/80">day streak</span>
-                        </div>
-                      )}
-                    </div>
-                    {garden.ownerDisplayName && (
-                      <div className="text-xs text-white/70">by {garden.ownerDisplayName}</div>
-                    )}
-                  </div>
-                  {isLarge && (
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-16 h-16">
-                        <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                          <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
-                          <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-lg" />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-lg font-bold text-white">{progressPercent}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
-              <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
-              <div className={`relative z-10 p-6 ${isLarge ? 'md:p-8' : ''}`}>
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="space-y-3">
-                    <h3 className={`${isLarge ? 'text-2xl md:text-3xl' : 'text-xl'} font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent`}>
-                      {gardenName}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
-                        <span className="text-base">🌱</span>
-                        <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">{plantsCount}</span>
-                        <span className="text-xs text-stone-600 dark:text-stone-300">plants</span>
-                      </div>
-                      {streakCount > 0 && (
-                        <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
-                          <span className="text-base">🔥</span>
-                          <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{streakCount}</span>
-                          <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
-                        </div>
-                      )}
-                    </div>
-                    {garden.ownerDisplayName && (
-                      <div className="text-xs text-stone-500 dark:text-stone-400">by {garden.ownerDisplayName}</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Plants Gallery - Show real plant images */}
-        {isLarge && (
-          <div className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
-                <span>🌿</span> Plants in Garden
-              </h4>
-              <span className="text-xs text-stone-500">{plantsCount} plants</span>
-            </div>
-            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-              {previewPlants.length > 0 ? (
-                previewPlants.slice(0, 6).map((plant) => (
-                  <div key={plant.id} className="relative aspect-square rounded-2xl overflow-hidden group/plant border border-stone-200/50 dark:border-stone-700/50">
-                    {plant.imageUrl ? (
-                      <img src={plant.imageUrl} alt={plant.nickname || plant.name} className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
-                    ) : (
-                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
-                        <Leaf className="h-6 w-6 text-white/60" />
-                      </div>
-                    )}
-                    {plant.nickname && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
-                        <span className="text-[9px] text-white font-medium truncate block">{plant.nickname}</span>
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                [1, 2, 3, 4, 5, 6].map((_, i) => (
-                  <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
-                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
-                      <Leaf className="h-6 w-6 text-white/60" />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Badge */}
-        <div className="absolute top-3 left-3">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
-            <Globe className="h-3 w-3" />
-            Public Garden
-          </span>
-        </div>
-      </Link>
-    )
-  }
-
-  // Helper to render a manual garden card (fallback when no gardens selected)
-  const renderManualGardenCard = (card: ShowcaseCard | undefined) => {
-    const gardenName = card?.garden_name || "My Indoor Jungle"
-    const plantsCount = card?.plants_count || 12
-    const speciesCount = card?.species_count || 8
-    const streakCount = card?.streak_count || 7
-    const progressPercent = card?.progress_percent || 85
-    const coverImage = card?.cover_image_url
-    const plantImages = card?.plant_images || []
-
-    return (
-      <div className="md:col-span-2 md:row-span-2 group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]">
-        {/* Hero Section with optional cover image */}
-        <div className="relative overflow-hidden">
-          {coverImage ? (
-            <>
-              <div className="absolute inset-0">
-                <img src={coverImage} alt={gardenName} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
-              </div>
-              <div className="relative z-10 p-6 md:p-8 min-h-[200px] flex flex-col justify-end">
-                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-                  <div className="space-y-3">
-                    <h3 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
-                      {gardenName}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <span className="text-base">🌱</span>
-                        <span className="font-semibold text-white text-sm">{plantsCount}</span>
-                        <span className="text-xs text-white/80">plants</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <span className="text-base">🔥</span>
-                        <span className="font-semibold text-white text-sm">{streakCount}</span>
-                        <span className="text-xs text-white/80">day streak</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <span className="text-base">🌿</span>
-                        <span className="font-semibold text-white text-sm">{speciesCount}</span>
-                        <span className="text-xs text-white/80">species</span>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Progress Ring */}
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-16 h-16">
-                      <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                        <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
-                        <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-lg" />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-lg font-bold text-white">{progressPercent}%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
-              <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
-              <div className="relative z-10 p-6 md:p-8">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="space-y-3">
-                    <h3 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
-                      {gardenName}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
-                        <span className="text-base">🌱</span>
-                        <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">{plantsCount}</span>
-                        <span className="text-xs text-stone-600 dark:text-stone-300">plants</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
-                        <span className="text-base">🔥</span>
-                        <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{streakCount}</span>
-                        <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-stone-200/50 dark:border-stone-500/20">
-                        <span className="text-base">🌿</span>
-                        <span className="font-semibold text-stone-700 dark:text-stone-300 text-sm">{speciesCount}</span>
-                        <span className="text-xs text-stone-600 dark:text-stone-300">species</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-16 h-16">
-                      <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                        <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" className="text-stone-200 dark:text-stone-700" strokeWidth="6" />
-                        <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(progressPercent / 100) * 163.4} 163.4`} className="drop-shadow-sm" />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{progressPercent}%</span>
-                      </div>
-                    </div>
-                    <div className="hidden sm:block">
-                      <div className="text-xs text-stone-500 dark:text-stone-400">Today's progress</div>
-                      <div className="font-semibold text-stone-700 dark:text-stone-200 text-sm">{Math.round(plantsCount * progressPercent / 100)}/{plantsCount} tasks</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Plants Gallery */}
-        <div className="p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
-              <span>🌿</span> Plants in Garden
-            </h4>
-            <span className="text-xs text-stone-500">{plantsCount} plants</span>
-          </div>
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-            {plantImages.length > 0 ? (
-              // Use real plant images from database
-              plantImages.slice(0, 6).map((plant, i) => (
-                <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
-                  <img src={plant.url} alt={plant.name} className="w-full h-full object-cover" />
-                  {i < 2 && (
-                    <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">
-                      {i + 1}
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              // Fallback gradient plants
-              [
-                { color: 'from-emerald-400 to-teal-500' },
-                { color: 'from-green-400 to-emerald-500' },
-                { color: 'from-lime-400 to-green-500' },
-                { color: 'from-teal-400 to-cyan-500' },
-                { color: 'from-emerald-500 to-green-600' },
-                { color: 'from-green-500 to-teal-600' },
-              ].map((plant, i) => (
-                <div key={i} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
-                  <div className={`absolute inset-0 bg-gradient-to-br ${plant.color}`}>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Leaf className="h-6 w-6 text-white/60" />
-                    </div>
-                  </div>
-                  {i < 2 && (
-                    <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">
-                      {i + 1}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Badge */}
-        <div className="absolute top-3 left-3">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
-            <Globe className="h-3 w-3" />
-            {card?.badge_text || "Garden Dashboard"}
-          </span>
-        </div>
-      </div>
-    )
-  }
-
-  // Render garden cards - use selected gardens if available, otherwise fall back to manual
-  const renderGardenShowcase = () => {
-    if (selectedGardens.length > 0) {
-      // Show selected real gardens
-      if (selectedGardens.length === 1) {
-        // Single garden - show large
-        return renderRealGardenCard(selectedGardens[0], 0, true)
-      } else {
-        // Multiple gardens - show in a grid
-        return (
-          <div className="md:col-span-2 md:row-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {selectedGardens.slice(0, 4).map((garden, i) => (
-              <div key={garden.id} className={i === 0 ? 'md:col-span-2' : ''}>
-                {renderRealGardenCard(garden, i, i === 0)}
-              </div>
-            ))}
-          </div>
-        )
-      }
+  // Generate default calendar (last 30 days, all completed)
+  const defaultCalendar = React.useMemo((): CalendarDay[] => {
+    const days: CalendarDay[] = []
+    const today = new Date()
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today)
+      date.setDate(date.getDate() - i)
+      days.push({
+        date: date.toISOString().split('T')[0],
+        status: 'completed'
+      })
     }
-    // Fall back to manual card
-    return renderManualGardenCard(mainCard)
+    return days
+  }, [])
+
+  // Default values if config is not loaded
+  const rawConfig = showcaseConfig || {
+    garden_name: "My Indoor Jungle",
+    plants_count: 12,
+    species_count: 8,
+    streak_count: 7,
+    progress_percent: 85,
+    cover_image_url: null,
+    tasks: [
+      { id: '1', text: "Water your Pothos", completed: true },
+      { id: '2', text: "Fertilize Monstera", completed: false },
+      { id: '3', text: "Mist your Fern", completed: false },
+    ],
+    members: [
+      { id: '1', name: "Sophie", role: 'owner' as const, avatar_url: null, color: "#10b981" },
+      { id: '2', name: "Marcus", role: 'member' as const, avatar_url: null, color: "#3b82f6" },
+    ],
+    plant_cards: [
+      { id: '1', plant_id: null, name: "Monstera", image_url: null, gradient: "from-emerald-400 to-teal-500", tasks_due: 1 },
+      { id: '2', plant_id: null, name: "Pothos", image_url: null, gradient: "from-lime-400 to-green-500", tasks_due: 2 },
+      { id: '3', plant_id: null, name: "Snake Plant", image_url: null, gradient: "from-green-400 to-emerald-500", tasks_due: 0 },
+      { id: '4', plant_id: null, name: "Fern", image_url: null, gradient: "from-teal-400 to-cyan-500", tasks_due: 0 },
+      { id: '5', plant_id: null, name: "Peace Lily", image_url: null, gradient: "from-emerald-500 to-green-600", tasks_due: 0 },
+      { id: '6', plant_id: null, name: "Calathea", image_url: null, gradient: "from-green-500 to-teal-600", tasks_due: 0 },
+    ],
+    completion_rate: 92,
+    analytics_streak: 14,
+    chart_data: [3, 5, 2, 6, 4, 5, 6],
+    calendar_data: defaultCalendar,
   }
+
+  // Calculate plants_count from plant_cards length (auto-calculated)
+  const config = {
+    ...rawConfig,
+    plants_count: rawConfig.plant_cards?.length || rawConfig.plants_count || 0,
+  }
+
+  // Use calendar_data from config or default
+  const calendarData = config.calendar_data?.length > 0 ? config.calendar_data : defaultCalendar
+
+  // Generate chart points from config data
+  const chartPoints = React.useMemo(() => {
+    const data = config.chart_data.length === 7 ? config.chart_data : [3, 5, 2, 6, 4, 5, 6]
+    const maxVal = Math.max(...data, 1)
+    return data.map((val, i) => {
+      const x = (i / 6) * 280
+      const y = 70 - (val / maxVal) * 60
+      return [x, y]
+    })
+  }, [config.chart_data])
+
+  const chartPath = chartPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]},${p[1]}`).join(' ')
+  const areaPath = `${chartPath} L 280,80 L 0,80 Z`
+
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
   return (
     <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-stone-100/50 to-transparent dark:via-stone-900/30">
@@ -1654,8 +1397,213 @@ const ShowcaseSection: React.FC = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {/* Garden Dashboard Card(s) - uses selected real gardens or manual fallback */}
-          {renderGardenShowcase()}
+          {/* Main Garden Dashboard Card */}
+          <div className="md:col-span-2 md:row-span-2 group relative rounded-[32px] overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]">
+            {/* Hero Section with optional cover image */}
+            <div className="relative overflow-hidden">
+              {config.cover_image_url ? (
+                <>
+                  <div className="absolute inset-0">
+                    <img src={config.cover_image_url} alt={config.garden_name} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+                  </div>
+                  <div className="relative z-10 p-6 md:p-8 min-h-[200px] flex flex-col justify-end">
+                    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                      <div className="space-y-3">
+                        <h3 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                          {config.garden_name}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                            <span className="text-base">🌱</span>
+                            <span className="font-semibold text-white text-sm">{config.plants_count}</span>
+                            <span className="text-xs text-white/80">plants</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                            <span className="text-base">🔥</span>
+                            <span className="font-semibold text-white text-sm">{config.streak_count}</span>
+                            <span className="text-xs text-white/80">day streak</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
+                            <span className="text-base">🌿</span>
+                            <span className="font-semibold text-white text-sm">{config.species_count}</span>
+                            <span className="text-xs text-white/80">species</span>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Progress Ring */}
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-16 h-16">
+                          <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                            <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
+                            <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(config.progress_percent / 100) * 163.4} 163.4`} className="drop-shadow-lg" />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-lg font-bold text-white">{config.progress_percent}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
+                  <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
+                  <div className="relative z-10 p-6 md:p-8">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-3">
+                        <h3 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+                          {config.garden_name}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
+                            <span className="text-base">🌱</span>
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">{config.plants_count}</span>
+                            <span className="text-xs text-stone-600 dark:text-stone-300">plants</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-orange-200/50 dark:border-orange-500/20">
+                            <span className="text-base">🔥</span>
+                            <span className="font-semibold text-orange-600 dark:text-orange-400 text-sm">{config.streak_count}</span>
+                            <span className="text-xs text-stone-600 dark:text-stone-300">day streak</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-stone-200/50 dark:border-stone-500/20">
+                            <span className="text-base">🌿</span>
+                            <span className="font-semibold text-stone-700 dark:text-stone-300 text-sm">{config.species_count}</span>
+                            <span className="text-xs text-stone-600 dark:text-stone-300">species</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-16 h-16">
+                          <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                            <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" className="text-stone-200 dark:text-stone-700" strokeWidth="6" />
+                            <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${(config.progress_percent / 100) * 163.4} 163.4`} className="drop-shadow-sm" />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{config.progress_percent}%</span>
+                          </div>
+                        </div>
+                        <div className="hidden sm:block">
+                          <div className="text-xs text-stone-500 dark:text-stone-400">Today's progress</div>
+                          <div className="font-semibold text-stone-700 dark:text-stone-200 text-sm">{Math.round(config.plants_count * config.progress_percent / 100)}/{config.plants_count} tasks</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Members Section */}
+            {config.members.length > 0 && (
+              <div className="px-5 pt-4 pb-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm">👥</span>
+                  <span className="text-xs font-medium text-stone-600 dark:text-stone-400">Garden members ({config.members.length})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {config.members.map((member) => (
+                    <div key={member.id} className="flex items-center gap-2 px-2 py-1 rounded-full bg-stone-100 dark:bg-stone-800">
+                      <div
+                        className="h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold"
+                        style={{ backgroundColor: member.color }}
+                      >
+                        {member.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="text-xs text-stone-700 dark:text-stone-300">{member.name}</span>
+                      {member.role === 'owner' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">Owner</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Plants Gallery */}
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
+                  <span>🌿</span> Plants in Garden
+                </h4>
+                <span className="text-xs text-stone-500">{config.plants_count} plants</span>
+              </div>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {config.plant_cards.slice(0, 6).map((plant) => (
+                  <div key={plant.id} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
+                    {plant.image_url ? (
+                      <img src={plant.image_url} alt={plant.name} className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
+                    ) : (
+                      <div className={`absolute inset-0 bg-gradient-to-br ${plant.gradient}`}>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Leaf className="h-6 w-6 text-white/60" />
+                        </div>
+                      </div>
+                    )}
+                    {plant.tasks_due > 0 && (
+                      <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center shadow-lg">
+                        {plant.tasks_due}
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                      <span className="text-[9px] text-white font-medium truncate block">{plant.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Last 30 Days Calendar */}
+            <div className="p-5 border-t border-stone-200/50 dark:border-stone-700/50">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
+                  <Calendar className="h-4 w-4" /> Last 30 days
+                </h4>
+                <div className="flex items-center gap-3 text-[10px]">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-emerald-500" />
+                    <span className="text-stone-500">Completed</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-stone-300 dark:bg-stone-600" />
+                    <span className="text-stone-500">Missed</span>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-10 gap-1.5">
+                {calendarData.map((day) => {
+                  const date = new Date(day.date)
+                  const dayNum = date.getDate()
+                  const isToday = day.date === new Date().toISOString().split('T')[0]
+                  
+                  return (
+                    <div
+                      key={day.date}
+                      className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-medium ${
+                        day.status === 'completed' 
+                          ? 'bg-emerald-500 text-white' 
+                          : day.status === 'missed'
+                          ? 'bg-stone-300 dark:bg-stone-600 text-stone-600 dark:text-stone-300'
+                          : 'bg-stone-100 dark:bg-stone-800 text-stone-400'
+                      } ${isToday ? 'ring-2 ring-emerald-400 ring-offset-1 dark:ring-offset-stone-900' : ''}`}
+                      title={day.date}
+                    >
+                      {dayNum}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Badge */}
+            <div className="absolute top-3 left-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/90 text-white text-xs font-medium backdrop-blur-sm shadow-lg">
+                <Globe className="h-3 w-3" />
+                Garden Dashboard
+              </span>
+            </div>
+          </div>
 
           {/* Tasks Card */}
           <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
@@ -1664,24 +1612,24 @@ const ShowcaseSection: React.FC = () => {
                 <Droplets className="h-6 w-6 text-white" />
               </div>
               <span className="px-2 py-1 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-medium">
-                {tasksCard?.badge_text || t("showcase.tasksText", { defaultValue: "3 plants need attention" })}
+                {config.tasks.filter(t => !t.completed).length} plants need attention
               </span>
             </div>
-            <p className="font-semibold text-stone-900 dark:text-white mb-3">{tasksCard?.title || t("showcase.tasksReminder", { defaultValue: "Today's Tasks" })}</p>
+            <p className="font-semibold text-stone-900 dark:text-white mb-3">{t("showcase.tasksReminder", { defaultValue: "Today's Tasks" })}</p>
             
             <div className="space-y-2">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                <span className="text-xs text-stone-600 dark:text-stone-400 line-through">{t("showcase.taskWater", { defaultValue: "Water your Pothos" })}</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
-                <CircleDot className="h-4 w-4 text-blue-500" />
-                <span className="text-xs text-stone-700 dark:text-stone-300">{t("showcase.taskFertilize", { defaultValue: "Fertilize Monstera" })}</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
-                <CircleDot className="h-4 w-4 text-blue-500" />
-                <span className="text-xs text-stone-700 dark:text-stone-300">{t("showcase.taskMist", { defaultValue: "Mist your Fern" })}</span>
-              </div>
+              {config.tasks.map((task) => (
+                <div key={task.id} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/5 border border-blue-500/10">
+                  {task.completed ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <CircleDot className="h-4 w-4 text-blue-500" />
+                  )}
+                  <span className={`text-xs ${task.completed ? 'text-stone-600 dark:text-stone-400 line-through' : 'text-stone-700 dark:text-stone-300'}`}>
+                    {task.text}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -1690,7 +1638,7 @@ const ShowcaseSection: React.FC = () => {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-emerald-500" />
-                <span className="font-semibold text-stone-900 dark:text-white text-sm">{analyticsCard?.title || t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</span>
+                <span className="font-semibold text-stone-900 dark:text-white text-sm">{t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</span>
               </div>
               <div className="flex bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5">
                 <span className="px-2 py-1 text-[10px] font-medium rounded-md bg-white dark:bg-stone-700 shadow-sm text-emerald-600 dark:text-emerald-400">Overview</span>
@@ -1706,7 +1654,7 @@ const ShowcaseSection: React.FC = () => {
                     <Target className="w-3 h-3" />
                     <span>Completion Rate</span>
                   </div>
-                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{analyticsCard?.progress_percent || 92}%</div>
+                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{config.completion_rate}%</div>
                   <div className="flex items-center gap-1 mt-0.5">
                     <TrendingUp className="w-3 h-3 text-emerald-500" />
                     <span className="text-[10px] text-emerald-500">+8%</span>
@@ -1722,7 +1670,7 @@ const ShowcaseSection: React.FC = () => {
                     <Flame className="w-3 h-3" />
                     <span>Current Streak</span>
                   </div>
-                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{analyticsCard?.streak_count || 14}</div>
+                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{config.analytics_streak}</div>
                   <div className="text-[10px] text-stone-500 mt-0.5">Best: 21 days</div>
                 </div>
               </div>
@@ -1740,20 +1688,20 @@ const ShowcaseSection: React.FC = () => {
               <div className="relative h-20">
                 <svg viewBox="0 0 280 80" className="w-full h-full" preserveAspectRatio="none">
                   <defs>
-                    <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="showcaseAreaGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
                       <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
                     </linearGradient>
                   </defs>
-                  <path d="M 0,50 L 40,35 L 80,55 L 120,20 L 160,40 L 200,25 L 240,15 L 280,10 L 280,80 L 0,80 Z" fill="url(#areaGradient)" />
-                  <path d="M 0,50 L 40,35 L 80,55 L 120,20 L 160,40 L 200,25 L 240,15 L 280,10" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  {[[0, 50], [40, 35], [80, 55], [120, 20], [160, 40], [200, 25], [240, 15], [280, 10]].map(([x, y], i) => (
+                  <path d={areaPath} fill="url(#showcaseAreaGradient)" />
+                  <path d={chartPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  {chartPoints.map(([x, y], i) => (
                     <circle key={i} cx={x} cy={y} r="3" fill="#10b981" className="drop-shadow-sm" />
                   ))}
                 </svg>
                 <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1 -mb-4">
-                  {chartData.map((d, i) => (
-                    <span key={i} className="text-[8px] text-stone-400">{d.day}</span>
+                  {dayLabels.map((d, i) => (
+                    <span key={i} className="text-[8px] text-stone-400">{d}</span>
                   ))}
                 </div>
               </div>
@@ -1822,6 +1770,60 @@ const ShowcaseSection: React.FC = () => {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   HOW IT WORKS - Redesigned
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const HowItWorksSection: React.FC = () => {
+  const { t } = useTranslation("Landing")
+
+  const steps = [
+    { num: 1, icon: Search, titleKey: "howItWorks.step1.title", descKey: "howItWorks.step1.description" },
+    { num: 2, icon: Sprout, titleKey: "howItWorks.step2.title", descKey: "howItWorks.step2.description" },
+    { num: 3, icon: Bell, titleKey: "howItWorks.step3.title", descKey: "howItWorks.step3.description" },
+  ]
+
+  return (
+    <section id="how-it-works" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
+            {t("howItWorks.title")}
+          </h2>
+          <p className="text-lg text-stone-600 dark:text-stone-400">
+            {t("howItWorks.subtitle")}
+          </p>
+        </div>
+
+        <div className="relative">
+          {/* Connecting Line */}
+          <div className="hidden lg:block absolute top-24 left-[calc(16.67%+24px)] right-[calc(16.67%+24px)] h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 rounded-full" />
+
+          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
+            {steps.map((step, i) => (
+              <div key={i} className="relative text-center group">
+                {/* Step Number with Icon */}
+                <div className="relative z-10 mx-auto mb-8">
+                  <div className="relative inline-flex">
+                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-xl shadow-emerald-500/30 group-hover:scale-110 transition-transform">
+                      <step.icon className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-white dark:bg-stone-900 border-2 border-emerald-500 flex items-center justify-center">
+                      <span className="text-sm font-bold text-emerald-600">{step.num}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <h3 className="text-xl font-bold text-stone-900 dark:text-white mb-3">{t(step.titleKey)}</h3>
+                <p className="text-stone-600 dark:text-stone-400 max-w-xs mx-auto">{t(step.descKey)}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1952,60 +1954,88 @@ const FAQSection: React.FC = () => {
           ))}
         </div>
 
-        {/* Support CTA - Enhanced with Social Links */}
+        {/* Support CTA - Enhanced with Vibrant Gradients */}
         <div className="mt-16">
-          <div className="rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-green-500/10 border border-emerald-500/20 p-8 lg:p-10">
-            <div className="text-center max-w-2xl mx-auto space-y-6">
-              <div className="inline-flex h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 items-center justify-center shadow-lg shadow-emerald-500/30">
-                <HandHeart className="h-8 w-8 text-white" />
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-2xl font-bold text-stone-900 dark:text-white">
-                  {t("faq.supportTitle", { defaultValue: "We'd love to hear from you!" })}
-                </h3>
-                <p className="text-stone-600 dark:text-stone-400 text-lg">
-                  {t("faq.supportSubtitle", { defaultValue: "Questions, feedback, or just want to say hi? Reach out anytime - it's always a pleasure to connect with plant lovers!" })}
-                </p>
-              </div>
+          <div className="relative rounded-[32px] overflow-hidden">
+            {/* Animated gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 via-teal-500 to-cyan-500" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-pink-500/30 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-purple-500/30 via-transparent to-transparent" />
+            
+            {/* Glowing orbs */}
+            <div className="absolute -top-20 -left-20 w-60 h-60 bg-emerald-400/40 rounded-full blur-3xl animate-pulse" />
+            <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-cyan-400/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-teal-300/20 rounded-full blur-3xl" />
+            
+            {/* Grid pattern overlay */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px]" />
+            
+            <div className="relative z-10 p-8 lg:p-12">
+              <div className="text-center max-w-2xl mx-auto space-y-8">
+                {/* Icon with glow */}
+                <div className="relative inline-block">
+                  <div className="absolute inset-0 bg-white/30 rounded-3xl blur-xl scale-150" />
+                  <div className="relative inline-flex h-20 w-20 rounded-3xl bg-white/20 backdrop-blur-sm border border-white/30 items-center justify-center shadow-2xl">
+                    <HandHeart className="h-10 w-10 text-white drop-shadow-lg" />
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <h3 className="text-3xl lg:text-4xl font-bold text-white drop-shadow-lg">
+                    {t("faq.supportTitle", { defaultValue: "We're here to help!" })}
+                  </h3>
+                  <p className="text-white/90 text-lg max-w-xl mx-auto">
+                    {t("faq.supportSubtitle", { defaultValue: "Questions, feedback, or just want to say hi? We'd love to connect with fellow plant enthusiasts!" })}
+                  </p>
+                </div>
 
-              {/* Social Links */}
-              <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-                <a
-                  href="https://instagram.com/aphylia_app"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium hover:shadow-lg hover:shadow-pink-500/25 hover:-translate-y-0.5 transition-all"
-                >
-                  <Instagram className="h-5 w-5" />
-                  <span>Instagram</span>
-                </a>
-                <a
-                  href="https://twitter.com/aphylia_app"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-sky-500/25 hover:-translate-y-0.5 transition-all"
-                >
-                  <Twitter className="h-5 w-5" />
-                  <span>Twitter</span>
-                </a>
-                <a
-                  href="mailto:hello@aphylia.app"
-                  className="group flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium hover:shadow-lg hover:shadow-emerald-500/25 hover:-translate-y-0.5 transition-all"
-                >
-                  <Mail className="h-5 w-5" />
-                  <span>Email Us</span>
-                </a>
-              </div>
+                {/* Social Links - Glass morphism cards */}
+                <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
+                  <a
+                    href="https://instagram.com/aphylia_app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative flex items-center gap-3 px-6 py-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-semibold hover:bg-white/20 hover:scale-105 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300"
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/50 to-purple-500/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/30">
+                      <Instagram className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="relative">Instagram</span>
+                  </a>
+                  <a
+                    href="https://twitter.com/aphylia_app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative flex items-center gap-3 px-6 py-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-semibold hover:bg-white/20 hover:scale-105 hover:shadow-2xl hover:shadow-sky-500/20 transition-all duration-300"
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-sky-500/50 to-blue-500/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/30">
+                      <Twitter className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="relative">Twitter</span>
+                  </a>
+                  <a
+                    href="mailto:hello@aphylia.app"
+                    className="group relative flex items-center gap-3 px-6 py-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-semibold hover:bg-white/20 hover:scale-105 hover:shadow-2xl hover:shadow-amber-500/20 transition-all duration-300"
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-amber-500/50 to-orange-500/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                      <Mail className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="relative">Email Us</span>
+                  </a>
+                </div>
 
-              <div className="pt-4 border-t border-emerald-500/10">
-                <Link
-                  to="/contact"
-                  className="inline-flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium hover:underline"
-                >
-                  {t("faq.supportButton", { defaultValue: "Or visit our contact page" })}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
+                <div className="pt-6">
+                  <Link
+                    to="/contact"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 text-white font-medium hover:bg-white/30 transition-all group"
+                  >
+                    {t("faq.supportButton", { defaultValue: "Contact Support" })}
+                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -2020,14 +2050,13 @@ const FAQSection: React.FC = () => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const FinalCTASection: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { settings } = useLandingData()
 
-  // Use settings if available, otherwise fall back to translations
-  const badge = settings?.final_cta_badge || t("finalCta.badge", { defaultValue: "No experience needed" })
-  const title = settings?.final_cta_title || t("finalCta.title", { defaultValue: "Ready to Start Your Plant Journey?" })
-  const subtitle = settings?.final_cta_subtitle || t("finalCta.subtitle", { defaultValue: "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents." })
-  const primaryButtonText = settings?.final_cta_button_text || t("finalCta.ctaDownload", { defaultValue: "Start Growing" })
-  const secondaryButtonText = settings?.final_cta_secondary_text || t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })
+  // All text content from translations (not editable via admin)
+  const badge = t("finalCta.badge", { defaultValue: "No experience needed" })
+  const title = t("finalCta.title", { defaultValue: "Ready to Start Your Plant Journey?" })
+  const subtitle = t("finalCta.subtitle", { defaultValue: "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents." })
+  const primaryButtonText = t("finalCta.ctaDownload", { defaultValue: "Start Growing" })
+  const secondaryButtonText = t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })
 
   return (
     <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8">

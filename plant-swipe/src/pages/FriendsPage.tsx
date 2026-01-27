@@ -27,7 +27,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
-import { sendFriendRequestPushNotification } from "@/lib/notifications";
+import { sendFriendRequestPushNotification, refreshAppBadge } from "@/lib/notifications";
 import { areUsersBlocked } from "@/lib/moderation";
 import { cn } from "@/lib/utils";
 
@@ -472,12 +472,16 @@ export const FriendsPage: React.FC = () => {
       await supabase.rpc("accept_friend_request", { _request_id: requestId });
       await Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()]);
       setError(null);
+      // Refresh app badge after accepting request
+      if (user?.id) {
+        refreshAppBadge(user.id).catch(() => {});
+      }
     } catch (e: any) {
       setError(e?.message || t("friends.errors.failedToAccept"));
     } finally {
       setProcessingId(null);
     }
-  }, [loadFriends, loadPendingRequests, loadSentPendingRequests, t]);
+  }, [loadFriends, loadPendingRequests, loadSentPendingRequests, t, user?.id]);
 
   // Reject request
   const rejectRequest = React.useCallback(async (requestId: string) => {
@@ -486,12 +490,16 @@ export const FriendsPage: React.FC = () => {
       await supabase.from("friend_requests").update({ status: "rejected" }).eq("id", requestId);
       await Promise.all([loadPendingRequests(), loadSentPendingRequests()]);
       setError(null);
+      // Refresh app badge after rejecting request
+      if (user?.id) {
+        refreshAppBadge(user.id).catch(() => {});
+      }
     } catch (e: any) {
       setError(e?.message || t("friends.errors.failedToReject"));
     } finally {
       setProcessingId(null);
     }
-  }, [loadPendingRequests, loadSentPendingRequests, t]);
+  }, [loadPendingRequests, loadSentPendingRequests, t, user?.id]);
 
   // Cancel sent request
   const cancelRequest = React.useCallback(async (requestId: string) => {
@@ -1033,6 +1041,7 @@ export const FriendsPage: React.FC = () => {
               placeholder={t("friends.addFriendDialog.searchPlaceholder")}
               value={dialogSearchQuery}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDialogSearchQuery(e.target.value)}
+              onClear={() => setDialogSearchQuery("")}
               loading={dialogSearching}
             />
 

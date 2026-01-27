@@ -25,7 +25,7 @@ import { ReportUserDialog } from "@/components/moderation/ReportUserDialog"
 import { BlockUserDialog } from "@/components/moderation/BlockUserDialog"
 import { hasBlockedUser, unblockUser, isBlockedByUser } from "@/lib/moderation"
 import { getOrCreateConversation } from "@/lib/messaging"
-import { sendFriendRequestPushNotification } from "@/lib/notifications"
+import { sendFriendRequestPushNotification, refreshAppBadge } from "@/lib/notifications"
 
 type PublicProfile = {
   id: string
@@ -709,6 +709,9 @@ export default function PublicProfilePage() {
       } else {
         setFriendsSince(new Date().toISOString())
       }
+      
+      // Refresh app badge after accepting friend request
+      refreshAppBadge(user.id).catch(() => {})
     } catch (e: any) {
       setEditError(e?.message || t('profile.editProfile.failedToAcceptFriendRequest'))
     } finally {

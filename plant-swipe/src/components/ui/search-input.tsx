@@ -87,6 +87,8 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
             "placeholder:text-stone-400 dark:placeholder:text-stone-500",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:border-emerald-400",
             "disabled:cursor-not-allowed disabled:opacity-50",
+            // Hide native browser clear button (we provide our own)
+            "[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none",
             // Size variants
             isLarge
               ? "h-12 rounded-2xl pr-4 text-base"

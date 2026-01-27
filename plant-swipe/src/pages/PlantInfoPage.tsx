@@ -53,6 +53,7 @@ import {
   Clock,
   CalendarDays,
   FileText,
+  Wrench,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -137,6 +138,68 @@ const normalizeSchedules = (rows?: any[]): WaterSchedules => {
   }))
 }
 
+// Fast query to check plant status and get basic info for construction banner
+// This allows non-privileged users to see the "in construction" message immediately
+// without waiting for all the heavy relation queries
+async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Promise<{
+  exists: boolean
+  status?: string
+  name?: string
+  scientificName?: string
+  family?: string
+  plantType?: string
+  levelSun?: string
+  livingSpace?: string
+  lifeCycle?: string
+  season?: string[]
+  maintenanceLevel?: string
+  overview?: string
+  primaryImage?: string
+} | null> {
+  const targetLanguage = language || 'en'
+  
+  // Run all queries in parallel for speed
+  const [plantResult, translationResult, imageResult] = await Promise.all([
+    supabase
+      .from('plants')
+      .select('id, name, scientific_name, status, family, plant_type, level_sun, living_space, life_cycle, season, maintenance_level')
+      .eq('id', id)
+      .maybeSingle(),
+    supabase
+      .from('plant_translations')
+      .select('name, overview')
+      .eq('plant_id', id)
+      .eq('language', targetLanguage)
+      .maybeSingle(),
+    supabase
+      .from('plant_images')
+      .select('link')
+      .eq('plant_id', id)
+      .eq('use', 'primary')
+      .maybeSingle()
+  ])
+  
+  if (plantResult.error || !plantResult.data) return null
+  
+  const data = plantResult.data
+  
+  return {
+    exists: true,
+    status: data.status || undefined,
+    name: translationResult.data?.name || data.name,
+    scientificName: data.scientific_name || undefined,
+    family: data.family || undefined,
+    plantType: plantTypeEnum.toUi(data.plant_type) || undefined,
+    levelSun: levelSunEnum.toUi(data.level_sun) || undefined,
+    livingSpace: livingSpaceEnum.toUi(data.living_space) || undefined,
+    lifeCycle: lifeCycleEnum.toUi(data.life_cycle) || undefined,
+    season: seasonEnum.toUiArray(data.season) || undefined,
+    maintenanceLevel: maintenanceLevelEnum.toUi(data.maintenance_level) || undefined,
+    overview: translationResult.data?.overview || undefined,
+    primaryImage: imageResult.data?.link || undefined,
+  }
+}
+
 async function fetchPlantWithRelations(id: string, language?: string): Promise<Plant | null> {
   const { data, error } = await supabase.from('plants').select('*').eq('id', id).maybeSingle()
   if (error) throw new Error(error.message)
@@ -145,22 +208,37 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
   // All translatable fields are stored in plant_translations for ALL languages (including English)
   // Load translation for the requested language
   const targetLanguage = language || 'en'
-  let translation: any = null
-  const { data: translationData } = await supabase
-    .from('plant_translations')
-    .select('*')
-    .eq('plant_id', id)
-    .eq('language', targetLanguage)
-    .maybeSingle()
-  translation = translationData || null
   
-  const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
-  const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
-  const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
-  const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
-  const { data: infusionMixRows } = await supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id)
+  // Run all independent queries in parallel for faster loading
+  const [
+    translationResult,
+    colorLinksResult,
+    imagesResult,
+    schedulesResult,
+    sourcesResult,
+    infusionMixResult
+  ] = await Promise.all([
+    supabase
+      .from('plant_translations')
+      .select('*')
+      .eq('plant_id', id)
+      .eq('language', targetLanguage)
+      .maybeSingle(),
+    supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id),
+    supabase.from('plant_images').select('id,link,use').eq('plant_id', id),
+    supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id),
+    supabase.from('plant_sources').select('id,name,url').eq('plant_id', id),
+    supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id)
+  ])
   
-  // Fetch color translations for the target language
+  const translation = translationResult.data || null
+  const colorLinks = colorLinksResult.data
+  const images = imagesResult.data
+  const schedules = schedulesResult.data
+  const sources = sourcesResult.data
+  const infusionMixRows = infusionMixResult.data
+  
+  // Fetch color translations for the target language (depends on colorLinks result)
   const colorIds = (colorLinks || []).map((c: any) => c.colors?.id).filter(Boolean)
   let colorTranslationsMap: Record<string, string> = {}
   if (colorIds.length > 0) {
@@ -344,6 +422,21 @@ const PlantInfoPage: React.FC = () => {
   const [isBookmarked, setIsBookmarked] = React.useState(false)
   const [gardenOpen, setGardenOpen] = React.useState(false)
   const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'shared' | 'error'>('idle')
+  // For fast-path: show construction banner immediately for non-privileged users
+  const [limitedPlantInfo, setLimitedPlantInfo] = React.useState<{
+    name: string
+    scientificName?: string
+    status: string
+    family?: string
+    plantType?: string
+    levelSun?: string
+    livingSpace?: string
+    lifeCycle?: string
+    season?: string[]
+    maintenanceLevel?: string
+    overview?: string
+    primaryImage?: string
+  } | null>(null)
   const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   React.useEffect(() => {
@@ -442,7 +535,51 @@ const PlantInfoPage: React.FC = () => {
       if (!id) { setLoading(false); return }
       setLoading(true)
       setError(null)
+      setLimitedPlantInfo(null)
+      
       try {
+        // Fast-path: First check plant status with minimal query
+        const basicInfo = await fetchPlantStatusAndBasicInfo(id, currentLang)
+        
+        if (ignore) return
+        
+        if (!basicInfo) {
+          setPlant(null)
+          setLoading(false)
+          return
+        }
+        
+        // Check if plant is "in construction"
+        const statusLower = basicInfo.status?.toLowerCase()
+        const isInConstruction = statusLower === 'in progres' || statusLower === 'in progress'
+        
+        // Check if user has privileged access
+        const hasPrivilegedAccess = profile?.is_admin === true || 
+          hasAnyRole(profile?.roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR, USER_ROLES.PRO])
+        
+        // For non-privileged users viewing "in construction" plants,
+        // show the construction banner immediately without loading full data
+        if (isInConstruction && !hasPrivilegedAccess) {
+          setLimitedPlantInfo({
+            name: basicInfo.name || 'Unknown Plant',
+            scientificName: basicInfo.scientificName,
+            status: basicInfo.status || 'in progress',
+            family: basicInfo.family,
+            plantType: basicInfo.plantType,
+            levelSun: basicInfo.levelSun,
+            livingSpace: basicInfo.livingSpace,
+            lifeCycle: basicInfo.lifeCycle,
+            season: basicInfo.season,
+            maintenanceLevel: basicInfo.maintenanceLevel,
+            overview: basicInfo.overview,
+            primaryImage: basicInfo.primaryImage,
+          })
+          setPlant(null)
+          setLoading(false)
+          return
+        }
+        
+        // User has access or plant is published - load full data
         const record = await fetchPlantWithRelations(id, currentLang)
         if (!ignore) setPlant(record)
       } catch (e: any) {
@@ -453,7 +590,7 @@ const PlantInfoPage: React.FC = () => {
     }
     load()
     return () => { ignore = true }
-  }, [id, currentLang])
+  }, [id, currentLang, profile?.is_admin, profile?.roles])
 
   const toggleLiked = async () => {
     if (!user?.id || !id) return
@@ -511,6 +648,207 @@ const PlantInfoPage: React.FC = () => {
     return <PlantInfoPageSkeleton label={t('common.loading', { defaultValue: 'Loading plant data' })} />
   }
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
+  
+  // Fast-path: Show construction banner immediately for non-privileged users
+  // This avoids loading full plant data when user won't see it anyway
+  if (limitedPlantInfo) {
+    // Helper to translate enum values for the limited info display
+    const translateLimitedEnum = (value: string | undefined): string => {
+      if (!value) return ''
+      const key = value.toLowerCase().replace(/[_\s-]/g, '')
+      const translationKeys = [
+        `plantDetails.plantType.${key}`,
+        `plantDetails.sunLevels.${key}`,
+        `plantDetails.maintenanceLevels.${key}`,
+        `plantDetails.seasons.${key}`,
+        `moreInfo.lifeCycle.${key}`,
+        `moreInfo.livingSpace.${key}`,
+      ]
+      for (const k of translationKeys) {
+        const translated = t(k, { defaultValue: '' })
+        if (translated) return translated
+      }
+      return value.replace(/[_-]/g, ' ')
+    }
+    
+    const hasBasicInfo = limitedPlantInfo.family || limitedPlantInfo.plantType || limitedPlantInfo.lifeCycle
+    const hasCareInfo = limitedPlantInfo.levelSun || limitedPlantInfo.maintenanceLevel || limitedPlantInfo.livingSpace
+    const hasSeasons = limitedPlantInfo.season && limitedPlantInfo.season.length > 0
+    
+    return (
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
+        <div className="flex items-center gap-2 justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="rounded-full border border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
+            onClick={handleGoBack}
+            aria-label={t('common.back', { defaultValue: 'Back' })}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+        </div>
+        
+        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 overflow-hidden">
+          {/* Hero section with image */}
+          <div className="relative">
+            {limitedPlantInfo.primaryImage ? (
+              <div className="relative h-48 sm:h-64 md:h-72 overflow-hidden">
+                <img 
+                  src={limitedPlantInfo.primaryImage} 
+                  alt={limitedPlantInfo.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white drop-shadow-lg">{limitedPlantInfo.name}</h1>
+                  {limitedPlantInfo.scientificName && (
+                    <p className="text-base sm:text-lg italic text-white/80 mt-1">{limitedPlantInfo.scientificName}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 sm:p-8 text-center border-b border-amber-200/50 dark:border-amber-500/20">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-stone-900 dark:text-white">{limitedPlantInfo.name}</h1>
+                {limitedPlantInfo.scientificName && (
+                  <p className="text-base sm:text-lg italic text-stone-600 dark:text-stone-400 mt-1">{limitedPlantInfo.scientificName}</p>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Construction notice */}
+          <div className="p-6 sm:p-8 text-center border-b border-amber-200/50 dark:border-amber-500/20 bg-amber-50/50 dark:bg-amber-900/10">
+            <div className="flex justify-center mb-4">
+              <div className="p-3 rounded-full bg-amber-100 dark:bg-amber-900/40">
+                <HardHat className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+              </div>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-amber-900 dark:text-amber-100 mb-2">
+              {t('plantInfo.inConstruction.title', { defaultValue: 'Plant in Construction' })}
+            </h2>
+            <p className="text-amber-700 dark:text-amber-300 max-w-lg mx-auto text-sm sm:text-base">
+              {t('plantInfo.inConstruction.description', { 
+                defaultValue: 'We are currently verifying and completing the information for this plant. Check back soon for the full details!' 
+              })}
+            </p>
+          </div>
+          
+          {/* Available plant info */}
+          <div className="p-6 sm:p-8 space-y-6">
+            {/* Overview if available */}
+            {limitedPlantInfo.overview && (
+              <div className="text-stone-700 dark:text-stone-300 text-sm sm:text-base leading-relaxed">
+                {limitedPlantInfo.overview}
+              </div>
+            )}
+            
+            {/* Basic Info Grid */}
+            {(hasBasicInfo || hasCareInfo || hasSeasons) && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+                {limitedPlantInfo.plantType && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('plantDetails.stats.type', { defaultValue: 'Type' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.plantType)}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.family && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('moreInfo.labels.family', { defaultValue: 'Family' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {limitedPlantInfo.family}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.lifeCycle && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('moreInfo.labels.lifeCycle', { defaultValue: 'Life Cycle' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.lifeCycle)}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.levelSun && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sun className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('plantDetails.stats.sunLevel', { defaultValue: 'Sun' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.levelSun)}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.maintenanceLevel && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Wrench className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('plantDetails.stats.maintenance', { defaultValue: 'Maintenance' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.maintenanceLevel)}
+                    </p>
+                  </div>
+                )}
+                
+                {limitedPlantInfo.livingSpace && (
+                  <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <MapPin className="h-4 w-4 text-rose-500 dark:text-rose-400" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {t('moreInfo.labels.livingSpace', { defaultValue: 'Living Space' })}
+                      </span>
+                    </div>
+                    <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
+                      {translateLimitedEnum(limitedPlantInfo.livingSpace)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Seasons */}
+            {hasSeasons && (
+              <div className="flex flex-wrap gap-2 justify-center">
+                {limitedPlantInfo.season!.map((s) => (
+                  <Badge key={s} variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 px-3 py-1">
+                    {translateLimitedEnum(s)}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
@@ -718,13 +1056,44 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       
       setCompanionsLoading(true)
       try {
-        // Fetch plant basic info
-        const { data: plantsData } = await supabase
-          .from('plants')
-          .select('id, name')
-          .in('id', companionIds)
+        // Run all queries in parallel for faster loading
+        // Note: Promise.resolve() wraps PromiseLike into a proper Promise for TypeScript
+        const queries: Promise<any>[] = [
+          Promise.resolve(
+            supabase
+              .from('plants')
+              .select('id, name')
+              .in('id', companionIds)
+          ),
+          Promise.resolve(
+            supabase
+              .from('plant_images')
+              .select('plant_id, link')
+              .in('plant_id', companionIds)
+              .eq('use', 'primary')
+          )
+        ]
+        
+        // Add translation query if not English
+        if (currentLang !== 'en') {
+          queries.push(
+            Promise.resolve(
+              supabase
+                .from('plant_translations')
+                .select('plant_id, name')
+                .in('plant_id', companionIds)
+                .eq('language', currentLang)
+            )
+          )
+        }
+        
+        const [plantsRes, imagesRes, translationsRes] = await Promise.all(queries)
         
         if (ignore) return
+        
+        const plantsData = plantsRes?.data
+        const imagesData = imagesRes?.data
+        const translationsData = translationsRes?.data
         
         if (!plantsData?.length) {
           setCompanionPlants([])
@@ -732,45 +1101,25 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           return
         }
         
-        // Fetch primary images for companion plants
-        const { data: imagesData } = await supabase
-          .from('plant_images')
-          .select('plant_id, link')
-          .in('plant_id', companionIds)
-          .eq('use', 'primary')
-        
-        if (ignore) return
-        
         const imageMap = new Map<string, string>()
         if (imagesData) {
-          imagesData.forEach((img) => {
+          imagesData.forEach((img: { plant_id: string; link: string }) => {
             if (img.plant_id && img.link) {
               imageMap.set(img.plant_id, img.link)
             }
           })
         }
         
-        // Fetch translated names if not English
-        let nameTranslations: Record<string, string> = {}
-        if (currentLang !== 'en') {
-          const { data: translationsData } = await supabase
-            .from('plant_translations')
-            .select('plant_id, name')
-            .in('plant_id', companionIds)
-            .eq('language', currentLang)
-          
-          if (!ignore && translationsData) {
-            translationsData.forEach((trans) => {
-              if (trans.plant_id && trans.name) {
-                nameTranslations[trans.plant_id] = trans.name
-              }
-            })
-          }
+        const nameTranslations: Record<string, string> = {}
+        if (translationsData) {
+          (translationsData as Array<{ plant_id: string; name: string }>).forEach((trans) => {
+            if (trans.plant_id && trans.name) {
+              nameTranslations[trans.plant_id] = trans.name
+            }
+          })
         }
         
-        if (ignore) return
-        
-        const companions = plantsData.map((p) => ({
+        const companions = plantsData.map((p: { id: string; name: string }) => ({
           id: p.id,
           name: nameTranslations[p.id] || p.name,
           imageUrl: imageMap.get(p.id),
@@ -2036,38 +2385,42 @@ type CompanionPlantCardProps = {
   onClick: () => void
 }
 
-const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ name, imageUrl, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="flex-shrink-0 snap-start group relative overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-    style={{ width: 'min(180px, 45vw)' }}
-  >
-    {/* Image container with aspect ratio */}
-    <div className="relative w-full aspect-[4/3] overflow-hidden bg-stone-100 dark:bg-[#2d2d30]">
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={name}
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
-          loading="lazy"
-        />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center text-stone-400 dark:text-stone-600">
-          <Leaf className="h-12 w-12" />
-        </div>
-      )}
-    </div>
-    <div className="p-3 text-left">
-      <h4 className="text-sm font-semibold text-stone-900 dark:text-stone-100 line-clamp-2 leading-tight">
-        {name}
-      </h4>
-      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wide">
-        View Plant →
-      </p>
-    </div>
-  </button>
-)
+const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ name, imageUrl, onClick }) => {
+  const { t } = useTranslation('common')
+  
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex-shrink-0 snap-start group relative overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+      style={{ width: 'min(180px, 45vw)' }}
+    >
+      {/* Image container with aspect ratio */}
+      <div className="relative w-full aspect-[4/3] overflow-hidden bg-stone-100 dark:bg-[#2d2d30]">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={name}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+            loading="lazy"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-stone-400 dark:text-stone-600">
+            <Leaf className="h-12 w-12" />
+          </div>
+        )}
+      </div>
+      <div className="p-3 text-left">
+        <h4 className="text-sm font-semibold text-stone-900 dark:text-stone-100 line-clamp-2 leading-tight">
+          {name}
+        </h4>
+        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wide">
+          {t('plantInfo.viewPlant')}
+        </p>
+      </div>
+    </button>
+  )
+}
 
 type CompanionPlantsCarouselProps = {
   companions: Array<{ id: string; name: string; imageUrl?: string }>

@@ -23,15 +23,18 @@ import {
   CheckCircle2, 
   ExternalLink,
   Trash2,
-  ChevronRight,
   ScanLine,
   Sparkles,
   History,
   Image as ImageIcon,
-  Search
+  Search,
+  FlaskConical,
+  X,
+  ZoomIn
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
+import { RequestPlantDialog } from '@/components/plant/RequestPlantDialog'
 import { 
   uploadAndIdentifyPlant, 
   createPlantScan,
@@ -55,9 +58,14 @@ export const ScanPage: React.FC = () => {
   
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   
+  // Pagination constants
+  const SCANS_PER_PAGE = 10
+  
   // State
   const [scans, setScans] = React.useState<PlantScan[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+  const [hasMore, setHasMore] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   
   // Scan flow state
@@ -73,13 +81,21 @@ export const ScanPage: React.FC = () => {
   const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null)
   const [isDeleting, setIsDeleting] = React.useState(false)
   
-  // Load user's scans
+  // Request plant dialog
+  const [showRequestDialog, setShowRequestDialog] = React.useState(false)
+  const [requestPlantName, setRequestPlantName] = React.useState<string>('')
+  
+  // Fullscreen image viewer
+  const [fullscreenImage, setFullscreenImage] = React.useState<string | null>(null)
+  
+  // Load user's scans (initial load)
   const loadScans = React.useCallback(async () => {
     if (!user?.id) return
     try {
       setError(null)
-      const data = await getUserScans({ limit: 50 })
+      const data = await getUserScans({ limit: SCANS_PER_PAGE })
       setScans(data)
+      setHasMore(data.length === SCANS_PER_PAGE)
     } catch (e: any) {
       console.error('[scan] Failed to load scans:', e)
       setError(e?.message || t('scan.errors.loadFailed', { defaultValue: 'Failed to load your scans' }))
@@ -87,6 +103,26 @@ export const ScanPage: React.FC = () => {
       setLoading(false)
     }
   }, [user?.id, t])
+  
+  // Load more scans (pagination)
+  // Note: recheckMatches is enabled (default) to ensure consistent UX across all pages
+  const loadMoreScans = async () => {
+    if (!user?.id || loadingMore || !hasMore) return
+    try {
+      setLoadingMore(true)
+      const data = await getUserScans({ 
+        limit: SCANS_PER_PAGE, 
+        offset: scans.length
+        // recheckMatches defaults to true for consistent experience
+      })
+      setScans(prev => [...prev, ...data])
+      setHasMore(data.length === SCANS_PER_PAGE)
+    } catch (e: any) {
+      console.error('[scan] Failed to load more scans:', e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
   
   React.useEffect(() => {
     loadScans()
@@ -128,7 +164,10 @@ export const ScanPage: React.FC = () => {
     try {
       // Combined upload + identify in a single request
       // Uses same optimization as Admin/Garden Cover/Messages uploads
-      const result = await uploadAndIdentifyPlant(file)
+      // Always use 'all' classification_level for maximum detail including cultivars
+      const result = await uploadAndIdentifyPlant(file, {
+        classificationLevel: 'all'
+      })
       
       // Check if it's a plant
       if (!result.identification.result?.is_plant?.binary) {
@@ -139,11 +178,12 @@ export const ScanPage: React.FC = () => {
         return
       }
       
-      // Save to database
+      // Save to database with classification level for reference
       const scan = await createPlantScan(
         result.upload.url, 
         result.upload.path, 
-        result.identification
+        result.identification,
+        { classificationLevel: 'all' }
       )
       
       setCurrentResult(scan)
@@ -194,6 +234,88 @@ export const ScanPage: React.FC = () => {
   // Navigate to plant info
   const goToPlantInfo = (plantId: string) => {
     navigate(`/plants/${plantId}`)
+  }
+  
+  // Open request plant dialog with pre-filled name
+  const handleRequestPlant = (plantName: string) => {
+    setRequestPlantName(plantName)
+    setShowRequestDialog(true)
+  }
+  
+  // Determine the type of infraspecies and return appropriate label and display value
+  const getInfraspeciesInfo = (infraspecies: string | undefined): { label: string; value: string } | null => {
+    if (!infraspecies) return null
+    
+    const raw = infraspecies.trim()
+    const lower = raw.toLowerCase()
+    
+    // Check for cultivar indicators (quotes or cv. prefix)
+    if (raw.startsWith("'") || raw.endsWith("'") || raw.includes('"') || lower.startsWith('cv.')) {
+      const cleanValue = raw.replace(/^cv\.\s*/i, '').replace(/['"]/g, '')
+      return { label: 'Cultivar', value: `'${cleanValue}'` }
+    }
+    
+    // Check for variety
+    if (lower.startsWith('var.')) {
+      const cleanValue = raw.replace(/^var\.\s*/i, '')
+      return { label: 'Variety', value: cleanValue }
+    }
+    
+    // Check for subspecies
+    if (lower.startsWith('subsp.') || lower.startsWith('ssp.')) {
+      const cleanValue = raw.replace(/^(subsp\.|ssp\.)\s*/i, '')
+      return { label: 'Subspecies', value: cleanValue }
+    }
+    
+    // Check for forma
+    if (lower.startsWith('f.') || lower.startsWith('forma')) {
+      const cleanValue = raw.replace(/^(f\.|forma)\s*/i, '')
+      return { label: 'Form', value: cleanValue }
+    }
+    
+    // Default: assume it's a cultivar if it starts with uppercase, otherwise variety
+    if (raw.match(/^[A-Z]/)) {
+      return { label: 'Cultivar', value: `'${raw}'` }
+    }
+    
+    return { label: 'Variety', value: raw }
+  }
+  
+  // Build full scientific name from taxonomy parts
+  const buildFullScientificName = (suggestion: PlantScan['suggestions'][0] | undefined) => {
+    if (!suggestion) return null
+    
+    const parts: string[] = []
+    
+    if (suggestion.genus) {
+      parts.push(suggestion.genus)
+    }
+    if (suggestion.species) {
+      parts.push(suggestion.species)
+    }
+    if (suggestion.infraspecies) {
+      // Use infraspecies as-is if it already appears formatted (quotes or known prefixes),
+      // otherwise default to treating it as a variety.
+      const rawInfraspecies = suggestion.infraspecies.trim()
+      const lowerInfraspecies = rawInfraspecies.toLowerCase()
+      const hasQuotes =
+        rawInfraspecies.startsWith("'") ||
+        rawInfraspecies.endsWith("'") ||
+        rawInfraspecies.includes('"')
+      const hasKnownPrefix =
+        lowerInfraspecies.startsWith('var.') ||
+        lowerInfraspecies.startsWith('subsp.') ||
+        lowerInfraspecies.startsWith('ssp.') ||
+        lowerInfraspecies.startsWith('cv.')
+
+      if (hasQuotes || hasKnownPrefix) {
+        parts.push(rawInfraspecies)
+      } else {
+        parts.push(`var. ${rawInfraspecies}`)
+      }
+    }
+    
+    return parts.length > 0 ? parts.join(' ') : null
   }
   
   // Format date
@@ -355,11 +477,14 @@ export const ScanPage: React.FC = () => {
           </p>
         </Card>
       ) : (
+        <>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {scans.map((scan) => {
             const confidence = scan.topMatchProbability 
               ? getConfidenceLevel(scan.topMatchProbability)
               : null
+            const topSuggestion = scan.suggestions?.[0]
+            const scientificName = buildFullScientificName(topSuggestion)
             
             return (
               <Card 
@@ -387,30 +512,30 @@ export const ScanPage: React.FC = () => {
                   </div>
                   
                   {/* Info */}
-                  <div className="flex-1 min-w-0 py-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="font-semibold text-stone-900 dark:text-white truncate">
-                          {scan.topMatchName || t('scan.unknownPlant', { defaultValue: 'Unknown Plant' })}
-                        </h3>
-                        {scan.topMatchProbability && confidence && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge 
-                              variant="outline" 
-                              className={cn("rounded-full text-xs", confidence.color)}
-                            >
-                              {formatProbability(scan.topMatchProbability)}
-                            </Badge>
-                            <span className="text-xs text-stone-500 dark:text-stone-400">
-                              {confidence.label}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-stone-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex-1 min-w-0 py-1 pr-8">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-stone-900 dark:text-white truncate">
+                        {scan.topMatchName || t('scan.unknownPlant', { defaultValue: 'Unknown Plant' })}
+                      </h3>
+                      {/* Scientific name if available */}
+                      {scientificName && scientificName !== scan.topMatchName && (
+                        <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                          {scientificName}
+                        </p>
+                      )}
+                      {scan.topMatchProbability && confidence && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge 
+                            variant="outline" 
+                            className={cn("rounded-full text-xs", confidence.color)}
+                          >
+                            {formatProbability(scan.topMatchProbability)}
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                     
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
                       <span className="text-xs text-stone-500 dark:text-stone-400">
                         {formatDate(scan.createdAt)}
                       </span>
@@ -438,6 +563,31 @@ export const ScanPage: React.FC = () => {
             )
           })}
         </div>
+        
+        {/* Load More Button */}
+        {hasMore && scans.length > 0 && (
+          <div className="flex justify-center mt-6">
+            <Button
+              onClick={loadMoreScans}
+              variant="outline"
+              className="rounded-full gap-2"
+              disabled={loadingMore}
+            >
+              {loadingMore ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('common.loading', { defaultValue: 'Loading...' })}
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  {t('scan.loadMore', { defaultValue: 'Load More' })}
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+        </>
       )}
       
       {/* Camera Dialog */}
@@ -467,14 +617,20 @@ export const ScanPage: React.FC = () => {
           
           {currentResult && (
             <div className="space-y-6 mt-2">
-              {/* Scanned image */}
+              {/* Scanned image - clickable to view fullscreen */}
               {currentResult.imageUrl && (
-                <div className="relative rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800">
+                <div 
+                  className="relative rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group"
+                  onClick={() => setFullscreenImage(currentResult.imageUrl!)}
+                >
                   <img 
                     src={currentResult.imageUrl}
                     alt="Scanned plant"
                     className="w-full h-48 object-cover"
                   />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                  </div>
                 </div>
               )}
               
@@ -482,10 +638,12 @@ export const ScanPage: React.FC = () => {
               {currentResult.topMatchName && (
                 <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">
                         {t('scan.topMatch', { defaultValue: 'Best Match' })}
                       </p>
+                      
+                      {/* Main plant name - clickable to search */}
                       <button
                         onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
                         className="text-xl font-bold text-stone-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-left underline decoration-dotted underline-offset-2 cursor-pointer"
@@ -493,11 +651,79 @@ export const ScanPage: React.FC = () => {
                       >
                         {currentResult.topMatchName}
                       </button>
+                      
+                      {/* Full scientific name with taxonomy */}
+                      {currentResult.suggestions?.[0] && (
+                        <div className="mt-3 space-y-2">
+                          {/* Full scientific name display */}
+                          {buildFullScientificName(currentResult.suggestions[0]) && (
+                            <div className="p-2 rounded-lg bg-white/60 dark:bg-stone-800/40 border border-emerald-100 dark:border-emerald-900/50">
+                              <p className="text-xs text-stone-500 dark:text-stone-400 mb-0.5">
+                                {t('scan.scientificName', { defaultValue: 'Scientific Name' })}
+                              </p>
+                              <p className="text-sm font-medium italic text-stone-800 dark:text-stone-200">
+                                {buildFullScientificName(currentResult.suggestions[0])}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* Taxonomy breakdown badges */}
+                          {(currentResult.suggestions[0].genus || currentResult.suggestions[0].species || currentResult.suggestions[0].infraspecies) && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {currentResult.suggestions[0].genus && (
+                                <Badge variant="outline" className="rounded-full bg-white/50 dark:bg-stone-800/50 text-stone-600 dark:text-stone-300 text-xs">
+                                  <span className="text-stone-400 mr-1">{t('scan.genus', { defaultValue: 'Genus' })}:</span>
+                                  <span className="italic font-medium">{currentResult.suggestions[0].genus}</span>
+                                </Badge>
+                              )}
+                              {currentResult.suggestions[0].species && (
+                                <Badge variant="outline" className="rounded-full bg-white/50 dark:bg-stone-800/50 text-stone-600 dark:text-stone-300 text-xs">
+                                  <span className="text-stone-400 mr-1">{t('scan.species', { defaultValue: 'Species' })}:</span>
+                                  <span className="italic font-medium">{currentResult.suggestions[0].species}</span>
+                                </Badge>
+                              )}
+                              {currentResult.suggestions[0].infraspecies && (() => {
+                                const infraInfo = getInfraspeciesInfo(currentResult.suggestions[0].infraspecies)
+                                if (!infraInfo) return null
+                                return (
+                                  <Badge variant="outline" className="rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 text-xs">
+                                    <FlaskConical className="h-3 w-3 mr-1" />
+                                    <span className="text-amber-500 mr-1">{t(`scan.${infraInfo.label.toLowerCase()}`, { defaultValue: infraInfo.label })}:</span>
+                                    <span className="font-medium">{infraInfo.value}</span>
+                                  </Badge>
+                                )
+                              })()}
+                            </div>
+                          )}
+                          
+                          {/* Common names */}
+                          {currentResult.suggestions[0].commonNames && currentResult.suggestions[0].commonNames.length > 0 && (
+                            <div className="text-xs text-stone-500 dark:text-stone-400">
+                              <span className="font-medium">{t('scan.commonNames', { defaultValue: 'Also known as' })}:</span>{' '}
+                              {currentResult.suggestions[0].commonNames.slice(0, 5).join(', ')}
+                              {currentResult.suggestions[0].commonNames.length > 5 && (
+                                <span className="text-stone-400"> +{currentResult.suggestions[0].commonNames.length - 5} more</span>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Synonyms if available */}
+                          {currentResult.suggestions[0].synonyms && currentResult.suggestions[0].synonyms.length > 0 && (
+                            <div className="text-xs text-stone-400 dark:text-stone-500">
+                              <span className="font-medium">{t('scan.synonyms', { defaultValue: 'Synonyms' })}:</span>{' '}
+                              <span className="italic">{currentResult.suggestions[0].synonyms.slice(0, 3).join(', ')}</span>
+                              {currentResult.suggestions[0].synonyms.length > 3 && (
+                                <span> +{currentResult.suggestions[0].synonyms.length - 3} more</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {currentResult.topMatchProbability && (
                       <Badge 
                         className={cn(
-                          "rounded-full text-lg font-bold px-3 py-1",
+                          "rounded-full text-lg font-bold px-3 py-1 flex-shrink-0 ml-2",
                           getConfidenceLevel(currentResult.topMatchProbability).level === 'high' 
                             ? "bg-emerald-600 text-white" 
                             : getConfidenceLevel(currentResult.topMatchProbability).level === 'medium'
@@ -510,26 +736,39 @@ export const ScanPage: React.FC = () => {
                     )}
                   </div>
                   
-                  {/* Search in encyclopedia */}
-                  <Button 
-                    onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
-                    variant="outline"
-                    className="w-full mt-4 rounded-full gap-2 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
-                  >
-                    <Search className="h-4 w-4" />
-                    {t('scan.searchInEncyclopedia', { defaultValue: 'Search in Encyclopedia' })}
-                  </Button>
-                  
-                  {/* Link to database plant (if exact match found) */}
-                  {currentResult.matchedPlant && (
+                  {/* Action buttons */}
+                  <div className="mt-4 space-y-2">
+                    {/* Link to database plant (if exact match found) */}
+                    {currentResult.matchedPlant ? (
+                      <Button 
+                        onClick={() => goToPlantInfo(currentResult.matchedPlant!.id)}
+                        className="w-full rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
+                      </Button>
+                    ) : (
+                      /* Subtle request plant button when NOT in database */
+                      <Button 
+                        onClick={() => handleRequestPlant(currentResult.topMatchName!)}
+                        variant="ghost"
+                        className="w-full rounded-full text-stone-500 dark:text-stone-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {t('scan.notInDatabaseRequest', { defaultValue: "Not in our database? Request it" })}
+                      </Button>
+                    )}
+                    
+                    {/* Search in encyclopedia */}
                     <Button 
-                      onClick={() => goToPlantInfo(currentResult.matchedPlant!.id)}
-                      className="w-full mt-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                      onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
+                      variant="outline"
+                      className="w-full rounded-full gap-2 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
                     >
-                      <ExternalLink className="h-4 w-4" />
-                      {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
+                      <Search className="h-4 w-4" />
+                      {t('scan.searchInEncyclopedia', { defaultValue: 'Search in Encyclopedia' })}
                     </Button>
-                  )}
+                  </div>
                 </div>
               )}
               
@@ -544,13 +783,34 @@ export const ScanPage: React.FC = () => {
                       <button 
                         key={suggestion.id || idx}
                         onClick={() => navigate(`/search?q=${encodeURIComponent(suggestion.name)}`)}
-                        className="flex items-center justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
+                        className="flex items-start justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
                         title={t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
                       >
-                        <span className="text-sm text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                          {suggestion.name}
-                        </span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                            {suggestion.name}
+                          </span>
+                          {/* Show infraspecies/cultivar if available */}
+                          {suggestion.infraspecies && (() => {
+                            const infraInfo = getInfraspeciesInfo(suggestion.infraspecies)
+                            if (!infraInfo) return null
+                            return (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Badge variant="outline" className="rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                                  <FlaskConical className="h-2.5 w-2.5 mr-1" />
+                                  {infraInfo.value}
+                                </Badge>
+                              </div>
+                            )
+                          })()}
+                          {/* Show common names if available */}
+                          {suggestion.commonNames && suggestion.commonNames.length > 0 && (
+                            <p className="text-xs text-stone-400 mt-0.5 truncate">
+                              {suggestion.commonNames.slice(0, 2).join(', ')}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                           <Badge variant="outline" className="rounded-full text-xs">
                             {formatProbability(suggestion.probability)}
                           </Badge>
@@ -562,23 +822,27 @@ export const ScanPage: React.FC = () => {
                 </div>
               )}
               
-              {/* Similar images */}
+              {/* Similar images - clickable to view fullscreen */}
               {currentResult.suggestions?.[0]?.similarImages && currentResult.suggestions[0].similarImages.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium text-stone-900 dark:text-white mb-3">
                     {t('scan.similarImages', { defaultValue: 'Similar Images' })}
                   </h4>
                   <div className="flex gap-2 overflow-x-auto pb-2">
-                    {currentResult.suggestions[0].similarImages.slice(0, 4).map((img, idx) => (
+                    {currentResult.suggestions[0].similarImages.slice(0, 6).map((img, idx) => (
                       <div 
                         key={img.id || idx}
-                        className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800"
+                        className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group relative"
+                        onClick={() => setFullscreenImage(img.url)}
                       >
                         <img 
                           src={img.urlSmall || img.url}
                           alt={`Similar image ${idx + 1}`}
                           className="w-full h-full object-cover"
                         />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                          <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -645,6 +909,34 @@ export const ScanPage: React.FC = () => {
               {t('common.delete', { defaultValue: 'Delete' })}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Request Plant Dialog */}
+      <RequestPlantDialog
+        open={showRequestDialog}
+        onOpenChange={setShowRequestDialog}
+        initialPlantName={requestPlantName}
+      />
+      
+      {/* Fullscreen Image Viewer */}
+      <Dialog open={!!fullscreenImage} onOpenChange={(open) => !open && setFullscreenImage(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none rounded-2xl overflow-hidden">
+          <button
+            onClick={() => setFullscreenImage(null)}
+            className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          {fullscreenImage && (
+            <div className="flex items-center justify-center w-full h-full min-h-[50vh]">
+              <img 
+                src={fullscreenImage}
+                alt="Fullscreen view"
+                className="max-w-full max-h-[90vh] object-contain"
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

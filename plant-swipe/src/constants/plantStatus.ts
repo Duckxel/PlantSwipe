@@ -30,3 +30,12 @@ export const ADMIN_STATUS_BADGE_CLASSES = {
   "approved": "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/30 dark:text-emerald-100",
   "other": "bg-slate-200 text-slate-800 dark:bg-slate-600/40 dark:text-slate-100",
 };
+
+// Selected button classes for status filter pills (filled background with matching shadow)
+export const ADMIN_STATUS_BUTTON_SELECTED_CLASSES = {
+  "in progres": "bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/20",
+  "review": "bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-500/20",
+  "rework": "bg-red-500 text-white border-red-500 shadow-md shadow-red-500/20",
+  "approved": "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20",
+  "other": "bg-slate-500 text-white border-slate-500 shadow-md shadow-slate-500/20",
+};

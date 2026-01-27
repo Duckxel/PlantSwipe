@@ -234,6 +234,7 @@ const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
 import {
   ADMIN_STATUS_COLORS,
   ADMIN_STATUS_BADGE_CLASSES,
+  ADMIN_STATUS_BUTTON_SELECTED_CLASSES,
 } from "@/constants/plantStatus";
 import {
   USER_ROLES,
@@ -248,6 +249,8 @@ import { UserRoleBadge, ProfileNameBadges } from "@/components/profile/UserRoleB
 const PLANT_STATUS_COLORS: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_COLORS;
 
 const PLANT_STATUS_BADGE_CLASSES: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_BADGE_CLASSES;
+
+const PLANT_STATUS_BUTTON_SELECTED_CLASSES: Record<NormalizedPlantStatus, string> = ADMIN_STATUS_BUTTON_SELECTED_CLASSES;
 
 const PLANT_STATUS_KEYS: NormalizedPlantStatus[] = [
   "approved",
@@ -363,6 +366,70 @@ const toPromotionMonthSlug = (
   return (PROMOTION_MONTH_SLUGS as readonly string[]).includes(normalized)
     ? normalized
     : null;
+};
+
+// Constants for persisting admin plants list state in sessionStorage
+const ADMIN_PLANTS_STATE_KEY = "admin-plants-list-state";
+const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name"];
+
+// Type for persisted plant list state
+type AdminPlantsListState = {
+  searchQuery: string;
+  sortOption: PlantSortOption;
+  promotionMonth: PromotionMonthSlug | "none" | "all";
+  statuses: NormalizedPlantStatus[];
+  scrollPosition: number;
+};
+
+// Load persisted state from sessionStorage
+const loadAdminPlantsState = (): Partial<AdminPlantsListState> => {
+  try {
+    const saved = sessionStorage.getItem(ADMIN_PLANTS_STATE_KEY);
+    if (!saved) return {};
+    const parsed = JSON.parse(saved);
+    
+    // Validate and sanitize the loaded state
+    const result: Partial<AdminPlantsListState> = {};
+    
+    if (typeof parsed.searchQuery === "string") {
+      result.searchQuery = parsed.searchQuery;
+    }
+    
+    if (parsed.sortOption && VALID_SORT_OPTIONS.includes(parsed.sortOption)) {
+      result.sortOption = parsed.sortOption;
+    }
+    
+    if (parsed.promotionMonth === "all" || parsed.promotionMonth === "none" || 
+        (PROMOTION_MONTH_SLUGS as readonly string[]).includes(parsed.promotionMonth)) {
+      result.promotionMonth = parsed.promotionMonth;
+    }
+    
+    if (Array.isArray(parsed.statuses)) {
+      const validStatuses = parsed.statuses.filter((s: string) =>
+        PLANT_STATUS_KEYS.includes(s as NormalizedPlantStatus)
+      ) as NormalizedPlantStatus[];
+      if (validStatuses.length > 0) {
+        result.statuses = validStatuses;
+      }
+    }
+    
+    if (typeof parsed.scrollPosition === "number" && parsed.scrollPosition >= 0) {
+      result.scrollPosition = parsed.scrollPosition;
+    }
+    
+    return result;
+  } catch {
+    return {};
+  }
+};
+
+// Save state to sessionStorage
+const saveAdminPlantsState = (state: AdminPlantsListState): void => {
+  try {
+    sessionStorage.setItem(ADMIN_PLANTS_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage errors
+  }
 };
 
 export const AdminPage: React.FC = () => {
@@ -1640,15 +1707,20 @@ export const AdminPage: React.FC = () => {
   >(null);
   const [plantDashboardInitialized, setPlantDashboardInitialized] =
     React.useState<boolean>(false);
+  
+  // Initialize plant list filter state from sessionStorage for persistence
+  const savedPlantsState = React.useMemo(() => loadAdminPlantsState(), []);
   const [visiblePlantStatuses, setVisiblePlantStatuses] = React.useState<
     NormalizedPlantStatus[]
-  >(DEFAULT_VISIBLE_PLANT_STATUSES);
+  >(savedPlantsState.statuses ?? DEFAULT_VISIBLE_PLANT_STATUSES);
   const [selectedPromotionMonth, setSelectedPromotionMonth] = React.useState<
     PromotionMonthSlug | "none" | "all"
-  >("all");
+  >(savedPlantsState.promotionMonth ?? "all");
   const [plantSearchQuery, setPlantSearchQuery] =
-    React.useState<string>("");
-  const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>("status");
+    React.useState<string>(savedPlantsState.searchQuery ?? "");
+  const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>(
+    savedPlantsState.sortOption ?? "status"
+  );
   const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
   const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
   const [deletingPlant, setDeletingPlant] = React.useState(false);
@@ -1664,6 +1736,40 @@ export const AdminPage: React.FC = () => {
   const [addFromDuplicating, setAddFromDuplicating] = React.useState(false);
   const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
   const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
+
+  // Track whether we've restored the scroll position (to avoid doing it multiple times)
+  const scrollRestoredRef = React.useRef(false);
+  
+  // Restore scroll position when returning to the plants tab AFTER data has loaded
+  React.useEffect(() => {
+    // Only restore once, and only when on plants tab with data loaded
+    if (scrollRestoredRef.current) return;
+    if (!currentPath.includes("/admin/plants")) return;
+    if (!plantDashboardInitialized) return;
+    
+    // Check if we have a saved scroll position
+    const saved = loadAdminPlantsState();
+    if (saved.scrollPosition && saved.scrollPosition > 0) {
+      // Mark as restored before scrolling
+      scrollRestoredRef.current = true;
+      
+      // Use setTimeout to ensure the DOM has rendered with the data
+      setTimeout(() => {
+        window.scrollTo(0, saved.scrollPosition!);
+        // Clear the scroll position after restoring (but keep other state)
+        saveAdminPlantsState({
+          searchQuery: plantSearchQuery,
+          sortOption: plantSortOption,
+          promotionMonth: selectedPromotionMonth,
+          statuses: visiblePlantStatuses,
+          scrollPosition: 0,
+        });
+      }, 100);
+    } else {
+      // No scroll to restore, but mark as done
+      scrollRestoredRef.current = true;
+    }
+  }, [currentPath, plantDashboardInitialized, plantSearchQuery, plantSortOption, selectedPromotionMonth, visiblePlantStatuses]);
 
   // AI Prefill All state
   const [aiPrefillRunning, setAiPrefillRunning] = React.useState<boolean>(false);
@@ -2006,9 +2112,17 @@ export const AdminPage: React.FC = () => {
   const handleOpenPlantEditor = React.useCallback(
     (plantId: string) => {
       if (!plantId) return;
+      // Save all filter state and scroll position before navigating to plant editor
+      saveAdminPlantsState({
+        searchQuery: plantSearchQuery,
+        sortOption: plantSortOption,
+        promotionMonth: selectedPromotionMonth,
+        statuses: visiblePlantStatuses,
+        scrollPosition: window.scrollY,
+      });
       navigate(`/create/${plantId}`);
     },
-    [navigate],
+    [navigate, plantSearchQuery, plantSortOption, selectedPromotionMonth, visiblePlantStatuses],
   );
   const togglePlantStatusFilter = React.useCallback(
     (status: NormalizedPlantStatus) => {
@@ -7133,10 +7247,10 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:shadow-amber-500/5">
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-sky-300 dark:hover:border-sky-800 hover:shadow-lg hover:shadow-sky-500/5">
                                 <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                                    <Sparkles className="h-5 w-5 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                                    <Sparkles className="h-5 w-5 sm:h-5 sm:w-5 text-sky-600 dark:text-sky-400" />
                                   </div>
                                   <div>
                                     <div className="text-xs text-stone-500 dark:text-stone-400">In Review</div>
@@ -7146,10 +7260,10 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
-                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-lg hover:shadow-blue-500/5">
+                              <div className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:shadow-amber-500/5">
                                 <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                                    <TrendingUp className="h-5 w-5 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
+                                  <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                                    <TrendingUp className="h-5 w-5 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
                                   </div>
                                   <div>
                                     <div className="text-xs text-stone-500 dark:text-stone-400">In Progress</div>
@@ -7490,6 +7604,7 @@ export const AdminPage: React.FC = () => {
                                     {PLANT_STATUS_FILTER_OPTIONS.map((option) => {
                                       const selected = visiblePlantStatusesSet.has(option.value);
                                       const statusColor = PLANT_STATUS_COLORS[option.value];
+                                      const selectedClasses = PLANT_STATUS_BUTTON_SELECTED_CLASSES[option.value];
                                       return (
                                         <button
                                           key={option.value}
@@ -7498,7 +7613,7 @@ export const AdminPage: React.FC = () => {
                                           onClick={() => togglePlantStatusFilter(option.value)}
                                           className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                                             selected
-                                              ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20"
+                                              ? selectedClasses
                                               : "border-stone-200 dark:border-[#3e3e42] text-stone-600 dark:text-stone-300 hover:border-stone-300 dark:hover:border-stone-500 bg-white dark:bg-[#1a1a1d]"
                                           }`}
                                         >

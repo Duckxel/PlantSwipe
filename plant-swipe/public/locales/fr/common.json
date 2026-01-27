@@ -807,6 +807,7 @@
       "viewFullScreen": "Voir l'image en plein écran",
         "viewPhoto": "Voir la photo {{index}}",
       "viewFullDetails": "Afficher tous les détails",
+      "viewPlant": "Voir la plante →",
       "deleteConfirm": "Supprimer cette plante ? Cela échouera si elle est utilisée dans un jardin.",
       "day": "jour",
       "week": "semaine",
@@ -2687,7 +2688,18 @@
     },
     "errors": {
       "failedToLoad": "Échec du chargement des conversations"
-    }
+    },
+    "linkPreview": {
+      "plant": "Plante",
+      "garden": "Jardin",
+      "profile": "Profil",
+      "bookmark": "Collection",
+      "blog": "Article",
+      "media": "Média",
+      "link": "Lien"
+    },
+    "download": "Télécharger",
+    "openInNewTab": "Ouvrir dans un nouvel onglet"
   },
   "moderation": {
     "report": {
@@ -2861,11 +2873,35 @@
       "resultDescription": "Voici ce que nous avons trouvé à partir de votre image.",
       "topMatch": "Meilleure Correspondance",
       "viewInDatabase": "Voir dans Notre Base",
+      "searchInEncyclopedia": "Rechercher dans l'Encyclopédie",
+      "searchForPlant": "Rechercher cette plante dans notre encyclopédie",
       "otherSuggestions": "Autres Possibilités",
       "similarImages": "Images Similaires",
       "scanAnother": "Scanner une Autre",
       "deleteTitle": "Supprimer le Scan ?",
       "deleteDescription": "Cela supprimera définitivement ce scan de votre historique. Cette action est irréversible.",
+      "classificationLevel": "Niveau de Détail",
+      "levelAll": "Détail Complet (Cultivars)",
+      "levelAllDesc": "ex., Philodendron 'Brasil'",
+      "levelSpecies": "Niveau Espèce",
+      "levelSpeciesDesc": "ex., Philodendron hederaceum",
+      "levelGenus": "Genre Uniquement",
+      "levelGenusDesc": "ex., Philodendron",
+      "classificationHintShort": "Le détail complet identifie les cultivars comme 'Brasil' ou 'Pink Princess'",
+      "genus": "Genre",
+      "species": "Espèce",
+      "cultivar": "Cultivar",
+      "variety": "Variété",
+      "subspecies": "Sous-espèce",
+      "form": "Forme",
+      "commonNames": "Aussi connu sous",
+      "synonyms": "Synonymes",
+      "scientificName": "Nom Scientifique",
+      "requestPlant": "Demander Cette Plante",
+      "notInDatabase": "Pas encore dans notre base",
+      "notInDatabaseYet": "Cette plante n'est pas encore dans notre base de données",
+      "notInDatabaseRequest": "Pas dans notre base ? Demandez-la",
+      "loadMore": "Charger Plus",
       "errors": {
         "loadFailed": "Impossible de charger vos scans",
         "notAPlant": "Ceci ne semble pas être une plante. Veuillez essayer une autre image.",

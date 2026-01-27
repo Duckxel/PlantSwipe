@@ -56,19 +56,19 @@
     }
   },
   "howItWorks": {
-    "title": "From seedling to jungle, in 3 steps.",
-    "subtitle": "Getting started is simple. Set up once, and Aphylia handles the rest.",
+    "title": "Your plant journey starts here.",
+    "subtitle": "Three simple steps to happier, healthier plants.",
     "step1": {
-      "title": "Add your plants",
-      "description": "Search our library or snap a photo to identify and add plants to your collection."
+      "title": "Discover Plants",
+      "description": "Browse our library of 10,000+ species or scan any plant to identify it instantly and learn how to care for it."
     },
     "step2": {
-      "title": "Set your conditions",
-      "description": "Tell us about your space—light levels, humidity, and location—for tailored advice."
+      "title": "Build Your Garden",
+      "description": "Create personal gardens, add your plants, and organize your collection by room, type, or however you like."
     },
     "step3": {
-      "title": "Let Aphylia remind you",
-      "description": "Sit back while we send timely reminders for watering, feeding, and more."
+      "title": "Watch Them Thrive",
+      "description": "Get smart reminders tailored to each plant, track growth over time, and never miss a watering again."
     }
   },
   "showcase": {
@@ -121,6 +121,26 @@
       }
     ]
   },
+  "stats": {
+    "plants": "Plant Species",
+    "users": "Happy Gardeners",
+    "tasks": "Care Tasks Done",
+    "rating": "App Store Rating"
+  },
+  "demo": {
+    "discover": "Discover Plants",
+    "schedule": "Schedule Care",
+    "track": "Track Growth",
+    "protect": "Get Alerts",
+    "identify": "Identify Plants",
+    "journal": "Keep Journal",
+    "community": "Join Community",
+    "assistant": "Smart Assistant"
+  },
+  "floatingCards": {
+    "newLikes": "+42 today",
+    "morePlants": "+10K"
+  },
   "pricingSection": {
     "title": "Start for free. Grow as you grow.",
     "subtitle": "Choose a plan that matches your garden size. Upgrade anytime.",
@@ -165,6 +185,28 @@
       ],
       "cta": "Join the Club"
     }
+  },
+  "beginner": {
+    "badge": "Perfect for Beginners",
+    "title": "Know Nothing About Gardening?",
+    "titleHighlight": "That's Exactly Why We Built This",
+    "subtitle": "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany.",
+    "feature1Title": "Learn as You Grow",
+    "feature1Desc": "No gardening experience? No problem! Our app teaches you everything step by step.",
+    "feature2Title": "Your Plant Assistant",
+    "feature2Desc": "Not sure what's wrong? Just ask Aphylia - your friendly assistant that explains plant care in simple terms.",
+    "feature3Title": "Never Forget to Water",
+    "feature3Desc": "Get gentle reminders exactly when your plants need attention. We'll help you build the habit.",
+    "ctaTitle": "Join thousands of first-time plant parents",
+    "ctaSubtitle": "Start your green journey today — we'll guide you every step of the way",
+    "ctaButton": "Get Started Free"
+  },
+  "finalCta": {
+    "badge": "No experience needed",
+    "title": "Ready to Start Your Plant Journey?",
+    "subtitle": "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents.",
+    "ctaDownload": "Start Growing",
+    "ctaDocs": "Explore Plants"
   },
   "faq": {
     "title": "Frequently asked questions",

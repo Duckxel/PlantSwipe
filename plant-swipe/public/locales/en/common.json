@@ -807,6 +807,7 @@
       "viewFullScreen": "View image in full screen",
         "viewPhoto": "View photo {{index}}",
       "viewFullDetails": "View full details",
+      "viewPlant": "View Plant →",
       "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
       "day": "day",
       "week": "week",
@@ -2687,7 +2688,18 @@
     },
     "errors": {
       "failedToLoad": "Failed to load conversations"
-    }
+    },
+    "linkPreview": {
+      "plant": "Plant",
+      "garden": "Garden",
+      "profile": "Profile",
+      "bookmark": "Collection",
+      "blog": "Article",
+      "media": "Media",
+      "link": "Link"
+    },
+    "download": "Download",
+    "openInNewTab": "Open in new tab"
   },
   "moderation": {
     "report": {
@@ -2861,11 +2873,35 @@
       "resultDescription": "Here's what we found based on your image.",
       "topMatch": "Best Match",
       "viewInDatabase": "View in Our Database",
+      "searchInEncyclopedia": "Search in Encyclopedia",
+      "searchForPlant": "Search for this plant in our encyclopedia",
       "otherSuggestions": "Other Possibilities",
       "similarImages": "Similar Images",
       "scanAnother": "Scan Another",
       "deleteTitle": "Delete Scan?",
       "deleteDescription": "This will permanently remove this scan from your history. This action cannot be undone.",
+      "classificationLevel": "Detail Level",
+      "levelAll": "Full Detail (Cultivars)",
+      "levelAllDesc": "e.g., Philodendron 'Brasil'",
+      "levelSpecies": "Species Level",
+      "levelSpeciesDesc": "e.g., Philodendron hederaceum",
+      "levelGenus": "Genus Only",
+      "levelGenusDesc": "e.g., Philodendron",
+      "classificationHintShort": "Full Detail identifies cultivars like 'Brasil' or 'Pink Princess'",
+      "genus": "Genus",
+      "species": "Species",
+      "cultivar": "Cultivar",
+      "variety": "Variety",
+      "subspecies": "Subspecies",
+      "form": "Form",
+      "commonNames": "Also known as",
+      "synonyms": "Synonyms",
+      "scientificName": "Scientific Name",
+      "requestPlant": "Request This Plant",
+      "notInDatabase": "Not in our database yet",
+      "notInDatabaseYet": "This plant is not in our database yet",
+      "notInDatabaseRequest": "Not in our database? Request it",
+      "loadMore": "Load More",
       "errors": {
         "loadFailed": "Failed to load your scans",
         "notAPlant": "This doesn't appear to be a plant. Please try a different image.",

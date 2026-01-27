@@ -824,11 +824,15 @@ if (vapidPublicKey && vapidPrivateKey) {
   try {
     webpush.setVapidDetails('mailto:support@aphylia.app', vapidPublicKey, vapidPrivateKey)
     pushNotificationsEnabled = true
+    console.log('[notifications] ✓ VAPID keys configured successfully - push notifications ENABLED')
+    console.log('[notifications]   Public key prefix:', vapidPublicKey.slice(0, 20) + '...')
   } catch (err) {
-    console.error('[notifications] Failed to configure VAPID keys:', err)
+    console.error('[notifications] ✗ Failed to configure VAPID keys:', err)
   }
 } else {
-  console.warn('[notifications] VAPID keys not configured — push notifications disabled')
+  console.warn('[notifications] ✗ VAPID keys not configured — push notifications DISABLED')
+  if (!vapidPublicKey) console.warn('[notifications]   Missing: VAPID_PUBLIC_KEY')
+  if (!vapidPrivateKey) console.warn('[notifications]   Missing: VAPID_PRIVATE_KEY')
 }
 
 // Admin bypass configuration
@@ -1027,12 +1031,17 @@ async function handleScopedImageUpload(req, res, options = {}) {
           ? prefixBuilder({ req, file })
           : adminUploadPrefix
 
-      // Determine if file should be optimized (only JPEG, PNG, WebP)
-      const shouldOptimize = optimizableMimeTypes.has(mime)
+      // Check if optimization is requested (defaults to true if not specified)
+      const optimizeParam = req.body?.optimize
+      const userWantsOptimization = optimizeParam !== 'false'
+      
+      // Determine if file should be optimized (only JPEG, PNG, WebP when user wants optimization)
+      const shouldOptimize = userWantsOptimization && optimizableMimeTypes.has(mime)
 
       let finalBuffer
       let finalMimeType
       let finalTypeSegment
+      let finalExtension = 'webp' // Default to webp for optimized files
       let compressionPercent = 0
       let quality = null
 
@@ -1056,6 +1065,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
             .toBuffer()
           finalMimeType = 'image/webp'
           finalTypeSegment = sanitizePathSegment('webp', 'webp')
+          finalExtension = 'webp'
           quality = webpQuality
           compressionPercent = file.size > 0
             ? Math.max(0, Math.round(100 - (finalBuffer.length / file.size) * 100))
@@ -1066,11 +1076,14 @@ async function handleScopedImageUpload(req, res, options = {}) {
           return
         }
       } else {
-        // Upload as-is without optimization (SVG, GIF, AVIF, HEIC, etc.)
+        // Upload as-is without optimization (SVG, GIF, AVIF, HEIC, etc., or when user skips optimization)
         finalBuffer = file.buffer
         finalMimeType = mime
         // Derive extension from mime type
         const extMap = {
+          'image/jpeg': 'jpg',
+          'image/png': 'png',
+          'image/webp': 'webp',
           'image/svg+xml': 'svg',
           'image/gif': 'gif',
           'image/avif': 'avif',
@@ -1081,9 +1094,10 @@ async function handleScopedImageUpload(req, res, options = {}) {
         }
         const ext = extMap[mime] || originalTypeSegment
         finalTypeSegment = sanitizePathSegment(ext, ext)
+        finalExtension = ext // Use original file extension when not optimizing
       }
 
-      const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix)
+      const objectPath = buildUploadObjectPath(baseName, finalTypeSegment, scopedPrefix, finalExtension)
 
       try {
         const { error: uploadError } = await supabaseServiceClient.storage.from(bucket).upload(objectPath, finalBuffer, {
@@ -1248,16 +1262,18 @@ function deriveUploadTypeSegment(originalName, mimeType) {
   return 'unknown'
 }
 
-function buildUploadObjectPath(baseName, typeSegment, prefix = adminUploadPrefix) {
+function buildUploadObjectPath(baseName, typeSegment, prefix = adminUploadPrefix, extension = 'webp') {
   const unique =
     (typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
       : crypto.randomBytes(10).toString('hex'))
   const cleanPrefix = typeof prefix === 'string' ? prefix.replace(/^\/+|\/+$/g, '') : ''
+  // Use provided extension (without leading dot if present)
+  const ext = (extension || 'webp').replace(/^\./, '')
   const segments = [
     cleanPrefix,
     sanitizePathSegment(typeSegment, 'unknown'),
-    `${baseName}-${unique}.webp`,
+    `${baseName}-${unique}.${ext}`,
   ].filter(Boolean)
   return segments.join('/').replace(/\/{2,}/g, '/')
 }
@@ -4572,6 +4588,9 @@ async function ensureNotificationTables() {
     await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
     await sql`create index if not exists user_notifications_automation_idx on public.user_notifications (automation_id);`
     await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
+    // Unique constraint for automation notifications: one notification per automation per user per day (in user's timezone)
+    // Using scheduled_for::date since the automation inserts with scheduled_for = now()
+    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (scheduled_for::date)) where automation_id is not null;`
 
     // User Push Subscriptions
     await sql`
@@ -5306,6 +5325,8 @@ app.post('/api/blog/summarize', async (req, res) => {
 
   const html = typeof req.body?.html === 'string' ? req.body.html : ''
   const title = typeof req.body?.title === 'string' ? req.body.title : ''
+  // Check if full metadata generation is requested (new feature)
+  const generateFullMetadata = req.body?.generateMetadata === true
 
   if (!html.trim()) {
     res.status(400).json({ error: 'Missing html content to summarize' })
@@ -5314,10 +5335,75 @@ app.post('/api/blog/summarize', async (req, res) => {
 
   const bodyText = extractPlainText(html, 6000)
   if (!bodyText) {
-    res.json({ summary: '' })
+    res.json({ summary: '', seoTitle: null, seoDescription: null, tags: [] })
     return
   }
 
+  // If full metadata generation is requested, generate all fields at once
+  if (generateFullMetadata) {
+    const instructions = [
+      'You are an SEO expert. Generate metadata for this blog article from Aphylia (a plant care app).',
+      '',
+      'Return a JSON object with exactly these fields:',
+      '',
+      '- "teaser": A compelling 1-sentence summary under 240 characters. Capture the SPECIFIC topic/insight of THIS article. Active voice, no emojis.',
+      '',
+      '- "seoTitle": An SEO-optimized title under 60 characters that is SPECIFIC to this article\'s unique content. Do NOT use generic titles. Include the main subject/plant/technique discussed.',
+      '',
+      '- "seoDescription": An SEO meta description between 120-155 characters. Be SPECIFIC about what readers will learn from THIS article.',
+      '',
+      '- "tags": An array of 5-7 lowercase tags. IMPORTANT: Tags must be SPECIFIC to the article content:',
+      '  * Include specific plant names mentioned (e.g., "monstera", "tomatoes", "succulents")',
+      '  * Include specific techniques discussed (e.g., "propagation", "repotting", "pruning")',
+      '  * Include specific problems/solutions (e.g., "yellow-leaves", "overwatering", "pest-control")',
+      '  * Include seasonal relevance if applicable (e.g., "spring-planting", "winter-care")',
+      '  * Avoid generic tags like "plants", "gardening", "tips" unless the article is truly general',
+      '  * Use hyphens for multi-word tags (e.g., "indoor-plants", "soil-mix")',
+      '',
+      'Respond ONLY with valid JSON, no markdown formatting.',
+    ].join('\n')
+    const promptSections = [
+      title ? `Article Title: ${title}` : null,
+      `Article Body:\n${bodyText}`,
+    ].filter(Boolean)
+
+    try {
+      // Use same model and timeout as AI Plant Fill for best quality metadata
+      const response = await openaiClient.responses.create(
+        {
+          model: openaiModel,
+          reasoning: { effort: 'medium' },
+          instructions,
+          input: promptSections.join('\n\n'),
+          max_output_tokens: 500,
+        },
+        { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) },
+      )
+      const rawOutput = typeof response?.output_text === 'string' ? response.output_text.trim() : '{}'
+      // Parse the JSON response, handling potential markdown code blocks
+      let parsed = {}
+      try {
+        const cleanJson = rawOutput.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()
+        parsed = JSON.parse(cleanJson)
+      } catch (parseErr) {
+        console.warn('[blog] Failed to parse AI metadata JSON, falling back to empty', parseErr)
+      }
+      // Validate and normalize the response
+      const teaser = typeof parsed.teaser === 'string' ? parsed.teaser.slice(0, 240).trim() : ''
+      const seoTitle = typeof parsed.seoTitle === 'string' ? parsed.seoTitle.slice(0, 60).trim() : null
+      const seoDescription = typeof parsed.seoDescription === 'string' ? parsed.seoDescription.slice(0, 160).trim() : null
+      const tags = Array.isArray(parsed.tags) 
+        ? parsed.tags.filter(t => typeof t === 'string').map(t => t.toLowerCase().trim()).slice(0, 7)
+        : []
+      res.json({ summary: teaser, seoTitle, seoDescription, tags })
+    } catch (err) {
+      console.error('[blog] full metadata generation failed', err)
+      res.status(500).json({ error: err?.message || 'Failed to generate metadata' })
+    }
+    return
+  }
+
+  // Legacy mode: just generate summary/teaser
   const instructions = [
     'Summarize the provided Aphylia blog article into a single compelling sentence under 240 characters.',
     'Write in active voice and avoid emojis or hashtags.',
@@ -6623,6 +6709,24 @@ async function ensureDefaultAutomations() {
       },
     ]
 
+    // Valid automation types (cron-based only)
+    const validTriggerTypes = defaultAutomations.map(a => a.trigger_type)
+    
+    // First, delete any invalid automation types (action-based notifications that shouldn't be here)
+    try {
+      const deleted = await sql`
+        delete from public.notification_automations
+        where trigger_type not in ${sql(validTriggerTypes)}
+        returning trigger_type
+      `
+      if (deleted && deleted.length > 0) {
+        console.log(`[notification-automations] Cleaned up invalid automation types:`, deleted.map(d => d.trigger_type))
+      }
+    } catch (deleteErr) {
+      console.warn('[notification-automations] Could not clean up invalid types:', deleteErr?.message)
+    }
+
+    // Then ensure the valid automations exist
     for (const auto of defaultAutomations) {
       try {
         // First check if it exists
@@ -6678,20 +6782,34 @@ app.get('/api/admin/notification-automations', async (req, res) => {
     console.log('[notification-automations] Query returned:', rows?.length || 0, 'rows')
 
     // Calculate recipient counts separately to avoid query failures
+    // NOTE: These counts show users who will receive notifications TODAY (in their local timezone)
+    // The actual delivery happens when the user's local time matches the send_hour
     const automationsWithCounts = await Promise.all((rows || []).map(async (row) => {
       let recipientCount = 0
+      const sendHour = typeof row.send_hour === 'number' ? row.send_hour : 9
       try {
         if (row.trigger_type === 'weekly_inactive_reminder') {
+          // Count users who are inactive 7+ days, haven't received this notification today,
+          // and have push notifications enabled
           const countResult = await sql`
             select count(*)::bigint as cnt
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and not exists (
+                select 1 from public.user_notifications un
+                where un.automation_id = ${row.id}
+                  and un.user_id = p.id
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+              )
           `
           recipientCount = Number(countResult?.[0]?.cnt || 0)
         } else if (row.trigger_type === 'daily_task_reminder') {
           try {
+            // Count users with incomplete tasks TODAY (in their local timezone),
+            // who haven't received this notification today
+            // This matches the actual delivery query logic
             const countResult = await sql`
               select count(distinct p.id)::bigint as cnt
               from public.profiles p
@@ -6699,16 +6817,24 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_plant_tasks t on t.garden_id = gm.garden_id
               join public.garden_plant_task_occurrences occ on occ.task_id = t.id
               where (p.notify_push is null or p.notify_push = true)
-                and occ.due_at::date = current_date
+                and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
                 and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+                and not exists (
+                  select 1 from public.user_notifications un
+                  where un.automation_id = ${row.id}
+                    and un.user_id = p.id
+                    and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                )
             `
             recipientCount = Number(countResult?.[0]?.cnt || 0)
           } catch (e) {
             // Table might not exist
+            console.warn('[notification-automations] daily_task_reminder count error:', e?.message)
             recipientCount = 0
           }
         } else if (row.trigger_type === 'journal_continue_reminder') {
           try {
+            // Count users who wrote in their journal yesterday (in their local timezone)
             const countResult = await sql`
               select count(distinct p.id)::bigint as cnt
               from public.profiles p
@@ -6716,11 +6842,18 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
               where (p.notify_push is null or p.notify_push = true)
                 and gal.kind = 'note'
-                and gal.occurred_at::date = current_date - interval '1 day'
+                and (gal.occurred_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date - interval '1 day'
+                and not exists (
+                  select 1 from public.user_notifications un
+                  where un.automation_id = ${row.id}
+                    and un.user_id = p.id
+                    and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                )
             `
             recipientCount = Number(countResult?.[0]?.cnt || 0)
           } catch (e) {
             // Table might not exist
+            console.warn('[notification-automations] journal_continue_reminder count error:', e?.message)
             recipientCount = 0
           }
         }
@@ -13496,6 +13629,15 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
       // Parse optional location from form data
       const latitude = req.body?.latitude ? parseFloat(req.body.latitude) : undefined
       const longitude = req.body?.longitude ? parseFloat(req.body.longitude) : undefined
+      
+      // Parse optional classification_level from form data
+      // Options: 'all' (default - includes cultivars/varieties), 'species', 'genus' (genus only)
+      // Default to 'all' for maximum detail including cultivars and varieties
+      const classificationLevel = req.body?.classification_level || 'all'
+      const validClassificationLevels = ['species', 'all', 'genus']
+      const sanitizedClassificationLevel = validClassificationLevels.includes(classificationLevel) 
+        ? classificationLevel 
+        : 'all'
 
       let optimizedBuffer
       let finalMimeType = 'image/webp'
@@ -13537,13 +13679,14 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
         const requestBody = {
           images: [optimizedBase64],
           similar_images: true,
+          classification_level: sanitizedClassificationLevel,
         }
         if (latitude !== undefined && longitude !== undefined && !isNaN(latitude) && !isNaN(longitude)) {
           requestBody.latitude = latitude
           requestBody.longitude = longitude
         }
 
-        console.log('[scan] Calling Kindwise API for user:', user.id)
+        console.log('[scan] Calling Kindwise API for user:', user.id, 'classification_level:', sanitizedClassificationLevel)
 
         const apiResponse = await fetch('https://plant.id/api/v3/identification', {
           method: 'POST',
@@ -13776,7 +13919,9 @@ app.post('/api/bug-report/upload-screenshot', async (req, res) => {
       const userSegment = sanitizePathSegment(`user-${user.id}`, 'user')
       const timestamp = Date.now()
       const typeSegment = userSegment ? `bug-${userSegment}-${timestamp}` : `bug-${timestamp}`
-      const objectPath = buildUploadObjectPath(baseName, typeSegment, bugScreenshotUploadPrefix)
+      // Use correct extension based on final mime type (gif if preserved, webp if converted)
+      const finalExtension = finalMimeType === 'image/gif' ? 'gif' : 'webp'
+      const objectPath = buildUploadObjectPath(baseName, typeSegment, bugScreenshotUploadPrefix, finalExtension)
 
       try {
         const { error: uploadError } = await supabaseServiceClient
@@ -15169,8 +15314,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         p.name as plant_name, p.scientific_name, p.plant_type,
         p.utility as plant_utility, p.comestible_part,
         -- Care requirements
-        p.watering_type, p.water_freq_amount, p.water_freq_period,
-        p.light_level, p.hardiness_min, p.hardiness_max,
+        p.watering_type, p.level_sun,
         p.temperature_min, p.temperature_max, p.temperature_ideal,
         p.hygrometry, p.soil, p.nutrition_need, p.fertilizer,
         -- Growing info
@@ -15178,17 +15322,31 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         p.height_cm, p.wingspan_cm, p.separation_cm,
         p.tutoring, p.transplanting, p.sow_type, p.division,
         -- Characteristics
-        p.is_edible, p.is_poisonous, p.spiked, p.scent, p.multicolor,
+        p.spiked, p.scent, p.multicolor,
         p.melliferous, p.conservation_status,
-        -- Problems and companions
-        p.pests, p.diseases, p.companions, p.tags,
-        -- Translated overview
+        p.toxicity_human, p.toxicity_pets,
+        ('comestible' = ANY(p.utility)) as is_edible,
+        -- Companions (pests/diseases now in plant_translations)
+        p.companions,
+        -- Translated fields including pests and diseases
         (
           select pt.overview 
           from public.plant_translations pt 
           where pt.plant_id = p.id and pt.language = 'en'
           limit 1
-        ) as plant_overview
+        ) as plant_overview,
+        (
+          select pt.pests 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as pests,
+        (
+          select pt.diseases 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as diseases
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
@@ -15359,23 +15517,27 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         .filter(Boolean)
     } catch { }
 
-    // Get previous week's advice to avoid repetition
-    let previousAdvice = null
+    // Get previous 4 weeks of advice to avoid repetition and build on progress
+    let previousAdviceList = []
     try {
-      const prevWeekStart = new Date(weekStart)
-      prevWeekStart.setDate(prevWeekStart.getDate() - 7)
-      const prevWeekStartIso = prevWeekStart.toISOString().slice(0, 10)
+      const fourWeeksAgo = new Date(weekStart)
+      fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28)
+      const fourWeeksAgoIso = fourWeeksAgo.toISOString().slice(0, 10)
 
       const prevAdviceRows = await sql`
-        select advice_text, advice_summary, focus_areas, plant_specific_tips
+        select week_start, advice_text, advice_summary, focus_areas, plant_specific_tips
         from public.garden_ai_advice
-        where garden_id = ${gardenId} and week_start = ${prevWeekStartIso}
-        limit 1
+        where garden_id = ${gardenId} 
+          and week_start >= ${fourWeeksAgoIso}
+          and week_start < ${weekStartIso}
+        order by week_start desc
+        limit 4
       `
       if (prevAdviceRows && prevAdviceRows.length > 0) {
-        previousAdvice = prevAdviceRows[0]
+        previousAdviceList = prevAdviceRows
       }
     } catch { }
+    const previousAdvice = previousAdviceList[0] || null
 
     // Build COMPREHENSIVE plant list with ALL details for AI advice
     const plantList = plants.map(p => {
@@ -15399,10 +15561,8 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       const careInfo = []
       if (p.override_water_freq_value) {
         careInfo.push(`Watering: ${p.override_water_freq_value}x per ${p.override_water_freq_unit || 'week'} (custom)`)
-      } else if (p.water_freq_amount) {
-        careInfo.push(`Watering: ${p.water_freq_amount}x per ${p.water_freq_period || 'week'}`)
       }
-      if (p.light_level) careInfo.push(`Light: ${p.light_level}`)
+      if (p.level_sun) careInfo.push(`Light: ${p.level_sun}`)
       if (p.temperature_min && p.temperature_max) {
         careInfo.push(`Temp: ${p.temperature_min}°C-${p.temperature_max}°C${p.temperature_ideal ? ` (ideal: ${p.temperature_ideal}°C)` : ''}`)
       }
@@ -15419,7 +15579,8 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       // Characteristics
       const chars = []
       if (p.is_edible) chars.push('Edible')
-      if (p.is_poisonous) chars.push('⚠️ Poisonous')
+      if (p.toxicity_human === 'highly toxic' || p.toxicity_human === 'lethally toxic') chars.push('⚠️ Toxic to humans')
+      if (p.toxicity_pets === 'highly toxic' || p.toxicity_pets === 'lethally toxic') chars.push('⚠️ Toxic to pets')
       if (p.melliferous) chars.push('Melliferous')
       if (chars.length > 0) lines.push(`- Traits: ${chars.join(', ')}`)
       
@@ -15587,38 +15748,72 @@ ${weatherContext}
 ${journalContext}
 ${photoContext}
 ${plantImages.length > 0 ? `\n📷 The gardener has uploaded ${plantImages.length} plant photos.` : ''}
-${previousAdvice ? `
+${previousAdviceList.length > 0 ? `
 ═══════════════════════════════════════════════════════════════
-📋 LAST WEEK'S ADVICE (DO NOT REPEAT THIS)
+📋 PREVIOUS ADVICE HISTORY (DO NOT REPEAT - BUILD UPON IT)
 ═══════════════════════════════════════════════════════════════
-Summary: ${previousAdvice.advice_summary || 'N/A'}
-Focus areas given: ${(previousAdvice.focus_areas || []).join(', ') || 'N/A'}
-${previousAdvice.advice_text ? `Full text: "${previousAdvice.advice_text.slice(0, 500)}${previousAdvice.advice_text.length > 500 ? '...' : ''}"` : ''}
+${previousAdviceList.map((adv, i) => {
+  const weeksAgo = i + 1
+  return `
+--- ${weeksAgo} week${weeksAgo > 1 ? 's' : ''} ago (${adv.week_start}) ---
+Summary: ${adv.advice_summary || 'N/A'}
+Focus areas: ${(adv.focus_areas || []).join(', ') || 'N/A'}
+Plant tips given: ${Array.isArray(adv.plant_specific_tips) ? adv.plant_specific_tips.map(t => typeof t === 'object' ? t.plantName : t).join(', ') : 'N/A'}`
+}).join('\n')}
 ` : ''}
 ═══════════════════════════════════════════════════════════════
-YOUR ADVICE
+🎯 YOUR COMPREHENSIVE WEEKLY ADVICE
 ═══════════════════════════════════════════════════════════════
-Based on ALL the above data, provide personalized advice. Consider:
-- The weather forecast and how it affects care needs
-- The gardener's observations and concerns from their journal
-- Task completion patterns and timing
-- Specific plant needs based on their characteristics
-- Seasonal considerations for the current date and location
-${previousAdvice ? `
-IMPORTANT: The gardener received advice last week (shown above). DO NOT repeat the same tips or focus areas. Provide FRESH, NEW advice that builds on or differs from last week. If a previous tip is still relevant, phrase it differently and add new context.
+
+You are providing PERSONALIZED, ACTIONABLE weekly advice. Your advice should be:
+1. SPECIFIC to this garden's plants, location, weather, and the gardener's habits
+2. FRESH and DIFFERENT from previous weeks (shown above) - never repeat the same tips
+3. DETAILED with clear explanations of WHY and HOW
+4. ENCOURAGING while being practical and honest
+
+ANALYZE AND CONSIDER:
+• Current weather forecast and its impact on each plant
+• Seasonal timing - what needs attention THIS week specifically
+• Plant health status and any concerning trends
+• Task completion patterns - help optimize their routine
+• Journal observations - address any concerns they've noted
+• Pest/disease risks for their specific plants
+• Growth stages and upcoming milestones (flowering, fruiting, etc.)
+• Companion planting opportunities
+• Soil and nutrition needs based on the season
+
+${previousAdviceList.length > 0 ? `
+⚠️ CRITICAL: You gave advice in previous weeks (shown above). 
+- DO NOT repeat the same focus areas or plant tips
+- If a concern persists, provide NEW strategies or escalate urgency
+- Build on previous advice - acknowledge progress or changes
+- Rotate focus to different plants unless urgent issues exist
 ` : ''}
-Format your response as JSON with this structure:
+
+Provide your response as JSON with this COMPREHENSIVE structure:
 {
-  "summary": "A warm, encouraging 2-3 sentence overview of the garden's status",
-  "weeklyFocus": "What the gardener should prioritize this specific week based on weather and plant needs",
-  "focusAreas": ["3-4 specific action items for this week"],
-  "plantTips": [
-    {"plantName": "name", "tip": "specific, actionable advice", "priority": "high|medium|low", "reason": "why this matters now"}
+  "summary": "A warm, personalized 2-3 sentence overview acknowledging their specific garden and progress",
+  "weeklyFocus": "The ONE most important thing to focus on this week with specific reasoning",
+  "focusAreas": [
+    "4-6 specific, actionable tasks for this week - each should be different from previous weeks"
   ],
-  "weatherAdvice": "How the upcoming weather affects plant care (be specific about the forecast)",
+  "plantTips": [
+    {
+      "plantName": "exact plant name from their garden",
+      "tip": "Detailed, specific advice (2-3 sentences minimum)",
+      "priority": "high|medium|low",
+      "reason": "Why this matters RIGHT NOW for this specific plant",
+      "timing": "When exactly to do this (e.g., 'early morning', 'before Friday's rain')"
+    }
+  ],
+  "seasonalInsights": "What's happening in the garden world this time of year and how it applies to their plants",
+  "weatherAdvice": "Detailed analysis of the 7-day forecast and specific actions to take",
+  "preventiveCare": "Proactive tips to prevent common issues this season",
   "improvementScore": 85,
-  "encouragement": "A personalized, motivating message based on their progress",
-  "fullAdvice": "A detailed, friendly paragraph covering all your recommendations"
+  "scoreExplanation": "Brief explanation of what contributes to the score and how to improve",
+  "encouragement": "A genuinely personalized, motivating message referencing their specific achievements",
+  "lookingAhead": "What to prepare for in the coming 2-3 weeks",
+  "fullAdvice": "A comprehensive, friendly 3-4 paragraph summary covering all your recommendations with specific details"
 }`
 
     const buildRuleBased = () =>
@@ -15634,14 +15829,37 @@ Format your response as JSON with this structure:
 
     let parsed = null
     let tokensUsed = 0
-    let modelUsed = 'gpt-4o-mini'
+    let modelUsed = openaiModel // Use the same model as AI Plant Fill
 
     if (openai) {
       try {
         // Build messages with optional images for vision analysis
         const useVision = journalPhotoUrls.length > 0
         let messages = [
-          { role: 'system', content: 'You are a warm, knowledgeable gardening expert. Always respond with valid JSON. Be specific, personalized, and encouraging. When analyzing plant photos, look for signs of health, disease, pests, nutrient issues, and growth progress.' },
+          { role: 'system', content: `You are an expert horticulturist and plant care specialist with decades of experience. You provide detailed, scientifically-informed yet accessible gardening advice.
+
+Your personality:
+- Warm, encouraging, and genuinely invested in the gardener's success
+- Practical and specific - never vague or generic
+- Proactive - anticipate problems before they occur
+- Educational - explain the "why" behind recommendations
+
+Your expertise includes:
+- Plant biology, growth cycles, and optimal care conditions
+- Pest and disease identification and organic/integrated management
+- Soil science, composting, and plant nutrition
+- Climate adaptation and seasonal gardening strategies
+- Companion planting and garden ecosystem design
+- Water management and irrigation optimization
+
+Guidelines:
+- ALWAYS respond with valid JSON matching the requested structure
+- Be SPECIFIC to the plants in this garden - reference them by name
+- Consider the LOCAL weather forecast when giving advice
+- Acknowledge their progress and build on previous advice
+- Provide ACTIONABLE tips with clear timing (e.g., "water deeply Tuesday before the heat wave")
+- When analyzing photos, look for: leaf color/texture, stem health, soil moisture, pest damage, nutrient deficiencies
+- Prioritize urgent issues but also include maintenance and optimization tips` },
         ]
 
         if (useVision) {
@@ -15674,10 +15892,10 @@ Include specific observations from the photos in your advice.` }
         }
 
         const completionOptions = {
-          model: useVision ? 'gpt-4o' : 'gpt-4o-mini',
+          model: openaiModel, // Use the bigger model (same as AI Plant Fill)
           messages,
           temperature: 0.7,
-          max_tokens: useVision ? 2000 : 1500,
+          max_tokens: useVision ? 3500 : 3000, // Increased for more comprehensive advice
         }
         // Only use json_object response format when not using vision (compatibility)
         if (!useVision) {
@@ -17706,6 +17924,15 @@ app.post('/api/push/subscribe', async (req, res) => {
   const authKey = subscription.keys?.auth || subscription.auth_key || null
   const p256dhKey = subscription.keys?.p256dh || subscription.p256dh_key || null
   const userAgent = req.get('user-agent') || null
+  
+  // Extract endpoint domain for logging
+  let endpointDomain = 'unknown'
+  try {
+    endpointDomain = new URL(subscription.endpoint).hostname
+  } catch {}
+  
+  console.log(`[push/subscribe] Storing subscription for user ${user.id.slice(0, 8)}... (endpoint: ${endpointDomain})`)
+  
   try {
     await sql`
       insert into public.user_push_subscriptions (user_id, endpoint, auth_key, p256dh_key, user_agent, subscription, updated_at, last_used_at)
@@ -17719,9 +17946,10 @@ app.post('/api/push/subscribe', async (req, res) => {
           updated_at = now(),
           last_used_at = now()
     `
+    console.log(`[push/subscribe] ✓ Subscription stored successfully for user ${user.id.slice(0, 8)}...`)
     res.json({ ok: true, pushConfigured: pushNotificationsEnabled })
   } catch (err) {
-    console.error('[notifications] failed to store push subscription', err)
+    console.error('[push/subscribe] ✗ Failed to store subscription:', err?.message || err)
     res.status(500).json({ error: err?.message || 'Failed to store subscription' })
   }
 })
@@ -17758,7 +17986,7 @@ app.delete('/api/push/subscribe', async (req, res) => {
 })
 
 // ========== Instant Push Notification API ==========
-// Sends an immediate push notification for social events (friend requests, garden invites)
+// Sends an immediate push notification for social events (friend requests, garden invites, messages)
 // This is called internally when creating these events
 app.post('/api/push/instant', async (req, res) => {
   const user = await getUserFromRequestOrToken(req)
@@ -17771,7 +17999,7 @@ app.post('/api/push/instant', async (req, res) => {
     return
   }
   
-  const { recipientId, type, title, body, data } = req.body || {}
+  const { recipientId, type, title, body, data, tag: clientTag, renotify } = req.body || {}
   
   if (!recipientId || !type || !title || !body) {
     res.status(400).json({ error: 'Missing required fields: recipientId, type, title, body' })
@@ -17793,6 +18021,33 @@ app.post('/api/push/instant', async (req, res) => {
       return
     }
     
+    // For message notifications, check if conversation is muted
+    if (type === 'new_message' && data?.conversationId) {
+      try {
+        const conversation = await sql`
+          select id, participant_1, participant_2, muted_by_1, muted_by_2
+          from public.conversations
+          where id = ${data.conversationId}::uuid
+          limit 1
+        `
+        
+        if (conversation && conversation.length > 0) {
+          const conv = conversation[0]
+          const isRecipientParticipant1 = conv.participant_1 === recipientId
+          const isMuted = isRecipientParticipant1 ? conv.muted_by_1 : conv.muted_by_2
+          
+          if (isMuted) {
+            console.log(`[push/instant] Conversation ${data.conversationId} is muted by recipient ${recipientId}, skipping notification`)
+            res.json({ ok: true, sent: false, reason: 'CONVERSATION_MUTED' })
+            return
+          }
+        }
+      } catch (muteCheckErr) {
+        // Don't fail the whole request if mute check fails, just log and continue
+        console.warn('[push/instant] Failed to check conversation mute status:', muteCheckErr?.message)
+      }
+    }
+    
     // Get recipient's push subscriptions
     const subscriptions = await sql`
       select id::text as id, user_id::text as user_id, endpoint, subscription
@@ -17806,8 +18061,34 @@ app.post('/api/push/instant', async (req, res) => {
       return
     }
     
+    console.log(`[push/instant] Found ${subscriptions.length} subscription(s) for user ${recipientId}, sending ${type} notification`)
+    
+    // Use client-provided tag if available, otherwise generate one
+    const notificationTag = clientTag || `${type}-${user.id}`
+    
+    // Determine the target URL based on notification type
+    let targetUrl = '/'
+    switch (type) {
+      case 'friend_request':
+      case 'friend_request_accepted':
+        targetUrl = '/friends'
+        break
+      case 'garden_invite':
+      case 'garden_invite_accepted':
+        targetUrl = '/gardens'
+        break
+      case 'new_message':
+        if (data?.conversationId) {
+          targetUrl = `/messages?conversation=${data.conversationId}`
+        } else {
+          targetUrl = '/messages'
+        }
+        break
+    }
+    
     // Send notification to all of recipient's subscriptions
     let sent = false
+    let successCount = 0
     const staleSubscriptionIds = []
     
     for (const sub of subscriptions) {
@@ -17815,21 +18096,32 @@ app.post('/api/push/instant', async (req, res) => {
         const payload = sub.subscription && typeof sub.subscription === 'string'
           ? JSON.parse(sub.subscription)
           : sub.subscription
+        
+        // Build notification payload with all necessary fields
+        const notificationPayload = {
+          title,
+          body,
+          tag: notificationTag,
+          renotify: renotify === true, // Ensure it's a boolean
+          data: {
+            type,
+            senderId: user.id,
+            url: targetUrl,
+            ...data,
+          },
+        }
+        
+        // Add vibration pattern for message notifications
+        if (type === 'new_message') {
+          notificationPayload.vibrate = [200, 100, 200]
+        }
           
         await webpush.sendNotification(
           payload,
-          JSON.stringify({
-            title,
-            body,
-            tag: `${type}-${user.id}`,
-            data: {
-              type,
-              senderId: user.id,
-              ...data,
-            },
-          })
+          JSON.stringify(notificationPayload)
         )
         sent = true
+        successCount++
         
         // Update last_used_at
         await sql`
@@ -17842,8 +18134,9 @@ app.post('/api/push/instant', async (req, res) => {
         if (statusCode === 404 || statusCode === 410) {
           // Subscription expired, mark for cleanup
           staleSubscriptionIds.push(sub.id)
+          console.log(`[push/instant] Subscription ${sub.id} expired (${statusCode}), marking for cleanup`)
         } else {
-          console.warn('[push/instant] Push delivery failed:', err?.message || err)
+          console.warn(`[push/instant] Push delivery failed for subscription ${sub.id}:`, err?.message || err)
         }
       }
     }
@@ -17858,13 +18151,90 @@ app.post('/api/push/instant', async (req, res) => {
     }
     
     if (sent) {
-      console.log(`[push/instant] Successfully sent ${type} notification to user ${recipientId}`)
+      console.log(`[push/instant] Successfully sent ${type} notification to user ${recipientId} (${successCount}/${subscriptions.length} devices)`)
+    } else {
+      console.warn(`[push/instant] Failed to deliver ${type} notification to any device for user ${recipientId}`)
     }
     
-    res.json({ ok: true, sent, type })
+    res.json({ ok: true, sent, type, devicesReached: successCount })
   } catch (err) {
     console.error('[push/instant] Failed to send notification:', err)
     res.status(500).json({ error: err?.message || 'Failed to send notification' })
+  }
+})
+
+// ========== Push Notification Debug Endpoint ==========
+// Returns info about the user's push notification setup for debugging
+app.get('/api/push/debug', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  
+  try {
+    // Get user's push subscriptions
+    const subscriptions = await sql`
+      select 
+        id::text as id,
+        endpoint,
+        created_at,
+        updated_at,
+        last_used_at,
+        user_agent
+      from public.user_push_subscriptions
+      where user_id = ${user.id}::uuid
+      order by updated_at desc
+    `
+    
+    // Mask the endpoint for privacy (show only domain)
+    const maskedSubscriptions = (subscriptions || []).map(sub => {
+      let endpointDomain = 'unknown'
+      try {
+        const url = new URL(sub.endpoint)
+        endpointDomain = url.hostname
+      } catch {}
+      
+      return {
+        id: sub.id,
+        endpointDomain,
+        endpointPreview: sub.endpoint ? sub.endpoint.slice(0, 50) + '...' : null,
+        createdAt: sub.created_at,
+        updatedAt: sub.updated_at,
+        lastUsedAt: sub.last_used_at,
+        userAgent: sub.user_agent ? sub.user_agent.slice(0, 100) : null
+      }
+    })
+    
+    res.json({
+      ok: true,
+      userId: user.id,
+      serverPushEnabled: pushNotificationsEnabled,
+      vapidConfigured: Boolean(vapidPublicKey && vapidPrivateKey),
+      subscriptionCount: subscriptions?.length || 0,
+      subscriptions: maskedSubscriptions,
+      troubleshooting: {
+        noSubscriptions: (subscriptions?.length || 0) === 0 
+          ? 'No push subscriptions found. Enable notifications in the app settings.'
+          : null,
+        pushDisabled: !pushNotificationsEnabled 
+          ? 'Push notifications are disabled on the server (VAPID keys not configured).'
+          : null,
+        staleSubscription: subscriptions?.some(s => {
+          const lastUsed = new Date(s.last_used_at || s.updated_at)
+          const daysSinceLastUse = (Date.now() - lastUsed.getTime()) / (1000 * 60 * 60 * 24)
+          return daysSinceLastUse > 30
+        }) ? 'Some subscriptions may be expired. Try disabling and re-enabling notifications.'
+          : null
+      }
+    })
+  } catch (err) {
+    console.error('[push/debug] Failed to get debug info:', err)
+    res.status(500).json({ error: err?.message || 'Failed to get debug info' })
   }
 })
 
@@ -18615,7 +18985,6 @@ async function buildGardenContextString(context) {
         careRequirements.push(`- Temperature range: ${plant.temperatureRange.min}°C to ${plant.temperatureRange.max}°C (ideal: ${plant.temperatureRange.ideal}°C)`)
       }
       if (plant.humidity) careRequirements.push(`- Humidity needs: ${plant.humidity}%`)
-      if (plant.hardinessZone) careRequirements.push(`- Hardiness zone: ${plant.hardinessZone}`)
       if (plant.soilType && plant.soilType.length > 0) careRequirements.push(`- Soil types: ${plant.soilType.join(', ')}`)
       if (plant.nutritionNeeds && plant.nutritionNeeds.length > 0) careRequirements.push(`- Nutrition needs: ${plant.nutritionNeeds.join(', ')}`)
       if (plant.fertilizerTypes && plant.fertilizerTypes.length > 0) careRequirements.push(`- Fertilizer types: ${plant.fertilizerTypes.join(', ')}`)
@@ -18640,7 +19009,8 @@ async function buildGardenContextString(context) {
       // Characteristics
       const characteristics = []
       if (plant.isEdible) characteristics.push('Edible')
-      if (plant.isPoisonous) characteristics.push('⚠️ Poisonous')
+      if (plant.toxicityHuman === 'highly toxic' || plant.toxicityHuman === 'lethally toxic') characteristics.push('⚠️ Toxic to humans')
+      if (plant.toxicityPets === 'highly toxic' || plant.toxicityPets === 'lethally toxic') characteristics.push('⚠️ Toxic to pets')
       if (plant.hasSpikes) characteristics.push('Has spikes')
       if (plant.hasScent) characteristics.push('Fragrant')
       if (plant.isMulticolor) characteristics.push('Multicolor')
@@ -18655,9 +19025,6 @@ async function buildGardenContextString(context) {
       if (plant.commonPests && plant.commonPests.length > 0) parts.push(`- Common pests: ${plant.commonPests.join(', ')}`)
       if (plant.commonDiseases && plant.commonDiseases.length > 0) parts.push(`- Common diseases: ${plant.commonDiseases.join(', ')}`)
       if (plant.companionPlants && plant.companionPlants.length > 0) parts.push(`- Companion plants: ${plant.companionPlants.join(', ')}`)
-      
-      // Tags
-      if (plant.tags && plant.tags.length > 0) parts.push(`- Tags: ${plant.tags.join(', ')}`)
       
       // Schedule and tasks
       if (plant.schedule) {
@@ -19153,11 +19520,7 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.utility as plant_utility,
         p.comestible_part,
         -- Care requirements
-        p.water_freq_amount,
-        p.water_freq_period,
-        p.light_level,
-        p.hardiness_min,
-        p.hardiness_max,
+        p.level_sun,
         p.temperature_min,
         p.temperature_max,
         p.temperature_ideal,
@@ -19178,25 +19541,35 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.sow_type,
         p.division,
         -- Characteristics
-        p.is_edible,
-        p.is_poisonous,
+        ('comestible' = ANY(p.utility)) as is_edible,
+        p.toxicity_human,
+        p.toxicity_pets,
         p.spiked,
         p.scent,
         p.multicolor,
         p.melliferous,
         p.conservation_status,
-        -- Problems and companions
-        p.pests,
-        p.diseases,
+        -- Companions (pests/diseases now in plant_translations)
         p.companions,
-        p.tags as plant_tags,
-        -- Get translated overview if available
+        -- Get translated fields including pests and diseases
         (
           select pt.overview 
           from public.plant_translations pt 
           where pt.plant_id = p.id and pt.language = 'en'
           limit 1
-        ) as plant_overview
+        ) as plant_overview,
+        (
+          select pt.pests 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as pests,
+        (
+          select pt.diseases 
+          from public.plant_translations pt 
+          where pt.plant_id = p.id and pt.language = 'en'
+          limit 1
+        ) as diseases
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.garden_id = ${gardenId}
@@ -19273,9 +19646,8 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       // Care info - including overrides
       waterFrequency: row.override_water_freq_value 
         ? `${row.override_water_freq_value}x per ${row.override_water_freq_unit || 'week'} (custom)`
-        : (row.water_freq_amount ? `${row.water_freq_amount}x per ${row.water_freq_period || 'week'}` : null),
-      lightLevel: row.light_level,
-      hardinessZone: row.hardiness_min && row.hardiness_max ? `${row.hardiness_min}-${row.hardiness_max}` : null,
+        : null,
+      lightLevel: row.level_sun,
       temperatureRange: row.temperature_min && row.temperature_max 
         ? { min: row.temperature_min, max: row.temperature_max, ideal: row.temperature_ideal }
         : null,
@@ -19297,7 +19669,8 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       propagationMethods: row.division,
       // Characteristics
       isEdible: row.is_edible,
-      isPoisonous: row.is_poisonous,
+      toxicityHuman: row.toxicity_human,
+      toxicityPets: row.toxicity_pets,
       hasSpikes: row.spiked,
       hasScent: row.scent,
       isMulticolor: row.multicolor,
@@ -19310,7 +19683,6 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       commonPests: row.pests,
       commonDiseases: row.diseases,
       companionPlants: row.companions,
-      tags: row.plant_tags,
       // Instance data
       taskCount: taskCounts[row.garden_plant_id] || 0,
       schedule: schedules[row.garden_plant_id] || null,
@@ -19932,7 +20304,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         if (gardenIdForTools) {
           // Only enable tools if we have a garden context
           const initialResponse = await openai.chat.completions.create({
-            model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+            model: openaiModelNano, // Use fast model for chat
             messages: messagesWithTools,
             tools: APHYLIA_TOOLS,
             tool_choice: 'auto',
@@ -19991,7 +20363,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         
         // Now stream the final response (with tool results if any)
         const streamResponse = await openai.chat.completions.create({
-          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          model: openaiModelNano, // Use fast model for chat
           messages: messagesWithTools,
           stream: true,
           max_tokens: 2048,
@@ -20043,7 +20415,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       
       if (gardenIdForTools) {
         const initialResponse = await openai.chat.completions.create({
-          model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+          model: openaiModel, // Use the same powerful model as Gardener Advice
           messages: messagesWithTools,
           tools: APHYLIA_TOOLS,
           tool_choice: 'auto',
@@ -20086,7 +20458,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       
       // Final response
       const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+        model: openaiModelNano, // Use fast model for chat
         messages: messagesWithTools,
         max_tokens: 2048,
         temperature: 0.7
@@ -20857,10 +21229,11 @@ async function deliverPushNotifications(notifications, campaign) {
           JSON.stringify({
             title: notification.title || campaign.title || 'Aphylia',
             body: notification.message,
-            tag: campaign.id,
+            tag: campaign.id || `notification-${notification.id}`,
             data: {
               campaignId: campaign.id,
               notificationId: notification.id,
+              url: notification.cta_url || null,
               ctaUrl: notification.cta_url || null,
             },
           }),
@@ -20928,6 +21301,20 @@ async function deliverPushNotifications(notifications, campaign) {
           delivery_error = ${errorReason}
       where id = ${notifId}::uuid
     `
+  }
+
+  // Log delivery summary
+  const failureReasons = new Map()
+  for (const [, reason] of failedWithReason.entries()) {
+    failureReasons.set(reason, (failureReasons.get(reason) || 0) + 1)
+  }
+  if (deliveredIds.length > 0 || failedWithReason.size > 0) {
+    let summary = `[notifications] Delivery complete: ${deliveredIds.length} sent, ${failedWithReason.size} failed`
+    if (failureReasons.size > 0) {
+      const reasons = Array.from(failureReasons.entries()).map(([r, c]) => `${r}=${c}`).join(', ')
+      summary += ` (${reasons})`
+    }
+    console.log(summary)
   }
 
   return { sent: deliveredIds.length, failed: failedWithReason.size }
@@ -21195,7 +21582,7 @@ async function processDueAutomations() {
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and un.scheduled_for::date = current_date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               )
             limit 1000
           `
@@ -21207,14 +21594,14 @@ async function processDueAutomations() {
             join public.garden_plant_tasks t on t.garden_id = gm.garden_id
             join public.garden_plant_task_occurrences occ on occ.task_id = t.id
             where (p.notify_push is null or p.notify_push = true)
-              and occ.due_at::date = current_date
+              and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               and (occ.completed_count < occ.required_count or occ.completed_count = 0)
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and un.scheduled_for::date = current_date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               )
             limit 1000
           `
@@ -21226,13 +21613,13 @@ async function processDueAutomations() {
             join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
             where (p.notify_push is null or p.notify_push = true)
               and gal.kind = 'note'
-              and gal.occurred_at::date = current_date - interval '1 day'
+              and (gal.occurred_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date - interval '1 day'
               and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and un.scheduled_for::date = current_date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
               )
             limit 1000
           `
@@ -21241,14 +21628,68 @@ async function processDueAutomations() {
         }
 
         const recipients = await recipientQuery
-        if (!recipients || !recipients.length) continue
+        
+        // Log automation check even if no recipients (helps with debugging)
+        if (!recipients || !recipients.length) {
+          // Only log once per hour to avoid spam
+          const lastLogKey = `automation_log_${automation.id}`
+          const nowTs = Date.now()
+          if (!global[lastLogKey] || nowTs - global[lastLogKey] > 3600000) {
+            // Log debug info about why there might be no recipients
+            console.log(`[automations] ${automation.trigger_type}: No eligible recipients at send_hour=${sendHour}`)
+            
+            // For daily_task_reminder, log how many users have incomplete tasks (without hour filter)
+            if (automation.trigger_type === 'daily_task_reminder') {
+              try {
+                const debugCount = await sql`
+                  select count(distinct p.id)::bigint as total_with_tasks,
+                         count(distinct case when extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour} then p.id end)::bigint as at_send_hour
+                  from public.profiles p
+                  join public.garden_members gm on gm.user_id = p.id
+                  join public.garden_plant_tasks t on t.garden_id = gm.garden_id
+                  join public.garden_plant_task_occurrences occ on occ.task_id = t.id
+                  where (p.notify_push is null or p.notify_push = true)
+                    and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                    and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+                `
+                const totalWithTasks = Number(debugCount?.[0]?.total_with_tasks || 0)
+                const atSendHour = Number(debugCount?.[0]?.at_send_hour || 0)
+                console.log(`[automations] ${automation.trigger_type} debug: ${totalWithTasks} users with tasks, ${atSendHour} at send_hour=${sendHour}`)
+              } catch (debugErr) {
+                // Ignore debug query errors
+              }
+            }
+            global[lastLogKey] = nowTs
+          }
+          continue
+        }
 
         // Default message variants (English)
         const defaultVariants = toStringArray(automation.message_variants)
-        if (!defaultVariants.length) continue
+        if (!defaultVariants.length) {
+          console.warn(`[automations] ${automation.trigger_type}: No message template configured, skipping`)
+          continue
+        }
 
         console.log(`[automations] Processing ${automation.trigger_type}: ${recipients.length} recipients`)
 
+        // Determine default URL based on automation type
+        let defaultUrl = '/'
+        switch (automation.trigger_type) {
+          case 'daily_task_reminder':
+            defaultUrl = '/gardens'
+            break
+          case 'journal_continue_reminder':
+            defaultUrl = '/gardens'
+            break
+          case 'weekly_inactive_reminder':
+            defaultUrl = '/'
+            break
+        }
+        const targetUrl = automation.cta_url || defaultUrl
+
+        let insertedCount = 0
+        let skippedCount = 0
         for (const recipient of recipients) {
           // Get message variants for user's language (with fallback to default)
           const userLang = (recipient.language || 'en').toLowerCase()
@@ -21264,7 +21705,9 @@ async function processDueAutomations() {
             .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
           try {
-            await sql`
+            // Insert notification with conflict handling for the unique automation constraint
+            // The unique constraint is on (automation_id, user_id, scheduled_for::date)
+            const insertResult = await sql`
               insert into public.user_notifications (
                 automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
               )
@@ -21273,21 +21716,40 @@ async function processDueAutomations() {
                 ${recipient.user_id},
                 ${automation.display_name || 'Reminder'},
                 ${message},
-                ${automation.cta_url || null},
+                ${targetUrl},
                 now(),
                 'pending'
               )
+              on conflict (automation_id, user_id, (scheduled_for::date)) where automation_id is not null
+              do nothing
+              returning id
             `
+            if (insertResult && insertResult.length > 0) {
+              insertedCount++
+            } else {
+              skippedCount++
+            }
           } catch (insertErr) {
-            // Ignore errors (e.g. if notification already exists)
+            // Log errors for debugging (duplicate key violations expected if constraint triggered)
+            if (!insertErr?.message?.includes('duplicate key') && !insertErr?.message?.includes('violates unique constraint')) {
+              console.warn(`[automations] Failed to insert notification for user ${recipient.user_id}:`, insertErr?.message)
+            }
+            skippedCount++
           }
         }
 
-        // Update last_run_at
+        console.log(`[automations] ${automation.trigger_type}: Queued ${insertedCount} notifications (${skippedCount} skipped/duplicates)`)
+
+        // Update last_run_at with detailed summary
         await sql`
           update public.notification_automations
           set last_run_at = now(),
-              last_run_summary = ${sql.json({ recipients: recipients.length, sentAt: new Date().toISOString() })}
+              last_run_summary = ${sql.json({ 
+                recipients: recipients.length, 
+                queued: insertedCount,
+                skipped: skippedCount,
+                sentAt: new Date().toISOString() 
+              })}
           where id = ${automation.id}
         `
       } catch (automationErr) {
@@ -21300,10 +21762,20 @@ async function processDueAutomations() {
 }
 
 function scheduleNotificationWorker() {
-  if (!sql) return
-  if (notificationWorkerTimer) return
+  if (!sql) {
+    console.log('[notifications] Worker not started - no database connection')
+    return
+  }
+  if (notificationWorkerTimer) {
+    console.log('[notifications] Worker already running')
+    return
+  }
+  console.log(`[notifications] Starting notification worker (interval: ${notificationWorkerIntervalMs}ms)`)
+  console.log('[notifications] Automations will be processed every tick based on user timezone and send_hour')
   const tick = () => {
-    runNotificationWorkerTick().catch(() => { })
+    runNotificationWorkerTick().catch((err) => {
+      console.error('[notifications] Worker tick error:', err?.message || err)
+    })
     notificationWorkerTimer = setTimeout(tick, notificationWorkerIntervalMs)
   }
   notificationWorkerTimer = setTimeout(tick, 2000)
@@ -21795,10 +22267,34 @@ async function generateCrawlerHtml(req, pagePath) {
     return `${siteUrl.replace(/\/+$/, '')}/${url}`
   }
 
+  // Helper to check if an image URL is from our media domain (for Google image indexing)
+  const isAphyliaMediaUrl = (url) => {
+    if (!url) return false
+    return url.includes('media.aphylia.app')
+  }
+
+  // Helper to generate an img tag for media.aphylia.app images (for Google image indexing)
+  const generateImageTag = (url, alt, options = {}) => {
+    if (!url || !isAphyliaMediaUrl(url)) return ''
+    const { width, height, style = 'max-width: 100%; height: auto; border-radius: 12px; margin: 16px 0;' } = options
+    const widthAttr = width ? ` width="${width}"` : ''
+    const heightAttr = height ? ` height="${height}"` : ''
+    return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt || 'Aphylia')}"${widthAttr}${heightAttr} style="${style}" loading="lazy" />`
+  }
+
   // Default meta tags
   let title = 'Aphylia - Discover, Swipe and Manage Plants for Your Garden'
   let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
-  let image = `${siteUrl}/icons/icon-512x512.png`
+  
+  // Banner image ONLY for landing page - other pages should use specific images or no image
+  const LANDING_BANNER_IMAGE = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260-ae7e1e2d-ea1d-4944-be95-84cc4b8a29ed.png'
+  
+  // Image settings - null means no image (don't show logo as fallback)
+  // Only landing page gets the banner, other pages get specific images or nothing
+  let image = null
+  let imageWidth = null
+  let imageHeight = null
+  let imageAlt = 'Aphylia'
   let pageContent = ''
   
   // Track whether the requested resource was found (for proper 404 handling)
@@ -22388,13 +22884,16 @@ async function generateCrawlerHtml(req, pagePath) {
           const discoveryImg = images?.find(img => img.use === 'discovery')
           const anyImg = images?.[0]
 
-          if (primaryImg?.link) {
-            image = ensureAbsoluteUrl(primaryImg.link) || image
-          } else if (discoveryImg?.link) {
-            image = ensureAbsoluteUrl(discoveryImg.link) || image
-          } else if (anyImg?.link) {
-            image = ensureAbsoluteUrl(anyImg.link) || image
+          // Set plant image - don't specify dimensions to avoid squeezing
+          // Let the platform render the image at its natural aspect ratio
+          const selectedImg = primaryImg?.link || discoveryImg?.link || anyImg?.link
+          if (selectedImg) {
+            image = ensureAbsoluteUrl(selectedImg)
+            // Don't set width/height - let the image display at natural dimensions
+            // This prevents squeezing on platforms like Discord/Telegram
+            imageAlt = `${plant.name} - Plant photo`
           }
+          // If no image found, image stays null - no fallback to banner
 
           // Build structured content for the page
           const quickFacts = []
@@ -22409,10 +22908,18 @@ async function generateCrawlerHtml(req, pagePath) {
           if (difficulty) careInfo.push(difficulty)
           if (plant.season?.length) careInfo.push(`🌿 ${plant.season.map(s => escapeHtml(s)).join(', ')}`)
 
+          // Generate image tag if we have an image from media.aphylia.app
+          const plantImageTag = generateImageTag(image, `${plant.name} - Plant photo on Aphylia`)
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Product">
               <h1 itemprop="name">${emoji} ${escapeHtml(plant.name)}</h1>
               ${quickFacts.length ? `<div class="plant-meta">${quickFacts.join(' · ')}</div>` : ''}
+              
+              ${plantImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
+                ${plantImageTag}
+                <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(plant.name)}</figcaption>
+              </figure>` : ''}
               
               ${plant.overview ? `
                 <div itemprop="description">
@@ -22436,6 +22943,15 @@ async function generateCrawlerHtml(req, pagePath) {
               <p style="margin-top: 20px;">
                 <a href="${escapeHtml(canonicalUrl)}">📖 ${tr.plantViewFull} →</a>
               </p>
+              
+              <h2>🔗 ${detectedLang === 'fr' ? 'Découvrir plus' : 'Discover More'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher des plantes' : 'Search Plants'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+                <a href="/blog">📚 Blog</a>
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+              </nav>
             </article>
           `
 
@@ -22520,7 +23036,12 @@ async function generateCrawlerHtml(req, pagePath) {
 
         description = descParts.length > 0 ? descParts.join(' • ') : tr.blogDesc
 
-        if (post.cover_image_url) image = ensureAbsoluteUrl(post.cover_image_url) || image
+        // Blog cover images - don't force dimensions
+        if (post.cover_image_url) {
+          image = ensureAbsoluteUrl(post.cover_image_url)
+          imageAlt = `${post.title} - Aphylia Blog`
+        }
+        // If no cover image, image stays null - no fallback
 
         // Use locale-specific date format
         const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
@@ -22530,6 +23051,9 @@ async function generateCrawlerHtml(req, pagePath) {
           day: 'numeric'
         }) : null
 
+        // Generate blog cover image tag if from media.aphylia.app
+        const blogImageTag = generateImageTag(image, `${post.title} - Aphylia Blog`)
+
         pageContent = `
           <article itemscope itemtype="https://schema.org/BlogPosting">
             <h1 itemprop="headline">📖 ${escapeHtml(post.title)}</h1>
@@ -22538,8 +23062,23 @@ async function generateCrawlerHtml(req, pagePath) {
               ${publishDate ? ` · 📅 <time itemprop="datePublished" datetime="${post.published_at}">${publishDate}</time>` : ''}
               ${readTime > 0 ? ` · 📚 ${readTime} ${tr.blogMinRead}` : ''}
             </div>
+            
+            ${blogImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
+              ${blogImageTag}
+              <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(post.title)}</figcaption>
+            </figure>` : ''}
+            
             ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadFull} →</a></p>
+            
+            <h2>🔗 ${detectedLang === 'fr' ? 'Plus d\'articles' : 'More Articles'}</h2>
+            <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <a href="/blog">📚 ${detectedLang === 'fr' ? 'Tous les articles' : 'All Articles'}</a>
+              <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
+              <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+              <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+              <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            </nav>
           </article>
         `
         console.log(`[ssr] Blog image: ${image}`)
@@ -22576,7 +23115,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: profileByDisplayName, error: err1 } = await ssrQuery(
           supabaseServer
             .from('profiles')
-            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant')
+            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
             .ilike('display_name', username)
             .maybeSingle(),
           'profile_lookup_by_display_name'
@@ -22589,7 +23128,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: profileByUsername, error: err2 } = await ssrQuery(
             supabaseServer
               .from('profiles')
-              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant')
+              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
               .ilike('username', username)
               .maybeSingle(),
             'profile_lookup_by_username'
@@ -22622,7 +23161,12 @@ async function generateCrawlerHtml(req, pagePath) {
         // For private profiles, show limited info
         if (isPrivate) {
           description = `${displayName} ${tr.profileOnAphylia || 'on Aphylia'} 🌱 ${tr.profilePrivateAccount || 'This is a private profile.'}`
-          if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
+          // Use avatar if available, otherwise no image
+          if (profile.avatar_url) {
+            image = ensureAbsoluteUrl(profile.avatar_url)
+            imageAlt = `${displayName} - Profile on Aphylia`
+          }
+          // If no avatar, image stays null - no fallback
 
           pageContent = `
             <article itemscope itemtype="https://schema.org/Person">
@@ -22637,63 +23181,201 @@ async function generateCrawlerHtml(req, pagePath) {
           // Get garden and plant counts (with timeouts to avoid blocking)
           let gardenCount = 0
           let plantCount = 0
+          let currentStreak = 0
+          let bestStreak = 0
+          let friendsCount = 0
+          let joinedDate = null
+          let isOnline = false
+          let lastSeen = null
+          
           try {
-            const { count: gCount } = await ssrQuery(
-              supabaseServer
-                .from('gardens')
-                .select('id', { count: 'exact', head: true })
-                .eq('created_by', profile.id),
-              'profile_garden_count'
+            // Get stats using the same RPC as frontend
+            const { data: statsData } = await ssrQuery(
+              supabaseServer.rpc('get_user_profile_public_stats', { _user_id: profile.id }),
+              'profile_stats'
             )
-            gardenCount = gCount || 0
+            if (statsData) {
+              const statRow = Array.isArray(statsData) ? statsData[0] : statsData
+              gardenCount = Number(statRow?.gardens_count || 0)
+              plantCount = Number(statRow?.plants_total || 0)
+              currentStreak = Number(statRow?.current_streak || 0)
+              bestStreak = Number(statRow?.longest_streak || 0)
+            }
+            
+            // Get friend count
+            const { data: friendCountData } = await ssrQuery(
+              supabaseServer.rpc('get_friend_count', { _user_id: profile.id }),
+              'profile_friend_count'
+            )
+            if (typeof friendCountData === 'number') {
+              friendsCount = friendCountData
+            }
 
-            // Get total plants across all gardens
-            const { data: gardens } = await ssrQuery(
-              supabaseServer
-                .from('gardens')
-                .select('id')
-                .eq('created_by', profile.id),
-              'profile_gardens'
-            )
-            if (gardens?.length) {
-              const gardenIds = gardens.map(g => g.id)
-              const { count: pCount } = await ssrQuery(
+            // Fallback for garden/plant counts if RPC didn't return them
+            if (gardenCount === 0) {
+              const { count: gCount } = await ssrQuery(
                 supabaseServer
-                  .from('garden_plants')
+                  .from('gardens')
                   .select('id', { count: 'exact', head: true })
-                  .in('garden_id', gardenIds),
-                'profile_plant_count'
+                  .eq('created_by', profile.id),
+                'profile_garden_count'
               )
-              plantCount = pCount || 0
+              gardenCount = gCount || 0
+            }
+
+            if (plantCount === 0 && gardenCount > 0) {
+              const { data: gardens } = await ssrQuery(
+                supabaseServer
+                  .from('gardens')
+                  .select('id')
+                  .eq('created_by', profile.id),
+                'profile_gardens'
+              )
+              if (gardens?.length) {
+                const gardenIds = gardens.map(g => g.id)
+                const { count: pCount } = await ssrQuery(
+                  supabaseServer
+                    .from('garden_plants')
+                    .select('id', { count: 'exact', head: true })
+                    .in('garden_id', gardenIds),
+                  'profile_plant_count'
+                )
+                plantCount = pCount || 0
+              }
             }
           } catch { }
 
-          // Create rich description
+          // Extract joined date and online status from RPC result if available
+          if (profile.joined_at) {
+            joinedDate = profile.joined_at
+          }
+          if (profile.is_online !== undefined) {
+            isOnline = Boolean(profile.is_online)
+          }
+          if (profile.last_seen_at) {
+            lastSeen = profile.last_seen_at
+          }
+
+          // Fetch user's public gardens for internal links
+          let userGardens = []
+          try {
+            const { data: gardens } = await ssrQuery(
+              supabaseServer
+                .from('gardens')
+                .select('id, name')
+                .eq('created_by', profile.id)
+                .eq('privacy', 'public')
+                .limit(6),
+              'profile_user_gardens'
+            )
+            if (gardens) userGardens = gardens
+          } catch { }
+
+          // Create rich description with all stats
           const descParts = []
           if (profile.bio) {
-            descParts.push(profile.bio.slice(0, 100))
+            descParts.push(profile.bio.slice(0, 80))
           } else {
             descParts.push(`${tr.profileCheckOut} ${displayName}'s ${tr.profileGrowingJourney}`)
           }
           if (gardenCount > 0) descParts.push(`🏡 ${gardenCount} ${tr.profileGardens}`)
           if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
+          if (currentStreak > 0) descParts.push(`🔥 ${currentStreak} ${detectedLang === 'fr' ? 'jours de série' : 'day streak'}`)
+          if (friendsCount > 0) descParts.push(`👥 ${friendsCount} ${detectedLang === 'fr' ? 'amis' : 'friends'}`)
           if (profile.country) descParts.push(`📍 ${profile.country}`)
-          if (profile.favorite_plant) descParts.push(`❤️ ${profile.favorite_plant}`)
 
           description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
 
-          if (profile.avatar_url) image = ensureAbsoluteUrl(profile.avatar_url) || image
+          // Use avatar if available, otherwise no image
+          if (profile.avatar_url) {
+            image = ensureAbsoluteUrl(profile.avatar_url)
+            imageAlt = `${displayName} - Garden Profile on Aphylia`
+          }
+          // If no avatar, image stays null - no fallback
+
+          // Build role badges
+          const roleBadges = []
+          if (profile.is_admin) roleBadges.push('👑 Admin')
+          if (Array.isArray(profile.roles)) {
+            if (profile.roles.includes('team_member')) roleBadges.push('🌟 Team')
+            if (profile.roles.includes('beta_tester')) roleBadges.push('🧪 Beta')
+            if (profile.roles.includes('bug_catcher')) roleBadges.push('🐛 Bug Catcher')
+            if (profile.roles.includes('early_adopter')) roleBadges.push('🌱 Early Adopter')
+          }
+
+          // Locale-specific date formatting
+          const dateLocales = { en: 'en-US', fr: 'fr-FR' }
+          const joinedDateFormatted = joinedDate ? new Date(joinedDate).toLocaleDateString(dateLocales[detectedLang] || 'en-US', {
+            year: 'numeric',
+            month: 'long',
+          }) : null
+
+          // Generate avatar image tag if from media.aphylia.app
+          const profileImageTag = generateImageTag(image, `${displayName} - Profile on Aphylia`, { 
+            width: 150, 
+            height: 150, 
+            style: 'border-radius: 50%; margin: 16px 0;' 
+          })
 
           pageContent = `
             <article itemscope itemtype="https://schema.org/Person">
               <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
-              <div class="plant-meta">
-                ${gardenCount > 0 ? `🏡 ${gardenCount} ${tr.profileGardens}` : ''}
-                ${plantCount > 0 ? ` · 🌿 ${plantCount} ${tr.profilePlants}` : ''}
-                ${profile.country ? ` · 📍 ${escapeHtml(profile.country)}` : ''}
+              ${roleBadges.length > 0 ? `<div style="margin-bottom: 12px;">${roleBadges.join(' ')}</div>` : ''}
+              
+              ${profileImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject" style="text-align: center;">
+                ${profileImageTag}
+              </figure>` : ''}
+              
+              <div class="profile-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
+                ${profile.country ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
+                ${isOnline ? `<span>🟢 ${detectedLang === 'fr' ? 'En ligne' : 'Online'}</span>` : ''}
+                ${joinedDateFormatted ? `<span>📅 ${detectedLang === 'fr' ? 'Membre depuis' : 'Member since'} ${joinedDateFormatted}</span>` : ''}
               </div>
-              ${profile.bio ? `<p itemprop="description">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
-              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileExploreGardens} ${escapeHtml(displayName)} →</a></p>
+              
+              ${profile.bio ? `<p itemprop="description" style="font-style: italic; margin-bottom: 20px;">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
+              
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 20px 0; padding: 16px; background: #f0fdf4; border-radius: 12px;">
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${tr.profilePlants}</div>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🏡 ${gardenCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${tr.profileGardens}</div>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #f97316;">🔥 ${currentStreak}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Série actuelle' : 'Current Streak'}</div>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #eab308;">🏆 ${bestStreak}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Meilleure série' : 'Best Streak'}</div>
+                </div>
+                ${friendsCount > 0 ? `
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #8b5cf6;">👥 ${friendsCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Amis' : 'Friends'}</div>
+                </div>
+                ` : ''}
+              </div>
+              
+              ${profile.favorite_plant ? `<p>❤️ ${detectedLang === 'fr' ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
+              
+              ${userGardens.length > 0 ? `
+              <h2>🏡 ${detectedLang === 'fr' ? 'Jardins de' : 'Gardens by'} ${escapeHtml(displayName)}</h2>
+              <ul>
+                ${userGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+              </ul>
+              ` : ''}
+              
+              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+                <a href="/blog">📚 Blog</a>
+              </nav>
             </article>
           `
           console.log(`[ssr] Profile image: ${image}`)
@@ -22736,8 +23418,9 @@ async function generateCrawlerHtml(req, pagePath) {
         const gardenName = garden.name || tr.gardenBeautiful
         console.log(`[ssr] ✓ Found garden: ${gardenName} (privacy: ${garden.privacy || 'public'})`)
 
-        // Get owner name (needed for both public and private gardens)
+        // Get owner info (needed for both public and private gardens)
         let ownerName = null
+        let ownerAvatarUrl = null
         if (garden.created_by) {
           const { data: owner } = await ssrQuery(
             dbClient
@@ -22749,6 +23432,7 @@ async function generateCrawlerHtml(req, pagePath) {
           )
           if (owner) {
             ownerName = owner.display_name
+            ownerAvatarUrl = owner.avatar_url
           }
         }
 
@@ -22757,7 +23441,12 @@ async function generateCrawlerHtml(req, pagePath) {
           const gardenEmoji = '🏡'
           title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
           description = `${gardenName} ${tr.gardenOnAphylia || 'on Aphylia'} 🌱 ${tr.gardenPrivate || 'This is a private garden.'}`
-          if (garden.cover_image_url) image = ensureAbsoluteUrl(garden.cover_image_url)
+          // Use garden cover if available, otherwise no image
+          if (garden.cover_image_url) {
+            image = ensureAbsoluteUrl(garden.cover_image_url)
+            imageAlt = `${gardenName} - Garden on Aphylia`
+          }
+          // If no cover, image stays null - no fallback
 
           pageContent = `
             <article itemscope itemtype="https://schema.org/Place">
@@ -22771,7 +23460,12 @@ async function generateCrawlerHtml(req, pagePath) {
         } else {
           // Public garden - show full details
           let plantCount = 0
+          let speciesCount = 0
           let gardenImage = null
+          let gardenStreak = 0
+          let memberCount = 1
+          let recentPlants = []
+          let todayProgress = { due: 0, completed: 0 }
 
           try {
             // Use garden cover image if available
@@ -22780,50 +23474,98 @@ async function generateCrawlerHtml(req, pagePath) {
             }
 
             // Get owner avatar if no garden cover
-            if (!gardenImage && garden.created_by) {
-              const { data: ownerForAvatar } = await ssrQuery(
-                dbClient
-                  .from('profiles')
-                  .select('avatar_url')
-                  .eq('id', garden.created_by)
-                  .maybeSingle(),
-                'garden_owner_avatar'
-              )
-              if (ownerForAvatar?.avatar_url) gardenImage = ensureAbsoluteUrl(ownerForAvatar.avatar_url)
+            if (!gardenImage && ownerAvatarUrl) {
+              gardenImage = ensureAbsoluteUrl(ownerAvatarUrl)
             }
 
-            // Get plant count (with timeout)
-            const { count } = await ssrQuery(
+            // Get plant count and species count
+            const { data: gardenPlants } = await ssrQuery(
               dbClient
                 .from('garden_plants')
+                .select('id, plant_id, nickname')
+                .eq('garden_id', gardenId),
+              'garden_plants'
+            )
+            
+            // Array to store plant details with IDs for linking
+            let gardenPlantDetails = []
+            
+            if (gardenPlants?.length) {
+              plantCount = gardenPlants.length
+              // Count unique species
+              const uniquePlantIds = new Set(gardenPlants.map(p => p.plant_id).filter(Boolean))
+              speciesCount = uniquePlantIds.size
+              
+              // Get plant names and IDs for linking
+              const plantIds = [...uniquePlantIds].slice(0, 8)
+              if (plantIds.length > 0) {
+                const { data: plantDetails } = await ssrQuery(
+                  dbClient
+                    .from('plants')
+                    .select('id, name')
+                    .in('id', plantIds),
+                  'garden_plant_names'
+                )
+                if (plantDetails) {
+                  gardenPlantDetails = plantDetails.filter(p => p.name)
+                  recentPlants = plantDetails.map(p => p.name).filter(Boolean).slice(0, 4)
+                }
+              }
+            }
+
+            // Get garden streak
+            const { data: gardenData } = await ssrQuery(
+              dbClient
+                .from('gardens')
+                .select('current_streak')
+                .eq('id', gardenId)
+                .maybeSingle(),
+              'garden_streak'
+            )
+            if (gardenData?.current_streak) {
+              gardenStreak = gardenData.current_streak
+            }
+
+            // Get member count
+            const { count: mCount } = await ssrQuery(
+              dbClient
+                .from('garden_members')
                 .select('id', { count: 'exact', head: true })
                 .eq('garden_id', gardenId),
-              'garden_plant_count'
+              'garden_member_count'
             )
-            plantCount = count || 0
+            memberCount = (mCount || 0) + 1 // +1 for owner
+
+            // Try to get today's task progress
+            try {
+              const today = new Date().toISOString().slice(0, 10)
+              const { data: taskOccs } = await ssrQuery(
+                dbClient
+                  .from('task_occurrences')
+                  .select('required_count, completed_count')
+                  .eq('garden_id', gardenId)
+                  .gte('due_at', today)
+                  .lt('due_at', today + 'T23:59:59'),
+                'garden_today_tasks'
+              )
+              if (taskOccs?.length) {
+                todayProgress.due = taskOccs.reduce((sum, t) => sum + (t.required_count || 0), 0)
+                todayProgress.completed = taskOccs.reduce((sum, t) => sum + (t.completed_count || 0), 0)
+              }
+            } catch { }
 
             // Try to get a plant image from the garden (with timeout)
-            if (!gardenImage) {
-              const { data: gardenPlants } = await ssrQuery(
+            if (!gardenImage && gardenPlants?.[0]?.plant_id) {
+              const { data: plantImg } = await ssrQuery(
                 dbClient
-                  .from('garden_plants')
-                  .select('plant_id')
-                  .eq('garden_id', gardenId)
-                  .limit(1),
-                'garden_plants_for_img'
+                  .from('plant_images')
+                  .select('link')
+                  .eq('plant_id', gardenPlants[0].plant_id)
+                  .eq('use', 'primary')
+                  .maybeSingle(),
+                'garden_plant_img'
               )
-              if (gardenPlants?.[0]?.plant_id) {
-                const { data: plantImg } = await ssrQuery(
-                  dbClient
-                    .from('plant_images')
-                    .select('link')
-                    .eq('plant_id', gardenPlants[0].plant_id)
-                    .eq('use', 'primary')
-                    .maybeSingle(),
-                  'garden_plant_img'
-                )
-                if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
-              }
+              if (plantImg?.link) gardenImage = ensureAbsoluteUrl(plantImg.link)
             }
           } catch { }
 
@@ -22841,13 +23583,15 @@ async function generateCrawlerHtml(req, pagePath) {
           const gardenEmoji = plantCount > 20 ? '🌳' : plantCount > 10 ? '🌿' : plantCount > 0 ? '🌱' : '🏡'
           title = `${gardenEmoji} ${gardenName} - ${tr.gardenWord} | Aphylia`
 
-          // Create rich description
+          // Create rich description with all stats
           const descParts = []
           // Build location string from city/country
           const locationParts = [garden.location_city, garden.location_country].filter(Boolean)
           const gardenLocation = locationParts.length > 0 ? locationParts.join(', ') : null
 
           if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.gardenPlantsGrowing}`)
+          if (speciesCount > 0 && speciesCount !== plantCount) descParts.push(`🌸 ${speciesCount} ${detectedLang === 'fr' ? 'espèces' : 'species'}`)
+          if (gardenStreak > 0) descParts.push(`🔥 ${gardenStreak} ${detectedLang === 'fr' ? 'jours de série' : 'day streak'}`)
           if (ownerName) descParts.push(`👤 ${tr.gardenBy} ${ownerName}`)
           if (gardenLocation) descParts.push(`📍 ${gardenLocation}`)
           if (gardenAge) descParts.push(`🕐 ${gardenAge}`)
@@ -22856,19 +23600,76 @@ async function generateCrawlerHtml(req, pagePath) {
             ? descParts.join(' • ')
             : `${tr.gardenExploreThis}. ${tr.gardenDiscover}`
 
-          if (gardenImage) image = gardenImage
+          // Use garden image if found, otherwise no image
+          if (gardenImage) {
+            image = gardenImage
+            imageAlt = `${gardenName} - Garden on Aphylia`
+          }
+          // If no image found, image stays null - no fallback
+
+          // Calculate task progress percentage
+          const progressPercent = todayProgress.due > 0 ? Math.round((todayProgress.completed / todayProgress.due) * 100) : 100
+
+          // Generate garden image tag if from media.aphylia.app
+          const gardenImageTag = generateImageTag(image, `${gardenName} - Garden on Aphylia`)
 
           pageContent = `
             <article itemscope itemtype="https://schema.org/Place">
               <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
-              <div class="plant-meta">
-                ${plantCount > 0 ? `🌿 ${plantCount} ${tr.gardenPlantsGrowing}` : `🌱 ${tr.gardenStartingFresh}`}
-                ${ownerName ? ` · 👤 ${tr.gardenBy} ${escapeHtml(ownerName)}` : ''}
-                ${gardenLocation ? ` · 📍 ${escapeHtml(gardenLocation)}` : ''}
-                ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
+              
+              <div class="garden-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
+                ${ownerName ? `<span>👤 ${tr.gardenBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a></span>` : ''}
+                ${gardenLocation ? `<span>📍 ${escapeHtml(gardenLocation)}</span>` : ''}
+                ${gardenAge ? `<span>🕐 ${gardenAge}</span>` : ''}
+                ${memberCount > 1 ? `<span>👥 ${memberCount} ${detectedLang === 'fr' ? 'membres' : 'members'}</span>` : ''}
               </div>
+              
+              ${gardenImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
+                ${gardenImageTag}
+                <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(gardenName)}</figcaption>
+              </figure>` : ''}
+              
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 20px 0; padding: 16px; background: #f0fdf4; border-radius: 12px;">
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${tr.gardenPlantsGrowing}</div>
+                </div>
+                ${speciesCount > 0 ? `
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🌸 ${speciesCount}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Espèces' : 'Species'}</div>
+                </div>
+                ` : ''}
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: #f97316;">🔥 ${gardenStreak}</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Série' : 'Streak'}</div>
+                </div>
+                ${todayProgress.due > 0 ? `
+                <div style="text-align: center;">
+                  <div style="font-size: 24px; font-weight: bold; color: ${progressPercent >= 100 ? '#10b981' : '#f59e0b'};">✅ ${progressPercent}%</div>
+                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Aujourd\'hui' : 'Today'}</div>
+                </div>
+                ` : ''}
+              </div>
+              
+              ${gardenPlantDetails.length > 0 ? `
+              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans ce jardin' : 'Plants in this garden'}</h2>
+              <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+                ${gardenPlantDetails.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+              </ul>
+              ${plantCount > gardenPlantDetails.length ? `<p style="color: #6b7280; font-size: 14px;">${detectedLang === 'fr' ? `Et ${plantCount - gardenPlantDetails.length} autres plantes...` : `And ${plantCount - gardenPlantDetails.length} more plants...`}</p>` : ''}
+              ` : ''}
+              
               <p>${tr.gardenFilled} 🌸</p>
-              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenExploreThis} →</a></p>
+              
+              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
+                ${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">👤 ${detectedLang === 'fr' ? 'Profil de' : 'Profile of'} ${escapeHtml(ownerName)}</a>` : ''}
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Tous les jardins' : 'All Gardens'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+              </nav>
             </article>
           `
           console.log(`[ssr] Garden image: ${image}`)
@@ -22888,16 +23689,40 @@ async function generateCrawlerHtml(req, pagePath) {
           <p>${tr.aboutBelieve}</p>
           <h2>${tr.aboutOffer}</h2>
           <ul>
-            <li>🔍 ${tr.aboutDatabase}</li>
-            <li>🏡 ${tr.aboutGarden}</li>
+            <li>🔍 <a href="/search">${tr.aboutDatabase}</a></li>
+            <li>🏡 <a href="/gardens">${tr.aboutGarden}</a></li>
             <li>⏰ ${tr.aboutReminders}</li>
             <li>👥 ${tr.aboutCommunity}</li>
           </ul>
+          <h2>🔗 ${detectedLang === 'fr' ? 'En savoir plus' : 'Learn More'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/blog">📚 Blog</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+            <a href="/contact">💬 Contact</a>
+          </nav>
         </article>
       `
     }
 
     else if (effectivePath[0] === 'search' || pagePath === '/search') {
+      // Fetch some popular plants to link from search page
+      let searchPopularPlants = []
+      try {
+        if (supabaseServer) {
+          const { data: plants } = await ssrQuery(
+            supabaseServer
+              .from('plants')
+              .select('id, name')
+              .limit(10),
+            'search_popular_plants'
+          )
+          if (plants) searchPopularPlants = plants
+        }
+      } catch { }
+      
       title = `🔍 ${tr.searchTitle} | Aphylia`
       description = tr.searchDesc
       pageContent = `
@@ -22913,6 +23738,19 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>🌡️ ${tr.searchClimate}</li>
             <li>🎯 ${tr.searchDifficulty}</li>
           </ul>
+          ${searchPopularPlants.length > 0 ? `
+          <h2>🌿 ${detectedLang === 'fr' ? 'Plantes Populaires' : 'Popular Plants'}</h2>
+          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+            ${searchPopularPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+          </ul>
+          ` : ''}
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
+          </nav>
         </article>
       `
     }
@@ -22934,9 +23772,13 @@ async function generateCrawlerHtml(req, pagePath) {
         )
 
         if (posts?.length) {
-          // Use the most recent post's cover image
+          // Use the most recent post's cover image if available
           const latestWithImage = posts.find(p => p.cover_image_url)
-          if (latestWithImage) image = ensureAbsoluteUrl(latestWithImage.cover_image_url) || image
+          if (latestWithImage) {
+            image = ensureAbsoluteUrl(latestWithImage.cover_image_url)
+            imageAlt = `${tr.blogTitle} - ${latestWithImage.title}`
+          }
+          // If no image found, image stays null - no fallback
 
           pageContent = `
             <article>
@@ -22944,14 +23786,36 @@ async function generateCrawlerHtml(req, pagePath) {
               <p>${tr.blogDesc}</p>
               <h2>${tr.blogLatest}</h2>
               <ul>
-                ${posts.slice(0, 5).map(p => `
+                ${posts.map(p => `
                   <li>
                     <a href="/blog/${escapeHtml(p.slug)}"><strong>${escapeHtml(p.title)}</strong></a>
-                    ${p.excerpt ? `<br><em>${escapeHtml(p.excerpt.slice(0, 80))}...</em>` : ''}
+                    ${p.excerpt ? `<br><em>${escapeHtml(p.excerpt.slice(0, 100))}...</em>` : ''}
                   </li>
                 `).join('')}
               </ul>
-              <p><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadAll} →</a></p>
+              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+                <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+              </nav>
+            </article>
+          `
+        } else {
+          pageContent = `
+            <article>
+              <h1>📚 ${tr.blogTitle}</h1>
+              <p>${tr.blogDesc}</p>
+              <p>${detectedLang === 'fr' ? 'Les articles arrivent bientôt!' : 'Articles coming soon!'}</p>
+              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+              </nav>
             </article>
           `
         }
@@ -22960,6 +23824,22 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Gardens listing page
     else if (effectivePath[0] === 'gardens' && !effectivePath[1]) {
+      // Fetch some public gardens to list
+      let listGardens = []
+      try {
+        if (supabaseServer) {
+          const { data: gardens } = await ssrQuery(
+            supabaseServer
+              .from('gardens')
+              .select('id, name')
+              .eq('privacy', 'public')
+              .limit(12),
+            'gardens_list'
+          )
+          if (gardens) listGardens = gardens
+        }
+      } catch { }
+      
       title = `🏡 ${tr.gardensTitle} | Aphylia`
       description = tr.gardensDesc
       pageContent = `
@@ -22973,12 +23853,40 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>💡 ${tr.gardensIdeas}</li>
             <li>🤝 ${tr.gardensConnect}</li>
           </ul>
+          ${listGardens.length > 0 ? `
+          <h2>🌳 ${detectedLang === 'fr' ? 'Jardins de la Communauté' : 'Community Gardens'}</h2>
+          <ul>
+            ${listGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+          </ul>
+          ` : ''}
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/blog">📚 Blog</a>
+          </nav>
         </article>
       `
     }
 
     // Discovery/Swipe page
     else if (effectivePath[0] === 'discovery') {
+      // Fetch some featured plants for discovery page
+      let discoveryPlants = []
+      try {
+        if (supabaseServer) {
+          const { data: plants } = await ssrQuery(
+            supabaseServer
+              .from('plants')
+              .select('id, name')
+              .limit(8),
+            'discovery_plants'
+          )
+          if (plants) discoveryPlants = plants
+        }
+      } catch { }
+      
       title = `🎴 ${tr.discoveryTitle}`
       description = tr.discoveryDesc
       pageContent = `
@@ -22993,6 +23901,20 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>🔄 ${tr.discoveryKeep}</li>
           </ul>
           <p>${tr.discoveryStart} 🌿</p>
+          ${discoveryPlants.length > 0 ? `
+          <h2>🌿 ${detectedLang === 'fr' ? 'Plantes à Découvrir' : 'Plants to Discover'}</h2>
+          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+            ${discoveryPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+          </ul>
+          ` : ''}
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+          </nav>
         </article>
       `
     }
@@ -23007,8 +23929,8 @@ async function generateCrawlerHtml(req, pagePath) {
           <h2>🆓 ${tr.pricingFree}</h2>
           <p>${tr.pricingEverything}</p>
           <ul>
-            <li>✅ ${tr.pricingDiscovery}</li>
-            <li>✅ ${tr.pricingTracking}</li>
+            <li>✅ <a href="/discovery">${tr.pricingDiscovery}</a></li>
+            <li>✅ <a href="/gardens">${tr.pricingTracking}</a></li>
             <li>✅ ${tr.pricingCare}</li>
             <li>✅ ${tr.pricingIdentify}</li>
             <li>✅ ${tr.pricingAccess}</li>
@@ -23020,6 +23942,14 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>🌟 ${tr.pricingSupport}</li>
             <li>🌟 ${tr.pricingExclusive}</li>
           </ul>
+          <p style="margin-top: 20px;"><a href="/download" style="display: inline-block; padding: 12px 24px; background: #10b981; color: white; border-radius: 12px; text-decoration: none; font-weight: 600;">📲 ${detectedLang === 'fr' ? 'Commencer Gratuitement' : 'Get Started Free'}</a></p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'En savoir plus' : 'Learn More'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/contact">💬 Contact</a>
+            <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+          </nav>
         </article>
       `
     }
@@ -23033,6 +23963,7 @@ async function generateCrawlerHtml(req, pagePath) {
           <h1>📲 ${tr.downloadGet}</h1>
           <h2>🌐 ${tr.downloadWeb}</h2>
           <p>${tr.downloadWebDesc}</p>
+          <p><a href="/discovery" style="display: inline-block; padding: 10px 20px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: 600;">🎴 ${detectedLang === 'fr' ? 'Lancer l\'App Web' : 'Launch Web App'}</a></p>
           <h2>📱 ${tr.downloadPwa}</h2>
           <p>${tr.downloadPwaDesc}</p>
           <ul>
@@ -23041,6 +23972,14 @@ async function generateCrawlerHtml(req, pagePath) {
           </ul>
           <h2>🚀 ${tr.downloadNative}</h2>
           <p>${tr.downloadNativeDesc}</p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+          </nav>
         </article>
       `
     }
@@ -23062,7 +24001,13 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>✅ ${tr.termsSecure}</li>
             <li>✅ ${tr.termsEnjoy}</li>
           </ul>
-          <p><a href="${escapeHtml(canonicalUrl)}">${tr.termsRead} →</a></p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Liens Utiles' : 'Useful Links'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/contact">💬 Contact</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+          </nav>
         </article>
       `
     }
@@ -23082,6 +24027,13 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>📚 ${tr.businessCreators}</li>
           </ul>
           <p>${tr.businessExplore}</p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Liens Utiles' : 'Useful Links'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/contact">💬 ${detectedLang === 'fr' ? 'Contact Général' : 'General Contact'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/blog">📚 Blog</a>
+          </nav>
         </article>
       `
     }
@@ -23098,10 +24050,18 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>❓ ${tr.contactQuestions}</li>
             <li>💡 ${tr.contactFeatures}</li>
             <li>🐛 ${tr.contactBugs}</li>
-            <li>🤝 ${tr.contactPartnership}</li>
+            <li>🤝 <a href="/contact/business">${tr.contactPartnership}</a></li>
             <li>👋 ${tr.contactHello}</li>
           </ul>
           <p>${tr.contactRespond} 🌱</p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/blog">📚 Blog</a>
+            <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+          </nav>
         </article>
       `
     }
@@ -23199,58 +24159,282 @@ async function generateCrawlerHtml(req, pagePath) {
           description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
         }
 
-        if (listImage) image = listImage
+        // Use plant image if found, otherwise no image
+        if (listImage) {
+          image = listImage
+          imageAlt = `${bookmarkName} - Plant Collection on Aphylia`
+        }
+        // If no image found, image stays null - no fallback
+
+        // Generate bookmark image tag if from media.aphylia.app
+        const bookmarkImageTag = generateImageTag(listImage, `${bookmarkName} - Plant Collection on Aphylia`)
 
         pageContent = `
           <article>
             <h1>🔖 ${escapeHtml(bookmarkName)} - ${tr.bookmarkTitle}</h1>
             <div class="plant-meta">
               🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved}
-              ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} ${escapeHtml(ownerName)}` : ''}
+              ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a>` : ''}
             </div>
+            
+            ${bookmarkImageTag ? `<figure itemscope itemtype="https://schema.org/ImageObject">
+              ${bookmarkImageTag}
+              <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(bookmarkName)}</figcaption>
+            </figure>` : ''}
+            
             <p>${tr.bookmarksCarefully} 🌱</p>
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
+            
+            <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+            <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
+              <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+              <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+              <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            </nav>
           </article>
         `
       }
     }
 
-    // Homepage with dynamic content
+    // Homepage with dynamic content - ONLY page that gets the banner image
     else if (pagePath === '/' || effectivePath.length === 0) {
       title = `🌱 ${tr.homeTitle}`
       description = tr.homeDesc
+      
+      // Landing page is the ONLY page that uses the banner image
+      image = LANDING_BANNER_IMAGE
+      imageAlt = 'Aphylia - Your Personal Plant Companion'
 
-      // Try to get some stats (with timeout to avoid blocking)
+      // Try to get stats from landing_stats table first, fallback to counts
       let plantCountStat = '5,000+'
       let userCount = '10,000+'
+      let taskCount = '50,000+'
+      let ratingValue = '4.9'
+      let ratingLabel = 'App Store Rating'
       try {
         if (supabaseServer) {
-          const { count: pCount } = await ssrQuery(
+          // Try to get landing stats from admin-configured table
+          const { data: landingStats } = await ssrQuery(
             supabaseServer
-              .from('plants')
-              .select('id', { count: 'exact', head: true }),
-            'home_plant_count'
+              .from('landing_stats')
+              .select('plants_count, plants_label, users_count, users_label, tasks_count, tasks_label, rating_value, rating_label')
+              .limit(1)
+              .maybeSingle(),
+            'landing_stats'
           )
-          if (pCount) plantCountStat = pCount.toLocaleString() + '+'
+          
+          if (landingStats) {
+            plantCountStat = landingStats.plants_count || plantCountStat
+            userCount = landingStats.users_count || userCount
+            taskCount = landingStats.tasks_count || taskCount
+            ratingValue = landingStats.rating_value || ratingValue
+            ratingLabel = landingStats.rating_label || ratingLabel
+          } else {
+            // Fallback: count from database
+            const { count: pCount } = await ssrQuery(
+              supabaseServer
+                .from('plants')
+                .select('id', { count: 'exact', head: true }),
+              'home_plant_count'
+            )
+            if (pCount) plantCountStat = pCount.toLocaleString() + '+'
+            
+            // Count users
+            const { count: uCount } = await ssrQuery(
+              supabaseServer
+                .from('profiles')
+                .select('id', { count: 'exact', head: true }),
+              'home_user_count'
+            )
+            if (uCount) userCount = uCount.toLocaleString() + '+'
+          }
         }
       } catch { }
 
+      // Features list for crawlers
+      const features = detectedLang === 'fr' ? [
+        { icon: '🎴', title: 'Découverte de Plantes', desc: 'Swipez pour découvrir des plantes parfaites pour votre jardin' },
+        { icon: '🏡', title: 'Gestion de Jardin', desc: 'Suivez tous vos jardins et plantes en un seul endroit' },
+        { icon: '⏰', title: 'Rappels Intelligents', desc: 'Ne manquez plus jamais l\'arrosage ou l\'entretien' },
+        { icon: '📚', title: 'Guides d\'Entretien', desc: 'Conseils d\'experts pour chaque plante' },
+        { icon: '📸', title: 'Identification', desc: 'Identifiez les plantes avec votre caméra' },
+        { icon: '👥', title: 'Communauté', desc: 'Connectez-vous avec d\'autres passionnés de jardinage' },
+        { icon: '📊', title: 'Analyses', desc: 'Suivez vos progrès et accomplissements' },
+        { icon: '🐾', title: 'Sécurité Animaux', desc: 'Vérifiez la toxicité des plantes pour vos animaux' },
+      ] : [
+        { icon: '🎴', title: 'Plant Discovery', desc: 'Swipe to discover perfect plants for your garden' },
+        { icon: '🏡', title: 'Garden Management', desc: 'Track all your gardens and plants in one place' },
+        { icon: '⏰', title: 'Smart Reminders', desc: 'Never miss watering or care tasks again' },
+        { icon: '📚', title: 'Care Guides', desc: 'Expert tips and advice for every plant' },
+        { icon: '📸', title: 'Plant ID', desc: 'Identify plants using your camera' },
+        { icon: '👥', title: 'Community', desc: 'Connect with fellow gardening enthusiasts' },
+        { icon: '📊', title: 'Analytics', desc: 'Track your progress and achievements' },
+        { icon: '🐾', title: 'Pet Safety', desc: 'Check plant toxicity for your pets' },
+      ]
+
+      // How it works steps
+      const howItWorks = detectedLang === 'fr' ? [
+        { step: '1', title: 'Téléchargez', desc: 'Installez Aphylia gratuitement' },
+        { step: '2', title: 'Créez votre Jardin', desc: 'Ajoutez vos plantes et configurez votre espace' },
+        { step: '3', title: 'Recevez des Rappels', desc: 'Notifications intelligentes pour l\'entretien' },
+        { step: '4', title: 'Regardez-le Grandir', desc: 'Suivez les progrès et célébrez les succès' },
+      ] : [
+        { step: '1', title: 'Download', desc: 'Install Aphylia for free' },
+        { step: '2', title: 'Create Your Garden', desc: 'Add your plants and set up your space' },
+        { step: '3', title: 'Get Reminders', desc: 'Smart notifications for care tasks' },
+        { step: '4', title: 'Watch It Grow', desc: 'Track progress and celebrate success' },
+      ]
+
+      // Fetch popular plants for internal links
+      let popularPlants = []
+      let recentBlogPosts = []
+      let publicGardens = []
+      try {
+        if (supabaseServer) {
+          // Get popular plants (by name for linking)
+          const { data: plants } = await ssrQuery(
+            supabaseServer
+              .from('plants')
+              .select('id, name')
+              .limit(12),
+            'home_popular_plants'
+          )
+          if (plants) popularPlants = plants
+
+          // Get recent blog posts
+          const { data: posts } = await ssrQuery(
+            supabaseServer
+              .from('blog_posts')
+              .select('slug, title')
+              .eq('is_published', true)
+              .order('published_at', { ascending: false })
+              .limit(6),
+            'home_recent_blog'
+          )
+          if (posts) recentBlogPosts = posts
+
+          // Get public gardens with names
+          const { data: gardens } = await ssrQuery(
+            supabaseServer
+              .from('gardens')
+              .select('id, name')
+              .eq('privacy', 'public')
+              .limit(6),
+            'home_public_gardens'
+          )
+          if (gardens) publicGardens = gardens
+        }
+      } catch { }
+
+      // Generate landing banner image tag (always from media.aphylia.app)
+      const landingBannerTag = generateImageTag(LANDING_BANNER_IMAGE, 'Aphylia - Your Personal Plant Companion', {
+        style: 'width: 100%; max-width: 600px; height: auto; border-radius: 16px; margin: 20px auto; display: block;'
+      })
+
       pageContent = `
-        <article>
-          <h1>🌱 ${tr.homeWelcome}</h1>
-          <p>${tr.homePersonal}</p>
+        <article itemscope itemtype="https://schema.org/WebApplication">
+          <h1 itemprop="name">🌱 ${tr.homeWelcome}</h1>
+          <p itemprop="description">${tr.homePersonal}</p>
+          
+          ${landingBannerTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject" style="text-align: center; margin: 24px 0;">
+            ${landingBannerTag}
+          </figure>` : ''}
+          
+          <div class="stats-banner" style="display: flex; flex-wrap: wrap; gap: 20px; margin: 24px 0; padding: 20px; background: #f0fdf4; border-radius: 12px;">
+            <div style="text-align: center; flex: 1; min-width: 120px;">
+              <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCountStat}</div>
+              <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Plantes' : 'Plants'}</div>
+            </div>
+            <div style="text-align: center; flex: 1; min-width: 120px;">
+              <div style="font-size: 24px; font-weight: bold; color: #059669;">👥 ${userCount}</div>
+              <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Utilisateurs' : 'Users'}</div>
+            </div>
+            <div style="text-align: center; flex: 1; min-width: 120px;">
+              <div style="font-size: 24px; font-weight: bold; color: #059669;">✅ ${taskCount}</div>
+              <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Tâches complétées' : 'Tasks Completed'}</div>
+            </div>
+            <div style="text-align: center; flex: 1; min-width: 120px;">
+              <div style="font-size: 24px; font-weight: bold; color: #f59e0b;">⭐ ${ratingValue}</div>
+              <div style="font-size: 12px; color: #6b7280;">${ratingLabel}</div>
+            </div>
+          </div>
           
           <h2>${tr.homeWhy}</h2>
           <ul>
-            <li>🎴 ${tr.homeSwipe}</li>
-            <li>🏡 ${tr.homeTracker}</li>
+            <li>🎴 <a href="/discovery">${tr.homeSwipe}</a></li>
+            <li>🏡 <a href="/gardens">${tr.homeTracker}</a></li>
             <li>⏰ ${tr.homeReminders}</li>
-            <li>📚 ${tr.homeCareGuides} ${plantCountStat} ${tr.homePlants}</li>
+            <li>📚 <a href="/search">${tr.homeCareGuides} ${plantCountStat} ${tr.homePlants}</a></li>
             <li>👥 ${tr.homeCommunityJoin} ${userCount} ${tr.homePlantLovers}</li>
           </ul>
           
+          <h2>✨ ${detectedLang === 'fr' ? 'Fonctionnalités' : 'Features'}</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px;">
+            ${features.map(f => `
+              <div style="padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                <div style="font-size: 24px; margin-bottom: 8px;">${f.icon}</div>
+                <div style="font-weight: 600; margin-bottom: 4px;">${f.title}</div>
+                <div style="font-size: 14px; color: #6b7280;">${f.desc}</div>
+              </div>
+            `).join('')}
+          </div>
+          
+          <h2>🚀 ${detectedLang === 'fr' ? 'Comment ça marche' : 'How It Works'}</h2>
+          <ol>
+            ${howItWorks.map(step => `<li><strong>${step.title}</strong>: ${step.desc}</li>`).join('')}
+          </ol>
+          
+          ${popularPlants.length > 0 ? `
+          <h2>🌿 ${detectedLang === 'fr' ? 'Plantes Populaires' : 'Popular Plants'}</h2>
+          <p>${detectedLang === 'fr' ? 'Découvrez nos guides de soins pour ces plantes:' : 'Explore our care guides for these plants:'}</p>
+          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+            ${popularPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+          </ul>
+          <p><a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher plus de plantes' : 'Search more plants'} →</a></p>
+          ` : ''}
+          
+          ${recentBlogPosts.length > 0 ? `
+          <h2>📚 ${detectedLang === 'fr' ? 'Articles Récents' : 'Recent Articles'}</h2>
+          <ul>
+            ${recentBlogPosts.map(post => `<li><a href="/blog/${escapeHtml(post.slug)}">${escapeHtml(post.title)}</a></li>`).join('')}
+          </ul>
+          <p><a href="/blog">📖 ${detectedLang === 'fr' ? 'Voir tous les articles' : 'View all articles'} →</a></p>
+          ` : ''}
+          
+          ${publicGardens.length > 0 ? `
+          <h2>🏡 ${detectedLang === 'fr' ? 'Jardins de la Communauté' : 'Community Gardens'}</h2>
+          <p>${detectedLang === 'fr' ? 'Découvrez ce que les autres jardiniers cultivent:' : 'See what other gardeners are growing:'}</p>
+          <ul>
+            ${publicGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+          </ul>
+          <p><a href="/gardens">🌳 ${detectedLang === 'fr' ? 'Explorer tous les jardins' : 'Explore all gardens'} →</a></p>
+          ` : ''}
+          
           <h2>${tr.homeStart}</h2>
           <p>${tr.homeFree} 🌿</p>
+          
+          <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+            <a href="/download" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #10b981; color: white; border-radius: 12px; text-decoration: none; font-weight: 600;">
+              📲 ${detectedLang === 'fr' ? 'Télécharger l\'App' : 'Download the App'}
+            </a>
+            <a href="/discovery" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: white; color: #374151; border: 2px solid #e5e7eb; border-radius: 12px; text-decoration: none; font-weight: 600;">
+              🌐 ${detectedLang === 'fr' ? 'Essayer dans le navigateur' : 'Try in Browser'}
+            </a>
+          </div>
+          
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;">
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des Plantes' : 'Discover Plants'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+            <a href="/contact">💬 Contact</a>
+            <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+          </nav>
         </article>
       `
     }
@@ -23272,20 +24456,23 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
-  <!-- Open Graph / Facebook -->
+  <!-- Open Graph / Facebook / Discord / Telegram / LinkedIn -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
   <meta property="og:title" content="${escapeHtml(title)}">
   <meta property="og:description" content="${escapeHtml(description)}">
-  <meta property="og:image" content="${escapeHtml(image)}">
+  ${image ? `<meta property="og:image" content="${escapeHtml(image)}">
+  <meta property="og:image:alt" content="${escapeHtml(imageAlt)}">` : '<!-- No image for this page -->'}
   <meta property="og:site_name" content="Aphylia">
+  <meta property="og:locale" content="${detectedLang === 'fr' ? 'fr_FR' : 'en_US'}">
   
   <!-- Twitter -->
-  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">
   <meta name="twitter:url" content="${escapeHtml(canonicalUrl)}">
   <meta name="twitter:title" content="${escapeHtml(title)}">
   <meta name="twitter:description" content="${escapeHtml(description)}">
-  <meta name="twitter:image" content="${escapeHtml(image)}">
+  ${image ? `<meta name="twitter:image" content="${escapeHtml(image)}">
+  <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}">` : ''}
   
   <!-- Theme -->
   <meta name="theme-color" content="#052e16">

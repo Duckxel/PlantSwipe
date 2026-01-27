@@ -1,17 +1,24 @@
 import React from "react"
 import { useParams } from "react-router-dom"
-import { ArrowLeft, RefreshCcw, Sparkles, UploadCloud } from "lucide-react"
+import { ArrowLeft, RefreshCcw, Sparkles, Trash2, UploadCloud } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
 import type { JSONContent } from "@tiptap/core"
 import { useAuth } from "@/context/AuthContext"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import type { BlogPost } from "@/types/blog"
-import { fetchBlogPost, saveBlogPost } from "@/lib/blogs"
+import { fetchBlogPost, saveBlogPost, deleteBlogPost } from "@/lib/blogs"
 import { uploadBlogImage } from "@/lib/blogMedia"
 import { buildAdminRequestHeaders } from "@/lib/adminAuth"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
@@ -81,6 +88,14 @@ export default function BlogComposerPage() {
   const [summaryError, setSummaryError] = React.useState<string | null>(null)
   const [coverUploading, setCoverUploading] = React.useState(false)
   const [coverUploadError, setCoverUploadError] = React.useState<string | null>(null)
+  const [showCoverImage, setShowCoverImage] = React.useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
+  // SEO metadata fields
+  const [seoTitle, setSeoTitle] = React.useState("")
+  const [seoDescription, setSeoDescription] = React.useState("")
+  const [tags, setTags] = React.useState<string[]>([])
+  const [tagsInput, setTagsInput] = React.useState("")
 
   const editorRef = React.useRef<BlogEditorHandle | null>(null)
   const coverInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -112,10 +127,16 @@ export default function BlogComposerPage() {
     setEditorContent({ html: "", doc: null, plainText: "" })
     setAssetFolder(createDraftFolder())
     setCoverUploadError(null)
+    setShowCoverImage(false)
     setSummaryError(null)
     setSummaryStatus("idle")
     summarySourceRef.current = ""
     latestHtmlRef.current = ""
+    // Reset SEO metadata
+    setSeoTitle("")
+    setSeoDescription("")
+    setTags([])
+    setTagsInput("")
     setEditorKey((key) => key + 1)
   }, [])
 
@@ -149,10 +170,16 @@ export default function BlogComposerPage() {
         setEditorContent({ html: post.bodyHtml, doc: (post.editorData as JSONContent | null) ?? null, plainText: "" })
         setAssetFolder(folderForPost(post, post.title))
         setCoverUploadError(null)
+        setShowCoverImage(post.showCoverImage ?? true)
         setSummaryError(null)
         setSummaryStatus("idle")
         summarySourceRef.current = post.bodyHtml
         latestHtmlRef.current = post.bodyHtml
+        // Load SEO metadata
+        setSeoTitle(post.seoTitle ?? "")
+        setSeoDescription(post.seoDescription ?? "")
+        setTags(post.tags ?? [])
+        setTagsInput((post.tags ?? []).join(", "))
         setEditorKey((key) => key + 1)
       } catch (err) {
         if (!cancelled) {
@@ -190,8 +217,10 @@ export default function BlogComposerPage() {
         const result = await uploadBlogImage(file, { folder: assetFolder })
         if (result?.url) {
           setCoverUrl(result.url)
+          setShowCoverImage(true) // Auto-check when image is uploaded
         } else if (result?.path) {
           setCoverUrl(result.path)
+          setShowCoverImage(true) // Auto-check when image is uploaded
         }
       } catch (err) {
         const message =
@@ -229,17 +258,17 @@ export default function BlogComposerPage() {
   }, [])
 
   const runSummary = React.useCallback(
-    async (html: string, options?: { force?: boolean }) => {
+    async (html: string, options?: { force?: boolean; generateFullMetadata?: boolean }) => {
       const source = html.trim()
       if (!source) {
         summarySourceRef.current = ""
         setAutoSummary("")
         setSummaryStatus("idle")
         setSummaryError(null)
-        return ""
+        return { summary: "" }
       }
       if (!options?.force && summarySourceRef.current === source) {
-        return autoSummary
+        return { summary: autoSummary, seoTitle, seoDescription, tags }
       }
       summaryAbortRef.current?.abort()
       const controller = new AbortController()
@@ -251,7 +280,11 @@ export default function BlogComposerPage() {
         const response = await fetch("/api/blog/summarize", {
           method: "POST",
           headers,
-          body: JSON.stringify({ html: source, title: formTitle || undefined }),
+          body: JSON.stringify({ 
+            html: source, 
+            title: formTitle || undefined,
+            generateMetadata: options?.generateFullMetadata ?? true, // Enable full metadata by default
+          }),
           credentials: "same-origin",
           signal: controller.signal,
         })
@@ -262,11 +295,29 @@ export default function BlogComposerPage() {
         const summaryText = (payload?.summary as string) || ""
         setAutoSummary(summaryText)
         summarySourceRef.current = source
+        // Update SEO metadata if full generation was requested
+        if (options?.generateFullMetadata !== false) {
+          if (payload?.seoTitle) {
+            setSeoTitle(payload.seoTitle)
+          }
+          if (payload?.seoDescription) {
+            setSeoDescription(payload.seoDescription)
+          }
+          if (Array.isArray(payload?.tags)) {
+            setTags(payload.tags)
+            setTagsInput(payload.tags.join(", "))
+          }
+        }
         setSummaryStatus("idle")
-        return summaryText
+        return { 
+          summary: summaryText, 
+          seoTitle: payload?.seoTitle ?? seoTitle,
+          seoDescription: payload?.seoDescription ?? seoDescription,
+          tags: payload?.tags ?? tags,
+        }
       } catch (err) {
         if ((err as Error).name === "AbortError") {
-          return ""
+          return { summary: "" }
         }
         const message =
           err instanceof Error
@@ -281,7 +332,7 @@ export default function BlogComposerPage() {
         }
       }
     },
-    [autoSummary, formTitle, t],
+    [autoSummary, seoTitle, seoDescription, tags, formTitle, t],
   )
 
   const handleSavePost = async () => {
@@ -312,16 +363,35 @@ export default function BlogComposerPage() {
       latestHtmlRef.current = html
       const trimmedHtml = html.trim()
       summaryAbortRef.current?.abort()
+      
+      // Use current values - preserve admin edits
       let summaryText = autoSummary
-      if (trimmedHtml) {
+      let finalSeoTitle = seoTitle
+      let finalSeoDescription = seoDescription
+      let finalTags = tags
+      
+      // Only auto-generate AI content if ALL metadata fields are empty
+      // This preserves any admin edits to individual fields
+      const hasNoMetadata = !autoSummary.trim() && !seoTitle.trim() && !seoDescription.trim() && tags.length === 0
+      
+      if (trimmedHtml && hasNoMetadata) {
         try {
-          summaryText = await runSummary(trimmedHtml, { force: true })
+          const result = await runSummary(trimmedHtml, { force: true, generateFullMetadata: true })
+          summaryText = result.summary || ""
+          finalSeoTitle = result.seoTitle || ""
+          finalSeoDescription = result.seoDescription || ""
+          finalTags = result.tags || []
           setAutoSummary(summaryText)
+          setSeoTitle(finalSeoTitle)
+          setSeoDescription(finalSeoDescription)
+          setTags(finalTags)
+          setTagsInput(finalTags.join(", "))
         } catch {
-          summaryText = autoSummary
+          // Keep empty values if generation fails
         }
       }
       const publishDateIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString()
+      const currentUserName = profile?.display_name || profile?.username || user?.email || "Aphylia Team"
       const { data, error: saveError } = await saveBlogPost({
         id: editingPost?.id,
         slug: editingPost?.slug,
@@ -332,8 +402,13 @@ export default function BlogComposerPage() {
         isPublished: publishMode === "scheduled",
         publishedAt: publishDateIso,
         authorId,
-        authorName: profile?.display_name || profile?.username || user?.email || "Aphylia Team",
+        authorName: isEditing ? editingPost?.authorName ?? currentUserName : currentUserName,
         editorData: doc ?? undefined,
+        showCoverImage,
+        updatedByName: isEditing ? currentUserName : undefined,
+        seoTitle: finalSeoTitle?.trim() || null,
+        seoDescription: finalSeoDescription?.trim() || null,
+        tags: finalTags,
       })
 
       if (saveError || !data) {
@@ -354,6 +429,25 @@ export default function BlogComposerPage() {
 
   const handleCancel = () => {
     navigate("/blog")
+  }
+
+  const handleDeletePost = async () => {
+    if (!editingPost?.id) return
+
+    setDeleting(true)
+    setFormError(null)
+    try {
+      await deleteBlogPost(editingPost.id)
+      setDeleteDialogOpen(false)
+      navigate("/blog", { replace: true })
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : t("blogPage.editor.deleteError", { defaultValue: "Failed to delete post." }),
+      )
+      setDeleting(false)
+    }
   }
 
   const summaryText =
@@ -472,7 +566,14 @@ export default function BlogComposerPage() {
                   id="blog-cover"
                   type="url"
                   value={coverUrl}
-                  onChange={(event) => setCoverUrl(event.target.value)}
+                  onChange={(event) => {
+                    const newUrl = event.target.value
+                    setCoverUrl(newUrl)
+                    // Auto-check show cover image when a URL is added
+                    if (newUrl.trim() && !coverUrl.trim()) {
+                      setShowCoverImage(true)
+                    }
+                  }}
                   placeholder="https://..."
                   className="flex-1"
                 />
@@ -494,8 +595,22 @@ export default function BlogComposerPage() {
                 </div>
               </div>
               {coverUploadError && <p className="text-xs text-red-500">{coverUploadError}</p>}
+              <label className="flex items-center gap-2 mt-3">
+                <input
+                  type="checkbox"
+                  checked={showCoverImage}
+                  onChange={(e) => setShowCoverImage(e.target.checked)}
+                  className="h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="text-sm text-stone-600 dark:text-stone-400">
+                  {t("blogPage.editor.showCoverAtTop", { defaultValue: "Display cover image at the top of the article" })}
+                </span>
+              </label>
               <p className="text-xs text-stone-500">
                 {t("blogPage.editor.coverHelper", { defaultValue: "Paste a public image URL or upload to the shared blog folder." })}
+              </p>
+              <p className="text-[11px] text-stone-400">
+                {t("blogPage.editor.coverHelperFallback", { defaultValue: "If no cover image is set, the first image in the blog content will be used for social sharing." })}
               </p>
               <p className="text-[11px] text-stone-400">
                 {t("blogPage.editor.assetFolderHelper", { defaultValue: "Uploads stored in" })} <code className="font-mono">{assetFolder}</code>
@@ -538,6 +653,123 @@ export default function BlogComposerPage() {
               {summaryError && <p className="text-xs text-red-500">{summaryError}</p>}
             </div>
 
+            {/* SEO Metadata Section */}
+            <div className="space-y-4 rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-emerald-600" />
+                    {t("blogPage.editor.seoMetadataLabel", { defaultValue: "SEO & Discoverability" })}
+                  </p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400">
+                    {t("blogPage.editor.seoMetadataHelper", { defaultValue: "Edit fields manually or generate with AI. Your edits are preserved when saving." })}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-2xl shrink-0"
+                  onClick={() => runSummary(latestHtmlRef.current || editorContent.html, { force: true, generateFullMetadata: true }).catch(() => {})}
+                  disabled={summaryStatus === "generating"}
+                >
+                  {summaryStatus === "generating" ? (
+                    <>
+                      <RefreshCcw className="mr-2 h-3 w-3 animate-spin" />
+                      {t("blogPage.editor.generating", { defaultValue: "Generating…" })}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-3 w-3" />
+                      {t("blogPage.editor.generateWithAI", { defaultValue: "Generate with AI" })}
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* SEO Title */}
+              <div className="space-y-1">
+                <Label htmlFor="seo-title" className="text-xs">
+                  {t("blogPage.editor.seoTitleLabel", { defaultValue: "SEO Title" })}
+                  <span className="ml-2 text-stone-400">({seoTitle.length}/60)</span>
+                </Label>
+                <Input
+                  id="seo-title"
+                  value={seoTitle}
+                  onChange={(e) => setSeoTitle(e.target.value.slice(0, 60))}
+                  placeholder={t("blogPage.editor.seoTitlePlaceholder", { defaultValue: "Optimized title for search engines..." })}
+                  className="text-sm"
+                  maxLength={60}
+                />
+              </div>
+
+              {/* SEO Description */}
+              <div className="space-y-1">
+                <Label htmlFor="seo-description" className="text-xs">
+                  {t("blogPage.editor.seoDescriptionLabel", { defaultValue: "SEO Description" })}
+                  <span className="ml-2 text-stone-400">({seoDescription.length}/160)</span>
+                </Label>
+                <textarea
+                  id="seo-description"
+                  value={seoDescription}
+                  onChange={(e) => setSeoDescription(e.target.value.slice(0, 160))}
+                  placeholder={t("blogPage.editor.seoDescriptionPlaceholder", { defaultValue: "Compelling description for search results..." })}
+                  className="w-full min-h-[80px] px-3 py-2 text-sm rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  maxLength={160}
+                />
+              </div>
+
+              {/* Tags */}
+              <div className="space-y-2">
+                <Label htmlFor="tags-input" className="text-xs">
+                  {t("blogPage.editor.tagsLabel", { defaultValue: "Tags" })}
+                  <span className="ml-2 text-stone-400">({tags.length}/7)</span>
+                </Label>
+                <Input
+                  id="tags-input"
+                  value={tagsInput}
+                  onChange={(e) => {
+                    setTagsInput(e.target.value)
+                    // Parse tags from comma-separated input
+                    const newTags = e.target.value
+                      .split(",")
+                      .map((t) => t.trim().toLowerCase())
+                      .filter((t) => t.length > 0)
+                      .slice(0, 7)
+                    setTags(newTags)
+                  }}
+                  placeholder={t("blogPage.editor.tagsPlaceholder", { defaultValue: "gardening, plants, tips, care..." })}
+                  className="text-sm"
+                />
+                <p className="text-[11px] text-stone-400">
+                  {t("blogPage.editor.tagsHelper", { defaultValue: "Add specific tags for this article (e.g., plant names, techniques). Separate with commas. Max 7." })}
+                </p>
+                {tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {tags.map((tag, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newTags = tags.filter((_, i) => i !== idx)
+                            setTags(newTags)
+                            setTagsInput(newTags.join(", "))
+                          }}
+                          className="hover:text-red-600 dark:hover:text-red-400"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-3 text-xs text-stone-500 dark:text-stone-400">
             {t("blogPage.editor.canvasHelper", {
               defaultValue: "Use the toolbar or slash menu to add blocks, quotes, dividers, and embeds. Everything is auto-sanitized.",
@@ -567,8 +799,81 @@ export default function BlogComposerPage() {
                   : t("blogPage.editor.save", { defaultValue: "Publish post" })}
             </Button>
           </div>
+
+          {/* Delete Section - Only shown when editing */}
+          {isEditing && editingPost && (
+            <div className="mt-12 pt-8 border-t border-red-200 dark:border-red-900/40">
+              <div className="rounded-2xl border border-red-200 bg-red-50/50 dark:border-red-900/40 dark:bg-red-900/10 p-6 space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold text-red-700 dark:text-red-400">
+                    {t("blogPage.editor.dangerZone", { defaultValue: "Danger zone" })}
+                  </h3>
+                  <p className="text-sm text-red-600/80 dark:text-red-300/80">
+                    {t("blogPage.editor.deleteWarning", {
+                      defaultValue: "Deleting this blog post is permanent and cannot be undone.",
+                    })}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="rounded-2xl"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  disabled={saving || deleting}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {t("blogPage.editor.deletePost", { defaultValue: "Delete this post" })}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => !deleting && setDeleteDialogOpen(open)}>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <Trash2 className="h-5 w-5" />
+              {t("blogPage.editor.deleteDialogTitle", { defaultValue: "Delete blog post?" })}
+            </DialogTitle>
+            <DialogDescription>
+              {t("blogPage.editor.deleteDialogDescription", {
+                defaultValue:
+                  "This will permanently delete the blog post. This action cannot be undone.",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 p-3 rounded-xl bg-stone-100 dark:bg-stone-800/50">
+            <p className="text-sm font-medium text-stone-700 dark:text-stone-200 truncate">
+              {editingPost?.title || t("blogPage.editor.untitled", { defaultValue: "Untitled post" })}
+            </p>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 rounded-2xl"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              {t("blogPage.editor.cancel", { defaultValue: "Cancel" })}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="flex-1 rounded-2xl"
+              onClick={handleDeletePost}
+              disabled={deleting}
+            >
+              {deleting
+                ? t("blogPage.editor.deleting", { defaultValue: "Deleting…" })
+                : t("blogPage.editor.confirmDelete", { defaultValue: "Yes, delete" })}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

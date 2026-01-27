@@ -159,12 +159,16 @@ do $$ declare
     'messages',
     'message_reactions',
     -- Landing Page CMS
+    'landing_page_settings',
     'landing_hero_cards',
     'landing_stats',
-    'landing_features',
-    'landing_showcase_cards',
+    'landing_stats_translations',
     'landing_testimonials',
     'landing_faq',
+    'landing_faq_translations',
+    'landing_demo_features',
+    'landing_demo_feature_translations',
+    'landing_showcase_config',
     -- Plant Scanning
     'plant_scans',
     -- Bug Catcher System
@@ -2044,7 +2048,8 @@ create table if not exists public.garden_plants (
   plants_on_hand integer not null default 0,
   override_water_freq_unit text check (override_water_freq_unit in ('day','week','month','year')),
   override_water_freq_value integer,
-  sort_index integer
+  sort_index integer,
+  created_at timestamptz not null default now()
 );
 
 -- Ensure new columns exist on existing deployments
@@ -2062,6 +2067,8 @@ alter table if exists public.garden_plants
   add column if not exists notes text;
 alter table if exists public.garden_plants
   add column if not exists last_health_update timestamptz;
+alter table if exists public.garden_plants
+  add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.garden_plant_events (
   id uuid primary key default gen_random_uuid(),
@@ -3805,15 +3812,36 @@ returns void
 language plpgsql
 set search_path = public
 as $$
-declare g record; anchor date := (_day - interval '1 day')::date; begin
+declare 
+  g record; 
+  anchor date := (_day - interval '1 day')::date;
+  yesterday date := (_day - interval '1 day')::date;
+begin
+  -- CRITICAL: First, ensure task occurrences exist for YESTERDAY (for accurate streak calculation)
+  -- This catches gardens where users didn't log in yesterday - their tasks still need to be created
+  -- so we can accurately determine if they missed any tasks and should lose their streak
+  perform public.ensure_all_gardens_tasks_occurrences_for_day(yesterday);
+  
+  -- Also ensure task occurrences exist for TODAY (so streak calculation tomorrow will be accurate)
+  perform public.ensure_all_gardens_tasks_occurrences_for_day(_day);
+  
+  -- Now process each garden: update streak based on yesterday, compute today's task status
   for g in select id from public.gardens loop
+    -- Recompute yesterday's success based on now-existing occurrences
+    perform public.compute_garden_task_for_day(g.id, yesterday);
+    -- Update streak using yesterday as anchor (checks consecutive successful days ending yesterday)
     perform public.update_garden_streak(g.id, anchor);
+    -- Compute today's task status (will show 0/X until user completes tasks)
     perform public.compute_garden_task_for_day(g.id, _day);
   end loop;
 end; $$;
 
 -- ========== Scheduling (optional) ==========
--- Schedule daily computation at 00:05 UTC to update streaks and create daily tasks
+-- Schedule daily computation at 00:05 UTC to:
+-- 1. Create task occurrences for all gardens (for yesterday AND today)
+-- 2. Recalculate yesterday's success based on actual task completion
+-- 3. Update streaks (users who didn't complete tasks will lose their streak)
+-- 4. Initialize today's task records
 do $$ begin
   begin
     perform cron.schedule(
@@ -4362,9 +4390,48 @@ create table if not exists public.blog_posts (
   published_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  show_cover_image boolean not null default false,
+  updated_by_name text,
+  seo_title text,
+  seo_description text,
+  tags text[] default '{}',
   unique(slug)
 );
+
+-- Add new columns if they don't exist (for existing deployments)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'blog_posts' and column_name = 'show_cover_image') then
+    alter table public.blog_posts add column show_cover_image boolean not null default false;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'blog_posts' and column_name = 'updated_by_name') then
+    alter table public.blog_posts add column updated_by_name text;
+  end if;
+end $$;
+
+-- Add SEO metadata columns if they don't exist (for existing deployments)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'blog_posts' and column_name = 'seo_title') then
+    alter table public.blog_posts add column seo_title text;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'blog_posts' and column_name = 'seo_description') then
+    alter table public.blog_posts add column seo_description text;
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'blog_posts' and column_name = 'tags') then
+    alter table public.blog_posts add column tags text[] default '{}';
+  end if;
+end $$;
+
 create index if not exists blog_posts_published_idx on public.blog_posts (is_published desc, published_at desc nulls last, created_at desc);
+create index if not exists blog_posts_tags_idx on public.blog_posts using gin (tags);
 create index if not exists blog_posts_author_idx on public.blog_posts (author_id, created_at desc);
 
 create or replace function public.update_blog_posts_updated_at()
@@ -6972,7 +7039,9 @@ BEGIN
 
     -- Repeat pattern
     ELSIF _task.schedule_kind = 'repeat_pattern' THEN
-       _curr := _start_date;
+       -- Start from the later of: window start OR task creation date
+       -- This prevents creating occurrences for dates before the task existed
+       _curr := GREATEST(_start_date, (_task.created_at AT TIME ZONE 'UTC')::date);
        WHILE _curr <= _end_date LOOP
           _match := false;
           _weekday := extract(dow from _curr); -- 0-6 (Sun-Sat)
@@ -7025,6 +7094,43 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.ensure_gardens_tasks_occurrences(uuid[], timestamptz, timestamptz) TO authenticated;
 
+-- ========== Ensure task occurrences for ALL gardens (used by cron job) ==========
+-- This function creates task occurrences for all gardens for a given day.
+-- It must run BEFORE streak calculation to ensure accurate task tracking.
+-- Without this, users who don't log in don't have their task occurrences created,
+-- and the system incorrectly thinks they have no tasks, allowing streaks to continue.
+CREATE OR REPLACE FUNCTION public.ensure_all_gardens_tasks_occurrences_for_day(_day date)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _all_garden_ids uuid[];
+  _start_iso timestamptz;
+  _end_iso timestamptz;
+BEGIN
+  -- Get all garden IDs that have at least one task defined
+  SELECT array_agg(DISTINCT t.garden_id)
+  INTO _all_garden_ids
+  FROM garden_plant_tasks t;
+  
+  -- If no gardens have tasks, nothing to do
+  IF _all_garden_ids IS NULL OR array_length(_all_garden_ids, 1) IS NULL THEN
+    RETURN;
+  END IF;
+  
+  -- Define the day window
+  _start_iso := (_day::text || 'T00:00:00.000Z')::timestamptz;
+  _end_iso := (_day::text || 'T23:59:59.999Z')::timestamptz;
+  
+  -- Create task occurrences for all gardens using the existing batch function
+  PERFORM public.ensure_gardens_tasks_occurrences(_all_garden_ids, _start_iso, _end_iso);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ensure_all_gardens_tasks_occurrences_for_day(date) TO authenticated;
+
 -- Optimization: Batch fetch member counts for gardens
 CREATE OR REPLACE FUNCTION public.get_garden_member_counts(_garden_ids uuid[])
 RETURNS TABLE (garden_id uuid, count integer)
@@ -7040,6 +7146,633 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_garden_member_counts(uuid[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_garden_member_counts(uuid[]) TO anon;
+
+-- ============================================================================
+-- TASK VALIDATION IMPROVEMENTS - Best Practices Implementation
+-- ============================================================================
+
+-- ========== 1. DATA VALIDATION CONSTRAINTS ==========
+
+-- Add constraint: weekly_days must be valid day numbers (0=Sunday to 6=Saturday)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE table_name = 'garden_plant_tasks' 
+    AND constraint_name = 'valid_weekly_days'
+  ) THEN
+    ALTER TABLE public.garden_plant_tasks
+      ADD CONSTRAINT valid_weekly_days
+      CHECK (
+        weekly_days IS NULL 
+        OR (
+          array_length(weekly_days, 1) > 0 
+          AND array_length(weekly_days, 1) <= 7
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest(weekly_days) AS d WHERE d < 0 OR d > 6
+          )
+        )
+      );
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Add constraint: monthly_days must be valid day numbers (1-31)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE table_name = 'garden_plant_tasks' 
+    AND constraint_name = 'valid_monthly_days'
+  ) THEN
+    ALTER TABLE public.garden_plant_tasks
+      ADD CONSTRAINT valid_monthly_days
+      CHECK (
+        monthly_days IS NULL 
+        OR (
+          array_length(monthly_days, 1) > 0 
+          AND array_length(monthly_days, 1) <= 31
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest(monthly_days) AS d WHERE d < 1 OR d > 31
+          )
+        )
+      );
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Add constraint: interval_amount must be positive when interval_unit is set
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE table_name = 'garden_plant_tasks' 
+    AND constraint_name = 'valid_interval'
+  ) THEN
+    ALTER TABLE public.garden_plant_tasks
+      ADD CONSTRAINT valid_interval
+      CHECK (
+        (interval_unit IS NULL AND interval_amount IS NULL)
+        OR (interval_unit IS NOT NULL AND interval_amount IS NOT NULL AND interval_amount > 0)
+      );
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Add constraint: completed_count cannot exceed required_count on occurrences
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE table_name = 'garden_plant_task_occurrences' 
+    AND constraint_name = 'completed_within_required'
+  ) THEN
+    ALTER TABLE public.garden_plant_task_occurrences
+      ADD CONSTRAINT completed_within_required
+      CHECK (completed_count <= required_count);
+  END IF;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- ========== 2. VALIDATION TRIGGER FOR SCHEDULE CONSISTENCY ==========
+
+-- Function to validate task schedule data consistency
+CREATE OR REPLACE FUNCTION public.validate_task_schedule()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  -- Validate one_time_date schedule
+  IF NEW.schedule_kind = 'one_time_date' THEN
+    IF NEW.due_at IS NULL THEN
+      RAISE EXCEPTION 'one_time_date schedule requires due_at to be set';
+    END IF;
+  
+  -- Validate one_time_duration schedule
+  ELSIF NEW.schedule_kind = 'one_time_duration' THEN
+    IF NEW.interval_amount IS NULL OR NEW.interval_unit IS NULL THEN
+      RAISE EXCEPTION 'one_time_duration schedule requires interval_amount and interval_unit';
+    END IF;
+    IF NEW.interval_amount <= 0 THEN
+      RAISE EXCEPTION 'interval_amount must be positive';
+    END IF;
+  
+  -- Validate repeat_duration schedule
+  ELSIF NEW.schedule_kind = 'repeat_duration' THEN
+    IF NEW.interval_amount IS NULL OR NEW.interval_unit IS NULL THEN
+      RAISE EXCEPTION 'repeat_duration schedule requires interval_amount and interval_unit';
+    END IF;
+    IF NEW.interval_amount <= 0 THEN
+      RAISE EXCEPTION 'interval_amount must be positive';
+    END IF;
+  
+  -- Validate repeat_pattern schedule
+  ELSIF NEW.schedule_kind = 'repeat_pattern' THEN
+    IF NEW.period IS NULL THEN
+      RAISE EXCEPTION 'repeat_pattern schedule requires period to be set';
+    END IF;
+    
+    -- Validate period-specific requirements
+    IF NEW.period = 'week' AND (NEW.weekly_days IS NULL OR array_length(NEW.weekly_days, 1) IS NULL) THEN
+      RAISE EXCEPTION 'weekly repeat_pattern requires at least one day in weekly_days';
+    END IF;
+    
+    IF NEW.period = 'month' AND (
+      (NEW.monthly_days IS NULL OR array_length(NEW.monthly_days, 1) IS NULL) 
+      AND (NEW.monthly_nth_weekdays IS NULL OR array_length(NEW.monthly_nth_weekdays, 1) IS NULL)
+    ) THEN
+      RAISE EXCEPTION 'monthly repeat_pattern requires monthly_days or monthly_nth_weekdays';
+    END IF;
+    
+    IF NEW.period = 'year' AND (NEW.yearly_days IS NULL OR array_length(NEW.yearly_days, 1) IS NULL) THEN
+      RAISE EXCEPTION 'yearly repeat_pattern requires at least one day in yearly_days';
+    END IF;
+  END IF;
+  
+  -- Validate custom task has a name
+  IF NEW.type = 'custom' AND (NEW.custom_name IS NULL OR trim(NEW.custom_name) = '') THEN
+    RAISE EXCEPTION 'custom task type requires a custom_name';
+  END IF;
+  
+  -- Ensure garden_plant belongs to the garden
+  IF NOT EXISTS (
+    SELECT 1 FROM public.garden_plants gp 
+    WHERE gp.id = NEW.garden_plant_id AND gp.garden_id = NEW.garden_id
+  ) THEN
+    RAISE EXCEPTION 'garden_plant_id must belong to the specified garden_id';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- Create trigger for task validation
+DROP TRIGGER IF EXISTS validate_task_schedule_trigger ON public.garden_plant_tasks;
+CREATE TRIGGER validate_task_schedule_trigger
+  BEFORE INSERT OR UPDATE ON public.garden_plant_tasks
+  FOR EACH ROW
+  EXECUTE FUNCTION public.validate_task_schedule();
+
+-- ========== 3. OCCURRENCE VALIDATION TRIGGER ==========
+
+-- Function to validate and normalize occurrence data
+CREATE OR REPLACE FUNCTION public.validate_task_occurrence()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  -- Ensure required_count is positive
+  IF NEW.required_count IS NULL OR NEW.required_count < 1 THEN
+    NEW.required_count := 1;
+  END IF;
+  
+  -- Ensure completed_count is non-negative
+  IF NEW.completed_count IS NULL OR NEW.completed_count < 0 THEN
+    NEW.completed_count := 0;
+  END IF;
+  
+  -- Cap completed_count at required_count
+  IF NEW.completed_count > NEW.required_count THEN
+    NEW.completed_count := NEW.required_count;
+  END IF;
+  
+  -- Set completed_at when task is fully completed
+  IF NEW.completed_count >= NEW.required_count AND NEW.completed_at IS NULL THEN
+    NEW.completed_at := now();
+  END IF;
+  
+  -- Clear completed_at if task is no longer complete (edge case: required_count increased)
+  IF NEW.completed_count < NEW.required_count AND NEW.completed_at IS NOT NULL THEN
+    NEW.completed_at := NULL;
+  END IF;
+  
+  -- Validate garden_plant_id matches the task's garden_plant_id
+  IF TG_OP = 'INSERT' THEN
+    DECLARE
+      _task_garden_plant_id uuid;
+    BEGIN
+      SELECT garden_plant_id INTO _task_garden_plant_id
+      FROM public.garden_plant_tasks WHERE id = NEW.task_id;
+      
+      IF _task_garden_plant_id IS NOT NULL AND _task_garden_plant_id != NEW.garden_plant_id THEN
+        -- Auto-correct to match task's garden_plant_id
+        NEW.garden_plant_id := _task_garden_plant_id;
+      END IF;
+    END;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- Create trigger for occurrence validation
+DROP TRIGGER IF EXISTS validate_task_occurrence_trigger ON public.garden_plant_task_occurrences;
+CREATE TRIGGER validate_task_occurrence_trigger
+  BEFORE INSERT OR UPDATE ON public.garden_plant_task_occurrences
+  FOR EACH ROW
+  EXECUTE FUNCTION public.validate_task_occurrence();
+
+-- ========== 4. PERFORMANCE INDEXES ==========
+
+-- Composite index for finding tasks by garden and type
+CREATE INDEX IF NOT EXISTS idx_tasks_garden_type 
+  ON public.garden_plant_tasks (garden_id, type);
+
+-- Composite index for finding tasks by plant
+CREATE INDEX IF NOT EXISTS idx_tasks_garden_plant 
+  ON public.garden_plant_tasks (garden_plant_id, schedule_kind);
+
+-- Index for occurrence lookups by task and date range
+CREATE INDEX IF NOT EXISTS idx_occurrences_task_due 
+  ON public.garden_plant_task_occurrences (task_id, due_at);
+
+-- Partial index for incomplete occurrences (most common query)
+CREATE INDEX IF NOT EXISTS idx_occurrences_incomplete 
+  ON public.garden_plant_task_occurrences (task_id, due_at) 
+  WHERE completed_count < required_count;
+
+-- Index for user completions lookup
+CREATE INDEX IF NOT EXISTS idx_user_completions_user_time 
+  ON public.garden_task_user_completions (user_id, occurred_at DESC);
+
+-- ========== 5. CLEANUP FUNCTIONS ==========
+
+-- Function to clean up old task occurrences (older than retention period)
+CREATE OR REPLACE FUNCTION public.cleanup_old_task_occurrences(_retention_days integer DEFAULT 90)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _deleted_count integer;
+  _cutoff_date timestamptz;
+BEGIN
+  _cutoff_date := (CURRENT_DATE - (_retention_days || ' days')::interval)::timestamptz;
+  
+  -- Delete old occurrences (cascades to user completions)
+  WITH deleted AS (
+    DELETE FROM public.garden_plant_task_occurrences
+    WHERE due_at < _cutoff_date
+    RETURNING id
+  )
+  SELECT count(*) INTO _deleted_count FROM deleted;
+  
+  RETURN _deleted_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.cleanup_old_task_occurrences(integer) TO authenticated;
+
+-- Function to remove orphaned occurrences (task was deleted but cascade failed)
+CREATE OR REPLACE FUNCTION public.cleanup_orphaned_occurrences()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _deleted_count integer;
+BEGIN
+  WITH deleted AS (
+    DELETE FROM public.garden_plant_task_occurrences o
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.garden_plant_tasks t WHERE t.id = o.task_id
+    )
+    RETURNING o.id
+  )
+  SELECT count(*) INTO _deleted_count FROM deleted;
+  
+  RETURN _deleted_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.cleanup_orphaned_occurrences() TO authenticated;
+
+-- Function to fix inconsistent occurrence data
+CREATE OR REPLACE FUNCTION public.fix_inconsistent_occurrences()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _fixed_count integer := 0;
+BEGIN
+  -- Fix occurrences where completed_count > required_count
+  UPDATE public.garden_plant_task_occurrences
+  SET completed_count = required_count
+  WHERE completed_count > required_count;
+  GET DIAGNOSTICS _fixed_count = ROW_COUNT;
+  
+  -- Fix occurrences marked complete but completed_count < required_count
+  UPDATE public.garden_plant_task_occurrences
+  SET completed_at = NULL
+  WHERE completed_at IS NOT NULL AND completed_count < required_count;
+  
+  -- Fix occurrences not marked complete but completed_count >= required_count
+  UPDATE public.garden_plant_task_occurrences
+  SET completed_at = now()
+  WHERE completed_at IS NULL AND completed_count >= required_count;
+  
+  RETURN _fixed_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.fix_inconsistent_occurrences() TO authenticated;
+
+-- ========== 6. IMPROVED STREAK CALCULATION ==========
+
+-- Enhanced streak calculation that handles edge cases
+CREATE OR REPLACE FUNCTION public.compute_garden_streak_v2(_garden_id uuid, _anchor_day date)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _d date := _anchor_day;
+  _streak integer := 0;
+  _task_record record;
+  _garden_created_at date;
+  _has_tasks boolean;
+BEGIN
+  -- Get garden creation date (don't count days before garden existed)
+  SELECT (created_at AT TIME ZONE 'UTC')::date INTO _garden_created_at
+  FROM public.gardens WHERE id = _garden_id;
+  
+  IF _garden_created_at IS NULL THEN
+    RETURN 0;
+  END IF;
+  
+  -- Check if garden has any tasks at all
+  SELECT EXISTS(
+    SELECT 1 FROM public.garden_plant_tasks WHERE garden_id = _garden_id
+  ) INTO _has_tasks;
+  
+  -- No tasks = no streak (can't maintain a streak without tasks)
+  IF NOT _has_tasks THEN
+    RETURN 0;
+  END IF;
+  
+  -- Calculate streak going backwards from anchor day
+  LOOP
+    -- Don't count days before garden was created
+    IF _d < _garden_created_at THEN
+      EXIT;
+    END IF;
+    
+    -- Check garden_tasks table for this day's success
+    SELECT day, success INTO _task_record
+    FROM public.garden_tasks
+    WHERE garden_id = _garden_id 
+      AND day = _d 
+      AND task_type = 'watering'
+    LIMIT 1;
+    
+    -- If no record exists for this day, check if tasks were due
+    IF _task_record IS NULL THEN
+      -- Check if any tasks existed and had occurrences due on this day
+      DECLARE
+        _had_tasks_due boolean;
+        _all_completed boolean;
+      BEGIN
+        SELECT 
+          EXISTS(
+            SELECT 1 FROM public.garden_plant_task_occurrences o
+            JOIN public.garden_plant_tasks t ON t.id = o.task_id
+            WHERE t.garden_id = _garden_id
+              AND (o.due_at AT TIME ZONE 'UTC')::date = _d
+          ),
+          NOT EXISTS(
+            SELECT 1 FROM public.garden_plant_task_occurrences o
+            JOIN public.garden_plant_tasks t ON t.id = o.task_id
+            WHERE t.garden_id = _garden_id
+              AND (o.due_at AT TIME ZONE 'UTC')::date = _d
+              AND o.completed_count < o.required_count
+          )
+        INTO _had_tasks_due, _all_completed;
+        
+        IF _had_tasks_due THEN
+          IF _all_completed THEN
+            _streak := _streak + 1;
+          ELSE
+            -- Had tasks but didn't complete them - streak broken
+            EXIT;
+          END IF;
+        ELSE
+          -- No tasks due this day - check if we should continue
+          -- Only continue if the garden had tasks defined before this date
+          IF EXISTS(
+            SELECT 1 FROM public.garden_plant_tasks 
+            WHERE garden_id = _garden_id 
+              AND (created_at AT TIME ZONE 'UTC')::date <= _d
+          ) THEN
+            -- Garden had tasks but none were due - day is a "pass"
+            _streak := _streak + 1;
+          ELSE
+            -- No tasks defined yet - don't count this day
+            EXIT;
+          END IF;
+        END IF;
+      END;
+    ELSIF NOT COALESCE(_task_record.success, false) THEN
+      -- Day failed - streak broken
+      EXIT;
+    ELSE
+      -- Day successful - increment streak
+      _streak := _streak + 1;
+    END IF;
+    
+    -- Move to previous day
+    _d := (_d - interval '1 day')::date;
+    
+    -- Safety limit to prevent infinite loops
+    IF _streak > 3650 THEN -- Max 10 years
+      EXIT;
+    END IF;
+  END LOOP;
+  
+  RETURN _streak;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.compute_garden_streak_v2(uuid, date) TO authenticated;
+
+-- ========== 7. SCHEDULED CLEANUP CRON JOB ==========
+
+-- Schedule weekly cleanup of old task data (Sundays at 3:00 UTC)
+DO $$ BEGIN
+  BEGIN
+    PERFORM cron.schedule(
+      'cleanup_old_task_data',
+      '0 3 * * 0',
+      $_cron$
+        SELECT public.cleanup_old_task_occurrences(90);
+        SELECT public.cleanup_orphaned_occurrences();
+        SELECT public.fix_inconsistent_occurrences();
+      $_cron$
+    );
+  EXCEPTION
+    WHEN others THEN NULL;
+  END;
+END $$;
+
+-- ========== 8. HELPER FUNCTION FOR TASK STATUS SUMMARY ==========
+
+-- Get comprehensive task status for a garden on a specific day
+CREATE OR REPLACE FUNCTION public.get_garden_task_status(_garden_id uuid, _day date DEFAULT CURRENT_DATE)
+RETURNS TABLE (
+  total_tasks_due integer,
+  total_completed integer,
+  total_remaining integer,
+  is_all_done boolean,
+  task_types_breakdown jsonb,
+  completion_percentage numeric
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _start_iso timestamptz := (_day::text || 'T00:00:00.000Z')::timestamptz;
+  _end_iso timestamptz := (_day::text || 'T23:59:59.999Z')::timestamptz;
+BEGIN
+  RETURN QUERY
+  SELECT
+    COALESCE(SUM(o.required_count), 0)::integer AS total_tasks_due,
+    COALESCE(SUM(LEAST(o.completed_count, o.required_count)), 0)::integer AS total_completed,
+    COALESCE(SUM(GREATEST(0, o.required_count - o.completed_count)), 0)::integer AS total_remaining,
+    (COALESCE(SUM(o.required_count), 0) = 0 OR 
+     COALESCE(SUM(LEAST(o.completed_count, o.required_count)), 0) >= COALESCE(SUM(o.required_count), 0)) AS is_all_done,
+    jsonb_object_agg(
+      COALESCE(t.type, 'unknown'),
+      jsonb_build_object(
+        'due', COALESCE(SUM(o.required_count) FILTER (WHERE t.type IS NOT NULL), 0),
+        'completed', COALESCE(SUM(LEAST(o.completed_count, o.required_count)) FILTER (WHERE t.type IS NOT NULL), 0)
+      )
+    ) AS task_types_breakdown,
+    CASE 
+      WHEN COALESCE(SUM(o.required_count), 0) = 0 THEN 100.0
+      ELSE ROUND(
+        (COALESCE(SUM(LEAST(o.completed_count, o.required_count)), 0)::numeric / 
+         COALESCE(SUM(o.required_count), 1)::numeric) * 100, 
+        1
+      )
+    END AS completion_percentage
+  FROM public.garden_plant_task_occurrences o
+  JOIN public.garden_plant_tasks t ON t.id = o.task_id
+  WHERE t.garden_id = _garden_id
+    AND o.due_at >= _start_iso
+    AND o.due_at <= _end_iso;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_garden_task_status(uuid, date) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_garden_task_status(uuid, date) TO anon;
+
+-- ========== 9. AUDIT LOGGING FOR TASK CHANGES ==========
+
+-- Create audit log table for task changes (optional - enable if debugging needed)
+CREATE TABLE IF NOT EXISTS public.garden_task_audit_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  operation text NOT NULL CHECK (operation IN ('INSERT', 'UPDATE', 'DELETE')),
+  table_name text NOT NULL,
+  record_id uuid NOT NULL,
+  old_data jsonb,
+  new_data jsonb,
+  changed_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  changed_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Index for efficient audit log queries
+CREATE INDEX IF NOT EXISTS idx_task_audit_record ON public.garden_task_audit_log (table_name, record_id, changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_audit_time ON public.garden_task_audit_log (changed_at DESC);
+
+-- Enable RLS on audit log
+ALTER TABLE public.garden_task_audit_log ENABLE ROW LEVEL SECURITY;
+
+-- Only admins can view audit logs
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_task_audit_log' AND policyname='audit_admin_only') THEN
+    CREATE POLICY audit_admin_only ON public.garden_task_audit_log FOR SELECT TO authenticated
+      USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin = true));
+  END IF;
+END $$;
+
+-- Audit trigger function
+CREATE OR REPLACE FUNCTION public.audit_task_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO public.garden_task_audit_log (operation, table_name, record_id, old_data, changed_by)
+    VALUES (TG_OP, TG_TABLE_NAME, OLD.id, to_jsonb(OLD), auth.uid());
+    RETURN OLD;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO public.garden_task_audit_log (operation, table_name, record_id, old_data, new_data, changed_by)
+    VALUES (TG_OP, TG_TABLE_NAME, NEW.id, to_jsonb(OLD), to_jsonb(NEW), auth.uid());
+    RETURN NEW;
+  ELSIF TG_OP = 'INSERT' THEN
+    INSERT INTO public.garden_task_audit_log (operation, table_name, record_id, new_data, changed_by)
+    VALUES (TG_OP, TG_TABLE_NAME, NEW.id, to_jsonb(NEW), auth.uid());
+    RETURN NEW;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+-- Create audit triggers (disabled by default - enable for debugging)
+-- DROP TRIGGER IF EXISTS audit_tasks_trigger ON public.garden_plant_tasks;
+-- CREATE TRIGGER audit_tasks_trigger
+--   AFTER INSERT OR UPDATE OR DELETE ON public.garden_plant_tasks
+--   FOR EACH ROW EXECUTE FUNCTION public.audit_task_changes();
+
+-- DROP TRIGGER IF EXISTS audit_occurrences_trigger ON public.garden_plant_task_occurrences;
+-- CREATE TRIGGER audit_occurrences_trigger
+--   AFTER INSERT OR UPDATE OR DELETE ON public.garden_plant_task_occurrences
+--   FOR EACH ROW EXECUTE FUNCTION public.audit_task_changes();
+
+-- ========== 10. STATS FUNCTION FOR DEBUGGING ==========
+
+-- Get task system health statistics
+CREATE OR REPLACE FUNCTION public.get_task_system_stats()
+RETURNS TABLE (
+  stat_name text,
+  stat_value bigint
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT 'total_gardens' AS stat_name, count(*)::bigint FROM public.gardens
+  UNION ALL
+  SELECT 'gardens_with_tasks', count(DISTINCT garden_id)::bigint FROM public.garden_plant_tasks
+  UNION ALL
+  SELECT 'total_tasks', count(*)::bigint FROM public.garden_plant_tasks
+  UNION ALL
+  SELECT 'total_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences
+  UNION ALL
+  SELECT 'completed_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences WHERE completed_count >= required_count
+  UNION ALL
+  SELECT 'pending_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences WHERE completed_count < required_count
+  UNION ALL
+  SELECT 'occurrences_today', count(*)::bigint FROM public.garden_plant_task_occurrences 
+    WHERE (due_at AT TIME ZONE 'UTC')::date = CURRENT_DATE
+  UNION ALL
+  SELECT 'orphaned_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences o
+    WHERE NOT EXISTS (SELECT 1 FROM public.garden_plant_tasks t WHERE t.id = o.task_id)
+  UNION ALL
+  SELECT 'inconsistent_occurrences', count(*)::bigint FROM public.garden_plant_task_occurrences
+    WHERE completed_count > required_count
+  ORDER BY stat_name;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_task_system_stats() TO authenticated;
+
 -- Create bookmarks table
 create table if not exists public.bookmarks (
   id uuid not null default gen_random_uuid(),
@@ -8275,6 +9008,78 @@ GRANT EXECUTE ON FUNCTION public.get_user_conversations(UUID) TO authenticated;
 -- ========== Landing Page CMS Tables ==========
 -- These tables store configurable content for the landing page
 
+-- Landing Page Settings: Global settings for the landing page (single row)
+create table if not exists public.landing_page_settings (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  
+  -- Hero Section Settings
+  hero_badge_text text default 'Your Personal Plant Care Expert',
+  hero_title text default 'Grow Your',
+  hero_title_highlight text default 'Green Paradise',
+  hero_title_end text default 'with Confidence',
+  hero_description text default 'Discover, track, and nurture your plants with personalized care reminders, smart identification, and expert tips – all in one beautiful app.',
+  hero_cta_primary_text text default 'Download App',
+  hero_cta_primary_link text default '/download',
+  hero_cta_secondary_text text default 'Try in Browser',
+  hero_cta_secondary_link text default '/discovery',
+  hero_social_proof_text text default '10,000+ plant lovers',
+  
+  -- Section Visibility
+  show_hero_section boolean default true,
+  show_stats_section boolean default true,
+  show_beginner_section boolean default true,
+  show_features_section boolean default true,
+  show_demo_section boolean default true,
+  show_how_it_works_section boolean default true,
+  show_showcase_section boolean default true,
+  show_testimonials_section boolean default true,
+  show_faq_section boolean default true,
+  show_final_cta_section boolean default true,
+  
+  -- Social Links
+  instagram_url text default 'https://instagram.com/aphylia.app',
+  twitter_url text default 'https://twitter.com/aphylia_app',
+  support_email text default 'hello@aphylia.app',
+  
+  -- Final CTA Section
+  final_cta_badge text default 'No experience needed',
+  final_cta_title text default 'Ready to Start Your Plant Journey?',
+  final_cta_subtitle text default 'Whether it''s your first succulent or you''re building a jungle, Aphylia grows with you.',
+  final_cta_button_text text default 'Start Growing',
+  final_cta_secondary_text text default 'Explore Plants',
+  
+  -- Beginner Section
+  beginner_badge text default 'Perfect for Beginners',
+  beginner_title text default 'Know Nothing About Gardening?',
+  beginner_title_highlight text default 'That''s Exactly Why We Built This',
+  beginner_subtitle text default 'Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance.',
+  
+  -- Meta/SEO
+  meta_title text default 'Aphylia – Your Personal Plant Care Expert',
+  meta_description text default 'Discover, track, and nurture your plants with personalized care reminders, smart identification, and expert tips.'
+);
+
+-- Create index for landing_page_settings
+create index if not exists idx_landing_page_settings_id on public.landing_page_settings(id);
+
+-- Ensure only one row exists for settings
+create or replace function public.ensure_single_landing_page_settings()
+returns trigger as $$
+begin
+  if (select count(*) from public.landing_page_settings) > 0 and TG_OP = 'INSERT' then
+    raise exception 'Only one landing_page_settings row allowed';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists ensure_single_landing_page_settings_trigger on public.landing_page_settings;
+create trigger ensure_single_landing_page_settings_trigger
+  before insert on public.landing_page_settings
+  for each row execute function public.ensure_single_landing_page_settings();
+
 -- Hero Cards: Multiple plant cards shown in the hero section
 create table if not exists public.landing_hero_cards (
   id uuid primary key default gen_random_uuid(),
@@ -8325,52 +9130,22 @@ create trigger ensure_single_landing_stats_trigger
   before insert on public.landing_stats
   for each row execute function public.ensure_single_landing_stats();
 
--- Landing Features: Feature cards shown in the spinning circle and features section
-create table if not exists public.landing_features (
+-- Landing Stats Translations: Stores translations for stats labels
+create table if not exists public.landing_stats_translations (
   id uuid primary key default gen_random_uuid(),
-  position integer not null default 0,
-  icon_name text not null default 'Leaf',
-  title text not null,
-  description text,
-  color text not null default 'emerald',
-  is_in_circle boolean not null default false,
-  is_active boolean not null default true,
+  stats_id uuid not null references public.landing_stats(id) on delete cascade,
+  language text not null,
+  plants_label text not null,
+  users_label text not null,
+  tasks_label text not null,
+  rating_label text not null,
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  unique(stats_id, language)
 );
 
-create index if not exists idx_landing_features_position on public.landing_features(position);
-create index if not exists idx_landing_features_active on public.landing_features(is_active);
-create index if not exists idx_landing_features_circle on public.landing_features(is_in_circle);
-
--- Landing Showcase Cards: Cards in the "Designed for your jungle" section
-create table if not exists public.landing_showcase_cards (
-  id uuid primary key default gen_random_uuid(),
-  position integer not null default 0,
-  card_type text not null default 'small',
-  icon_name text,
-  title text not null,
-  description text,
-  badge_text text,
-  image_url text,
-  cover_image_url text,
-  plant_images jsonb default '[]'::jsonb,
-  garden_name text,
-  plants_count integer default 12,
-  species_count integer default 8,
-  streak_count integer default 7,
-  progress_percent integer default 85,
-  link_url text,
-  color text not null default 'emerald',
-  is_active boolean not null default true,
-  -- Selected public gardens to showcase (array of garden IDs)
-  selected_garden_ids uuid[] default array[]::uuid[],
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
-create index if not exists idx_landing_showcase_position on public.landing_showcase_cards(position);
-create index if not exists idx_landing_showcase_active on public.landing_showcase_cards(is_active);
+create index if not exists idx_landing_stats_translations_stats_id on public.landing_stats_translations(stats_id);
+create index if not exists idx_landing_stats_translations_language on public.landing_stats_translations(language);
 
 -- Landing Testimonials: Customer reviews/testimonials
 create table if not exists public.landing_testimonials (
@@ -8379,6 +9154,8 @@ create table if not exists public.landing_testimonials (
   author_name text not null,
   author_role text,
   author_avatar_url text,
+  author_website_url text,
+  linked_user_id uuid references public.profiles(id) on delete set null,
   quote text not null,
   rating integer not null default 5 check (rating >= 1 and rating <= 5),
   is_active boolean not null default true,
@@ -8389,7 +9166,18 @@ create table if not exists public.landing_testimonials (
 create index if not exists idx_landing_testimonials_position on public.landing_testimonials(position);
 create index if not exists idx_landing_testimonials_active on public.landing_testimonials(is_active);
 
--- Landing FAQ: Frequently asked questions
+-- Add new columns to landing_testimonials if they don't exist (for existing tables)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'landing_testimonials' AND column_name = 'author_website_url') THEN
+    ALTER TABLE public.landing_testimonials ADD COLUMN author_website_url text;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'landing_testimonials' AND column_name = 'linked_user_id') THEN
+    ALTER TABLE public.landing_testimonials ADD COLUMN linked_user_id uuid references public.profiles(id) on delete set null;
+  END IF;
+END $$;
+
+-- Landing FAQ: Frequently asked questions (base content in English)
 create table if not exists public.landing_faq (
   id uuid primary key default gen_random_uuid(),
   position integer not null default 0,
@@ -8403,8 +9191,143 @@ create table if not exists public.landing_faq (
 create index if not exists idx_landing_faq_position on public.landing_faq(position);
 create index if not exists idx_landing_faq_active on public.landing_faq(is_active);
 
+-- Landing FAQ Translations: Stores translations for FAQ items
+create table if not exists public.landing_faq_translations (
+  id uuid primary key default gen_random_uuid(),
+  faq_id uuid not null references public.landing_faq(id) on delete cascade,
+  language text not null,
+  question text not null,
+  answer text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(faq_id, language)
+);
+
+create index if not exists idx_landing_faq_translations_faq_id on public.landing_faq_translations(faq_id);
+create index if not exists idx_landing_faq_translations_language on public.landing_faq_translations(language);
+
+-- Landing Demo Features: Features shown in the interactive demo wheel
+create table if not exists public.landing_demo_features (
+  id uuid primary key default gen_random_uuid(),
+  position integer not null default 0,
+  icon_name text not null default 'Leaf',
+  label text not null,
+  color text not null default 'emerald',
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_landing_demo_features_position on public.landing_demo_features(position);
+create index if not exists idx_landing_demo_features_active on public.landing_demo_features(is_active);
+
+-- Landing Demo Feature Translations: Stores translations for demo features
+create table if not exists public.landing_demo_feature_translations (
+  id uuid primary key default gen_random_uuid(),
+  feature_id uuid not null references public.landing_demo_features(id) on delete cascade,
+  language text not null,
+  label text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(feature_id, language)
+);
+
+create index if not exists idx_landing_demo_feature_translations_feature_id on public.landing_demo_feature_translations(feature_id);
+create index if not exists idx_landing_demo_feature_translations_language on public.landing_demo_feature_translations(language);
+
+-- Insert default demo features if table is empty
+insert into public.landing_demo_features (position, icon_name, label, color)
+select * from (values
+  (0, 'Leaf', 'Discover Plants', 'emerald'),
+  (1, 'Clock', 'Schedule Care', 'blue'),
+  (2, 'TrendingUp', 'Track Growth', 'purple'),
+  (3, 'Shield', 'Get Alerts', 'rose'),
+  (4, 'Camera', 'Identify Plants', 'pink'),
+  (5, 'NotebookPen', 'Keep Journal', 'amber'),
+  (6, 'Users', 'Join Community', 'teal'),
+  (7, 'Sparkles', 'Smart Assistant', 'indigo')
+) as v(position, icon_name, label, color)
+where not exists (select 1 from public.landing_demo_features limit 1);
+
+-- Landing Showcase Config: Configuration for the landing page showcase section
+create table if not exists public.landing_showcase_config (
+  id uuid primary key default gen_random_uuid(),
+  
+  -- Garden Card Settings
+  garden_name text not null default 'My Indoor Jungle',
+  plants_count integer not null default 12,
+  species_count integer not null default 8,
+  streak_count integer not null default 7,
+  progress_percent integer not null default 85 check (progress_percent >= 0 and progress_percent <= 100),
+  cover_image_url text,
+  
+  -- Tasks (JSONB array of {id, text, completed})
+  tasks jsonb not null default '[
+    {"id": "1", "text": "Water your Pothos", "completed": true},
+    {"id": "2", "text": "Fertilize Monstera", "completed": false},
+    {"id": "3", "text": "Mist your Fern", "completed": false}
+  ]'::jsonb,
+  
+  -- Members (JSONB array of {id, name, role, avatar_url, color})
+  members jsonb not null default '[
+    {"id": "1", "name": "Sophie", "role": "owner", "avatar_url": null, "color": "#10b981"},
+    {"id": "2", "name": "Marcus", "role": "member", "avatar_url": null, "color": "#3b82f6"}
+  ]'::jsonb,
+  
+  -- Plant Cards (JSONB array of {id, plant_id, name, image_url, gradient, tasks_due})
+  plant_cards jsonb not null default '[
+    {"id": "1", "plant_id": null, "name": "Monstera", "image_url": null, "gradient": "from-emerald-400 to-teal-500", "tasks_due": 1},
+    {"id": "2", "plant_id": null, "name": "Pothos", "image_url": null, "gradient": "from-lime-400 to-green-500", "tasks_due": 2},
+    {"id": "3", "plant_id": null, "name": "Snake Plant", "image_url": null, "gradient": "from-green-400 to-emerald-500", "tasks_due": 0},
+    {"id": "4", "plant_id": null, "name": "Fern", "image_url": null, "gradient": "from-teal-400 to-cyan-500", "tasks_due": 0},
+    {"id": "5", "plant_id": null, "name": "Peace Lily", "image_url": null, "gradient": "from-emerald-500 to-green-600", "tasks_due": 0},
+    {"id": "6", "plant_id": null, "name": "Calathea", "image_url": null, "gradient": "from-green-500 to-teal-600", "tasks_due": 0}
+  ]'::jsonb,
+  
+  -- Analytics Card Settings
+  completion_rate integer not null default 92 check (completion_rate >= 0 and completion_rate <= 100),
+  analytics_streak integer not null default 14,
+  chart_data jsonb not null default '[3, 5, 2, 6, 4, 5, 6]'::jsonb,
+  
+  -- Calendar (30 days history: array of {date, status})
+  calendar_data jsonb not null default '[]'::jsonb,
+  
+  -- Timestamps
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Ensure only one row exists for showcase config
+create or replace function public.ensure_single_landing_showcase_config()
+returns trigger as $$
+begin
+  if (select count(*) from public.landing_showcase_config) > 0 and TG_OP = 'INSERT' then
+    raise exception 'Only one landing_showcase_config row allowed';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists ensure_single_landing_showcase_config_trigger on public.landing_showcase_config;
+create trigger ensure_single_landing_showcase_config_trigger
+  before insert on public.landing_showcase_config
+  for each row execute function public.ensure_single_landing_showcase_config();
+
 -- RLS Policies for Landing Page Tables
 -- All landing tables are publicly readable but only admin-writable
+
+alter table public.landing_page_settings enable row level security;
+drop policy if exists "Landing page settings are publicly readable" on public.landing_page_settings;
+create policy "Landing page settings are publicly readable" on public.landing_page_settings for select using (true);
+drop policy if exists "Admins can manage landing page settings" on public.landing_page_settings;
+create policy "Admins can manage landing page settings" on public.landing_page_settings for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+-- Insert default settings row if not exists
+insert into public.landing_page_settings (id)
+select gen_random_uuid()
+where not exists (select 1 from public.landing_page_settings limit 1);
 
 alter table public.landing_hero_cards enable row level security;
 drop policy if exists "Landing hero cards are publicly readable" on public.landing_hero_cards;
@@ -8422,19 +9345,11 @@ create policy "Admins can manage landing stats" on public.landing_stats for all 
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
 
-alter table public.landing_features enable row level security;
-drop policy if exists "Landing features are publicly readable" on public.landing_features;
-create policy "Landing features are publicly readable" on public.landing_features for select using (true);
-drop policy if exists "Admins can manage landing features" on public.landing_features;
-create policy "Admins can manage landing features" on public.landing_features for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
-
-alter table public.landing_showcase_cards enable row level security;
-drop policy if exists "Landing showcase cards are publicly readable" on public.landing_showcase_cards;
-create policy "Landing showcase cards are publicly readable" on public.landing_showcase_cards for select using (true);
-drop policy if exists "Admins can manage landing showcase cards" on public.landing_showcase_cards;
-create policy "Admins can manage landing showcase cards" on public.landing_showcase_cards for all using (
+alter table public.landing_stats_translations enable row level security;
+drop policy if exists "Landing stats translations are publicly readable" on public.landing_stats_translations;
+create policy "Landing stats translations are publicly readable" on public.landing_stats_translations for select using (true);
+drop policy if exists "Admins can manage landing stats translations" on public.landing_stats_translations;
+create policy "Admins can manage landing stats translations" on public.landing_stats_translations for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
 
@@ -8453,6 +9368,44 @@ drop policy if exists "Admins can manage landing FAQ" on public.landing_faq;
 create policy "Admins can manage landing FAQ" on public.landing_faq for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
+
+alter table public.landing_faq_translations enable row level security;
+drop policy if exists "Landing FAQ translations are publicly readable" on public.landing_faq_translations;
+create policy "Landing FAQ translations are publicly readable" on public.landing_faq_translations for select using (true);
+drop policy if exists "Admins can manage landing FAQ translations" on public.landing_faq_translations;
+create policy "Admins can manage landing FAQ translations" on public.landing_faq_translations for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_demo_features enable row level security;
+drop policy if exists "Landing demo features are publicly readable" on public.landing_demo_features;
+create policy "Landing demo features are publicly readable" on public.landing_demo_features for select using (true);
+drop policy if exists "Admins can manage landing demo features" on public.landing_demo_features;
+create policy "Admins can manage landing demo features" on public.landing_demo_features for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_demo_feature_translations enable row level security;
+drop policy if exists "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations;
+create policy "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations for select using (true);
+drop policy if exists "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations;
+create policy "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+alter table public.landing_showcase_config enable row level security;
+drop policy if exists "Landing showcase config is publicly readable" on public.landing_showcase_config;
+create policy "Landing showcase config is publicly readable" on public.landing_showcase_config for select using (true);
+drop policy if exists "Admins can manage landing showcase config" on public.landing_showcase_config;
+create policy "Admins can manage landing showcase config" on public.landing_showcase_config for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
+);
+
+-- Insert default showcase config row if not exists
+insert into public.landing_showcase_config (id)
+select gen_random_uuid()
+where not exists (select 1 from public.landing_showcase_config limit 1);
+
 -- =============================================
 -- PLANT SCANS TABLE
 -- Stores plant identification scans using Kindwise API

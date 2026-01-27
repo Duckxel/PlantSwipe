@@ -26,7 +26,8 @@ import {
 import { cn } from '@/lib/utils'
 import type { Message } from '@/types/messaging'
 import { COMMON_REACTIONS } from '@/types/messaging'
-import { isImageMessage, parseImageMessage } from '@/lib/messaging'
+import { isImageMessage, parseImageMessage, extractInternalLinks } from '@/lib/messaging'
+import { InternalLinkPreview } from './InternalLinkPreview'
 
 interface MessageBubbleProps {
   message: Message
@@ -351,7 +352,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     {message.content}
                   </p>
                   
-                  {/* Link preview */}
+                  {/* Auto-detected internal link previews (aphylia.app links in message text) */}
+                  {!message.linkType && extractInternalLinks(message.content).length > 0 && (
+                    <InternalLinkPreview
+                      content={message.content}
+                      isOwn={isOwn}
+                    />
+                  )}
+                  
+                  {/* Explicit link preview (from LinkShareDialog) */}
                   {message.linkType && (
                     <button
                       onClick={handleLinkClick}

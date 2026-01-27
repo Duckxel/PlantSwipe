@@ -1,12 +1,16 @@
 import { supabase, type BlogPostRow } from '@/lib/supabaseClient'
 import type { BlogPost, BlogPostInput } from '@/types/blog'
 
-const BLOG_POST_SELECT = 'id, title, slug, body_html, editor_data, author_id, author_name, cover_image_url, excerpt, is_published, published_at, created_at, updated_at'
+const BLOG_POST_SELECT = 'id, title, slug, body_html, editor_data, author_id, author_name, cover_image_url, excerpt, is_published, published_at, created_at, updated_at, show_cover_image, updated_by_name, seo_title, seo_description, tags'
 const MAX_SLUG_ATTEMPTS = 15
 
 export type SaveBlogPostParams = BlogPostInput & {
   authorId: string
   authorName: string | null
+  updatedByName?: string | null
+  seoTitle?: string | null
+  seoDescription?: string | null
+  tags?: string[]
 }
 
 export function mapBlogPostRow(row: BlogPostRow): BlogPost {
@@ -24,6 +28,11 @@ export function mapBlogPostRow(row: BlogPostRow): BlogPost {
     publishedAt: row.published_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    showCoverImage: row.show_cover_image ?? false, // Default to false - auto-enabled when cover image is added
+    updatedByName: row.updated_by_name ?? null,
+    seoTitle: row.seo_title ?? null,
+    seoDescription: row.seo_description ?? null,
+    tags: row.tags ?? [],
   }
 }
 
@@ -119,6 +128,12 @@ export async function saveBlogPost(params: SaveBlogPostParams) {
   const baseSlug = params.slug?.trim() || slugifyTitle(params.title)
   const slug = await ensureUniqueSlug(baseSlug, params.id)
 
+  // Normalize tags: ensure array with max 7 items, trimmed strings
+  const normalizedTags = (params.tags ?? [])
+    .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+    .filter((tag) => tag.length > 0)
+    .slice(0, 7)
+
   const basePayload = {
     title: params.title.trim(),
     slug,
@@ -129,6 +144,11 @@ export async function saveBlogPost(params: SaveBlogPostParams) {
     cover_image_url: params.coverImageUrl ?? null,
     excerpt: params.excerpt ?? normalizeExcerpt(params.bodyHtml),
     is_published: params.isPublished ?? true,
+    show_cover_image: params.showCoverImage ?? false,
+    updated_by_name: isUpdate ? (params.updatedByName ?? params.authorName) : null,
+    seo_title: params.seoTitle ?? null,
+    seo_description: params.seoDescription ?? null,
+    tags: normalizedTags,
   }
 
   const payload = isUpdate

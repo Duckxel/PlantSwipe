@@ -404,12 +404,16 @@ async function loadBlogRoutes() {
 
   if (!data || !data.length) return []
 
-  return data.map((post) => {
+  // Prioritize the latest blog post for better discoverability
+  // The most recent post gets priority 0.95 (second only to homepage)
+  // Other posts get standard priority 0.8
+  return data.map((post, index) => {
     if (!post.slug) return null
+    const isLatestPost = index === 0
     return {
       path: `/blog/${post.slug}`,
-      changefreq: 'weekly',
-      priority: 0.8,
+      changefreq: isLatestPost ? 'daily' : 'weekly',
+      priority: isLatestPost ? 0.95 : 0.8,
       lastmod: pickLastmod(post),
     }
   }).filter(Boolean)

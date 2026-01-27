@@ -2040,40 +2040,27 @@ export const AdminEmailTemplatePage: React.FC = () => {
                   boxShadow: '0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset',
                 }}
               >
-                {/* Header */}
+                {/* Header Banner */}
                 <div
                   style={{
                     background: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%)',
-                    padding: '32px 48px',
+                    padding: '20px 48px',
                     textAlign: 'center',
                   }}
                 >
                   <div
                     style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '12px',
+                      display: 'inline-block',
                       background: 'rgba(255, 255, 255, 0.15)',
-                      borderRadius: '20px',
-                      padding: '14px 28px',
+                      borderRadius: '16px',
+                      padding: '10px 24px',
                     }}
                   >
                     <img
-                      src="/icons/plant-swipe-icon.svg"
-                      alt=""
-                      style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)' }}
+                      src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260-ae7e1e2d-ea1d-4944-be95-84cc4b8a29ed.png"
+                      alt="Aphylia"
+                      style={{ display: 'block', height: '48px', width: 'auto' }}
                     />
-                    <span
-                      style={{
-                        fontSize: '26px',
-                        fontWeight: 700,
-                        color: '#ffffff',
-                        letterSpacing: '-0.5px',
-                        fontFamily: "'Quicksand', -apple-system, BlinkMacSystemFont, sans-serif",
-                      }}
-                    >
-                      Aphylia
-                    </span>
                   </div>
                 </div>
 
@@ -2168,6 +2155,73 @@ export const AdminEmailTemplatePage: React.FC = () => {
                   >
                     Explore Aphylia →
                   </a>
+                  
+                  {/* Social Media Links */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                      Follow us
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+                      {/* YouTube */}
+                      <a
+                        href="https://www.youtube.com/@aphylia_app"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '40px',
+                          height: '40px',
+                          background: '#374151',
+                          borderRadius: '12px',
+                          textDecoration: 'none',
+                        }}
+                        title="YouTube"
+                      >
+                        <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/youtube-19624fb6-23e5-4af1-a383-24cbf131cf70.png" alt="YouTube" style={{ width: '20px', height: '20px' }} />
+                      </a>
+                      {/* X (Twitter) */}
+                      <a
+                        href="https://x.com/aphylia_app"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '40px',
+                          height: '40px',
+                          background: '#374151',
+                          borderRadius: '12px',
+                          textDecoration: 'none',
+                        }}
+                        title="X"
+                      >
+                        <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/twitter-700af2d5-45cb-41c2-a0c4-479fa9979124.png" alt="X" style={{ width: '20px', height: '20px' }} />
+                      </a>
+                      {/* Instagram */}
+                      <a
+                        href="https://www.instagram.com/aphylia_app/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '40px',
+                          height: '40px',
+                          background: '#374151',
+                          borderRadius: '12px',
+                          textDecoration: 'none',
+                        }}
+                        title="Instagram"
+                      >
+                        <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/instagram-822eef7b-752d-47af-a1bb-79d99039bbb9.png" alt="Instagram" style={{ width: '20px', height: '20px' }} />
+                      </a>
+                    </div>
+                  </div>
+                  
                   <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#9ca3af' }}>
                     <a href="#" style={{ color: '#059669', fontWeight: 500, textDecoration: 'none' }}>aphylia.app</a>
                     <span style={{ margin: '0 8px', color: '#d1d5db' }}>•</span>
