@@ -6,6 +6,8 @@ on:
     paths:
       - 'plant-swipe/public/locales/**/*.json'
       - 'plant-swipe/scripts/check-translations.js'
+      - 'plant-swipe/bun.lock'
+      - '.github/workflows/check-translations.yml'
 
 jobs:
   check-translations:
@@ -25,6 +27,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.7"
+          no-cache: true
       
       - name: Install dependencies
         working-directory: plant-swipe
