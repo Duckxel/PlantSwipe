@@ -18,8 +18,13 @@ const parseDate = (value?: string): Date | null => {
 }
 
 export const isPlantOfTheMonth = (plant?: Plant | null, referenceDate: Date = new Date()): boolean => {
-  if (!plant?.planting?.calendar) return false
-  const promotionMonth = normalizeMonth(plant.planting.calendar.promotionMonth)
+  if (!plant) return false
+  // Check both possible locations for promotionMonth
+  // - planting.calendar.promotionMonth (used by loadPlantPreviews)
+  // - identity.promotionMonth (used by loadPlantsWithTranslations)
+  const promotionMonth = normalizeMonth(
+    plant.planting?.calendar?.promotionMonth ?? plant.identity?.promotionMonth
+  )
   if (!promotionMonth) return false
   return promotionMonth === referenceDate.getMonth() + 1
 }

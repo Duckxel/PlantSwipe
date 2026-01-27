@@ -260,8 +260,8 @@ export function mergePlantWithTranslation(
         ...translationPlanting,
         calendar: {
           ...planting?.calendar,
-          promotionMonth: planting?.calendar?.promotionMonth || (Array.isArray(basePlant.plant_month) && basePlant.plant_month.length > 0
-            ? basePlant.plant_month[0]
+          promotionMonth: planting?.calendar?.promotionMonth || monthSlugToNumber(basePlant.promotion_month) || (Array.isArray(basePlant.plant_month) && basePlant.plant_month.length > 0
+            ? monthSlugToNumber(basePlant.plant_month[0]) ?? undefined
             : undefined),
         },
         sitePrep: translationPlanting?.sitePrep || planting?.sitePrep || undefined,
@@ -555,6 +555,11 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
             rarity: (basePlant.rarity || 'Common') as Plant['rarity'],
             classification: basePlant.plant_type ? { type: basePlant.plant_type } : undefined,
             popularity: popularityMap.get(String(basePlant.id)),
+            planting: {
+              calendar: {
+                promotionMonth: monthSlugToNumber(basePlant.promotion_month) ?? undefined,
+              },
+            },
           }
 
       return sanitizeDeep(plant) as Plant
@@ -792,7 +797,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         
         planting: {
             calendar: {
-                promotionMonth: basePlant.promotion_month
+                promotionMonth: monthSlugToNumber(basePlant.promotion_month) ?? undefined
             }
         },
         
