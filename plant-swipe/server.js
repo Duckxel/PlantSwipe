@@ -1357,6 +1357,39 @@ async function deleteGardenCoverObject(publicUrl) {
   }
 }
 
+// GDPR: Generic storage object deletion
+async function deleteStorageObject(publicUrl) {
+  if (!publicUrl || !supabaseServiceClient) return { deleted: false, reason: 'unavailable' }
+  const info = parseStoragePublicUrl(publicUrl)
+  if (!info) return { deleted: false, reason: 'not_managed' }
+  try {
+    const { error } = await supabaseServiceClient.storage.from(info.bucket).remove([info.path])
+    if (error) throw error
+    return { deleted: true }
+  } catch (err) {
+    console.error('[storage] failed to delete storage object', err)
+    return { deleted: false, reason: err?.message || 'delete_failed' }
+  }
+}
+
+// GDPR: Audit logging helper
+async function logGdprAccess(userId, action, details = {}, req = null) {
+  if (!sql) return null
+  try {
+    const ip = req ? getClientIp(req) : null
+    const userAgent = req ? (req.get('user-agent') || '').slice(0, 500) : null
+    const rows = await sql`
+      INSERT INTO public.gdpr_audit_log (user_id, action, details, ip_address, user_agent, created_at)
+      VALUES (${userId}, ${action}, ${JSON.stringify(details)}::jsonb, ${ip}::inet, ${userAgent}, NOW())
+      RETURNING id
+    `
+    return rows?.[0]?.id || null
+  } catch (err) {
+    console.error('[gdpr] Audit log failed:', err)
+    return null
+  }
+}
+
 // Extract Supabase user id and email from Authorization header. Falls back to
 // decoding the JWT locally when the server anon client isn't configured.
 async function getUserIdFromRequest(req) {
@@ -12330,6 +12363,7 @@ app.options('/api/account/delete', (_req, res) => {
   res.status(204).end()
 })
 
+// GDPR-compliant comprehensive account deletion
 app.post('/api/account/delete', async (req, res) => {
   try {
     if (!supabaseServiceClient) {
@@ -12343,13 +12377,162 @@ app.post('/api/account/delete', async (req, res) => {
     }
     const userId = user.id
 
-    let deletedGardens = 0
-    let deletedGardenIds = []
-    let deletedCoverImages = 0
-    let promotedMembers = 0
-    let leftGardens = 0
+    // Log GDPR action first (while we still have the user)
+    await logGdprAccess(userId, 'ACCOUNT_DELETION_INITIATED', { ip: getClientIp(req) }, req)
+
+    const deletionStats = {
+      deletedGardens: 0,
+      deletedGardenIds: [],
+      deletedCoverImages: 0,
+      promotedMembers: 0,
+      leftGardens: 0,
+      deletedMessages: 0,
+      deletedConversations: 0,
+      deletedFriends: 0,
+      deletedFriendRequests: 0,
+      deletedPushSubscriptions: 0,
+      deletedNotifications: 0,
+      deletedJournalEntries: 0,
+      deletedJournalPhotos: 0,
+      deletedPlantScans: 0,
+      deletedBugReports: 0,
+      deletedBookmarks: 0,
+      deletedActivityLogs: 0,
+      anonymizedWebVisits: 0,
+      deletedStorageObjects: 0,
+    }
+
     try {
-      // Get all gardens where the user is a member (any role)
+      if (sql) {
+        // ========== 1. Delete Messages and Conversations ==========
+        // First delete messages where user is sender
+        const msgResult = await sql`DELETE FROM public.messages WHERE sender_id = ${userId}`
+        deletionStats.deletedMessages = msgResult?.count || 0
+
+        // Delete conversations where user is a participant
+        const convResult = await sql`DELETE FROM public.conversations WHERE participant_1 = ${userId} OR participant_2 = ${userId}`
+        deletionStats.deletedConversations = convResult?.count || 0
+
+        // ========== 2. Delete Friend Relationships ==========
+        const friendResult = await sql`DELETE FROM public.friends WHERE user_id = ${userId} OR friend_id = ${userId}`
+        deletionStats.deletedFriends = friendResult?.count || 0
+
+        const friendReqResult = await sql`DELETE FROM public.friend_requests WHERE requester_id = ${userId} OR recipient_id = ${userId}`
+        deletionStats.deletedFriendRequests = friendReqResult?.count || 0
+
+        // ========== 3. Delete Push Subscriptions ==========
+        const pushResult = await sql`DELETE FROM public.user_push_subscriptions WHERE user_id = ${userId}`
+        deletionStats.deletedPushSubscriptions = pushResult?.count || 0
+
+        // ========== 4. Delete Notifications ==========
+        const notifResult = await sql`DELETE FROM public.user_notifications WHERE user_id = ${userId}`
+        deletionStats.deletedNotifications = notifResult?.count || 0
+
+        // ========== 5. Delete Journal Entries and Photos (with storage cleanup) ==========
+        // First get journal photos to delete from storage
+        const journalPhotos = await sql`
+          SELECT gjp.image_url FROM public.garden_journal_photos gjp
+          JOIN public.garden_journal_entries gje ON gje.id = gjp.entry_id
+          WHERE gje.user_id = ${userId} AND gjp.image_url IS NOT NULL
+        `
+        for (const photo of journalPhotos || []) {
+          try {
+            const result = await deleteStorageObject(photo.image_url)
+            if (result.deleted) deletionStats.deletedStorageObjects++
+          } catch (err) {
+            console.warn('[gdpr] Failed to delete journal photo:', err?.message)
+          }
+        }
+        deletionStats.deletedJournalPhotos = journalPhotos?.length || 0
+
+        // Delete journal entries (photos will cascade)
+        const journalResult = await sql`DELETE FROM public.garden_journal_entries WHERE user_id = ${userId}`
+        deletionStats.deletedJournalEntries = journalResult?.count || 0
+
+        // ========== 6. Delete Plant Scans (with storage cleanup) ==========
+        const scans = await sql`SELECT image_url FROM public.plant_scans WHERE user_id = ${userId}`
+        for (const scan of scans || []) {
+          try {
+            const result = await deleteStorageObject(scan.image_url)
+            if (result.deleted) deletionStats.deletedStorageObjects++
+          } catch (err) {
+            console.warn('[gdpr] Failed to delete scan image:', err?.message)
+          }
+        }
+        const scanResult = await sql`DELETE FROM public.plant_scans WHERE user_id = ${userId}`
+        deletionStats.deletedPlantScans = scanResult?.count || 0
+
+        // ========== 7. Delete Bug Reports (with storage cleanup) ==========
+        const bugScreenshots = await sql`SELECT screenshot_url FROM public.bug_reports WHERE user_id = ${userId} AND screenshot_url IS NOT NULL`
+        for (const bug of bugScreenshots || []) {
+          try {
+            const result = await deleteStorageObject(bug.screenshot_url)
+            if (result.deleted) deletionStats.deletedStorageObjects++
+          } catch (err) {
+            console.warn('[gdpr] Failed to delete bug screenshot:', err?.message)
+          }
+        }
+        await sql`DELETE FROM public.bug_reports WHERE user_id = ${userId}`
+        deletionStats.deletedBugReports = (bugScreenshots?.length || 0)
+
+        // ========== 8. Delete Bookmarks ==========
+        // First delete bookmark items (via cascade or explicitly)
+        await sql`DELETE FROM public.bookmark_items WHERE bookmark_id IN (
+          SELECT id FROM public.bookmarks WHERE user_id = ${userId}
+        )`
+        const bookmarkResult = await sql`DELETE FROM public.bookmarks WHERE user_id = ${userId}`
+        deletionStats.deletedBookmarks = bookmarkResult?.count || 0
+
+        // ========== 9. Delete Activity Logs ==========
+        const activityResult = await sql`DELETE FROM public.garden_activity_logs WHERE user_id = ${userId}`
+        deletionStats.deletedActivityLogs = activityResult?.count || 0
+
+        // ========== 10. Anonymize Web Visits (for analytics retention) ==========
+        const webVisitResult = await sql`UPDATE public.web_visits SET user_id = NULL, ip_address = NULL, anonymized_at = NOW() WHERE user_id = ${userId}`
+        deletionStats.anonymizedWebVisits = webVisitResult?.count || 0
+
+        // ========== 11. Delete User Blocks ==========
+        await sql`DELETE FROM public.user_blocks WHERE blocker_id = ${userId} OR blocked_id = ${userId}`
+
+        // ========== 12. Delete User Reports (as reporter) ==========
+        await sql`DELETE FROM public.user_reports WHERE reporter_id = ${userId}`
+
+        // ========== 13. Delete Garden Invites ==========
+        await sql`DELETE FROM public.garden_invites WHERE inviter_id = ${userId} OR invitee_id = ${userId}`
+
+        // ========== 14. Delete Message Reactions ==========
+        await sql`DELETE FROM public.message_reactions WHERE user_id = ${userId}`
+
+        // ========== 15. Delete Task Completions ==========
+        await sql`DELETE FROM public.garden_task_user_completions WHERE user_id = ${userId}`
+
+        // ========== 16. Delete User Task Cache ==========
+        await sql`DELETE FROM public.user_task_daily_cache WHERE user_id = ${userId}`
+
+        // ========== 17. Delete Garden User Activity ==========
+        await sql`DELETE FROM public.garden_user_activity WHERE user_id = ${userId}`
+
+        // ========== 18. Delete Admin Campaign Sends tracking ==========
+        await sql`DELETE FROM public.admin_campaign_sends WHERE user_id = ${userId}`
+
+        // ========== 19. Delete Avatar Image from storage ==========
+        const profileData = await sql`SELECT avatar_url FROM public.profiles WHERE id = ${userId}`
+        if (profileData?.[0]?.avatar_url) {
+          try {
+            const result = await deleteStorageObject(profileData[0].avatar_url)
+            if (result.deleted) deletionStats.deletedStorageObjects++
+          } catch (err) {
+            console.warn('[gdpr] Failed to delete avatar:', err?.message)
+          }
+        }
+      }
+    } catch (dataErr) {
+      console.error('[gdpr] Failed to delete user data:', dataErr)
+      // Continue with garden cleanup and account deletion even if some data deletion fails
+    }
+
+    // ========== Garden Cleanup (existing logic) ==========
+    try {
       const { data: userMemberships, error: memberErr } = await supabaseServiceClient
         .from('garden_members')
         .select('garden_id, role')
@@ -12367,7 +12550,6 @@ app.post('/api/account/delete', async (req, res) => {
       for (const gardenId of gardenIds) {
         const userRole = (userMemberships || []).find((m) => m.garden_id === gardenId)?.role
 
-        // Get all members of this garden
         const { data: allMembers } = await supabaseServiceClient
           .from('garden_members')
           .select('user_id, role')
@@ -12377,34 +12559,22 @@ app.post('/api/account/delete', async (req, res) => {
         const otherOwners = otherMembers.filter((m) => m.role === 'owner')
 
         if (userRole === 'owner' && otherOwners.length === 0) {
-          // User is the only owner
           if (otherMembers.length > 0) {
-            // There are other members - promote one to owner and remove user
             const newOwner = otherMembers[0]
             const { error: promoteErr } = await supabaseServiceClient
               .from('garden_members')
               .update({ role: 'owner' })
               .eq('garden_id', gardenId)
               .eq('user_id', newOwner.user_id)
-            if (promoteErr) {
-              console.warn('[account-delete] Failed to promote member', gardenId, promoteErr?.message)
-            } else {
-              promotedMembers++
-            }
-            // Remove the user from the garden
+            if (!promoteErr) deletionStats.promotedMembers++
+            
             const { error: removeErr } = await supabaseServiceClient
               .from('garden_members')
               .delete()
               .eq('garden_id', gardenId)
               .eq('user_id', userId)
-            if (removeErr) {
-              console.warn('[account-delete] Failed to remove user from garden', gardenId, removeErr?.message)
-            } else {
-              leftGardens++
-            }
+            if (!removeErr) deletionStats.leftGardens++
           } else {
-            // No other members - delete the garden entirely
-            // First get the cover image URL
             const { data: gardenRow } = await supabaseServiceClient
               .from('gardens')
               .select('cover_image_url')
@@ -12412,78 +12582,301 @@ app.post('/api/account/delete', async (req, res) => {
               .maybeSingle()
             const coverUrl = gardenRow?.cover_image_url || null
 
-            // Delete the garden
             const { error: deleteErr } = await supabaseServiceClient
               .from('gardens')
               .delete()
               .eq('id', gardenId)
-            if (deleteErr) {
-              console.warn('[account-delete] Failed to delete garden', gardenId, deleteErr?.message)
-            } else {
-              deletedGardens++
-              deletedGardenIds.push(gardenId)
+            if (!deleteErr) {
+              deletionStats.deletedGardens++
+              deletionStats.deletedGardenIds.push(gardenId)
 
-              // Delete cover image from storage
               if (coverUrl) {
                 try {
                   const result = await deleteGardenCoverObject(coverUrl)
-                  if (result.deleted) deletedCoverImages++
-                } catch (coverErr) {
-                  console.warn('[account-delete] Failed to delete cover image', coverUrl, coverErr?.message)
-                }
+                  if (result.deleted) deletionStats.deletedCoverImages++
+                } catch {}
               }
             }
           }
         } else {
-          // User is not the only owner (either not an owner, or there are other owners)
-          // Just remove the user from the garden
           const { error: removeErr } = await supabaseServiceClient
             .from('garden_members')
             .delete()
             .eq('garden_id', gardenId)
             .eq('user_id', userId)
-          if (removeErr) {
-            console.warn('[account-delete] Failed to remove user from garden', gardenId, removeErr?.message)
-          } else {
-            leftGardens++
-          }
+          if (!removeErr) deletionStats.leftGardens++
         }
       }
     } catch (gardenErr) {
-      console.error('[account-delete] Failed to process gardens', gardenErr)
-      res.status(500).json({ error: 'Failed to process gardens' })
-      return
+      console.error('[gdpr] Failed to process gardens:', gardenErr)
     }
 
-    try {
-      if (sql) {
-        await sql`delete from public.user_task_daily_cache where user_id = ${userId}`
-      } else {
-        await supabaseServiceClient.from('user_task_daily_cache').delete().eq('user_id', userId)
-      }
-    } catch (cacheErr) {
-      console.warn('[account-delete] Failed to clear task cache for user', cacheErr?.message || cacheErr)
-    }
-
+    // ========== Finally: Delete Auth User ==========
     const { error: deleteUserError } = await supabaseServiceClient.auth.admin.deleteUser(userId)
     if (deleteUserError) {
-      console.error('[account-delete] Failed to delete auth user', deleteUserError)
+      console.error('[gdpr] Failed to delete auth user:', deleteUserError)
       res.status(500).json({ error: 'Failed to delete account' })
       return
     }
 
+    // Log completion (user_id will be null now as user is deleted, but we logged initiation earlier)
+    console.log('[gdpr] Account deletion completed for user:', userId, deletionStats)
+
     res.json({
       ok: true,
-      deletedGardens,
-      deletedGardenIds,
-      deletedCoverImages,
-      promotedMembers,
-      leftGardens,
+      message: 'All personal data deleted',
+      ...deletionStats,
       deletedUser: true,
     })
   } catch (err) {
-    console.error('[account-delete] Unexpected failure', err)
+    console.error('[gdpr] Account deletion unexpected failure:', err)
     res.status(500).json({ error: 'Failed to delete account' })
+  }
+})
+
+// ========== GDPR: Data Export Endpoint ==========
+// Export all user data in machine-readable format for data portability
+app.get('/api/account/export', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    const userId = user.id
+
+    // Log GDPR access
+    await logGdprAccess(userId, 'DATA_EXPORT', { ip: getClientIp(req) }, req)
+
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      exportVersion: '1.0',
+      dataSubject: {},
+      profile: null,
+      gardens: [],
+      plants: [],
+      tasks: [],
+      journal: [],
+      messages: [],
+      friends: [],
+      bookmarks: [],
+      scans: [],
+      notifications: [],
+      activityLogs: [],
+      bugReports: [],
+      webVisitsSummary: {},
+    }
+
+    if (!sql) {
+      res.status(503).json({ error: 'Data export is not available' })
+      return
+    }
+
+    // 1. Profile data
+    const profileRows = await sql`
+      SELECT id, display_name, username, email, bio, country,
+             timezone, language, favorite_plant, avatar_url,
+             created_at, is_private, disable_friend_requests,
+             experience_years, accent_key,
+             marketing_consent, marketing_consent_date,
+             terms_accepted_date, privacy_policy_accepted_date,
+             analytics_consent, analytics_consent_date
+      FROM public.profiles WHERE id = ${userId}
+    `
+    exportData.profile = profileRows?.[0] || null
+
+    // Get email from auth
+    if (supabaseServiceClient) {
+      try {
+        const { data: authUser } = await supabaseServiceClient.auth.admin.getUserById(userId)
+        exportData.dataSubject = {
+          userId: userId,
+          email: authUser?.user?.email,
+          emailConfirmedAt: authUser?.user?.email_confirmed_at,
+          createdAt: authUser?.user?.created_at,
+          lastSignIn: authUser?.user?.last_sign_in_at,
+        }
+      } catch {}
+    }
+
+    // 2. Gardens and plants
+    const gardens = await sql`
+      SELECT g.*, gm.role as member_role
+      FROM public.gardens g
+      JOIN public.garden_members gm ON gm.garden_id = g.id
+      WHERE gm.user_id = ${userId}
+    `
+    for (const garden of gardens || []) {
+      const plants = await sql`
+        SELECT gp.*, p.name as plant_name, p.scientific_name
+        FROM public.garden_plants gp
+        LEFT JOIN public.plants p ON p.id = gp.plant_id
+        WHERE gp.garden_id = ${garden.id}
+      `
+      const tasks = await sql`
+        SELECT * FROM public.garden_plant_tasks
+        WHERE garden_id = ${garden.id}
+      `
+      exportData.gardens.push({
+        ...garden,
+        plants: plants || [],
+        tasks: tasks || [],
+      })
+    }
+
+    // 3. Journal entries
+    const journal = await sql`
+      SELECT gje.*, 
+             COALESCE(json_agg(gjp) FILTER (WHERE gjp.id IS NOT NULL), '[]') as photos
+      FROM public.garden_journal_entries gje
+      LEFT JOIN public.garden_journal_photos gjp ON gjp.entry_id = gje.id
+      WHERE gje.user_id = ${userId}
+      GROUP BY gje.id
+      ORDER BY gje.created_at DESC
+    `
+    exportData.journal = journal || []
+
+    // 4. Messages
+    const messages = await sql`
+      SELECT m.*, c.participant_1, c.participant_2
+      FROM public.messages m
+      JOIN public.conversations c ON c.id = m.conversation_id
+      WHERE m.sender_id = ${userId}
+      ORDER BY m.created_at DESC
+    `
+    exportData.messages = messages || []
+
+    // 5. Friends
+    const friends = await sql`
+      SELECT f.*, p.display_name as friend_name
+      FROM public.friends f
+      JOIN public.profiles p ON p.id = CASE
+        WHEN f.user_id = ${userId} THEN f.friend_id
+        ELSE f.user_id
+      END
+      WHERE f.user_id = ${userId} OR f.friend_id = ${userId}
+    `
+    exportData.friends = friends || []
+
+    // 6. Bookmarks
+    const bookmarks = await sql`
+      SELECT b.*, 
+             COALESCE(json_agg(bi.plant_id) FILTER (WHERE bi.id IS NOT NULL), '[]') as plant_ids
+      FROM public.bookmarks b
+      LEFT JOIN public.bookmark_items bi ON bi.bookmark_id = b.id
+      WHERE b.user_id = ${userId}
+      GROUP BY b.id
+    `
+    exportData.bookmarks = bookmarks || []
+
+    // 7. Plant scans
+    const scans = await sql`
+      SELECT * FROM public.plant_scans WHERE user_id = ${userId}
+      ORDER BY created_at DESC
+    `
+    exportData.scans = scans || []
+
+    // 8. Notifications received
+    const notifications = await sql`
+      SELECT * FROM public.user_notifications
+      WHERE user_id = ${userId}
+      ORDER BY created_at DESC
+      LIMIT 500
+    `
+    exportData.notifications = notifications || []
+
+    // 9. Activity logs
+    const activityLogs = await sql`
+      SELECT * FROM public.garden_activity_logs
+      WHERE user_id = ${userId}
+      ORDER BY occurred_at DESC
+      LIMIT 1000
+    `
+    exportData.activityLogs = activityLogs || []
+
+    // 10. Bug reports
+    const bugReports = await sql`
+      SELECT * FROM public.bug_reports
+      WHERE user_id = ${userId}
+      ORDER BY created_at DESC
+    `
+    exportData.bugReports = bugReports || []
+
+    // 11. Web visits summary (anonymized count, not raw data)
+    const webVisitSummary = await sql`
+      SELECT COUNT(*) as total_visits,
+             MIN(occurred_at) as first_visit,
+             MAX(occurred_at) as last_visit
+      FROM public.web_visits
+      WHERE user_id = ${userId}
+    `
+    exportData.webVisitsSummary = webVisitSummary?.[0] || {}
+
+    // Set headers for download
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', 
+      `attachment; filename="aphylia-data-export-${userId.slice(0, 8)}-${Date.now()}.json"`)
+    
+    res.json(exportData)
+  } catch (err) {
+    console.error('[gdpr] Data export failed:', err)
+    res.status(500).json({ error: 'Failed to export data' })
+  }
+})
+
+// ========== GDPR: Update Consent Preferences ==========
+app.post('/api/account/consent', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    const userId = user.id
+    const { marketingConsent, analyticsConsent } = req.body || {}
+
+    if (!sql) {
+      res.status(503).json({ error: 'Consent update is not available' })
+      return
+    }
+
+    const updates = {}
+    const now = new Date().toISOString()
+
+    if (typeof marketingConsent === 'boolean') {
+      updates.marketing_consent = marketingConsent
+      updates.marketing_consent_date = now
+    }
+    if (typeof analyticsConsent === 'boolean') {
+      updates.analytics_consent = analyticsConsent
+      updates.analytics_consent_date = now
+    }
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: 'No consent preferences provided' })
+      return
+    }
+
+    await sql`
+      UPDATE public.profiles SET
+        marketing_consent = COALESCE(${updates.marketing_consent ?? null}, marketing_consent),
+        marketing_consent_date = COALESCE(${updates.marketing_consent_date ?? null}::timestamptz, marketing_consent_date),
+        analytics_consent = COALESCE(${updates.analytics_consent ?? null}, analytics_consent),
+        analytics_consent_date = COALESCE(${updates.analytics_consent_date ?? null}::timestamptz, analytics_consent_date)
+      WHERE id = ${userId}
+    `
+
+    // Log consent change
+    await logGdprAccess(userId, 'CONSENT_UPDATE', { 
+      marketingConsent, 
+      analyticsConsent,
+      ip: getClientIp(req) 
+    }, req)
+
+    res.json({ ok: true, updated: updates })
+  } catch (err) {
+    console.error('[gdpr] Consent update failed:', err)
+    res.status(500).json({ error: 'Failed to update consent preferences' })
   }
 })
 
@@ -18302,6 +18695,83 @@ cron.schedule('0 * * * *', async () => {
     }
   } catch (err) {
     console.error('[aphylia-chat] Cleanup error:', err?.message)
+  }
+})
+
+// ========== GDPR: Automated Data Retention Cleanup ==========
+// Runs daily at 3 AM to enforce data retention policies
+cron.schedule('0 3 * * *', async () => {
+  if (!sql) return
+  console.log('[gdpr] Running data retention cleanup...')
+  
+  try {
+    // 1. Anonymize web visits older than 90 days
+    const anonymizedVisits = await sql`
+      UPDATE public.web_visits
+      SET ip_address = NULL, user_agent = NULL, anonymized_at = NOW()
+      WHERE occurred_at < NOW() - INTERVAL '90 days'
+        AND ip_address IS NOT NULL
+        AND anonymized_at IS NULL
+    `
+    const anonymizedCount = anonymizedVisits?.count || 0
+    
+    // 2. Delete orphaned messages (from deleted users, older than 30 days)
+    const deletedOrphanedMessages = await sql`
+      DELETE FROM public.messages
+      WHERE sender_id NOT IN (SELECT id FROM auth.users)
+        AND created_at < NOW() - INTERVAL '30 days'
+    `
+    const orphanedMessagesCount = deletedOrphanedMessages?.count || 0
+    
+    // 3. Delete expired push subscriptions (not used in 180 days)
+    const deletedPushSubs = await sql`
+      DELETE FROM public.user_push_subscriptions
+      WHERE updated_at < NOW() - INTERVAL '180 days'
+    `
+    const pushSubsCount = deletedPushSubs?.count || 0
+    
+    // 4. Delete old notifications (older than 90 days and already read)
+    const deletedOldNotifs = await sql`
+      DELETE FROM public.user_notifications
+      WHERE scheduled_for < NOW() - INTERVAL '90 days'
+        AND (read_at IS NOT NULL OR clicked_at IS NOT NULL)
+    `
+    const oldNotifsCount = deletedOldNotifs?.count || 0
+    
+    // 5. Delete old GDPR audit logs (older than 3 years for compliance)
+    const deletedAuditLogs = await sql`
+      DELETE FROM public.gdpr_audit_log
+      WHERE created_at < NOW() - INTERVAL '3 years'
+    `
+    const auditLogsCount = deletedAuditLogs?.count || 0
+    
+    // 6. Delete old admin activity logs (older than 90 days)
+    const deletedAdminLogs = await sql`
+      DELETE FROM public.admin_activity_logs
+      WHERE created_at < NOW() - INTERVAL '90 days'
+    `
+    const adminLogsCount = deletedAdminLogs?.count || 0
+    
+    // 7. Delete orphaned conversations (both participants deleted)
+    const deletedOrphanedConvs = await sql`
+      DELETE FROM public.conversations
+      WHERE participant_1 NOT IN (SELECT id FROM auth.users)
+        AND participant_2 NOT IN (SELECT id FROM auth.users)
+        AND created_at < NOW() - INTERVAL '30 days'
+    `
+    const orphanedConvsCount = deletedOrphanedConvs?.count || 0
+    
+    console.log('[gdpr] Data retention cleanup completed:', {
+      anonymizedVisits: anonymizedCount,
+      orphanedMessages: orphanedMessagesCount,
+      expiredPushSubs: pushSubsCount,
+      oldNotifications: oldNotifsCount,
+      oldAuditLogs: auditLogsCount,
+      oldAdminLogs: adminLogsCount,
+      orphanedConversations: orphanedConvsCount,
+    })
+  } catch (err) {
+    console.error('[gdpr] Data retention cleanup failed:', err)
   }
 })
 

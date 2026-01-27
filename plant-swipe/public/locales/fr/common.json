@@ -2907,6 +2907,39 @@
         "notAPlant": "Ceci ne semble pas être une plante. Veuillez essayer une autre image.",
         "identifyFailed": "Échec de l'identification de la plante. Veuillez réessayer."
       }
+    },
+    "cookie": {
+      "title": "Préférences de cookies",
+      "subtitle": "Gérez vos paramètres de confidentialité",
+      "description": "Nous utilisons des cookies et des technologies similaires pour améliorer votre expérience, analyser le trafic et personnaliser le contenu. Vous pouvez choisir les cookies que vous autorisez.",
+      "acceptAll": "Tout accepter",
+      "essentialOnly": "Essentiels uniquement",
+      "rejectAll": "Tout refuser",
+      "showDetails": "Détails",
+      "hideDetails": "Masquer les détails",
+      "essential": "Essentiels",
+      "essentialDesc": "Nécessaires au fonctionnement de l'application. Ne peuvent pas être désactivés.",
+      "analytics": "Analytiques",
+      "analyticsDesc": "Nous aident à comprendre comment vous utilisez l'application pour l'améliorer.",
+      "marketing": "Marketing",
+      "marketingDesc": "Utilisés pour le contenu personnalisé et la publicité.",
+      "learnMore": "En savoir plus sur notre utilisation des cookies dans notre",
+      "privacyPolicy": "Politique de confidentialité"
+    },
+    "gdpr": {
+      "exportData": "Exporter mes données",
+      "exportDataDesc": "Téléchargez toutes vos données personnelles dans un format lisible par machine",
+      "exportDataButton": "Télécharger l'export des données",
+      "exportSuccess": "Vos données ont été exportées avec succès",
+      "exportError": "Échec de l'exportation des données. Veuillez réessayer.",
+      "deleteAccount": "Supprimer le compte",
+      "deleteAccountDesc": "Supprimez définitivement votre compte et toutes les données associées",
+      "deleteAccountWarning": "Cette action est irréversible. Toutes vos données seront définitivement supprimées.",
+      "consentSettings": "Confidentialité et consentement",
+      "marketingConsent": "Communications marketing",
+      "marketingConsentDesc": "Recevez des mises à jour sur les nouvelles fonctionnalités et promotions",
+      "analyticsConsent": "Analytiques",
+      "analyticsConsentDesc": "Aidez-nous à nous améliorer en autorisant les analyses anonymes d'utilisation"
     }
   }
 }

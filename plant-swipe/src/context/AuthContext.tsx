@@ -15,11 +15,13 @@ type AuthContextValue = {
   user: AuthUser | null
   profile: ProfileRow | null
   loading: boolean
-  signUp: (opts: { email: string; password: string; displayName: string; recaptchaToken?: string }) => Promise<{ error?: string }>
+  signUp: (opts: { email: string; password: string; displayName: string; recaptchaToken?: string; marketingConsent?: boolean }) => Promise<{ error?: string }>
   signIn: (opts: { email: string; password: string; recaptchaToken?: string }) => Promise<{ error?: string }>
   signOut: () => Promise<void>
   deleteAccount: () => Promise<{ error?: string }>
   refreshProfile: () => Promise<void>
+  exportData: () => Promise<{ error?: string; data?: unknown }>
+  updateConsent: (opts: { marketingConsent?: boolean; analyticsConsent?: boolean }) => Promise<{ error?: string }>
 }
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
@@ -160,7 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { sub.subscription.unsubscribe() }
   }, [loadSession, refreshProfile])
 
-  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken }) => {
+  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken, marketingConsent }) => {
     // Verify reCAPTCHA token before attempting signup
     if (recaptchaToken) {
       try {
@@ -217,8 +219,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     })()
     
-    // Create profile row with detected timezone and language
-    // Note: notify_push and notify_email columns will default to true once the migration is applied
+    // GDPR: Record consent timestamps during signup
+    const now = new Date().toISOString()
+    
+    // Create profile row with detected timezone, language, and GDPR consent tracking
     // Use normalized (lowercase) display name for consistent uniqueness
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
@@ -227,6 +231,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timezone: detectedTimezone,
       language: detectedLanguage,
       accent_key: 'emerald',
+      // GDPR consent tracking
+      terms_accepted_date: now,
+      privacy_policy_accepted_date: now,
+      marketing_consent: marketingConsent || false,
+      marketing_consent_date: marketingConsent ? now : null,
     })
     if (perr) return { error: perr.message }
 
@@ -364,6 +373,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return {}
   }
 
+  // GDPR: Export all user data
+  const exportData: AuthContextValue['exportData'] = async () => {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+    if (!token) return { error: 'Not authenticated' }
+
+    try {
+      const resp = await fetch('/api/account/export', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: 'same-origin',
+      })
+      if (!resp.ok) {
+        let message = 'Failed to export data'
+        try {
+          const payload = await resp.json()
+          if (payload?.error) message = payload.error
+        } catch {}
+        return { error: message }
+      }
+      const data = await resp.json()
+      return { data }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Failed to export data' }
+    }
+  }
+
+  // GDPR: Update consent preferences
+  const updateConsent: AuthContextValue['updateConsent'] = async ({ marketingConsent, analyticsConsent }) => {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+    if (!token) return { error: 'Not authenticated' }
+
+    try {
+      const resp = await fetch('/api/account/consent', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ marketingConsent, analyticsConsent }),
+        credentials: 'same-origin',
+      })
+      if (!resp.ok) {
+        let message = 'Failed to update consent'
+        try {
+          const payload = await resp.json()
+          if (payload?.error) message = payload.error
+        } catch {}
+        return { error: message }
+      }
+      // Refresh profile to get updated consent values
+      await refreshProfile()
+      return {}
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Failed to update consent' }
+    }
+  }
+
   const value: AuthContextValue = {
     user,
     profile,
@@ -373,6 +443,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signOut,
     deleteAccount,
     refreshProfile,
+    exportData,
+    updateConsent,
   }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

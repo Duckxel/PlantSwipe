@@ -14,7 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TopBar } from "@/components/layout/TopBar";
 import { Footer } from "@/components/layout/Footer";
-import BroadcastToast from "@/components/layout/BroadcastToast";
+import BroadcastToast from "@/components/layout/BroadcastToast"
+import CookieConsent from "@/components/layout/CookieConsent";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
@@ -2014,6 +2015,7 @@ export default function PlantSwipe() {
 
       <Footer />
       <BroadcastToast />
+      <CookieConsent />
       <RequestPlantDialog open={requestPlantDialogOpen} onOpenChange={setRequestPlantDialogOpen} />
       
       {/* Message notification toast - shows when new messages arrive */}
