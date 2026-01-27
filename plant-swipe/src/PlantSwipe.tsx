@@ -916,6 +916,7 @@ export default function PlantSwipe() {
     
     // Only shuffle if we haven't done initial shuffle yet, or explicit epoch triggered
     if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
+      // Fisher-Yates shuffle for unbiased randomization
       const shuffleArray = <T,>(arr: T[]): T[] => {
         const result = arr.slice()
         for (let i = result.length - 1; i > 0; i--) {
@@ -925,6 +926,10 @@ export default function PlantSwipe() {
         return result
       }
       
+      // Discovery Algorithm:
+      // 1. Plants with promotion_month matching current month appear FIRST (shuffled among themselves)
+      // 2. All other plants follow (shuffled among themselves)
+      // This ensures "Plant of the Month" plants get priority visibility in Discovery
       const now = new Date()
       const promoted: string[] = []
       const regular: string[] = []
@@ -937,6 +942,7 @@ export default function PlantSwipe() {
         }
       })
       
+      // Promoted plants first, then regular plants (both groups shuffled internally)
       const newOrder = promoted.length === 0
         ? shuffleArray(swipeablePlants.map(p => p.id))
         : [...shuffleArray(promoted), ...shuffleArray(regular)]
@@ -966,15 +972,25 @@ export default function PlantSwipe() {
       return status === 'in progres' || status === 'in progress'
     }
 
-    // For default sort, push "in progress" plants to the bottom
+    // For default sort:
+    // 1. Promotion Month plants first (featured for current month)
+    // 2. Regular plants in the middle
+    // 3. In-progress plants last
     if (searchSort === "default") {
+      const now = new Date()
       const arr = filtered.slice() as PreparedPlant[]
       arr.sort((a, b) => {
+        // Priority: Promotion Month > Regular > In Progress
+        const aPromoted = isPlantOfTheMonth(a, now) ? -1 : 0
+        const bPromoted = isPlantOfTheMonth(b, now) ? -1 : 0
+        if (aPromoted !== bPromoted) return aPromoted - bPromoted
+        
         const aInProgress = isPlantInProgress(a) ? 1 : 0
         const bInProgress = isPlantInProgress(b) ? 1 : 0
         if (aInProgress !== bInProgress) return aInProgress - bInProgress
-        // Maintain original order for same status
-        return 0
+        
+        // Maintain alphabetical order within same priority
+        return a.name.localeCompare(b.name)
       })
       return arr
     }
