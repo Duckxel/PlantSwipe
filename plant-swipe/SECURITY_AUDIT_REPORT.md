@@ -56,8 +56,12 @@ This security audit was conducted to assess the security posture of the Aphylia 
 #### ✅ Account Lockout (IMPLEMENTED)
 - IP-based rate limiting for authentication attempts
 - 10 failed attempts per 15 minutes triggers temporary block
-- Successful login clears failed attempt history
-- Endpoints: `/api/auth/check-rate-limit`, `/api/auth/record-attempt`
+- Rate limit clearing requires authentication (prevents bypass attacks)
+- Minimal information disclosure (only returns `blocked: true/false`)
+- Endpoints:
+  - `GET /api/auth/check-rate-limit` - Check if IP is blocked (minimal response)
+  - `POST /api/auth/record-attempt` - Record failed attempt only
+  - `POST /api/auth/clear-rate-limit` - Clear rate limit (requires auth)
 
 ---
 

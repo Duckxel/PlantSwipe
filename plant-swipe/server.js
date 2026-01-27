@@ -12008,6 +12008,9 @@ app.get('/api/banned/check', async (req, res) => {
 /**
  * Check if an IP is blocked due to too many auth attempts
  * GET /api/auth/check-rate-limit
+ * 
+ * SECURITY: Returns minimal information to prevent enumeration attacks.
+ * Only reveals whether the IP is blocked, not timing details.
  */
 app.get('/api/auth/check-rate-limit', (req, res) => {
   const ip = getClientIp(req) || 'unknown'
@@ -12020,61 +12023,91 @@ app.get('/api/auth/check-rate-limit', (req, res) => {
   const recent = history.filter((ts) => now - ts < config.windowMs)
   
   const isBlocked = recent.length >= config.maxAttempts
-  const remainingAttempts = Math.max(0, config.maxAttempts - recent.length)
-  const resetTime = recent.length > 0 ? new Date(recent[0] + config.windowMs).toISOString() : null
   
+  // SECURITY: Only return blocked status - don't reveal timing or attempt counts
+  // This prevents attackers from enumerating rate limit windows
   res.json({
-    blocked: isBlocked,
-    remainingAttempts,
-    resetTime: isBlocked ? resetTime : null,
-    windowMinutes: config.windowMs / 60000
+    blocked: isBlocked
   })
 })
 
 /**
- * Record an authentication attempt
+ * Record a FAILED authentication attempt (internal rate limiting)
  * POST /api/auth/record-attempt
- * Body: { success: boolean }
  * 
- * Only failed attempts count toward the rate limit.
- * This should be called AFTER authentication result is known.
+ * SECURITY: This endpoint ONLY records failed attempts.
+ * Rate limit clearing happens INTERNALLY when Supabase auth succeeds,
+ * not via external API calls. This prevents bypass attacks.
  */
 app.post('/api/auth/record-attempt', (req, res) => {
-  const { success } = req.body || {}
   const ip = getClientIp(req) || 'unknown'
   const identifier = `ip:${ip}`
   
-  // Only track failed attempts
-  if (success === true) {
-    // On successful login, optionally clear the failed attempt history
-    // This allows legitimate users to recover immediately after logging in
-    rateLimitStores.authAttempt.delete(identifier)
-    res.json({ ok: true, message: 'Attempt history cleared on success' })
-    return
-  }
-  
-  // Record failed attempt
+  // SECURITY: Check if already blocked before recording
   const store = rateLimitStores.authAttempt
   const config = rateLimitConfig.authAttempt
   const now = Date.now()
   const history = store.get(identifier) || []
   const recent = history.filter((ts) => now - ts < config.windowMs)
+  
+  // If already blocked, don't record more - just return blocked status
+  if (recent.length >= config.maxAttempts) {
+    res.status(429).json({
+      ok: false,
+      blocked: true,
+      error: 'Too many failed attempts. Please try again later.'
+    })
+    return
+  }
+  
+  // Record the failed attempt
   recent.push(now)
   store.set(identifier, recent)
   
-  const remainingAttempts = Math.max(0, config.maxAttempts - recent.length)
-  const isBlocked = remainingAttempts === 0
+  const isBlocked = recent.length >= config.maxAttempts
   
   if (isBlocked) {
     console.log(`[auth-rate-limit] IP ${ip} blocked after ${config.maxAttempts} failed attempts`)
   }
   
+  // SECURITY: Only return blocked status - no timing information
   res.json({
     ok: true,
-    blocked: isBlocked,
-    remainingAttempts,
-    windowMinutes: config.windowMs / 60000
+    blocked: isBlocked
   })
+})
+
+/**
+ * Clear rate limit after successful authentication (INTERNAL USE ONLY)
+ * POST /api/auth/clear-rate-limit
+ * 
+ * SECURITY: Requires valid Supabase authentication token.
+ * Only authenticated users can clear their IP's rate limit history.
+ */
+app.post('/api/auth/clear-rate-limit', async (req, res) => {
+  try {
+    // SECURITY: Verify the user is actually authenticated
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      // Don't reveal whether rate limit exists - just return generic error
+      res.status(401).json({ ok: false, error: 'Unauthorized' })
+      return
+    }
+    
+    // User is authenticated - clear the rate limit for their IP
+    const ip = getClientIp(req) || 'unknown'
+    const identifier = `ip:${ip}`
+    
+    rateLimitStores.authAttempt.delete(identifier)
+    
+    // Log for security monitoring
+    console.log(`[auth-rate-limit] Rate limit cleared for IP ${ip} after successful auth by user ${user.id.slice(0, 8)}...`)
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[auth-rate-limit] Error clearing rate limit:', err?.message)
+    res.status(500).json({ ok: false, error: 'Internal error' })
+  }
 })
 
 // =============================================================================
