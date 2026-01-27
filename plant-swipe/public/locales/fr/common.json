@@ -1,4 +1,8 @@
 {
+  "_meta": {
+    "version": "1.0.0",
+    "lastUpdated": "2026-01-27"
+  },
   "common": {
     "appName": "Aphylia",
     "discovery": "Découverte",
