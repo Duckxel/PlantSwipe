@@ -2857,6 +2857,118 @@ try { app.set('trust proxy', true) } catch { }
 // Increase JSON body limit to handle base64 encoded images (e.g. for plant scan identification)
 app.use(express.json({ limit: '15mb' }))
 
+// =============================================================================
+// CSRF (Cross-Site Request Forgery) Protection
+// Used for high-risk operations like password/email changes
+// =============================================================================
+
+// CSRF token store: Map of token -> { userId, createdAt, used }
+// Tokens expire after 15 minutes and can only be used once
+const csrfTokenStore = new Map()
+const CSRF_TOKEN_EXPIRY_MS = 15 * 60 * 1000 // 15 minutes
+const CSRF_CLEANUP_INTERVAL_MS = 5 * 60 * 1000 // Clean up every 5 minutes
+
+// Cleanup expired tokens periodically
+setInterval(() => {
+  const now = Date.now()
+  for (const [token, data] of csrfTokenStore.entries()) {
+    if (now - data.createdAt > CSRF_TOKEN_EXPIRY_MS) {
+      csrfTokenStore.delete(token)
+    }
+  }
+}, CSRF_CLEANUP_INTERVAL_MS)
+
+/**
+ * Generate a new CSRF token for a user
+ * @param userId - The user ID to associate with the token
+ * @returns The generated token
+ */
+function generateCsrfToken(userId) {
+  const token = crypto.randomBytes(32).toString('hex')
+  csrfTokenStore.set(token, {
+    userId: userId || 'anonymous',
+    createdAt: Date.now(),
+    used: false
+  })
+  return token
+}
+
+/**
+ * Validate a CSRF token
+ * @param token - The token to validate
+ * @param userId - The user ID to match against (optional)
+ * @returns { valid: boolean, reason?: string }
+ */
+function validateCsrfToken(token, userId = null) {
+  if (!token) {
+    return { valid: false, reason: 'No CSRF token provided' }
+  }
+
+  const tokenData = csrfTokenStore.get(token)
+  
+  if (!tokenData) {
+    return { valid: false, reason: 'Invalid or expired CSRF token' }
+  }
+
+  // Check if token has expired
+  if (Date.now() - tokenData.createdAt > CSRF_TOKEN_EXPIRY_MS) {
+    csrfTokenStore.delete(token)
+    return { valid: false, reason: 'CSRF token has expired' }
+  }
+
+  // Check if token was already used (prevent replay attacks)
+  if (tokenData.used) {
+    return { valid: false, reason: 'CSRF token has already been used' }
+  }
+
+  // If userId provided, verify it matches
+  if (userId && tokenData.userId !== 'anonymous' && tokenData.userId !== userId) {
+    return { valid: false, reason: 'CSRF token user mismatch' }
+  }
+
+  // Mark token as used (one-time use)
+  tokenData.used = true
+  
+  return { valid: true }
+}
+
+/**
+ * Middleware to require CSRF token validation
+ * Expects token in X-CSRF-Token header
+ */
+function requireCsrfToken(req, res, next) {
+  const csrfToken = req.headers['x-csrf-token']
+  
+  // Get user ID from Authorization header if present
+  let userId = null
+  const authHeader = req.headers.authorization
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      // Decode JWT to get user ID (without verification - Supabase handles that)
+      const token = authHeader.split(' ')[1]
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
+      userId = payload.sub
+    } catch { }
+  }
+
+  const validation = validateCsrfToken(csrfToken, userId)
+  
+  if (!validation.valid) {
+    console.warn(`[CSRF] Validation failed: ${validation.reason}`, { 
+      path: req.path, 
+      ip: req.ip || req.headers['x-forwarded-for'],
+      userId 
+    })
+    return res.status(403).json({ 
+      error: 'CSRF validation failed', 
+      reason: validation.reason,
+      code: 'CSRF_INVALID'
+    })
+  }
+
+  next()
+}
+
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
   try {
@@ -2872,8 +2984,9 @@ app.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
     }
     if (req.path && req.path.startsWith('/api/')) {
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
+      res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token')
       if (req.method === 'OPTIONS') {
         res.status(204).end()
         return
@@ -2885,8 +2998,9 @@ app.use((req, res, next) => {
 
 // Catch-all OPTIONS for any /api/* route (defense-in-depth)
 app.options('/api/*', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
+  res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token')
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.status(204).end()
 })
@@ -2945,6 +3059,38 @@ app.get('/api/health', async (_req, res) => {
       db: { ok: false, latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' },
     })
   }
+})
+
+// =============================================================================
+// CSRF Token Endpoint - Get a fresh CSRF token for security-sensitive operations
+// =============================================================================
+app.get('/api/csrf-token', (req, res) => {
+  // Extract user ID from Authorization header if present
+  let userId = null
+  const authHeader = req.headers.authorization
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.split(' ')[1]
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
+      userId = payload.sub
+    } catch { }
+  }
+
+  const csrfToken = generateCsrfToken(userId)
+  
+  // Also set as a cookie for additional security layer
+  res.cookie('csrf_token', csrfToken, {
+    httpOnly: false, // Must be readable by JS
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: CSRF_TOKEN_EXPIRY_MS,
+    path: '/'
+  })
+
+  res.json({ 
+    token: csrfToken,
+    expiresIn: CSRF_TOKEN_EXPIRY_MS / 1000 // seconds
+  })
 })
 
 // Admin: System health stats (CPU, memory, disk, uptime, connections)
@@ -7855,6 +8001,39 @@ const DEFAULT_EMAIL_TRIGGERS = [
     displayName: 'User Ban Notification',
     description: 'Sent when a user is marked as threat level 3 (ban)',
   },
+  // Security Emails - Email Change
+  {
+    triggerType: 'EMAIL_CHANGE_VERIFICATION',
+    displayName: 'Email Change Verification',
+    description: 'Sent to the NEW email address with a verification link when user requests to change their email. Variables: {{url}}, {{new_email}}, {{old_email}}',
+  },
+  {
+    triggerType: 'EMAIL_CHANGE_NOTIFICATION',
+    displayName: 'Email Changed Notification',
+    description: 'Sent to the OLD email address to inform that the email has been changed. Variables: {{new_email}}, {{old_email}}, {{time}}',
+  },
+  // Security Emails - Password
+  {
+    triggerType: 'PASSWORD_RESET_REQUEST',
+    displayName: 'Password Reset Request',
+    description: 'Sent when user requests a password reset. Contains a secure reset link. Variables: {{url}}, {{time}}',
+  },
+  {
+    triggerType: 'PASSWORD_CHANGE_CONFIRMATION',
+    displayName: 'Password Changed Confirmation',
+    description: 'Sent after password has been successfully changed. Variables: {{time}}, {{device}}, {{location}}',
+  },
+  // Security Emails - Login Security
+  {
+    triggerType: 'SUSPICIOUS_LOGIN_ALERT',
+    displayName: 'Suspicious Login Alert',
+    description: 'Sent when a login is detected from an unusual location or device. Variables: {{location}}, {{device}}, {{ip_address}}, {{time}}',
+  },
+  {
+    triggerType: 'NEW_DEVICE_LOGIN',
+    displayName: 'New Device Login',
+    description: 'Sent when user logs in from a new device. Variables: {{device}}, {{location}}, {{ip_address}}, {{time}}',
+  },
 ]
 
 async function ensureDefaultEmailTriggers() {
@@ -8171,6 +8350,351 @@ app.post('/api/send-automatic-email', async (req, res) => {
   }
   const status = result?.reason === 'Trigger not configured' ? 404 : result?.reason === 'Email service not configured' ? 500 : 200
   res.status(status).json(result)
+})
+
+// =============================================================================
+// SECURITY EMAILS - Password Reset, Email Change, Suspicious Login, etc.
+// These emails do NOT check for "already sent" - they're always delivered
+// =============================================================================
+
+/**
+ * Send a security-related email (password reset, email change, suspicious login, etc.)
+ * Unlike sendAutomaticEmail, this function:
+ * - Does NOT check if already sent (security emails always go through)
+ * - Supports extra context variables for security info
+ * - Can send to any email address (important for email change notifications)
+ * 
+ * @param triggerType - The trigger type (e.g., 'PASSWORD_RESET_REQUEST', 'EMAIL_CHANGE_VERIFICATION')
+ * @param options.recipientEmail - Email address to send to (may differ from user's current email)
+ * @param options.userId - User ID for logging
+ * @param options.userDisplayName - User's display name for {{user}} variable
+ * @param options.userLanguage - User's preferred language
+ * @param options.extraContext - Additional variables: verification_link, reset_link, old_email, new_email, location, device, ip_address, timestamp
+ */
+async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisplayName, userLanguage, extraContext = {} }) {
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+  if (!apiKey) {
+    console.error('[sendSecurityEmail] No Resend API key configured')
+    return { sent: false, reason: 'Email service not configured' }
+  }
+
+  if (!sql) {
+    console.error('[sendSecurityEmail] Database connection not available')
+    return { sent: false, reason: 'Database not configured' }
+  }
+
+  const lang = userLanguage || 'en'
+
+  try {
+    await ensureDefaultEmailTriggers()
+    const triggerRows = await sql`
+      select t.*, tpl.title as template_title, tpl.subject, tpl.body_html
+      from public.admin_email_triggers t
+      left join public.admin_email_templates tpl on tpl.id = t.template_id
+      where t.trigger_type = ${triggerType}
+      limit 1
+    `
+
+    if (!triggerRows || !triggerRows.length) {
+      console.log(`[sendSecurityEmail] Trigger type "${triggerType}" not found`)
+      return { sent: false, reason: 'Trigger not configured' }
+    }
+
+    const trigger = triggerRows[0]
+
+    if (!trigger.is_enabled) {
+      console.log(`[sendSecurityEmail] Trigger "${triggerType}" is disabled`)
+      return { sent: false, reason: 'Trigger is disabled' }
+    }
+
+    if (!trigger.template_id) {
+      console.log(`[sendSecurityEmail] Trigger "${triggerType}" has no template configured`)
+      return { sent: false, reason: 'No template configured' }
+    }
+
+    // NOTE: For security emails, we do NOT check if already sent
+    // These emails should always be delivered for security reasons
+
+    const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
+    const translation = emailTranslations.get(lang)
+    const rawSubject = translation?.subject || trigger.subject
+    const rawBodyHtml = translation?.bodyHtml || trigger.body_html
+
+    if (!rawSubject || !rawBodyHtml) {
+      console.error(`[sendSecurityEmail] Template "${trigger.template_id}" has no content`)
+      return { sent: false, reason: 'Template has no content' }
+    }
+
+    // Build context with standard + security-specific variables
+    const userRaw = userDisplayName || 'User'
+    const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    let randomStr = ''
+    for (let i = 0; i < 10; i++) {
+      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+
+    const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+    const currentTimestamp = new Date().toLocaleString('en-US', { 
+      dateStyle: 'medium', 
+      timeStyle: 'short',
+      timeZone: 'UTC'
+    }) + ' UTC'
+
+    // Merge standard context with extra security context
+    // Note: {{url}} is used for verification links, reset links, and website URL
+    // The extraContext.url takes precedence if provided (for security links)
+    const context = {
+      user: userCap,
+      email: recipientEmail,
+      random: randomStr,
+      url: extraContext.url || websiteUrl.replace(/^https?:\/\//, ''),
+      code: extraContext.code || 'XXXXXX',
+      // Security-specific variables
+      old_email: extraContext.old_email || '',
+      new_email: extraContext.new_email || '',
+      location: extraContext.location || 'Unknown location',
+      device: extraContext.device || 'Unknown device',
+      ip_address: extraContext.ip_address || 'Unknown',
+      time: extraContext.time || currentTimestamp,
+    }
+
+    const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
+      const key = k.toLowerCase()
+      return context[key] !== undefined ? context[key] : `{{${k}}}`
+    })
+
+    const subject = replaceVars(rawSubject)
+    const bodyHtmlRaw = replaceVars(rawBodyHtml)
+    const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
+    const html = wrapEmailHtml(bodyHtml, subject, lang)
+    const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+
+    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
+
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: recipientEmail,
+        subject: subject,
+        html: html,
+        text: text,
+        headers: { 'X-Trigger-Type': triggerType, 'X-Security-Email': 'true' },
+        tags: [
+          { name: 'trigger_type', value: triggerType },
+          { name: 'category', value: 'security' }
+        ]
+      })
+    })
+
+    if (!resendResponse.ok) {
+      const errorText = await resendResponse.text().catch(() => '')
+      console.error(`[sendSecurityEmail] Resend API error (${resendResponse.status}):`, errorText)
+      return { sent: false, reason: errorText || 'Failed to send email' }
+    }
+
+    const resendData = await resendResponse.json().catch(() => ({}))
+    console.log(`[sendSecurityEmail] Sent "${triggerType}" to ${recipientEmail}, Resend ID: ${resendData.id || 'unknown'}`)
+
+    // Log security email send (don't prevent duplicates, but do track)
+    try {
+      await sql`
+        insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
+        values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
+      `
+    } catch (logErr) {
+      console.warn('[sendSecurityEmail] Failed to log send:', logErr?.message || logErr)
+    }
+
+    return { sent: true, resendId: resendData.id || null, trigger }
+  } catch (err) {
+    console.error('[sendSecurityEmail] Error:', err)
+    return { sent: false, error: err?.message || 'Failed to send email' }
+  }
+}
+
+// API endpoint to send security emails (called from frontend auth flows)
+app.post('/api/send-security-email', async (req, res) => {
+  const { 
+    triggerType, 
+    recipientEmail, 
+    userId, 
+    userDisplayName, 
+    userLanguage,
+    extraContext 
+  } = req.body || {}
+
+  if (!triggerType || !recipientEmail || !userId) {
+    res.status(400).json({ error: 'Missing required fields: triggerType, recipientEmail, userId' })
+    return
+  }
+
+  // Validate trigger type is a security-related trigger
+  const securityTriggers = [
+    'EMAIL_CHANGE_VERIFICATION',
+    'EMAIL_CHANGE_NOTIFICATION', 
+    'PASSWORD_RESET_REQUEST',
+    'PASSWORD_CHANGE_CONFIRMATION',
+    'SUSPICIOUS_LOGIN_ALERT',
+    'NEW_DEVICE_LOGIN'
+  ]
+
+  if (!securityTriggers.includes(triggerType)) {
+    res.status(400).json({ error: `Invalid security trigger type: ${triggerType}` })
+    return
+  }
+
+  const result = await sendSecurityEmail(triggerType, { 
+    recipientEmail, 
+    userId, 
+    userDisplayName: userDisplayName || 'User',
+    userLanguage,
+    extraContext: extraContext || {}
+  })
+
+  if (result.sent) {
+    res.json({ sent: true, resendId: result.resendId })
+    return
+  }
+
+  const status = result?.reason === 'Trigger not configured' ? 404 
+    : result?.reason === 'Email service not configured' ? 500 
+    : 200
+  res.status(status).json(result)
+})
+
+// Convenience endpoint: Send password change confirmation email
+// CSRF protected - requires X-CSRF-Token header
+// Auth protected - requires authenticated user to match userId
+app.post('/api/security/password-changed', requireCsrfToken, async (req, res) => {
+  const { userId, userEmail, userDisplayName, userLanguage, device, location, ipAddress } = req.body || {}
+  
+  if (!userId || !userEmail) {
+    res.status(400).json({ error: 'Missing required fields: userId, userEmail' })
+    return
+  }
+
+  // Verify authenticated user matches the userId in the request
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id || authUser.id !== userId) {
+    console.warn('[security/password-changed] User ID mismatch or not authenticated', { 
+      authUserId: authUser?.id, 
+      requestUserId: userId,
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
+  }
+
+  const result = await sendSecurityEmail('PASSWORD_CHANGE_CONFIRMATION', {
+    recipientEmail: userEmail,
+    userId,
+    userDisplayName: userDisplayName || 'User',
+    userLanguage,
+    extraContext: {
+      device: device || req.headers['user-agent'] || 'Unknown device',
+      location: location || 'Unknown location',
+      ip_address: ipAddress || req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+      time: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
+    }
+  })
+
+  res.json(result)
+})
+
+// Convenience endpoint: Send email change notification to OLD email
+// CSRF protected - requires X-CSRF-Token header
+// Auth protected - requires authenticated user to match userId
+app.post('/api/security/email-changed-notification', requireCsrfToken, async (req, res) => {
+  const { userId, oldEmail, newEmail, userDisplayName, userLanguage } = req.body || {}
+  
+  if (!userId || !oldEmail || !newEmail) {
+    res.status(400).json({ error: 'Missing required fields: userId, oldEmail, newEmail' })
+    return
+  }
+
+  // Verify authenticated user matches the userId in the request
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id || authUser.id !== userId) {
+    console.warn('[security/email-changed-notification] User ID mismatch or not authenticated', { 
+      authUserId: authUser?.id, 
+      requestUserId: userId,
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
+  }
+
+  const result = await sendSecurityEmail('EMAIL_CHANGE_NOTIFICATION', {
+    recipientEmail: oldEmail, // Send to the OLD email address
+    userId,
+    userDisplayName: userDisplayName || 'User',
+    userLanguage,
+    extraContext: {
+      old_email: oldEmail,
+      new_email: newEmail,
+      time: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
+    }
+  })
+
+  res.json(result)
+})
+
+// Check if email is already in use by another user
+// CSRF protected - requires X-CSRF-Token header
+// Auth protected - requires authenticated user
+app.post('/api/security/check-email-available', requireCsrfToken, async (req, res) => {
+  const { email, currentUserId } = req.body || {}
+  
+  if (!email) {
+    res.status(400).json({ error: 'Missing required field: email' })
+    return
+  }
+
+  // Verify user is authenticated
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    console.warn('[security/check-email-available] Not authenticated', { 
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(401).json({ error: 'Unauthorized: Authentication required', code: 'AUTH_REQUIRED' })
+  }
+
+  // If currentUserId provided, verify it matches the authenticated user
+  if (currentUserId && authUser.id !== currentUserId) {
+    console.warn('[security/check-email-available] User ID mismatch', { 
+      authUserId: authUser.id, 
+      requestUserId: currentUserId,
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
+  }
+
+  // Use the authenticated user's ID to exclude from the check
+  const userIdToExclude = authUser.id
+  const normalizedEmail = email.toLowerCase().trim()
+
+  try {
+    if (sql) {
+      // Check if email exists in auth.users (excluding the current authenticated user)
+      const rows = await sql`SELECT id FROM auth.users WHERE lower(email) = ${normalizedEmail} AND id != ${userIdToExclude} LIMIT 1`
+      const isAvailable = !rows || rows.length === 0
+      
+      res.json({ available: isAvailable, email: normalizedEmail })
+    } else {
+      // Fallback: can't check without database connection, assume available
+      // The actual update will fail if email is taken
+      res.json({ available: true, email: normalizedEmail, note: 'Database check unavailable' })
+    }
+  } catch (err) {
+    console.error('[check-email-available] Error:', err)
+    // On error, let the update proceed and handle the error there
+    res.json({ available: true, email: normalizedEmail, note: 'Check failed, proceeding' })
+  }
 })
 
 // Admin: global stats (bypass RLS via server connection)

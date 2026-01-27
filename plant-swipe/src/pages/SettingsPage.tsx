@@ -15,6 +15,31 @@ import usePushSubscription from "@/hooks/usePushSubscription"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
 
+/**
+ * Fetch a CSRF token for security-sensitive operations
+ * Tokens are single-use and expire after 15 minutes
+ */
+async function getCsrfToken(): Promise<string> {
+  const session = (await supabase.auth.getSession()).data.session
+  const headers: Record<string, string> = {}
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  
+  const response = await fetch('/api/csrf-token', {
+    method: 'GET',
+    headers,
+    credentials: 'same-origin',
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to get CSRF token')
+  }
+  
+  const data = await response.json()
+  return data.token
+}
+
 export default function SettingsPage() {
   const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
   const navigate = useLanguageNavigate()
@@ -227,11 +252,84 @@ export default function SettingsPage() {
     setSuccess(null)
 
     try {
+      // Get CSRF token and auth session for security-sensitive operations
+      const csrfToken = await getCsrfToken()
+      const session = (await supabase.auth.getSession()).data.session
+      
+      // Build secure headers with both CSRF and Authorization
+      const secureHeaders: Record<string, string> = { 
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      }
+      if (session?.access_token) {
+        secureHeaders['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      // Check if email is already in use by another user (CSRF + Auth protected)
+      const checkResponse = await fetch('/api/security/check-email-available', {
+        method: 'POST',
+        headers: secureHeaders,
+        body: JSON.stringify({ 
+          email: newEmail,
+          currentUserId: user?.id 
+        }),
+        credentials: 'same-origin',
+      })
+      
+      // Handle security errors (CSRF, Auth)
+      if (checkResponse.status === 401 || checkResponse.status === 403) {
+        const errorData = await checkResponse.json().catch(() => ({}))
+        if (errorData.code === 'CSRF_INVALID') {
+          throw new Error(t('settings.security.csrfError', { defaultValue: 'Security validation failed. Please refresh the page and try again.' }))
+        }
+        if (errorData.code === 'AUTH_REQUIRED' || errorData.code === 'AUTH_MISMATCH') {
+          throw new Error(t('settings.security.authError', { defaultValue: 'Authentication failed. Please sign in again and retry.' }))
+        }
+        // Generic auth error
+        throw new Error(errorData.error || t('settings.security.authError', { defaultValue: 'Authentication failed. Please sign in again and retry.' }))
+      }
+      
+      const checkResult = await checkResponse.json().catch(() => ({ available: true }))
+      
+      if (!checkResult.available) {
+        throw new Error(t('settings.email.emailAlreadyInUse', { defaultValue: 'This email is already in use by another account.' }))
+      }
+
+      const oldEmailAddress = email // Store old email before change
+      
       const { error: updateError } = await supabase.auth.updateUser({
         email: newEmail
       })
 
       if (updateError) throw updateError
+
+      // Send notification to OLD email about the change (CSRF + Auth protected, non-blocking)
+      // Need a fresh CSRF token since the previous one was used
+      if (user?.id && oldEmailAddress) {
+        Promise.all([getCsrfToken(), supabase.auth.getSession()]).then(([notifCsrfToken, sessionRes]) => {
+          const notifHeaders: Record<string, string> = { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': notifCsrfToken,
+          }
+          if (sessionRes.data.session?.access_token) {
+            notifHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
+          }
+          fetch('/api/security/email-changed-notification', {
+            method: 'POST',
+            headers: notifHeaders,
+            body: JSON.stringify({
+              userId: user.id,
+              oldEmail: oldEmailAddress,
+              newEmail: newEmail,
+              userDisplayName: profile?.display_name || 'User',
+              userLanguage: (profile as any)?.language || 'en',
+            }),
+            credentials: 'same-origin',
+          })
+        }).catch((err) => {
+          console.warn('[email-change] Failed to send notification email:', err)
+        })
+      }
 
       setSuccess(t('settings.email.updateRequestSent'))
       setNewEmail("")
@@ -262,6 +360,12 @@ export default function SettingsPage() {
       return
     }
 
+    // Check if new password is the same as current password
+    if (newPassword === currentPassword) {
+      setError(t('settings.password.newPasswordSameAsCurrent', { defaultValue: 'New password must be different from your current password.' }))
+      return
+    }
+
     setSaving(true)
     setError(null)
     setSuccess(null)
@@ -281,6 +385,33 @@ export default function SettingsPage() {
       })
 
       if (updateError) throw updateError
+
+      // Send password change confirmation email (CSRF + Auth protected, non-blocking)
+      if (user?.id && email) {
+        Promise.all([getCsrfToken(), supabase.auth.getSession()]).then(([csrfToken, sessionRes]) => {
+          const pwHeaders: Record<string, string> = { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken,
+          }
+          if (sessionRes.data.session?.access_token) {
+            pwHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
+          }
+          fetch('/api/security/password-changed', {
+            method: 'POST',
+            headers: pwHeaders,
+            body: JSON.stringify({
+              userId: user.id,
+              userEmail: email,
+              userDisplayName: profile?.display_name || 'User',
+              userLanguage: (profile as any)?.language || 'en',
+              // Browser will auto-detect device from user-agent on server
+            }),
+            credentials: 'same-origin',
+          })
+        }).catch((err) => {
+          console.warn('[password-change] Failed to send confirmation email:', err)
+        })
+      }
 
       setSuccess(t('settings.password.updated'))
       setCurrentPassword("")
