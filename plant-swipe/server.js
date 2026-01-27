@@ -5325,6 +5325,8 @@ app.post('/api/blog/summarize', async (req, res) => {
 
   const html = typeof req.body?.html === 'string' ? req.body.html : ''
   const title = typeof req.body?.title === 'string' ? req.body.title : ''
+  // Check if full metadata generation is requested (new feature)
+  const generateFullMetadata = req.body?.generateMetadata === true
 
   if (!html.trim()) {
     res.status(400).json({ error: 'Missing html content to summarize' })
@@ -5333,10 +5335,75 @@ app.post('/api/blog/summarize', async (req, res) => {
 
   const bodyText = extractPlainText(html, 6000)
   if (!bodyText) {
-    res.json({ summary: '' })
+    res.json({ summary: '', seoTitle: null, seoDescription: null, tags: [] })
     return
   }
 
+  // If full metadata generation is requested, generate all fields at once
+  if (generateFullMetadata) {
+    const instructions = [
+      'You are an SEO expert. Generate metadata for this blog article from Aphylia (a plant care app).',
+      '',
+      'Return a JSON object with exactly these fields:',
+      '',
+      '- "teaser": A compelling 1-sentence summary under 240 characters. Capture the SPECIFIC topic/insight of THIS article. Active voice, no emojis.',
+      '',
+      '- "seoTitle": An SEO-optimized title under 60 characters that is SPECIFIC to this article\'s unique content. Do NOT use generic titles. Include the main subject/plant/technique discussed.',
+      '',
+      '- "seoDescription": An SEO meta description between 120-155 characters. Be SPECIFIC about what readers will learn from THIS article.',
+      '',
+      '- "tags": An array of 5-7 lowercase tags. IMPORTANT: Tags must be SPECIFIC to the article content:',
+      '  * Include specific plant names mentioned (e.g., "monstera", "tomatoes", "succulents")',
+      '  * Include specific techniques discussed (e.g., "propagation", "repotting", "pruning")',
+      '  * Include specific problems/solutions (e.g., "yellow-leaves", "overwatering", "pest-control")',
+      '  * Include seasonal relevance if applicable (e.g., "spring-planting", "winter-care")',
+      '  * Avoid generic tags like "plants", "gardening", "tips" unless the article is truly general',
+      '  * Use hyphens for multi-word tags (e.g., "indoor-plants", "soil-mix")',
+      '',
+      'Respond ONLY with valid JSON, no markdown formatting.',
+    ].join('\n')
+    const promptSections = [
+      title ? `Article Title: ${title}` : null,
+      `Article Body:\n${bodyText}`,
+    ].filter(Boolean)
+
+    try {
+      // Use same model and timeout as AI Plant Fill for best quality metadata
+      const response = await openaiClient.responses.create(
+        {
+          model: openaiModel,
+          reasoning: { effort: 'medium' },
+          instructions,
+          input: promptSections.join('\n\n'),
+          max_output_tokens: 500,
+        },
+        { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) },
+      )
+      const rawOutput = typeof response?.output_text === 'string' ? response.output_text.trim() : '{}'
+      // Parse the JSON response, handling potential markdown code blocks
+      let parsed = {}
+      try {
+        const cleanJson = rawOutput.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()
+        parsed = JSON.parse(cleanJson)
+      } catch (parseErr) {
+        console.warn('[blog] Failed to parse AI metadata JSON, falling back to empty', parseErr)
+      }
+      // Validate and normalize the response
+      const teaser = typeof parsed.teaser === 'string' ? parsed.teaser.slice(0, 240).trim() : ''
+      const seoTitle = typeof parsed.seoTitle === 'string' ? parsed.seoTitle.slice(0, 60).trim() : null
+      const seoDescription = typeof parsed.seoDescription === 'string' ? parsed.seoDescription.slice(0, 160).trim() : null
+      const tags = Array.isArray(parsed.tags) 
+        ? parsed.tags.filter(t => typeof t === 'string').map(t => t.toLowerCase().trim()).slice(0, 7)
+        : []
+      res.json({ summary: teaser, seoTitle, seoDescription, tags })
+    } catch (err) {
+      console.error('[blog] full metadata generation failed', err)
+      res.status(500).json({ error: err?.message || 'Failed to generate metadata' })
+    }
+    return
+  }
+
+  // Legacy mode: just generate summary/teaser
   const instructions = [
     'Summarize the provided Aphylia blog article into a single compelling sentence under 240 characters.',
     'Write in active voice and avoid emojis or hashtags.',

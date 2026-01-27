@@ -91,6 +91,11 @@ export default function BlogComposerPage() {
   const [showCoverImage, setShowCoverImage] = React.useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
+  // SEO metadata fields
+  const [seoTitle, setSeoTitle] = React.useState("")
+  const [seoDescription, setSeoDescription] = React.useState("")
+  const [tags, setTags] = React.useState<string[]>([])
+  const [tagsInput, setTagsInput] = React.useState("")
 
   const editorRef = React.useRef<BlogEditorHandle | null>(null)
   const coverInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -127,6 +132,11 @@ export default function BlogComposerPage() {
     setSummaryStatus("idle")
     summarySourceRef.current = ""
     latestHtmlRef.current = ""
+    // Reset SEO metadata
+    setSeoTitle("")
+    setSeoDescription("")
+    setTags([])
+    setTagsInput("")
     setEditorKey((key) => key + 1)
   }, [])
 
@@ -165,6 +175,11 @@ export default function BlogComposerPage() {
         setSummaryStatus("idle")
         summarySourceRef.current = post.bodyHtml
         latestHtmlRef.current = post.bodyHtml
+        // Load SEO metadata
+        setSeoTitle(post.seoTitle ?? "")
+        setSeoDescription(post.seoDescription ?? "")
+        setTags(post.tags ?? [])
+        setTagsInput((post.tags ?? []).join(", "))
         setEditorKey((key) => key + 1)
       } catch (err) {
         if (!cancelled) {
@@ -243,17 +258,17 @@ export default function BlogComposerPage() {
   }, [])
 
   const runSummary = React.useCallback(
-    async (html: string, options?: { force?: boolean }) => {
+    async (html: string, options?: { force?: boolean; generateFullMetadata?: boolean }) => {
       const source = html.trim()
       if (!source) {
         summarySourceRef.current = ""
         setAutoSummary("")
         setSummaryStatus("idle")
         setSummaryError(null)
-        return ""
+        return { summary: "" }
       }
       if (!options?.force && summarySourceRef.current === source) {
-        return autoSummary
+        return { summary: autoSummary, seoTitle, seoDescription, tags }
       }
       summaryAbortRef.current?.abort()
       const controller = new AbortController()
@@ -265,7 +280,11 @@ export default function BlogComposerPage() {
         const response = await fetch("/api/blog/summarize", {
           method: "POST",
           headers,
-          body: JSON.stringify({ html: source, title: formTitle || undefined }),
+          body: JSON.stringify({ 
+            html: source, 
+            title: formTitle || undefined,
+            generateMetadata: options?.generateFullMetadata ?? true, // Enable full metadata by default
+          }),
           credentials: "same-origin",
           signal: controller.signal,
         })
@@ -276,11 +295,29 @@ export default function BlogComposerPage() {
         const summaryText = (payload?.summary as string) || ""
         setAutoSummary(summaryText)
         summarySourceRef.current = source
+        // Update SEO metadata if full generation was requested
+        if (options?.generateFullMetadata !== false) {
+          if (payload?.seoTitle) {
+            setSeoTitle(payload.seoTitle)
+          }
+          if (payload?.seoDescription) {
+            setSeoDescription(payload.seoDescription)
+          }
+          if (Array.isArray(payload?.tags)) {
+            setTags(payload.tags)
+            setTagsInput(payload.tags.join(", "))
+          }
+        }
         setSummaryStatus("idle")
-        return summaryText
+        return { 
+          summary: summaryText, 
+          seoTitle: payload?.seoTitle ?? seoTitle,
+          seoDescription: payload?.seoDescription ?? seoDescription,
+          tags: payload?.tags ?? tags,
+        }
       } catch (err) {
         if ((err as Error).name === "AbortError") {
-          return ""
+          return { summary: "" }
         }
         const message =
           err instanceof Error
@@ -295,7 +332,7 @@ export default function BlogComposerPage() {
         }
       }
     },
-    [autoSummary, formTitle, t],
+    [autoSummary, seoTitle, seoDescription, tags, formTitle, t],
   )
 
   const handleSavePost = async () => {
@@ -326,13 +363,31 @@ export default function BlogComposerPage() {
       latestHtmlRef.current = html
       const trimmedHtml = html.trim()
       summaryAbortRef.current?.abort()
+      
+      // Use current values - preserve admin edits
       let summaryText = autoSummary
-      if (trimmedHtml) {
+      let finalSeoTitle = seoTitle
+      let finalSeoDescription = seoDescription
+      let finalTags = tags
+      
+      // Only auto-generate AI content if ALL metadata fields are empty
+      // This preserves any admin edits to individual fields
+      const hasNoMetadata = !autoSummary.trim() && !seoTitle.trim() && !seoDescription.trim() && tags.length === 0
+      
+      if (trimmedHtml && hasNoMetadata) {
         try {
-          summaryText = await runSummary(trimmedHtml, { force: true })
+          const result = await runSummary(trimmedHtml, { force: true, generateFullMetadata: true })
+          summaryText = result.summary || ""
+          finalSeoTitle = result.seoTitle || ""
+          finalSeoDescription = result.seoDescription || ""
+          finalTags = result.tags || []
           setAutoSummary(summaryText)
+          setSeoTitle(finalSeoTitle)
+          setSeoDescription(finalSeoDescription)
+          setTags(finalTags)
+          setTagsInput(finalTags.join(", "))
         } catch {
-          summaryText = autoSummary
+          // Keep empty values if generation fails
         }
       }
       const publishDateIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString()
@@ -351,6 +406,9 @@ export default function BlogComposerPage() {
         editorData: doc ?? undefined,
         showCoverImage,
         updatedByName: isEditing ? currentUserName : undefined,
+        seoTitle: finalSeoTitle?.trim() || null,
+        seoDescription: finalSeoDescription?.trim() || null,
+        tags: finalTags,
       })
 
       if (saveError || !data) {
@@ -593,6 +651,123 @@ export default function BlogComposerPage() {
                 {summaryText}
               </div>
               {summaryError && <p className="text-xs text-red-500">{summaryError}</p>}
+            </div>
+
+            {/* SEO Metadata Section */}
+            <div className="space-y-4 rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-emerald-600" />
+                    {t("blogPage.editor.seoMetadataLabel", { defaultValue: "SEO & Discoverability" })}
+                  </p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400">
+                    {t("blogPage.editor.seoMetadataHelper", { defaultValue: "Edit fields manually or generate with AI. Your edits are preserved when saving." })}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-2xl shrink-0"
+                  onClick={() => runSummary(latestHtmlRef.current || editorContent.html, { force: true, generateFullMetadata: true }).catch(() => {})}
+                  disabled={summaryStatus === "generating"}
+                >
+                  {summaryStatus === "generating" ? (
+                    <>
+                      <RefreshCcw className="mr-2 h-3 w-3 animate-spin" />
+                      {t("blogPage.editor.generating", { defaultValue: "Generating…" })}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-3 w-3" />
+                      {t("blogPage.editor.generateWithAI", { defaultValue: "Generate with AI" })}
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* SEO Title */}
+              <div className="space-y-1">
+                <Label htmlFor="seo-title" className="text-xs">
+                  {t("blogPage.editor.seoTitleLabel", { defaultValue: "SEO Title" })}
+                  <span className="ml-2 text-stone-400">({seoTitle.length}/60)</span>
+                </Label>
+                <Input
+                  id="seo-title"
+                  value={seoTitle}
+                  onChange={(e) => setSeoTitle(e.target.value.slice(0, 60))}
+                  placeholder={t("blogPage.editor.seoTitlePlaceholder", { defaultValue: "Optimized title for search engines..." })}
+                  className="text-sm"
+                  maxLength={60}
+                />
+              </div>
+
+              {/* SEO Description */}
+              <div className="space-y-1">
+                <Label htmlFor="seo-description" className="text-xs">
+                  {t("blogPage.editor.seoDescriptionLabel", { defaultValue: "SEO Description" })}
+                  <span className="ml-2 text-stone-400">({seoDescription.length}/160)</span>
+                </Label>
+                <textarea
+                  id="seo-description"
+                  value={seoDescription}
+                  onChange={(e) => setSeoDescription(e.target.value.slice(0, 160))}
+                  placeholder={t("blogPage.editor.seoDescriptionPlaceholder", { defaultValue: "Compelling description for search results..." })}
+                  className="w-full min-h-[80px] px-3 py-2 text-sm rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  maxLength={160}
+                />
+              </div>
+
+              {/* Tags */}
+              <div className="space-y-2">
+                <Label htmlFor="tags-input" className="text-xs">
+                  {t("blogPage.editor.tagsLabel", { defaultValue: "Tags" })}
+                  <span className="ml-2 text-stone-400">({tags.length}/7)</span>
+                </Label>
+                <Input
+                  id="tags-input"
+                  value={tagsInput}
+                  onChange={(e) => {
+                    setTagsInput(e.target.value)
+                    // Parse tags from comma-separated input
+                    const newTags = e.target.value
+                      .split(",")
+                      .map((t) => t.trim().toLowerCase())
+                      .filter((t) => t.length > 0)
+                      .slice(0, 7)
+                    setTags(newTags)
+                  }}
+                  placeholder={t("blogPage.editor.tagsPlaceholder", { defaultValue: "gardening, plants, tips, care..." })}
+                  className="text-sm"
+                />
+                <p className="text-[11px] text-stone-400">
+                  {t("blogPage.editor.tagsHelper", { defaultValue: "Add specific tags for this article (e.g., plant names, techniques). Separate with commas. Max 7." })}
+                </p>
+                {tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {tags.map((tag, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newTags = tags.filter((_, i) => i !== idx)
+                            setTags(newTags)
+                            setTagsInput(newTags.join(", "))
+                          }}
+                          className="hover:text-red-600 dark:hover:text-red-400"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-3 text-xs text-stone-500 dark:text-stone-400">
