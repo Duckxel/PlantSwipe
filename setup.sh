@@ -652,6 +652,94 @@ fi
 
 log "Using Bun $(bun --version 2>/dev/null || echo 'version unknown') as primary package manager."
 
+# Install Sentry for error monitoring
+log "Installing Sentry for error monitoring…"
+install_sentry() {
+  local bun_path=""
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+    if [[ -x "$SERVICE_HOME/.bun/bin/bun" ]]; then
+      bun_path="$SERVICE_HOME/.bun/bin"
+    elif [[ -x "/usr/local/bin/bun" ]]; then
+      bun_path="/usr/local/bin"
+    elif [[ -x "$HOME/.bun/bin/bun" ]]; then
+      bun_path="$HOME/.bun/bin"
+    fi
+  fi
+  
+  # Check if @sentry/bun is already installed
+  if [[ -f "$NODE_DIR/package.json" ]] && grep -q '"@sentry/bun"' "$NODE_DIR/package.json" 2>/dev/null; then
+    log "Sentry (@sentry/bun) is already installed."
+    return 0
+  fi
+  
+  log "Adding @sentry/bun package…"
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add @sentry/bun" 2>&1; then
+      log "Sentry (@sentry/bun) installed successfully."
+    else
+      log "[WARN] Failed to install @sentry/bun. You can manually install it with: cd $NODE_DIR && bun add @sentry/bun"
+    fi
+  else
+    if bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add @sentry/bun" 2>&1; then
+      log "Sentry (@sentry/bun) installed successfully."
+    else
+      log "[WARN] Failed to install @sentry/bun. You can manually install it with: cd $NODE_DIR && bun add @sentry/bun"
+    fi
+  fi
+}
+
+install_sentry
+
+# Configure Sentry in server.js if not already configured
+configure_sentry_in_server() {
+  local server_file="$NODE_DIR/server.js"
+  local sentry_dsn="https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520"
+  
+  if [[ ! -f "$server_file" ]]; then
+    log "[WARN] server.js not found at $server_file. Skipping Sentry configuration."
+    return 1
+  fi
+  
+  # Check if Sentry is already configured
+  if grep -q "@sentry/bun" "$server_file" 2>/dev/null; then
+    log "Sentry is already configured in server.js."
+    return 0
+  fi
+  
+  log "Configuring Sentry in server.js…"
+  
+  # Create the Sentry import and init code
+  local sentry_code="// Sentry error monitoring - must be imported first
+import * as Sentry from '@sentry/bun';
+
+Sentry.init({
+  dsn: '$sentry_dsn',
+});
+
+"
+  
+  # Prepend Sentry code to server.js
+  local tmp_file
+  tmp_file="$(mktemp)"
+  echo "$sentry_code" > "$tmp_file"
+  cat "$server_file" >> "$tmp_file"
+  
+  # Backup original and replace
+  cp "$server_file" "$server_file.bak"
+  mv "$tmp_file" "$server_file"
+  
+  # Fix ownership if needed
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    chown "$SERVICE_USER:$SERVICE_USER" "$server_file" 2>/dev/null || true
+  fi
+  
+  log "Sentry configured in server.js successfully."
+  return 0
+}
+
+configure_sentry_in_server
+
 # Build frontend and API bundle using Bun
 # Delegate to refresh script if available (avoids code duplication and uses optimized build)
 REFRESH_SCRIPT="$REPO_DIR/scripts/refresh-plant-swipe.sh"

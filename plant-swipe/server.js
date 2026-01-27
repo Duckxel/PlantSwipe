@@ -1,3 +1,10 @@
+// Sentry error monitoring - must be imported first
+import * as Sentry from '@sentry/bun';
+
+Sentry.init({
+  dsn: 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520',
+});
+
 // ESM server to serve API and static assets
 import express from 'express'
 import postgres from 'postgres'
