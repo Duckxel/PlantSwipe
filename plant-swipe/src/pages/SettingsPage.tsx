@@ -9,14 +9,14 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink } from "lucide-react"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
 
 export default function SettingsPage() {
-  const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
+  const { user, profile, refreshProfile, deleteAccount, signOut, exportData, updateConsent } = useAuth()
   const navigate = useLanguageNavigate()
   const changeLanguage = useChangeLanguage()
   const currentLang = useLanguage()
@@ -60,6 +60,11 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = React.useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
+  
+  // GDPR consent states
+  const [marketingConsent, setMarketingConsent] = React.useState(false)
+  const [analyticsConsent, setAnalyticsConsent] = React.useState(false)
+  const [exporting, setExporting] = React.useState(false)
 
   // Get detected timezone from browser
   const detectedTimezone = React.useMemo(() => {
@@ -201,6 +206,23 @@ export default function SettingsPage() {
           // Columns don't exist yet - use defaults (enabled)
           setNotifyPush(true)
           setNotifyEmail(true)
+        }
+
+        // Try to fetch GDPR consent preferences (columns may not exist yet)
+        try {
+          const { data: consentData } = await supabase
+            .from('profiles')
+            .select('marketing_consent, analytics_consent')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (consentData) {
+            setMarketingConsent(Boolean(consentData.marketing_consent))
+            setAnalyticsConsent(Boolean(consentData.analytics_consent))
+          }
+        } catch {
+          // Columns don't exist yet - use defaults (disabled)
+          setMarketingConsent(false)
+          setAnalyticsConsent(false)
         }
       } catch (e: any) {
         setError(e?.message || t('settings.failedToLoad'))
@@ -500,6 +522,93 @@ export default function SettingsPage() {
     } catch (e: any) {
       setError(e?.message || t('settings.dangerZone.failedToDelete'))
       setDeleting(false)
+    }
+  }
+
+  // GDPR: Toggle marketing consent
+  const handleToggleMarketingConsent = async () => {
+    if (!user?.id) return
+
+    const newValue = !marketingConsent
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const result = await updateConsent({ marketingConsent: newValue })
+      if (result?.error) {
+        throw new Error(result.error)
+      }
+
+      setMarketingConsent(newValue)
+      setSuccess(newValue 
+        ? t('gdpr.marketingConsentEnabled', { defaultValue: 'Marketing communications enabled' })
+        : t('gdpr.marketingConsentDisabled', { defaultValue: 'Marketing communications disabled' })
+      )
+    } catch (e: any) {
+      setError(e?.message || t('gdpr.failedToUpdateConsent', { defaultValue: 'Failed to update consent' }))
+      setMarketingConsent(!newValue)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // GDPR: Toggle analytics consent
+  const handleToggleAnalyticsConsent = async () => {
+    if (!user?.id) return
+
+    const newValue = !analyticsConsent
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const result = await updateConsent({ analyticsConsent: newValue })
+      if (result?.error) {
+        throw new Error(result.error)
+      }
+
+      setAnalyticsConsent(newValue)
+      setSuccess(newValue 
+        ? t('gdpr.analyticsConsentEnabled', { defaultValue: 'Analytics tracking enabled' })
+        : t('gdpr.analyticsConsentDisabled', { defaultValue: 'Analytics tracking disabled' })
+      )
+    } catch (e: any) {
+      setError(e?.message || t('gdpr.failedToUpdateConsent', { defaultValue: 'Failed to update consent' }))
+      setAnalyticsConsent(!newValue)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // GDPR: Export user data
+  const handleExportData = async () => {
+    setExporting(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const result = await exportData()
+      if (result?.error) {
+        throw new Error(result.error)
+      }
+
+      // Download the data as a JSON file
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `aphylia-data-export-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      setSuccess(t('gdpr.exportSuccess', { defaultValue: 'Your data has been exported successfully' }))
+    } catch (e: any) {
+      setError(e?.message || t('gdpr.exportError', { defaultValue: 'Failed to export data' }))
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -950,6 +1059,7 @@ export default function SettingsPage() {
       {/* Privacy Tab */}
       {activeTab === 'privacy' && (
         <div className="space-y-6">
+          {/* Profile Privacy Settings */}
           <Card className={glassCard}>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -1019,6 +1129,120 @@ export default function SettingsPage() {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* GDPR Consent Settings */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-emerald-600" />
+                <CardTitle>{t('gdpr.consentSettings', { defaultValue: 'Privacy & Consent' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('gdpr.consentDescription', { defaultValue: 'Manage how we use your data for marketing and analytics purposes.' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Marketing Consent */}
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <input
+                  type="checkbox"
+                  id="marketing-consent"
+                  checked={marketingConsent}
+                  onChange={handleToggleMarketingConsent}
+                  disabled={saving}
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="marketing-consent" className="font-semibold cursor-pointer text-base">
+                    {t('gdpr.marketingConsent', { defaultValue: 'Marketing Communications' })}
+                  </Label>
+                  <p className="text-sm opacity-70 mt-1">
+                    {t('gdpr.marketingConsentDesc', { defaultValue: 'Receive updates about new features, promotions, and plant care tips.' })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Analytics Consent */}
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <input
+                  type="checkbox"
+                  id="analytics-consent"
+                  checked={analyticsConsent}
+                  onChange={handleToggleAnalyticsConsent}
+                  disabled={saving}
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="analytics-consent" className="font-semibold cursor-pointer text-base">
+                    {t('gdpr.analyticsConsent', { defaultValue: 'Analytics' })}
+                  </Label>
+                  <p className="text-sm opacity-70 mt-1">
+                    {t('gdpr.analyticsConsentDesc', { defaultValue: 'Help us improve by allowing anonymous usage analytics.' })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Legal Links */}
+              <div className="flex flex-wrap gap-4 pt-2">
+                <a 
+                  href="/terms" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400 hover:underline"
+                >
+                  <FileText className="h-4 w-4" />
+                  {t('gdpr.termsOfService', { defaultValue: 'Terms of Service' })}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <a 
+                  href="/privacy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400 hover:underline"
+                >
+                  <Shield className="h-4 w-4" />
+                  {t('gdpr.privacyPolicy', { defaultValue: 'Privacy Policy' })}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* GDPR Data Export */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Download className="h-5 w-5 text-emerald-600" />
+                <CardTitle>{t('gdpr.exportData', { defaultValue: 'Export My Data' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('gdpr.exportDataDesc', { defaultValue: 'Download all your personal data in a machine-readable format (JSON). This includes your profile, gardens, plants, journal entries, messages, and more.' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={handleExportData}
+                disabled={exporting}
+                variant="outline"
+                className="rounded-2xl"
+              >
+                {exporting ? (
+                  <>
+                    <Download className="h-4 w-4 mr-2 animate-pulse" />
+                    {t('gdpr.exporting', { defaultValue: 'Preparing export...' })}
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    {t('gdpr.exportDataButton', { defaultValue: 'Download Data Export' })}
+                  </>
+                )}
+              </Button>
+              <p className="text-xs opacity-60 mt-3">
+                {t('gdpr.exportNote', { defaultValue: 'Your data will be downloaded as a JSON file that you can open with any text editor or import into other services.' })}
+              </p>
             </CardContent>
           </Card>
         </div>

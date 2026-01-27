@@ -60,6 +60,7 @@ const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
 const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
 const PricingPageLazy = lazy(() => import("@/pages/PricingPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
+const PrivacyPageLazy = lazy(() => import("@/pages/PrivacyPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
 const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
@@ -206,6 +207,7 @@ export default function PlantSwipe() {
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
+  const privacyPath = React.useMemo(() => addLanguagePrefix('/privacy', currentLang), [currentLang])
 
   const [plants, setPlants] = useState<Plant[]>(() => {
     if (typeof localStorage === 'undefined') return []
@@ -1379,6 +1381,15 @@ export default function PlantSwipe() {
                         className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
                       >
                         {t('auth.termsLinkLabel')}
+                      </a>{" "}
+                      {t('auth.and', { defaultValue: 'and' })}{" "}
+                      <a
+                        href={privacyPath}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                      >
+                        {t('auth.privacyLinkLabel', { defaultValue: 'Privacy Policy' })}
                       </a>.
                     </Label>
                   </div>
@@ -1728,6 +1739,14 @@ export default function PlantSwipe() {
               element={
                 <Suspense fallback={routeLoadingFallback}>
                   <TermsPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/privacy"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PrivacyPageLazy />
                 </Suspense>
               }
             />
