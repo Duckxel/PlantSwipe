@@ -486,7 +486,7 @@ async function processEmailCampaigns() {
             au.id,
             au.email,
             coalesce(p.display_name, au.raw_user_meta_data->>'full_name', split_part(au.email, '@', 1)) as display_name,
-            coalesce(p.timezone, 'UTC') as user_timezone,
+            coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}) as user_timezone,
             coalesce(p.language, 'en') as user_language
           from auth.users au
           left join public.profiles p on p.id = au.id
@@ -7155,7 +7155,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
                 select 1 from public.user_notifications un
                 where un.automation_id = ${row.id}
                   and un.user_id = p.id
-                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               )
           `
           recipientCount = Number(countResult?.[0]?.cnt || 0)
@@ -7171,13 +7171,13 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_plant_tasks t on t.garden_id = gm.garden_id
               join public.garden_plant_task_occurrences occ on occ.task_id = t.id
               where (p.notify_push is null or p.notify_push = true)
-                and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                 and (occ.completed_count < occ.required_count or occ.completed_count = 0)
                 and not exists (
                   select 1 from public.user_notifications un
                   where un.automation_id = ${row.id}
                     and un.user_id = p.id
-                    and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                    and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                 )
             `
             recipientCount = Number(countResult?.[0]?.cnt || 0)
@@ -7196,12 +7196,12 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
               where (p.notify_push is null or p.notify_push = true)
                 and gal.kind = 'note'
-                and (gal.occurred_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date - interval '1 day'
+                and (gal.occurred_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date - interval '1 day'
                 and not exists (
                   select 1 from public.user_notifications un
                   where un.automation_id = ${row.id}
                     and un.user_id = p.id
-                    and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                    and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                 )
             `
             recipientCount = Number(countResult?.[0]?.cnt || 0)
@@ -21297,6 +21297,19 @@ const notificationDeliveryBatchSize = Math.min(
   Math.max(Number(process.env.NOTIFICATION_DELIVERY_BATCH_SIZE || 200), 25),
   500,
 )
+
+// Default timezone for users who haven't set one in their profile
+// Falls back to server's system timezone if not configured via env
+const getServerTimezone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+const DEFAULT_USER_TIMEZONE = process.env.DEFAULT_USER_TIMEZONE || getServerTimezone()
+console.log(`[notifications] Default user timezone: ${DEFAULT_USER_TIMEZONE}`)
+
 let notificationWorkerTimer = null
 let notificationWorkerBusy = false
 
@@ -22358,6 +22371,13 @@ async function processDueAutomations() {
 
     const now = new Date()
     const currentHourUTC = now.getUTCHours()
+    
+    // Log current time info for debugging (every 15 minutes)
+    const nowMinutes = now.getMinutes()
+    if (nowMinutes < 1 || (nowMinutes >= 15 && nowMinutes < 16) || (nowMinutes >= 30 && nowMinutes < 31) || (nowMinutes >= 45 && nowMinutes < 46)) {
+      const serverLocalHour = now.getHours()
+      console.log(`[automations] Time check: serverLocalHour=${serverLocalHour}, UTC=${currentHourUTC}, defaultTimezone=${DEFAULT_USER_TIMEZONE}, enabled=${automations.length}`)
+    }
 
     for (const automation of automations) {
       try {
@@ -22379,12 +22399,12 @@ async function processDueAutomations() {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
-              and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               )
             limit 1000
           `
@@ -22396,14 +22416,14 @@ async function processDueAutomations() {
             join public.garden_plant_tasks t on t.garden_id = gm.garden_id
             join public.garden_plant_task_occurrences occ on occ.task_id = t.id
             where (p.notify_push is null or p.notify_push = true)
-              and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+              and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and (occ.completed_count < occ.required_count or occ.completed_count = 0)
-              and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               )
             limit 1000
           `
@@ -22415,13 +22435,13 @@ async function processDueAutomations() {
             join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
             where (p.notify_push is null or p.notify_push = true)
               and gal.kind = 'note'
-              and (gal.occurred_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date - interval '1 day'
-              and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
+              and (gal.occurred_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date - interval '1 day'
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               )
             limit 1000
           `
@@ -22445,13 +22465,13 @@ async function processDueAutomations() {
               try {
                 const debugCount = await sql`
                   select count(distinct p.id)::bigint as total_with_tasks,
-                         count(distinct case when extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour} then p.id end)::bigint as at_send_hour
+                         count(distinct case when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour} then p.id end)::bigint as at_send_hour
                   from public.profiles p
                   join public.garden_members gm on gm.user_id = p.id
                   join public.garden_plant_tasks t on t.garden_id = gm.garden_id
                   join public.garden_plant_task_occurrences occ on occ.task_id = t.id
                   where (p.notify_push is null or p.notify_push = true)
-                    and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                    and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                     and (occ.completed_count < occ.required_count or occ.completed_count = 0)
                 `
                 const totalWithTasks = Number(debugCount?.[0]?.total_with_tasks || 0)
