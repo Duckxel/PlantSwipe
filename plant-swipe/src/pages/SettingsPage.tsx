@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink } from "lucide-react"
+import { Link } from "@/components/i18n/Link"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 
@@ -85,6 +86,13 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = React.useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
+  
+  // GDPR consent states
+  const [marketingConsent, setMarketingConsent] = React.useState(false)
+  const [marketingConsentDate, setMarketingConsentDate] = React.useState<string | null>(null)
+  const [termsAcceptedDate, setTermsAcceptedDate] = React.useState<string | null>(null)
+  const [privacyAcceptedDate, setPrivacyAcceptedDate] = React.useState<string | null>(null)
+  const [exporting, setExporting] = React.useState(false)
 
   // Get detected timezone from browser
   const detectedTimezone = React.useMemo(() => {
@@ -226,6 +234,24 @@ export default function SettingsPage() {
           // Columns don't exist yet - use defaults (enabled)
           setNotifyPush(true)
           setNotifyEmail(true)
+        }
+
+        // Try to fetch GDPR consent data (columns may not exist yet)
+        try {
+          const { data: consentData } = await supabase
+            .from('profiles')
+            .select('marketing_consent, marketing_consent_date, terms_accepted_date, privacy_policy_accepted_date')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (consentData) {
+            setMarketingConsent(Boolean(consentData.marketing_consent))
+            setMarketingConsentDate(consentData.marketing_consent_date || null)
+            setTermsAcceptedDate(consentData.terms_accepted_date || null)
+            setPrivacyAcceptedDate(consentData.privacy_policy_accepted_date || null)
+          }
+        } catch {
+          // Columns don't exist yet - use defaults
+          setMarketingConsent(false)
         }
       } catch (e: any) {
         setError(e?.message || t('settings.failedToLoad'))
@@ -631,6 +657,109 @@ export default function SettingsPage() {
     } catch (e: any) {
       setError(e?.message || t('settings.dangerZone.failedToDelete'))
       setDeleting(false)
+    }
+  }
+
+  // GDPR: Toggle marketing consent
+  const handleToggleMarketingConsent = async () => {
+    if (!user?.id) return
+
+    const newValue = !marketingConsent
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/account/consent', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ marketingConsent: newValue }),
+        credentials: 'same-origin',
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to update consent')
+      }
+
+      const result = await response.json()
+      setMarketingConsent(newValue)
+      setMarketingConsentDate(result.updatedAt || new Date().toISOString())
+      setSuccess(t('gdpr.consentUpdated', { defaultValue: 'Your preferences have been saved.' }))
+      await refreshProfile()
+    } catch (e: any) {
+      setError(e?.message || t('gdpr.consentUpdateFailed', { defaultValue: 'Failed to update consent preferences' }))
+      setMarketingConsent(!newValue)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // GDPR: Export user data
+  const handleExportData = async () => {
+    if (!user?.id) return
+
+    setExporting(true)
+    setError(null)
+
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/account/export', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: 'same-origin',
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to export data')
+      }
+
+      // Download the JSON file
+      const data = await response.json()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `aphylia-data-export-${Date.now()}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      setSuccess(t('gdpr.exportSuccess', { defaultValue: 'Your data has been exported successfully.' }))
+    } catch (e: any) {
+      setError(e?.message || t('gdpr.exportFailed', { defaultValue: 'Failed to export your data' }))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // Format date for display
+  const formatConsentDate = (dateStr: string | null): string => {
+    if (!dateStr) return t('gdpr.notSet', { defaultValue: 'Not set' })
+    try {
+      return new Date(dateStr).toLocaleDateString(currentLang, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    } catch {
+      return dateStr
     }
   }
 
@@ -1150,6 +1279,110 @@ export default function SettingsPage() {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* GDPR Data & Consent Management */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-blue-600" />
+                <CardTitle>{t('gdpr.title', { defaultValue: 'Data & Consent' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('gdpr.description', { defaultValue: 'Manage your data and consent preferences under GDPR.' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Marketing Consent Toggle */}
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <input
+                  type="checkbox"
+                  id="marketing-consent"
+                  checked={marketingConsent}
+                  onChange={handleToggleMarketingConsent}
+                  disabled={saving}
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="marketing-consent" className="font-semibold cursor-pointer text-base">
+                    {t('gdpr.marketingConsent', { defaultValue: 'Marketing Communications' })}
+                  </Label>
+                  <p className="text-sm opacity-70 mt-1">
+                    {t('gdpr.marketingConsentDescription', { defaultValue: 'Receive occasional emails about new features and updates.' })}
+                  </p>
+                  {marketingConsentDate && (
+                    <p className="text-xs opacity-50 mt-2">
+                      {t('gdpr.lastUpdated', { defaultValue: 'Last updated:' })} {formatConsentDate(marketingConsentDate)}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Consent History */}
+              <div className="p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <h4 className="font-semibold text-sm mb-3">{t('gdpr.consentHistory', { defaultValue: 'Consent History' })}</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="opacity-70">{t('gdpr.termsAccepted', { defaultValue: 'Terms of Service accepted' })}</span>
+                    <span className="font-medium">{formatConsentDate(termsAcceptedDate)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="opacity-70">{t('gdpr.privacyAccepted', { defaultValue: 'Privacy Policy accepted' })}</span>
+                    <span className="font-medium">{formatConsentDate(privacyAcceptedDate)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Legal Documents Links */}
+              <div className="flex flex-wrap gap-3">
+                <Link 
+                  to="/terms" 
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1c1c1f] hover:bg-stone-50 dark:hover:bg-[#252528] transition-colors text-sm"
+                >
+                  <FileText className="h-4 w-4" />
+                  {t('gdpr.viewTerms', { defaultValue: 'Terms of Service' })}
+                  <ExternalLink className="h-3 w-3 opacity-50" />
+                </Link>
+                <Link 
+                  to="/privacy" 
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1c1c1f] hover:bg-stone-50 dark:hover:bg-[#252528] transition-colors text-sm"
+                >
+                  <Shield className="h-4 w-4" />
+                  {t('gdpr.viewPrivacy', { defaultValue: 'Privacy Policy' })}
+                  <ExternalLink className="h-3 w-3 opacity-50" />
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Data Export */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Download className="h-5 w-5 text-emerald-600" />
+                <CardTitle>{t('gdpr.exportData', { defaultValue: 'Export My Data' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('gdpr.exportDataDescription', { defaultValue: 'Download all data we have about you in a machine-readable format.' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm opacity-80">
+                {t('gdpr.exportInfo', { defaultValue: 'Your export will include your profile, gardens, plants, messages, friends, bookmarks, and all other personal data.' })}
+              </p>
+              <Button
+                onClick={handleExportData}
+                disabled={exporting}
+                className="rounded-2xl"
+                variant="outline"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {exporting 
+                  ? t('gdpr.exporting', { defaultValue: 'Preparing export...' })
+                  : t('gdpr.downloadData', { defaultValue: 'Download My Data' })
+                }
+              </Button>
             </CardContent>
           </Card>
         </div>

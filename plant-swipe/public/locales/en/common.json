@@ -2923,13 +2923,50 @@
       "privacyPolicy": "Privacy Policy"
     },
     "gdpr": {
+      "title": "Data & Consent",
+      "description": "Manage your data and consent preferences under GDPR.",
       "exportData": "Export My Data",
       "exportDataDescription": "Download all data we have about you in a machine-readable format.",
+      "exportInfo": "Your export will include your profile, gardens, plants, messages, friends, bookmarks, and all other personal data.",
+      "downloadData": "Download My Data",
+      "exporting": "Preparing export...",
+      "exportSuccess": "Your data has been exported successfully.",
+      "exportFailed": "Failed to export your data",
       "deleteAccount": "Delete My Account",
       "deleteAccountDescription": "Permanently delete your account and all associated data. This action cannot be undone.",
       "marketingConsent": "Marketing Communications",
       "marketingConsentDescription": "Receive occasional emails about new features and updates.",
-      "consentUpdated": "Your preferences have been saved."
+      "consentUpdated": "Your preferences have been saved.",
+      "consentUpdateFailed": "Failed to update consent preferences",
+      "consentHistory": "Consent History",
+      "termsAccepted": "Terms of Service accepted",
+      "privacyAccepted": "Privacy Policy accepted",
+      "lastUpdated": "Last updated:",
+      "notSet": "Not set",
+      "viewTerms": "Terms of Service",
+      "viewPrivacy": "Privacy Policy"
+    },
+    "privacyPage": {
+      "hero": {
+        "eyebrow": "Your data, your rights",
+        "title": "Aphylia Privacy Policy",
+        "subtitle": "Learn how we collect, use, and protect your personal data. Your privacy is important to us and we are committed to GDPR compliance.",
+        "updated": "Last updated"
+      },
+      "legalContent": {
+        "label": "Full Privacy Policy"
+      },
+      "contact": {
+        "title": "Questions about your data?",
+        "subtitle": "Contact us via the Contact page if you have any questions about how we handle your data or to exercise your GDPR rights.",
+        "badge": "GDPR Compliant"
+      }
+    },
+    "seo": {
+      "privacy": {
+        "title": "Aphylia Privacy Policy & GDPR Rights",
+        "description": "Learn how Aphylia protects your personal data and your GDPR rights including data access, export, and deletion."
+      }
     }
   }
 }

@@ -2923,13 +2923,50 @@
       "privacyPolicy": "Politique de Confidentialité"
     },
     "gdpr": {
+      "title": "Données & Consentement",
+      "description": "Gérez vos données et préférences de consentement conformément au RGPD.",
       "exportData": "Exporter Mes Données",
       "exportDataDescription": "Téléchargez toutes les données que nous avons sur vous dans un format lisible par machine.",
+      "exportInfo": "Votre export comprendra votre profil, jardins, plantes, messages, amis, favoris et toutes vos autres données personnelles.",
+      "downloadData": "Télécharger Mes Données",
+      "exporting": "Préparation de l'export...",
+      "exportSuccess": "Vos données ont été exportées avec succès.",
+      "exportFailed": "Échec de l'export de vos données",
       "deleteAccount": "Supprimer Mon Compte",
       "deleteAccountDescription": "Supprimez définitivement votre compte et toutes les données associées. Cette action est irréversible.",
       "marketingConsent": "Communications Marketing",
       "marketingConsentDescription": "Recevoir des emails occasionnels sur les nouvelles fonctionnalités et mises à jour.",
-      "consentUpdated": "Vos préférences ont été enregistrées."
+      "consentUpdated": "Vos préférences ont été enregistrées.",
+      "consentUpdateFailed": "Échec de la mise à jour des préférences de consentement",
+      "consentHistory": "Historique des Consentements",
+      "termsAccepted": "Conditions d'utilisation acceptées",
+      "privacyAccepted": "Politique de confidentialité acceptée",
+      "lastUpdated": "Dernière mise à jour :",
+      "notSet": "Non défini",
+      "viewTerms": "Conditions d'Utilisation",
+      "viewPrivacy": "Politique de Confidentialité"
+    },
+    "privacyPage": {
+      "hero": {
+        "eyebrow": "Vos données, vos droits",
+        "title": "Politique de Confidentialité Aphylia",
+        "subtitle": "Découvrez comment nous collectons, utilisons et protégeons vos données personnelles. Votre vie privée est importante pour nous et nous nous engageons à respecter le RGPD.",
+        "updated": "Dernière mise à jour"
+      },
+      "legalContent": {
+        "label": "Politique de Confidentialité Complète"
+      },
+      "contact": {
+        "title": "Questions sur vos données ?",
+        "subtitle": "Contactez-nous via la page Contact si vous avez des questions sur la façon dont nous traitons vos données ou pour exercer vos droits RGPD.",
+        "badge": "Conforme RGPD"
+      }
+    },
+    "seo": {
+      "privacy": {
+        "title": "Politique de Confidentialité & Droits RGPD Aphylia",
+        "description": "Découvrez comment Aphylia protège vos données personnelles et vos droits RGPD incluant l'accès, l'export et la suppression de données."
+      }
     }
   }
 }
