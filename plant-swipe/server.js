@@ -837,52 +837,52 @@ const rateLimitStores = {
  * perUser: If true, limit per user ID; if false, limit per IP
  */
 const rateLimitConfig = {
-  // Scan: 30 scans per hour per user (AI/API costs)
+  // Scan: 60 scans per hour per user (AI/API costs - 1 per minute average)
   scan: {
-    windowMs: 60 * 60 * 1000,  // 1 hour
-    maxAttempts: 30,
-    perUser: true,
-  },
-  // AI Chat: 60 messages per hour per user (OpenAI costs)
-  aiChat: {
     windowMs: 60 * 60 * 1000,  // 1 hour
     maxAttempts: 60,
     perUser: true,
   },
-  // Translation: 200 requests per hour per user (DeepL costs)
-  translate: {
+  // AI Chat: 120 messages per hour per user (OpenAI costs - 2 per minute average)
+  aiChat: {
     windowMs: 60 * 60 * 1000,  // 1 hour
-    maxAttempts: 200,
+    maxAttempts: 120,
     perUser: true,
   },
-  // Image uploads: 50 per hour per user (storage costs)
+  // Translation: 500 requests per hour per user (DeepL costs - generous for active translators)
+  translate: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 500,
+    perUser: true,
+  },
+  // Image uploads: 100 per hour per user (storage costs)
   imageUpload: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 100,
+    perUser: true,
+  },
+  // Bug reports: 20 per hour per IP (spam prevention)
+  bugReport: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 20,
+    perUser: false,
+  },
+  // Garden activity: 300 per hour per user (5 per minute for active gardeners)
+  gardenActivity: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 300,
+    perUser: true,
+  },
+  // Journal entries: 50 per hour per user (generous for journaling)
+  gardenJournal: {
     windowMs: 60 * 60 * 1000,  // 1 hour
     maxAttempts: 50,
     perUser: true,
   },
-  // Bug reports: 10 per hour per IP (spam prevention)
-  bugReport: {
-    windowMs: 60 * 60 * 1000,  // 1 hour
-    maxAttempts: 10,
-    perUser: false,
-  },
-  // Garden activity: 100 per hour per user (prevent log spam)
-  gardenActivity: {
-    windowMs: 60 * 60 * 1000,  // 1 hour
-    maxAttempts: 100,
-    perUser: true,
-  },
-  // Journal entries: 20 per hour per user
-  gardenJournal: {
-    windowMs: 60 * 60 * 1000,  // 1 hour
-    maxAttempts: 20,
-    perUser: true,
-  },
-  // Push notifications: 100 per hour per user
+  // Push notifications: 300 per hour per user (for active social users)
   pushNotify: {
     windowMs: 60 * 60 * 1000,  // 1 hour
-    maxAttempts: 100,
+    maxAttempts: 300,
     perUser: true,
   },
 }

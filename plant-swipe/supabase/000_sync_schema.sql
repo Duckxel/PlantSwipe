@@ -8742,7 +8742,7 @@ DECLARE
   v_are_friends BOOLEAN;
   v_are_blocked BOOLEAN;
   v_conversation_count INTEGER;
-  v_rate_limit INTEGER := 20; -- Max new conversations per hour
+  v_rate_limit INTEGER := 30; -- Max new conversations per hour
   v_window_interval INTERVAL := '1 hour';
 BEGIN
   v_caller := auth.uid();
@@ -8839,7 +8839,7 @@ DECLARE
   v_p2 UUID;
   v_is_muted BOOLEAN;
   v_message_count INTEGER;
-  v_rate_limit INTEGER := 120; -- Max messages per hour
+  v_rate_limit INTEGER := 300; -- Max messages per hour (5/min sustained)
   v_window_interval INTERVAL := '1 hour';
 BEGIN
   v_caller := auth.uid();
@@ -10319,7 +10319,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_request_count INTEGER;
-  v_rate_limit INTEGER := 30; -- Max friend requests per hour
+  v_rate_limit INTEGER := 50; -- Max friend requests per hour
   v_window_interval INTERVAL := '1 hour';
 BEGIN
   -- Only check for new pending requests (not status updates)
@@ -10355,7 +10355,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_reaction_count INTEGER;
-  v_rate_limit INTEGER := 200; -- Max reactions per hour
+  v_rate_limit INTEGER := 500; -- Max reactions per hour
   v_window_interval INTERVAL := '1 hour';
 BEGIN
   -- Count reactions added by this user in the last hour
