@@ -3344,7 +3344,7 @@ const CSP_POLICY = [
   "default-src 'self' *.aphylia.app",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.aphylia.app https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://recaptchaenterprise.googleapis.com",
   "style-src 'self' 'unsafe-inline' *.aphylia.app https://fonts.googleapis.com",
-  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com",
+  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://*.sentry.io",
   "font-src 'self' *.aphylia.app https://fonts.gstatic.com data:",
   "frame-src 'self' *.aphylia.app https://www.google.com https://recaptcha.google.com",
   "img-src * data: blob:",
