@@ -5261,6 +5261,9 @@ export const AdminPage: React.FC = () => {
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
               <div className="text-sm font-semibold">Admin Panel</div>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500 text-white">
+                v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-2">
                 {navItems.map(({ key, label, Icon, path }) => {
@@ -5321,7 +5324,12 @@ export const AdminPage: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                       <div>
-                        <div className="text-lg font-semibold">Admin Panel</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-semibold">Admin Panel</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500 text-white">
+                            v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+                          </span>
+                        </div>
                         <div className="text-xs text-stone-600 dark:text-stone-300">
                           Control Center
                         </div>
@@ -5558,6 +5566,50 @@ export const AdminPage: React.FC = () => {
                               {!dbProbe?.ok && (
                                 <ErrorBadge code={dbProbe.errorCode} />
                               )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* App Version Card */}
+                    <Card className={`${glassCardClass} relative overflow-hidden`}>
+                      {/* Subtle decorative glow from the badge */}
+                      <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-violet-500/10 dark:bg-violet-500/5 blur-3xl pointer-events-none" />
+                      
+                      <CardContent className="p-4 relative">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            {/* Icon with enhanced styling */}
+                            <div className="relative">
+                              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 blur-lg opacity-40" />
+                              <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-purple-600 flex items-center justify-center shadow-xl shadow-violet-500/30 ring-1 ring-white/20">
+                                <Sparkles className="h-6 w-6 text-white drop-shadow-sm" />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold">
+                                App Version
+                              </div>
+                              <div className="text-xs text-violet-600/70 dark:text-violet-300/60">
+                                Aphylia Release
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Version badge section */}
+                          <div className="flex flex-col items-end gap-1.5">
+                            <div className="relative group">
+                              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 blur-md opacity-50 group-hover:opacity-70 transition-opacity" />
+                              <span className="relative inline-flex items-center px-4 py-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-bold text-sm shadow-lg shadow-violet-500/25 ring-1 ring-white/20">
+                                v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs opacity-60">
+                              <GitBranch className="h-3.5 w-3.5" />
+                              <span className="font-mono tracking-tight">
+                                {(import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev'}
+                              </span>
                             </div>
                           </div>
                         </div>
