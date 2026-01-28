@@ -348,13 +348,25 @@ def _sql_schema_path(repo_root: str) -> str:
 
 
 def _ensure_sslmode_in_url(db_url: str) -> str:
+    """Ensure SSL mode is set to 'require' for non-local databases.
+    
+    Uses 'require' which enables SSL encryption but does NOT verify the server certificate.
+    This avoids 'certificate verify failed' errors when CA certificates are outdated.
+    
+    If the URL already has a stricter mode (verify-ca, verify-full), it will be
+    changed to 'require' to avoid certificate verification failures.
+    """
     try:
         u = urlparse(db_url)
         host = (u.hostname or '').lower()
         if host in ("localhost", "127.0.0.1"):
             return db_url
         q = dict(parse_qsl(u.query, keep_blank_values=True))
-        if 'sslmode' not in q:
+        current_sslmode = q.get('sslmode', '').lower()
+        # Force 'require' mode to avoid certificate verification issues
+        # 'require' = use SSL but don't verify certificate
+        # 'verify-ca' and 'verify-full' = use SSL and verify certificate (can fail with outdated CAs)
+        if current_sslmode not in ('require', 'prefer', 'allow'):
             q['sslmode'] = 'require'
             new_query = urlencode(q)
             return urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
@@ -688,6 +700,53 @@ def sync_schema():
             pass
         return jsonify({"ok": False, "error": "psql not available on server"}), 500
 
+    def _run_psql_with_ssl_fallback(cmd_args, db_url, timeout_secs=180):
+        """Run psql with SSL, with automatic fallback if certificate verification fails.
+        
+        Tries in order:
+        1. sslmode=require (SSL without cert verification - should work in most cases)
+        2. If SSL error, retry with explicit no-verification settings
+        """
+        psql_env = os.environ.copy()
+        
+        # Remove any existing SSL settings that might interfere
+        for key in list(psql_env.keys()):
+            if key.startswith("PGSSL") or key == "PGSSLMODE":
+                del psql_env[key]
+        
+        # First attempt: sslmode=require (SSL without certificate verification)
+        psql_env["PGSSLMODE"] = "require"
+        
+        res = subprocess.run(cmd_args, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env)
+        
+        # Check if it's an SSL certificate error
+        stderr_lower = (res.stderr or "").lower()
+        if res.returncode != 0 and ("ssl" in stderr_lower and "certificate" in stderr_lower):
+            # SSL certificate error - try again with explicit settings to skip verification
+            # This can happen on some systems where libpq still tries to verify even with require
+            psql_env_retry = psql_env.copy()
+            # Set sslmode in URL to ensure it overrides any defaults
+            # Also explicitly unset PGSSLROOTCERT to prevent any verification
+            psql_env_retry.pop("PGSSLROOTCERT", None)
+            # Some libpq versions respect this to skip verification
+            psql_env_retry["PGSSLMODE"] = "require"
+            
+            # Modify the URL to ensure sslmode=require is explicit
+            from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+            try:
+                u = urlparse(db_url)
+                q = dict(parse_qsl(u.query, keep_blank_values=True))
+                q["sslmode"] = "require"  # Force require mode
+                new_query = urlencode(q)
+                modified_url = urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
+                # Update URL in command args
+                cmd_retry = [modified_url if arg == db_url else arg for arg in cmd_args]
+                res = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env_retry)
+            except Exception:
+                pass  # If URL modification fails, return original result
+        
+        return res
+    
     try:
         # Run psql with ON_ERROR_STOP for atomic failure
         # Use -a (echo all commands) and -e (echo errors) for better debugging
@@ -701,15 +760,15 @@ def sync_schema():
             "-e",  # Echo errors
             "-f", sql_path,
         ]
-        # Set environment variables to handle SSL properly
-        # PGSSLMODE=require uses SSL but doesn't verify the certificate
-        # This fixes "SSL error: certificate verify failed" on some systems
+        
+        res = _run_psql_with_ssl_fallback(cmd, db_url, timeout_secs=180)
+        
+        # Prepare environment for potential follow-up psql calls (admin_secrets update)
         psql_env = os.environ.copy()
+        for key in list(psql_env.keys()):
+            if key.startswith("PGSSL"):
+                del psql_env[key]
         psql_env["PGSSLMODE"] = "require"
-        # Disable root certificate verification by pointing to non-existent file
-        # This prevents OpenSSL from trying to verify the server's certificate
-        psql_env["PGSSLROOTCERT"] = ""
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False, env=psql_env)
         out = (res.stdout or "")
         err = (res.stderr or "")
         
