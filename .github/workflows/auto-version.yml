@@ -43,10 +43,6 @@ jobs:
           # Fetch the PR's head branch to calculate diff
           git fetch origin ${{ github.event.pull_request.head.sha }}
           
-          # Fetch main branch to compare versions
-          git fetch origin main:refs/remotes/origin/main 2>/dev/null || true
-          git fetch origin master:refs/remotes/origin/master 2>/dev/null || true
-          
           # Get the merge base between the PR's base and head
           MERGE_BASE=$(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} 2>/dev/null || echo "${{ github.event.pull_request.base.sha }}")
           echo "Merge base: $MERGE_BASE"
@@ -87,42 +83,28 @@ jobs:
             fi
           }
           
-          # Read current version from the target branch (after merge)
-          CURRENT_VERSION=$(node -p "require('./plant-swipe/package.json').version")
-          echo "Current branch version: $CURRENT_VERSION"
+          # Get version from the BASE branch (target - branch being merged INTO)
+          BASE_BRANCH_VERSION=$(node -p "require('./plant-swipe/package.json').version")
+          echo "Base branch version (${{ github.event.pull_request.base.ref }}): $BASE_BRANCH_VERSION"
           
-          # Get version from main branch (if it exists and has package.json)
-          MAIN_VERSION="0.0.0"
-          if git show origin/main:plant-swipe/package.json > /tmp/main-package.json 2>/dev/null; then
-            MAIN_VERSION=$(node -p "require('/tmp/main-package.json').version" 2>/dev/null || echo "0.0.0")
-          elif git show origin/master:plant-swipe/package.json > /tmp/master-package.json 2>/dev/null; then
-            MAIN_VERSION=$(node -p "require('/tmp/master-package.json').version" 2>/dev/null || echo "0.0.0")
-          fi
-          echo "Main branch version: $MAIN_VERSION"
-          
-          # Get version from the PR's head branch (the branch being merged)
-          HEAD_VERSION="0.0.0"
+          # Get version from the HEAD branch (source - branch being merged FROM)
+          HEAD_BRANCH_VERSION="0.0.0"
           if git show ${{ github.event.pull_request.head.sha }}:plant-swipe/package.json > /tmp/head-package.json 2>/dev/null; then
-            HEAD_VERSION=$(node -p "require('/tmp/head-package.json').version" 2>/dev/null || echo "0.0.0")
+            HEAD_BRANCH_VERSION=$(node -p "require('/tmp/head-package.json').version" 2>/dev/null || echo "0.0.0")
           fi
-          echo "PR head branch version: $HEAD_VERSION"
+          echo "Head branch version (${{ github.event.pull_request.head.ref }}): $HEAD_BRANCH_VERSION"
           
-          # Find the highest version among all sources
-          BASE_VERSION=$CURRENT_VERSION
-          
-          COMP=$(compare_versions $MAIN_VERSION $BASE_VERSION)
+          # Use the HIGHEST version between the two branches being merged
+          BASE_VERSION=$BASE_BRANCH_VERSION
+          COMP=$(compare_versions $HEAD_BRANCH_VERSION $BASE_BRANCH_VERSION)
           if [ "$COMP" = "1" ]; then
-            BASE_VERSION=$MAIN_VERSION
-            echo "Using main branch version as it's higher"
+            BASE_VERSION=$HEAD_BRANCH_VERSION
+            echo "Using head branch version as it's higher"
+          else
+            echo "Using base branch version as it's higher or equal"
           fi
           
-          COMP=$(compare_versions $HEAD_VERSION $BASE_VERSION)
-          if [ "$COMP" = "1" ]; then
-            BASE_VERSION=$HEAD_VERSION
-            echo "Using PR head branch version as it's higher"
-          fi
-          
-          echo "Base version for increment: $BASE_VERSION"
+          echo "Highest version between branches: $BASE_VERSION"
           echo "current_version=$BASE_VERSION" >> $GITHUB_OUTPUT
           
           # Parse version components from the highest version
