@@ -5261,6 +5261,9 @@ export const AdminPage: React.FC = () => {
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
               <div className="text-sm font-semibold">Admin Panel</div>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500 text-white">
+                v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-2">
                 {navItems.map(({ key, label, Icon, path }) => {
@@ -5321,7 +5324,12 @@ export const AdminPage: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                       <div>
-                        <div className="text-lg font-semibold">Admin Panel</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-semibold">Admin Panel</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500 text-white">
+                            v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+                          </span>
+                        </div>
                         <div className="text-xs text-stone-600 dark:text-stone-300">
                           Control Center
                         </div>
@@ -5558,6 +5566,38 @@ export const AdminPage: React.FC = () => {
                               {!dbProbe?.ok && (
                                 <ErrorBadge code={dbProbe.errorCode} />
                               )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* App Version Card */}
+                    <Card className={glassCardClass}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
+                              <Sparkles className="h-5 w-5 text-white" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium">
+                                App Version
+                              </div>
+                              <div className="text-xs opacity-60">
+                                Aphylia Release
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-sm font-bold px-3 py-1 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md">
+                              v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+                            </span>
+                            <div className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
+                              <GitBranch className="h-3 w-3" />
+                              <span className="font-mono">
+                                {(import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev'}
+                              </span>
                             </div>
                           </div>
                         </div>
