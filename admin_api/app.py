@@ -1064,6 +1064,88 @@ def git_pull():
         return jsonify({"ok": False, "error": str(e) or "Failed to run git pull"}), 500
 
 
+def _sitemap_script_path(repo_root: str) -> str:
+    return str(Path(repo_root) / "scripts" / "generate-sitemap-daily.sh")
+
+
+@app.get("/admin/regenerate-sitemap")
+@app.post("/admin/regenerate-sitemap")
+def regenerate_sitemap():
+    """Regenerate the sitemap by running the sitemap generation script."""
+    _verify_request()
+    repo_root = _get_repo_root()
+    script_path = _sitemap_script_path(repo_root)
+    if not os.path.isfile(script_path):
+        detail = {"error": "sitemap script not found", "path": script_path}
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": f"sitemap script not found at {script_path}"}), 500
+
+    _ensure_executable(script_path)
+    env = os.environ.copy()
+    env.setdefault("CI", os.environ.get("CI", "true"))
+    env["PLANTSWIPE_REPO_DIR"] = repo_root
+
+    try:
+        res = subprocess.run(
+            [script_path],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout for sitemap generation
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail={"error": "timeout"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": "Sitemap generation timed out"}), 504
+    except Exception as e:
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail={"error": str(e) or "unexpected failure"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(e) or "Failed to run sitemap script"}), 500
+
+    stdout = res.stdout or ""
+    stderr = res.stderr or ""
+    stdout_tail = "\n".join(stdout.splitlines()[-100:])
+    stderr_tail = "\n".join(stderr.splitlines()[-50:])
+    detail = {
+        "returncode": res.returncode,
+        "stdoutTail": stdout_tail,
+        "stderrTail": stderr_tail or None,
+    }
+    if res.returncode != 0:
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({
+            "ok": False,
+            "error": "Sitemap generation failed",
+            "returncode": res.returncode,
+            "stdout": stdout_tail,
+            "stderr": stderr_tail,
+        }), 500
+
+    try:
+        _log_admin_action("regenerate_sitemap", detail=detail)
+    except Exception:
+        pass
+    return jsonify({
+        "ok": True,
+        "message": "Sitemap regenerated successfully",
+        "returncode": res.returncode,
+        "stdout": stdout_tail,
+        "stderr": stderr_tail,
+    })
+
+
 if __name__ == "__main__":
     # Dev-only server. In production we run via gunicorn.
     app.run(host="127.0.0.1", port=5001)
