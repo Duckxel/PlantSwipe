@@ -18,7 +18,7 @@ const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.i
 // Server identification: Set VITE_SERVER_NAME to 'DEV' or 'MAIN' in your .env file
 const SERVER_NAME = (import.meta.env as Record<string, string>).VITE_SERVER_NAME || 
                     (import.meta.env as Record<string, string>).VITE_PLANTSWIPE_SERVER_NAME ||
-                    (typeof window !== 'undefined' && (window as Record<string, unknown>).__SERVER_NAME__ as string) ||
+                    (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).__SERVER_NAME__ as string) ||
                     'unknown'
 
 // Track initialization state
@@ -200,7 +200,7 @@ export function initSentry(): void {
         }
 
         // Scrub PII before sending
-        event = scrubPII(event)
+        const scrubbedEvent = scrubPII(event)
 
         // Ignore ResizeObserver errors (common in browsers, usually not actionable)
         if (error instanceof Error) {
@@ -223,8 +223,8 @@ export function initSentry(): void {
             error.message?.includes('Network request failed')
           ) {
             // Still log these but at lower priority
-            event.level = 'warning'
-            event.fingerprint = ['network-error', error.message?.substring(0, 50) || 'unknown']
+            scrubbedEvent.level = 'warning'
+            scrubbedEvent.fingerprint = ['network-error', error.message?.substring(0, 50) || 'unknown']
           }
           // Ignore cancelled requests
           if (error.name === 'AbortError') {
@@ -234,8 +234,8 @@ export function initSentry(): void {
 
         // Add app state context for debugging
         try {
-          event.contexts = {
-            ...event.contexts,
+          scrubbedEvent.contexts = {
+            ...scrubbedEvent.contexts,
             app: {
               online: navigator.onLine,
               language: navigator.language,
@@ -250,7 +250,7 @@ export function initSentry(): void {
           // Ignore context gathering errors
         }
 
-        return event
+        return scrubbedEvent
       },
 
       // Custom fingerprinting for better error grouping
@@ -525,11 +525,11 @@ export function startTransaction(
     return () => {}
   }
 
-  const transaction = Sentry.startSpan(
+  Sentry.startSpan(
     {
       name,
       op: operation,
-      attributes: data as Record<string, Sentry.SpanAttributeValue>,
+      attributes: data as Record<string, string | number | boolean | undefined>,
     },
     () => {}
   )
