@@ -64,7 +64,7 @@ export function hasTrackingConsent(): boolean {
  * Scrub PII from event before sending to Sentry
  * GDPR compliance: Remove or hash personally identifiable information
  */
-function scrubPII(event: Sentry.Event): Sentry.Event {
+function scrubPII<T extends Sentry.Event>(event: T): T {
   // Remove or hash email addresses in event data
   if (event.user) {
     // Keep only anonymous ID, remove PII
