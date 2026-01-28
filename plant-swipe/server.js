@@ -726,15 +726,21 @@ async function processEmailCampaigns() {
             url: websiteUrl.replace(/^https?:\/\//, ''), // Website URL without protocol (e.g., "aphylia.app")
             code: 'XXXXXX'                           // Placeholder for campaign emails (real codes are for transactional emails)
           }
-          const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
+          const replaceVars = (str, escape = false) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
+            const val = context[k.toLowerCase()]
+            if (val === undefined || val === null) return `{{${k}}}`
+            return escape ? escapeHtml(String(val)) : String(val)
+          })
 
           // Get user's language-specific content (fallback to campaign's default content)
           const translation = emailTranslations.get(userLang)
           const rawSubject = translation?.subject || campaign.subject
           const rawBodyHtml = translation?.bodyHtml || campaign.body_html
 
-          const bodyHtmlRaw = replaceVars(rawBodyHtml)
-          const subject = replaceVars(rawSubject)
+          // Escape HTML characters in values injected into the body to prevent XSS
+          const bodyHtmlRaw = replaceVars(rawBodyHtml, true)
+          // Do not escape values in subject (email clients handle text subjects)
+          const subject = replaceVars(rawSubject, false)
           // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
           const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
           // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
@@ -8672,10 +8678,16 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       url: websiteUrl.replace(/^https?:\/\//, ''),
       code: 'XXXXXX',
     }
-    const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
+    const replaceVars = (str, escape = false) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
+      const val = context[k.toLowerCase()]
+      if (val === undefined || val === null) return `{{${k}}}`
+      return escape ? escapeHtml(String(val)) : String(val)
+    })
 
-    const subject = replaceVars(rawSubject)
-    const bodyHtmlRaw = replaceVars(rawBodyHtml)
+    // Do not escape values in subject (email clients handle text subjects)
+    const subject = replaceVars(rawSubject, false)
+    // Escape HTML characters in values injected into the body to prevent XSS
+    const bodyHtmlRaw = replaceVars(rawBodyHtml, true)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
     const html = wrapEmailHtml(bodyHtml, subject, lang)
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
@@ -8849,13 +8861,17 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
       time: extraContext.time || currentTimestamp,
     }
 
-    const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
+    const replaceVars = (str, escape = false) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
       const key = k.toLowerCase()
-      return context[key] !== undefined ? context[key] : `{{${k}}}`
+      const val = context[key]
+      if (val === undefined || val === null) return `{{${k}}}`
+      return escape ? escapeHtml(String(val)) : String(val)
     })
 
-    const subject = replaceVars(rawSubject)
-    const bodyHtmlRaw = replaceVars(rawBodyHtml)
+    // Do not escape values in subject (email clients handle text subjects)
+    const subject = replaceVars(rawSubject, false)
+    // Escape HTML characters in values injected into the body to prevent XSS
+    const bodyHtmlRaw = replaceVars(rawBodyHtml, true)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
     const html = wrapEmailHtml(bodyHtml, subject, lang)
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
