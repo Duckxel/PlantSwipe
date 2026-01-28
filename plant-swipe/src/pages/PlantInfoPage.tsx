@@ -49,7 +49,7 @@ import {
   ShieldCheck,
   User,
   PawPrint,
-  HardHat,
+  FlaskConical,
   Clock,
   CalendarDays,
   FileText,
@@ -722,7 +722,7 @@ const PlantInfoPage: React.FC = () => {
           <div className="p-6 sm:p-8 text-center border-b border-amber-200/50 dark:border-amber-500/20 bg-amber-50/50 dark:bg-amber-900/10">
             <div className="flex justify-center mb-4">
               <div className="p-3 rounded-full bg-amber-100 dark:bg-amber-900/40">
-                <HardHat className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+                <FlaskConical className="h-8 w-8 text-amber-600 dark:text-amber-400" />
               </div>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-amber-900 dark:text-amber-100 mb-2">
@@ -951,7 +951,7 @@ const PlantInfoPage: React.FC = () => {
             <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
               <div className="flex justify-center">
                 <div className="p-4 rounded-full bg-amber-100 dark:bg-amber-900/40">
-                  <HardHat className="h-12 w-12 text-amber-600 dark:text-amber-400" />
+                  <FlaskConical className="h-12 w-12 text-amber-600 dark:text-amber-400" />
                 </div>
               </div>
               <div className="space-y-3">
@@ -983,7 +983,7 @@ const PlantInfoPage: React.FC = () => {
             {isInConstruction && hasPrivilegedAccess && (
               <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-900/30 dark:to-amber-800/20 p-4 sm:p-5 flex items-center gap-4">
                 <div className="shrink-0 p-2.5 rounded-full bg-amber-200 dark:bg-amber-800/50">
-                  <HardHat className="h-6 w-6 text-amber-700 dark:text-amber-300" />
+                  <FlaskConical className="h-6 w-6 text-amber-700 dark:text-amber-300" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-amber-900 dark:text-amber-100">
