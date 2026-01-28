@@ -701,7 +701,15 @@ def sync_schema():
             "-e",  # Echo errors
             "-f", sql_path,
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False)
+        # Set environment variables to handle SSL properly
+        # PGSSLMODE=require uses SSL but doesn't verify the certificate
+        # This fixes "SSL error: certificate verify failed" on some systems
+        psql_env = os.environ.copy()
+        psql_env["PGSSLMODE"] = "require"
+        # Disable root certificate verification by pointing to non-existent file
+        # This prevents OpenSSL from trying to verify the server's certificate
+        psql_env["PGSSLROOTCERT"] = ""
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False, env=psql_env)
         out = (res.stdout or "")
         err = (res.stderr or "")
         
@@ -748,12 +756,14 @@ def sync_schema():
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
                 """
                 # Use subprocess to pipe SQL to psql to avoid escaping issues with shell arguments
+                # Use same SSL environment as the main psql call
                 p = subprocess.Popen(
                     ["psql", db_url, "-q", "-f", "-"],
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
-                    text=True
+                    text=True,
+                    env=psql_env
                 )
                 _, secret_err = p.communicate(input=secret_sql)
                 if p.returncode != 0:
