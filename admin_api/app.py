@@ -155,17 +155,10 @@ def _parse_allowed_services(env_value: str) -> Set[str]:
     return services
 
 
-APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
-ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
-# Allow nginx, node app, and admin api by default; can be overridden via env
-ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
-DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
-
-ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
-
 HMAC_HEADER = "X-Button-Token"
 
 # Load .env files from the repo's plant-swipe directory to unify configuration
+# IMPORTANT: This MUST be called BEFORE reading config variables
 def _load_repo_env():
     try:
         here = Path(__file__).resolve().parent
@@ -194,9 +187,51 @@ def _load_repo_env():
     except Exception:
         pass
 
+# Load env files FIRST before reading config variables
 _load_repo_env()
 
+# Now read config variables AFTER env files are loaded
+APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
+ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
+# Allow nginx, node app, and admin api by default; can be overridden via env
+ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
+DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
+
+ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
+
 app = Flask(__name__)
+
+
+# JSON error handlers for proper API responses
+@app.errorhandler(400)
+def bad_request_handler(error):
+    description = getattr(error, 'description', 'Bad Request')
+    return jsonify({"ok": False, "error": "Bad Request", "message": description}), 400
+
+
+@app.errorhandler(401)
+def unauthorized_handler(error):
+    description = getattr(error, 'description', 'Unauthorized')
+    return jsonify({"ok": False, "error": "Unauthorized", "message": description}), 401
+
+
+@app.errorhandler(403)
+def forbidden_handler(error):
+    description = getattr(error, 'description', 'Forbidden')
+    return jsonify({"ok": False, "error": "Forbidden", "message": description}), 403
+
+
+@app.errorhandler(404)
+def not_found_handler(error):
+    description = getattr(error, 'description', 'Not Found')
+    return jsonify({"ok": False, "error": "Not Found", "message": description}), 404
+
+
+@app.errorhandler(500)
+def internal_error_handler(error):
+    description = getattr(error, 'description', 'Internal Server Error')
+    return jsonify({"ok": False, "error": "Internal Server Error", "message": description}), 500
+
 
 # Optional: forward admin actions to Node app for centralized logging
 def _log_admin_action(action: str, target: str = "", detail: dict | None = None) -> None:
