@@ -1,6 +1,8 @@
 // Sentry error monitoring - must be imported first
 // GDPR Compliance: No PII is sent automatically
-import * as Sentry from '@sentry/bun';
+// Use @sentry/node for Node.js compatibility (systemd service runs with /usr/bin/node)
+// @sentry/bun would only work when running with the Bun runtime
+import * as Sentry from '@sentry/node';
 
 const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520';
 
