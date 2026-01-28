@@ -9372,6 +9372,11 @@ create policy "Admins can manage landing stats" on public.landing_stats for all 
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
 
+-- Insert default stats row if not exists
+insert into public.landing_stats (id)
+select gen_random_uuid()
+where not exists (select 1 from public.landing_stats limit 1);
+
 alter table public.landing_stats_translations enable row level security;
 drop policy if exists "Landing stats translations are publicly readable" on public.landing_stats_translations;
 create policy "Landing stats translations are publicly readable" on public.landing_stats_translations for select using (true);
