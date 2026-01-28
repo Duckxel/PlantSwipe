@@ -175,6 +175,7 @@ const GardenListSidebarComponent: React.FC<GardenListSidebarProps> = ({
               className="rounded-2xl w-full"
               onClick={onMarkAllCompleted}
               disabled={markingAllCompleted}
+              aria-label={t("garden.markAllCompletedLabel", { defaultValue: "Mark all tasks in all gardens as completed" })}
             >
               {markingAllCompleted ? (
                 <span className="flex items-center gap-2">
@@ -240,6 +241,7 @@ const GardenListSidebarComponent: React.FC<GardenListSidebarProps> = ({
                     className="rounded-xl flex-shrink-0"
                     onClick={() => onCompleteAllForGarden(gw.gardenId)}
                     disabled={completingGardenIds.has(gw.gardenId)}
+                    aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: gw.gardenName })}
                   >
                     {completingGardenIds.has(gw.gardenId) ? (
                       <span className="flex items-center gap-1">
