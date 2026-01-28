@@ -84,7 +84,7 @@ export async function executeRecaptcha(action: string): Promise<string | null> {
     return null
   }
   
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     window.grecaptcha!.enterprise.ready(async () => {
       try {
         const token = await window.grecaptcha!.enterprise.execute(RECAPTCHA_SITE_KEY, { action })
