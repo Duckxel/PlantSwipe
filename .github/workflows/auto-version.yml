@@ -1,12 +1,11 @@
 name: Auto Version Increment
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches:
       - main
       - master
-    # Only trigger when a merge commit is detected (not direct pushes)
-    # This is handled in the job logic
 
 permissions:
   contents: write
@@ -14,14 +13,15 @@ permissions:
 jobs:
   version-bump:
     runs-on: ubuntu-latest
-    # Only run on merge commits (commits with 2+ parents)
-    if: github.event.head_commit.message && contains(github.event.head_commit.message, 'Merge')
+    # Only run when the PR was actually merged (not just closed)
+    if: github.event.pull_request.merged == true
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
@@ -34,41 +34,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Detect merge and calculate version bump
+      - name: Calculate version bump based on PR changes
         id: version
         run: |
-          # Get the merge commit hash
-          MERGE_COMMIT="${{ github.sha }}"
-          echo "Merge commit: $MERGE_COMMIT"
+          echo "PR #${{ github.event.pull_request.number }} was merged"
+          echo "PR Title: ${{ github.event.pull_request.title }}"
+          echo "Base branch: ${{ github.event.pull_request.base.ref }}"
+          echo "Head branch: ${{ github.event.pull_request.head.ref }}"
           
-          # Check if this is actually a merge commit (has 2 parents)
-          PARENT_COUNT=$(git rev-list --parents -n 1 $MERGE_COMMIT | wc -w)
-          PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract 1 for the commit itself
+          # Fetch the PR's head branch to calculate diff
+          git fetch origin ${{ github.event.pull_request.head.sha }}
           
-          if [ "$PARENT_COUNT" -lt 2 ]; then
-            echo "Not a merge commit (only $PARENT_COUNT parent(s)). Skipping version bump."
-            echo "skip=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          echo "This is a merge commit with $PARENT_COUNT parents"
-          
-          # Get the two parent commits
-          PARENTS=$(git rev-list --parents -n 1 $MERGE_COMMIT | cut -d' ' -f2-)
-          PARENT1=$(echo $PARENTS | cut -d' ' -f1)
-          PARENT2=$(echo $PARENTS | cut -d' ' -f2)
-          
-          echo "Parent 1 (base): $PARENT1"
-          echo "Parent 2 (merged branch): $PARENT2"
-          
-          # Calculate lines added in the merge
-          # We diff from the merge-base to the merged branch head
-          MERGE_BASE=$(git merge-base $PARENT1 $PARENT2 2>/dev/null || echo $PARENT1)
+          # Get the merge base between the PR's base and head
+          MERGE_BASE=$(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} 2>/dev/null || echo "${{ github.event.pull_request.base.sha }}")
           echo "Merge base: $MERGE_BASE"
           
-          # Count only added lines (lines starting with + but not +++)
-          LINES_ADDED=$(git diff --numstat $MERGE_BASE $PARENT2 2>/dev/null | awk '{ added += $1 } END { print added+0 }')
-          echo "Lines added in merge: $LINES_ADDED"
+          # Calculate lines added in the PR
+          LINES_ADDED=$(git diff --numstat $MERGE_BASE ${{ github.event.pull_request.head.sha }} 2>/dev/null | awk '{ added += $1 } END { print added+0 }')
+          echo "Lines added in PR: $LINES_ADDED"
           echo "lines_added=$LINES_ADDED" >> $GITHUB_OUTPUT
           
           # Read current version from package.json
@@ -92,132 +75,33 @@ jobs:
             NEW_MAJOR=$((MAJOR + 1))
             NEW_MINOR=0
             NEW_PATCH=0
-            NEW_VERSION="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
           elif [ "$LINES_ADDED" -ge 500 ]; then
             BUMP_TYPE="minor"
             NEW_MAJOR=$MAJOR
             NEW_MINOR=$((MINOR + 1))
             NEW_PATCH=0
-            NEW_VERSION="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
           else
             BUMP_TYPE="patch"
             NEW_MAJOR=$MAJOR
             NEW_MINOR=$MINOR
             NEW_PATCH=$((PATCH + 1))
-            NEW_VERSION="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
           fi
+          
+          NEW_VERSION="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
           
           echo "Bump type: $BUMP_TYPE"
           echo "New version: $NEW_VERSION"
           
           echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "skip=false" >> $GITHUB_OUTPUT
-
-      - name: Check for version conflict
-        if: steps.version.outputs.skip != 'true'
-        id: conflict
-        run: |
-          # Get the merged branch's version if it has package.json changes
-          MERGE_COMMIT="${{ github.sha }}"
-          PARENTS=$(git rev-list --parents -n 1 $MERGE_COMMIT | cut -d' ' -f2-)
-          PARENT1=$(echo $PARENTS | cut -d' ' -f1)
-          PARENT2=$(echo $PARENTS | cut -d' ' -f2)
-          
-          # Get version from both parents
-          VERSION_PARENT1=$(git show $PARENT1:plant-swipe/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8')).version" 2>/dev/null || echo "0.0.0")
-          VERSION_PARENT2=$(git show $PARENT2:plant-swipe/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8')).version" 2>/dev/null || echo "0.0.0")
-          
-          echo "Version in parent 1 (base branch): $VERSION_PARENT1"
-          echo "Version in parent 2 (merged branch): $VERSION_PARENT2"
-          
-          # Compare versions - use the higher one as the base
-          compare_versions() {
-            local v1=$1
-            local v2=$2
-            
-            local v1_major=$(echo $v1 | cut -d. -f1)
-            local v1_minor=$(echo $v1 | cut -d. -f2)
-            local v1_patch=$(echo $v1 | cut -d. -f3)
-            
-            local v2_major=$(echo $v2 | cut -d. -f1)
-            local v2_minor=$(echo $v2 | cut -d. -f2)
-            local v2_patch=$(echo $v2 | cut -d. -f3)
-            
-            if [ "$v1_major" -gt "$v2_major" ]; then
-              echo "1"
-            elif [ "$v1_major" -lt "$v2_major" ]; then
-              echo "2"
-            elif [ "$v1_minor" -gt "$v2_minor" ]; then
-              echo "1"
-            elif [ "$v1_minor" -lt "$v2_minor" ]; then
-              echo "2"
-            elif [ "$v1_patch" -gt "$v2_patch" ]; then
-              echo "1"
-            elif [ "$v1_patch" -lt "$v2_patch" ]; then
-              echo "2"
-            else
-              echo "0"
-            fi
-          }
-          
-          COMPARISON=$(compare_versions $VERSION_PARENT1 $VERSION_PARENT2)
-          
-          if [ "$COMPARISON" = "0" ]; then
-            echo "Both branches have the same version ($VERSION_PARENT1). Proceeding with bump."
-            echo "base_version=$VERSION_PARENT1" >> $GITHUB_OUTPUT
-            echo "same_version=true" >> $GITHUB_OUTPUT
-          elif [ "$COMPARISON" = "1" ]; then
-            echo "Parent 1 has higher version ($VERSION_PARENT1 > $VERSION_PARENT2). Using $VERSION_PARENT1 as base."
-            echo "base_version=$VERSION_PARENT1" >> $GITHUB_OUTPUT
-            echo "same_version=false" >> $GITHUB_OUTPUT
-          else
-            echo "Parent 2 has higher version ($VERSION_PARENT2 > $VERSION_PARENT1). Using $VERSION_PARENT2 as base."
-            echo "base_version=$VERSION_PARENT2" >> $GITHUB_OUTPUT
-            echo "same_version=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Calculate final version
-        if: steps.version.outputs.skip != 'true'
-        id: final
-        run: |
-          BASE_VERSION="${{ steps.conflict.outputs.base_version }}"
-          BUMP_TYPE="${{ steps.version.outputs.bump_type }}"
-          LINES_ADDED="${{ steps.version.outputs.lines_added }}"
-          
-          # Parse base version
-          MAJOR=$(echo $BASE_VERSION | cut -d. -f1)
-          MINOR=$(echo $BASE_VERSION | cut -d. -f2)
-          PATCH=$(echo $BASE_VERSION | cut -d. -f3)
-          
-          # Apply bump based on lines added
-          if [ "$LINES_ADDED" -ge 5000 ]; then
-            NEW_MAJOR=$((MAJOR + 1))
-            NEW_MINOR=0
-            NEW_PATCH=0
-          elif [ "$LINES_ADDED" -ge 500 ]; then
-            NEW_MAJOR=$MAJOR
-            NEW_MINOR=$((MINOR + 1))
-            NEW_PATCH=0
-          else
-            NEW_MAJOR=$MAJOR
-            NEW_MINOR=$MINOR
-            NEW_PATCH=$((PATCH + 1))
-          fi
-          
-          FINAL_VERSION="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
-          echo "Final version: $FINAL_VERSION"
-          echo "final_version=$FINAL_VERSION" >> $GITHUB_OUTPUT
 
       - name: Update package.json version
-        if: steps.version.outputs.skip != 'true'
         run: |
           cd plant-swipe
-          npm version ${{ steps.final.outputs.final_version }} --no-git-tag-version --allow-same-version
-          echo "Updated package.json to version ${{ steps.final.outputs.final_version }}"
+          npm version ${{ steps.version.outputs.new_version }} --no-git-tag-version --allow-same-version
+          echo "Updated package.json to version ${{ steps.version.outputs.new_version }}"
 
       - name: Commit and push version bump
-        if: steps.version.outputs.skip != 'true'
         run: |
           git add plant-swipe/package.json
           
@@ -227,24 +111,26 @@ jobs:
             exit 0
           fi
           
-          git commit -m "chore: bump version to ${{ steps.final.outputs.final_version }} [skip ci]
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }} [skip ci]
 
-          Automatic version bump triggered by merge.
+          Automatic version bump triggered by PR #${{ github.event.pull_request.number }}.
+          - PR Title: ${{ github.event.pull_request.title }}
           - Lines added: ${{ steps.version.outputs.lines_added }}
           - Bump type: ${{ steps.version.outputs.bump_type }}
-          - Previous version: ${{ steps.conflict.outputs.base_version }}"
+          - Previous version: ${{ steps.version.outputs.current_version }}"
           
           git push
 
       - name: Create version summary
-        if: steps.version.outputs.skip != 'true'
         run: |
           echo "## Version Bump Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Previous Version | ${{ steps.conflict.outputs.base_version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| New Version | ${{ steps.final.outputs.final_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| PR Number | #${{ github.event.pull_request.number }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| PR Title | ${{ github.event.pull_request.title }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Previous Version | ${{ steps.version.outputs.current_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| New Version | ${{ steps.version.outputs.new_version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Bump Type | ${{ steps.version.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Lines Added | ${{ steps.version.outputs.lines_added }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
