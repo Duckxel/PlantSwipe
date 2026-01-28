@@ -3,9 +3,7 @@ name: Auto Version Increment
 on:
   pull_request:
     types: [closed]
-    branches:
-      - main
-      - master
+    # Triggers on PR merges to ANY branch
 
 permissions:
   contents: write
