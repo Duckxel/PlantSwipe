@@ -5258,17 +5258,9 @@ export const AdminPage: React.FC = () => {
         {/* Mobile Navigation */}
         <div className={`md:hidden ${mobileNavPanelClass}`}>
           <div className="p-4">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
-                <div className="text-sm font-semibold">Admin Panel</div>
-              </div>
-              <Badge 
-                variant="outline" 
-                className="rounded-full px-2 py-0.5 text-xs font-mono bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
-              >
-                v{import.meta.env.VITE_APP_VERSION || '1.0.0'}
-              </Badge>
+            <div className="flex items-center gap-2 mb-3">
+              <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
+              <div className="text-sm font-semibold">Admin Panel</div>
             </div>
             <div className="grid grid-cols-2 gap-2">
                 {navItems.map(({ key, label, Icon, path }) => {
@@ -5329,15 +5321,7 @@ export const AdminPage: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-semibold">Admin Panel</span>
-                          <Badge 
-                            variant="outline" 
-                            className="rounded-full px-2 py-0.5 text-[10px] font-mono bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
-                          >
-                            v{import.meta.env.VITE_APP_VERSION || '1.0.0'}
-                          </Badge>
-                        </div>
+                        <div className="text-lg font-semibold">Admin Panel</div>
                         <div className="text-xs text-stone-600 dark:text-stone-300">
                           Control Center
                         </div>
@@ -5575,38 +5559,6 @@ export const AdminPage: React.FC = () => {
                                 <ErrorBadge code={dbProbe.errorCode} />
                               )}
                             </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* App Version Card */}
-                    <Card className={glassCardClass}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900/40 dark:to-purple-900/40 flex items-center justify-center">
-                              <Package className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                            </div>
-                            <div>
-                              <div className="text-sm font-semibold">App Version</div>
-                              <div className="text-xs text-stone-500 dark:text-stone-400">
-                                Aphylia Release
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <Badge 
-                              className="rounded-full px-3 py-1 text-sm font-mono font-bold bg-gradient-to-r from-violet-500 to-purple-500 text-white border-0 shadow-lg shadow-violet-500/25"
-                            >
-                              v{import.meta.env.VITE_APP_VERSION || '1.0.0'}
-                            </Badge>
-                            {import.meta.env.VITE_COMMIT_SHA && import.meta.env.VITE_COMMIT_SHA !== 'dev' && (
-                              <div className="flex items-center gap-1.5 text-[10px] text-stone-400 dark:text-stone-500">
-                                <Github className="h-3 w-3" />
-                                <span className="font-mono">{import.meta.env.VITE_COMMIT_SHA}</span>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </CardContent>
