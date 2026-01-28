@@ -5573,36 +5573,47 @@ export const AdminPage: React.FC = () => {
                     </Card>
 
                     {/* App Version Card */}
-                    <Card className={glassCardClass}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
-                              <Sparkles className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                              <div className="text-sm font-medium">
-                                App Version
-                              </div>
-                              <div className="text-xs opacity-60">
-                                Aphylia Release
-                              </div>
+                    <div className="relative rounded-2xl border border-violet-200/50 dark:border-violet-500/20 bg-gradient-to-br from-slate-50 via-violet-50/30 to-purple-50/50 dark:from-[#1a1a2e] dark:via-[#16162a] dark:to-[#1a1528] p-5 shadow-sm overflow-hidden">
+                      {/* Decorative glow effects */}
+                      <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-violet-400/20 dark:bg-violet-500/10 blur-3xl" />
+                      <div className="absolute -left-4 -bottom-4 w-24 h-24 rounded-full bg-purple-400/15 dark:bg-purple-500/10 blur-2xl" />
+                      
+                      <div className="relative flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          {/* Icon with enhanced styling */}
+                          <div className="relative">
+                            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 blur-lg opacity-40" />
+                            <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-purple-600 flex items-center justify-center shadow-xl shadow-violet-500/30 ring-1 ring-white/20">
+                              <Sparkles className="h-6 w-6 text-white drop-shadow-sm" />
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <span className="text-sm font-bold px-3 py-1 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md">
-                              v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
-                            </span>
-                            <div className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
-                              <GitBranch className="h-3 w-3" />
-                              <span className="font-mono">
-                                {(import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev'}
-                              </span>
+                          <div>
+                            <div className="text-base font-semibold text-slate-800 dark:text-white">
+                              App Version
+                            </div>
+                            <div className="text-sm text-violet-600/70 dark:text-violet-300/60">
+                              Aphylia Release
                             </div>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
+                        
+                        {/* Version badge section */}
+                        <div className="flex flex-col items-end gap-1.5">
+                          <div className="relative group">
+                            <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 blur-md opacity-50 group-hover:opacity-70 transition-opacity" />
+                            <span className="relative inline-flex items-center px-4 py-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-bold text-sm shadow-lg shadow-violet-500/25 ring-1 ring-white/20">
+                              v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400/80">
+                            <GitBranch className="h-3.5 w-3.5 text-violet-500/60 dark:text-violet-400/50" />
+                            <span className="font-mono tracking-tight">
+                              {(import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
                     {/* Quick Stats Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
