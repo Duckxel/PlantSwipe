@@ -1,6 +1,8 @@
 // Sentry error monitoring - must be imported first
 // GDPR Compliance: No PII is sent automatically
-import * as Sentry from '@sentry/bun';
+// Use @sentry/node for Node.js compatibility (systemd service runs with /usr/bin/node)
+// @sentry/bun would only work when running with the Bun runtime
+import * as Sentry from '@sentry/node';
 
 const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520';
 
@@ -3635,19 +3637,30 @@ app.post('/api/admin/ai/plant-fill/english-name', async (req, res) => {
     }
     
     // Ask AI to identify the English common name of the plant
-    const instructions = `You are a botanist expert. Your task is to identify plants and provide their common English name.
+    // IMPORTANT: Preserve cultivar names, subspecies, and variety information
+    const instructions = `You are a botanist expert. Your task is to identify plants and provide their English name while PRESERVING all botanical specificity.
+
 Given a plant name in ANY language (scientific name, common name in French, Spanish, German, etc.), 
-return the most common ENGLISH name for that plant.
+return the ENGLISH name for that plant, keeping ALL specific details like cultivar names, subspecies, and varieties.
 
 Rules:
-1. If the input is already a common English name, return it as-is (possibly corrected for spelling)
-2. If the input is a scientific/Latin name, return the most common English name
-3. If the input is a name in another language, translate/identify the English equivalent
-4. Always return a single, commonly used English name (not scientific name)
-5. If you cannot identify the plant, return the original name
-6. Return ONLY the plant name, nothing else - no explanations, no quotes, no JSON`
+1. PRESERVE cultivar names (e.g., 'Monstera deliciosa Thai Constellation' stays as 'Monstera Thai Constellation', NOT simplified to 'Monstera')
+2. PRESERVE subspecies and variety names (e.g., 'Rosa gallica var. officinalis' becomes 'Apothecary Rose' or 'Rosa gallica officinalis', NOT just 'Rose')
+3. If the input is already a specific English name with cultivar/variety, return it as-is (possibly corrected for spelling)
+4. If the input is a scientific/Latin name with subspecies/cultivar, translate to English equivalent BUT KEEP the specific cultivar/variety name
+5. If the input is a name in another language, translate/identify the English equivalent while keeping specificity
+6. DO NOT simplify to the most common/generic name - keep the EXACT variety/cultivar specified
+7. If you cannot identify the specific variety, return the original name unchanged
+8. Return ONLY the plant name, nothing else - no explanations, no quotes, no JSON
 
-    const prompt = `What is the common English name for this plant: "${plantName}"?`
+Examples:
+- "Monstera deliciosa Thai Constellation" → "Monstera Thai Constellation" (NOT "Monstera" or "Swiss Cheese Plant")
+- "Philodendron Pink Princess" → "Philodendron Pink Princess" (NOT "Philodendron")
+- "Rosa 'Peace'" → "Peace Rose" (NOT "Rose")
+- "Lavandula angustifolia 'Hidcote'" → "Hidcote Lavender" (NOT "Lavender")
+- "Tomate cerise" → "Cherry Tomato" (translating but not simplifying)`
+
+    const prompt = `What is the English name for this plant, preserving any cultivar or variety specificity: "${plantName}"?`
     
     const response = await openaiClient.responses.create({
       model: openaiModelNano,
