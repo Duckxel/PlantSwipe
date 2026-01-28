@@ -437,9 +437,10 @@ async function loadBlogRoutes() {
     return []
   }
 
+  // Select id instead of slug - frontend blog links use /blog/{id} format
   const { data, error } = await client
     .from('blog_posts')
-    .select('slug, updated_at, created_at, published_at')
+    .select('id, updated_at, created_at, published_at')
     .eq('is_published', true)
     .order('published_at', { ascending: false })
 
@@ -453,10 +454,11 @@ async function loadBlogRoutes() {
   // The most recent post gets priority 0.95 (second only to homepage)
   // Other posts get standard priority 0.8
   return data.map((post, index) => {
-    if (!post.slug) return null
+    if (!post.id) return null
     const isLatestPost = index === 0
+    const normalizedId = encodeURIComponent(String(post.id))
     return {
-      path: `/blog/${post.slug}`,
+      path: `/blog/${normalizedId}`,
       changefreq: isLatestPost ? 'daily' : 'weekly',
       priority: isLatestPost ? 0.95 : 0.8,
       lastmod: pickLastmod(post),
