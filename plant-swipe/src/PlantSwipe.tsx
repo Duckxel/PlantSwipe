@@ -21,7 +21,8 @@ import { MessageNotificationToast } from "@/components/messaging/MessageNotifica
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 import { CookieConsent } from "@/components/CookieConsent";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import type { Plant } from "@/types/plant";
+import type { Plant, PreparedPlant } from "@/types/plant";
+import { filterPlants } from "@/lib/plantFilter";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import { RequireEditor } from "@/pages/RequireAdmin";
@@ -69,25 +70,6 @@ const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module =
 const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
-
-type PreparedPlant = Plant & {
-  _searchString: string
-  _normalizedColors: string[]
-  _colorTokens: Set<string>        // Pre-tokenized colors for compound matching
-  _typeLabel: string | null
-  _usageLabels: string[]
-  _usageSet: Set<string>           // O(1) usage lookups
-  _habitats: string[]
-  _habitatSet: Set<string>         // O(1) habitat lookups
-  _maintenance: string
-  _petSafe: boolean
-  _humanSafe: boolean
-  _livingSpace: string
-  _seasonsSet: Set<string>         // O(1) season lookups
-  _createdAtTs: number             // Pre-parsed timestamp for sorting
-  _popularityLikes: number         // Pre-extracted popularity for sorting
-  _hasImage: boolean               // Pre-computed image availability
-}
 
 type ExtendedWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
@@ -816,79 +798,14 @@ export default function PlantSwipe() {
   }, [debouncedQuery])
 
   const filtered = useMemo(() => {
-    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet } = normalizedFilters
-    
-    // Pre-compute living space matching logic
-    const livingSpaceCount = livingSpaceSet.size
-    const requiresBoth = livingSpaceCount === 2
-    const requiresIndoor = livingSpaceSet.has('indoor')
-    const requiresOutdoor = livingSpaceSet.has('outdoor')
-
-    return preparedPlants.filter((p) => {
-      // Early exit pattern: check cheapest conditions first
-      // Boolean checks are O(1) and fastest
-      if (petSafe && !p._petSafe) return false
-      if (humanSafe && !p._humanSafe) return false
-      if (onlySeeds && !p.seedsAvailable) return false
-      if (onlyFavorites && !likedSet.has(p.id)) return false
-      
-      // String equality checks - still O(1)
-      if (normalizedType && p._typeLabel !== normalizedType) return false
-      if (normalizedMaintenanceFilter && p._maintenance !== normalizedMaintenanceFilter) return false
-      
-      // Season filter - O(1) Set lookup
-      if (seasonFilter && !p._seasonsSet.has(seasonFilter)) return false
-      
-      // Living space filter - pre-computed logic
-      if (livingSpaceCount > 0) {
-        if (requiresBoth) {
-          if (p._livingSpace !== 'both') return false
-        } else if (requiresIndoor) {
-          if (p._livingSpace !== 'indoor' && p._livingSpace !== 'both') return false
-        } else if (requiresOutdoor) {
-          if (p._livingSpace !== 'outdoor' && p._livingSpace !== 'both') return false
-        }
-      }
-      
-      // Usage filter - O(k) where k is number of selected usages, using O(1) Set lookups
-      if (usageSet.size > 0) {
-        for (const usage of usageSet) {
-          if (!p._usageSet.has(usage)) return false
-        }
-      }
-      
-      // Habitat filter - OR logic: match if plant has ANY selected habitat
-      // Using O(1) Set lookups instead of O(n) array includes
-      if (habitatSet.size > 0) {
-        let hasMatchingHabitat = false
-        for (const h of habitatSet) {
-          if (p._habitatSet.has(h)) {
-            hasMatchingHabitat = true
-            break
-          }
-        }
-        if (!hasMatchingHabitat) return false
-      }
-      
-      // Color filter - using pre-computed color tokens for O(1) lookups
-      // Optimized: Iterate over plant tokens (smaller set) instead of filter set (larger set)
-      // Note: _colorTokens includes both full color strings (e.g. "red-orange") and split tokens (e.g. "red", "orange")
-      if (expandedColorFilterSet) {
-        let hasMatchingColor = false
-        for (const plantToken of p._colorTokens) {
-          if (expandedColorFilterSet.has(plantToken)) {
-            hasMatchingColor = true
-            break
-          }
-        }
-        if (!hasMatchingColor) return false
-      }
-      
-      // Search query - string includes is O(n*m) but unavoidable for substring search
-      // Checked last as it's the most expensive operation
-      if (lowerQuery && !p._searchString.includes(lowerQuery)) return false
-      
-      return true
+    return filterPlants(preparedPlants, normalizedFilters, {
+      seasonFilter,
+      onlySeeds,
+      onlyFavorites,
+      petSafe,
+      humanSafe,
+      likedSet,
+      expandedColorFilterSet
     })
   }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, onlySeeds, onlyFavorites, petSafe, humanSafe, likedSet])
 

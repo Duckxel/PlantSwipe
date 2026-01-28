@@ -456,3 +456,22 @@ export type ColorOption = {
   parentIds: string[]
   translations: Record<string, string>
 }
+
+export type PreparedPlant = Plant & {
+  _searchString: string
+  _normalizedColors: string[]
+  _colorTokens: Set<string>        // Pre-tokenized colors for compound matching
+  _typeLabel: string | null
+  _usageLabels: string[]
+  _usageSet: Set<string>           // O(1) usage lookups
+  _habitats: string[]
+  _habitatSet: Set<string>         // O(1) habitat lookups
+  _maintenance: string
+  _petSafe: boolean
+  _humanSafe: boolean
+  _livingSpace: string
+  _seasonsSet: Set<string>         // O(1) season lookups
+  _createdAtTs: number             // Pre-parsed timestamp for sorting
+  _popularityLikes: number         // Pre-extracted popularity for sorting
+  _hasImage: boolean               // Pre-computed image availability
+}
