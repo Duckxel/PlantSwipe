@@ -5996,7 +5996,7 @@ export const AdminPage: React.FC = () => {
                             Server Controls
                           </button>
                           {serverControlsOpen && (
-                            <div className="mt-3 space-y-3" id="server-controls">
+                            <form className="mt-3 space-y-3" id="server-controls" onSubmit={(e) => e.preventDefault()} autoComplete="off">
                               {/* Root Password Input (shared) */}
                               <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 space-y-2 bg-stone-50/50 dark:bg-stone-900/20">
                                 <div className="text-xs font-medium text-stone-600 dark:text-stone-400">
@@ -6009,6 +6009,7 @@ export const AdminPage: React.FC = () => {
                                   onChange={(e) => setSetupPassword(e.target.value)}
                                   className="rounded-xl text-sm"
                                   disabled={runningSetup || restarting}
+                                  autoComplete="off"
                                 />
                               </div>
 
@@ -6069,7 +6070,7 @@ export const AdminPage: React.FC = () => {
                               <div className="text-[10px] text-stone-400">
                                 setup.sh runs the full server provisioning script with root privileges
                               </div>
-                            </div>
+                            </form>
                           )}
                         </div>
                       </CardContent>
