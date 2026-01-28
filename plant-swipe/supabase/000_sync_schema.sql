@@ -280,6 +280,7 @@ grant execute on function public.has_any_role(uuid, text[]) to anon, authenticat
 alter table public.profiles enable row level security;
 -- Helper to avoid RLS self-recursion when checking admin
 -- Uses SECURITY DEFINER to bypass RLS on public.profiles
+-- Checks both is_admin flag AND 'admin' role in roles array
 create or replace function public.is_admin_user(_user_id uuid)
 returns boolean
 language sql
@@ -288,7 +289,7 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.profiles
-    where id = _user_id and is_admin = true
+    where id = _user_id and (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
   );
 $$;
 grant execute on function public.is_admin_user(uuid) to anon, authenticated;
@@ -10228,9 +10229,7 @@ DROP POLICY IF EXISTS "Users can view own reports" ON public.bug_reports;
 CREATE POLICY "Users can view own reports" ON public.bug_reports
     FOR SELECT
     TO authenticated
-    USING (user_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (user_id = (select auth.uid()) OR public.is_admin_user((select auth.uid())));
 
 DROP POLICY IF EXISTS "Users can insert own reports" ON public.bug_reports;
 CREATE POLICY "Users can insert own reports" ON public.bug_reports
@@ -10242,21 +10241,15 @@ DROP POLICY IF EXISTS "Admins can update reports" ON public.bug_reports;
 CREATE POLICY "Admins can update reports" ON public.bug_reports
     FOR UPDATE
     TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ))
-    WITH CHECK (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (public.is_admin_user((select auth.uid())))
+    WITH CHECK (public.is_admin_user((select auth.uid())));
 
 -- Bug Points History policies
 DROP POLICY IF EXISTS "Users can view own points history" ON public.bug_points_history;
 CREATE POLICY "Users can view own points history" ON public.bug_points_history
     FOR SELECT
     TO authenticated
-    USING (user_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (user_id = (select auth.uid()) OR public.is_admin_user((select auth.uid())));
 
 DROP POLICY IF EXISTS "System can insert points history" ON public.bug_points_history;
 CREATE POLICY "System can insert points history" ON public.bug_points_history
