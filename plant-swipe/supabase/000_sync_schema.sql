@@ -10412,6 +10412,13 @@ ADD COLUMN IF NOT EXISTS terms_accepted_date timestamptz;
 ALTER TABLE IF EXISTS public.profiles
 ADD COLUMN IF NOT EXISTS privacy_policy_accepted_date timestamptz;
 
+-- Track which version of legal documents user accepted
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS terms_version_accepted text DEFAULT '1.0.0';
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS privacy_version_accepted text DEFAULT '1.0.0';
+
 -- GDPR Audit Log Table
 CREATE TABLE IF NOT EXISTS public.gdpr_audit_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

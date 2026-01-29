@@ -20,6 +20,7 @@ import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 import { CookieConsent } from "@/components/CookieConsent";
+import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -208,6 +209,14 @@ export default function PlantSwipe() {
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
+  
+  // Legal update modal - show when user's accepted versions are outdated
+  const [legalUpdateDismissed, setLegalUpdateDismissed] = useState(false)
+  const { needsUpdate: needsLegalUpdate } = useNeedsLegalUpdate(
+    profile?.terms_version_accepted,
+    profile?.privacy_version_accepted
+  )
+  const showLegalUpdateModal = Boolean(user && profile && needsLegalUpdate && !legalUpdateDismissed)
 
   const [plants, setPlants] = useState<Plant[]>(() => {
     if (typeof localStorage === 'undefined') return []
@@ -1445,6 +1454,26 @@ export default function PlantSwipe() {
           
           {/* GDPR Cookie Consent Banner */}
           <CookieConsent />
+          
+          {/* Legal Document Update Modal */}
+          {showLegalUpdateModal && user && profile && (
+            <LegalUpdateModal
+              open={showLegalUpdateModal}
+              userId={user.id}
+              userTermsVersion={profile.terms_version_accepted ?? null}
+              userPrivacyVersion={profile.privacy_version_accepted ?? null}
+              onAccepted={() => {
+                setLegalUpdateDismissed(true)
+                refreshProfile().catch(() => {})
+              }}
+              onDeclined={async () => {
+                // User declined - they will be blocked (threat_level = 3)
+                // Sign them out and show message
+                await signOut()
+                alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+              }}
+            />
+          )}
         </AuthActionsProvider>
       )
     }
@@ -2094,6 +2123,26 @@ export default function PlantSwipe() {
       
       {/* GDPR Cookie Consent Banner */}
       <CookieConsent />
+      
+      {/* Legal Document Update Modal */}
+      {showLegalUpdateModal && user && profile && (
+        <LegalUpdateModal
+          open={showLegalUpdateModal}
+          userId={user.id}
+          userTermsVersion={profile.terms_version_accepted ?? null}
+          userPrivacyVersion={profile.privacy_version_accepted ?? null}
+          onAccepted={() => {
+            setLegalUpdateDismissed(true)
+            refreshProfile().catch(() => {})
+          }}
+          onDeclined={async () => {
+            // User declined - they will be blocked (threat_level = 3)
+            // Sign them out and show message
+            await signOut()
+            alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+          }}
+        />
+      )}
     </div>
     </AuthActionsProvider>
   )
