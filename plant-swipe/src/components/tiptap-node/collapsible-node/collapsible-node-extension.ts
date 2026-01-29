@@ -35,10 +35,8 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
   // Allow dragging via the drag handle
   draggable: true,
 
-  // IMPORTANT: Set to false to prevent clicking inside from selecting the whole node
-  // This allows clicking inside the content to place a text cursor there
-  // Dragging still works via the drag handle
-  selectable: false,
+  // Must be true for dragging to work - the drag handle requires node selection
+  selectable: true,
 
   // IMPORTANT: Must be false to allow editing inside the node
   atom: false,
