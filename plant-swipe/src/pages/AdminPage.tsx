@@ -101,7 +101,6 @@ import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { processAllPlantRequests } from "@/lib/aiPrefillService";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
 import { Languages } from "lucide-react";
-import { captureException, enableMaintenanceMode } from "@/lib/sentry";
 import { 
   buildCategoryProgress, 
   createEmptyCategoryProgress, 
@@ -1141,10 +1140,6 @@ export const AdminPage: React.FC = () => {
   const restartServer = async () => {
     if (restarting) return;
     setRestarting(true);
-    
-    // Enable Sentry maintenance mode to filter out expected 5xx errors during restart
-    enableMaintenanceMode(90000); // 90 seconds for restart + health checks
-    
     try {
       setConsoleOpen(true);
       appendConsole("[restart] Restart services requested?");
@@ -1275,10 +1270,6 @@ export const AdminPage: React.FC = () => {
       return;
     }
     setRestarting(true);
-    
-    // Enable Sentry maintenance mode to filter out expected 5xx errors during restart
-    enableMaintenanceMode(90000); // 90 seconds for restart + health checks
-    
     try {
       setConsoleLines([]);
       setConsoleOpen(true);
@@ -2724,13 +2715,6 @@ export const AdminPage: React.FC = () => {
               setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
             } else if (error) {
               console.error(`Failed to process ${plantName}:`, error);
-              // Report to Sentry with context for easier debugging
-              captureException(new Error(`AI Prefill failed for plant: ${plantName}`), {
-                plantName,
-                requestId,
-                errorMessage: error,
-                source: 'AdminPage.aiPrefill',
-              });
             }
           },
           onError: (error) => {
@@ -3312,11 +3296,6 @@ export const AdminPage: React.FC = () => {
   const pullLatest = async () => {
     if (pulling) return;
     setPulling(true);
-    
-    // Enable Sentry maintenance mode to filter out expected 5xx errors during build/restart
-    // Longer duration since pull + build + restart can take a while
-    enableMaintenanceMode(180000); // 3 minutes for pull + build + restart
-    
     try {
       // Use streaming endpoint for live logs
       setConsoleLines([]);
