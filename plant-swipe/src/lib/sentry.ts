@@ -9,9 +9,9 @@
  * - Lightweight performance monitoring (optimized for minimal overhead)
  * 
  * PERFORMANCE OPTIMIZATIONS:
- * - Session replay is disabled by default (heavy DOM observation)
+ * - Session replay is disabled (heavy DOM observation overhead)
  * - Long task and INP monitoring disabled (continuous overhead)
- * - Console capture disabled (intercepts all console calls)
+ * - Console capture limited to 'error' only (not 'warn' to reduce noise)
  * - HTTP client integration disabled (monitors all requests)
  * - Consent check results are cached to avoid repeated localStorage reads
  * - Reduced trace sample rate for lower overhead
@@ -181,7 +181,7 @@ export function initSentry(): void {
       // _experiments: { enableLogs: true },
       
       // PERFORMANCE OPTIMIZED: Minimal integrations for lower overhead
-      // Heavy integrations (replay, console capture, http monitoring) are disabled
+      // Heavy integrations (replay, http monitoring) are disabled
       integrations: [
         // Browser tracing for performance monitoring - OPTIMIZED
         Sentry.browserTracingIntegration({
@@ -194,8 +194,11 @@ export function initSentry(): void {
         // Even with 0% sample rate, the integration still initializes observers
         // Sentry.replayIntegration({ ... }),
         
-        // PERFORMANCE: Console capture DISABLED - intercepts all console calls
-        // Sentry.captureConsoleIntegration({ levels: ['error', 'warn'] }),
+        // Console capture - only 'error' level for debugging (not 'warn' to reduce noise)
+        // This helps devs track console.error() calls while avoiding React warnings etc.
+        Sentry.captureConsoleIntegration({
+          levels: ['error'], // Only errors, not warnings (reduces noise + overhead)
+        }),
         
         // PERFORMANCE: HTTP client integration DISABLED - monitors all requests
         // Sentry.httpClientIntegration({ failedRequestStatusCodes: [[400, 599]] }),
