@@ -305,13 +305,18 @@ export function useList(config: UseListConfig) {
   }, [editor, type, hideWhenUnavailable])
 
   const handleToggle = useCallback(() => {
-    if (!editor) return false
+    if (!editor || !editor.isEditable) return false
 
-    const success = toggleList(editor, type)
-    if (success) {
-      onToggled?.()
+    try {
+      const success = toggleList(editor, type)
+      if (success) {
+        onToggled?.()
+      }
+      return success
+    } catch (error) {
+      console.error('Error toggling list:', error)
+      return false
     }
-    return success
   }, [editor, type, onToggled])
 
   return {

@@ -306,26 +306,37 @@ export function useHeading(config: UseHeadingConfig) {
   }, [editor, level, hideWhenUnavailable])
 
   const handleToggle = useCallback(() => {
-    if (!editor) return false
+    if (!editor || !editor.isEditable) return false
 
-    // Use native toggleHeading which handles node conversion and paragraph toggling reliably
-    if (typeof level === 'number') {
-      return editor.chain().focus(undefined, { scrollIntoView: false }).toggleHeading({ level }).run()
+    try {
+      // Use native toggleHeading which handles node conversion and paragraph toggling reliably
+      if (typeof level === 'number') {
+        const result = editor.chain().focus(undefined, { scrollIntoView: false }).toggleHeading({ level }).run()
+        if (result) onToggled?.()
+        return result
+      }
+
+      // Fallback for array of levels (uncommon for toggle, usually just for check)
+      // If any is active, turn to paragraph. Else turn to first level.
+      const active = isHeadingActive(editor, level)
+      if (active) {
+        const result = editor.chain().focus(undefined, { scrollIntoView: false }).setParagraph().run()
+        if (result) onToggled?.()
+        return result
+      }
+
+      const firstLevel = Array.isArray(level) ? level[0] : level
+      if (firstLevel) {
+        const result = editor.chain().focus(undefined, { scrollIntoView: false }).toggleHeading({ level: firstLevel }).run()
+        if (result) onToggled?.()
+        return result
+      }
+
+      return false
+    } catch (error) {
+      console.error('Error toggling heading:', error)
+      return false
     }
-
-    // Fallback for array of levels (uncommon for toggle, usually just for check)
-    // If any is active, turn to paragraph. Else turn to first level.
-    const isActive = isHeadingActive(editor, level)
-    if (isActive) {
-      return editor.chain().focus(undefined, { scrollIntoView: false }).setParagraph().run()
-    }
-
-    const firstLevel = Array.isArray(level) ? level[0] : level
-    if (firstLevel) {
-      return editor.chain().focus(undefined, { scrollIntoView: false }).toggleHeading({ level: firstLevel }).run()
-    }
-
-    return false
   }, [editor, level, onToggled])
 
   return {
