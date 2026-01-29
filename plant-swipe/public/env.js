@@ -4,4 +4,5 @@ window.__ENV__ = {
   VITE_ADMIN_STATIC_TOKEN: globalThis.VITE_ADMIN_STATIC_TOKEN || '',
   VITE_ADMIN_PUBLIC_MODE: globalThis.VITE_ADMIN_PUBLIC_MODE || false,
   VITE_SENTRY_DSN: globalThis.VITE_SENTRY_DSN || '',
+  SERVER_NAME: globalThis.SERVER_NAME || '',
 };

@@ -10,8 +10,11 @@ import * as Sentry from '@sentry/react'
  * - HTTP Client Integration (tracks outgoing HTTP requests)
  */
 export function initSentry() {
+  // Get runtime env from window.__ENV__
+  const runtimeEnv = (window as Window & { __ENV__?: Record<string, unknown> }).__ENV__ || {}
+  
   // Get DSN from environment variables
-  const dsn = (window as Window & { __ENV__?: Record<string, unknown> }).__ENV__?.VITE_SENTRY_DSN as string
+  const dsn = runtimeEnv.VITE_SENTRY_DSN as string
     || import.meta.env.VITE_SENTRY_DSN as string
 
   // Only initialize if DSN is configured
@@ -27,14 +30,19 @@ export function initSentry() {
   
   // Get release version from build info
   const release = `aphylia@${(import.meta.env as Record<string, string>).VITE_APP_VERSION || '1.0.0'}`
+  
+  // Get server name from environment (e.g., 'DEV', 'PROD', 'STAGING')
+  const serverName = runtimeEnv.SERVER_NAME as string
+    || import.meta.env.VITE_SERVER_NAME as string
+    || 'unknown'
 
   Sentry.init({
     dsn,
     environment,
     release,
     
-    // Set the server name to identify this application in Sentry
-    serverName: 'Aphylia',
+    // Set the server name from environment variable to identify the instance
+    serverName,
 
     // Sample rates
     tracesSampleRate: import.meta.env.PROD ? 0.2 : 1.0, // 20% in production, 100% in dev
@@ -102,7 +110,7 @@ export function initSentry() {
   Sentry.setTag('platform', 'web')
 
   if (import.meta.env.DEV) {
-    console.info('[Sentry] Initialized successfully', { dsn: dsn.substring(0, 20) + '...', environment, release })
+    console.info('[Sentry] Initialized successfully', { dsn: dsn.substring(0, 20) + '...', environment, release, serverName })
   }
 }
 
