@@ -580,7 +580,8 @@ export const GlobalImageLibrary: React.FC = () => {
             return (
               <div
                 key={entry.id}
-                className="group rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5"
+                className="group rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5 cursor-pointer"
+                onClick={() => setSelectedEntry(entry)}
               >
                 {/* Image Preview */}
                 <div className="aspect-video bg-stone-100 dark:bg-[#2a2a2d] relative overflow-hidden">
@@ -588,9 +589,8 @@ export const GlobalImageLibrary: React.FC = () => {
                     <img
                       src={entry.url}
                       alt={storageName}
-                      className="w-full h-full object-cover cursor-pointer"
+                      className="w-full h-full object-cover"
                       loading="lazy"
-                      onClick={() => setSelectedEntry(entry)}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -608,12 +608,15 @@ export const GlobalImageLibrary: React.FC = () => {
                   </div>
                   
                   {/* Overlay Actions */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center gap-2 p-4">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center gap-2 p-4 pointer-events-none group-hover:pointer-events-auto">
                     <Button
                       type="button"
                       size="sm"
-                      className="rounded-lg bg-white/90 text-stone-900 hover:bg-white"
-                      onClick={() => handleCopy(entry.id, displayLink)}
+                      className="rounded-lg bg-white/90 text-stone-900 hover:bg-white pointer-events-auto"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleCopy(entry.id, displayLink)
+                      }}
                       disabled={copiedId === entry.id}
                     >
                       {copiedId === entry.id ? (
@@ -632,7 +635,8 @@ export const GlobalImageLibrary: React.FC = () => {
                       <Button
                         type="button"
                         size="sm"
-                        className="rounded-lg bg-white/90 text-stone-900 hover:bg-white"
+                        className="rounded-lg bg-white/90 text-stone-900 hover:bg-white pointer-events-auto"
+                        onClick={(e) => e.stopPropagation()}
                         asChild
                       >
                         <a href={entry.url} target="_blank" rel="noreferrer">
@@ -644,8 +648,11 @@ export const GlobalImageLibrary: React.FC = () => {
                     <Button
                       type="button"
                       size="sm"
-                      className="rounded-lg bg-red-500 text-white hover:bg-red-600"
-                      onClick={() => handleDelete(entry)}
+                      className="rounded-lg bg-red-500 text-white hover:bg-red-600 pointer-events-auto"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(entry)
+                      }}
                       disabled={deletingId === entry.id}
                     >
                       {deletingId === entry.id ? (
@@ -677,7 +684,10 @@ export const GlobalImageLibrary: React.FC = () => {
                   {/* Uploader - Clickable */}
                   <button
                     type="button"
-                    onClick={() => setSelectedUser(entry.adminId)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedUser(entry.adminId)
+                    }}
                     disabled={!entry.adminId}
                     className={cn(
                       "mt-2 flex items-center gap-1.5 text-xs",
