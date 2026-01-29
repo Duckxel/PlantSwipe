@@ -10422,33 +10422,27 @@ ALTER TABLE public.bug_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bug_points_history ENABLE ROW LEVEL SECURITY;
 
 -- Bug Actions policies
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
 DROP POLICY IF EXISTS "Bug catchers can view active actions" ON public.bug_actions;
 CREATE POLICY "Bug catchers can view active actions" ON public.bug_actions
     FOR SELECT
     TO authenticated
-    USING (status = 'active' OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (status = 'active' OR public.is_admin_user(auth.uid()));
 
 DROP POLICY IF EXISTS "Admins can manage all actions" ON public.bug_actions;
 CREATE POLICY "Admins can manage all actions" ON public.bug_actions
     FOR ALL
     TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ))
-    WITH CHECK (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (public.is_admin_user(auth.uid()))
+    WITH CHECK (public.is_admin_user(auth.uid()));
 
 -- Bug Action Responses policies
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
 DROP POLICY IF EXISTS "Users can view own responses" ON public.bug_action_responses;
 CREATE POLICY "Users can view own responses" ON public.bug_action_responses
     FOR SELECT
     TO authenticated
-    USING (user_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (user_id = auth.uid() OR public.is_admin_user(auth.uid()));
 
 DROP POLICY IF EXISTS "Users can insert own responses" ON public.bug_action_responses;
 CREATE POLICY "Users can insert own responses" ON public.bug_action_responses
@@ -10465,17 +10459,14 @@ CREATE POLICY "Users can update own responses" ON public.bug_action_responses
 
 -- Bug Reports policies
 -- Allow users to view their own reports, admins can view all
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
 DROP POLICY IF EXISTS "Users can view own reports" ON public.bug_reports;
 CREATE POLICY "Users can view own reports" ON public.bug_reports
     FOR SELECT
     TO authenticated
     USING (
         user_id = auth.uid() 
-        OR EXISTS (
-            SELECT 1 FROM public.profiles 
-            WHERE id = auth.uid() 
-            AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-        )
+        OR public.is_admin_user(auth.uid())
     );
 
 DROP POLICY IF EXISTS "Users can insert own reports" ON public.bug_reports;
@@ -10485,33 +10476,23 @@ CREATE POLICY "Users can insert own reports" ON public.bug_reports
     WITH CHECK (user_id = auth.uid());
 
 -- Allow admins to update any report (for reviewing, completing, closing)
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
 DROP POLICY IF EXISTS "Admins can update reports" ON public.bug_reports;
 CREATE POLICY "Admins can update reports" ON public.bug_reports
     FOR UPDATE
     TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM public.profiles 
-        WHERE id = auth.uid() 
-        AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ))
-    WITH CHECK (EXISTS (
-        SELECT 1 FROM public.profiles 
-        WHERE id = auth.uid() 
-        AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (public.is_admin_user(auth.uid()))
+    WITH CHECK (public.is_admin_user(auth.uid()));
 
 -- Bug Points History policies
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
 DROP POLICY IF EXISTS "Users can view own points history" ON public.bug_points_history;
 CREATE POLICY "Users can view own points history" ON public.bug_points_history
     FOR SELECT
     TO authenticated
     USING (
         user_id = auth.uid() 
-        OR EXISTS (
-            SELECT 1 FROM public.profiles 
-            WHERE id = auth.uid() 
-            AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-        )
+        OR public.is_admin_user(auth.uid())
     );
 
 DROP POLICY IF EXISTS "System can insert points history" ON public.bug_points_history;
