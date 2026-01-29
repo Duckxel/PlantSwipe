@@ -88,6 +88,8 @@ type PreparedPlant = Plant & {
   _createdAtTs: number             // Pre-parsed timestamp for sorting
   _popularityLikes: number         // Pre-extracted popularity for sorting
   _hasImage: boolean               // Pre-computed image availability
+  _isPromoted: boolean             // Pre-computed promotion status (Plant of the Month)
+  _isInProgress: boolean           // Pre-computed status for sorting
 }
 
 type ExtendedWindow = Window & {
@@ -650,6 +652,7 @@ export default function PlantSwipe() {
   // Enhanced: Now includes color translations for bi-directional language matching
   const preparedPlants = useMemo(() => {
     const { aliasMap } = colorLookups
+    const now = new Date()
     
     return plants.map((p) => {
       // Colors - build both array (for iteration) and Sets (for O(1) lookups)
@@ -734,6 +737,13 @@ export default function PlantSwipe() {
       const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
       const hasImage = hasLegacyImage || hasImagesArray
 
+      // Pre-compute promotion status
+      const isPromoted = isPlantOfTheMonth(p, now)
+
+      // Pre-compute in-progress status
+      const status = p.meta?.status?.toLowerCase()
+      const isInProgress = status === 'in progres' || status === 'in progress'
+
       return {
         ...p,
         _searchString: searchString,
@@ -751,7 +761,9 @@ export default function PlantSwipe() {
         _seasonsSet: seasonsSet,
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
-        _hasImage: hasImage
+        _hasImage: hasImage,
+        _isPromoted: isPromoted,
+        _isInProgress: isInProgress
       } as PreparedPlant
     })
   }, [plants, colorLookups])
@@ -978,27 +990,21 @@ export default function PlantSwipe() {
   }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
-    // Helper to check if a plant is "in progress"
-    const isPlantInProgress = (p: Plant) => {
-      const status = p.meta?.status?.toLowerCase()
-      return status === 'in progres' || status === 'in progress'
-    }
-
     // For default sort:
     // 1. Promotion Month plants first (featured for current month)
     // 2. Regular plants in the middle
     // 3. In-progress plants last
     if (searchSort === "default") {
-      const now = new Date()
       const arr = filtered.slice() as PreparedPlant[]
       arr.sort((a, b) => {
         // Priority: Promotion Month > Regular > In Progress
-        const aPromoted = isPlantOfTheMonth(a, now) ? -1 : 0
-        const bPromoted = isPlantOfTheMonth(b, now) ? -1 : 0
+        // Use pre-computed boolean flags for O(1) checks during sort
+        const aPromoted = a._isPromoted ? -1 : 0
+        const bPromoted = b._isPromoted ? -1 : 0
         if (aPromoted !== bPromoted) return aPromoted - bPromoted
         
-        const aInProgress = isPlantInProgress(a) ? 1 : 0
-        const bInProgress = isPlantInProgress(b) ? 1 : 0
+        const aInProgress = a._isInProgress ? 1 : 0
+        const bInProgress = b._isInProgress ? 1 : 0
         if (aInProgress !== bInProgress) return aInProgress - bInProgress
         
         // Maintain alphabetical order within same priority
