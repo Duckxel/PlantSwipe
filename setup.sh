@@ -1939,6 +1939,46 @@ WantedBy=timers.target
 EOF
 "
 
+# CA certificates auto-update timer (weekly)
+# This ensures the system CA certificates stay up-to-date for SSL connections
+# (e.g., connecting to Supabase database which requires valid CA certs)
+SERVICE_CA_UPDATE="plantswipe-ca-update"
+CA_UPDATE_SERVICE_FILE="/etc/systemd/system/$SERVICE_CA_UPDATE.service"
+CA_UPDATE_TIMER_FILE="/etc/systemd/system/$SERVICE_CA_UPDATE.timer"
+
+log "Installing CA certificates auto-update service…"
+$SUDO bash -c "cat > '$CA_UPDATE_SERVICE_FILE' <<EOF
+[Unit]
+Description=Update CA certificates for PlantSwipe SSL connections
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'apt-get update -qq && apt-get install -y --only-upgrade ca-certificates && update-ca-certificates'
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+"
+
+log "Installing CA certificates auto-update timer (weekly)…"
+$SUDO bash -c "cat > '$CA_UPDATE_TIMER_FILE' <<EOF
+[Unit]
+Description=Weekly CA certificates update for PlantSwipe
+
+[Timer]
+# Run weekly on Sunday at 4:00 AM
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
+EOF
+"
+
 # Ensure ownership for admin dir (www-data runs the service)
 $SUDO chown -R www-data:www-data "$ADMIN_DIR" || true
 
@@ -1972,8 +2012,12 @@ fi
 # Enable and restart services to pick up updated unit files
 log "Enabling and restarting services…"
 $SUDO systemctl daemon-reload
-$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVICE_SITEMAP.timer"
+$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVICE_SITEMAP.timer" "$SERVICE_CA_UPDATE.timer"
 $SUDO systemctl start "$SERVICE_SITEMAP.timer" || log "[WARN] Failed to start $SERVICE_SITEMAP.timer"
+$SUDO systemctl start "$SERVICE_CA_UPDATE.timer" || log "[WARN] Failed to start $SERVICE_CA_UPDATE.timer"
+# Run CA update immediately to fix any current SSL issues
+log "Running initial CA certificates update…"
+$SUDO systemctl start "$SERVICE_CA_UPDATE.service" || log "[WARN] CA certificates update failed (will retry on timer)"
 $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
 if [[ -x "$SITEMAP_GENERATOR_BIN" ]]; then
   if ! $SUDO systemctl start "$SERVICE_SITEMAP.service"; then
