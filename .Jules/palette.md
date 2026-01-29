@@ -21,3 +21,7 @@
 ## 2025-05-24 - Invisible Focusable Elements
 **Learning:** The "Remove Photo" button in the journal upload section was only visible on hover (`opacity-0`), making it invisible to keyboard users even when focused.
 **Action:** Always ensure interactive elements that are hidden by default become fully visible on focus (`focus:opacity-100`) to support keyboard navigation.
+
+## 2025-05-25 - Contextual Accessibility Labels
+**Learning:** Generic "Complete All" buttons are ambiguous for screen reader users when multiple lists (e.g., plants) appear on the same page. Adding the plant or garden name to `aria-label` provides necessary context.
+**Action:** Always interpolate the specific object name (Plant, Garden) into the `aria-label` of generic action buttons.

@@ -194,6 +194,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
                     className="h-6 md:h-7 text-[10px] md:text-xs rounded-lg px-2 border-2 border-emerald-400 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 font-semibold transition-all"
                     onClick={() => completeAllTodayForPlant(plant.id)}
                     disabled={isCompleting}
+                    aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: plant.nickname || plant.plant?.name || "Plant" })}
                   >
                     {isCompleting ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
