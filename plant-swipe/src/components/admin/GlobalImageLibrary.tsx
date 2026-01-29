@@ -21,6 +21,7 @@ import {
   Mail,
   Shield,
   Sparkles,
+  Smartphone,
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
@@ -83,6 +84,7 @@ const SOURCE_CONFIG: Record<string, { label: string; icon: React.ComponentType<{
   "pro-advice": { label: "Pro Advice", icon: Sparkles, color: "text-amber-600 bg-amber-100 dark:bg-amber-900/30" },
   email: { label: "Email", icon: Mail, color: "text-rose-600 bg-rose-100 dark:bg-rose-900/30" },
   contact_screenshot: { label: "Contact Form", icon: MessageSquare, color: "text-indigo-600 bg-indigo-100 dark:bg-indigo-900/30" },
+  mockups: { label: "Mockups", icon: Smartphone, color: "text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30" },
 }
 
 function getSourceConfig(source: string | null) {
