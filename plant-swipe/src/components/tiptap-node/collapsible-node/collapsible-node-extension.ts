@@ -43,11 +43,13 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
   // IMPORTANT: Must be false to allow editing inside the node
   atom: false,
 
-  // Set to false to allow content transformations (like turning text into headings/lists) inside the node
-  defining: false,
+  // Set to true so the collapsible defines its own editing context
+  // This helps prevent operations inside from accidentally replacing the collapsible
+  defining: true,
 
-  // Allow content to be joined with surrounding content when appropriate
-  isolating: false,
+  // IMPORTANT: Set to true to create an editing boundary
+  // This prevents operations inside the collapsible from escaping and replacing the whole node
+  isolating: true,
 
   addOptions() {
     return {

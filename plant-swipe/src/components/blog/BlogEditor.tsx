@@ -30,6 +30,7 @@ import { ResizableImageNode } from "@/components/tiptap-node/resizable-image-nod
 import { EmailCardNode } from "@/components/tiptap-node/email-card-node/email-card-node-extension"
 import { SensitiveCodeNode } from "@/components/tiptap-node/sensitive-code-node/sensitive-code-node-extension"
 import { CollapsibleNode } from "@/components/tiptap-node/collapsible-node/collapsible-node-extension"
+import { GlobalDragHandle } from "@/components/tiptap-extensions/global-drag-handle"
 
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "@/components/tiptap-ui-primitive/toolbar"
 import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
@@ -76,6 +77,7 @@ import "@/components/tiptap-node/image-node/image-node.scss"
 import "@/components/tiptap-node/heading-node/heading-node.scss"
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss"
 import "@/components/tiptap-node/collapsible-node/collapsible-node.scss"
+import "@/components/tiptap-extensions/global-drag-handle.scss"
 import "@/components/tiptap-templates/simple/simple-editor.scss"
 
 export type BlogEditorHandle = {
@@ -286,6 +288,9 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
         EmailCardNode,
         SensitiveCodeNode,
         CollapsibleNode,
+        GlobalDragHandle.configure({
+          excludeNodes: ["doc", "text", "hardBreak", "collapsible"], // Collapsible has its own drag handle
+        }),
         ...(extraExtensions || []),
       ],
       content: initialDocument ?? initialHtml ?? DEFAULT_CONTENT,
