@@ -208,6 +208,48 @@ if [[ -n "$SUDO" ]]; then
   fi
 fi
 
+# Ensure CA certificates are up-to-date (fixes SSL certificate verification errors)
+# This runs early to ensure database connections work correctly
+ensure_ca_certificates() {
+  if [[ "$CAN_SUDO" != "true" ]]; then
+    return 0  # Skip if we can't sudo
+  fi
+  
+  # Check if update-ca-certificates is available
+  if ! command -v update-ca-certificates >/dev/null 2>&1; then
+    return 0
+  fi
+  
+  # Only update if ca-certificates package can be upgraded or certs are old
+  # This is a quick check to avoid unnecessary apt operations
+  local ca_cert_file="/etc/ssl/certs/ca-certificates.crt"
+  local needs_update=false
+  
+  # Check if CA cert file is older than 30 days
+  if [[ -f "$ca_cert_file" ]]; then
+    local file_age_days
+    file_age_days=$(( ($(date +%s) - $(stat -c %Y "$ca_cert_file" 2>/dev/null || echo 0)) / 86400 ))
+    if [[ $file_age_days -gt 30 ]]; then
+      needs_update=true
+      log "CA certificates are $file_age_days days old, updating..."
+    fi
+  else
+    needs_update=true
+    log "CA certificates file not found, installing..."
+  fi
+  
+  if [[ "$needs_update" == "true" ]]; then
+    # Update CA certificates (quick operation, doesn't require full apt update)
+    if $SUDO apt-get install -y --only-upgrade ca-certificates >/dev/null 2>&1; then
+      $SUDO update-ca-certificates >/dev/null 2>&1 || true
+      log "CA certificates updated successfully"
+    fi
+  fi
+}
+
+# Run CA certificate check early (before any network operations that might need SSL)
+ensure_ca_certificates
+
 # Optional: skip restarting services (useful for streaming logs via SSE)
 # Enable with --no-restart flag or SKIP_SERVICE_RESTARTS=true|1 env var
 SKIP_RESTARTS=false
