@@ -3068,7 +3068,10 @@
       "goBack": "Go Back & Accept",
       "confirmDecline": "I Understand, Decline",
       "blockingAccount": "Blocking account...",
-      "declinedMessage": "Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account."
+      "declinedMessage": "Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.",
+      "termsVersion": "Version {{version}} - Updated {{date}}",
+      "privacyVersion": "Version {{version}} - Updated {{date}}",
+      "backToReview": "Back to Review"
     }
   }
 }

@@ -3068,7 +3068,10 @@
       "goBack": "Revenir & Accepter",
       "confirmDecline": "Je Comprends, Refuser",
       "blockingAccount": "Blocage du compte...",
-      "declinedMessage": "Votre compte a été bloqué car vous avez refusé les conditions mises à jour. Contactez le support si vous souhaitez réactiver votre compte."
+      "declinedMessage": "Votre compte a été bloqué car vous avez refusé les conditions mises à jour. Contactez le support si vous souhaitez réactiver votre compte.",
+      "termsVersion": "Version {{version}} - Mis à jour le {{date}}",
+      "privacyVersion": "Version {{version}} - Mis à jour le {{date}}",
+      "backToReview": "Retour à la Révision"
     }
   }
 }
