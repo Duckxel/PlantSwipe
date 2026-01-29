@@ -1,6 +1,150 @@
 import * as Sentry from '@sentry/react'
 
 /**
+ * Maintenance window detection for Sentry error filtering.
+ * 
+ * When the server restarts, users may experience network errors.
+ * We detect this by tracking consecutive network failures and suppress
+ * maintenance-related errors to avoid flooding Sentry with expected errors.
+ */
+const maintenanceState = {
+  /** Timestamp of the last successful API response */
+  lastSuccessfulCall: Date.now(),
+  /** Count of consecutive network failures */
+  consecutiveFailures: 0,
+  /** Whether we believe we're in a maintenance window */
+  inMaintenanceWindow: false,
+  /** Timestamp when maintenance window was detected */
+  maintenanceStartTime: 0,
+}
+
+// Grace period after detecting maintenance (5 minutes)
+const MAINTENANCE_GRACE_PERIOD_MS = 5 * 60 * 1000
+// Number of consecutive failures before assuming maintenance
+const FAILURE_THRESHOLD = 3
+
+/**
+ * Check if an error message indicates a network/connectivity issue
+ */
+function isNetworkError(message: string): boolean {
+  const networkErrorPatterns = [
+    'Failed to fetch',
+    'Network request failed',
+    'NetworkError',
+    'Load failed',
+    'fetch failed',
+    'net::ERR_',
+    'NS_ERROR_',
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'ERR_INTERNET_DISCONNECTED',
+    'ERR_CONNECTION_REFUSED',
+    'ERR_CONNECTION_RESET',
+    'ERR_NAME_NOT_RESOLVED',
+    'The network connection was lost',
+    'A server with the specified hostname could not be found',
+    'The Internet connection appears to be offline',
+    'cancelled', // iOS cancellation during page unload
+    'aborted',
+  ]
+  
+  const lowerMessage = message.toLowerCase()
+  return networkErrorPatterns.some(pattern => lowerMessage.includes(pattern.toLowerCase()))
+}
+
+/**
+ * Check if an HTTP status code indicates server maintenance
+ */
+function isMaintenanceStatusCode(statusCode: number | undefined): boolean {
+  if (!statusCode) return false
+  // 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout
+  return statusCode === 502 || statusCode === 503 || statusCode === 504
+}
+
+/**
+ * Record a successful API call - resets maintenance detection
+ */
+export function recordSuccessfulApiCall() {
+  maintenanceState.lastSuccessfulCall = Date.now()
+  maintenanceState.consecutiveFailures = 0
+  if (maintenanceState.inMaintenanceWindow) {
+    maintenanceState.inMaintenanceWindow = false
+    console.info('[Sentry] Exiting maintenance window - server is back online')
+  }
+}
+
+/**
+ * Record a failed API call - may trigger maintenance window detection
+ */
+export function recordFailedApiCall() {
+  maintenanceState.consecutiveFailures++
+  
+  if (maintenanceState.consecutiveFailures >= FAILURE_THRESHOLD && !maintenanceState.inMaintenanceWindow) {
+    maintenanceState.inMaintenanceWindow = true
+    maintenanceState.maintenanceStartTime = Date.now()
+    console.info('[Sentry] Entering maintenance window - suppressing network errors')
+  }
+}
+
+/**
+ * Check if we're currently in a maintenance window
+ */
+function isInMaintenanceWindow(): boolean {
+  if (!maintenanceState.inMaintenanceWindow) return false
+  
+  // Auto-exit maintenance window after grace period
+  const elapsed = Date.now() - maintenanceState.maintenanceStartTime
+  if (elapsed > MAINTENANCE_GRACE_PERIOD_MS) {
+    maintenanceState.inMaintenanceWindow = false
+    console.info('[Sentry] Maintenance window grace period expired')
+    return false
+  }
+  
+  return true
+}
+
+/**
+ * Determine if an error should be filtered out during maintenance
+ */
+function shouldFilterMaintenanceError(event: Sentry.ErrorEvent): boolean {
+  // If not in maintenance window, don't filter
+  if (!isInMaintenanceWindow()) return false
+  
+  // Check if this is a network-related error
+  const message = event.message || ''
+  const exceptionValues = event.exception?.values || []
+  
+  for (const exception of exceptionValues) {
+    const exceptionMessage = exception.value || ''
+    const exceptionType = exception.type || ''
+    
+    // Check for network errors
+    if (isNetworkError(exceptionMessage) || isNetworkError(exceptionType)) {
+      return true
+    }
+    
+    // Check for TypeError with network message (common pattern)
+    if (exceptionType === 'TypeError' && isNetworkError(exceptionMessage)) {
+      return true
+    }
+  }
+  
+  // Check main message
+  if (isNetworkError(message)) {
+    return true
+  }
+  
+  // Check for HTTP status codes indicating maintenance
+  const statusCode = event.contexts?.response?.status_code as number | undefined
+  if (isMaintenanceStatusCode(statusCode)) {
+    return true
+  }
+  
+  return false
+}
+
+/**
  * Initialize Sentry monitoring for the Aphylia application.
  * 
  * This configuration enables:
@@ -8,6 +152,7 @@ import * as Sentry from '@sentry/react'
  * - INP (Interaction to Next Paint) Monitoring
  * - Console Capture Integration (excludes Warning to avoid flooding)
  * - HTTP Client Integration (tracks outgoing HTTP requests)
+ * - Smart maintenance window detection (filters errors during server restarts)
  */
 export function initSentry() {
   // Get runtime env from window.__ENV__
@@ -44,27 +189,26 @@ export function initSentry() {
     // Set the server name from environment variable to identify the instance
     serverName,
 
-    // Sample rates
-    tracesSampleRate: import.meta.env.PROD ? 0.2 : 1.0, // 20% in production, 100% in dev
-    replaysSessionSampleRate: 0, // Disable session replays by default
-    replaysOnErrorSampleRate: import.meta.env.PROD ? 0.1 : 0, // 10% on error in production
+    // Sample rates - capture more in production to get all errors
+    tracesSampleRate: import.meta.env.PROD ? 0.3 : 1.0,
+    replaysSessionSampleRate: 0,
+    replaysOnErrorSampleRate: import.meta.env.PROD ? 0.2 : 0,
 
     // Enable Long Task and INP monitoring via browserTracingIntegration
     integrations: [
       // Browser tracing with Long Task and INP monitoring enabled
       Sentry.browserTracingIntegration({
-        enableLongTask: true,         // Long Task Monitoring (tasks > 50ms)
-        enableInp: true,              // INP (Interaction to Next Paint) Monitoring
+        enableLongTask: true,
+        enableInp: true,
       }),
       
       // HTTP Client Integration - tracks outgoing HTTP requests and their errors
       Sentry.httpClientIntegration({
-        failedRequestStatusCodes: [[400, 599]], // Capture 4xx and 5xx responses
-        failedRequestTargets: [/.*/], // Track all targets
+        failedRequestStatusCodes: [[400, 599]],
+        failedRequestTargets: [/.*/],
       }),
       
       // Console Capture Integration - capture console logs except warnings
-      // Excluding 'warn' level to avoid flooding developers with noise
       Sentry.captureConsoleIntegration({
         levels: ['log', 'info', 'error', 'debug', 'assert'],
       }),
@@ -75,35 +219,46 @@ export function initSentry() {
       ? [/https?:\/\/(.*\.)?aphylia\.app/]
       : undefined,
 
-    // Ignore common non-actionable errors
+    // Minimal ignore list - only truly non-actionable errors
     ignoreErrors: [
-      // Browser extensions
-      /Extensions/,
-      /extension/,
-      // Network errors that users can't control
-      'Network request failed',
-      'Failed to fetch',
-      'Load failed',
-      'NetworkError',
-      // Script errors from cross-origin scripts
+      // Script errors from cross-origin scripts we can't debug
       'Script error.',
-      // ResizeObserver errors (benign, often caused by rapid resizing)
+      // ResizeObserver errors (benign browser behavior)
       'ResizeObserver loop limit exceeded',
       'ResizeObserver loop completed with undelivered notifications',
-      // Common third-party errors
-      /^ChunkLoadError/,
+      // Browser extension errors (not our code)
+      /^chrome-extension:\/\//,
+      /^moz-extension:\/\//,
+      /^safari-extension:\/\//,
     ],
 
-    // Before sending, add additional context
+    // Smart error filtering with maintenance window detection
     beforeSend(event, hint) {
       // In development, log to console instead of sending
       if (import.meta.env.DEV) {
         console.info('[Sentry] Would send event:', event, hint)
-        return null // Don't send in development
+        return null
       }
+      
+      // Filter out maintenance-related errors
+      if (shouldFilterMaintenanceError(event)) {
+        console.debug('[Sentry] Filtering maintenance-related error:', event.message)
+        return null
+      }
+      
+      // Add maintenance state context to all errors
+      event.tags = {
+        ...event.tags,
+        maintenance_window: maintenanceState.inMaintenanceWindow ? 'true' : 'false',
+        consecutive_failures: String(maintenanceState.consecutiveFailures),
+      }
+      
       return event
     },
   })
+
+  // Set up global fetch interceptor to track API success/failure
+  setupFetchInterceptor()
 
   // Set user context if available (can be updated later when user logs in)
   Sentry.setTag('app', 'aphylia')
@@ -112,6 +267,57 @@ export function initSentry() {
   if (import.meta.env.DEV) {
     console.info('[Sentry] Initialized successfully', { dsn: dsn.substring(0, 20) + '...', environment, release, serverName })
   }
+}
+
+/**
+ * Set up a fetch interceptor to automatically track API success/failure
+ * for maintenance window detection
+ */
+function setupFetchInterceptor() {
+  const originalFetch = window.fetch
+  
+  window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    try {
+      const response = await originalFetch.call(window, input, init)
+      
+      // Track successful calls to our API
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url && (url.includes('/api/') || url.includes('aphylia.app'))) {
+        if (response.ok || (response.status >= 200 && response.status < 500)) {
+          recordSuccessfulApiCall()
+        } else if (isMaintenanceStatusCode(response.status)) {
+          recordFailedApiCall()
+        }
+      }
+      
+      return response
+    } catch (error) {
+      // Track failed calls (network errors)
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url
+      if (url && (url.includes('/api/') || url.includes('aphylia.app'))) {
+        recordFailedApiCall()
+      }
+      throw error
+    }
+  }
+}
+
+/**
+ * Manually enter maintenance mode (e.g., from admin action or broadcast)
+ */
+export function enterMaintenanceMode() {
+  maintenanceState.inMaintenanceWindow = true
+  maintenanceState.maintenanceStartTime = Date.now()
+  console.info('[Sentry] Manually entering maintenance window')
+}
+
+/**
+ * Manually exit maintenance mode
+ */
+export function exitMaintenanceMode() {
+  maintenanceState.inMaintenanceWindow = false
+  maintenanceState.consecutiveFailures = 0
+  console.info('[Sentry] Manually exiting maintenance window')
 }
 
 /**
