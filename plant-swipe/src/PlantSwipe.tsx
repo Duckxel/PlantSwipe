@@ -20,6 +20,7 @@ import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 import { CookieConsent } from "@/components/CookieConsent";
+import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -204,9 +205,18 @@ export default function PlantSwipe() {
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
   const [authAcceptedTerms, setAuthAcceptedTerms] = useState(false)
+  const [authMarketingConsent, setAuthMarketingConsent] = useState(true) // Default to checked
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
+  
+  // Legal update modal - show when user's accepted versions are outdated
+  const [legalUpdateDismissed, setLegalUpdateDismissed] = useState(false)
+  const { needsUpdate: needsLegalUpdate } = useNeedsLegalUpdate(
+    profile?.terms_version_accepted,
+    profile?.privacy_version_accepted
+  )
+  const showLegalUpdateModal = Boolean(user && profile && needsLegalUpdate && !legalUpdateDismissed)
 
   const [plants, setPlants] = useState<Plant[]>(() => {
     if (typeof localStorage === 'undefined') return []
@@ -1275,7 +1285,7 @@ export default function PlantSwipe() {
           setAuthSubmitting(false)
           return
         }
-        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, recaptchaToken })
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, recaptchaToken, marketingConsent: authMarketingConsent })
         if (error) {
           console.error('[auth] signup error', error)
           setAuthError(error)
@@ -1315,6 +1325,7 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (!authOpen) {
       setAuthAcceptedTerms(false)
+      setAuthMarketingConsent(true) // Reset to default (checked)
       setAuthSubmitting(false)
       setAuthError(null)
       setAuthEmail("")
@@ -1327,6 +1338,7 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (authMode !== 'signup') {
       setAuthAcceptedTerms(false)
+      setAuthMarketingConsent(true) // Reset to default (checked)
     }
   }, [authMode])
 
@@ -1383,27 +1395,42 @@ export default function PlantSwipe() {
                   </div>
                 )}
                 {authMode === 'signup' && (
-                  <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
-                    <input
-                      id="auth-accept-terms"
-                      type="checkbox"
-                      checked={authAcceptedTerms}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
-                      disabled={authSubmitting}
-                      className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
-                    />
-                    <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
-                      {t('auth.acceptTermsLabel')}{" "}
-                      <a
-                        href={termsPath}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
-                      >
-                        {t('auth.termsLinkLabel')}
-                      </a>.
-                    </Label>
-                  </div>
+                  <>
+                    <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                      <input
+                        id="auth-accept-terms"
+                        type="checkbox"
+                        checked={authAcceptedTerms}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
+                        disabled={authSubmitting}
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                      />
+                      <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                        {t('auth.acceptTermsLabel')}{" "}
+                        <a
+                          href={termsPath}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                        >
+                          {t('auth.termsLinkLabel')}
+                        </a>.
+                      </Label>
+                    </div>
+                    <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                      <input
+                        id="auth-marketing-consent"
+                        type="checkbox"
+                        checked={authMarketingConsent}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthMarketingConsent(e.target.checked)}
+                        disabled={authSubmitting}
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                      />
+                      <Label htmlFor="auth-marketing-consent" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                        {t('auth.marketingConsentLabel', 'Receive occasional emails about new features and updates')}
+                      </Label>
+                    </div>
+                  </>
                 )}
                 {authError && <div className="text-sm text-red-600">{authError}</div>}
                 <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
@@ -1427,6 +1454,26 @@ export default function PlantSwipe() {
           
           {/* GDPR Cookie Consent Banner */}
           <CookieConsent />
+          
+          {/* Legal Document Update Modal */}
+          {showLegalUpdateModal && user && profile && (
+            <LegalUpdateModal
+              open={showLegalUpdateModal}
+              userId={user.id}
+              userTermsVersion={profile.terms_version_accepted ?? null}
+              userPrivacyVersion={profile.privacy_version_accepted ?? null}
+              onAccepted={() => {
+                setLegalUpdateDismissed(true)
+                refreshProfile().catch(() => {})
+              }}
+              onDeclined={async () => {
+                // User declined - they will be blocked (threat_level = 3)
+                // Sign them out and show message
+                await signOut()
+                alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+              }}
+            />
+          )}
         </AuthActionsProvider>
       )
     }
@@ -2003,27 +2050,42 @@ export default function PlantSwipe() {
               </div>
             )}
             {authMode === 'signup' && (
-              <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
-                <input
-                  id="auth-accept-terms"
-                  type="checkbox"
-                  checked={authAcceptedTerms}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
-                  disabled={authSubmitting}
-                  className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
-                />
-                <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
-                  {t('auth.acceptTermsLabel')}{" "}
-                  <a
-                    href={termsPath}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
-                  >
-                    {t('auth.termsLinkLabel')}
-                  </a>.
-                </Label>
-              </div>
+              <>
+                <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                  <input
+                    id="auth-accept-terms-2"
+                    type="checkbox"
+                    checked={authAcceptedTerms}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
+                    disabled={authSubmitting}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                  />
+                  <Label htmlFor="auth-accept-terms-2" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                    {t('auth.acceptTermsLabel')}{" "}
+                    <a
+                      href={termsPath}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                    >
+                      {t('auth.termsLinkLabel')}
+                    </a>.
+                  </Label>
+                </div>
+                <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                  <input
+                    id="auth-marketing-consent-2"
+                    type="checkbox"
+                    checked={authMarketingConsent}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthMarketingConsent(e.target.checked)}
+                    disabled={authSubmitting}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                  />
+                  <Label htmlFor="auth-marketing-consent-2" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                    {t('auth.marketingConsentLabel', 'Receive occasional emails about new features and updates')}
+                  </Label>
+                </div>
+              </>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
             <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
@@ -2061,6 +2123,26 @@ export default function PlantSwipe() {
       
       {/* GDPR Cookie Consent Banner */}
       <CookieConsent />
+      
+      {/* Legal Document Update Modal */}
+      {showLegalUpdateModal && user && profile && (
+        <LegalUpdateModal
+          open={showLegalUpdateModal}
+          userId={user.id}
+          userTermsVersion={profile.terms_version_accepted ?? null}
+          userPrivacyVersion={profile.privacy_version_accepted ?? null}
+          onAccepted={() => {
+            setLegalUpdateDismissed(true)
+            refreshProfile().catch(() => {})
+          }}
+          onDeclined={async () => {
+            // User declined - they will be blocked (threat_level = 3)
+            // Sign them out and show message
+            await signOut()
+            alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+          }}
+        />
+      )}
     </div>
     </AuthActionsProvider>
   )

@@ -4,8 +4,18 @@ import { applyAccentByKey } from '@/lib/accent'
 import { validateUsername } from '@/lib/username'
 import { setUser as setSentryUser } from '@/lib/sentry'
 
+// Import current legal document versions
+import termsVersion from '@/content/terms-version.json'
+import privacyVersion from '@/content/privacy-version.json'
+
 // Default timezone for users who haven't set one
 const DEFAULT_TIMEZONE = 'Europe/London'
+
+// Current legal document versions (auto-updated by GitHub Action)
+export const CURRENT_TERMS_VERSION = termsVersion.version
+export const CURRENT_PRIVACY_VERSION = privacyVersion.version
+export const TERMS_LAST_UPDATED = termsVersion.lastUpdated
+export const PRIVACY_LAST_UPDATED = privacyVersion.lastUpdated
 
 type AuthUser = {
   id: string
@@ -75,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, threat_level')
+      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, threat_level, terms_version_accepted, privacy_version_accepted')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
@@ -178,7 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { sub.subscription.unsubscribe() }
   }, [loadSession, refreshProfile])
 
-  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken, marketingConsent = false }) => {
+  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken, marketingConsent = true }) => {
     // Verify reCAPTCHA token before attempting signup
     if (recaptchaToken) {
       try {
@@ -251,6 +261,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // GDPR consent tracking
       terms_accepted_date: consentTimestamp,
       privacy_policy_accepted_date: consentTimestamp,
+      terms_version_accepted: CURRENT_TERMS_VERSION,
+      privacy_version_accepted: CURRENT_PRIVACY_VERSION,
       marketing_consent: marketingConsent,
       marketing_consent_date: marketingConsent ? consentTimestamp : null,
     })

@@ -4696,6 +4696,7 @@ alter table public.admin_email_campaigns add column if not exists created_by uui
 alter table public.admin_email_campaigns add column if not exists updated_by uuid references public.profiles(id) on delete set null;
 alter table public.admin_email_campaigns add column if not exists test_mode boolean default false;
 alter table public.admin_email_campaigns add column if not exists test_email text;
+alter table public.admin_email_campaigns add column if not exists is_marketing boolean default false; -- If true, only send to users with marketing_consent=true
 alter table public.admin_email_campaigns add column if not exists send_summary jsonb;
 
 alter table public.admin_email_campaigns enable row level security;
@@ -10434,6 +10435,13 @@ ADD COLUMN IF NOT EXISTS terms_accepted_date timestamptz;
 
 ALTER TABLE IF EXISTS public.profiles
 ADD COLUMN IF NOT EXISTS privacy_policy_accepted_date timestamptz;
+
+-- Track which version of legal documents user accepted
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS terms_version_accepted text DEFAULT '1.0.0';
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS privacy_version_accepted text DEFAULT '1.0.0';
 
 -- GDPR Audit Log Table
 CREATE TABLE IF NOT EXISTS public.gdpr_audit_log (

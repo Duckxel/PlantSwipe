@@ -5407,6 +5407,7 @@ const emailCampaignInputSchema = z.object({
     .nullable(),
   testMode: z.boolean().optional().default(false),
   testEmail: z.string().email().optional().nullable(),
+  isMarketing: z.boolean().optional().default(false), // If true, only send to users with marketing_consent=true
 })
 
 const emailCampaignUpdateSchema = z.object({
@@ -8077,6 +8078,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
 
     const testMode = parsed.testMode === true
     const testEmail = testMode && parsed.testEmail ? parsed.testEmail : null
+    const isMarketing = parsed.isMarketing === true
     const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
@@ -8098,6 +8100,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         failed_count,
         test_mode,
         test_email,
+        is_marketing,
         created_by,
         updated_by,
         created_at,
@@ -8121,6 +8124,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         0,
         ${testMode},
         ${testEmail},
+        ${isMarketing},
         ${adminUuid},
         ${adminUuid},
         now(),
@@ -8464,6 +8468,7 @@ function normalizeEmailCampaignRow(row) {
     sendCompletedAt: row.send_completed_at || null,
     testMode: row.test_mode === true,
     testEmail: row.test_email || null,
+    isMarketing: row.is_marketing === true, // If true, only users with marketing_consent receive this
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
