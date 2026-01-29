@@ -9341,98 +9341,331 @@ create trigger ensure_single_landing_showcase_config_trigger
   before insert on public.landing_showcase_config
   for each row execute function public.ensure_single_landing_showcase_config();
 
--- RLS Policies for Landing Page Tables
--- All landing tables are publicly readable but only admin-writable
+-- ========== Updated_at Triggers for Landing Page Tables ==========
+-- Create a generic updated_at trigger function
+create or replace function public.update_landing_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
 
+-- Add updated_at triggers for all landing tables that have the column
+drop trigger if exists landing_page_settings_updated_at on public.landing_page_settings;
+create trigger landing_page_settings_updated_at
+  before update on public.landing_page_settings
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_hero_cards_updated_at on public.landing_hero_cards;
+create trigger landing_hero_cards_updated_at
+  before update on public.landing_hero_cards
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_stats_updated_at on public.landing_stats;
+create trigger landing_stats_updated_at
+  before update on public.landing_stats
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_stats_translations_updated_at on public.landing_stats_translations;
+create trigger landing_stats_translations_updated_at
+  before update on public.landing_stats_translations
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_testimonials_updated_at on public.landing_testimonials;
+create trigger landing_testimonials_updated_at
+  before update on public.landing_testimonials
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_faq_updated_at on public.landing_faq;
+create trigger landing_faq_updated_at
+  before update on public.landing_faq
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_faq_translations_updated_at on public.landing_faq_translations;
+create trigger landing_faq_translations_updated_at
+  before update on public.landing_faq_translations
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_demo_features_updated_at on public.landing_demo_features;
+create trigger landing_demo_features_updated_at
+  before update on public.landing_demo_features
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_demo_feature_translations_updated_at on public.landing_demo_feature_translations;
+create trigger landing_demo_feature_translations_updated_at
+  before update on public.landing_demo_feature_translations
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_showcase_config_updated_at on public.landing_showcase_config;
+create trigger landing_showcase_config_updated_at
+  before update on public.landing_showcase_config
+  for each row execute function public.update_landing_updated_at();
+
+-- ========== RLS Policies for Landing Page Tables ==========
+-- All landing tables are publicly readable but only admin-writable
+-- Using separate policies for INSERT, UPDATE, DELETE with proper WITH CHECK clauses
+
+-- Helper function to check if user is admin (cached for performance)
+create or replace function public.is_landing_admin()
+returns boolean as $$
+begin
+  return exists (
+    select 1 from public.profiles 
+    where id = auth.uid() and is_admin = true
+  );
+end;
+$$ language plpgsql security definer stable;
+
+-- ========== landing_page_settings RLS ==========
 alter table public.landing_page_settings enable row level security;
+
 drop policy if exists "Landing page settings are publicly readable" on public.landing_page_settings;
-create policy "Landing page settings are publicly readable" on public.landing_page_settings for select using (true);
+create policy "Landing page settings are publicly readable" 
+  on public.landing_page_settings for select using (true);
+
 drop policy if exists "Admins can manage landing page settings" on public.landing_page_settings;
-create policy "Admins can manage landing page settings" on public.landing_page_settings for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing page settings" on public.landing_page_settings;
+create policy "Admins can insert landing page settings" 
+  on public.landing_page_settings for insert 
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can update landing page settings" on public.landing_page_settings;
+create policy "Admins can update landing page settings" 
+  on public.landing_page_settings for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing page settings" on public.landing_page_settings;
+create policy "Admins can delete landing page settings" 
+  on public.landing_page_settings for delete 
+  using (public.is_landing_admin());
 
 -- Insert default settings row if not exists
 insert into public.landing_page_settings (id)
 select gen_random_uuid()
 where not exists (select 1 from public.landing_page_settings limit 1);
 
+-- ========== landing_hero_cards RLS ==========
 alter table public.landing_hero_cards enable row level security;
-drop policy if exists "Landing hero cards are publicly readable" on public.landing_hero_cards;
-create policy "Landing hero cards are publicly readable" on public.landing_hero_cards for select using (true);
-drop policy if exists "Admins can manage landing hero cards" on public.landing_hero_cards;
-create policy "Admins can manage landing hero cards" on public.landing_hero_cards for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
 
+drop policy if exists "Landing hero cards are publicly readable" on public.landing_hero_cards;
+create policy "Landing hero cards are publicly readable" 
+  on public.landing_hero_cards for select using (true);
+
+drop policy if exists "Admins can manage landing hero cards" on public.landing_hero_cards;
+drop policy if exists "Admins can insert landing hero cards" on public.landing_hero_cards;
+create policy "Admins can insert landing hero cards" 
+  on public.landing_hero_cards for insert 
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can update landing hero cards" on public.landing_hero_cards;
+create policy "Admins can update landing hero cards" 
+  on public.landing_hero_cards for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing hero cards" on public.landing_hero_cards;
+create policy "Admins can delete landing hero cards" 
+  on public.landing_hero_cards for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_stats RLS ==========
 alter table public.landing_stats enable row level security;
+
 drop policy if exists "Landing stats are publicly readable" on public.landing_stats;
-create policy "Landing stats are publicly readable" on public.landing_stats for select using (true);
+create policy "Landing stats are publicly readable" 
+  on public.landing_stats for select using (true);
+
 drop policy if exists "Admins can manage landing stats" on public.landing_stats;
-create policy "Admins can manage landing stats" on public.landing_stats for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing stats" on public.landing_stats;
+create policy "Admins can insert landing stats" 
+  on public.landing_stats for insert 
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can update landing stats" on public.landing_stats;
+create policy "Admins can update landing stats" 
+  on public.landing_stats for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing stats" on public.landing_stats;
+create policy "Admins can delete landing stats" 
+  on public.landing_stats for delete 
+  using (public.is_landing_admin());
 
 -- Insert default stats row if not exists
 insert into public.landing_stats (id)
 select gen_random_uuid()
 where not exists (select 1 from public.landing_stats limit 1);
 
+-- ========== landing_stats_translations RLS ==========
 alter table public.landing_stats_translations enable row level security;
+
 drop policy if exists "Landing stats translations are publicly readable" on public.landing_stats_translations;
-create policy "Landing stats translations are publicly readable" on public.landing_stats_translations for select using (true);
+create policy "Landing stats translations are publicly readable" 
+  on public.landing_stats_translations for select using (true);
+
 drop policy if exists "Admins can manage landing stats translations" on public.landing_stats_translations;
-create policy "Admins can manage landing stats translations" on public.landing_stats_translations for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing stats translations" on public.landing_stats_translations;
+create policy "Admins can insert landing stats translations" 
+  on public.landing_stats_translations for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing stats translations" on public.landing_stats_translations;
+create policy "Admins can update landing stats translations" 
+  on public.landing_stats_translations for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing stats translations" on public.landing_stats_translations;
+create policy "Admins can delete landing stats translations" 
+  on public.landing_stats_translations for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_testimonials RLS ==========
 alter table public.landing_testimonials enable row level security;
+
 drop policy if exists "Landing testimonials are publicly readable" on public.landing_testimonials;
-create policy "Landing testimonials are publicly readable" on public.landing_testimonials for select using (true);
+create policy "Landing testimonials are publicly readable" 
+  on public.landing_testimonials for select using (true);
+
 drop policy if exists "Admins can manage landing testimonials" on public.landing_testimonials;
-create policy "Admins can manage landing testimonials" on public.landing_testimonials for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing testimonials" on public.landing_testimonials;
+create policy "Admins can insert landing testimonials" 
+  on public.landing_testimonials for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing testimonials" on public.landing_testimonials;
+create policy "Admins can update landing testimonials" 
+  on public.landing_testimonials for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing testimonials" on public.landing_testimonials;
+create policy "Admins can delete landing testimonials" 
+  on public.landing_testimonials for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_faq RLS ==========
 alter table public.landing_faq enable row level security;
+
 drop policy if exists "Landing FAQ are publicly readable" on public.landing_faq;
-create policy "Landing FAQ are publicly readable" on public.landing_faq for select using (true);
+create policy "Landing FAQ are publicly readable" 
+  on public.landing_faq for select using (true);
+
 drop policy if exists "Admins can manage landing FAQ" on public.landing_faq;
-create policy "Admins can manage landing FAQ" on public.landing_faq for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing FAQ" on public.landing_faq;
+create policy "Admins can insert landing FAQ" 
+  on public.landing_faq for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing FAQ" on public.landing_faq;
+create policy "Admins can update landing FAQ" 
+  on public.landing_faq for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing FAQ" on public.landing_faq;
+create policy "Admins can delete landing FAQ" 
+  on public.landing_faq for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_faq_translations RLS ==========
 alter table public.landing_faq_translations enable row level security;
+
 drop policy if exists "Landing FAQ translations are publicly readable" on public.landing_faq_translations;
-create policy "Landing FAQ translations are publicly readable" on public.landing_faq_translations for select using (true);
+create policy "Landing FAQ translations are publicly readable" 
+  on public.landing_faq_translations for select using (true);
+
 drop policy if exists "Admins can manage landing FAQ translations" on public.landing_faq_translations;
-create policy "Admins can manage landing FAQ translations" on public.landing_faq_translations for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing FAQ translations" on public.landing_faq_translations;
+create policy "Admins can insert landing FAQ translations" 
+  on public.landing_faq_translations for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing FAQ translations" on public.landing_faq_translations;
+create policy "Admins can update landing FAQ translations" 
+  on public.landing_faq_translations for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing FAQ translations" on public.landing_faq_translations;
+create policy "Admins can delete landing FAQ translations" 
+  on public.landing_faq_translations for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_demo_features RLS ==========
 alter table public.landing_demo_features enable row level security;
+
 drop policy if exists "Landing demo features are publicly readable" on public.landing_demo_features;
-create policy "Landing demo features are publicly readable" on public.landing_demo_features for select using (true);
+create policy "Landing demo features are publicly readable" 
+  on public.landing_demo_features for select using (true);
+
 drop policy if exists "Admins can manage landing demo features" on public.landing_demo_features;
-create policy "Admins can manage landing demo features" on public.landing_demo_features for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing demo features" on public.landing_demo_features;
+create policy "Admins can insert landing demo features" 
+  on public.landing_demo_features for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing demo features" on public.landing_demo_features;
+create policy "Admins can update landing demo features" 
+  on public.landing_demo_features for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing demo features" on public.landing_demo_features;
+create policy "Admins can delete landing demo features" 
+  on public.landing_demo_features for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_demo_feature_translations RLS ==========
 alter table public.landing_demo_feature_translations enable row level security;
-drop policy if exists "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations;
-create policy "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations for select using (true);
-drop policy if exists "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations;
-create policy "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
 
+drop policy if exists "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations;
+create policy "Landing demo feature translations are publicly readable" 
+  on public.landing_demo_feature_translations for select using (true);
+
+drop policy if exists "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations;
+drop policy if exists "Admins can insert landing demo feature translations" on public.landing_demo_feature_translations;
+create policy "Admins can insert landing demo feature translations" 
+  on public.landing_demo_feature_translations for insert 
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can update landing demo feature translations" on public.landing_demo_feature_translations;
+create policy "Admins can update landing demo feature translations" 
+  on public.landing_demo_feature_translations for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing demo feature translations" on public.landing_demo_feature_translations;
+create policy "Admins can delete landing demo feature translations" 
+  on public.landing_demo_feature_translations for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_showcase_config RLS ==========
 alter table public.landing_showcase_config enable row level security;
+
 drop policy if exists "Landing showcase config is publicly readable" on public.landing_showcase_config;
-create policy "Landing showcase config is publicly readable" on public.landing_showcase_config for select using (true);
+create policy "Landing showcase config is publicly readable" 
+  on public.landing_showcase_config for select using (true);
+
 drop policy if exists "Admins can manage landing showcase config" on public.landing_showcase_config;
-create policy "Admins can manage landing showcase config" on public.landing_showcase_config for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing showcase config" on public.landing_showcase_config;
+create policy "Admins can insert landing showcase config" 
+  on public.landing_showcase_config for insert 
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can update landing showcase config" on public.landing_showcase_config;
+create policy "Admins can update landing showcase config" 
+  on public.landing_showcase_config for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing showcase config" on public.landing_showcase_config;
+create policy "Admins can delete landing showcase config" 
+  on public.landing_showcase_config for delete 
+  using (public.is_landing_admin());
 
 -- Insert default showcase config row if not exists
 insert into public.landing_showcase_config (id)
