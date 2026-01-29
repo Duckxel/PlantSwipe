@@ -390,6 +390,33 @@ do $$ begin
   end;
 end $$;
 
+-- ========== Purge old completed bug reports (retention) ==========
+-- Delete bug reports with status 'completed' that are older than 10 days
+-- Runs daily at 4 AM UTC
+do $$ begin
+  begin
+    -- First unschedule if exists to allow updates
+    perform cron.unschedule('purge_old_bug_reports');
+  exception
+    when others then
+      null;
+  end;
+  begin
+    perform cron.schedule(
+      'purge_old_bug_reports',
+      '0 4 * * *',
+      $_cron$
+      delete from public.bug_reports
+      where status = 'completed'
+        and timezone('utc', created_at) < ((now() at time zone 'utc')::date - interval '10 days');
+      $_cron$
+    );
+  exception
+    when others then
+      null;
+  end;
+end $$;
+
 -- ========== Plants base table ==========
 -- ARCHITECTURE NOTE: As of 2024, ALL translatable content is stored ONLY in plant_translations.
 -- This table contains ONLY non-translatable base data. No translatable columns exist here

@@ -182,8 +182,27 @@ export const AdminBugsPanel: React.FC = () => {
           })
         }
         
+        // Sort reports: uncompleted first (pending, reviewing), then completed/closed
+        // Within each group, sort by created_at descending (newest first)
+        const statusPriority: Record<string, number> = {
+          'pending': 0,
+          'reviewing': 1,
+          'completed': 2,
+          'closed': 3
+        }
+        
+        const sortedReports = [...reportsData].sort((a, b) => {
+          const priorityA = statusPriority[a.status] ?? 99
+          const priorityB = statusPriority[b.status] ?? 99
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB
+          }
+          // Same status, sort by created_at descending
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        })
+        
         // Map reports with display names
-        setBugReports(reportsData.map(r => ({
+        setBugReports(sortedReports.map(r => ({
           ...r,
           user_display_name: displayNameMap[r.user_id] || 'Unknown User'
         })))
