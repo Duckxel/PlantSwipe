@@ -703,47 +703,43 @@ def sync_schema():
     def _run_psql_with_ssl_fallback(cmd_args, db_url, timeout_secs=180):
         """Run psql with SSL, with automatic fallback if certificate verification fails.
         
-        Tries in order:
-        1. sslmode=require (SSL without cert verification - should work in most cases)
-        2. If SSL error, retry with explicit no-verification settings
+        PostgreSQL/libpq SSL behavior:
+        - sslmode=require: Use SSL, but behavior varies by libpq version
+        - PGSSLROOTCERT: Path to CA certificate file for verification
+        
+        When PGSSLROOTCERT points to a non-existent file and sslmode=require,
+        libpq will use SSL but skip certificate verification.
         """
+        from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+        
         psql_env = os.environ.copy()
         
         # Remove any existing SSL settings that might interfere
         for key in list(psql_env.keys()):
-            if key.startswith("PGSSL") or key == "PGSSLMODE":
+            if key.startswith("PGSSL"):
                 del psql_env[key]
         
-        # First attempt: sslmode=require (SSL without certificate verification)
+        # CRITICAL FIX for "certificate verify failed" error:
+        # Set PGSSLROOTCERT to a non-existent path. According to PostgreSQL docs:
+        # "If the root certificate file is not found, the connection will proceed
+        # without verifying the server certificate if sslmode is require, allow, or prefer"
+        # This is the most reliable way to disable certificate verification across all libpq versions
         psql_env["PGSSLMODE"] = "require"
+        psql_env["PGSSLROOTCERT"] = "/nonexistent/.postgresql/root.crt"
+        
+        # Also ensure the URL has sslmode=require explicitly set
+        try:
+            u = urlparse(db_url)
+            q = dict(parse_qsl(u.query, keep_blank_values=True))
+            q["sslmode"] = "require"
+            new_query = urlencode(q)
+            db_url_modified = urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
+            # Update URL in command args
+            cmd_args = [db_url_modified if arg == db_url else arg for arg in cmd_args]
+        except Exception:
+            pass  # If URL modification fails, use original
         
         res = subprocess.run(cmd_args, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env)
-        
-        # Check if it's an SSL certificate error
-        stderr_lower = (res.stderr or "").lower()
-        if res.returncode != 0 and ("ssl" in stderr_lower and "certificate" in stderr_lower):
-            # SSL certificate error - try again with explicit settings to skip verification
-            # This can happen on some systems where libpq still tries to verify even with require
-            psql_env_retry = psql_env.copy()
-            # Set sslmode in URL to ensure it overrides any defaults
-            # Also explicitly unset PGSSLROOTCERT to prevent any verification
-            psql_env_retry.pop("PGSSLROOTCERT", None)
-            # Some libpq versions respect this to skip verification
-            psql_env_retry["PGSSLMODE"] = "require"
-            
-            # Modify the URL to ensure sslmode=require is explicit
-            from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-            try:
-                u = urlparse(db_url)
-                q = dict(parse_qsl(u.query, keep_blank_values=True))
-                q["sslmode"] = "require"  # Force require mode
-                new_query = urlencode(q)
-                modified_url = urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
-                # Update URL in command args
-                cmd_retry = [modified_url if arg == db_url else arg for arg in cmd_args]
-                res = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env_retry)
-            except Exception:
-                pass  # If URL modification fails, return original result
         
         return res
     
@@ -764,11 +760,13 @@ def sync_schema():
         res = _run_psql_with_ssl_fallback(cmd, db_url, timeout_secs=180)
         
         # Prepare environment for potential follow-up psql calls (admin_secrets update)
+        # Use the same SSL settings as the main call to avoid certificate verification
         psql_env = os.environ.copy()
         for key in list(psql_env.keys()):
             if key.startswith("PGSSL"):
                 del psql_env[key]
         psql_env["PGSSLMODE"] = "require"
+        psql_env["PGSSLROOTCERT"] = "/nonexistent/.postgresql/root.crt"
         out = (res.stdout or "")
         err = (res.stderr or "")
         
