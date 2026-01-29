@@ -1714,6 +1714,8 @@ create index if not exists admin_media_uploads_created_idx on public.admin_media
 create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
 create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
 create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
+-- GIN index for efficient JSONB queries on metadata (tag, device filtering)
+create index if not exists admin_media_uploads_metadata_idx on public.admin_media_uploads using gin (metadata jsonb_path_ops);
 
 -- Add upload_source column to existing installations (safe to run multiple times)
 do $$ begin

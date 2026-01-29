@@ -1338,6 +1338,8 @@ async function handleScopedImageUpload(req, res, options = {}) {
     bucket = adminUploadBucket,
     webpQuality = adminUploadWebpQuality,
     maxDimension = adminUploadMaxDimension,
+    // Additional metadata to merge with the default metadata (e.g., tag, device)
+    extraMetadataBuilder = null,
   } = options
 
   singleAdminImageUpload(req, res, (err) => {
@@ -1483,6 +1485,11 @@ async function handleScopedImageUpload(req, res, options = {}) {
         payload.warning = 'Bucket is not public; no public URL is available'
       }
 
+      // Build extra metadata if builder is provided
+      const extraMetadata = typeof extraMetadataBuilder === 'function' 
+        ? extraMetadataBuilder({ req, file }) 
+        : {}
+
       await recordAdminMediaUpload({
         adminId: uploaderInfo?.id || null,
         adminEmail: uploaderInfo?.email || null,
@@ -1502,6 +1509,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
           originalTypeSegment,
           scope: auditLabel,
           optimized: shouldOptimize,
+          ...extraMetadata,
         },
       })
 
@@ -3427,6 +3435,155 @@ app.get('/api/health', async (_req, res) => {
       ok: true,
       db: { ok: false, latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' },
     })
+  }
+})
+
+// =============================================================================
+// PWA Manifest Screenshots - Public endpoint for dynamic manifest screenshots
+// =============================================================================
+// Returns screenshots tagged for PWA manifest use (tag: screenshot)
+// Format follows Web App Manifest spec: https://www.w3.org/TR/appmanifest/#screenshots-member
+app.get('/api/manifest/screenshots', async (_req, res) => {
+  try {
+    let rows = []
+    if (sql) {
+      // Fetch screenshots (tag = 'screenshot') ordered by device type for proper form_factor grouping
+      rows = await sql`
+        select 
+          id, 
+          public_url, 
+          metadata
+        from public.admin_media_uploads 
+        where upload_source = 'mockups' 
+          and metadata->>'tag' = 'screenshot'
+          and public_url is not null
+        order by 
+          case metadata->>'device'
+            when 'phone' then 1
+            when 'tablet' then 2
+            when 'computer' then 3
+            else 4
+          end,
+          created_at desc
+        limit 8
+      `
+    }
+    
+    // Transform to PWA manifest screenshot format
+    const screenshots = rows.map(row => {
+      const device = row.metadata?.device || 'phone'
+      // Map device to form_factor (wide for computer/tablet, narrow for phone)
+      const formFactor = device === 'phone' ? 'narrow' : 'wide'
+      // Default sizes based on device type
+      const sizes = device === 'phone' 
+        ? '1080x1920' 
+        : device === 'tablet'
+        ? '2048x1536'
+        : '1920x1080'
+      
+      return {
+        src: row.public_url,
+        sizes,
+        type: 'image/webp',
+        form_factor: formFactor,
+        label: row.metadata?.displayName || row.metadata?.storageName || 'App Screenshot',
+      }
+    })
+    
+    res.json({ screenshots })
+  } catch (err) {
+    console.error('[manifest/screenshots] failed to fetch screenshots', err)
+    res.json({ screenshots: [] })
+  }
+})
+
+// Full dynamic manifest endpoint - merges static config with dynamic screenshots
+app.get('/api/manifest.webmanifest', async (_req, res) => {
+  try {
+    // Base manifest (matches vite.config.ts)
+    const baseManifest = {
+      id: 'aphylia',
+      name: 'Aphylia',
+      short_name: 'Aphylia',
+      description: 'Discover, swipe and manage the perfect plants for every garden.',
+      lang: 'en',
+      theme_color: '#052e16',
+      background_color: '#03120c',
+      display: 'standalone',
+      display_override: ['window-controls-overlay', 'standalone'],
+      scope: '/',
+      start_url: '/discovery',
+      orientation: 'portrait-primary',
+      categories: ['productivity', 'lifestyle', 'utilities'],
+      iarc_rating_id: 'IARC21-00000000-0000000000000000',
+      icons: [
+        { src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable any' },
+        { src: '/icons/plant-swipe-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+        { src: '/icons/plant-swipe-icon-outline.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+      ],
+      shortcuts: [
+        { name: 'Swipe plants', url: '/swipe', description: 'Jump directly into swipe mode' },
+        { name: 'My gardens', url: '/gardens', description: 'Open your garden dashboard' },
+      ],
+    }
+    
+    // Fetch screenshots from database
+    let screenshots = []
+    if (sql) {
+      try {
+        const rows = await sql`
+          select 
+            public_url, 
+            metadata
+          from public.admin_media_uploads 
+          where upload_source = 'mockups' 
+            and metadata->>'tag' = 'screenshot'
+            and public_url is not null
+          order by 
+            case metadata->>'device'
+              when 'phone' then 1
+              when 'tablet' then 2
+              when 'computer' then 3
+              else 4
+            end,
+            created_at desc
+          limit 8
+        `
+        screenshots = rows.map(row => {
+          const device = row.metadata?.device || 'phone'
+          const formFactor = device === 'phone' ? 'narrow' : 'wide'
+          const sizes = device === 'phone' 
+            ? '1080x1920' 
+            : device === 'tablet'
+            ? '2048x1536'
+            : '1920x1080'
+          
+          return {
+            src: row.public_url,
+            sizes,
+            type: 'image/webp',
+            form_factor: formFactor,
+            label: row.metadata?.displayName || row.metadata?.storageName || 'App Screenshot',
+          }
+        })
+      } catch (err) {
+        console.error('[manifest] failed to fetch screenshots', err)
+      }
+    }
+    
+    // Only add screenshots if we have some
+    if (screenshots.length > 0) {
+      baseManifest.screenshots = screenshots
+    }
+    
+    res.setHeader('Content-Type', 'application/manifest+json')
+    res.setHeader('Cache-Control', 'public, max-age=3600') // Cache for 1 hour
+    res.json(baseManifest)
+  } catch (err) {
+    console.error('[manifest] failed to generate manifest', err)
+    res.status(500).json({ error: 'Failed to generate manifest' })
   }
 })
 
@@ -5859,6 +6016,14 @@ app.post('/api/admin/upload-mockup', async (req, res) => {
     // Mockups uploads: UTILITY bucket, 90% quality (highest for marketing materials)
     bucket: 'UTILITY',
     webpQuality: 90,
+    // Extract tag and device from request body for mockup metadata
+    extraMetadataBuilder: ({ req }) => {
+      const validTags = ['screenshot', 'mockup']
+      const validDevices = ['phone', 'computer', 'tablet']
+      const tag = validTags.includes(req.body?.tag) ? req.body.tag : null
+      const device = validDevices.includes(req.body?.device) ? req.body.device : null
+      return { tag, device }
+    },
   })
 })
 
@@ -6334,9 +6499,124 @@ app.delete('/api/admin/media/:id', async (req, res) => {
   res.json({ ok: true, id: mediaId, storageWarning })
 })
 app.options('/api/admin/media/:id', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'DELETE,PATCH,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
+})
+
+// Update media metadata (tag, device)
+app.patch('/api/admin/media/:id', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const admin = await ensureEditor(req, res)
+  if (!admin) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  const mediaId = String(req.params?.id || '').trim()
+  if (!mediaId) {
+    res.status(400).json({ error: 'Missing media id' })
+    return
+  }
+
+  // Validate and extract tag/device from body
+  const validTags = ['screenshot', 'mockup']
+  const validDevices = ['phone', 'computer', 'tablet']
+  const body = req.body || {}
+  
+  // Only allow updating tag and device, and validate values
+  const updates = {}
+  if (body.tag !== undefined) {
+    if (body.tag === null || validTags.includes(body.tag)) {
+      updates.tag = body.tag
+    } else {
+      res.status(400).json({ error: `Invalid tag value. Must be one of: ${validTags.join(', ')}` })
+      return
+    }
+  }
+  if (body.device !== undefined) {
+    if (body.device === null || validDevices.includes(body.device)) {
+      updates.device = body.device
+    } else {
+      res.status(400).json({ error: `Invalid device value. Must be one of: ${validDevices.join(', ')}` })
+      return
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: 'No valid fields to update. Provide tag and/or device.' })
+    return
+  }
+
+  try {
+    let updatedRow = null
+    if (sql) {
+      // Fetch current metadata, merge updates, and save
+      const rows = await sql`
+        select id, metadata from public.admin_media_uploads where id = ${mediaId} limit 1
+      `
+      if (!rows || rows.length === 0) {
+        res.status(404).json({ error: 'Media not found' })
+        return
+      }
+      const currentMetadata = rows[0].metadata || {}
+      const newMetadata = { ...currentMetadata, ...updates }
+      
+      const updated = await sql`
+        update public.admin_media_uploads
+        set metadata = ${sql.json(newMetadata)}
+        where id = ${mediaId}
+        returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at
+      `
+      updatedRow = updated?.[0] || null
+    } else {
+      // Fetch current record
+      const { data: current, error: fetchError } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .select('id, metadata')
+        .eq('id', mediaId)
+        .maybeSingle()
+      
+      if (fetchError) {
+        res.status(500).json({ error: fetchError.message || 'Failed to load media record' })
+        return
+      }
+      if (!current) {
+        res.status(404).json({ error: 'Media not found' })
+        return
+      }
+      
+      const currentMetadata = current.metadata || {}
+      const newMetadata = { ...currentMetadata, ...updates }
+      
+      const { data, error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .update({ metadata: newMetadata })
+        .eq('id', mediaId)
+        .select('id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at')
+        .maybeSingle()
+      
+      if (error) {
+        res.status(500).json({ error: error.message || 'Failed to update media record' })
+        return
+      }
+      updatedRow = data
+    }
+
+    if (!updatedRow) {
+      res.status(404).json({ error: 'Media not found' })
+      return
+    }
+
+    res.json({ ok: true, media: normalizeAdminMediaRow(updatedRow) })
+  } catch (err) {
+    console.error('[media-update] failed to update media metadata', err)
+    res.status(500).json({ error: err?.message || 'Failed to update media record' })
+  }
 })
 
 app.get('/api/env.js', (req, res) => {
