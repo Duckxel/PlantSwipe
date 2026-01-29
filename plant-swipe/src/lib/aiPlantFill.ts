@@ -1,10 +1,10 @@
 import { supabase } from "@/lib/supabaseClient"
 
 // Retry configuration for handling timeouts and rate limits
-const MAX_RETRIES = 3
-const MAX_RETRIES_GATEWAY_TIMEOUT = 5 // More retries for 504 gateway timeouts
+const MAX_RETRIES = 2 // Reduced from 3 since server already has 10min timeout
+const MAX_RETRIES_GATEWAY_TIMEOUT = 2 // Keep retries low to avoid long waits
 const INITIAL_RETRY_DELAY = 2000 // 2 seconds
-const INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT = 5000 // 5 seconds for gateway timeouts (give server time to complete)
+const INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT = 3000 // 3 seconds for gateway timeouts
 
 // Helper to delay execution (abortable)
 const delay = (ms: number, signal?: AbortSignal | null) => new Promise<void>((resolve, reject) => {
@@ -59,12 +59,10 @@ async function fetchWithRetry(
       
       // If it's a retryable error and we have retries left, retry
       if (isRetryableStatus(response.status) && attempt < maxRetries) {
-        // For 504 gateway timeouts, escalate to more retries and longer delays
-        // This gives the server more time to complete the AI processing
-        if (isGatewayTimeout(response.status) && maxRetries < MAX_RETRIES_GATEWAY_TIMEOUT) {
-          maxRetries = MAX_RETRIES_GATEWAY_TIMEOUT
+        // For 504 gateway timeouts, use slightly longer delays
+        if (isGatewayTimeout(response.status) && initialDelay < INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT) {
           initialDelay = INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT
-          console.log(`[AI Fill] Gateway timeout (504) detected, escalating to ${maxRetries} retries with ${initialDelay}ms initial delay`)
+          console.log(`[AI Fill] Gateway timeout (504) detected, using ${initialDelay}ms delay between retries`)
         }
         
         lastStatus = response.status
