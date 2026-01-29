@@ -169,6 +169,8 @@ export function LegalUpdateModal({
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
         hideCloseButton
+        // Use very high z-index to ensure legal modal appears above ServiceWorkerToast (z-9999)
+        priorityZIndex={10000}
       >
         {step === 'review' ? (
           <>
