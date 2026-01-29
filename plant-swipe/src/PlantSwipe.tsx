@@ -205,7 +205,7 @@ export default function PlantSwipe() {
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
   const [authAcceptedTerms, setAuthAcceptedTerms] = useState(false)
-  const [authMarketingConsent, setAuthMarketingConsent] = useState(true) // Default to checked
+  const [authMarketingConsent, setAuthMarketingConsent] = useState(false) // GDPR: Must be unchecked by default - pre-ticked boxes don't constitute valid consent (Recital 32)
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
@@ -1327,7 +1327,7 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (!authOpen) {
       setAuthAcceptedTerms(false)
-      setAuthMarketingConsent(true) // Reset to default (checked)
+      setAuthMarketingConsent(false) // Reset to default (unchecked - GDPR compliant)
       setAuthSubmitting(false)
       setAuthError(null)
       setAuthEmail("")
@@ -1340,7 +1340,7 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (authMode !== 'signup') {
       setAuthAcceptedTerms(false)
-      setAuthMarketingConsent(true) // Reset to default (checked)
+      setAuthMarketingConsent(false) // Reset to default (unchecked - GDPR compliant)
     }
   }, [authMode])
 

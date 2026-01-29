@@ -188,7 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { sub.subscription.unsubscribe() }
   }, [loadSession, refreshProfile])
 
-  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken, marketingConsent = true }) => {
+  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken, marketingConsent = false }) => {
     // Verify reCAPTCHA token before attempting signup
     if (recaptchaToken) {
       try {
