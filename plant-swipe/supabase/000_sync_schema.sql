@@ -6334,7 +6334,10 @@ GRANT EXECUTE ON FUNCTION refresh_garden_task_cache(uuid, date) TO authenticated
 GRANT EXECUTE ON FUNCTION cleanup_old_garden_task_cache() TO authenticated;
 
 -- Create a view for easy querying of today's cache
-CREATE OR REPLACE VIEW garden_task_cache_today AS
+-- Use security_invoker to enforce RLS policies of the querying user, not the view owner
+CREATE OR REPLACE VIEW garden_task_cache_today
+WITH (security_invoker = true)
+AS
 SELECT
   c.garden_id,
   c.cache_date,
