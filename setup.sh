@@ -307,7 +307,68 @@ fi
 
 log "Installing base packages…"
 $PM_UPDATE
-$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd certbot python3-certbot-nginx unzip
+$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd certbot python3-certbot-nginx unzip unattended-upgrades apt-listchanges
+
+# Configure unattended-upgrades for automatic security updates
+log "Configuring unattended-upgrades for automatic security updates…"
+configure_unattended_upgrades() {
+  local config_file="/etc/apt/apt.conf.d/50unattended-upgrades"
+  local auto_file="/etc/apt/apt.conf.d/20auto-upgrades"
+  
+  # Create unattended-upgrades configuration
+  $SUDO bash -c "cat > '$config_file' <<'EOF'
+// Unattended-Upgrades configuration for PlantSwipe server
+// Only install security updates automatically (safe for production)
+
+Unattended-Upgrade::Allowed-Origins {
+    \"\${distro_id}:\${distro_codename}\";
+    \"\${distro_id}:\${distro_codename}-security\";
+    \"\${distro_id}ESMApps:\${distro_codename}-apps-security\";
+    \"\${distro_id}ESM:\${distro_codename}-infra-security\";
+};
+
+// Packages to never update automatically (add any critical packages here)
+Unattended-Upgrade::Package-Blacklist {
+    // \"nginx\";  // Uncomment to prevent nginx auto-updates
+};
+
+// Automatically reboot at 5:00 AM if required (e.g., kernel updates)
+Unattended-Upgrade::Automatic-Reboot \"true\";
+Unattended-Upgrade::Automatic-Reboot-Time \"05:00\";
+
+// Only reboot if no users are logged in (safer)
+Unattended-Upgrade::Automatic-Reboot-WithUsers \"false\";
+
+// Remove unused kernel packages and dependencies
+Unattended-Upgrade::Remove-Unused-Kernel-Packages \"true\";
+Unattended-Upgrade::Remove-Unused-Dependencies \"true\";
+
+// Log to syslog
+Unattended-Upgrade::SyslogEnable \"true\";
+
+// Don't install updates that require dpkg prompts
+Unattended-Upgrade::DevRelease \"false\";
+EOF
+"
+
+  # Enable automatic updates
+  $SUDO bash -c "cat > '$auto_file' <<'EOF'
+// Enable automatic updates
+APT::Periodic::Update-Package-Lists \"1\";
+APT::Periodic::Unattended-Upgrade \"1\";
+APT::Periodic::Download-Upgradeable-Packages \"1\";
+APT::Periodic::AutocleanInterval \"7\";
+EOF
+"
+
+  # Enable and start the unattended-upgrades service
+  $SUDO systemctl enable unattended-upgrades || true
+  $SUDO systemctl start unattended-upgrades || true
+  
+  log "Unattended-upgrades configured: security updates daily, auto-reboot at 5 AM if needed"
+}
+
+configure_unattended_upgrades
 
 # Ensure global AWS RDS CA bundle for TLS to Supabase Postgres
 log "Installing AWS RDS global CA bundle for TLS…"
