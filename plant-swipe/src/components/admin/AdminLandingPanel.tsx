@@ -1253,19 +1253,29 @@ const GlobalSettingsTab: React.FC<{
     if (!localSettings) return
     setSaving(true)
     try {
-      const { error } = await supabase
+      // Don't manually set updated_at - the database trigger handles it
+      const { id, ...settingsToSave } = localSettings
+      
+      const { data, error } = await supabase
         .from("landing_page_settings")
-        .update({
-          ...localSettings,
-          updated_at: new Date().toISOString(),
-        })
+        .update(settingsToSave)
         .eq("id", localSettings.id)
+        .select()
+        .single()
 
-      if (!error) {
-        setSettings(localSettings)
+      if (error) {
+        console.error("Failed to save settings:", error)
+        alert(`Failed to save settings: ${error.message}`)
+        return
+      }
+      
+      if (data) {
+        setSettings(data)
+        setLocalSettings(data)
       }
     } catch (e) {
       console.error("Failed to save settings:", e)
+      alert(`Failed to save settings: ${e instanceof Error ? e.message : "Unknown error"}`)
     } finally {
       setSaving(false)
     }
@@ -1554,16 +1564,32 @@ const HeroCardsTab: React.FC<{
   const saveAllCards = async () => {
     setSaving(true)
     try {
+      let hasError = false
       for (const card of localCards) {
         const originalCard = cards.find(c => c.id === card.id)
         if (originalCard && JSON.stringify(originalCard) !== JSON.stringify(card)) {
-          await supabase
+          // Don't manually set updated_at - the database trigger handles it
+          const { id, created_at, updated_at, ...cardToSave } = card
+          const { error } = await supabase
             .from("landing_hero_cards")
-            .update({ ...card, updated_at: new Date().toISOString() })
+            .update(cardToSave)
             .eq("id", card.id)
+          
+          if (error) {
+            console.error(`Failed to save card ${card.id}:`, error)
+            hasError = true
+          }
         }
       }
-      setCards(localCards)
+      
+      if (hasError) {
+        alert("Some cards failed to save. Check console for details.")
+      } else {
+        setCards(localCards)
+      }
+    } catch (e) {
+      console.error("Failed to save cards:", e)
+      alert(`Failed to save cards: ${e instanceof Error ? e.message : "Unknown error"}`)
     } finally {
       setSaving(false)
     }
@@ -1994,20 +2020,27 @@ const StatsTab: React.FC<{
 
     try {
       if (selectedLang === "en") {
-        // Save base English content
-        const { error } = await supabase
+        // Save base English content - don't manually set updated_at, trigger handles it
+        const { id, updated_at, ...statsToSave } = localStats
+        const { data, error } = await supabase
           .from("landing_stats")
-          .update({
-            ...localStats,
-            updated_at: new Date().toISOString(),
-          })
+          .update(statsToSave)
           .eq("id", localStats.id)
+          .select()
+          .single()
 
-        if (!error) {
-          setStats(localStats)
+        if (error) {
+          console.error("Failed to save stats:", error)
+          alert(`Failed to save stats: ${error.message}`)
+          return
+        }
+        
+        if (data) {
+          setStats(data)
+          setLocalStats(data)
         }
       } else {
-        // Save translation
+        // Save translation - don't manually set updated_at, trigger handles it
         const translationData = {
           stats_id: localStats.id,
           language: selectedLang,
@@ -2015,17 +2048,26 @@ const StatsTab: React.FC<{
           users_label: localTranslation.users_label ?? translation?.users_label ?? localStats.users_label,
           tasks_label: localTranslation.tasks_label ?? translation?.tasks_label ?? localStats.tasks_label,
           rating_label: localTranslation.rating_label ?? translation?.rating_label ?? localStats.rating_label,
-          updated_at: new Date().toISOString(),
         }
 
         if (translation) {
           // Update existing translation
-          await supabase
+          const { data, error } = await supabase
             .from("landing_stats_translations")
             .update(translationData)
             .eq("id", translation.id)
+            .select()
+            .single()
           
-          setTranslation({ ...translation, ...translationData })
+          if (error) {
+            console.error("Failed to update translation:", error)
+            alert(`Failed to save translation: ${error.message}`)
+            return
+          }
+          
+          if (data) {
+            setTranslation(data)
+          }
         } else {
           // Insert new translation
           const { data, error } = await supabase
@@ -2034,12 +2076,21 @@ const StatsTab: React.FC<{
             .select()
             .single()
           
-          if (data && !error) {
+          if (error) {
+            console.error("Failed to insert translation:", error)
+            alert(`Failed to save translation: ${error.message}`)
+            return
+          }
+          
+          if (data) {
             setTranslation(data)
           }
         }
         setLocalTranslation({})
       }
+    } catch (e) {
+      console.error("Failed to save stats:", e)
+      alert(`Failed to save stats: ${e instanceof Error ? e.message : "Unknown error"}`)
     } finally {
       setSaving(false)
     }
@@ -2354,16 +2405,32 @@ const TestimonialsTab: React.FC<{
   const saveAllTestimonials = async () => {
     setSaving(true)
     try {
+      let hasError = false
       for (const testimonial of localTestimonials) {
         const originalTestimonial = testimonials.find(t => t.id === testimonial.id)
         if (originalTestimonial && JSON.stringify(originalTestimonial) !== JSON.stringify(testimonial)) {
-          await supabase
+          // Don't manually set updated_at - the database trigger handles it
+          const { id, created_at, updated_at, ...testimonialToSave } = testimonial
+          const { error } = await supabase
             .from("landing_testimonials")
-            .update({ ...testimonial, updated_at: new Date().toISOString() })
+            .update(testimonialToSave)
             .eq("id", testimonial.id)
+          
+          if (error) {
+            console.error(`Failed to save testimonial ${testimonial.id}:`, error)
+            hasError = true
+          }
         }
       }
-      setTestimonials(localTestimonials)
+      
+      if (hasError) {
+        alert("Some testimonials failed to save. Check console for details.")
+      } else {
+        setTestimonials(localTestimonials)
+      }
+    } catch (e) {
+      console.error("Failed to save testimonials:", e)
+      alert(`Failed to save testimonials: ${e instanceof Error ? e.message : "Unknown error"}`)
     } finally {
       setSaving(false)
     }
@@ -2812,39 +2879,57 @@ const DemoFeaturesTab: React.FC<{
   const saveAllFeatures = async () => {
     setSaving(true)
     try {
+      let hasError = false
       if (selectedLang === "en") {
-        // Save English base content
+        // Save English base content - don't manually set updated_at, trigger handles it
         for (const feature of localFeatures) {
           const originalFeature = features.find(f => f.id === feature.id)
           if (originalFeature && JSON.stringify(originalFeature) !== JSON.stringify(feature)) {
-            await supabase
+            const { id, created_at, updated_at, ...featureToSave } = feature
+            const { error } = await supabase
               .from("landing_demo_features")
-              .update({ ...feature, updated_at: new Date().toISOString() })
+              .update(featureToSave)
               .eq("id", feature.id)
+            
+            if (error) {
+              console.error(`Failed to save feature ${feature.id}:`, error)
+              hasError = true
+            }
           }
         }
-        setFeatures(localFeatures)
+        
+        if (hasError) {
+          alert("Some features failed to save. Check console for details.")
+        } else {
+          setFeatures(localFeatures)
+        }
       } else {
-        // Save translations
+        // Save translations - don't manually set updated_at, trigger handles it
         for (const [featureId, localTrans] of Object.entries(localTranslations)) {
           const existingTranslation = translations[featureId]
           const translationData = {
             feature_id: featureId,
             language: selectedLang,
             label: localTrans.label ?? existingTranslation?.label ?? "",
-            updated_at: new Date().toISOString(),
           }
           
           if (existingTranslation) {
-            await supabase
+            const { data, error } = await supabase
               .from("landing_demo_feature_translations")
               .update(translationData)
               .eq("id", existingTranslation.id)
+              .select()
+              .single()
             
-            setTranslations(prev => ({
-              ...prev,
-              [featureId]: { ...existingTranslation, ...translationData }
-            }))
+            if (error) {
+              console.error(`Failed to update translation for feature ${featureId}:`, error)
+              hasError = true
+            } else if (data) {
+              setTranslations(prev => ({
+                ...prev,
+                [featureId]: data
+              }))
+            }
           } else {
             const { data, error } = await supabase
               .from("landing_demo_feature_translations")
@@ -2852,13 +2937,24 @@ const DemoFeaturesTab: React.FC<{
               .select()
               .single()
             
-            if (data && !error) {
+            if (error) {
+              console.error(`Failed to insert translation for feature ${featureId}:`, error)
+              hasError = true
+            } else if (data) {
               setTranslations(prev => ({ ...prev, [featureId]: data }))
             }
           }
         }
-        setLocalTranslations({})
+        
+        if (hasError) {
+          alert("Some translations failed to save. Check console for details.")
+        } else {
+          setLocalTranslations({})
+        }
       }
+    } catch (e) {
+      console.error("Failed to save features:", e)
+      alert(`Failed to save features: ${e instanceof Error ? e.message : "Unknown error"}`)
     } finally {
       setSaving(false)
     }
@@ -3313,20 +3409,32 @@ const FAQTab: React.FC<{
   const saveAllFAQs = async () => {
     setSaving(true)
     try {
+      let hasError = false
       if (selectedLang === "en") {
-        // Save English base content
+        // Save English base content - don't manually set updated_at, trigger handles it
         for (const item of localItems) {
           const originalItem = items.find(i => i.id === item.id)
           if (originalItem && JSON.stringify(originalItem) !== JSON.stringify(item)) {
-            await supabase
+            const { id, created_at, updated_at, ...itemToSave } = item
+            const { error } = await supabase
               .from("landing_faq")
-              .update({ ...item, updated_at: new Date().toISOString() })
+              .update(itemToSave)
               .eq("id", item.id)
+            
+            if (error) {
+              console.error(`Failed to save FAQ ${item.id}:`, error)
+              hasError = true
+            }
           }
         }
-        setItems(localItems)
+        
+        if (hasError) {
+          alert("Some FAQ items failed to save. Check console for details.")
+        } else {
+          setItems(localItems)
+        }
       } else {
-        // Save translations
+        // Save translations - don't manually set updated_at, trigger handles it
         for (const [faqId, localTrans] of Object.entries(localTranslations)) {
           const existingTranslation = translations[faqId]
           const translationData = {
@@ -3334,19 +3442,25 @@ const FAQTab: React.FC<{
             language: selectedLang,
             question: localTrans.question ?? existingTranslation?.question ?? "",
             answer: localTrans.answer ?? existingTranslation?.answer ?? "",
-            updated_at: new Date().toISOString(),
           }
           
           if (existingTranslation) {
-            await supabase
+            const { data, error } = await supabase
               .from("landing_faq_translations")
               .update(translationData)
               .eq("id", existingTranslation.id)
+              .select()
+              .single()
             
-            setTranslations(prev => ({
-              ...prev,
-              [faqId]: { ...existingTranslation, ...translationData }
-            }))
+            if (error) {
+              console.error(`Failed to update FAQ translation ${faqId}:`, error)
+              hasError = true
+            } else if (data) {
+              setTranslations(prev => ({
+                ...prev,
+                [faqId]: data
+              }))
+            }
           } else {
             const { data, error } = await supabase
               .from("landing_faq_translations")
@@ -3354,13 +3468,24 @@ const FAQTab: React.FC<{
               .select()
               .single()
             
-            if (data && !error) {
+            if (error) {
+              console.error(`Failed to insert FAQ translation ${faqId}:`, error)
+              hasError = true
+            } else if (data) {
               setTranslations(prev => ({ ...prev, [faqId]: data }))
             }
           }
         }
-        setLocalTranslations({})
+        
+        if (hasError) {
+          alert("Some FAQ translations failed to save. Check console for details.")
+        } else {
+          setLocalTranslations({})
+        }
       }
+    } catch (e) {
+      console.error("Failed to save FAQs:", e)
+      alert(`Failed to save FAQs: ${e instanceof Error ? e.message : "Unknown error"}`)
     } finally {
       setSaving(false)
     }
