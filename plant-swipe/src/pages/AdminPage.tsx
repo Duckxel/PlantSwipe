@@ -97,6 +97,7 @@ import {
   savePersistedBroadcast,
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
+import { enterMaintenanceMode, exitMaintenanceMode } from "@/lib/sentry";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { processAllPlantRequests } from "@/lib/aiPrefillService";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
@@ -1140,9 +1141,13 @@ export const AdminPage: React.FC = () => {
   const restartServer = async () => {
     if (restarting) return;
     setRestarting(true);
+    
+    // Enter Sentry maintenance mode to suppress network errors during restart
+    enterMaintenanceMode();
+    
     try {
       setConsoleOpen(true);
-      appendConsole("[restart] Restart services requested?");
+      appendConsole("[restart] Restart services requested? (Sentry maintenance mode active)");
       setReloadReady(false);
       setPreRestartNotice(false);
       const session = (await supabase.auth.getSession()).data.session;
@@ -1244,18 +1249,24 @@ export const AdminPage: React.FC = () => {
         await new Promise((res) => setTimeout(res, 1000));
       }
       if (healthy) {
+        // Exit Sentry maintenance mode - server is healthy again
+        exitMaintenanceMode();
         appendConsole(
-          "[restart] Services healthy. You can reload the page when ready.",
+          "[restart] Services healthy. You can reload the page when ready. (Sentry maintenance mode ended)",
         );
       } else {
+        // Still exit maintenance mode after timeout to avoid permanent suppression
+        exitMaintenanceMode();
         appendConsole(
-          "[restart] Timed out waiting for service health. You may try reloading manually.",
+          "[restart] Timed out waiting for service health. You may try reloading manually. (Sentry maintenance mode ended)",
         );
       }
       setReloadReady(true);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       appendConsole(`[restart] Failed to restart services: ? ${message}`);
+      // Exit maintenance mode on error too
+      exitMaintenanceMode();
     } finally {
       setRestarting(false);
     }
@@ -1270,10 +1281,14 @@ export const AdminPage: React.FC = () => {
       return;
     }
     setRestarting(true);
+    
+    // Enter Sentry maintenance mode to suppress network errors during restart
+    enterMaintenanceMode();
+    
     try {
       setConsoleLines([]);
       setConsoleOpen(true);
-      appendConsole("[restart] Starting server restart...");
+      appendConsole("[restart] Starting server restart... (Sentry maintenance mode active)");
 
       const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
       const headers: Record<string, string> = {
@@ -1322,11 +1337,13 @@ export const AdminPage: React.FC = () => {
           }
         }
       }
-      appendConsole("[restart] Server restart completed");
+      appendConsole("[restart] Server restart completed (Sentry maintenance mode ended)");
+      exitMaintenanceMode();
       setReloadReady(true);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       appendConsole(`[restart] Failed: ${message}`);
+      exitMaintenanceMode();
     } finally {
       setRestarting(false);
     }
@@ -3296,11 +3313,15 @@ export const AdminPage: React.FC = () => {
   const pullLatest = async () => {
     if (pulling) return;
     setPulling(true);
+    
+    // Enter Sentry maintenance mode to suppress network errors during restart
+    enterMaintenanceMode();
+    
     try {
       // Use streaming endpoint for live logs
       setConsoleLines([]);
       setConsoleOpen(true);
-      appendConsole("[pull] Pull & Build: starting?");
+      appendConsole("[pull] Pull & Build: starting? (Sentry maintenance mode active)");
       if (selectedBranch && selectedBranch !== currentBranch) {
         appendConsole(`[pull] Will switch to branch: ? ${selectedBranch}`);
       } else if (currentBranch) {
