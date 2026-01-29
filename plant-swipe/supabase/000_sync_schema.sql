@@ -1773,6 +1773,45 @@ set upload_source = coalesce(
 )
 where upload_source is null;
 
+-- ========== admin_media_uploads RLS ==========
+alter table public.admin_media_uploads enable row level security;
+
+-- Select: admins see all, users see their own uploads
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_media_uploads' and policyname='amu_select') then
+    drop policy amu_select on public.admin_media_uploads;
+  end if;
+  create policy amu_select on public.admin_media_uploads for select to authenticated
+    using (
+      admin_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Insert: authenticated users can insert their own uploads
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_media_uploads' and policyname='amu_insert') then
+    drop policy amu_insert on public.admin_media_uploads;
+  end if;
+  create policy amu_insert on public.admin_media_uploads for insert to authenticated
+    with check (
+      admin_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Delete: users can delete their own uploads, admins can delete any
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_media_uploads' and policyname='amu_delete') then
+    drop policy amu_delete on public.admin_media_uploads;
+  end if;
+  create policy amu_delete on public.admin_media_uploads for delete to authenticated
+    using (
+      admin_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
 -- ========== Team Members (About page) ==========
 create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),
