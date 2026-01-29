@@ -3439,6 +3439,155 @@ app.get('/api/health', async (_req, res) => {
 })
 
 // =============================================================================
+// PWA Manifest Screenshots - Public endpoint for dynamic manifest screenshots
+// =============================================================================
+// Returns screenshots tagged for PWA manifest use (tag: screenshot)
+// Format follows Web App Manifest spec: https://www.w3.org/TR/appmanifest/#screenshots-member
+app.get('/api/manifest/screenshots', async (_req, res) => {
+  try {
+    let rows = []
+    if (sql) {
+      // Fetch screenshots (tag = 'screenshot') ordered by device type for proper form_factor grouping
+      rows = await sql`
+        select 
+          id, 
+          public_url, 
+          metadata
+        from public.admin_media_uploads 
+        where upload_source = 'mockups' 
+          and metadata->>'tag' = 'screenshot'
+          and public_url is not null
+        order by 
+          case metadata->>'device'
+            when 'phone' then 1
+            when 'tablet' then 2
+            when 'computer' then 3
+            else 4
+          end,
+          created_at desc
+        limit 8
+      `
+    }
+    
+    // Transform to PWA manifest screenshot format
+    const screenshots = rows.map(row => {
+      const device = row.metadata?.device || 'phone'
+      // Map device to form_factor (wide for computer/tablet, narrow for phone)
+      const formFactor = device === 'phone' ? 'narrow' : 'wide'
+      // Default sizes based on device type
+      const sizes = device === 'phone' 
+        ? '1080x1920' 
+        : device === 'tablet'
+        ? '2048x1536'
+        : '1920x1080'
+      
+      return {
+        src: row.public_url,
+        sizes,
+        type: 'image/webp',
+        form_factor: formFactor,
+        label: row.metadata?.displayName || row.metadata?.storageName || 'App Screenshot',
+      }
+    })
+    
+    res.json({ screenshots })
+  } catch (err) {
+    console.error('[manifest/screenshots] failed to fetch screenshots', err)
+    res.json({ screenshots: [] })
+  }
+})
+
+// Full dynamic manifest endpoint - merges static config with dynamic screenshots
+app.get('/api/manifest.webmanifest', async (_req, res) => {
+  try {
+    // Base manifest (matches vite.config.ts)
+    const baseManifest = {
+      id: 'aphylia',
+      name: 'Aphylia',
+      short_name: 'Aphylia',
+      description: 'Discover, swipe and manage the perfect plants for every garden.',
+      lang: 'en',
+      theme_color: '#052e16',
+      background_color: '#03120c',
+      display: 'standalone',
+      display_override: ['window-controls-overlay', 'standalone'],
+      scope: '/',
+      start_url: '/discovery',
+      orientation: 'portrait-primary',
+      categories: ['productivity', 'lifestyle', 'utilities'],
+      iarc_rating_id: 'IARC21-00000000-0000000000000000',
+      icons: [
+        { src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable any' },
+        { src: '/icons/plant-swipe-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+        { src: '/icons/plant-swipe-icon-outline.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+      ],
+      shortcuts: [
+        { name: 'Swipe plants', url: '/swipe', description: 'Jump directly into swipe mode' },
+        { name: 'My gardens', url: '/gardens', description: 'Open your garden dashboard' },
+      ],
+    }
+    
+    // Fetch screenshots from database
+    let screenshots = []
+    if (sql) {
+      try {
+        const rows = await sql`
+          select 
+            public_url, 
+            metadata
+          from public.admin_media_uploads 
+          where upload_source = 'mockups' 
+            and metadata->>'tag' = 'screenshot'
+            and public_url is not null
+          order by 
+            case metadata->>'device'
+              when 'phone' then 1
+              when 'tablet' then 2
+              when 'computer' then 3
+              else 4
+            end,
+            created_at desc
+          limit 8
+        `
+        screenshots = rows.map(row => {
+          const device = row.metadata?.device || 'phone'
+          const formFactor = device === 'phone' ? 'narrow' : 'wide'
+          const sizes = device === 'phone' 
+            ? '1080x1920' 
+            : device === 'tablet'
+            ? '2048x1536'
+            : '1920x1080'
+          
+          return {
+            src: row.public_url,
+            sizes,
+            type: 'image/webp',
+            form_factor: formFactor,
+            label: row.metadata?.displayName || row.metadata?.storageName || 'App Screenshot',
+          }
+        })
+      } catch (err) {
+        console.error('[manifest] failed to fetch screenshots', err)
+      }
+    }
+    
+    // Only add screenshots if we have some
+    if (screenshots.length > 0) {
+      baseManifest.screenshots = screenshots
+    }
+    
+    res.setHeader('Content-Type', 'application/manifest+json')
+    res.setHeader('Cache-Control', 'public, max-age=3600') // Cache for 1 hour
+    res.json(baseManifest)
+  } catch (err) {
+    console.error('[manifest] failed to generate manifest', err)
+    res.status(500).json({ error: 'Failed to generate manifest' })
+  }
+})
+
+// =============================================================================
 // CSRF Token Endpoint - Get a fresh CSRF token for security-sensitive operations
 // =============================================================================
 app.get('/api/csrf-token', (req, res) => {

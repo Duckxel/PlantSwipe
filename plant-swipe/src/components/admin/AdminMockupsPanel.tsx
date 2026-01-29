@@ -427,6 +427,18 @@ export const AdminMockupsPanel: React.FC = () => {
     setEditDevice(null)
   }, [])
 
+  // Calculate counts by tag type
+  const tagCounts = React.useMemo(() => {
+    const counts = { screenshot: 0, mockup: 0, untagged: 0 }
+    for (const entry of entries) {
+      const tag = entry.metadata?.tag
+      if (tag === "screenshot") counts.screenshot++
+      else if (tag === "mockup") counts.mockup++
+      else counts.untagged++
+    }
+    return counts
+  }, [entries])
+
   // Filter entries by search, tag, and device
   const visibleEntries = React.useMemo(() => {
     let filtered = entries
@@ -751,9 +763,35 @@ export const AdminMockupsPanel: React.FC = () => {
               <FileImage className="h-5 w-5 text-emerald-600" />
               Mockups Library
             </h2>
-            <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-              {visibleEntries.length} mockup{visibleEntries.length !== 1 ? 's' : ''} available
-            </p>
+            <div className="flex flex-wrap items-center gap-3 mt-2">
+              <span className="text-sm text-stone-500 dark:text-stone-400">
+                {entries.length} total
+              </span>
+              <span className="text-stone-300 dark:text-stone-600">•</span>
+              <span className="inline-flex items-center gap-1.5 text-sm">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+                  <Camera className="h-3 w-3" />
+                  {tagCounts.screenshot}
+                </span>
+                <span className="text-stone-400">Screenshots</span>
+              </span>
+              <span className="text-stone-300 dark:text-stone-600">•</span>
+              <span className="inline-flex items-center gap-1.5 text-sm">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                  <Image className="h-3 w-3" />
+                  {tagCounts.mockup}
+                </span>
+                <span className="text-stone-400">Mockups</span>
+              </span>
+              {tagCounts.untagged > 0 && (
+                <>
+                  <span className="text-stone-300 dark:text-stone-600">•</span>
+                  <span className="text-sm text-stone-400">
+                    {tagCounts.untagged} untagged
+                  </span>
+                </>
+              )}
+            </div>
           </div>
           <Button
             type="button"
