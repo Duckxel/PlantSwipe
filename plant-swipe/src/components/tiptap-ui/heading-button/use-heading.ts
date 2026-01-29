@@ -160,7 +160,7 @@ export function toggleHeading(
     }
 
     const selection = state.selection
-    let chain = editor.chain().focus()
+    let chain = editor.chain().focus(undefined, { scrollIntoView: false })
 
     // Handle NodeSelection
     if (selection instanceof NodeSelection) {
@@ -193,7 +193,7 @@ export function toggleHeading(
 
     toggle.run()
 
-    editor.chain().focus().selectTextblockEnd().run()
+    editor.chain().focus(undefined, { scrollIntoView: false }).selectTextblockEnd().run()
 
     return true
   } catch {

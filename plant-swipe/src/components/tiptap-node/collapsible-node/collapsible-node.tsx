@@ -286,7 +286,7 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
         </div>
       </div>
 
-      {/* Content area - animated */}
+      {/* Content area - editable section where users can add any content */}
       <div
         className={`collapsible-content-wrapper transition-all duration-200 ease-in-out ${
           isOpen ? "opacity-100" : "opacity-0 max-h-0 overflow-hidden"
@@ -297,10 +297,8 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
         data-state={isOpen ? "open" : "closed"}
       >
         <div className={`collapsible-content border-t p-4 ${classes.content}`}>
-          <NodeViewContent 
-            className="collapsible-inner-content" 
-            as="div"
-          />
+          {/* NodeViewContent renders the editable content - this is where paragraphs, lists, etc. go */}
+          <NodeViewContent className="collapsible-inner-content" />
         </div>
       </div>
 

@@ -36,6 +36,9 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
 
   selectable: true,
 
+  // IMPORTANT: Must be false to allow editing inside the node
+  atom: false,
+
   // Set to false to allow content transformations (like turning text into headings/lists) inside the node
   defining: false,
 
@@ -119,7 +122,10 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(CollapsibleNodeComponent)
+    return ReactNodeViewRenderer(CollapsibleNodeComponent, {
+      // Ensure content is properly editable
+      contentDOMElementTag: "div",
+    })
   },
 
   addCommands() {

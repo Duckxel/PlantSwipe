@@ -268,6 +268,23 @@
   [data-type="collapsible"] {
     display: block !important;
     position: relative;
+    
+    // Ensure the inner content area is editable
+    .collapsible-inner-content {
+      // This is the editable content area - ensure cursor works properly
+      cursor: text;
+      min-height: 1.5em;
+      
+      // Ensure focus is visible
+      &:focus {
+        outline: none;
+      }
+      
+      // Ensure all child elements can receive focus
+      > * {
+        outline: none;
+      }
+    }
   }
 }
 
