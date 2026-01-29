@@ -726,15 +726,15 @@ async function processEmailCampaigns() {
             url: websiteUrl.replace(/^https?:\/\//, ''), // Website URL without protocol (e.g., "aphylia.app")
             code: 'XXXXXX'                           // Placeholder for campaign emails (real codes are for transactional emails)
           }
-          const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
-
           // Get user's language-specific content (fallback to campaign's default content)
           const translation = emailTranslations.get(userLang)
           const rawSubject = translation?.subject || campaign.subject
           const rawBodyHtml = translation?.bodyHtml || campaign.body_html
 
-          const bodyHtmlRaw = replaceVars(rawBodyHtml)
-          const subject = replaceVars(rawSubject)
+          // Escape HTML characters in values injected into the body to prevent XSS
+          const bodyHtmlRaw = replaceTemplateVariables(rawBodyHtml, context, true)
+          // Do not escape values in subject (email clients handle text subjects)
+          const subject = replaceTemplateVariables(rawSubject, context, false)
           // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
           const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
           // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
@@ -4273,6 +4273,20 @@ const htmlEscapeMap = {
 function escapeHtml(value) {
   if (value === null || value === undefined) return ''
   return String(value).replace(/[&<>"']/g, (ch) => htmlEscapeMap[ch] || ch)
+}
+
+/**
+ * Replaces {{variables}} in a string with values from a context object.
+ * @param {string} str - The template string
+ * @param {object} context - Map of variable names to values
+ * @param {boolean} escape - Whether to HTML-escape the values (default: false)
+ */
+function replaceTemplateVariables(str, context, escape = false) {
+  return (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
+    const val = context[k.toLowerCase()]
+    if (val === undefined || val === null) return `{{${k}}}`
+    return escape ? escapeHtml(String(val)) : String(val)
+  })
 }
 
 function isContactRateLimited(key) {
@@ -8672,10 +8686,10 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       url: websiteUrl.replace(/^https?:\/\//, ''),
       code: 'XXXXXX',
     }
-    const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => context[k.toLowerCase()] ?? `{{${k}}}`)
-
-    const subject = replaceVars(rawSubject)
-    const bodyHtmlRaw = replaceVars(rawBodyHtml)
+    // Do not escape values in subject (email clients handle text subjects)
+    const subject = replaceTemplateVariables(rawSubject, context, false)
+    // Escape HTML characters in values injected into the body to prevent XSS
+    const bodyHtmlRaw = replaceTemplateVariables(rawBodyHtml, context, true)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
     const html = wrapEmailHtml(bodyHtml, subject, lang)
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
@@ -8849,13 +8863,10 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
       time: extraContext.time || currentTimestamp,
     }
 
-    const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
-      const key = k.toLowerCase()
-      return context[key] !== undefined ? context[key] : `{{${k}}}`
-    })
-
-    const subject = replaceVars(rawSubject)
-    const bodyHtmlRaw = replaceVars(rawBodyHtml)
+    // Do not escape values in subject (email clients handle text subjects)
+    const subject = replaceTemplateVariables(rawSubject, context, false)
+    // Escape HTML characters in values injected into the body to prevent XSS
+    const bodyHtmlRaw = replaceTemplateVariables(rawBodyHtml, context, true)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
     const html = wrapEmailHtml(bodyHtml, subject, lang)
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()

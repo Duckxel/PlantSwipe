@@ -1,0 +1,4 @@
+## 2026-01-27 - HTML Injection in Email Templates
+**Vulnerability:** Detected Stored XSS / HTML Injection in `plant-swipe/server.js` where user-controlled data (e.g., `display_name`) was injected into email HTML templates using simple string replacement (`replaceVars`) without HTML escaping.
+**Learning:** Even in restricted environments like email clients, sending unsanitized user input in HTML bodies is risky (phishing, layout breaking, or XSS in vulnerable clients). Manual template interpolation often overlooks context-specific escaping.
+**Prevention:** Always use context-aware escaping when injecting variables into HTML. If using manual replacement, default to escaping and explicitly opt-out for trusted content. Preferably use established template engines (like Handlebars or EJS) that handle escaping by default.
