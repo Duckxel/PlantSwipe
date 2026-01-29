@@ -46,7 +46,9 @@
       "blog": "Blog",
       "contactUs": "Nous contacter",
       "downloadApp": "Télécharger",
-      "termsOfServices": "Conditions d'utilisation"
+      "legal": "Mentions légales",
+      "termsOfServices": "Conditions d'utilisation",
+      "privacyPolicy": "Politique de confidentialité"
     },
     "share": "Partager"
   },

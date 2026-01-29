@@ -1,6 +1,6 @@
 import React from "react"
 import { Link } from "@/components/i18n/Link"
-import { Youtube, Twitter, Instagram } from "lucide-react"
+import { Youtube, Twitter, Instagram, ChevronDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 const footerLinks = [
@@ -8,12 +8,29 @@ const footerLinks = [
   { to: '/blog', labelKey: 'blog', fallback: 'Blog' },
   { to: '/contact', labelKey: 'contactUs', fallback: 'Contact Us' },
   { to: '/download', labelKey: 'downloadApp', fallback: 'Download' },
-  { to: '/terms', labelKey: 'termsOfServices', fallback: 'Terms of Services' },
+] as const
+
+const legalLinks = [
+  { to: '/terms', labelKey: 'termsOfServices', fallback: 'Terms of Service' },
+  { to: '/privacy', labelKey: 'privacyPolicy', fallback: 'Privacy Policy' },
 ] as const
 
 export const Footer: React.FC = () => {
   const { t } = useTranslation('common')
   const currentYear = new Date().getFullYear()
+  const [legalOpen, setLegalOpen] = React.useState(false)
+  const legalRef = React.useRef<HTMLDivElement>(null)
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (legalRef.current && !legalRef.current.contains(event.target as Node)) {
+        setLegalOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   return (
     <footer className="max-w-6xl mx-auto mt-10 pt-8 pb-6 px-2 border-t border-stone-300 dark:border-[#3e3e42]">
@@ -62,6 +79,32 @@ export const Footer: React.FC = () => {
                 : t(`common.footer.${labelKey}`, { defaultValue: fallback })}
             </Link>
           ))}
+          
+          {/* Legal Dropdown */}
+          <div ref={legalRef} className="relative">
+            <button
+              onClick={() => setLegalOpen(!legalOpen)}
+              className="flex items-center gap-1 text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors"
+            >
+              {t('common.footer.legal', { defaultValue: 'Legal' })}
+              <ChevronDown className={`h-4 w-4 transition-transform ${legalOpen ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {legalOpen && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 py-2 px-1 bg-white dark:bg-[#2d2d30] border border-stone-200 dark:border-[#3e3e42] rounded-xl shadow-lg min-w-[160px] z-50">
+                {legalLinks.map(({ to, labelKey, fallback }) => (
+                  <Link
+                    key={labelKey}
+                    to={to}
+                    onClick={() => setLegalOpen(false)}
+                    className="block px-3 py-2 text-sm text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42] rounded-lg transition-colors no-underline"
+                  >
+                    {t(`common.footer.${labelKey}`, { defaultValue: fallback })}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Copyright */}
