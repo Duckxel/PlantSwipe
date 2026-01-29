@@ -1,5 +1,4 @@
 import React from 'react'
-import { captureException, addBreadcrumb } from '@/lib/sentry'
 
 type ErrorBoundaryProps = {
   children: React.ReactNode
@@ -10,47 +9,26 @@ type ErrorBoundaryProps = {
 type ErrorBoundaryState = {
   hasError: boolean
   error: Error | null
-  eventId: string | null
 }
 
 /**
  * ErrorBoundary component to catch and handle React errors gracefully
  * Particularly useful for catching lazy loading failures
- * Now integrated with Sentry for automatic error reporting
  */
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props)
-    this.state = { hasError: false, error: null, eventId: null }
+    this.state = { hasError: false, error: null }
   }
 
-  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error }
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    // Log error for debugging
-    console.error('[ErrorBoundary] Caught error:', error, errorInfo)
-    
-    // Add breadcrumb for context
-    addBreadcrumb(
-      `ErrorBoundary caught: ${error.message}`,
-      'error',
-      'error',
-      {
-        componentStack: errorInfo.componentStack,
-        errorName: error.name,
-      }
-    )
-    
-    // Send to Sentry
-    const eventId = captureException(error, {
-      componentStack: errorInfo.componentStack,
-      source: 'ErrorBoundary',
-    })
-    
-    if (eventId) {
-      this.setState({ eventId })
+    // Log error for debugging (but don't spam console in production)
+    if (import.meta.env.DEV) {
+      console.error('[ErrorBoundary] Caught error:', error, errorInfo)
     }
     
     this.props.onError?.(error, errorInfo)

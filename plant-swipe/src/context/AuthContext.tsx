@@ -2,7 +2,6 @@ import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
 import { validateUsername } from '@/lib/username'
-import { setUser as setSentryUser, setContext as setSentryContext } from '@/lib/sentry'
 
 // Default timezone for users who haven't set one
 const DEFAULT_TIMEZONE = 'Europe/London'
@@ -42,8 +41,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('plantswipe.auth')
       localStorage.removeItem('plantswipe.profile')
     } catch {}
-    // Clear Sentry user when logging out
-    setSentryUser(null)
   }, [])
 
   const forceSignOut = React.useCallback(async () => {
@@ -136,21 +133,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Apply accent if present
       if ((data as any)?.accent_key) {
         try { applyAccentByKey((data as any).accent_key) } catch {}
-      }
-      
-      // Set Sentry user context for error tracking
-      if (data) {
-        setSentryUser({
-          id: data.id,
-          username: data.display_name || undefined,
-        })
-        setSentryContext('user_profile', {
-          is_admin: data.is_admin,
-          roles: data.roles,
-          country: data.country,
-          language: data.language,
-          experience_years: data.experience_years,
-        })
       }
     }
   }, [forceSignOut])
