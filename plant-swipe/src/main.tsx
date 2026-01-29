@@ -1,10 +1,15 @@
 import { createRoot } from 'react-dom/client'
 import '@/lib/runtimeEnvLoader'
+import { initSentry } from '@/lib/sentry'
 import { patchGoogleTranslateConflict } from '@/lib/googleTranslateFix'
 import './lib/i18n' // Initialize i18n before App
 import './index.scss'
 import App from './App.tsx'
 import { initAccentFromStorage } from '@/lib/accent'
+
+// Initialize Sentry monitoring as early as possible
+// This captures errors during app initialization
+initSentry()
 
 // Apply Google Translate DOM conflict fix before React renders
 // This prevents crashes when users use browser translation extensions
