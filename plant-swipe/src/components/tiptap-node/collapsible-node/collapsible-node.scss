@@ -1,0 +1,196 @@
+// Collapsible Node Styles for TipTap Editor
+
+.collapsible-node {
+  // Ensure the node is properly displayed as a block
+  display: block;
+  position: relative;
+
+  // Header styling
+  .collapsible-header {
+    display: flex;
+    align-items: center;
+    user-select: none;
+    
+    // Prevent text selection during drag
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  // Drag handle
+  .collapsible-drag-handle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    &:hover {
+      opacity: 1;
+    }
+  }
+
+  // Content wrapper with smooth transitions
+  .collapsible-content-wrapper {
+    will-change: max-height, opacity;
+  }
+
+  // Inner content - ensure TipTap editor styles apply
+  .collapsible-inner-content {
+    // Reset some styles to ensure nested content looks correct
+    > *:first-child {
+      margin-top: 0;
+    }
+
+    > *:last-child {
+      margin-bottom: 0;
+    }
+
+    // Ensure nested paragraphs have proper spacing
+    p {
+      margin: 0.75em 0;
+      
+      &:first-child {
+        margin-top: 0;
+      }
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    // Ensure headings in nested content look good
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1em;
+      margin-bottom: 0.5em;
+      
+      &:first-child {
+        margin-top: 0;
+      }
+    }
+
+    // Lists inside collapsible
+    ul, ol {
+      margin: 0.75em 0;
+      padding-left: 1.5em;
+    }
+
+    // Blockquotes inside collapsible
+    blockquote {
+      margin: 1em 0;
+      padding-left: 1em;
+      border-left: 3px solid currentColor;
+      opacity: 0.8;
+    }
+
+    // Code blocks inside collapsible
+    pre {
+      margin: 1em 0;
+      padding: 1em;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+
+    // Images inside collapsible
+    img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+
+    // Nested collapsibles
+    .collapsible-node {
+      margin: 1em 0;
+    }
+  }
+
+  // Selected state
+  &[data-selected="true"],
+  &:focus-within {
+    outline: none;
+  }
+}
+
+// Ensure proper rendering in the editor
+.ProseMirror {
+  .collapsible-node {
+    // Cursor positioning
+    &::before {
+      content: none;
+    }
+
+    // Gap cursor support
+    &.ProseMirror-selectednode {
+      outline: none;
+    }
+  }
+
+  // Ensure drag handle works
+  [data-drag-handle] {
+    cursor: grab;
+    
+    &:active {
+      cursor: grabbing;
+    }
+  }
+}
+
+// Animation for expand/collapse
+@keyframes collapsible-expand {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes collapsible-collapse {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.collapsible-content-wrapper {
+  &[data-state="open"] {
+    animation: collapsible-expand 0.2s ease-out;
+  }
+  
+  &[data-state="closed"] {
+    animation: collapsible-collapse 0.2s ease-out;
+  }
+}
+
+// Dark mode adjustments
+.dark {
+  .collapsible-node {
+    .collapsible-inner-content {
+      blockquote {
+        opacity: 0.9;
+      }
+    }
+  }
+}
+
+// Print styles
+@media print {
+  .collapsible-node {
+    // Always show content when printing
+    .collapsible-content-wrapper {
+      max-height: none !important;
+      opacity: 1 !important;
+    }
+    
+    // Hide interactive elements
+    .collapsible-drag-handle,
+    button[aria-label="Section settings"] {
+      display: none;
+    }
+  }
+}
