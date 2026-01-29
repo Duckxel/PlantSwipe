@@ -583,7 +583,7 @@ async function collectRecipients(
       if (profile?.notifyEmail === false) continue
 
       // For marketing emails, skip users who haven't given marketing consent
-      // marketing_consent defaults to true for new users (signup checkbox is checked by default)
+      // GDPR: marketing_consent defaults to false - users must actively opt-in (pre-ticked boxes don't constitute valid consent)
       // but users can uncheck it during signup or later in Settings
       if (isMarketing && profile?.marketingConsent === false) {
         continue
