@@ -759,16 +759,18 @@ if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
 fi
 
 log "Building application with Bun…"
-# Limit memory to prevent OOM on low-RAM servers (default 512MB, override with NODE_BUILD_MEMORY)
-NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
+# Limit memory to prevent OOM on low-RAM servers (default 1536MB/1.5GB for TypeScript compilation, override with NODE_BUILD_MEMORY)
+NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
+export NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY"
+log "Using NODE_OPTIONS: $NODE_OPTIONS"
 if [[ "$REPO_OWNER" != "" ]]; then
   OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
   OWNER_BUN_PATH="$OWNER_HOME/.bun/bin"
   if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
+    sudo -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
   elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
     if $SUDO -n true >/dev/null 2>&1; then
-      $SUDO -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
+      $SUDO -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
     else
       CI=${CI:-true} bun run build
     fi
