@@ -854,7 +854,7 @@ if [[ -f "$REFRESH_SCRIPT" ]]; then
   # Set environment for refresh script
   export PLANTSWIPE_REPO_DIR="$REPO_DIR"
   export PLANTSWIPE_REPO_OWNER="$SERVICE_USER"
-  export NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-4096}"
+  export NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
   export NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY"
   export SKIP_SERVICE_RESTARTS=true  # Don't restart services yet (setup will do it later)
   export SKIP_SUPABASE_DEPLOY=true   # Skip Supabase deploy (setup handles it separately)
@@ -888,7 +888,7 @@ if [[ -f "$REFRESH_SCRIPT" ]]; then
     fi
     sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
     log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
-    NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-4096}"
+    NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
     sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
   fi
 else
@@ -911,7 +911,7 @@ else
   fi
   sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
   log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
-  NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-4096}"
+  NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
   sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
 fi
 

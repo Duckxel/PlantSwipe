@@ -759,8 +759,8 @@ if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
 fi
 
 log "Building application with Bun…"
-# Limit memory to prevent OOM on low-RAM servers (default 4096MB for TypeScript compilation, override with NODE_BUILD_MEMORY)
-NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-4096}"
+# Limit memory to prevent OOM on low-RAM servers (default 1536MB/1.5GB for TypeScript compilation, override with NODE_BUILD_MEMORY)
+NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
 export NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY"
 log "Using NODE_OPTIONS: $NODE_OPTIONS"
 if [[ "$REPO_OWNER" != "" ]]; then
