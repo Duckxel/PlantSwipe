@@ -247,7 +247,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
           gapcursor: false,
         }),
         Placeholder.configure({
-          placeholder: 'Type "/" for quick commands or start writing…',
+          placeholder: 'Start writing…',
         }),
         Link.configure({
           openOnClick: false,
@@ -391,7 +391,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
 
         {!isEmbedded && (
           <div className="flex items-center justify-between border-t border-stone-200 px-4 py-3 text-xs text-stone-500 dark:border-[#3e3e42] dark:text-stone-400">
-            <span>Use "/" for quick commands · Drag blocks to rearrange</span>
+            <span>Use the toolbar to format text and add content</span>
             <span>{wordCount} words</span>
           </div>
         )}

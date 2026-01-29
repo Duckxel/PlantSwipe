@@ -73,6 +73,17 @@ body,
 .simple-editor-content .tiptap.ProseMirror.simple-editor {
   flex: 1;
   padding: 3rem 3rem 30vh;
+  text-align: left;
+
+  // Ensure paragraphs are left-aligned by default
+  p {
+    text-align: left;
+  }
+
+  // Fix placeholder positioning
+  .is-empty[data-placeholder]::before {
+    text-align: left;
+  }
 }
 
 @media screen and (max-width: 480px) {

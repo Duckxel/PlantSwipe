@@ -2,14 +2,20 @@
 
 .collapsible-node {
   // Ensure the node is properly displayed as a block
-  display: block;
+  display: block !important;
   position: relative;
+  // Ensure proper visibility and stacking
+  z-index: 1;
+  // Ensure it's not clipped
+  overflow: visible;
 
   // Header styling
   .collapsible-header {
     display: flex;
     align-items: center;
     user-select: none;
+    position: relative;
+    z-index: 2;
     
     // Prevent text selection during drag
     &:active {
@@ -32,11 +38,17 @@
   // Content wrapper with smooth transitions
   .collapsible-content-wrapper {
     will-change: max-height, opacity;
+    position: relative;
+    z-index: 1;
   }
 
-  // Inner content - ensure TipTap editor styles apply
+  // Inner content - inherit editor styles, minimal overrides
   .collapsible-inner-content {
-    // Reset some styles to ensure nested content looks correct
+    // Ensure content is editable and visible
+    min-height: 1.5em;
+    outline: none;
+    
+    // Reset margins for first/last children
     > *:first-child {
       margin-top: 0;
     }
@@ -45,59 +57,7 @@
       margin-bottom: 0;
     }
 
-    // Ensure nested paragraphs have proper spacing
-    p {
-      margin: 0.75em 0;
-      
-      &:first-child {
-        margin-top: 0;
-      }
-      
-      &:last-child {
-        margin-bottom: 0;
-      }
-    }
-
-    // Ensure headings in nested content look good
-    h1, h2, h3, h4, h5, h6 {
-      margin-top: 1em;
-      margin-bottom: 0.5em;
-      
-      &:first-child {
-        margin-top: 0;
-      }
-    }
-
-    // Lists inside collapsible
-    ul, ol {
-      margin: 0.75em 0;
-      padding-left: 1.5em;
-    }
-
-    // Blockquotes inside collapsible
-    blockquote {
-      margin: 1em 0;
-      padding-left: 1em;
-      border-left: 3px solid currentColor;
-      opacity: 0.8;
-    }
-
-    // Code blocks inside collapsible
-    pre {
-      margin: 1em 0;
-      padding: 1em;
-      border-radius: 8px;
-      overflow-x: auto;
-    }
-
-    // Images inside collapsible
-    img {
-      max-width: 100%;
-      height: auto;
-      border-radius: 8px;
-    }
-
-    // Nested collapsibles
+    // Nested collapsibles spacing
     .collapsible-node {
       margin: 1em 0;
     }
@@ -112,6 +72,7 @@
 
 // Ensure proper rendering in the editor
 .ProseMirror {
+  // Ensure collapsible nodes are visible and properly layered
   .collapsible-node {
     // Cursor positioning
     &::before {
@@ -122,6 +83,11 @@
     &.ProseMirror-selectednode {
       outline: none;
     }
+    
+    // Ensure visibility within the editor
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   // Ensure drag handle works
@@ -130,6 +96,22 @@
     
     &:active {
       cursor: grabbing;
+    }
+  }
+  
+  // Ensure NodeViewWrapper renders correctly
+  [data-type="collapsible"] {
+    display: block !important;
+    position: relative;
+    
+    // Ensure the inner content area is editable
+    .collapsible-inner-content {
+      cursor: text;
+      min-height: 1.5em;
+      
+      &:focus {
+        outline: none;
+      }
     }
   }
 }
@@ -167,13 +149,70 @@
   }
 }
 
-// Dark mode adjustments
+// Dark mode adjustments - ensure text is visible
 .dark {
   .collapsible-node {
     .collapsible-inner-content {
+      // Ensure text colors are visible in dark mode
+      color: #e7e5e4; // stone-200 equivalent
+      
+      p, span, li, td, th, label {
+        color: inherit;
+      }
+      
+      // Headings should be brighter
+      h1, h2, h3, h4, h5, h6 {
+        color: #fafaf9; // stone-50 equivalent
+      }
+      
+      // Muted text elements
       blockquote {
         opacity: 0.9;
+        color: #a8a29e; // stone-400 equivalent
       }
+      
+      // Code blocks
+      code {
+        background-color: rgba(41, 37, 36, 0.8); // stone-800 with opacity
+        color: #e7e5e4;
+      }
+      
+      pre {
+        background-color: rgba(28, 25, 23, 0.9); // stone-900 with opacity
+        color: #e7e5e4;
+      }
+      
+      // Links
+      a {
+        color: #6ee7b7; // emerald-300
+      }
+      
+      // Lists - ensure bullet/number colors
+      ul li::marker,
+      ol li::marker {
+        color: #a8a29e; // stone-400
+      }
+      
+      // Placeholder text
+      .is-empty::before {
+        color: #78716c !important; // stone-500
+      }
+    }
+    
+    // Collapsed preview text
+    .collapsible-content {
+      color: #e7e5e4;
+    }
+  }
+}
+
+// Light mode text colors (explicit for consistency)
+.collapsible-node {
+  .collapsible-inner-content {
+    color: #1c1917; // stone-900
+    
+    h1, h2, h3, h4, h5, h6 {
+      color: #0c0a09; // stone-950
     }
   }
 }
