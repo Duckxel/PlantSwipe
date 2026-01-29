@@ -73,7 +73,7 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
     ]
   },
 
-  renderHTML({ HTMLAttributes, node }) {
+  renderHTML({ HTMLAttributes }) {
     const { title, isOpen, style } = HTMLAttributes as CollapsibleAttributes
     const styles = getCollapsibleStyles(style)
 

@@ -49,7 +49,7 @@ const STYLE_CLASSES: Record<CollapsibleStyle, { container: string; header: strin
   },
 }
 
-export function CollapsibleNode({ node, updateAttributes, selected, editor }: NodeViewProps) {
+export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewProps) {
   const { title, isOpen, style } = node.attrs as {
     title: string
     isOpen: boolean
