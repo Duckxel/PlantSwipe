@@ -486,6 +486,7 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                           className="rounded-xl text-xs h-8 px-3 flex-shrink-0 border-2 border-emerald-400 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 font-semibold transition-all"
                           onClick={() => completeAllTodayForPlant(plant.id)}
                           disabled={isCompleting}
+                          aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: plant.nickname || plant.plant?.name || "Plant" })}
                         >
                           {isCompleting ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -560,6 +561,7 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
                               className={`rounded-xl h-9 px-4 text-xs font-semibold flex-shrink-0 border-2 transition-all ${config.buttonOutline}`}
                               onClick={() => onProgressOccurrence(occ.id, remaining)}
                               disabled={isProgressing}
+                              aria-label={`${t("garden.complete", "Complete")} ${t(`garden.taskTypes.${taskType}`, taskType)} ${t("garden.activity.for", "for")} ${plant.nickname || plant.plant?.name || "Plant"}`}
                             >
                               {isProgressing ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />

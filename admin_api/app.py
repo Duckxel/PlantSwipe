@@ -12,6 +12,128 @@ from pathlib import Path
 import shlex
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
+# Sentry error monitoring
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
+
+SENTRY_DSN = "https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520"
+
+# Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
+SERVER_NAME = os.environ.get("PLANTSWIPE_SERVER_NAME") or os.environ.get("SERVER_NAME") or "unknown"
+
+def _init_sentry() -> None:
+    """Initialize Sentry for error tracking in the Admin API.
+    
+    GDPR Compliance Notes:
+    - send_default_pii is False to avoid capturing user IP addresses and cookies
+    - Error scrubbing removes email patterns from error messages
+    - Only operational metadata is captured, no personal data
+    """
+    try:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[FlaskIntegration()],
+            environment=os.environ.get("FLASK_ENV", "production"),
+            # Server identification
+            server_name=SERVER_NAME,
+            # Send structured logs to Sentry
+            _experiments={
+                "enable_logs": True,
+            },
+            # Tracing - capture 20% of transactions in production (cost-effective)
+            traces_sample_rate=0.2,
+            # GDPR: Do NOT send PII automatically
+            # This prevents IP addresses, cookies, and request data from being sent
+            send_default_pii=False,
+            # Filter out common non-actionable errors
+            before_send=_sentry_before_send,
+            # GDPR: Scrub sensitive data from events
+            before_send_transaction=_sentry_before_send_transaction,
+        )
+        # Set server tag on all events
+        sentry_sdk.set_tag("server", SERVER_NAME)
+        sentry_sdk.set_tag("app", "plant-swipe-admin-api")
+        print(f"[Sentry] Admin API initialized for server: {SERVER_NAME} (GDPR-compliant)")
+    except Exception as e:
+        print(f"[Sentry] Failed to initialize: {e}")
+
+
+def _scrub_pii_from_string(value: str) -> str:
+    """Scrub PII patterns from a string."""
+    import re
+    if not value:
+        return value
+    # Scrub email addresses
+    value = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL_REDACTED]', value)
+    # Scrub potential passwords in URLs or logs
+    value = re.sub(r'password[=:][^\s&"\']+', 'password=[REDACTED]', value, flags=re.IGNORECASE)
+    # Scrub bearer tokens
+    value = re.sub(r'Bearer\s+[A-Za-z0-9\-_\.]+', 'Bearer [REDACTED]', value)
+    return value
+
+
+def _sentry_before_send(event, hint):
+    """Filter out non-actionable errors and scrub PII before sending to Sentry.
+    
+    GDPR Compliance:
+    - Scrubs email addresses from error messages
+    - Scrubs passwords and tokens
+    - Filters out expected client errors
+    """
+    if "exc_info" in hint:
+        exc_type, exc_value, _ = hint["exc_info"]
+        # Don't report 401 Unauthorized errors (expected for auth failures)
+        if hasattr(exc_value, "code") and exc_value.code == 401:
+            return None
+        # Don't report 400 Bad Request errors (client errors)
+        if hasattr(exc_value, "code") and exc_value.code == 400:
+            return None
+    
+    # Scrub PII from exception message
+    if event.get("exception", {}).get("values"):
+        for exc in event["exception"]["values"]:
+            if exc.get("value"):
+                exc["value"] = _scrub_pii_from_string(exc["value"])
+    
+    # Scrub PII from request data if present
+    if event.get("request", {}).get("data"):
+        data = event["request"]["data"]
+        if isinstance(data, str):
+            event["request"]["data"] = _scrub_pii_from_string(data)
+    
+    # Don't send request headers (may contain auth tokens)
+    if event.get("request", {}).get("headers"):
+        # Only keep safe headers
+        safe_headers = {"Content-Type", "Accept", "User-Agent"}
+        event["request"]["headers"] = {
+            k: v for k, v in event["request"]["headers"].items() 
+            if k in safe_headers
+        }
+    
+    # Add operational context for debugging
+    event.setdefault("contexts", {})
+    event["contexts"]["server"] = {
+        "name": SERVER_NAME,
+        "type": "admin-api",
+    }
+    
+    return event
+
+
+def _sentry_before_send_transaction(event, hint):
+    """Filter transactions and scrub any PII."""
+    # Scrub URL query parameters that might contain PII
+    if event.get("request", {}).get("url"):
+        url = event["request"]["url"]
+        # Remove query string entirely (may contain tokens/ids)
+        if "?" in url:
+            event["request"]["url"] = url.split("?")[0] + "?[PARAMS_REDACTED]"
+    return event
+
+
+# Initialize Sentry before Flask app is created
+_init_sentry()
+
 
 def _get_env_var(name: str, default: Optional[str] = None) -> str:
     value = os.environ.get(name, default)
@@ -33,17 +155,10 @@ def _parse_allowed_services(env_value: str) -> Set[str]:
     return services
 
 
-APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
-ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
-# Allow nginx, node app, and admin api by default; can be overridden via env
-ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
-DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
-
-ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
-
 HMAC_HEADER = "X-Button-Token"
 
 # Load .env files from the repo's plant-swipe directory to unify configuration
+# IMPORTANT: This MUST be called BEFORE reading config variables
 def _load_repo_env():
     try:
         here = Path(__file__).resolve().parent
@@ -72,9 +187,51 @@ def _load_repo_env():
     except Exception:
         pass
 
+# Load env files FIRST before reading config variables
 _load_repo_env()
 
+# Now read config variables AFTER env files are loaded
+APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
+ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
+# Allow nginx, node app, and admin api by default; can be overridden via env
+ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
+DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
+
+ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
+
 app = Flask(__name__)
+
+
+# JSON error handlers for proper API responses
+@app.errorhandler(400)
+def bad_request_handler(error):
+    description = getattr(error, 'description', 'Bad Request')
+    return jsonify({"ok": False, "error": "Bad Request", "message": description}), 400
+
+
+@app.errorhandler(401)
+def unauthorized_handler(error):
+    description = getattr(error, 'description', 'Unauthorized')
+    return jsonify({"ok": False, "error": "Unauthorized", "message": description}), 401
+
+
+@app.errorhandler(403)
+def forbidden_handler(error):
+    description = getattr(error, 'description', 'Forbidden')
+    return jsonify({"ok": False, "error": "Forbidden", "message": description}), 403
+
+
+@app.errorhandler(404)
+def not_found_handler(error):
+    description = getattr(error, 'description', 'Not Found')
+    return jsonify({"ok": False, "error": "Not Found", "message": description}), 404
+
+
+@app.errorhandler(500)
+def internal_error_handler(error):
+    description = getattr(error, 'description', 'Internal Server Error')
+    return jsonify({"ok": False, "error": "Internal Server Error", "message": description}), 500
+
 
 # Optional: forward admin actions to Node app for centralized logging
 def _log_admin_action(action: str, target: str = "", detail: dict | None = None) -> None:
@@ -544,7 +701,15 @@ def sync_schema():
             "-e",  # Echo errors
             "-f", sql_path,
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False)
+        # Set environment variables to handle SSL properly
+        # PGSSLMODE=require uses SSL but doesn't verify the certificate
+        # This fixes "SSL error: certificate verify failed" on some systems
+        psql_env = os.environ.copy()
+        psql_env["PGSSLMODE"] = "require"
+        # Disable root certificate verification by pointing to non-existent file
+        # This prevents OpenSSL from trying to verify the server's certificate
+        psql_env["PGSSLROOTCERT"] = ""
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False, env=psql_env)
         out = (res.stdout or "")
         err = (res.stderr or "")
         
@@ -591,12 +756,14 @@ def sync_schema():
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
                 """
                 # Use subprocess to pipe SQL to psql to avoid escaping issues with shell arguments
+                # Use same SSL environment as the main psql call
                 p = subprocess.Popen(
                     ["psql", db_url, "-q", "-f", "-"],
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
-                    text=True
+                    text=True,
+                    env=psql_env
                 )
                 _, secret_err = p.communicate(input=secret_sql)
                 if p.returncode != 0:
@@ -905,6 +1072,88 @@ def git_pull():
         return jsonify({"ok": False, "error": "Git pull timed out"}), 504
     except Exception as e:
         return jsonify({"ok": False, "error": str(e) or "Failed to run git pull"}), 500
+
+
+def _sitemap_script_path(repo_root: str) -> str:
+    return str(Path(repo_root) / "scripts" / "generate-sitemap-daily.sh")
+
+
+@app.get("/admin/regenerate-sitemap")
+@app.post("/admin/regenerate-sitemap")
+def regenerate_sitemap():
+    """Regenerate the sitemap by running the sitemap generation script."""
+    _verify_request()
+    repo_root = _get_repo_root()
+    script_path = _sitemap_script_path(repo_root)
+    if not os.path.isfile(script_path):
+        detail = {"error": "sitemap script not found", "path": script_path}
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": f"sitemap script not found at {script_path}"}), 500
+
+    _ensure_executable(script_path)
+    env = os.environ.copy()
+    env.setdefault("CI", os.environ.get("CI", "true"))
+    env["PLANTSWIPE_REPO_DIR"] = repo_root
+
+    try:
+        res = subprocess.run(
+            [script_path],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout for sitemap generation
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail={"error": "timeout"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": "Sitemap generation timed out"}), 504
+    except Exception as e:
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail={"error": str(e) or "unexpected failure"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(e) or "Failed to run sitemap script"}), 500
+
+    stdout = res.stdout or ""
+    stderr = res.stderr or ""
+    stdout_tail = "\n".join(stdout.splitlines()[-100:])
+    stderr_tail = "\n".join(stderr.splitlines()[-50:])
+    detail = {
+        "returncode": res.returncode,
+        "stdoutTail": stdout_tail,
+        "stderrTail": stderr_tail or None,
+    }
+    if res.returncode != 0:
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({
+            "ok": False,
+            "error": "Sitemap generation failed",
+            "returncode": res.returncode,
+            "stdout": stdout_tail,
+            "stderr": stderr_tail,
+        }), 500
+
+    try:
+        _log_admin_action("regenerate_sitemap", detail=detail)
+    except Exception:
+        pass
+    return jsonify({
+        "ok": True,
+        "message": "Sitemap regenerated successfully",
+        "returncode": res.returncode,
+        "stdout": stdout_tail,
+        "stderr": stderr_tail,
+    })
 
 
 if __name__ == "__main__":

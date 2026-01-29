@@ -652,6 +652,139 @@ fi
 
 log "Using Bun $(bun --version 2>/dev/null || echo 'version unknown') as primary package manager."
 
+# Install Sentry for error monitoring (server-side and client-side)
+log "Installing Sentry for error monitoring…"
+install_sentry() {
+  local bun_path=""
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+    if [[ -x "$SERVICE_HOME/.bun/bin/bun" ]]; then
+      bun_path="$SERVICE_HOME/.bun/bin"
+    elif [[ -x "/usr/local/bin/bun" ]]; then
+      bun_path="/usr/local/bin"
+    elif [[ -x "$HOME/.bun/bin/bun" ]]; then
+      bun_path="$HOME/.bun/bin"
+    fi
+  fi
+  
+  # Check if Sentry packages are already installed
+  local needs_server=true
+  local needs_client=true
+  
+  if [[ -f "$NODE_DIR/package.json" ]]; then
+    if grep -q '"@sentry/bun"' "$NODE_DIR/package.json" 2>/dev/null; then
+      needs_server=false
+      log "Sentry server-side (@sentry/bun) is already installed."
+    fi
+    if grep -q '"@sentry/react"' "$NODE_DIR/package.json" 2>/dev/null; then
+      needs_client=false
+      log "Sentry client-side (@sentry/react) is already installed."
+    fi
+  fi
+  
+  # Install missing packages
+  local packages_to_add=""
+  if $needs_server; then
+    packages_to_add="@sentry/bun"
+  fi
+  if $needs_client; then
+    packages_to_add="$packages_to_add @sentry/react"
+  fi
+  
+  if [[ -n "$packages_to_add" ]]; then
+    log "Adding Sentry packages: $packages_to_add"
+    if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+      if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add $packages_to_add" 2>&1; then
+        log "Sentry packages installed successfully."
+      else
+        log "[WARN] Failed to install Sentry packages. You can manually install with: cd $NODE_DIR && bun add $packages_to_add"
+      fi
+    else
+      if bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add $packages_to_add" 2>&1; then
+        log "Sentry packages installed successfully."
+      else
+        log "[WARN] Failed to install Sentry packages. You can manually install with: cd $NODE_DIR && bun add $packages_to_add"
+      fi
+    fi
+  else
+    log "All Sentry packages are already installed."
+  fi
+}
+
+install_sentry
+
+# Verify Sentry configuration in server.js
+verify_sentry_server_config() {
+  local server_file="$NODE_DIR/server.js"
+  
+  if [[ ! -f "$server_file" ]]; then
+    log "[WARN] server.js not found at $server_file. Skipping Sentry verification."
+    return 1
+  fi
+  
+  # Check if Sentry is already configured
+  if grep -q "@sentry/bun" "$server_file" 2>/dev/null; then
+    log "Sentry is configured in server.js."
+    return 0
+  else
+    log "[WARN] Sentry is not configured in server.js. Please ensure @sentry/bun is imported and initialized."
+    return 1
+  fi
+}
+
+# Verify Sentry configuration in client-side code
+verify_sentry_client_config() {
+  local sentry_lib="$NODE_DIR/src/lib/sentry.ts"
+  local main_file="$NODE_DIR/src/main.tsx"
+  
+  if [[ -f "$sentry_lib" ]]; then
+    log "Sentry client configuration found at $sentry_lib"
+  else
+    log "[WARN] Sentry client configuration not found at $sentry_lib"
+  fi
+  
+  if [[ -f "$main_file" ]] && grep -q "initSentry" "$main_file" 2>/dev/null; then
+    log "Sentry is initialized in main.tsx"
+  else
+    log "[WARN] Sentry initialization not found in main.tsx"
+  fi
+}
+
+verify_sentry_server_config
+verify_sentry_client_config
+
+# Verify Sentry configuration in Admin API (Python)
+verify_sentry_admin_api_config() {
+  local admin_app="$REPO_DIR/admin_api/app.py"
+  local admin_requirements="$REPO_DIR/admin_api/requirements.txt"
+  
+  if [[ -f "$admin_requirements" ]] && grep -q "sentry-sdk" "$admin_requirements" 2>/dev/null; then
+    log "Sentry SDK is configured in Admin API requirements.txt"
+  else
+    log "[WARN] Sentry SDK not found in Admin API requirements.txt"
+  fi
+  
+  if [[ -f "$admin_app" ]] && grep -q "sentry_sdk" "$admin_app" 2>/dev/null; then
+    log "Sentry is initialized in Admin API app.py"
+  else
+    log "[WARN] Sentry initialization not found in Admin API app.py"
+  fi
+}
+
+# Verify Sentry configuration in Sitemap generator
+verify_sentry_sitemap_config() {
+  local sitemap_script="$NODE_DIR/scripts/generate-sitemap.js"
+  
+  if [[ -f "$sitemap_script" ]] && grep -q "@sentry/node" "$sitemap_script" 2>/dev/null; then
+    log "Sentry is configured in sitemap generator"
+  else
+    log "[WARN] Sentry not found in sitemap generator script"
+  fi
+}
+
+verify_sentry_admin_api_config
+verify_sentry_sitemap_config
+
 # Build frontend and API bundle using Bun
 # Delegate to refresh script if available (avoids code duplication and uses optimized build)
 REFRESH_SCRIPT="$REPO_DIR/scripts/refresh-plant-swipe.sh"
@@ -1649,23 +1782,77 @@ rebuild_admin_api_venv() {
 
 rebuild_admin_api_venv
 
-# Admin API environment file (placeholders) — user must update secrets later
+# Admin API environment file — generate secure secrets on first run
 log "Ensuring Admin API env at $ADMIN_ENV_FILE…"
 $SUDO mkdir -p "$ADMIN_ENV_DIR"
+
+# Generate a secure random secret for ADMIN_BUTTON_SECRET
+generate_secure_secret() {
+  # Try openssl first (most secure), fall back to /dev/urandom
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  elif [[ -r /dev/urandom ]]; then
+    head -c 32 /dev/urandom | xxd -p | tr -d '\n'
+  else
+    # Last resort: use date + random for some entropy
+    echo "$(date +%s%N)$(shuf -i 1000000000-9999999999 -n 1)" | sha256sum | cut -d' ' -f1
+  fi
+}
+
+# Read ADMIN_STATIC_TOKEN from plant-swipe/.env file (prefer ADMIN_STATIC_TOKEN, then VITE_ADMIN_STATIC_TOKEN)
+ADMIN_STATIC_TOKEN_VALUE=""
+for env_file in "$NODE_DIR/.env" "$NODE_DIR/.env.server"; do
+  if [[ -z "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+    ADMIN_STATIC_TOKEN_VALUE="$(read_env_kv "$env_file" ADMIN_STATIC_TOKEN)"
+  fi
+  if [[ -z "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+    ADMIN_STATIC_TOKEN_VALUE="$(read_env_kv "$env_file" VITE_ADMIN_STATIC_TOKEN)"
+  fi
+done
+
 if [[ ! -f "$ADMIN_ENV_FILE" ]]; then
-  $SUDO bash -c "cat > '$ADMIN_ENV_FILE' <<'EOF'
-# Admin API environment — fill in after setup
-# Change this secret! If blank, only static token auth (if provided) is used.
-ADMIN_BUTTON_SECRET=change-me
+  # Generate a unique secure secret for this installation
+  ADMIN_BUTTON_SECRET_VALUE="$(generate_secure_secret)"
+  log "Generated new ADMIN_BUTTON_SECRET for this installation"
+  
+  if [[ -n "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+    log "Read ADMIN_STATIC_TOKEN from plant-swipe/.env"
+  else
+    log "[INFO] ADMIN_STATIC_TOKEN not found in plant-swipe/.env - will be empty (HMAC auth only)"
+  fi
+  
+  $SUDO bash -c "cat > '$ADMIN_ENV_FILE' <<EOF
+# Admin API environment — auto-generated by setup.sh
+# ADMIN_BUTTON_SECRET: Used for HMAC signature verification (X-Button-Token header)
+# Generated automatically - unique per installation
+ADMIN_BUTTON_SECRET=$ADMIN_BUTTON_SECRET_VALUE
 # Which services Admin API may restart (systemd unit names without or with .service)
 ADMIN_ALLOWED_SERVICES=nginx,plant-swipe-node,admin-api
 # Default when /admin/restart-app is called without payload
 ADMIN_DEFAULT_SERVICE=plant-swipe-node
-# Optional: a shared static token to authorize admin actions via X-Admin-Token
-ADMIN_STATIC_TOKEN=
+# ADMIN_STATIC_TOKEN: Shared token for X-Admin-Token header authentication
+# Read from plant-swipe/.env (ADMIN_STATIC_TOKEN or VITE_ADMIN_STATIC_TOKEN)
+ADMIN_STATIC_TOKEN=$ADMIN_STATIC_TOKEN_VALUE
 EOF
 "
   $SUDO chmod 0640 "$ADMIN_ENV_FILE"
+else
+  # File exists - update ADMIN_STATIC_TOKEN if we found a new value and it's different
+  if [[ -n "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+    EXISTING_TOKEN="$(read_env_kv "$ADMIN_ENV_FILE" ADMIN_STATIC_TOKEN)"
+    if [[ "$EXISTING_TOKEN" != "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+      log "Updating ADMIN_STATIC_TOKEN in existing $ADMIN_ENV_FILE"
+      $SUDO sed -i "s|^ADMIN_STATIC_TOKEN=.*|ADMIN_STATIC_TOKEN=$ADMIN_STATIC_TOKEN_VALUE|" "$ADMIN_ENV_FILE"
+    fi
+  fi
+  
+  # Check if ADMIN_BUTTON_SECRET is still the placeholder and regenerate if so
+  EXISTING_SECRET="$(read_env_kv "$ADMIN_ENV_FILE" ADMIN_BUTTON_SECRET)"
+  if [[ "$EXISTING_SECRET" == "change-me" || -z "$EXISTING_SECRET" ]]; then
+    ADMIN_BUTTON_SECRET_VALUE="$(generate_secure_secret)"
+    log "Regenerating ADMIN_BUTTON_SECRET (was placeholder or empty)"
+    $SUDO sed -i "s|^ADMIN_BUTTON_SECRET=.*|ADMIN_BUTTON_SECRET=$ADMIN_BUTTON_SECRET_VALUE|" "$ADMIN_ENV_FILE"
+  fi
 fi
 
 # Install systemd services

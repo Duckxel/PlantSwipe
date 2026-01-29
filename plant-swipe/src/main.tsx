@@ -1,4 +1,8 @@
 import { createRoot } from 'react-dom/client'
+// Initialize Sentry first - before any other code runs
+import { initSentry } from '@/lib/sentry'
+initSentry()
+
 import '@/lib/runtimeEnvLoader'
 import { patchGoogleTranslateConflict } from '@/lib/googleTranslateFix'
 import './lib/i18n' // Initialize i18n before App

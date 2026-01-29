@@ -2920,6 +2920,7 @@ export const GardenDashboardPage: React.FC = () => {
                                       onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
                                       disabled={completingPlantIds.has(gp.id)}
                                       onClick={() => completeAllTodayForPlant(gp.id)}
+                                      aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: gp.nickname || gp.plant?.name || "Plant" })}
                                     >
                                       {completingPlantIds.has(gp.id) ? (
                                         <span className="animate-pulse">...</span>
@@ -3911,6 +3912,7 @@ function RoutineSection({
                       className="rounded-xl"
                       onClick={() => completeAllTodayForPlant(gp.id)}
                       disabled={completingPlantIds.has(gp.id)}
+                      aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: gp.nickname || gp.plant?.name || "Plant" })}
                     >
                       {completingPlantIds.has(gp.id) ? (
                         <span className="flex items-center gap-1">

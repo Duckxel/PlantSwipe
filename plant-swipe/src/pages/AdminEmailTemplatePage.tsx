@@ -77,11 +77,19 @@ type TemplateVersion = {
 }
 
 const VARIABLE_CATALOG = [
+  // Standard variables (available in all emails)
   { token: "{{user}}", description: "Replaced with the user's display name (capitalized)" },
   { token: "{{email}}", description: "Replaced with the user's email address" },
   { token: "{{random}}", description: "Generates 10 random characters (letters & numbers) - unique per email" },
-  { token: "{{url}}", description: "Replaced with the Aphylia website URL (aphylia.app)" },
+  { token: "{{url}}", description: "Website URL, reset link, or verification link (context-dependent)" },
   { token: "{{code}}", description: "Replaced with verification code, OTP, or sensitive data (use in transactional emails)" },
+  // Security email variables
+  { token: "{{old_email}}", description: "Previous email address (for email change notifications)" },
+  { token: "{{new_email}}", description: "New email address (for email change notifications)" },
+  { token: "{{location}}", description: "Geographic location of login/action (city, country)" },
+  { token: "{{device}}", description: "Device/browser info (e.g., 'Chrome on Windows')" },
+  { token: "{{ip_address}}", description: "IP address where action originated" },
+  { token: "{{time}}", description: "Date and time when the action occurred (UTC)" },
 ]
 
 async function buildAdminHeaders() {

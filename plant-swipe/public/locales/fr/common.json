@@ -1,4 +1,8 @@
 {
+  "_meta": {
+    "version": "1.0.0",
+    "lastUpdated": "2026-01-27"
+  },
   "common": {
     "appName": "Aphylia",
     "discovery": "Découverte",
@@ -480,8 +484,16 @@
     "notifications": {
       "preferencesTitle": "Préférences de notification",
       "preferencesDescription": "Choisissez les notifications que vous souhaitez recevoir.",
+      "pushTitle": "Notifications Push",
+      "pushMasterDescription": "Contrôlez les notifications push sur vos appareils.",
+      "enablePush": "Activer les Notifications Push",
+      "enablePushDescription": "Activez pour recevoir des notifications push. Désactivez pour bloquer toutes les notifications push.",
       "pushNotifications": "Notifications push",
       "pushDescription": "Recevez des notifications push pour les rappels, les mises à jour de tâches et les alertes importantes.",
+      "emailTitle": "Notifications par Email",
+      "emailMasterDescription": "Choisissez les emails que vous souhaitez recevoir d'Aphylia.",
+      "enableEmail": "Activer les Notifications par Email",
+      "enableEmailDescription": "Activez pour recevoir des emails. Désactivez pour bloquer tous les emails sauf ceux de sécurité.",
       "emailCampaigns": "Campagnes e-mail",
       "emailDescription": "Recevez des newsletters, des mises à jour de produits et des e-mails promotionnels d'Aphylia.",
       "browserTitle": "Configuration push navigateur",
@@ -2907,6 +2919,128 @@
         "notAPlant": "Ceci ne semble pas être une plante. Veuillez essayer une autre image.",
         "identifyFailed": "Échec de l'identification de la plante. Veuillez réessayer."
       }
+    },
+    "cookieConsent": {
+      "title": "Préférences de Cookies",
+      "description": "Nous utilisons des cookies pour améliorer votre expérience. Vous pouvez choisir quels cookies accepter.",
+      "essentialTitle": "Cookies Essentiels",
+      "essentialDesc": "Nécessaires au fonctionnement de base du site comme l'authentification et les préférences. Ceux-ci ne peuvent pas être désactivés.",
+      "securityTitle": "Sécurité (reCAPTCHA)",
+      "securityDesc": "Google reCAPTCHA protège contre le spam et les abus. Chargé uniquement lorsque vous acceptez les cookies.",
+      "analyticsTitle": "Analytiques (Google Analytics)",
+      "analyticsDesc": "Nous aident à comprendre comment les visiteurs interagissent avec notre site. Votre IP est anonymisée.",
+      "rejectAll": "Tout Refuser",
+      "essentialOnly": "Essentiels Uniquement",
+      "acceptAll": "Tout Accepter",
+      "hideDetails": "Masquer les détails",
+      "showDetails": "Afficher les détails",
+      "privacyPolicy": "Politique de Confidentialité"
+    },
+    "gdpr": {
+      "title": "Données & Consentement",
+      "description": "Gérez vos données et préférences de consentement conformément au RGPD.",
+      "exportData": "Exporter Mes Données",
+      "exportDataDescription": "Téléchargez toutes les données que nous avons sur vous dans un format lisible par machine.",
+      "exportInfo": "Votre export comprendra votre profil, jardins, plantes, messages, amis, favoris et toutes vos autres données personnelles.",
+      "downloadData": "Télécharger Mes Données",
+      "exporting": "Préparation de l'export...",
+      "exportSuccess": "Vos données ont été exportées avec succès.",
+      "exportFailed": "Échec de l'export de vos données",
+      "deleteAccount": "Supprimer Mon Compte",
+      "deleteAccountDescription": "Supprimez définitivement votre compte et toutes les données associées. Cette action est irréversible.",
+      "marketingConsent": "Communications Marketing",
+      "marketingConsentDescription": "Recevoir des emails occasionnels sur les nouvelles fonctionnalités et mises à jour.",
+      "consentUpdated": "Vos préférences ont été enregistrées.",
+      "consentUpdateFailed": "Échec de la mise à jour des préférences de consentement",
+      "consentHistory": "Historique des Consentements",
+      "termsAccepted": "Conditions d'utilisation acceptées",
+      "privacyAccepted": "Politique de confidentialité acceptée",
+      "lastUpdated": "Dernière mise à jour :",
+      "notSet": "Non défini",
+      "viewTerms": "Conditions d'Utilisation",
+      "viewPrivacy": "Politique de Confidentialité"
+    },
+    "privacyPage": {
+      "hero": {
+        "eyebrow": "Vos données, vos droits",
+        "title": "Politique de Confidentialité Aphylia",
+        "subtitle": "Découvrez comment nous collectons, utilisons et protégeons vos données personnelles. Votre vie privée est importante pour nous et nous nous engageons à respecter le RGPD.",
+        "updated": "Dernière mise à jour"
+      },
+      "legalContent": {
+        "label": "Politique de Confidentialité Complète"
+      },
+      "contact": {
+        "title": "Questions sur vos données ?",
+        "subtitle": "Contactez-nous via la page Contact si vous avez des questions sur la façon dont nous traitons vos données ou pour exercer vos droits RGPD.",
+        "badge": "Conforme RGPD"
+      }
+    },
+    "seo": {
+      "privacy": {
+        "title": "Politique de Confidentialité & Droits RGPD Aphylia",
+        "description": "Découvrez comment Aphylia protège vos données personnelles et vos droits RGPD incluant l'accès, l'export et la suppression de données."
+      }
+    },
+    "prefs": {
+      "pushCategories": "Choisissez les notifications à recevoir :",
+      "pushTaskReminders": "Rappels de Tâches",
+      "pushTaskRemindersDesc": "Rappels d'arrosage, fertilisation et soins des plantes",
+      "pushTaskRemindersSuccess": "Préférences de rappels mises à jour",
+      "pushMessages": "Messages",
+      "pushMessagesDesc": "Nouveaux messages de vos amis",
+      "pushMessagesSuccess": "Préférences de messages mises à jour",
+      "pushFriendActivity": "Activité des Amis",
+      "pushFriendActivityDesc": "Demandes d'amis et mises à jour d'activité",
+      "pushFriendActivitySuccess": "Préférences d'activité des amis mises à jour",
+      "pushGardenUpdates": "Mises à Jour du Jardin",
+      "pushGardenUpdatesDesc": "Activité dans vos jardins partagés",
+      "pushGardenUpdatesSuccess": "Préférences de mises à jour du jardin mises à jour",
+      "emailCategories": "Choisissez les emails à recevoir :",
+      "emailProductUpdates": "Mises à Jour & Nouvelles Fonctionnalités",
+      "emailProductUpdatesDesc": "Découvrez les nouvelles fonctionnalités et améliorations",
+      "emailProductUpdatesSuccess": "Préférence de mises à jour produit mise à jour",
+      "emailTipsAdvice": "Conseils & Astuces Jardinage",
+      "emailTipsAdviceDesc": "Conseils saisonniers, guides d'entretien et conseils d'experts",
+      "emailTipsAdviceSuccess": "Préférence conseils & astuces mise à jour",
+      "emailCommunity": "Actualités Communauté",
+      "emailCommunityDesc": "Jardins en vedette, histoires de succès et nouvelles de la communauté",
+      "emailCommunitySuccess": "Préférence actualités communauté mise à jour",
+      "emailPromotions": "Promotions & Offres Spéciales",
+      "emailPromotionsDesc": "Offres exclusives, réductions et offres partenaires",
+      "emailPromotionsSuccess": "Préférence promotions mise à jour",
+      "securityEmailsNote": "Note : Les emails de sécurité (changements de mot de passe, activité suspecte) ne peuvent pas être désactivés.",
+      "personalizationTitle": "Personnalisation & Analyse",
+      "personalizationDescription": "Contrôlez comment nous personnalisons votre expérience et utilisons les données pour améliorer l'application.",
+      "personalizedRecommendations": "Recommandations Personnalisées",
+      "personalizedRecommendationsDesc": "Recevez des suggestions de plantes et du contenu basés sur vos intérêts et votre activité de jardinage.",
+      "personalizedSuccess": "Préférence de personnalisation mise à jour",
+      "analyticsImprovement": "Aider à Améliorer Aphylia",
+      "analyticsImprovementDesc": "Autoriser la collecte anonyme de données d'utilisation pour nous aider à améliorer l'application.",
+      "analyticsSuccess": "Préférence d'analyse mise à jour",
+      "privacyNote": "Nous ne vendons jamais vos données. Consultez notre Politique de Confidentialité pour plus de détails sur la protection de vos informations.",
+      "updateFailed": "Échec de la mise à jour de la préférence",
+      "quickActionsTitle": "Actions Rapides",
+      "quickActionsDescription": "Ajustez rapidement plusieurs paramètres à la fois.",
+      "optOutAll": "Refuser le Traitement Non-Essentiel",
+      "optOutSuccess": "Refus de tout traitement de données non-essentiel effectué",
+      "disableAllNotifications": "Désactiver Toutes les Notifications",
+      "disableAllNotificationsSuccess": "Toutes les notifications désactivées",
+      "quickActionsNote": "Vous pouvez réactiver des paramètres individuels à tout moment dans l'onglet Notifications.",
+      "cookieTitle": "Préférences de Cookies",
+      "cookieDescription": "Gérez comment nous utilisons les cookies sur votre appareil.",
+      "currentCookieStatus": "Statut Actuel",
+      "cookieNotSet": "Non défini",
+      "cookieAll": "Tous les cookies",
+      "cookieAnalytics": "Essentiels + Analytiques",
+      "cookieEssential": "Essentiels uniquement",
+      "cookieRejected": "Refusé",
+      "cookieInfo": "Les cookies essentiels sont nécessaires au fonctionnement de base. Les cookies analytiques nous aident à comprendre comment vous utilisez l'application.",
+      "essentialOnly": "Essentiels Uniquement",
+      "acceptAnalytics": "Accepter Analytiques",
+      "acceptAll": "Tout Accepter",
+      "rejectAll": "Tout Refuser",
+      "cookieUpdated": "Préférences de cookies mises à jour"
     }
   }
 }

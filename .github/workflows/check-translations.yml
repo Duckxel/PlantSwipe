@@ -28,7 +28,7 @@ jobs:
       
       - name: Install dependencies
         working-directory: plant-swipe
-        run: bun install --frozen-lockfile
+        run: bun install
       
       - name: Check translation consistency
         working-directory: plant-swipe

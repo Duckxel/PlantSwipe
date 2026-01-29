@@ -78,6 +78,7 @@ import {
   HardDrive,
   ArrowRight,
   FileImage,
+  FileText,
   MessageSquare as MessageSquareIcon,
   MessageSquareText,
   BookOpen,
@@ -617,6 +618,7 @@ export const AdminPage: React.FC = () => {
   const [runningSetup, setRunningSetup] = React.useState<boolean>(false);
   const [clearingMemory, setClearingMemory] = React.useState<boolean>(false);
   const [gitPulling, setGitPulling] = React.useState<boolean>(false);
+  const [regeneratingSitemap, setRegeneratingSitemap] = React.useState<boolean>(false);
   // On initial load, if a broadcast is currently active, auto-open the section
   React.useEffect(() => {
     let cancelled = false;
@@ -1498,6 +1500,47 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[git] Failed: ${message}`);
     } finally {
       setGitPulling(false);
+    }
+  };
+
+  // --- Server Controls: Regenerate Sitemap ---
+  const regenerateSitemap = async () => {
+    if (regeneratingSitemap) return;
+    setRegeneratingSitemap(true);
+    try {
+      setConsoleOpen(true);
+      appendConsole("[sitemap] Regenerating sitemap...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/regenerate-sitemap", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: "{}",
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data?.ok) {
+        appendConsole("[sitemap] Sitemap regenerated successfully");
+        if (data?.stdout) {
+          // Show last few lines of output
+          const lines = data.stdout.split("\n").filter((l: string) => l.trim());
+          lines.slice(-10).forEach((line: string) => appendConsole(`[sitemap] ${line}`));
+        }
+      } else {
+        throw new Error(data?.error || `HTTP ${response.status}`);
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[sitemap] Failed to regenerate sitemap: ${message}`);
+    } finally {
+      setRegeneratingSitemap(false);
     }
   };
 
@@ -5261,6 +5304,9 @@ export const AdminPage: React.FC = () => {
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
               <div className="text-sm font-semibold">Admin Panel</div>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500 text-white">
+                v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-2">
                 {navItems.map(({ key, label, Icon, path }) => {
@@ -5321,7 +5367,12 @@ export const AdminPage: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                       <div>
-                        <div className="text-lg font-semibold">Admin Panel</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-semibold">Admin Panel</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500 text-white">
+                            v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+                          </span>
+                        </div>
                         <div className="text-xs text-stone-600 dark:text-stone-300">
                           Control Center
                         </div>
@@ -5558,6 +5609,50 @@ export const AdminPage: React.FC = () => {
                               {!dbProbe?.ok && (
                                 <ErrorBadge code={dbProbe.errorCode} />
                               )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* App Version Card */}
+                    <Card className={`${glassCardClass} relative overflow-hidden`}>
+                      {/* Subtle decorative glow from the badge */}
+                      <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-violet-500/10 dark:bg-violet-500/5 blur-3xl pointer-events-none" />
+                      
+                      <CardContent className="p-4 relative">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            {/* Icon with enhanced styling */}
+                            <div className="relative">
+                              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 blur-lg opacity-40" />
+                              <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-purple-600 flex items-center justify-center shadow-xl shadow-violet-500/30 ring-1 ring-white/20">
+                                <Sparkles className="h-6 w-6 text-white drop-shadow-sm" />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold">
+                                App Version
+                              </div>
+                              <div className="text-xs text-violet-600/70 dark:text-violet-300/60">
+                                Aphylia Release
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Version badge section */}
+                          <div className="flex flex-col items-end gap-1.5">
+                            <div className="relative group">
+                              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 blur-md opacity-50 group-hover:opacity-70 transition-opacity" />
+                              <span className="relative inline-flex items-center px-4 py-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-bold text-sm shadow-lg shadow-violet-500/25 ring-1 ring-white/20">
+                                v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs opacity-60">
+                              <GitBranch className="h-3.5 w-3.5" />
+                              <span className="font-mono tracking-tight">
+                                {(import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev'}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -5953,7 +6048,7 @@ export const AdminPage: React.FC = () => {
                             Server Controls
                           </button>
                           {serverControlsOpen && (
-                            <div className="mt-3 space-y-3" id="server-controls">
+                            <form className="mt-3 space-y-3" id="server-controls" onSubmit={(e) => e.preventDefault()} autoComplete="off">
                               {/* Root Password Input (shared) */}
                               <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 space-y-2 bg-stone-50/50 dark:bg-stone-900/20">
                                 <div className="text-xs font-medium text-stone-600 dark:text-stone-400">
@@ -5966,6 +6061,7 @@ export const AdminPage: React.FC = () => {
                                   onChange={(e) => setSetupPassword(e.target.value)}
                                   className="rounded-xl text-sm"
                                   disabled={runningSetup || restarting}
+                                  autoComplete="off"
                                 />
                               </div>
 
@@ -6002,6 +6098,17 @@ export const AdminPage: React.FC = () => {
                                 {clearingMemory ? "Clearing..." : "Clear Memory"}
                               </Button>
 
+                              {/* Regenerate Sitemap Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={regenerateSitemap}
+                                disabled={regeneratingSitemap}
+                              >
+                                <FileText className={`h-4 w-4 ${regeneratingSitemap ? "animate-pulse" : ""}`} />
+                                {regeneratingSitemap ? "Regenerating..." : "Regenerate Sitemap"}
+                              </Button>
+
                               {/* Run Setup Button */}
                               <Button
                                 variant="outline"
@@ -6015,7 +6122,7 @@ export const AdminPage: React.FC = () => {
                               <div className="text-[10px] text-stone-400">
                                 setup.sh runs the full server provisioning script with root privileges
                               </div>
-                            </div>
+                            </form>
                           )}
                         </div>
                       </CardContent>

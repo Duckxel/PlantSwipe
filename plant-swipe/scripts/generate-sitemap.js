@@ -7,6 +7,44 @@ import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
+// Sentry error monitoring for sitemap generation
+const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520'
+
+// Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
+const SERVER_NAME = process.env.PLANTSWIPE_SERVER_NAME || process.env.SERVER_NAME || 'unknown'
+
+let Sentry = null
+try {
+  // Try to import Sentry (may not be available in all environments)
+  const sentryModule = await import('@sentry/node').catch(() => null)
+  if (sentryModule) {
+    Sentry = sentryModule
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      environment: process.env.NODE_ENV || 'production',
+      // Server identification
+      serverName: SERVER_NAME,
+      // Send structured logs to Sentry
+      _experiments: {
+        enableLogs: true,
+      },
+      // Tracing - capture 100% of transactions
+      tracesSampleRate: 1.0,
+      // Add server tag to all events
+      initialScope: {
+        tags: {
+          server: SERVER_NAME,
+          app: 'plant-swipe-sitemap',
+        },
+      },
+    })
+    console.log(`[sitemap] Sentry initialized for server: ${SERVER_NAME}`)
+  }
+} catch {
+  // Sentry not available, continue without it
+  console.log('[sitemap] Sentry not available, continuing without error tracking')
+}
+
 const startedAt = Date.now()
 
 const __filename = fileURLToPath(import.meta.url)
@@ -166,7 +204,14 @@ async function main() {
 
 main().catch((error) => {
   console.error('[sitemap] Generation failed:', error)
-  process.exit(1)
+  // Report error to Sentry if available
+  if (Sentry) {
+    Sentry.captureException(error)
+    // Give Sentry time to send the error before exiting
+    setTimeout(() => process.exit(1), 2000)
+  } else {
+    process.exit(1)
+  }
 })
 
 async function detectLanguages(localesDir, fallback) {
@@ -392,9 +437,10 @@ async function loadBlogRoutes() {
     return []
   }
 
+  // Select id instead of slug - frontend blog links use /blog/{id} format
   const { data, error } = await client
     .from('blog_posts')
-    .select('slug, updated_at, created_at, published_at')
+    .select('id, updated_at, created_at, published_at')
     .eq('is_published', true)
     .order('published_at', { ascending: false })
 
@@ -408,10 +454,11 @@ async function loadBlogRoutes() {
   // The most recent post gets priority 0.95 (second only to homepage)
   // Other posts get standard priority 0.8
   return data.map((post, index) => {
-    if (!post.slug) return null
+    if (!post.id) return null
     const isLatestPost = index === 0
+    const normalizedId = encodeURIComponent(String(post.id))
     return {
-      path: `/blog/${post.slug}`,
+      path: `/blog/${normalizedId}`,
       changefreq: isLatestPost ? 'daily' : 'weekly',
       priority: isLatestPost ? 0.95 : 0.8,
       lastmod: pickLastmod(post),

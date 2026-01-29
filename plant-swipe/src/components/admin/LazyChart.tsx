@@ -66,7 +66,16 @@ const ChartSkeleton: React.FC<{ height?: number | string }> = ({ height = 200 })
 // Chart components that use the shared context
 const ResponsiveContainerImpl: React.FC<ResponsiveContainerProps> = (props) => {
   const charts = useCharts()
-  return <charts.ResponsiveContainer {...props} />
+  // Add debounce and minWidth/minHeight to prevent -1 dimension warnings
+  // when the container hasn't been measured yet
+  return (
+    <charts.ResponsiveContainer 
+      debounce={50}
+      minWidth={1}
+      minHeight={1}
+      {...props} 
+    />
+  )
 }
 ResponsiveContainerImpl.displayName = 'ResponsiveContainer'
 

@@ -19,6 +19,7 @@ import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
+import { CookieConsent } from "@/components/CookieConsent";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -59,6 +60,7 @@ const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
 const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
 const PricingPageLazy = lazy(() => import("@/pages/PricingPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
+const PrivacyPageLazy = lazy(() => import("@/pages/PrivacyPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
 const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
@@ -914,6 +916,7 @@ export default function PlantSwipe() {
     
     // Only shuffle if we haven't done initial shuffle yet, or explicit epoch triggered
     if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
+      // Fisher-Yates shuffle for unbiased randomization
       const shuffleArray = <T,>(arr: T[]): T[] => {
         const result = arr.slice()
         for (let i = result.length - 1; i > 0; i--) {
@@ -923,6 +926,10 @@ export default function PlantSwipe() {
         return result
       }
       
+      // Discovery Algorithm:
+      // 1. Plants with promotion_month matching current month appear FIRST (shuffled among themselves)
+      // 2. All other plants follow (shuffled among themselves)
+      // This ensures "Plant of the Month" plants get priority visibility in Discovery
       const now = new Date()
       const promoted: string[] = []
       const regular: string[] = []
@@ -935,6 +942,7 @@ export default function PlantSwipe() {
         }
       })
       
+      // Promoted plants first, then regular plants (both groups shuffled internally)
       const newOrder = promoted.length === 0
         ? shuffleArray(swipeablePlants.map(p => p.id))
         : [...shuffleArray(promoted), ...shuffleArray(regular)]
@@ -964,15 +972,25 @@ export default function PlantSwipe() {
       return status === 'in progres' || status === 'in progress'
     }
 
-    // For default sort, push "in progress" plants to the bottom
+    // For default sort:
+    // 1. Promotion Month plants first (featured for current month)
+    // 2. Regular plants in the middle
+    // 3. In-progress plants last
     if (searchSort === "default") {
+      const now = new Date()
       const arr = filtered.slice() as PreparedPlant[]
       arr.sort((a, b) => {
+        // Priority: Promotion Month > Regular > In Progress
+        const aPromoted = isPlantOfTheMonth(a, now) ? -1 : 0
+        const bPromoted = isPlantOfTheMonth(b, now) ? -1 : 0
+        if (aPromoted !== bPromoted) return aPromoted - bPromoted
+        
         const aInProgress = isPlantInProgress(a) ? 1 : 0
         const bInProgress = isPlantInProgress(b) ? 1 : 0
         if (aInProgress !== bInProgress) return aInProgress - bInProgress
-        // Maintain original order for same status
-        return 0
+        
+        // Maintain alphabetical order within same priority
+        return a.name.localeCompare(b.name)
       })
       return arr
     }
@@ -1228,12 +1246,17 @@ export default function PlantSwipe() {
     try {
       console.log('[auth] submit start', { mode: authMode })
       
-      // Execute reCAPTCHA v3 Enterprise
+      // Execute reCAPTCHA v3 Enterprise (consent-aware, may return null)
       let recaptchaToken: string | undefined
       try {
         const action = authMode === 'signup' ? 'signup' : 'login'
-        recaptchaToken = await executeRecaptcha(action)
-        console.log('[auth] reCAPTCHA token obtained')
+        const token = await executeRecaptcha(action)
+        recaptchaToken = token ?? undefined
+        if (token) {
+          console.log('[auth] reCAPTCHA token obtained')
+        } else {
+          console.log('[auth] reCAPTCHA skipped (no consent or unavailable)')
+        }
       } catch (recaptchaError) {
         console.warn('[auth] reCAPTCHA execution failed', recaptchaError)
         // Continue without token - backend will decide how to handle
@@ -1401,6 +1424,9 @@ export default function PlantSwipe() {
               </div>
             </DialogContent>
           </Dialog>
+          
+          {/* GDPR Cookie Consent Banner */}
+          <CookieConsent />
         </AuthActionsProvider>
       )
     }
@@ -1731,6 +1757,14 @@ export default function PlantSwipe() {
               }
             />
             <Route
+              path="/privacy"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PrivacyPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
               path="/blog"
               element={
                 <Suspense fallback={routeLoadingFallback}>
@@ -2024,6 +2058,9 @@ export default function PlantSwipe() {
           navigate(`/messages?conversation=${conversationId}`)
         }}
       />
+      
+      {/* GDPR Cookie Consent Banner */}
+      <CookieConsent />
     </div>
     </AuthActionsProvider>
   )

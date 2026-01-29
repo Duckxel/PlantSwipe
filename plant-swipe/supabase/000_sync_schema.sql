@@ -280,6 +280,7 @@ grant execute on function public.has_any_role(uuid, text[]) to anon, authenticat
 alter table public.profiles enable row level security;
 -- Helper to avoid RLS self-recursion when checking admin
 -- Uses SECURITY DEFINER to bypass RLS on public.profiles
+-- Checks both is_admin flag AND 'admin' role in roles array
 create or replace function public.is_admin_user(_user_id uuid)
 returns boolean
 language sql
@@ -288,7 +289,7 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.profiles
-    where id = _user_id and is_admin = true
+    where id = _user_id and (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
   );
 $$;
 grant execute on function public.is_admin_user(uuid) to anon, authenticated;
@@ -8727,7 +8728,7 @@ END $$;
 
 -- ========== Helper Functions ==========
 
--- Function to get or create a conversation between two users
+-- Function to get or create a conversation between two users (with rate limiting for new conversations)
 CREATE OR REPLACE FUNCTION public.get_or_create_conversation(_user1_id UUID, _user2_id UUID)
 RETURNS UUID
 LANGUAGE plpgsql
@@ -8741,6 +8742,9 @@ DECLARE
   v_conversation_id UUID;
   v_are_friends BOOLEAN;
   v_are_blocked BOOLEAN;
+  v_conversation_count INTEGER;
+  v_rate_limit INTEGER := 30; -- Max new conversations per hour
+  v_window_interval INTERVAL := '1 hour';
 BEGIN
   v_caller := auth.uid();
   IF v_caller IS NULL THEN
@@ -8792,6 +8796,16 @@ BEGIN
     RETURN v_conversation_id;
   END IF;
   
+  -- Rate limiting for NEW conversation creation only
+  SELECT COUNT(*)::INTEGER INTO v_conversation_count
+  FROM public.conversations
+  WHERE participant_1 = v_caller
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_conversation_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before starting more conversations.';
+  END IF;
+  
   -- Create new conversation
   INSERT INTO public.conversations (participant_1, participant_2)
   VALUES (v_p1, v_p2)
@@ -8803,7 +8817,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_or_create_conversation(UUID, UUID) TO authenticated;
 
--- Function to send a message
+-- Function to send a message (with rate limiting)
 CREATE OR REPLACE FUNCTION public.send_message(
   _conversation_id UUID,
   _content TEXT,
@@ -8825,10 +8839,23 @@ DECLARE
   v_p1 UUID;
   v_p2 UUID;
   v_is_muted BOOLEAN;
+  v_message_count INTEGER;
+  v_rate_limit INTEGER := 300; -- Max messages per hour (5/min sustained)
+  v_window_interval INTERVAL := '1 hour';
 BEGIN
   v_caller := auth.uid();
   IF v_caller IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  
+  -- Rate limiting: Count messages sent by this user in the last hour
+  SELECT COUNT(*)::INTEGER INTO v_message_count
+  FROM public.messages
+  WHERE sender_id = v_caller
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_message_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before sending more messages.';
   END IF;
   
   -- Verify caller is participant
@@ -9344,6 +9371,11 @@ drop policy if exists "Admins can manage landing stats" on public.landing_stats;
 create policy "Admins can manage landing stats" on public.landing_stats for all using (
   exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
 );
+
+-- Insert default stats row if not exists
+insert into public.landing_stats (id)
+select gen_random_uuid()
+where not exists (select 1 from public.landing_stats limit 1);
 
 alter table public.landing_stats_translations enable row level security;
 drop policy if exists "Landing stats translations are publicly readable" on public.landing_stats_translations;
@@ -10202,9 +10234,7 @@ DROP POLICY IF EXISTS "Users can view own reports" ON public.bug_reports;
 CREATE POLICY "Users can view own reports" ON public.bug_reports
     FOR SELECT
     TO authenticated
-    USING (user_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (user_id = (select auth.uid()) OR public.is_admin_user((select auth.uid())));
 
 DROP POLICY IF EXISTS "Users can insert own reports" ON public.bug_reports;
 CREATE POLICY "Users can insert own reports" ON public.bug_reports
@@ -10216,21 +10246,15 @@ DROP POLICY IF EXISTS "Admins can update reports" ON public.bug_reports;
 CREATE POLICY "Admins can update reports" ON public.bug_reports
     FOR UPDATE
     TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ))
-    WITH CHECK (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (public.is_admin_user((select auth.uid())))
+    WITH CHECK (public.is_admin_user((select auth.uid())));
 
 -- Bug Points History policies
 DROP POLICY IF EXISTS "Users can view own points history" ON public.bug_points_history;
 CREATE POLICY "Users can view own points history" ON public.bug_points_history
     FOR SELECT
     TO authenticated
-    USING (user_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (user_id = (select auth.uid()) OR public.is_admin_user((select auth.uid())));
 
 DROP POLICY IF EXISTS "System can insert points history" ON public.bug_points_history;
 CREATE POLICY "System can insert points history" ON public.bug_points_history
@@ -10248,3 +10272,250 @@ GRANT SELECT, INSERT ON public.bug_points_history TO authenticated;
 GRANT ALL ON public.bug_actions TO authenticated;
 GRANT ALL ON public.bug_reports TO authenticated;
 
+-- =============================================================================
+-- RATE LIMITING TRIGGERS AND INDEXES
+-- =============================================================================
+
+-- Plant Request Rate Limiting
+CREATE OR REPLACE FUNCTION public.check_plant_request_rate_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_request_count INTEGER;
+  v_rate_limit INTEGER := 10; -- Max plant requests per hour
+  v_window_interval INTERVAL := '1 hour';
+BEGIN
+  -- Count requests by this user in the last hour
+  SELECT COUNT(*)::INTEGER INTO v_request_count
+  FROM public.plant_request_users
+  WHERE user_id = NEW.user_id
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_request_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before requesting more plants.';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS plant_request_rate_limit_trigger ON public.plant_request_users;
+CREATE TRIGGER plant_request_rate_limit_trigger
+  BEFORE INSERT ON public.plant_request_users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_plant_request_rate_limit();
+
+-- Friend Request Rate Limiting
+CREATE OR REPLACE FUNCTION public.check_friend_request_rate_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_request_count INTEGER;
+  v_rate_limit INTEGER := 50; -- Max friend requests per hour
+  v_window_interval INTERVAL := '1 hour';
+BEGIN
+  -- Only check for new pending requests (not status updates)
+  IF NEW.status = 'pending' THEN
+    -- Count pending friend requests sent by this user in the last hour
+    SELECT COUNT(*)::INTEGER INTO v_request_count
+    FROM public.friends
+    WHERE user_id = NEW.user_id
+      AND status = 'pending'
+      AND created_at > NOW() - v_window_interval;
+    
+    IF v_request_count >= v_rate_limit THEN
+      RAISE EXCEPTION 'Rate limit exceeded. Please wait before sending more friend requests.';
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS friend_request_rate_limit_trigger ON public.friends;
+CREATE TRIGGER friend_request_rate_limit_trigger
+  BEFORE INSERT ON public.friends
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_friend_request_rate_limit();
+
+-- Reaction Rate Limiting
+CREATE OR REPLACE FUNCTION public.check_reaction_rate_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_reaction_count INTEGER;
+  v_rate_limit INTEGER := 500; -- Max reactions per hour
+  v_window_interval INTERVAL := '1 hour';
+BEGIN
+  -- Count reactions added by this user in the last hour
+  SELECT COUNT(*)::INTEGER INTO v_reaction_count
+  FROM public.message_reactions
+  WHERE user_id = NEW.user_id
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_reaction_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before adding more reactions.';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS reaction_rate_limit_trigger ON public.message_reactions;
+CREATE TRIGGER reaction_rate_limit_trigger
+  BEFORE INSERT ON public.message_reactions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_reaction_rate_limit();
+
+-- Rate Limiting Indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_messages_sender_created 
+  ON public.messages(sender_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_plant_request_users_user_created
+  ON public.plant_request_users(user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_participant1_created
+  ON public.conversations(participant_1, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_friends_user_status_created
+  ON public.friends(user_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_message_reactions_user_created
+  ON public.message_reactions(user_id, created_at DESC);
+
+
+-- ========== GDPR COMPLIANCE ==========
+-- Added for GDPR compliance requirements including consent tracking and audit logging
+
+-- Add consent tracking columns to profiles
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS marketing_consent boolean DEFAULT false;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS marketing_consent_date timestamptz;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS terms_accepted_date timestamptz;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS privacy_policy_accepted_date timestamptz;
+
+-- GDPR Audit Log Table
+CREATE TABLE IF NOT EXISTS public.gdpr_audit_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  action text NOT NULL,
+  details jsonb DEFAULT '{}'::jsonb,
+  ip_address inet,
+  user_agent text,
+  created_at timestamptz NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE public.gdpr_audit_log IS 'GDPR compliance audit log tracking data access, exports, and deletions';
+COMMENT ON COLUMN public.gdpr_audit_log.action IS 'Type of GDPR action: DATA_EXPORT, ACCOUNT_DELETION, CONSENT_UPDATE, DATA_ACCESS';
+
+CREATE INDEX IF NOT EXISTS gdpr_audit_log_user_id_idx ON public.gdpr_audit_log(user_id);
+CREATE INDEX IF NOT EXISTS gdpr_audit_log_action_idx ON public.gdpr_audit_log(action);
+CREATE INDEX IF NOT EXISTS gdpr_audit_log_created_at_idx ON public.gdpr_audit_log(created_at DESC);
+
+ALTER TABLE public.gdpr_audit_log ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='gdpr_audit_log' AND policyname='gdpr_audit_log_admin_select') THEN
+    DROP POLICY gdpr_audit_log_admin_select ON public.gdpr_audit_log;
+  END IF;
+  CREATE POLICY gdpr_audit_log_admin_select ON public.gdpr_audit_log FOR SELECT TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = (SELECT auth.uid()) AND p.is_admin = true));
+END $$;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='gdpr_audit_log' AND policyname='gdpr_audit_log_insert_all') THEN
+    DROP POLICY gdpr_audit_log_insert_all ON public.gdpr_audit_log;
+  END IF;
+  CREATE POLICY gdpr_audit_log_insert_all ON public.gdpr_audit_log FOR INSERT TO public
+    WITH CHECK (true);
+END $$;
+
+GRANT SELECT ON public.gdpr_audit_log TO authenticated;
+GRANT INSERT ON public.gdpr_audit_log TO authenticated;
+
+-- Cookie Consent Tracking Table (optional server-side tracking)
+CREATE TABLE IF NOT EXISTS public.user_cookie_consent (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  session_id text,
+  consent_level text NOT NULL CHECK (consent_level IN ('essential', 'analytics', 'all', 'rejected')),
+  consent_version text DEFAULT '1.0',
+  consented_at timestamptz NOT NULL DEFAULT NOW(),
+  updated_at timestamptz NOT NULL DEFAULT NOW(),
+  ip_address inet,
+  user_agent text
+);
+
+CREATE INDEX IF NOT EXISTS user_cookie_consent_user_idx ON public.user_cookie_consent(user_id);
+CREATE INDEX IF NOT EXISTS user_cookie_consent_session_idx ON public.user_cookie_consent(session_id);
+
+ALTER TABLE public.user_cookie_consent ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='user_cookie_consent' AND policyname='cookie_consent_own') THEN
+    DROP POLICY cookie_consent_own ON public.user_cookie_consent;
+  END IF;
+  CREATE POLICY cookie_consent_own ON public.user_cookie_consent FOR ALL TO authenticated
+    USING (user_id = (SELECT auth.uid()))
+    WITH CHECK (user_id = (SELECT auth.uid()));
+END $$;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='user_cookie_consent' AND policyname='cookie_consent_insert_anon') THEN
+    DROP POLICY cookie_consent_insert_anon ON public.user_cookie_consent;
+  END IF;
+  CREATE POLICY cookie_consent_insert_anon ON public.user_cookie_consent FOR INSERT TO public
+    WITH CHECK (true);
+END $$;
+
+GRANT SELECT, INSERT, UPDATE ON public.user_cookie_consent TO authenticated;
+GRANT INSERT ON public.user_cookie_consent TO anon;
+
+-- ========== Granular Communication Preferences ==========
+-- Email notification preferences
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_product_updates boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_tips_advice boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_community_highlights boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_promotions boolean DEFAULT false;
+
+-- Push notification preferences
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_task_reminders boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_friend_activity boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_messages boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_garden_updates boolean DEFAULT true;
+
+-- Personalization preferences
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS personalized_recommendations boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS analytics_improvement boolean DEFAULT true;

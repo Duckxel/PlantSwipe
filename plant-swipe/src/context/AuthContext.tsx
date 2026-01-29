@@ -2,6 +2,7 @@ import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
 import { validateUsername } from '@/lib/username'
+import { setUser as setSentryUser } from '@/lib/sentry'
 
 // Default timezone for users who haven't set one
 const DEFAULT_TIMEZONE = 'Europe/London'
@@ -15,11 +16,18 @@ type AuthContextValue = {
   user: AuthUser | null
   profile: ProfileRow | null
   loading: boolean
-  signUp: (opts: { email: string; password: string; displayName: string; recaptchaToken?: string }) => Promise<{ error?: string }>
+  signUp: (opts: { 
+    email: string; 
+    password: string; 
+    displayName: string; 
+    recaptchaToken?: string;
+    marketingConsent?: boolean;
+  }) => Promise<{ error?: string }>
   signIn: (opts: { email: string; password: string; recaptchaToken?: string }) => Promise<{ error?: string }>
   signOut: () => Promise<void>
   deleteAccount: () => Promise<{ error?: string }>
   refreshProfile: () => Promise<void>
+  updateMarketingConsent: (consent: boolean) => Promise<{ error?: string }>
 }
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
@@ -134,6 +142,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if ((data as any)?.accent_key) {
         try { applyAccentByKey((data as any).accent_key) } catch {}
       }
+      // Set Sentry user context for error tracking
+      // GDPR: Only send anonymous ID and display name, NOT email
+      try {
+        setSentryUser({
+          id: currentId,
+          // Only include display name (not real name or email)
+          username: (data as any)?.display_name || undefined,
+          // email is intentionally omitted for GDPR compliance
+        })
+      } catch {}
     }
   }, [forceSignOut])
 
@@ -160,7 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { sub.subscription.unsubscribe() }
   }, [loadSession, refreshProfile])
 
-  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken }) => {
+  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, recaptchaToken, marketingConsent = false }) => {
     // Verify reCAPTCHA token before attempting signup
     if (recaptchaToken) {
       try {
@@ -217,7 +235,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     })()
     
-    // Create profile row with detected timezone and language
+    // GDPR: Record consent timestamps for terms, privacy policy, and optional marketing
+    const consentTimestamp = new Date().toISOString()
+    
+    // Create profile row with detected timezone, language, and GDPR consent tracking
     // Note: notify_push and notify_email columns will default to true once the migration is applied
     // Use normalized (lowercase) display name for consistent uniqueness
     const { error: perr } = await supabase.from('profiles').insert({
@@ -227,6 +248,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timezone: detectedTimezone,
       language: detectedLanguage,
       accent_key: 'emerald',
+      // GDPR consent tracking
+      terms_accepted_date: consentTimestamp,
+      privacy_policy_accepted_date: consentTimestamp,
+      marketing_consent: marketingConsent,
+      marketing_consent_date: marketingConsent ? consentTimestamp : null,
     })
     if (perr) return { error: perr.message }
 
@@ -318,6 +344,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearCachedAuth()
     setProfile(null)
     setUser(null)
+    // Clear Sentry user context
+    try { setSentryUser(null) } catch {}
     await supabase.auth.signOut()
   }
 
@@ -330,7 +358,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!token) return { error: 'Not authenticated' }
 
     try {
-      const resp = await fetch('/api/account/delete', {
+      // Use the enhanced GDPR-compliant deletion endpoint
+      const resp = await fetch('/api/account/delete-gdpr', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -355,6 +384,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       localStorage.removeItem('plantswipe.auth')
       localStorage.removeItem('plantswipe.profile')
+      // Clear cookie consent on account deletion
+      localStorage.removeItem('cookie_consent')
     } catch {}
     setProfile(null)
     setUser(null)
@@ -362,6 +393,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await supabase.auth.signOut()
     } catch {}
     return {}
+  }
+
+  // GDPR: Update marketing consent preference
+  const updateMarketingConsent: AuthContextValue['updateMarketingConsent'] = async (consent: boolean) => {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+    if (!token) return { error: 'Not authenticated' }
+
+    try {
+      const resp = await fetch('/api/account/consent', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ marketingConsent: consent }),
+        credentials: 'same-origin',
+      })
+      if (!resp.ok) {
+        const payload = await resp.json().catch(() => ({}))
+        return { error: payload?.error || 'Failed to update consent' }
+      }
+      // Refresh profile to get updated consent values
+      await refreshProfile()
+      return {}
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Failed to update consent' }
+    }
   }
 
   const value: AuthContextValue = {
@@ -373,6 +432,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signOut,
     deleteAccount,
     refreshProfile,
+    updateMarketingConsent,
   }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

@@ -1,3 +1,148 @@
+// Sentry error monitoring - must be imported first
+// GDPR Compliance: No PII is sent automatically
+// Use @sentry/node for Node.js compatibility (systemd service runs with /usr/bin/node)
+// @sentry/bun would only work when running with the Bun runtime
+import * as Sentry from '@sentry/node';
+
+const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520';
+
+// Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
+const SERVER_NAME = process.env.PLANTSWIPE_SERVER_NAME || process.env.SERVER_NAME || 'unknown';
+
+/**
+ * Scrub PII from strings before sending to Sentry
+ */
+function scrubPII(value) {
+  if (!value || typeof value !== 'string') return value;
+  // Scrub email addresses
+  value = value.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL_REDACTED]');
+  // Scrub potential passwords in URLs or logs
+  value = value.replace(/password[=:][^\s&"']+/gi, 'password=[REDACTED]');
+  // Scrub bearer tokens
+  value = value.replace(/Bearer\s+[A-Za-z0-9\-_\.]+/g, 'Bearer [REDACTED]');
+  // Scrub API keys
+  value = value.replace(/[a-f0-9]{32,}/gi, '[TOKEN_REDACTED]');
+  return value;
+}
+
+Sentry.init({
+  dsn: SENTRY_DSN,
+  environment: process.env.NODE_ENV || 'production',
+  // Server identification
+  serverName: SERVER_NAME,
+  // Send structured logs to Sentry
+  _experiments: {
+    enableLogs: true,
+  },
+  // GDPR: Sample 20% of transactions in production (cost-effective)
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+  // GDPR: Do NOT send PII automatically (IP addresses, cookies, etc.)
+  sendDefaultPii: false,
+  // Add server tag to all events
+  initialScope: {
+    tags: {
+      server: SERVER_NAME,
+      app: 'plant-swipe-server',
+    },
+  },
+  // Filter and scrub events before sending to Sentry
+  beforeSend(event, hint) {
+    const error = hint.originalException;
+    if (error instanceof Error) {
+      // Ignore connection reset errors (common with load balancers)
+      if (error.message?.includes('ECONNRESET')) {
+        return null;
+      }
+      // Ignore socket hang up errors
+      if (error.message?.includes('socket hang up')) {
+        return null;
+      }
+      // Ignore cancelled requests
+      if (error.name === 'AbortError') {
+        return null;
+      }
+    }
+    
+    // GDPR: Scrub PII from exception messages
+    if (event.exception?.values) {
+      event.exception.values = event.exception.values.map(exc => ({
+        ...exc,
+        value: scrubPII(exc.value),
+      }));
+    }
+    
+    // GDPR: Scrub request data
+    if (event.request) {
+      // Remove IP address
+      delete event.request.ip;
+      // Remove cookies
+      delete event.request.cookies;
+      // Only keep safe headers
+      if (event.request.headers) {
+        const safeHeaders = ['content-type', 'accept', 'user-agent', 'accept-language'];
+        event.request.headers = Object.fromEntries(
+          Object.entries(event.request.headers)
+            .filter(([k]) => safeHeaders.includes(k.toLowerCase()))
+        );
+      }
+      // Scrub URL query params (may contain tokens)
+      if (event.request.url && event.request.url.includes('?')) {
+        event.request.url = event.request.url.split('?')[0] + '?[PARAMS_REDACTED]';
+      }
+      // Scrub request body
+      if (event.request.data) {
+        event.request.data = typeof event.request.data === 'string' 
+          ? scrubPII(event.request.data)
+          : '[BODY_REDACTED]';
+      }
+    }
+    
+    // GDPR: Remove user email if present
+    if (event.user) {
+      delete event.user.email;
+      delete event.user.ip_address;
+    }
+    
+    // Add useful server context
+    event.contexts = event.contexts || {};
+    event.contexts.server = {
+      name: SERVER_NAME,
+      node_version: process.version,
+      platform: process.platform,
+    };
+    
+    return event;
+  },
+  // GDPR: Also filter transactions
+  beforeSendTransaction(event) {
+    // Scrub URL query parameters
+    if (event.request?.url && event.request.url.includes('?')) {
+      event.request.url = event.request.url.split('?')[0] + '?[PARAMS_REDACTED]';
+    }
+    // Remove user PII
+    if (event.user) {
+      delete event.user.email;
+      delete event.user.ip_address;
+    }
+    return event;
+  },
+});
+
+console.log(`[Sentry] Initialized for server: ${SERVER_NAME} (GDPR-compliant)`);
+
+// Global error handlers for uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error) => {
+  console.error('[Server] Uncaught Exception:', error);
+  Sentry.captureException(error);
+  // Give Sentry time to send the error before exiting
+  setTimeout(() => process.exit(1), 2000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Server] Unhandled Rejection at:', promise, 'reason:', reason);
+  Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
+});
+
 // ESM server to serve API and static assets
 import express from 'express'
 import postgres from 'postgres'
@@ -486,7 +631,7 @@ async function processEmailCampaigns() {
             au.id,
             au.email,
             coalesce(p.display_name, au.raw_user_meta_data->>'full_name', split_part(au.email, '@', 1)) as display_name,
-            coalesce(p.timezone, 'UTC') as user_timezone,
+            coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}) as user_timezone,
             coalesce(p.language, 'en') as user_language
           from auth.users au
           left join public.profiles p on p.id = au.id
@@ -808,6 +953,194 @@ const businessEmailFrom =
 const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
 const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
 const contactRateLimitStore = new Map()
+
+// =============================================================================
+// RATE LIMITING SYSTEM
+// Generic rate limiter for various endpoints to prevent abuse
+// All rate limits are invisible to users - requests are silently rejected
+// =============================================================================
+
+/**
+ * Rate limit store for different action types
+ * Each store maps identifiers (user ID or IP) to arrays of timestamps
+ */
+const rateLimitStores = {
+  scan: new Map(),           // Plant identification scans
+  aiChat: new Map(),         // AI garden chat
+  translate: new Map(),      // Translation API
+  imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
+  bugReport: new Map(),      // Bug report submissions
+  gardenActivity: new Map(), // Garden activity logging
+  gardenJournal: new Map(),  // Journal entries
+  pushNotify: new Map(),     // Push notification sending
+  authAttempt: new Map(),    // Authentication attempts (brute force protection)
+}
+
+/**
+ * Rate limit configurations for different actions
+ * windowMs: Time window in milliseconds
+ * maxAttempts: Maximum attempts allowed in the window
+ * perUser: If true, limit per user ID; if false, limit per IP
+ */
+const rateLimitConfig = {
+  // Scan: 60 scans per hour per user (AI/API costs - 1 per minute average)
+  scan: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 60,
+    perUser: true,
+  },
+  // AI Chat: 120 messages per hour per user (OpenAI costs - 2 per minute average)
+  aiChat: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 120,
+    perUser: true,
+  },
+  // Translation: 500 requests per hour per user (DeepL costs - generous for active translators)
+  translate: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 500,
+    perUser: true,
+  },
+  // Image uploads: 100 per hour per user (storage costs)
+  imageUpload: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 100,
+    perUser: true,
+  },
+  // Bug reports: 20 per hour per IP (spam prevention)
+  bugReport: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 20,
+    perUser: false,
+  },
+  // Garden activity: 300 per hour per user (5 per minute for active gardeners)
+  gardenActivity: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 300,
+    perUser: true,
+  },
+  // Journal entries: 50 per hour per user (generous for journaling)
+  gardenJournal: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 50,
+    perUser: true,
+  },
+  // Push notifications: 300 per hour per user (for active social users)
+  pushNotify: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 300,
+    perUser: true,
+  },
+  // Authentication attempts: 10 per 15 minutes per IP (brute force protection)
+  // After 10 failed attempts, IP is blocked for 15 minutes
+  authAttempt: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 10,
+    perUser: false,  // Per IP to catch credential stuffing
+  },
+}
+
+/**
+ * Check if an action is rate limited
+ * @param {string} action - The action type (scan, aiChat, translate, etc.)
+ * @param {string} identifier - User ID or IP address
+ * @returns {boolean} - True if rate limited, false if allowed
+ */
+function isRateLimited(action, identifier) {
+  const store = rateLimitStores[action]
+  const config = rateLimitConfig[action]
+  
+  if (!store || !config) {
+    console.warn(`[rate-limit] Unknown action type: ${action}`)
+    return false
+  }
+  
+  const now = Date.now()
+  const { windowMs, maxAttempts } = config
+  const history = store.get(identifier) || []
+  
+  // Filter to only keep timestamps within the window
+  const recent = history.filter((ts) => now - ts < windowMs)
+  
+  if (recent.length >= maxAttempts) {
+    store.set(identifier, recent)
+    return true
+  }
+  
+  // Add current timestamp and update store
+  recent.push(now)
+  store.set(identifier, recent)
+  return false
+}
+
+/**
+ * Get rate limit identifier based on action config
+ * @param {string} action - The action type
+ * @param {object} req - Express request object
+ * @param {object|null} user - User object (if authenticated)
+ * @returns {string} - Identifier to use for rate limiting
+ */
+function getRateLimitIdentifier(action, req, user) {
+  const config = rateLimitConfig[action]
+  if (!config) return getClientIp(req) || 'unknown'
+  
+  if (config.perUser && user?.id) {
+    return `user:${user.id}`
+  }
+  return `ip:${getClientIp(req) || 'unknown'}`
+}
+
+/**
+ * Check rate limit and return 429 if exceeded
+ * Returns true if request should be blocked, false if allowed
+ * @param {string} action - The action type
+ * @param {object} req - Express request object
+ * @param {object} res - Express response object
+ * @param {object|null} user - User object (if authenticated)
+ * @returns {boolean} - True if blocked (429 sent), false if allowed
+ */
+function checkRateLimit(action, req, res, user = null) {
+  const identifier = getRateLimitIdentifier(action, req, user)
+  
+  if (isRateLimited(action, identifier)) {
+    console.log(`[rate-limit] ${action} rate limit exceeded for ${identifier}`)
+    res.status(429).json({ error: 'Too many requests. Please try again later.' })
+    return true
+  }
+  return false
+}
+
+/**
+ * Periodically clean up old entries from rate limit stores
+ * Runs every 10 minutes to prevent memory bloat
+ */
+setInterval(() => {
+  const now = Date.now()
+  let totalCleaned = 0
+  
+  for (const [action, store] of Object.entries(rateLimitStores)) {
+    const config = rateLimitConfig[action]
+    if (!config) continue
+    
+    for (const [key, history] of store.entries()) {
+      const recent = history.filter((ts) => now - ts < config.windowMs)
+      if (recent.length === 0) {
+        store.delete(key)
+        totalCleaned++
+      } else if (recent.length < history.length) {
+        store.set(key, recent)
+      }
+    }
+  }
+  
+  if (totalCleaned > 0) {
+    console.log(`[rate-limit] Cleaned up ${totalCleaned} expired entries`)
+  }
+}, 10 * 60 * 1000) // Every 10 minutes
+
+// =============================================================================
+// END RATE LIMITING SYSTEM
+// =============================================================================
 
 const vapidPublicKey =
   process.env.VAPID_PUBLIC_KEY ||
@@ -2857,6 +3190,118 @@ try { app.set('trust proxy', true) } catch { }
 // Increase JSON body limit to handle base64 encoded images (e.g. for plant scan identification)
 app.use(express.json({ limit: '15mb' }))
 
+// =============================================================================
+// CSRF (Cross-Site Request Forgery) Protection
+// Used for high-risk operations like password/email changes
+// =============================================================================
+
+// CSRF token store: Map of token -> { userId, createdAt, used }
+// Tokens expire after 15 minutes and can only be used once
+const csrfTokenStore = new Map()
+const CSRF_TOKEN_EXPIRY_MS = 15 * 60 * 1000 // 15 minutes
+const CSRF_CLEANUP_INTERVAL_MS = 5 * 60 * 1000 // Clean up every 5 minutes
+
+// Cleanup expired tokens periodically
+setInterval(() => {
+  const now = Date.now()
+  for (const [token, data] of csrfTokenStore.entries()) {
+    if (now - data.createdAt > CSRF_TOKEN_EXPIRY_MS) {
+      csrfTokenStore.delete(token)
+    }
+  }
+}, CSRF_CLEANUP_INTERVAL_MS)
+
+/**
+ * Generate a new CSRF token for a user
+ * @param userId - The user ID to associate with the token
+ * @returns The generated token
+ */
+function generateCsrfToken(userId) {
+  const token = crypto.randomBytes(32).toString('hex')
+  csrfTokenStore.set(token, {
+    userId: userId || 'anonymous',
+    createdAt: Date.now(),
+    used: false
+  })
+  return token
+}
+
+/**
+ * Validate a CSRF token
+ * @param token - The token to validate
+ * @param userId - The user ID to match against (optional)
+ * @returns { valid: boolean, reason?: string }
+ */
+function validateCsrfToken(token, userId = null) {
+  if (!token) {
+    return { valid: false, reason: 'No CSRF token provided' }
+  }
+
+  const tokenData = csrfTokenStore.get(token)
+  
+  if (!tokenData) {
+    return { valid: false, reason: 'Invalid or expired CSRF token' }
+  }
+
+  // Check if token has expired
+  if (Date.now() - tokenData.createdAt > CSRF_TOKEN_EXPIRY_MS) {
+    csrfTokenStore.delete(token)
+    return { valid: false, reason: 'CSRF token has expired' }
+  }
+
+  // Check if token was already used (prevent replay attacks)
+  if (tokenData.used) {
+    return { valid: false, reason: 'CSRF token has already been used' }
+  }
+
+  // If userId provided, verify it matches
+  if (userId && tokenData.userId !== 'anonymous' && tokenData.userId !== userId) {
+    return { valid: false, reason: 'CSRF token user mismatch' }
+  }
+
+  // Mark token as used (one-time use)
+  tokenData.used = true
+  
+  return { valid: true }
+}
+
+/**
+ * Middleware to require CSRF token validation
+ * Expects token in X-CSRF-Token header
+ */
+function requireCsrfToken(req, res, next) {
+  const csrfToken = req.headers['x-csrf-token']
+  
+  // Get user ID from Authorization header if present
+  let userId = null
+  const authHeader = req.headers.authorization
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      // Decode JWT to get user ID (without verification - Supabase handles that)
+      const token = authHeader.split(' ')[1]
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
+      userId = payload.sub
+    } catch { }
+  }
+
+  const validation = validateCsrfToken(csrfToken, userId)
+  
+  if (!validation.valid) {
+    console.warn(`[CSRF] Validation failed: ${validation.reason}`, { 
+      path: req.path, 
+      ip: req.ip || req.headers['x-forwarded-for'],
+      userId 
+    })
+    return res.status(403).json({ 
+      error: 'CSRF validation failed', 
+      reason: validation.reason,
+      code: 'CSRF_INVALID'
+    })
+  }
+
+  next()
+}
+
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
   try {
@@ -2872,8 +3317,9 @@ app.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
     }
     if (req.path && req.path.startsWith('/api/')) {
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
+      res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token')
       if (req.method === 'OPTIONS') {
         res.status(204).end()
         return
@@ -2885,10 +3331,58 @@ app.use((req, res, next) => {
 
 // Catch-all OPTIONS for any /api/* route (defense-in-depth)
 app.options('/api/*', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
+  res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token')
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.status(204).end()
+})
+
+// Content Security Policy - Allow all *.aphylia.app subdomains EXCEPT for images
+// img-src and media-src allow all sources; other directives restrict to aphylia.app domains
+const CSP_POLICY = [
+  "default-src 'self' *.aphylia.app",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.aphylia.app https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://recaptchaenterprise.googleapis.com",
+  "style-src 'self' 'unsafe-inline' *.aphylia.app https://fonts.googleapis.com",
+  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://*.sentry.io",
+  "font-src 'self' *.aphylia.app https://fonts.gstatic.com data:",
+  "frame-src 'self' *.aphylia.app https://www.google.com https://recaptcha.google.com",
+  "img-src * data: blob:",
+  "media-src * data: blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self' *.aphylia.app",
+  "worker-src 'self' *.aphylia.app blob:",
+  "manifest-src 'self' *.aphylia.app"
+].join('; ')
+
+// Security headers middleware
+app.use((_req, res, next) => {
+  // Content Security Policy
+  res.setHeader('Content-Security-Policy', CSP_POLICY)
+  
+  // Prevent MIME type sniffing
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  
+  // Prevent clickjacking (in addition to CSP frame-ancestors)
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  
+  // XSS protection (legacy browsers)
+  res.setHeader('X-XSS-Protection', '1; mode=block')
+  
+  // Referrer policy - don't leak URLs to external sites
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  
+  // Permissions policy - disable unnecessary browser features
+  res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(self), microphone=()')
+  
+  // HSTS - enforce HTTPS (only in production)
+  if (process.env.NODE_ENV === 'production') {
+    // max-age=31536000 (1 year), includeSubDomains
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
+  
+  next()
 })
 
 // Supabase service client disabled to avoid using service-role env vars
@@ -2922,6 +3416,38 @@ app.get('/api/health', async (_req, res) => {
       db: { ok: false, latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' },
     })
   }
+})
+
+// =============================================================================
+// CSRF Token Endpoint - Get a fresh CSRF token for security-sensitive operations
+// =============================================================================
+app.get('/api/csrf-token', (req, res) => {
+  // Extract user ID from Authorization header if present
+  let userId = null
+  const authHeader = req.headers.authorization
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.split(' ')[1]
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
+      userId = payload.sub
+    } catch { }
+  }
+
+  const csrfToken = generateCsrfToken(userId)
+  
+  // Also set as a cookie for additional security layer
+  res.cookie('csrf_token', csrfToken, {
+    httpOnly: false, // Must be readable by JS
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: CSRF_TOKEN_EXPIRY_MS,
+    path: '/'
+  })
+
+  res.json({ 
+    token: csrfToken,
+    expiresIn: CSRF_TOKEN_EXPIRY_MS / 1000 // seconds
+  })
 })
 
 // Admin: System health stats (CPU, memory, disk, uptime, connections)
@@ -3111,19 +3637,30 @@ app.post('/api/admin/ai/plant-fill/english-name', async (req, res) => {
     }
     
     // Ask AI to identify the English common name of the plant
-    const instructions = `You are a botanist expert. Your task is to identify plants and provide their common English name.
+    // IMPORTANT: Preserve cultivar names, subspecies, and variety information
+    const instructions = `You are a botanist expert. Your task is to identify plants and provide their English name while PRESERVING all botanical specificity.
+
 Given a plant name in ANY language (scientific name, common name in French, Spanish, German, etc.), 
-return the most common ENGLISH name for that plant.
+return the ENGLISH name for that plant, keeping ALL specific details like cultivar names, subspecies, and varieties.
 
 Rules:
-1. If the input is already a common English name, return it as-is (possibly corrected for spelling)
-2. If the input is a scientific/Latin name, return the most common English name
-3. If the input is a name in another language, translate/identify the English equivalent
-4. Always return a single, commonly used English name (not scientific name)
-5. If you cannot identify the plant, return the original name
-6. Return ONLY the plant name, nothing else - no explanations, no quotes, no JSON`
+1. PRESERVE cultivar names (e.g., 'Monstera deliciosa Thai Constellation' stays as 'Monstera Thai Constellation', NOT simplified to 'Monstera')
+2. PRESERVE subspecies and variety names (e.g., 'Rosa gallica var. officinalis' becomes 'Apothecary Rose' or 'Rosa gallica officinalis', NOT just 'Rose')
+3. If the input is already a specific English name with cultivar/variety, return it as-is (possibly corrected for spelling)
+4. If the input is a scientific/Latin name with subspecies/cultivar, translate to English equivalent BUT KEEP the specific cultivar/variety name
+5. If the input is a name in another language, translate/identify the English equivalent while keeping specificity
+6. DO NOT simplify to the most common/generic name - keep the EXACT variety/cultivar specified
+7. If you cannot identify the specific variety, return the original name unchanged
+8. Return ONLY the plant name, nothing else - no explanations, no quotes, no JSON
 
-    const prompt = `What is the common English name for this plant: "${plantName}"?`
+Examples:
+- "Monstera deliciosa Thai Constellation" → "Monstera Thai Constellation" (NOT "Monstera" or "Swiss Cheese Plant")
+- "Philodendron Pink Princess" → "Philodendron Pink Princess" (NOT "Philodendron")
+- "Rosa 'Peace'" → "Peace Rose" (NOT "Rose")
+- "Lavandula angustifolia 'Hidcote'" → "Hidcote Lavender" (NOT "Lavender")
+- "Tomate cerise" → "Cherry Tomato" (translating but not simplifying)`
+
+    const prompt = `What is the English name for this plant, preserving any cultivar or variety specificity: "${plantName}"?`
     
     const response = await openaiClient.responses.create({
       model: openaiModelNano,
@@ -5287,6 +5824,11 @@ app.post('/api/messages/upload-image', async (req, res) => {
     return
   }
 
+  // Rate limit: 50 image uploads per hour per user
+  if (checkRateLimit('imageUpload', req, res, uploader)) {
+    return
+  }
+
   try {
     await ensureAdminMediaUploadsTable()
   } catch { }
@@ -6801,7 +7343,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
                 select 1 from public.user_notifications un
                 where un.automation_id = ${row.id}
                   and un.user_id = p.id
-                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               )
           `
           recipientCount = Number(countResult?.[0]?.cnt || 0)
@@ -6817,13 +7359,13 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_plant_tasks t on t.garden_id = gm.garden_id
               join public.garden_plant_task_occurrences occ on occ.task_id = t.id
               where (p.notify_push is null or p.notify_push = true)
-                and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                 and (occ.completed_count < occ.required_count or occ.completed_count = 0)
                 and not exists (
                   select 1 from public.user_notifications un
                   where un.automation_id = ${row.id}
                     and un.user_id = p.id
-                    and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                    and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                 )
             `
             recipientCount = Number(countResult?.[0]?.cnt || 0)
@@ -6842,12 +7384,12 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
               where (p.notify_push is null or p.notify_push = true)
                 and gal.kind = 'note'
-                and (gal.occurred_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date - interval '1 day'
+                and (gal.occurred_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date - interval '1 day'
                 and not exists (
                   select 1 from public.user_notifications un
                   where un.automation_id = ${row.id}
                     and un.user_id = p.id
-                    and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                    and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                 )
             `
             recipientCount = Number(countResult?.[0]?.cnt || 0)
@@ -6860,7 +7402,23 @@ app.get('/api/admin/notification-automations', async (req, res) => {
       } catch (countErr) {
         console.error('[notification-automations] Error counting recipients for', row.trigger_type, countErr)
       }
-      return { ...row, recipient_count: recipientCount }
+      
+      // Count how many notifications were sent today for this automation
+      let sentTodayCount = 0
+      try {
+        const sentTodayResult = await sql`
+          select count(*)::bigint as cnt
+          from public.user_notifications un
+          where un.automation_id = ${row.id}
+            and un.scheduled_for::date = current_date
+            and un.delivery_status in ('sent', 'pending')
+        `
+        sentTodayCount = Number(sentTodayResult?.[0]?.cnt || 0)
+      } catch (sentErr) {
+        // Ignore errors counting sent notifications
+      }
+      
+      return { ...row, recipient_count: recipientCount, sent_today_count: sentTodayCount }
     }))
 
     const automations = automationsWithCounts.map((row) => normalizeNotificationAutomation(row)).filter(Boolean)
@@ -7832,6 +8390,39 @@ const DEFAULT_EMAIL_TRIGGERS = [
     displayName: 'User Ban Notification',
     description: 'Sent when a user is marked as threat level 3 (ban)',
   },
+  // Security Emails - Email Change
+  {
+    triggerType: 'EMAIL_CHANGE_VERIFICATION',
+    displayName: 'Email Change Verification',
+    description: 'Sent to the NEW email address with a verification link when user requests to change their email. Variables: {{url}}, {{new_email}}, {{old_email}}',
+  },
+  {
+    triggerType: 'EMAIL_CHANGE_NOTIFICATION',
+    displayName: 'Email Changed Notification',
+    description: 'Sent to the OLD email address to inform that the email has been changed. Variables: {{new_email}}, {{old_email}}, {{time}}',
+  },
+  // Security Emails - Password
+  {
+    triggerType: 'PASSWORD_RESET_REQUEST',
+    displayName: 'Password Reset Request',
+    description: 'Sent when user requests a password reset. Contains a secure reset link. Variables: {{url}}, {{time}}',
+  },
+  {
+    triggerType: 'PASSWORD_CHANGE_CONFIRMATION',
+    displayName: 'Password Changed Confirmation',
+    description: 'Sent after password has been successfully changed. Variables: {{time}}, {{device}}, {{location}}',
+  },
+  // Security Emails - Login Security
+  {
+    triggerType: 'SUSPICIOUS_LOGIN_ALERT',
+    displayName: 'Suspicious Login Alert',
+    description: 'Sent when a login is detected from an unusual location or device. Variables: {{location}}, {{device}}, {{ip_address}}, {{time}}',
+  },
+  {
+    triggerType: 'NEW_DEVICE_LOGIN',
+    displayName: 'New Device Login',
+    description: 'Sent when user logs in from a new device. Variables: {{device}}, {{location}}, {{ip_address}}, {{time}}',
+  },
 ]
 
 async function ensureDefaultEmailTriggers() {
@@ -8148,6 +8739,351 @@ app.post('/api/send-automatic-email', async (req, res) => {
   }
   const status = result?.reason === 'Trigger not configured' ? 404 : result?.reason === 'Email service not configured' ? 500 : 200
   res.status(status).json(result)
+})
+
+// =============================================================================
+// SECURITY EMAILS - Password Reset, Email Change, Suspicious Login, etc.
+// These emails do NOT check for "already sent" - they're always delivered
+// =============================================================================
+
+/**
+ * Send a security-related email (password reset, email change, suspicious login, etc.)
+ * Unlike sendAutomaticEmail, this function:
+ * - Does NOT check if already sent (security emails always go through)
+ * - Supports extra context variables for security info
+ * - Can send to any email address (important for email change notifications)
+ * 
+ * @param triggerType - The trigger type (e.g., 'PASSWORD_RESET_REQUEST', 'EMAIL_CHANGE_VERIFICATION')
+ * @param options.recipientEmail - Email address to send to (may differ from user's current email)
+ * @param options.userId - User ID for logging
+ * @param options.userDisplayName - User's display name for {{user}} variable
+ * @param options.userLanguage - User's preferred language
+ * @param options.extraContext - Additional variables: verification_link, reset_link, old_email, new_email, location, device, ip_address, timestamp
+ */
+async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisplayName, userLanguage, extraContext = {} }) {
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+  if (!apiKey) {
+    console.error('[sendSecurityEmail] No Resend API key configured')
+    return { sent: false, reason: 'Email service not configured' }
+  }
+
+  if (!sql) {
+    console.error('[sendSecurityEmail] Database connection not available')
+    return { sent: false, reason: 'Database not configured' }
+  }
+
+  const lang = userLanguage || 'en'
+
+  try {
+    await ensureDefaultEmailTriggers()
+    const triggerRows = await sql`
+      select t.*, tpl.title as template_title, tpl.subject, tpl.body_html
+      from public.admin_email_triggers t
+      left join public.admin_email_templates tpl on tpl.id = t.template_id
+      where t.trigger_type = ${triggerType}
+      limit 1
+    `
+
+    if (!triggerRows || !triggerRows.length) {
+      console.log(`[sendSecurityEmail] Trigger type "${triggerType}" not found`)
+      return { sent: false, reason: 'Trigger not configured' }
+    }
+
+    const trigger = triggerRows[0]
+
+    if (!trigger.is_enabled) {
+      console.log(`[sendSecurityEmail] Trigger "${triggerType}" is disabled`)
+      return { sent: false, reason: 'Trigger is disabled' }
+    }
+
+    if (!trigger.template_id) {
+      console.log(`[sendSecurityEmail] Trigger "${triggerType}" has no template configured`)
+      return { sent: false, reason: 'No template configured' }
+    }
+
+    // NOTE: For security emails, we do NOT check if already sent
+    // These emails should always be delivered for security reasons
+
+    const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
+    const translation = emailTranslations.get(lang)
+    const rawSubject = translation?.subject || trigger.subject
+    const rawBodyHtml = translation?.bodyHtml || trigger.body_html
+
+    if (!rawSubject || !rawBodyHtml) {
+      console.error(`[sendSecurityEmail] Template "${trigger.template_id}" has no content`)
+      return { sent: false, reason: 'Template has no content' }
+    }
+
+    // Build context with standard + security-specific variables
+    const userRaw = userDisplayName || 'User'
+    const userCap = userRaw.charAt(0).toUpperCase() + userRaw.slice(1).toLowerCase()
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    let randomStr = ''
+    for (let i = 0; i < 10; i++) {
+      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+
+    const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+    const currentTimestamp = new Date().toLocaleString('en-US', { 
+      dateStyle: 'medium', 
+      timeStyle: 'short',
+      timeZone: 'UTC'
+    }) + ' UTC'
+
+    // Merge standard context with extra security context
+    // Note: {{url}} is used for verification links, reset links, and website URL
+    // The extraContext.url takes precedence if provided (for security links)
+    const context = {
+      user: userCap,
+      email: recipientEmail,
+      random: randomStr,
+      url: extraContext.url || websiteUrl.replace(/^https?:\/\//, ''),
+      code: extraContext.code || 'XXXXXX',
+      // Security-specific variables
+      old_email: extraContext.old_email || '',
+      new_email: extraContext.new_email || '',
+      location: extraContext.location || 'Unknown location',
+      device: extraContext.device || 'Unknown device',
+      ip_address: extraContext.ip_address || 'Unknown',
+      time: extraContext.time || currentTimestamp,
+    }
+
+    const replaceVars = (str) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
+      const key = k.toLowerCase()
+      return context[key] !== undefined ? context[key] : `{{${k}}}`
+    })
+
+    const subject = replaceVars(rawSubject)
+    const bodyHtmlRaw = replaceVars(rawBodyHtml)
+    const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
+    const html = wrapEmailHtml(bodyHtml, subject, lang)
+    const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+
+    const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
+
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: recipientEmail,
+        subject: subject,
+        html: html,
+        text: text,
+        headers: { 'X-Trigger-Type': triggerType, 'X-Security-Email': 'true' },
+        tags: [
+          { name: 'trigger_type', value: triggerType },
+          { name: 'category', value: 'security' }
+        ]
+      })
+    })
+
+    if (!resendResponse.ok) {
+      const errorText = await resendResponse.text().catch(() => '')
+      console.error(`[sendSecurityEmail] Resend API error (${resendResponse.status}):`, errorText)
+      return { sent: false, reason: errorText || 'Failed to send email' }
+    }
+
+    const resendData = await resendResponse.json().catch(() => ({}))
+    console.log(`[sendSecurityEmail] Sent "${triggerType}" to ${recipientEmail}, Resend ID: ${resendData.id || 'unknown'}`)
+
+    // Log security email send (don't prevent duplicates, but do track)
+    try {
+      await sql`
+        insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
+        values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
+      `
+    } catch (logErr) {
+      console.warn('[sendSecurityEmail] Failed to log send:', logErr?.message || logErr)
+    }
+
+    return { sent: true, resendId: resendData.id || null, trigger }
+  } catch (err) {
+    console.error('[sendSecurityEmail] Error:', err)
+    return { sent: false, error: err?.message || 'Failed to send email' }
+  }
+}
+
+// API endpoint to send security emails (called from frontend auth flows)
+app.post('/api/send-security-email', async (req, res) => {
+  const { 
+    triggerType, 
+    recipientEmail, 
+    userId, 
+    userDisplayName, 
+    userLanguage,
+    extraContext 
+  } = req.body || {}
+
+  if (!triggerType || !recipientEmail || !userId) {
+    res.status(400).json({ error: 'Missing required fields: triggerType, recipientEmail, userId' })
+    return
+  }
+
+  // Validate trigger type is a security-related trigger
+  const securityTriggers = [
+    'EMAIL_CHANGE_VERIFICATION',
+    'EMAIL_CHANGE_NOTIFICATION', 
+    'PASSWORD_RESET_REQUEST',
+    'PASSWORD_CHANGE_CONFIRMATION',
+    'SUSPICIOUS_LOGIN_ALERT',
+    'NEW_DEVICE_LOGIN'
+  ]
+
+  if (!securityTriggers.includes(triggerType)) {
+    res.status(400).json({ error: `Invalid security trigger type: ${triggerType}` })
+    return
+  }
+
+  const result = await sendSecurityEmail(triggerType, { 
+    recipientEmail, 
+    userId, 
+    userDisplayName: userDisplayName || 'User',
+    userLanguage,
+    extraContext: extraContext || {}
+  })
+
+  if (result.sent) {
+    res.json({ sent: true, resendId: result.resendId })
+    return
+  }
+
+  const status = result?.reason === 'Trigger not configured' ? 404 
+    : result?.reason === 'Email service not configured' ? 500 
+    : 200
+  res.status(status).json(result)
+})
+
+// Convenience endpoint: Send password change confirmation email
+// CSRF protected - requires X-CSRF-Token header
+// Auth protected - requires authenticated user to match userId
+app.post('/api/security/password-changed', requireCsrfToken, async (req, res) => {
+  const { userId, userEmail, userDisplayName, userLanguage, device, location, ipAddress } = req.body || {}
+  
+  if (!userId || !userEmail) {
+    res.status(400).json({ error: 'Missing required fields: userId, userEmail' })
+    return
+  }
+
+  // Verify authenticated user matches the userId in the request
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id || authUser.id !== userId) {
+    console.warn('[security/password-changed] User ID mismatch or not authenticated', { 
+      authUserId: authUser?.id, 
+      requestUserId: userId,
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
+  }
+
+  const result = await sendSecurityEmail('PASSWORD_CHANGE_CONFIRMATION', {
+    recipientEmail: userEmail,
+    userId,
+    userDisplayName: userDisplayName || 'User',
+    userLanguage,
+    extraContext: {
+      device: device || req.headers['user-agent'] || 'Unknown device',
+      location: location || 'Unknown location',
+      ip_address: ipAddress || req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+      time: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
+    }
+  })
+
+  res.json(result)
+})
+
+// Convenience endpoint: Send email change notification to OLD email
+// CSRF protected - requires X-CSRF-Token header
+// Auth protected - requires authenticated user to match userId
+app.post('/api/security/email-changed-notification', requireCsrfToken, async (req, res) => {
+  const { userId, oldEmail, newEmail, userDisplayName, userLanguage } = req.body || {}
+  
+  if (!userId || !oldEmail || !newEmail) {
+    res.status(400).json({ error: 'Missing required fields: userId, oldEmail, newEmail' })
+    return
+  }
+
+  // Verify authenticated user matches the userId in the request
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id || authUser.id !== userId) {
+    console.warn('[security/email-changed-notification] User ID mismatch or not authenticated', { 
+      authUserId: authUser?.id, 
+      requestUserId: userId,
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
+  }
+
+  const result = await sendSecurityEmail('EMAIL_CHANGE_NOTIFICATION', {
+    recipientEmail: oldEmail, // Send to the OLD email address
+    userId,
+    userDisplayName: userDisplayName || 'User',
+    userLanguage,
+    extraContext: {
+      old_email: oldEmail,
+      new_email: newEmail,
+      time: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
+    }
+  })
+
+  res.json(result)
+})
+
+// Check if email is already in use by another user
+// CSRF protected - requires X-CSRF-Token header
+// Auth protected - requires authenticated user
+app.post('/api/security/check-email-available', requireCsrfToken, async (req, res) => {
+  const { email, currentUserId } = req.body || {}
+  
+  if (!email) {
+    res.status(400).json({ error: 'Missing required field: email' })
+    return
+  }
+
+  // Verify user is authenticated
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    console.warn('[security/check-email-available] Not authenticated', { 
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(401).json({ error: 'Unauthorized: Authentication required', code: 'AUTH_REQUIRED' })
+  }
+
+  // If currentUserId provided, verify it matches the authenticated user
+  if (currentUserId && authUser.id !== currentUserId) {
+    console.warn('[security/check-email-available] User ID mismatch', { 
+      authUserId: authUser.id, 
+      requestUserId: currentUserId,
+      ip: req.ip || req.headers['x-forwarded-for']
+    })
+    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
+  }
+
+  // Use the authenticated user's ID to exclude from the check
+  const userIdToExclude = authUser.id
+  const normalizedEmail = email.toLowerCase().trim()
+
+  try {
+    if (sql) {
+      // Check if email exists in auth.users (excluding the current authenticated user)
+      const rows = await sql`SELECT id FROM auth.users WHERE lower(email) = ${normalizedEmail} AND id != ${userIdToExclude} LIMIT 1`
+      const isAvailable = !rows || rows.length === 0
+      
+      res.json({ available: isAvailable, email: normalizedEmail })
+    } else {
+      // Fallback: can't check without database connection, assume available
+      // The actual update will fail if email is taken
+      res.json({ available: true, email: normalizedEmail, note: 'Database check unavailable' })
+    }
+  } catch (err) {
+    console.error('[check-email-available] Error:', err)
+    // On error, let the update proceed and handle the error there
+    res.json({ available: true, email: normalizedEmail, note: 'Check failed, proceeding' })
+  }
 })
 
 // Admin: global stats (bypass RLS via server connection)
@@ -11237,6 +12173,116 @@ app.get('/api/banned/check', async (req, res) => {
   }
 })
 
+// =============================================================================
+// AUTHENTICATION RATE LIMITING (Brute Force Protection)
+// =============================================================================
+
+/**
+ * Check if an IP is blocked due to too many auth attempts
+ * GET /api/auth/check-rate-limit
+ * 
+ * SECURITY: Returns minimal information to prevent enumeration attacks.
+ * Only reveals whether the IP is blocked, not timing details.
+ */
+app.get('/api/auth/check-rate-limit', (req, res) => {
+  const ip = getClientIp(req) || 'unknown'
+  const identifier = `ip:${ip}`
+  const store = rateLimitStores.authAttempt
+  const config = rateLimitConfig.authAttempt
+  
+  const now = Date.now()
+  const history = store.get(identifier) || []
+  const recent = history.filter((ts) => now - ts < config.windowMs)
+  
+  const isBlocked = recent.length >= config.maxAttempts
+  
+  // SECURITY: Only return blocked status - don't reveal timing or attempt counts
+  // This prevents attackers from enumerating rate limit windows
+  res.json({
+    blocked: isBlocked
+  })
+})
+
+/**
+ * Record a FAILED authentication attempt (internal rate limiting)
+ * POST /api/auth/record-attempt
+ * 
+ * SECURITY: This endpoint ONLY records failed attempts.
+ * Rate limit clearing happens INTERNALLY when Supabase auth succeeds,
+ * not via external API calls. This prevents bypass attacks.
+ */
+app.post('/api/auth/record-attempt', (req, res) => {
+  const ip = getClientIp(req) || 'unknown'
+  const identifier = `ip:${ip}`
+  
+  // SECURITY: Check if already blocked before recording
+  const store = rateLimitStores.authAttempt
+  const config = rateLimitConfig.authAttempt
+  const now = Date.now()
+  const history = store.get(identifier) || []
+  const recent = history.filter((ts) => now - ts < config.windowMs)
+  
+  // If already blocked, don't record more - just return blocked status
+  if (recent.length >= config.maxAttempts) {
+    res.status(429).json({
+      ok: false,
+      blocked: true,
+      error: 'Too many failed attempts. Please try again later.'
+    })
+    return
+  }
+  
+  // Record the failed attempt
+  recent.push(now)
+  store.set(identifier, recent)
+  
+  const isBlocked = recent.length >= config.maxAttempts
+  
+  if (isBlocked) {
+    console.log(`[auth-rate-limit] IP ${ip} blocked after ${config.maxAttempts} failed attempts`)
+  }
+  
+  // SECURITY: Only return blocked status - no timing information
+  res.json({
+    ok: true,
+    blocked: isBlocked
+  })
+})
+
+/**
+ * Clear rate limit after successful authentication (INTERNAL USE ONLY)
+ * POST /api/auth/clear-rate-limit
+ * 
+ * SECURITY: Requires valid Supabase authentication token.
+ * Only authenticated users can clear their IP's rate limit history.
+ */
+app.post('/api/auth/clear-rate-limit', async (req, res) => {
+  try {
+    // SECURITY: Verify the user is actually authenticated
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      // Don't reveal whether rate limit exists - just return generic error
+      res.status(401).json({ ok: false, error: 'Unauthorized' })
+      return
+    }
+    
+    // User is authenticated - clear the rate limit for their IP
+    const ip = getClientIp(req) || 'unknown'
+    const identifier = `ip:${ip}`
+    
+    rateLimitStores.authAttempt.delete(identifier)
+    
+    // Log for security monitoring
+    console.log(`[auth-rate-limit] Rate limit cleared for IP ${ip} after successful auth by user ${user.id.slice(0, 8)}...`)
+    
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[auth-rate-limit] Error clearing rate limit:', err?.message)
+    res.status(500).json({ ok: false, error: 'Internal error' })
+  }
+})
+
+// =============================================================================
 // reCAPTCHA Enterprise v3 verification endpoint
 // Uses GOOGLE_API_KEY for authentication with Google Cloud
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || ''
@@ -11614,6 +12660,13 @@ app.post('/api/contact', async (req, res) => {
 // DeepL Translation API endpoint
 app.post('/api/translate', async (req, res) => {
   try {
+    // Rate limit: 200 translations per hour (per user or IP)
+    let user = null
+    try { user = await getUserFromRequest(req) } catch { }
+    if (checkRateLimit('translate', req, res, user)) {
+      return
+    }
+
     const { text, source_lang, target_lang } = req.body
 
     if (!text || typeof text !== 'string') {
@@ -11672,6 +12725,13 @@ app.post('/api/translate', async (req, res) => {
 // Uses DeepL's translation API with auto-detect (omitting source_lang)
 app.post('/api/detect-language', async (req, res) => {
   try {
+    // Rate limit: 200 requests per hour (per user or IP)
+    let user = null
+    try { user = await getUserFromRequest(req) } catch { }
+    if (checkRateLimit('translate', req, res, user)) {
+      return
+    }
+
     const { text } = req.body
 
     if (!text || typeof text !== 'string') {
@@ -11722,6 +12782,13 @@ app.post('/api/detect-language', async (req, res) => {
 // Translates text AND returns the detected source language
 app.post('/api/translate-detect', async (req, res) => {
   try {
+    // Rate limit: 200 requests per hour (per user or IP)
+    let user = null
+    try { user = await getUserFromRequest(req) } catch { }
+    if (checkRateLimit('translate', req, res, user)) {
+      return
+    }
+
     const { text, target_lang } = req.body
 
     if (!text || typeof text !== 'string') {
@@ -12486,6 +13553,905 @@ app.post('/api/account/delete', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete account' })
   }
 })
+
+// ========== GDPR COMPLIANCE ENDPOINTS ==========
+
+// Helper: Delete a storage object by public URL
+async function deleteStorageObjectByUrl(publicUrl) {
+  if (!publicUrl || !supabaseServiceClient) return { deleted: false, reason: 'unavailable' }
+  const info = parseStoragePublicUrl(publicUrl)
+  if (!info) return { deleted: false, reason: 'not_managed' }
+  try {
+    const { error } = await supabaseServiceClient.storage.from(info.bucket).remove([info.path])
+    if (error) throw error
+    return { deleted: true }
+  } catch (err) {
+    console.warn('[gdpr] Failed to delete storage object:', publicUrl, err?.message)
+    return { deleted: false, reason: err?.message || 'delete_failed' }
+  }
+}
+
+// Helper: Log GDPR-related actions for compliance audit
+async function logGdprAccess(userId, action, details = {}, req = null) {
+  try {
+    const ip = req ? getClientIp(req) : null
+    const userAgent = req ? (req.get('user-agent') || null) : null
+    
+    if (sql) {
+      await sql`
+        INSERT INTO public.gdpr_audit_log (user_id, action, details, ip_address, user_agent, created_at)
+        VALUES (${userId}, ${action}, ${sql.json(details)}, ${ip}::inet, ${userAgent}, NOW())
+      `
+    } else if (supabaseServiceClient) {
+      await supabaseServiceClient.from('gdpr_audit_log').insert({
+        user_id: userId,
+        action,
+        details,
+        ip_address: ip,
+        user_agent: userAgent
+      })
+    }
+  } catch (err) {
+    console.error('[gdpr] Audit log failed:', err?.message || err)
+  }
+}
+
+// GDPR: Enhanced account deletion with COMPLETE data removal
+app.options('/api/account/delete-gdpr', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+app.post('/api/account/delete-gdpr', async (req, res) => {
+  try {
+    if (!supabaseServiceClient) {
+      res.status(503).json({ error: 'Account deletion is not configured on this server' })
+      return
+    }
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    const userId = user.id
+
+    // Log the deletion request for GDPR audit
+    await logGdprAccess(userId, 'ACCOUNT_DELETION_STARTED', { userId: userId.slice(0, 8) + '...' }, req)
+
+    const stats = {
+      messagesDeleted: 0,
+      conversationsDeleted: 0,
+      friendsDeleted: 0,
+      friendRequestsDeleted: 0,
+      pushSubscriptionsDeleted: 0,
+      notificationsDeleted: 0,
+      journalEntriesDeleted: 0,
+      journalPhotosDeleted: 0,
+      plantScansDeleted: 0,
+      bugReportsDeleted: 0,
+      bookmarksDeleted: 0,
+      activityLogsDeleted: 0,
+      webVisitsAnonymized: 0,
+      avatarDeleted: false,
+      profileDeleted: false,
+      gardensProcessed: 0,
+      authUserDeleted: false,
+      storageObjectsDeleted: 0
+    }
+
+    try {
+      // 1. Delete messages (sender only - cascade handles conversation cleanup)
+      if (sql) {
+        const msgResult = await sql`DELETE FROM public.messages WHERE sender_id = ${userId}`
+        stats.messagesDeleted = msgResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('messages').delete().eq('sender_id', userId)
+        stats.messagesDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Messages deletion partial:', err?.message) }
+
+    try {
+      // 2. Delete conversations where user is a participant
+      if (sql) {
+        const convResult = await sql`DELETE FROM public.conversations WHERE participant_1 = ${userId} OR participant_2 = ${userId}`
+        stats.conversationsDeleted = convResult?.count || 0
+      } else {
+        const { count: c1 } = await supabaseServiceClient.from('conversations').delete().eq('participant_1', userId)
+        const { count: c2 } = await supabaseServiceClient.from('conversations').delete().eq('participant_2', userId)
+        stats.conversationsDeleted = (c1 || 0) + (c2 || 0)
+      }
+    } catch (err) { console.warn('[gdpr] Conversations deletion partial:', err?.message) }
+
+    try {
+      // 3. Delete friend relationships
+      if (sql) {
+        const friendResult = await sql`DELETE FROM public.friends WHERE user_id = ${userId} OR friend_id = ${userId}`
+        stats.friendsDeleted = friendResult?.count || 0
+      } else {
+        const { count: f1 } = await supabaseServiceClient.from('friends').delete().eq('user_id', userId)
+        const { count: f2 } = await supabaseServiceClient.from('friends').delete().eq('friend_id', userId)
+        stats.friendsDeleted = (f1 || 0) + (f2 || 0)
+      }
+    } catch (err) { console.warn('[gdpr] Friends deletion partial:', err?.message) }
+
+    try {
+      // 4. Delete friend requests
+      if (sql) {
+        const reqResult = await sql`DELETE FROM public.friend_requests WHERE requester_id = ${userId} OR recipient_id = ${userId}`
+        stats.friendRequestsDeleted = reqResult?.count || 0
+      } else {
+        const { count: r1 } = await supabaseServiceClient.from('friend_requests').delete().eq('requester_id', userId)
+        const { count: r2 } = await supabaseServiceClient.from('friend_requests').delete().eq('recipient_id', userId)
+        stats.friendRequestsDeleted = (r1 || 0) + (r2 || 0)
+      }
+    } catch (err) { console.warn('[gdpr] Friend requests deletion partial:', err?.message) }
+
+    try {
+      // 5. Delete push subscriptions
+      if (sql) {
+        const pushResult = await sql`DELETE FROM public.user_push_subscriptions WHERE user_id = ${userId}`
+        stats.pushSubscriptionsDeleted = pushResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('user_push_subscriptions').delete().eq('user_id', userId)
+        stats.pushSubscriptionsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Push subscriptions deletion partial:', err?.message) }
+
+    try {
+      // 6. Delete notifications
+      if (sql) {
+        const notifResult = await sql`DELETE FROM public.user_notifications WHERE user_id = ${userId}`
+        stats.notificationsDeleted = notifResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('user_notifications').delete().eq('user_id', userId)
+        stats.notificationsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Notifications deletion partial:', err?.message) }
+
+    try {
+      // 7. Delete journal photos from storage, then journal entries
+      let journalPhotos = []
+      if (sql) {
+        journalPhotos = await sql`
+          SELECT gjp.image_url, gjp.thumbnail_url 
+          FROM public.garden_journal_photos gjp
+          JOIN public.garden_journal_entries gje ON gje.id = gjp.entry_id
+          WHERE gje.user_id = ${userId}
+        `
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('garden_journal_photos')
+          .select('image_url, thumbnail_url, entry_id')
+          .in('entry_id', 
+            supabaseServiceClient.from('garden_journal_entries').select('id').eq('user_id', userId)
+          )
+        journalPhotos = data || []
+      }
+      
+      // Delete photos from storage
+      for (const photo of journalPhotos) {
+        if (photo.image_url) {
+          const result = await deleteStorageObjectByUrl(photo.image_url)
+          if (result.deleted) stats.storageObjectsDeleted++
+        }
+        if (photo.thumbnail_url) {
+          const result = await deleteStorageObjectByUrl(photo.thumbnail_url)
+          if (result.deleted) stats.storageObjectsDeleted++
+        }
+      }
+      stats.journalPhotosDeleted = journalPhotos.length
+      
+      // Delete journal entries
+      if (sql) {
+        const journalResult = await sql`DELETE FROM public.garden_journal_entries WHERE user_id = ${userId}`
+        stats.journalEntriesDeleted = journalResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_journal_entries').delete().eq('user_id', userId)
+        stats.journalEntriesDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Journal deletion partial:', err?.message) }
+
+    try {
+      // 8. Delete plant scans and their images
+      let scans = []
+      if (sql) {
+        scans = await sql`SELECT image_url, image_path FROM public.plant_scans WHERE user_id = ${userId}`
+      } else {
+        const { data } = await supabaseServiceClient.from('plant_scans').select('image_url, image_path').eq('user_id', userId)
+        scans = data || []
+      }
+      
+      for (const scan of scans) {
+        if (scan.image_url) {
+          const result = await deleteStorageObjectByUrl(scan.image_url)
+          if (result.deleted) stats.storageObjectsDeleted++
+        }
+      }
+      
+      if (sql) {
+        const scanResult = await sql`DELETE FROM public.plant_scans WHERE user_id = ${userId}`
+        stats.plantScansDeleted = scanResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('plant_scans').delete().eq('user_id', userId)
+        stats.plantScansDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Plant scans deletion partial:', err?.message) }
+
+    try {
+      // 9. Delete bug reports and screenshots
+      let bugReports = []
+      if (sql) {
+        bugReports = await sql`SELECT id, screenshots FROM public.bug_reports WHERE user_id = ${userId}`
+      } else {
+        const { data } = await supabaseServiceClient.from('bug_reports').select('id, screenshots').eq('user_id', userId)
+        bugReports = data || []
+      }
+      
+      for (const bug of bugReports) {
+        if (bug.screenshots && Array.isArray(bug.screenshots)) {
+          for (const screenshotUrl of bug.screenshots) {
+            if (typeof screenshotUrl === 'string') {
+              const result = await deleteStorageObjectByUrl(screenshotUrl)
+              if (result.deleted) stats.storageObjectsDeleted++
+            }
+          }
+        }
+      }
+      
+      if (sql) {
+        const bugResult = await sql`DELETE FROM public.bug_reports WHERE user_id = ${userId}`
+        stats.bugReportsDeleted = bugResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('bug_reports').delete().eq('user_id', userId)
+        stats.bugReportsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Bug reports deletion partial:', err?.message) }
+
+    try {
+      // 10. Delete bookmarks (items cascade via FK)
+      if (sql) {
+        const bookmarkResult = await sql`DELETE FROM public.bookmarks WHERE user_id = ${userId}`
+        stats.bookmarksDeleted = bookmarkResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('bookmarks').delete().eq('user_id', userId)
+        stats.bookmarksDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Bookmarks deletion partial:', err?.message) }
+
+    try {
+      // 11. Delete activity logs
+      if (sql) {
+        const actResult = await sql`DELETE FROM public.garden_activity_logs WHERE actor_id = ${userId}`
+        stats.activityLogsDeleted = actResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_activity_logs').delete().eq('actor_id', userId)
+        stats.activityLogsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Activity logs deletion partial:', err?.message) }
+
+    try {
+      // 12. Anonymize web visits (retain for analytics, remove PII)
+      if (sql) {
+        const visitResult = await sql`
+          UPDATE public.web_visits 
+          SET user_id = NULL, ip_address = NULL, user_agent = NULL 
+          WHERE user_id = ${userId}
+        `
+        stats.webVisitsAnonymized = visitResult?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient
+          .from('web_visits')
+          .update({ user_id: null, ip_address: null, user_agent: null })
+          .eq('user_id', userId)
+        stats.webVisitsAnonymized = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Web visits anonymization partial:', err?.message) }
+
+    try {
+      // 13. Delete user blocks (both as blocker and blocked)
+      if (sql) {
+        await sql`DELETE FROM public.user_blocks WHERE blocker_id = ${userId} OR blocked_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('user_blocks').delete().eq('blocker_id', userId)
+        await supabaseServiceClient.from('user_blocks').delete().eq('blocked_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] User blocks deletion partial:', err?.message) }
+
+    try {
+      // 14. Delete message reactions
+      if (sql) {
+        await sql`DELETE FROM public.message_reactions WHERE user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('message_reactions').delete().eq('user_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] Message reactions deletion partial:', err?.message) }
+
+    try {
+      // 15. Delete avatar image and profile
+      let profile = null
+      if (sql) {
+        const profiles = await sql`SELECT avatar_url FROM public.profiles WHERE id = ${userId}`
+        profile = profiles?.[0]
+      } else {
+        const { data } = await supabaseServiceClient.from('profiles').select('avatar_url').eq('id', userId).maybeSingle()
+        profile = data
+      }
+      
+      if (profile?.avatar_url) {
+        const result = await deleteStorageObjectByUrl(profile.avatar_url)
+        if (result.deleted) {
+          stats.avatarDeleted = true
+          stats.storageObjectsDeleted++
+        }
+      }
+      
+      if (sql) {
+        await sql`DELETE FROM public.profiles WHERE id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('profiles').delete().eq('id', userId)
+      }
+      stats.profileDeleted = true
+    } catch (err) { console.warn('[gdpr] Profile deletion partial:', err?.message) }
+
+    try {
+      // 16. Process gardens (existing logic)
+      const { data: userMemberships, error: memberErr } = await supabaseServiceClient
+        .from('garden_members')
+        .select('garden_id, role')
+        .eq('user_id', userId)
+      if (!memberErr && userMemberships) {
+        for (const membership of userMemberships) {
+          const gardenId = membership.garden_id
+          const userRole = membership.role
+          
+          const { data: allMembers } = await supabaseServiceClient
+            .from('garden_members')
+            .select('user_id, role')
+            .eq('garden_id', gardenId)
+          
+          const otherMembers = (allMembers || []).filter(m => m.user_id !== userId)
+          const otherOwners = otherMembers.filter(m => m.role === 'owner')
+          
+          if (userRole === 'owner' && otherOwners.length === 0) {
+            if (otherMembers.length > 0) {
+              // Promote another member to owner
+              await supabaseServiceClient
+                .from('garden_members')
+                .update({ role: 'owner' })
+                .eq('garden_id', gardenId)
+                .eq('user_id', otherMembers[0].user_id)
+              // Remove user from garden
+              await supabaseServiceClient
+                .from('garden_members')
+                .delete()
+                .eq('garden_id', gardenId)
+                .eq('user_id', userId)
+            } else {
+              // Delete garden (no other members)
+              const { data: gardenRow } = await supabaseServiceClient
+                .from('gardens')
+                .select('cover_image_url')
+                .eq('id', gardenId)
+                .maybeSingle()
+              
+              if (gardenRow?.cover_image_url) {
+                const result = await deleteStorageObjectByUrl(gardenRow.cover_image_url)
+                if (result.deleted) stats.storageObjectsDeleted++
+              }
+              
+              await supabaseServiceClient.from('gardens').delete().eq('id', gardenId)
+            }
+          } else {
+            // Just remove user from garden
+            await supabaseServiceClient
+              .from('garden_members')
+              .delete()
+              .eq('garden_id', gardenId)
+              .eq('user_id', userId)
+          }
+          stats.gardensProcessed++
+        }
+      }
+    } catch (err) { console.warn('[gdpr] Gardens processing partial:', err?.message) }
+
+    try {
+      // 17. Clear task cache
+      if (sql) {
+        await sql`DELETE FROM public.user_task_daily_cache WHERE user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('user_task_daily_cache').delete().eq('user_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] Task cache deletion partial:', err?.message) }
+
+    try {
+      // 18. Finally delete auth user
+      const { error: deleteUserError } = await supabaseServiceClient.auth.admin.deleteUser(userId)
+      if (deleteUserError) throw deleteUserError
+      stats.authUserDeleted = true
+    } catch (err) {
+      console.error('[gdpr] Failed to delete auth user:', err?.message)
+      // Log partial failure for audit
+      await logGdprAccess(userId, 'ACCOUNT_DELETION_PARTIAL', { ...stats, error: err?.message }, req)
+      res.status(500).json({ error: 'Failed to complete account deletion', stats })
+      return
+    }
+
+    // Log successful deletion for GDPR audit
+    await logGdprAccess(userId, 'ACCOUNT_DELETION_COMPLETED', stats, req)
+
+    res.json({
+      ok: true,
+      message: 'All personal data deleted',
+      stats
+    })
+  } catch (err) {
+    console.error('[gdpr] Complete deletion failed:', err)
+    res.status(500).json({ error: 'Failed to complete deletion' })
+  }
+})
+
+// GDPR: Export all user data (Data Portability - Article 20)
+app.options('/api/account/export', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+app.get('/api/account/export', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    const userId = user.id
+
+    // Log the export request for GDPR audit
+    await logGdprAccess(userId, 'DATA_EXPORT', { ip: getClientIp(req) }, req)
+
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      dataSubject: {},
+      profile: null,
+      gardens: [],
+      plants: [],
+      tasks: [],
+      journal: [],
+      messages: [],
+      conversations: [],
+      friends: [],
+      friendRequests: [],
+      bookmarks: [],
+      scans: [],
+      notifications: [],
+      activityLogs: [],
+      bugReports: [],
+      cookieConsent: null
+    }
+
+    try {
+      // 1. Profile data
+      if (sql) {
+        const profiles = await sql`
+          SELECT id, display_name, username, bio, country, timezone, language, 
+                 favorite_plant, avatar_url, is_private, disable_friend_requests,
+                 notify_push, notify_email, experience_years, accent_key, roles,
+                 marketing_consent, marketing_consent_date, terms_accepted_date, 
+                 privacy_policy_accepted_date, created_at
+          FROM public.profiles WHERE id = ${userId}
+        `
+        exportData.profile = profiles?.[0] || null
+      } else {
+        const { data } = await supabaseServiceClient.from('profiles')
+          .select('id, display_name, username, bio, country, timezone, language, favorite_plant, avatar_url, is_private, disable_friend_requests, notify_push, notify_email, experience_years, accent_key, roles, marketing_consent, marketing_consent_date, terms_accepted_date, privacy_policy_accepted_date')
+          .eq('id', userId)
+          .maybeSingle()
+        exportData.profile = data
+      }
+    } catch (err) { console.warn('[gdpr-export] Profile:', err?.message) }
+
+    try {
+      // 2. Auth user data
+      const { data: authUser } = await supabaseServiceClient.auth.admin.getUserById(userId)
+      exportData.dataSubject = {
+        userId: userId,
+        email: authUser?.user?.email || user.email,
+        emailConfirmedAt: authUser?.user?.email_confirmed_at,
+        createdAt: authUser?.user?.created_at,
+        lastSignIn: authUser?.user?.last_sign_in_at
+      }
+    } catch (err) { console.warn('[gdpr-export] Auth user:', err?.message) }
+
+    try {
+      // 3. Gardens and plants
+      if (sql) {
+        const gardens = await sql`
+          SELECT g.*, gm.role as member_role
+          FROM public.gardens g
+          JOIN public.garden_members gm ON gm.garden_id = g.id
+          WHERE gm.user_id = ${userId}
+        `
+        for (const garden of gardens) {
+          const plants = await sql`
+            SELECT gp.*, p.name as plant_name
+            FROM public.garden_plants gp
+            LEFT JOIN public.plants p ON p.id = gp.plant_id
+            WHERE gp.garden_id = ${garden.id}
+          `
+          const tasks = await sql`
+            SELECT * FROM public.garden_plant_tasks
+            WHERE garden_id = ${garden.id}
+          `
+          exportData.gardens.push({
+            ...garden,
+            plants: plants || [],
+            tasks: tasks || []
+          })
+        }
+      } else {
+        const { data: memberships } = await supabaseServiceClient
+          .from('garden_members')
+          .select('garden_id, role')
+          .eq('user_id', userId)
+        
+        for (const membership of (memberships || [])) {
+          const { data: garden } = await supabaseServiceClient
+            .from('gardens')
+            .select('*')
+            .eq('id', membership.garden_id)
+            .maybeSingle()
+          
+          if (garden) {
+            const { data: plants } = await supabaseServiceClient
+              .from('garden_plants')
+              .select('*')
+              .eq('garden_id', garden.id)
+            
+            const { data: tasks } = await supabaseServiceClient
+              .from('garden_plant_tasks')
+              .select('*')
+              .eq('garden_id', garden.id)
+            
+            exportData.gardens.push({
+              ...garden,
+              member_role: membership.role,
+              plants: plants || [],
+              tasks: tasks || []
+            })
+          }
+        }
+      }
+    } catch (err) { console.warn('[gdpr-export] Gardens:', err?.message) }
+
+    try {
+      // 4. Journal entries
+      if (sql) {
+        const journal = await sql`
+          SELECT gje.*, 
+            (SELECT json_agg(gjp.*) FROM public.garden_journal_photos gjp WHERE gjp.entry_id = gje.id) as photos
+          FROM public.garden_journal_entries gje
+          WHERE gje.user_id = ${userId}
+          ORDER BY gje.created_at DESC
+        `
+        exportData.journal = journal || []
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('garden_journal_entries')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+        exportData.journal = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Journal:', err?.message) }
+
+    try {
+      // 5. Messages
+      if (sql) {
+        const messages = await sql`
+          SELECT m.*, c.participant_1, c.participant_2
+          FROM public.messages m
+          JOIN public.conversations c ON c.id = m.conversation_id
+          WHERE m.sender_id = ${userId}
+          ORDER BY m.created_at DESC
+        `
+        exportData.messages = messages || []
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('messages')
+          .select('*, conversation:conversations(participant_1, participant_2)')
+          .eq('sender_id', userId)
+          .order('created_at', { ascending: false })
+        exportData.messages = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Messages:', err?.message) }
+
+    try {
+      // 6. Conversations
+      if (sql) {
+        const conversations = await sql`
+          SELECT * FROM public.conversations
+          WHERE participant_1 = ${userId} OR participant_2 = ${userId}
+        `
+        exportData.conversations = conversations || []
+      } else {
+        const { data: c1 } = await supabaseServiceClient.from('conversations').select('*').eq('participant_1', userId)
+        const { data: c2 } = await supabaseServiceClient.from('conversations').select('*').eq('participant_2', userId)
+        exportData.conversations = [...(c1 || []), ...(c2 || [])]
+      }
+    } catch (err) { console.warn('[gdpr-export] Conversations:', err?.message) }
+
+    try {
+      // 7. Friends
+      if (sql) {
+        const friends = await sql`
+          SELECT f.*, p.display_name as friend_name
+          FROM public.friends f
+          LEFT JOIN public.profiles p ON p.id = CASE
+            WHEN f.user_id = ${userId} THEN f.friend_id
+            ELSE f.user_id
+          END
+          WHERE f.user_id = ${userId} OR f.friend_id = ${userId}
+        `
+        exportData.friends = friends || []
+      } else {
+        const { data: f1 } = await supabaseServiceClient.from('friends').select('*').eq('user_id', userId)
+        const { data: f2 } = await supabaseServiceClient.from('friends').select('*').eq('friend_id', userId)
+        exportData.friends = [...(f1 || []), ...(f2 || [])]
+      }
+    } catch (err) { console.warn('[gdpr-export] Friends:', err?.message) }
+
+    try {
+      // 8. Friend requests
+      if (sql) {
+        const requests = await sql`
+          SELECT * FROM public.friend_requests
+          WHERE requester_id = ${userId} OR recipient_id = ${userId}
+        `
+        exportData.friendRequests = requests || []
+      } else {
+        const { data: r1 } = await supabaseServiceClient.from('friend_requests').select('*').eq('requester_id', userId)
+        const { data: r2 } = await supabaseServiceClient.from('friend_requests').select('*').eq('recipient_id', userId)
+        exportData.friendRequests = [...(r1 || []), ...(r2 || [])]
+      }
+    } catch (err) { console.warn('[gdpr-export] Friend requests:', err?.message) }
+
+    try {
+      // 9. Bookmarks
+      if (sql) {
+        const bookmarks = await sql`
+          SELECT b.*, 
+            (SELECT array_agg(bi.plant_id) FROM public.bookmark_items bi WHERE bi.bookmark_id = b.id) as plant_ids
+          FROM public.bookmarks b
+          WHERE b.user_id = ${userId}
+        `
+        exportData.bookmarks = bookmarks || []
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('bookmarks')
+          .select('*, bookmark_items(plant_id)')
+          .eq('user_id', userId)
+        exportData.bookmarks = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Bookmarks:', err?.message) }
+
+    try {
+      // 10. Plant scans
+      if (sql) {
+        const scans = await sql`SELECT * FROM public.plant_scans WHERE user_id = ${userId}`
+        exportData.scans = scans || []
+      } else {
+        const { data } = await supabaseServiceClient.from('plant_scans').select('*').eq('user_id', userId)
+        exportData.scans = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Scans:', err?.message) }
+
+    try {
+      // 11. Notifications
+      if (sql) {
+        const notifications = await sql`
+          SELECT * FROM public.user_notifications
+          WHERE user_id = ${userId}
+          ORDER BY created_at DESC
+        `
+        exportData.notifications = notifications || []
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('user_notifications')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+        exportData.notifications = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Notifications:', err?.message) }
+
+    try {
+      // 12. Bug reports
+      if (sql) {
+        const bugReports = await sql`SELECT * FROM public.bug_reports WHERE user_id = ${userId}`
+        exportData.bugReports = bugReports || []
+      } else {
+        const { data } = await supabaseServiceClient.from('bug_reports').select('*').eq('user_id', userId)
+        exportData.bugReports = data || []
+      }
+    } catch (err) { console.warn('[gdpr-export] Bug reports:', err?.message) }
+
+    try {
+      // 13. Cookie consent (if server-tracked)
+      if (sql) {
+        const consent = await sql`
+          SELECT * FROM public.user_cookie_consent 
+          WHERE user_id = ${userId} 
+          ORDER BY consented_at DESC LIMIT 1
+        `
+        exportData.cookieConsent = consent?.[0] || null
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('user_cookie_consent')
+          .select('*')
+          .eq('user_id', userId)
+          .order('consented_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        exportData.cookieConsent = data
+      }
+    } catch (err) { console.warn('[gdpr-export] Cookie consent:', err?.message) }
+
+    // Set headers for download
+    const shortId = userId.slice(0, 8)
+    const timestamp = Date.now()
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', `attachment; filename="aphylia-data-export-${shortId}-${timestamp}.json"`)
+
+    res.json(exportData)
+  } catch (err) {
+    console.error('[gdpr-export] Data export failed:', err)
+    res.status(500).json({ error: 'Failed to export data' })
+  }
+})
+
+// GDPR: Update marketing consent
+app.options('/api/account/consent', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+app.post('/api/account/consent', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    const { marketingConsent } = req.body
+    if (typeof marketingConsent !== 'boolean') {
+      res.status(400).json({ error: 'marketingConsent must be a boolean' })
+      return
+    }
+
+    const userId = user.id
+    const now = new Date().toISOString()
+
+    if (sql) {
+      await sql`
+        UPDATE public.profiles 
+        SET marketing_consent = ${marketingConsent},
+            marketing_consent_date = ${now}
+        WHERE id = ${userId}
+      `
+    } else if (supabaseServiceClient) {
+      await supabaseServiceClient
+        .from('profiles')
+        .update({ 
+          marketing_consent: marketingConsent,
+          marketing_consent_date: now
+        })
+        .eq('id', userId)
+    }
+
+    // Log consent change for GDPR audit
+    await logGdprAccess(userId, 'CONSENT_UPDATE', { 
+      marketingConsent,
+      previousValue: 'unknown'
+    }, req)
+
+    res.json({ ok: true, marketingConsent, updatedAt: now })
+  } catch (err) {
+    console.error('[gdpr] Consent update failed:', err)
+    res.status(500).json({ error: 'Failed to update consent' })
+  }
+})
+
+// GDPR: Data retention cleanup cron job (runs daily at 3 AM)
+cron.schedule('0 3 * * *', async () => {
+  console.log('[gdpr] Running data retention cleanup...')
+  
+  try {
+    // 1. Anonymize web visits older than 90 days (keep for analytics, remove PII)
+    if (sql) {
+      const visitResult = await sql`
+        UPDATE public.web_visits
+        SET ip_address = NULL, user_agent = NULL
+        WHERE occurred_at < NOW() - INTERVAL '90 days'
+          AND ip_address IS NOT NULL
+      `
+      if (visitResult?.count > 0) {
+        console.log(`[gdpr] Anonymized ${visitResult.count} old web visits`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Web visits anonymization failed:', err?.message)
+  }
+
+  try {
+    // 2. Delete orphaned messages from deleted users (older than 30 days)
+    if (sql) {
+      const orphanResult = await sql`
+        DELETE FROM public.messages
+        WHERE sender_id NOT IN (SELECT id FROM auth.users)
+          AND created_at < NOW() - INTERVAL '30 days'
+      `
+      if (orphanResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${orphanResult.count} orphaned messages`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Orphaned messages cleanup failed:', err?.message)
+  }
+
+  try {
+    // 3. Delete expired push subscriptions (inactive for 180 days)
+    if (sql) {
+      const pushResult = await sql`
+        DELETE FROM public.user_push_subscriptions
+        WHERE updated_at < NOW() - INTERVAL '180 days'
+      `
+      if (pushResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${pushResult.count} expired push subscriptions`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Push subscriptions cleanup failed:', err?.message)
+  }
+
+  try {
+    // 4. Delete old delivered notifications (older than 90 days)
+    if (sql) {
+      const notifResult = await sql`
+        DELETE FROM public.user_notifications
+        WHERE delivery_status = 'sent'
+          AND delivered_at < NOW() - INTERVAL '90 days'
+      `
+      if (notifResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${notifResult.count} old notifications`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Notifications cleanup failed:', err?.message)
+  }
+
+  try {
+    // 5. Clean old GDPR audit logs (keep for 3 years as required by GDPR)
+    if (sql) {
+      const auditResult = await sql`
+        DELETE FROM public.gdpr_audit_log
+        WHERE created_at < NOW() - INTERVAL '3 years'
+      `
+      if (auditResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${auditResult.count} old audit log entries`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Audit log cleanup failed:', err?.message)
+  }
+
+  console.log('[gdpr] Data retention cleanup completed')
+})
+
+// ========== END GDPR COMPLIANCE ENDPOINTS ==========
 
 // Admin: unique visitors stats (past 10m and 7 days)
 app.get('/api/admin/visitors-stats', async (req, res) => {
@@ -13356,6 +15322,12 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
     res.status(401).json({ error: 'Unauthorized' })
     return
   }
+
+  // Rate limit: 50 image uploads per hour per user
+  if (checkRateLimit('imageUpload', req, res, user)) {
+    return
+  }
+
   const canEdit = await isGardenOwner(req, gardenId, user.id)
   if (!canEdit) {
     res.status(403).json({ error: 'Forbidden' })
@@ -13579,6 +15551,11 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
   const user = await getUserFromRequest(req)
   if (!user?.id) {
     res.status(401).json({ error: 'You must be signed in to scan plants' })
+    return
+  }
+
+  // Rate limit: 30 scans per hour per user
+  if (checkRateLimit('scan', req, res, user)) {
     return
   }
 
@@ -13823,6 +15800,11 @@ app.post('/api/bug-report/upload-screenshot', async (req, res) => {
   const user = await getUserFromRequest(req)
   if (!user?.id) {
     res.status(401).json({ error: 'You must be signed in to upload bug screenshots' })
+    return
+  }
+
+  // Rate limit: 10 bug reports per hour per IP (spam prevention)
+  if (checkRateLimit('bugReport', req, res, user)) {
     return
   }
 
@@ -14244,6 +16226,12 @@ app.post('/api/garden/:id/activity', async (req, res) => {
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequest(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+
+    // Rate limit: 100 activity logs per hour per user
+    if (checkRateLimit('gardenActivity', req, res, user)) {
+      return
+    }
+
     const member = await isGardenMember(req, gardenId, user.id)
     if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
@@ -16910,6 +18898,12 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+
+    // Rate limit: 20 journal entries per hour per user
+    if (checkRateLimit('gardenJournal', req, res, user)) {
+      return
+    }
+
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
     const { title, content, mood, isPrivate, tags, photos } = req.body || {}
@@ -17420,6 +19414,11 @@ app.post('/api/garden/:id/upload', async (req, res) => {
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+
+    // Rate limit: 50 image uploads per hour per user
+    if (checkRateLimit('imageUpload', req, res, user)) {
+      return
+    }
 
     // Verify membership
     if (sql) {
@@ -17994,6 +19993,12 @@ app.post('/api/push/instant', async (req, res) => {
     res.status(401).json({ error: 'Unauthorized' })
     return
   }
+
+  // Rate limit: 100 push notifications per hour per user
+  if (checkRateLimit('pushNotify', req, res, user)) {
+    return
+  }
+
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
     return
@@ -18311,6 +20316,11 @@ app.post('/api/ai/garden-chat/upload', chatImageUpload.single('image'), async (r
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) {
       res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    // Rate limit: 50 image uploads per hour per user
+    if (checkRateLimit('imageUpload', req, res, user)) {
       return
     }
     
@@ -20077,6 +22087,11 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       return
     }
     
+    // Rate limit: 60 AI chat messages per hour per user
+    if (checkRateLimit('aiChat', req, res, user)) {
+      return
+    }
+    
     // Check if OpenAI is configured
     if (!openai) {
       res.status(503).json({ error: 'AI service not configured' })
@@ -20495,6 +22510,19 @@ const notificationDeliveryBatchSize = Math.min(
   Math.max(Number(process.env.NOTIFICATION_DELIVERY_BATCH_SIZE || 200), 25),
   500,
 )
+
+// Default timezone for users who haven't set one in their profile
+// Falls back to server's system timezone if not configured via env
+const getServerTimezone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+const DEFAULT_USER_TIMEZONE = process.env.DEFAULT_USER_TIMEZONE || getServerTimezone()
+console.log(`[notifications] Default user timezone: ${DEFAULT_USER_TIMEZONE}`)
+
 let notificationWorkerTimer = null
 let notificationWorkerBusy = false
 
@@ -20632,6 +22660,7 @@ function normalizeNotificationAutomation(row) {
     createdAt: isoOrNull(row.created_at),
     updatedAt: isoOrNull(row.updated_at),
     recipientCount: Number(row.recipient_count || 0),
+    sentTodayCount: Number(row.sent_today_count || 0),
   }
 }
 
@@ -21556,6 +23585,13 @@ async function processDueAutomations() {
 
     const now = new Date()
     const currentHourUTC = now.getUTCHours()
+    
+    // Log current time info for debugging (every 15 minutes)
+    const nowMinutes = now.getMinutes()
+    if (nowMinutes < 1 || (nowMinutes >= 15 && nowMinutes < 16) || (nowMinutes >= 30 && nowMinutes < 31) || (nowMinutes >= 45 && nowMinutes < 46)) {
+      const serverLocalHour = now.getHours()
+      console.log(`[automations] Time check: serverLocalHour=${serverLocalHour}, UTC=${currentHourUTC}, defaultTimezone=${DEFAULT_USER_TIMEZONE}, enabled=${automations.length}`)
+    }
 
     for (const automation of automations) {
       try {
@@ -21577,12 +23613,12 @@ async function processDueAutomations() {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
-              and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               )
             limit 1000
           `
@@ -21594,14 +23630,14 @@ async function processDueAutomations() {
             join public.garden_plant_tasks t on t.garden_id = gm.garden_id
             join public.garden_plant_task_occurrences occ on occ.task_id = t.id
             where (p.notify_push is null or p.notify_push = true)
-              and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+              and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and (occ.completed_count < occ.required_count or occ.completed_count = 0)
-              and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               )
             limit 1000
           `
@@ -21613,13 +23649,13 @@ async function processDueAutomations() {
             join public.garden_activity_logs gal on gal.garden_id = gm.garden_id
             where (p.notify_push is null or p.notify_push = true)
               and gal.kind = 'note'
-              and (gal.occurred_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date - interval '1 day'
-              and extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour}
+              and (gal.occurred_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date - interval '1 day'
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
-                  and (un.scheduled_for at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                  and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               )
             limit 1000
           `
@@ -21643,13 +23679,13 @@ async function processDueAutomations() {
               try {
                 const debugCount = await sql`
                   select count(distinct p.id)::bigint as total_with_tasks,
-                         count(distinct case when extract(hour from now() at time zone coalesce(p.timezone, 'UTC')) = ${sendHour} then p.id end)::bigint as at_send_hour
+                         count(distinct case when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour} then p.id end)::bigint as at_send_hour
                   from public.profiles p
                   join public.garden_members gm on gm.user_id = p.id
                   join public.garden_plant_tasks t on t.garden_id = gm.garden_id
                   join public.garden_plant_task_occurrences occ on occ.task_id = t.id
                   where (p.notify_push is null or p.notify_push = true)
-                    and (occ.due_at at time zone coalesce(p.timezone, 'UTC'))::date = (now() at time zone coalesce(p.timezone, 'UTC'))::date
+                    and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                     and (occ.completed_count < occ.required_count or occ.completed_count = 0)
                 `
                 const totalWithTasks = Number(debugCount?.[0]?.total_with_tasks || 0)
@@ -24849,6 +26885,57 @@ app.get('*', async (req, res) => {
   } catch { }
   res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
   res.sendFile(path.join(distDir, 'index.html'))
+})
+
+// Sentry error handling middleware - must be after all routes
+// This catches any errors thrown in route handlers
+// GDPR Compliant: Does not send PII (headers, cookies, full request body)
+app.use((err, req, res, next) => {
+  // Log error for debugging (server-side only)
+  console.error('[Server] Express error:', err?.message || err)
+  
+  // Capture error in Sentry with GDPR-compliant context
+  Sentry.withScope((scope) => {
+    // Only include path without query params (may contain tokens)
+    const safePath = (req.originalUrl || req.path || '/').split('?')[0]
+    scope.setExtra('path', safePath)
+    scope.setExtra('method', req.method)
+    
+    // Only include safe headers (no auth, cookies, etc.)
+    const safeHeaders = {
+      'content-type': req.headers['content-type'],
+      'accept': req.headers['accept'],
+      'accept-language': req.headers['accept-language'],
+    }
+    scope.setExtra('headers', safeHeaders)
+    
+    // Don't include query params or body (may contain PII/tokens)
+    // scope.setExtra('query', req.query) // GDPR: Removed
+    // scope.setExtra('body', req.body)   // GDPR: Removed
+    
+    // Add error categorization for easier filtering
+    if (err.statusCode === 400 || err.status === 400) {
+      scope.setTag('error.type', 'client_error')
+    } else if (err.statusCode === 401 || err.status === 401) {
+      scope.setTag('error.type', 'auth_error')
+    } else if (err.statusCode === 403 || err.status === 403) {
+      scope.setTag('error.type', 'permission_error')
+    } else if (err.statusCode === 404 || err.status === 404) {
+      scope.setTag('error.type', 'not_found')
+    } else {
+      scope.setTag('error.type', 'server_error')
+    }
+    
+    scope.setTag('route', safePath)
+    Sentry.captureException(err)
+  })
+  
+  // Send error response
+  const statusCode = err.statusCode || err.status || 500
+  res.status(statusCode).json({
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+  })
 })
 
 const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase() !== 'true'
