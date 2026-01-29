@@ -657,8 +657,9 @@ export default function PlantSwipe() {
     const colorTokenCache = new Map<string, Set<string>>()
 
     const getTokensForColor = (color: string): Set<string> => {
-      if (colorTokenCache.has(color)) {
-        return colorTokenCache.get(color)!
+      const cached = colorTokenCache.get(color)
+      if (cached) {
+        return cached
       }
 
       const tokens = new Set<string>()
