@@ -348,13 +348,25 @@ def _sql_schema_path(repo_root: str) -> str:
 
 
 def _ensure_sslmode_in_url(db_url: str) -> str:
+    """Ensure SSL mode is set to 'require' for non-local databases.
+    
+    Uses 'require' which enables SSL encryption but does NOT verify the server certificate.
+    This avoids 'certificate verify failed' errors when CA certificates are outdated.
+    
+    If the URL already has a stricter mode (verify-ca, verify-full), it will be
+    changed to 'require' to avoid certificate verification failures.
+    """
     try:
         u = urlparse(db_url)
         host = (u.hostname or '').lower()
         if host in ("localhost", "127.0.0.1"):
             return db_url
         q = dict(parse_qsl(u.query, keep_blank_values=True))
-        if 'sslmode' not in q:
+        current_sslmode = q.get('sslmode', '').lower()
+        # Force 'require' mode to avoid certificate verification issues
+        # 'require' = use SSL but don't verify certificate
+        # 'verify-ca' and 'verify-full' = use SSL and verify certificate (can fail with outdated CAs)
+        if current_sslmode not in ('require', 'prefer', 'allow'):
             q['sslmode'] = 'require'
             new_query = urlencode(q)
             return urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
@@ -688,6 +700,114 @@ def sync_schema():
             pass
         return jsonify({"ok": False, "error": "psql not available on server"}), 500
 
+    def _run_psql_with_ssl_fallback(cmd_args, db_url, timeout_secs=180):
+        """Run psql with SSL, with multiple fallback strategies for certificate verification issues.
+        
+        Tries multiple approaches to work around SSL certificate verification failures:
+        1. Standard require mode with non-existent root cert
+        2. Download fresh CA bundle from curl.se and use it
+        3. Use system CA bundle with explicit path
+        """
+        from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+        import tempfile
+        import urllib.request
+        
+        def build_psql_env(ca_cert_path=None, use_nonexistent=False):
+            """Build environment for psql with SSL settings."""
+            env = os.environ.copy()
+            # Remove any existing SSL settings
+            for key in list(env.keys()):
+                if key.startswith("PGSSL") or key.startswith("SSL_"):
+                    del env[key]
+            
+            env["PGSSLMODE"] = "require"
+            
+            if use_nonexistent:
+                env["PGSSLROOTCERT"] = "/nonexistent/.postgresql/root.crt"
+            elif ca_cert_path:
+                env["PGSSLROOTCERT"] = ca_cert_path
+            
+            return env
+        
+        def modify_url_sslmode(url, mode="require"):
+            """Ensure URL has the specified sslmode."""
+            try:
+                u = urlparse(url)
+                q = dict(parse_qsl(u.query, keep_blank_values=True))
+                q["sslmode"] = mode
+                new_query = urlencode(q)
+                return urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
+            except Exception:
+                return url
+        
+        def update_cmd_url(cmd, old_url, new_url):
+            """Replace URL in command args."""
+            return [new_url if arg == old_url else arg for arg in cmd]
+        
+        # Modify URL to ensure sslmode=require
+        db_url_modified = modify_url_sslmode(db_url, "require")
+        cmd_modified = update_cmd_url(list(cmd_args), db_url, db_url_modified)
+        
+        # Strategy 1: Try with non-existent root cert (should skip verification)
+        psql_env = build_psql_env(use_nonexistent=True)
+        res = subprocess.run(cmd_modified, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env)
+        
+        stderr_lower = (res.stderr or "").lower()
+        if res.returncode == 0 or "certificate" not in stderr_lower:
+            return res
+        
+        # Strategy 2: Try downloading fresh CA certificates from curl.se
+        try:
+            ca_bundle_url = "https://curl.se/ca/cacert.pem"
+            ca_temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False)
+            try:
+                # Download CA bundle with a short timeout
+                req = urllib.request.Request(ca_bundle_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    ca_content = response.read().decode('utf-8')
+                    ca_temp_file.write(ca_content)
+                    ca_temp_file.close()
+                
+                # Try with fresh CA bundle
+                psql_env = build_psql_env(ca_cert_path=ca_temp_file.name)
+                res = subprocess.run(cmd_modified, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env)
+                
+                if res.returncode == 0 or "certificate" not in (res.stderr or "").lower():
+                    # Clean up temp file on success
+                    try:
+                        os.unlink(ca_temp_file.name)
+                    except:
+                        pass
+                    return res
+            except Exception as e:
+                pass  # Continue to next strategy
+            finally:
+                try:
+                    os.unlink(ca_temp_file.name)
+                except:
+                    pass
+        except Exception:
+            pass
+        
+        # Strategy 3: Try with common system CA paths
+        ca_paths = [
+            "/etc/ssl/certs/ca-certificates.crt",  # Debian/Ubuntu
+            "/etc/pki/tls/certs/ca-bundle.crt",    # RHEL/CentOS
+            "/etc/ssl/ca-bundle.pem",               # OpenSUSE
+            "/etc/ssl/cert.pem",                    # Alpine/macOS
+            "/usr/local/share/ca-certificates/cacert.pem",  # Custom location
+        ]
+        
+        for ca_path in ca_paths:
+            if os.path.isfile(ca_path):
+                psql_env = build_psql_env(ca_cert_path=ca_path)
+                res = subprocess.run(cmd_modified, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env)
+                if res.returncode == 0 or "certificate" not in (res.stderr or "").lower():
+                    return res
+        
+        # Return last result if all strategies failed
+        return res
+    
     try:
         # Run psql with ON_ERROR_STOP for atomic failure
         # Use -a (echo all commands) and -e (echo errors) for better debugging
@@ -701,15 +821,17 @@ def sync_schema():
             "-e",  # Echo errors
             "-f", sql_path,
         ]
-        # Set environment variables to handle SSL properly
-        # PGSSLMODE=require uses SSL but doesn't verify the certificate
-        # This fixes "SSL error: certificate verify failed" on some systems
+        
+        res = _run_psql_with_ssl_fallback(cmd, db_url, timeout_secs=180)
+        
+        # Prepare environment for potential follow-up psql calls (admin_secrets update)
+        # Use the same SSL settings as the main call to avoid certificate verification
         psql_env = os.environ.copy()
+        for key in list(psql_env.keys()):
+            if key.startswith("PGSSL"):
+                del psql_env[key]
         psql_env["PGSSLMODE"] = "require"
-        # Disable root certificate verification by pointing to non-existent file
-        # This prevents OpenSSL from trying to verify the server's certificate
-        psql_env["PGSSLROOTCERT"] = ""
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False, env=psql_env)
+        psql_env["PGSSLROOTCERT"] = "/nonexistent/.postgresql/root.crt"
         out = (res.stdout or "")
         err = (res.stderr or "")
         

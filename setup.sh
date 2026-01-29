@@ -307,7 +307,68 @@ fi
 
 log "Installing base packages…"
 $PM_UPDATE
-$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd certbot python3-certbot-nginx unzip
+$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd certbot python3-certbot-nginx unzip unattended-upgrades apt-listchanges
+
+# Configure unattended-upgrades for automatic security updates
+log "Configuring unattended-upgrades for automatic security updates…"
+configure_unattended_upgrades() {
+  local config_file="/etc/apt/apt.conf.d/50unattended-upgrades"
+  local auto_file="/etc/apt/apt.conf.d/20auto-upgrades"
+  
+  # Create unattended-upgrades configuration
+  $SUDO bash -c "cat > '$config_file' <<'EOF'
+// Unattended-Upgrades configuration for PlantSwipe server
+// Only install security updates automatically (safe for production)
+
+Unattended-Upgrade::Allowed-Origins {
+    \"\${distro_id}:\${distro_codename}\";
+    \"\${distro_id}:\${distro_codename}-security\";
+    \"\${distro_id}ESMApps:\${distro_codename}-apps-security\";
+    \"\${distro_id}ESM:\${distro_codename}-infra-security\";
+};
+
+// Packages to never update automatically (add any critical packages here)
+Unattended-Upgrade::Package-Blacklist {
+    // \"nginx\";  // Uncomment to prevent nginx auto-updates
+};
+
+// Automatically reboot at 5:00 AM if required (e.g., kernel updates)
+Unattended-Upgrade::Automatic-Reboot \"true\";
+Unattended-Upgrade::Automatic-Reboot-Time \"05:00\";
+
+// Only reboot if no users are logged in (safer)
+Unattended-Upgrade::Automatic-Reboot-WithUsers \"false\";
+
+// Remove unused kernel packages and dependencies
+Unattended-Upgrade::Remove-Unused-Kernel-Packages \"true\";
+Unattended-Upgrade::Remove-Unused-Dependencies \"true\";
+
+// Log to syslog
+Unattended-Upgrade::SyslogEnable \"true\";
+
+// Don't install updates that require dpkg prompts
+Unattended-Upgrade::DevRelease \"false\";
+EOF
+"
+
+  # Enable automatic updates
+  $SUDO bash -c "cat > '$auto_file' <<'EOF'
+// Enable automatic updates
+APT::Periodic::Update-Package-Lists \"1\";
+APT::Periodic::Unattended-Upgrade \"1\";
+APT::Periodic::Download-Upgradeable-Packages \"1\";
+APT::Periodic::AutocleanInterval \"7\";
+EOF
+"
+
+  # Enable and start the unattended-upgrades service
+  $SUDO systemctl enable unattended-upgrades || true
+  $SUDO systemctl start unattended-upgrades || true
+  
+  log "Unattended-upgrades configured: security updates daily, auto-reboot at 5 AM if needed"
+}
+
+configure_unattended_upgrades
 
 # Ensure global AWS RDS CA bundle for TLS to Supabase Postgres
 log "Installing AWS RDS global CA bundle for TLS…"
@@ -1939,6 +2000,46 @@ WantedBy=timers.target
 EOF
 "
 
+# CA certificates auto-update timer (weekly)
+# This ensures the system CA certificates stay up-to-date for SSL connections
+# (e.g., connecting to Supabase database which requires valid CA certs)
+SERVICE_CA_UPDATE="plantswipe-ca-update"
+CA_UPDATE_SERVICE_FILE="/etc/systemd/system/$SERVICE_CA_UPDATE.service"
+CA_UPDATE_TIMER_FILE="/etc/systemd/system/$SERVICE_CA_UPDATE.timer"
+
+log "Installing CA certificates auto-update service…"
+$SUDO bash -c "cat > '$CA_UPDATE_SERVICE_FILE' <<EOF
+[Unit]
+Description=Update CA certificates for PlantSwipe SSL connections
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'apt-get update -qq && apt-get install -y --only-upgrade ca-certificates && update-ca-certificates'
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+"
+
+log "Installing CA certificates auto-update timer (weekly)…"
+$SUDO bash -c "cat > '$CA_UPDATE_TIMER_FILE' <<EOF
+[Unit]
+Description=Weekly CA certificates update for PlantSwipe
+
+[Timer]
+# Run weekly on Sunday at 4:00 AM
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
+EOF
+"
+
 # Ensure ownership for admin dir (www-data runs the service)
 $SUDO chown -R www-data:www-data "$ADMIN_DIR" || true
 
@@ -1972,8 +2073,12 @@ fi
 # Enable and restart services to pick up updated unit files
 log "Enabling and restarting services…"
 $SUDO systemctl daemon-reload
-$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVICE_SITEMAP.timer"
+$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVICE_SITEMAP.timer" "$SERVICE_CA_UPDATE.timer"
 $SUDO systemctl start "$SERVICE_SITEMAP.timer" || log "[WARN] Failed to start $SERVICE_SITEMAP.timer"
+$SUDO systemctl start "$SERVICE_CA_UPDATE.timer" || log "[WARN] Failed to start $SERVICE_CA_UPDATE.timer"
+# Run CA update immediately to fix any current SSL issues
+log "Running initial CA certificates update…"
+$SUDO systemctl start "$SERVICE_CA_UPDATE.service" || log "[WARN] CA certificates update failed (will retry on timer)"
 $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
 if [[ -x "$SITEMAP_GENERATOR_BIN" ]]; then
   if ! $SUDO systemctl start "$SERVICE_SITEMAP.service"; then

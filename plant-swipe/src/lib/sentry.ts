@@ -6,8 +6,15 @@
  * - Consent-aware initialization (respects cookie preferences)
  * - PII scrubbing (no emails, IPs anonymized)
  * - Enhanced error context for developers
- * - Performance monitoring
- * - Session replay with privacy controls
+ * - Lightweight performance monitoring (optimized for minimal overhead)
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Session replay is disabled (heavy DOM observation overhead)
+ * - Long task and INP monitoring disabled (continuous overhead)
+ * - Console capture limited to 'error' only (not 'warn' to reduce noise)
+ * - HTTP client integration disabled (monitors all requests)
+ * - Consent check results are cached to avoid repeated localStorage reads
+ * - Reduced trace sample rate for lower overhead
  * 
  * Import this module early in your application (before React renders).
  */
@@ -24,6 +31,120 @@ const SERVER_NAME = (import.meta.env as Record<string, string>).VITE_SERVER_NAME
 // Track initialization state
 let sentryInitialized = false
 let consentGiven = false
+
+// Cache consent check to avoid repeated localStorage reads (performance optimization)
+let consentCacheTimestamp = 0
+let cachedConsentResult = false
+const CONSENT_CACHE_TTL = 5000 // Cache consent check for 5 seconds
+// Maintenance mode tracking
+// When true, suppress HTTP errors that are expected during service restarts
+let maintenanceMode = false
+let maintenanceModeTimeout: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Enable maintenance mode to suppress expected HTTP errors during restarts
+ * Automatically disables after the specified timeout (default: 60 seconds)
+ * 
+ * @param durationMs - How long to stay in maintenance mode (default: 60000ms)
+ */
+export function enableMaintenanceMode(durationMs: number = 60000): void {
+  maintenanceMode = true
+  console.log('[Sentry] Maintenance mode enabled - suppressing expected HTTP errors')
+  
+  // Clear any existing timeout
+  if (maintenanceModeTimeout) {
+    clearTimeout(maintenanceModeTimeout)
+  }
+  
+  // Auto-disable after timeout
+  maintenanceModeTimeout = setTimeout(() => {
+    disableMaintenanceMode()
+  }, durationMs)
+}
+
+/**
+ * Disable maintenance mode and resume normal error reporting
+ */
+export function disableMaintenanceMode(): void {
+  maintenanceMode = false
+  if (maintenanceModeTimeout) {
+    clearTimeout(maintenanceModeTimeout)
+    maintenanceModeTimeout = null
+  }
+  console.log('[Sentry] Maintenance mode disabled - normal error reporting resumed')
+}
+
+/**
+ * Check if maintenance mode is currently active
+ */
+export function isMaintenanceModeActive(): boolean {
+  return maintenanceMode
+}
+
+/**
+ * URLs that are expected to have transient errors during restarts
+ * Errors from these URLs during maintenance mode will be suppressed
+ */
+const MAINTENANCE_IGNORED_URL_PATTERNS = [
+  /\/admin\/restart/,
+  /\/admin\/reload/,
+  /\/admin\/branches/,
+  /\/api\/admin\/branches/,
+  /\/api\/broadcast\/active/,
+  /\/api\/health/,
+  /\/api\/admin\/stats/,
+  /\/api\/admin\/online/,
+]
+
+/**
+ * Check if an error should be suppressed based on maintenance mode and URL
+ */
+function shouldSuppressMaintenanceError(error: Error | unknown, event: Sentry.Event): boolean {
+  if (!maintenanceMode) {
+    return false
+  }
+  
+  // Check if this is an HTTP client error (502, 503, 400 during restarts)
+  const errorMessage = error instanceof Error ? error.message : String(error)
+  const isHttpError = errorMessage.includes('HTTP Client Error with status code:')
+  
+  if (!isHttpError) {
+    return false
+  }
+  
+  // Extract status code from message
+  const statusMatch = errorMessage.match(/status code:\s*(\d+)/)
+  const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : 0
+  
+  // Suppress 502, 503 (Bad Gateway, Service Unavailable) and 400 (Bad Request during restart)
+  const suppressibleStatusCodes = [400, 502, 503, 504]
+  if (!suppressibleStatusCodes.includes(statusCode)) {
+    return false
+  }
+  
+  // Check URL from event tags or breadcrumbs
+  const url = event.tags?.url as string || 
+              event.request?.url || 
+              (event.breadcrumbs?.find(b => b.category === 'fetch' || b.category === 'xhr')?.data?.url as string)
+  
+  if (url) {
+    // Check if URL matches any of the maintenance-ignored patterns
+    for (const pattern of MAINTENANCE_IGNORED_URL_PATTERNS) {
+      if (pattern.test(url)) {
+        console.log(`[Sentry] Suppressing expected maintenance error for ${url} (${statusCode})`)
+        return true
+      }
+    }
+  }
+  
+  // During maintenance mode, suppress all 502/503 errors as they're likely due to service restart
+  if (statusCode === 502 || statusCode === 503) {
+    console.log(`[Sentry] Suppressing ${statusCode} error during maintenance mode`)
+    return true
+  }
+  
+  return false
+}
 
 /**
  * Error categories for better organization in Sentry dashboard
@@ -47,17 +168,42 @@ export type ErrorCategoryType = typeof ErrorCategory[keyof typeof ErrorCategory]
 /**
  * Check if user has given consent for analytics/error tracking
  * GDPR requires explicit consent before sending data
+ * 
+ * PERFORMANCE: Results are cached for CONSENT_CACHE_TTL ms to avoid
+ * repeated synchronous localStorage reads which can block the main thread.
  */
 export function hasTrackingConsent(): boolean {
+  const now = Date.now()
+  
+  // Return cached result if still valid
+  if (now - consentCacheTimestamp < CONSENT_CACHE_TTL) {
+    return cachedConsentResult
+  }
+  
   try {
     const stored = localStorage.getItem('cookie_consent')
-    if (!stored) return false
+    if (!stored) {
+      cachedConsentResult = false
+      consentCacheTimestamp = now
+      return false
+    }
     const consent = JSON.parse(stored)
     // Analytics consent includes error tracking
-    return consent.level === 'analytics' || consent.level === 'all'
+    cachedConsentResult = consent.level === 'analytics' || consent.level === 'all'
+    consentCacheTimestamp = now
+    return cachedConsentResult
   } catch {
+    cachedConsentResult = false
+    consentCacheTimestamp = now
     return false
   }
+}
+
+/**
+ * Invalidate the consent cache - call this when consent changes
+ */
+export function invalidateConsentCache(): void {
+  consentCacheTimestamp = 0
 }
 
 /**
@@ -140,49 +286,41 @@ export function initSentry(): void {
       // GDPR: Disable sending by default until consent is given
       enabled: consentGiven,
       
-      // Send structured logs to Sentry
-      _experiments: {
-        enableLogs: true,
-      },
+      // PERFORMANCE: Disabled experimental features to reduce overhead
+      // _experiments: { enableLogs: true },
       
-      // Integrations with GDPR-compliant settings
+      // PERFORMANCE OPTIMIZED: Minimal integrations for lower overhead
+      // Heavy integrations (replay, http monitoring) are disabled
       integrations: [
-        // Browser tracing for performance monitoring
+        // Browser tracing for performance monitoring - OPTIMIZED
         Sentry.browserTracingIntegration({
-          // Don't include URL query params (may contain PII)
-          enableLongTask: true,
-          enableInp: true,
+          // PERFORMANCE: Disabled long task monitoring (continuous overhead)
+          enableLongTask: false,
+          // PERFORMANCE: Disabled INP monitoring (continuous overhead)
+          enableInp: false,
         }),
-        // Replay for session recordings on errors - with privacy controls
-        Sentry.replayIntegration({
-          // GDPR: Mask all text by default to avoid capturing PII
-          maskAllText: true,
-          // GDPR: Block all media to avoid capturing images of sensitive content
-          blockAllMedia: true,
-          // Mask all inputs including select, textarea
-          maskAllInputs: true,
-          // Network request capture settings
-          networkDetailAllowUrls: [], // Don't capture network details by default
-          networkRequestHeaders: [], // Don't capture request headers
-          networkResponseHeaders: [], // Don't capture response headers
-        }),
-        // Capture console errors
+        // PERFORMANCE: Session Replay DISABLED - heavy DOM observation overhead
+        // Even with 0% sample rate, the integration still initializes observers
+        // Sentry.replayIntegration({ ... }),
+        
+        // Console capture - only 'error' level for debugging (not 'warn' to reduce noise)
+        // This helps devs track console.error() calls while avoiding React warnings etc.
         Sentry.captureConsoleIntegration({
-          levels: ['error', 'warn'],
+          levels: ['error'], // Only errors, not warnings (reduces noise + overhead)
         }),
-        // Enhanced context from HTTP requests
-        Sentry.httpClientIntegration({
-          failedRequestStatusCodes: [[400, 599]],
-        }),
+        
+        // PERFORMANCE: HTTP client integration DISABLED - monitors all requests
+        // Sentry.httpClientIntegration({ failedRequestStatusCodes: [[400, 599]] }),
       ],
 
-      // Tracing - capture 20% of transactions in production (cost-effective)
-      tracesSampleRate: isProduction ? 0.2 : 1.0,
+      // PERFORMANCE: Reduced trace sample rate for lower overhead
+      // 10% in production provides good coverage with less impact
+      tracesSampleRate: isProduction ? 0.1 : 0.5,
 
-      // Session replay settings
-      // GDPR: Only capture replays on errors, not random sessions
-      replaysSessionSampleRate: 0, // Don't capture random sessions
-      replaysOnErrorSampleRate: consentGiven ? 1.0 : 0, // Only on errors, only with consent
+      // PERFORMANCE: Session replay completely disabled
+      // Replay has significant overhead even when not actively recording
+      replaysSessionSampleRate: 0,
+      replaysOnErrorSampleRate: 0,
 
       // GDPR: Don't automatically send PII
       sendDefaultPii: false,
@@ -196,6 +334,11 @@ export function initSentry(): void {
 
         // Re-check consent at send time (user may have withdrawn)
         if (!hasTrackingConsent()) {
+          return null
+        }
+
+        // Suppress expected HTTP errors during maintenance mode (restart/refresh operations)
+        if (shouldSuppressMaintenanceError(error, event)) {
           return null
         }
 
@@ -285,6 +428,8 @@ export function initSentry(): void {
  * Call this when user updates their cookie preferences
  */
 export function updateSentryConsent(): void {
+  // Invalidate cache to get fresh consent value
+  invalidateConsentCache()
   const newConsent = hasTrackingConsent()
   
   if (newConsent !== consentGiven) {
@@ -577,6 +722,13 @@ export function setContext(name: string, context: Record<string, unknown>): void
 // Listen for consent changes
 if (typeof window !== 'undefined') {
   window.addEventListener('cookie_consent_granted', () => {
+    invalidateConsentCache()
+    updateSentryConsent()
+  })
+  
+  // Also listen for consent withdrawal
+  window.addEventListener('cookie_consent_rejected', () => {
+    invalidateConsentCache()
     updateSentryConsent()
   })
 }
