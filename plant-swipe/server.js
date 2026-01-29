@@ -336,7 +336,7 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
   <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
   <meta name="color-scheme" content="light dark">
   <meta name="supported-color-schemes" content="light dark">
-  <title>${subject || 'Aphylia'}</title>
+  <title>${escapeHtml(subject) || 'Aphylia'}</title>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
   <!--[if mso]>
   <noscript>
@@ -726,11 +726,7 @@ async function processEmailCampaigns() {
             url: websiteUrl.replace(/^https?:\/\//, ''), // Website URL without protocol (e.g., "aphylia.app")
             code: 'XXXXXX'                           // Placeholder for campaign emails (real codes are for transactional emails)
           }
-          const replaceVars = (str, escape = false) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
-            const val = context[k.toLowerCase()]
-            if (val === undefined || val === null) return `{{${k}}}`
-            return escape ? escapeHtml(String(val)) : String(val)
-          })
+          const replaceVars = createTemplateReplacer(context)
 
           // Get user's language-specific content (fallback to campaign's default content)
           const translation = emailTranslations.get(userLang)
@@ -4279,6 +4275,20 @@ const htmlEscapeMap = {
 function escapeHtml(value) {
   if (value === null || value === undefined) return ''
   return String(value).replace(/[&<>"']/g, (ch) => htmlEscapeMap[ch] || ch)
+}
+
+/**
+ * Creates a template variable replacer function for email templates.
+ * Replaces {{variable}} placeholders with values from the context object.
+ * @param {Object} context - Object containing variable values (keys should be lowercase)
+ * @returns {function(string, boolean): string} Replacer function that takes (template, shouldEscape)
+ */
+function createTemplateReplacer(context) {
+  return (str, escape = false) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
+    const val = context[k.toLowerCase()]
+    if (val === undefined || val === null) return `{{${k}}}`
+    return escape ? escapeHtml(String(val)) : String(val)
+  })
 }
 
 function isContactRateLimited(key) {
@@ -8678,11 +8688,7 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       url: websiteUrl.replace(/^https?:\/\//, ''),
       code: 'XXXXXX',
     }
-    const replaceVars = (str, escape = false) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
-      const val = context[k.toLowerCase()]
-      if (val === undefined || val === null) return `{{${k}}}`
-      return escape ? escapeHtml(String(val)) : String(val)
-    })
+    const replaceVars = createTemplateReplacer(context)
 
     // Do not escape values in subject (email clients handle text subjects)
     const subject = replaceVars(rawSubject, false)
@@ -8861,12 +8867,7 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
       time: extraContext.time || currentTimestamp,
     }
 
-    const replaceVars = (str, escape = false) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
-      const key = k.toLowerCase()
-      const val = context[key]
-      if (val === undefined || val === null) return `{{${k}}}`
-      return escape ? escapeHtml(String(val)) : String(val)
-    })
+    const replaceVars = createTemplateReplacer(context)
 
     // Do not escape values in subject (email clients handle text subjects)
     const subject = replaceVars(rawSubject, false)
