@@ -9939,6 +9939,20 @@ CREATE TABLE IF NOT EXISTS public.bug_reports (
     resolved_at timestamptz
 );
 
+-- Add foreign key to profiles for Supabase PostgREST joins
+-- This enables the profiles:user_id embed syntax in queries
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'bug_reports_user_id_profiles_fkey' 
+        AND table_name = 'bug_reports'
+    ) THEN
+        ALTER TABLE public.bug_reports 
+        ADD CONSTRAINT bug_reports_user_id_profiles_fkey 
+        FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_bug_reports_user ON public.bug_reports(user_id);
 CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON public.bug_reports(status);
 CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON public.bug_reports(created_at DESC);

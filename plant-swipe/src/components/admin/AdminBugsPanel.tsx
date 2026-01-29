@@ -154,20 +154,41 @@ export const AdminBugsPanel: React.FC = () => {
         setActions(actionsData)
       }
 
-      // Load all bug reports with user info
-      const { data: reportsData } = await supabase
+      // Load all bug reports
+      const { data: reportsData, error: reportsError } = await supabase
         .from('bug_reports')
-        .select(`
-          *,
-          profiles:user_id (display_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
       
-      if (reportsData) {
+      if (reportsError) {
+        console.error('Error loading bug reports:', reportsError)
+      }
+      
+      if (reportsData && reportsData.length > 0) {
+        // Get unique user IDs from reports
+        const userIds = [...new Set(reportsData.map(r => r.user_id))]
+        
+        // Fetch display names for all users
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', userIds)
+        
+        // Create a map of user_id to display_name
+        const displayNameMap: Record<string, string> = {}
+        if (profilesData) {
+          profilesData.forEach(p => {
+            displayNameMap[p.id] = p.display_name || 'Unknown User'
+          })
+        }
+        
+        // Map reports with display names
         setBugReports(reportsData.map(r => ({
           ...r,
-          user_display_name: r.profiles?.display_name || 'Unknown User'
+          user_display_name: displayNameMap[r.user_id] || 'Unknown User'
         })))
+      } else {
+        setBugReports([])
       }
 
     } catch (error) {
