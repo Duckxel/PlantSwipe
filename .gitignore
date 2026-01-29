@@ -85,3 +85,4 @@ yarn.lock
 .yarn/
 .yarnrc.yml
 .pnp.*
+admin_api/__pycache__/

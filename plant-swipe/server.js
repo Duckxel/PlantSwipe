@@ -1,4 +1,23 @@
-// Sentry error monitoring - must be imported first
+// Load environment variables FIRST - before any other initialization
+// This ensures all env vars are available for Sentry and other modules
+import dotenv from 'dotenv'
+import { fileURLToPath } from 'url'
+import path from 'path'
+
+// Get __dirname equivalent for ESM
+const __filename_early = fileURLToPath(import.meta.url)
+const __dirname_early = path.dirname(__filename_early)
+
+// Load .env files in order of priority
+dotenv.config() // Default .env in cwd
+try {
+  dotenv.config({ path: path.resolve(__dirname_early, '.env') }) // .env next to server.js
+} catch { }
+try {
+  dotenv.config({ path: path.resolve(__dirname_early, '.env.server') }) // server-specific secrets
+} catch { }
+
+// Sentry error monitoring - must be imported early for error catching
 // GDPR Compliance: No PII is sent automatically
 // Use @sentry/node for Node.js compatibility (systemd service runs with /usr/bin/node)
 // @sentry/bun would only work when running with the Bun runtime
@@ -7,6 +26,7 @@ import * as Sentry from '@sentry/node';
 const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520';
 
 // Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
+// Now this will correctly read from .env since dotenv was loaded above
 const SERVER_NAME = process.env.PLANTSWIPE_SERVER_NAME || process.env.SERVER_NAME || 'unknown';
 
 /**
@@ -146,12 +166,10 @@ process.on('unhandledRejection', (reason, promise) => {
 // ESM server to serve API and static assets
 import express from 'express'
 import postgres from 'postgres'
-import dotenv from 'dotenv'
-import path from 'path'
+// Note: dotenv, path, fileURLToPath already imported at top of file for early env loading
 import fs from 'fs/promises'
 import fsSync from 'fs'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { fileURLToPath } from 'url'
 import { exec as execCb, spawn as spawnChild } from 'child_process'
 import { promisify } from 'util'
 
@@ -168,15 +186,7 @@ import sharp from 'sharp'
 import webpush from 'web-push'
 import cron from 'node-cron'
 
-dotenv.config()
-// Optionally load server-only secrets from .env.server (ignored if missing)
-try {
-  dotenv.config({ path: path.resolve(__dirname, '.env.server') })
-} catch { }
-// Ensure we also load a co-located .env next to server.js regardless of cwd
-try {
-  dotenv.config({ path: path.resolve(__dirname, '.env') })
-} catch { }
+// Note: dotenv already loaded at top of file before Sentry init
 
 // Map common env aliases so deployments can be plug‑and‑play with a single .env
 function preferEnv(target, sources) {
