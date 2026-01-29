@@ -28,10 +28,12 @@ const getEnvironment = () => {
 const getServerName = () => {
   if (typeof window === 'undefined') return 'ssr'
   const hostname = window.location.hostname
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'local'
-  if (hostname.includes('aphylia.app')) return 'production'
+  if (!hostname) return 'unknown'
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'localhost'
+  if (hostname.includes('aphylia.app')) return 'aphylia.app'
   if (hostname.includes('staging')) return 'staging'
-  return hostname || 'unknown'
+  // Return the actual hostname for any other case
+  return hostname
 }
 
 // Track initialization state
@@ -78,6 +80,9 @@ export function initSentry(): void {
     Sentry.init({
       dsn: SENTRY_DSN,
       environment,
+      
+      // Server name for identifying the host/instance
+      serverName,
       
       // Integrations for monitoring and debugging
       integrations: [
@@ -138,10 +143,10 @@ export function initSentry(): void {
           return null
         }
         
-        // Add custom context
-        if (event.tags) {
-          event.tags['server.name'] = serverName
-        }
+        // Ensure tags object exists and add server context
+        event.tags = event.tags || {}
+        event.tags['server'] = serverName
+        event.tags['hostname'] = typeof window !== 'undefined' ? window.location.hostname : 'unknown'
         
         // Filter out certain errors if needed (e.g., network errors from extensions)
         const error = hint.originalException
@@ -185,9 +190,10 @@ export function initSentry(): void {
       debug: import.meta.env.DEV,
     })
     
-    // Set initial context
+    // Set initial tags
     Sentry.setTag('gdpr_consent', hasConsent.toString())
-    Sentry.setTag('server.name', serverName)
+    Sentry.setTag('server', serverName)
+    Sentry.setTag('hostname', typeof window !== 'undefined' ? window.location.hostname : 'unknown')
     
     // Set context with app info
     Sentry.setContext('app', {
@@ -195,6 +201,7 @@ export function initSentry(): void {
       commit: import.meta.env.VITE_COMMIT_SHA || 'unknown',
       base_url: import.meta.env.BASE_URL,
       environment,
+      serverName,
     })
     
     isInitialized = true
