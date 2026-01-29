@@ -17,6 +17,8 @@ type LegalUpdateModalProps = {
   userId: string
   userTermsVersion: string | null
   userPrivacyVersion: string | null
+  userTermsAcceptedDate?: string | null
+  userPrivacyAcceptedDate?: string | null
   onAccepted: () => void
   onDeclined: () => void
 }
@@ -46,10 +48,13 @@ function isVersionOutdated(userVersion: string | null, currentVersion: string): 
 
 export function useNeedsLegalUpdate(
   termsVersion: string | null | undefined, 
-  privacyVersion: string | null | undefined
+  privacyVersion: string | null | undefined,
+  termsAcceptedDate?: string | null,
+  privacyAcceptedDate?: string | null
 ) {
-  const needsTermsUpdate = isVersionOutdated(termsVersion ?? null, CURRENT_TERMS_VERSION)
-  const needsPrivacyUpdate = isVersionOutdated(privacyVersion ?? null, CURRENT_PRIVACY_VERSION)
+  // User needs to accept terms if: version is outdated OR no acceptance date exists
+  const needsTermsUpdate = isVersionOutdated(termsVersion ?? null, CURRENT_TERMS_VERSION) || !termsAcceptedDate
+  const needsPrivacyUpdate = isVersionOutdated(privacyVersion ?? null, CURRENT_PRIVACY_VERSION) || !privacyAcceptedDate
   
   return {
     needsUpdate: needsTermsUpdate || needsPrivacyUpdate,
@@ -75,6 +80,8 @@ export function LegalUpdateModal({
   userId,
   userTermsVersion,
   userPrivacyVersion,
+  userTermsAcceptedDate,
+  userPrivacyAcceptedDate,
   onAccepted,
   onDeclined,
 }: LegalUpdateModalProps) {
@@ -87,7 +94,9 @@ export function LegalUpdateModal({
   
   const { needsTermsUpdate, needsPrivacyUpdate } = useNeedsLegalUpdate(
     userTermsVersion,
-    userPrivacyVersion
+    userPrivacyVersion,
+    userTermsAcceptedDate,
+    userPrivacyAcceptedDate
   )
   
   const handleAccept = async () => {
@@ -159,6 +168,7 @@ export function LegalUpdateModal({
         className="max-w-lg mx-4 rounded-2xl"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
+        hideCloseButton
       >
         {step === 'review' ? (
           <>

@@ -210,11 +210,13 @@ export default function PlantSwipe() {
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
   
-  // Legal update modal - show when user's accepted versions are outdated
+  // Legal update modal - show when user's accepted versions are outdated OR acceptance dates are missing
   const [legalUpdateDismissed, setLegalUpdateDismissed] = useState(false)
   const { needsUpdate: needsLegalUpdate } = useNeedsLegalUpdate(
     profile?.terms_version_accepted,
-    profile?.privacy_version_accepted
+    profile?.privacy_version_accepted,
+    profile?.terms_accepted_date,
+    profile?.privacy_policy_accepted_date
   )
   const showLegalUpdateModal = Boolean(user && profile && needsLegalUpdate && !legalUpdateDismissed)
 
@@ -1462,6 +1464,8 @@ export default function PlantSwipe() {
               userId={user.id}
               userTermsVersion={profile.terms_version_accepted ?? null}
               userPrivacyVersion={profile.privacy_version_accepted ?? null}
+              userTermsAcceptedDate={profile.terms_accepted_date ?? null}
+              userPrivacyAcceptedDate={profile.privacy_policy_accepted_date ?? null}
               onAccepted={() => {
                 setLegalUpdateDismissed(true)
                 refreshProfile().catch(() => {})
@@ -2131,6 +2135,8 @@ export default function PlantSwipe() {
           userId={user.id}
           userTermsVersion={profile.terms_version_accepted ?? null}
           userPrivacyVersion={profile.privacy_version_accepted ?? null}
+          userTermsAcceptedDate={profile.terms_accepted_date ?? null}
+          userPrivacyAcceptedDate={profile.privacy_policy_accepted_date ?? null}
           onAccepted={() => {
             setLegalUpdateDismissed(true)
             refreshProfile().catch(() => {})

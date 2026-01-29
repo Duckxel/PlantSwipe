@@ -71,6 +71,7 @@ export function ServiceWorkerToast() {
   const autoHideTimer = React.useRef<number | null>(null)
   const wbRef = React.useRef<Workbox | null>(null)
   const pendingReloadRef = React.useRef(false)
+  const updateShownRef = React.useRef(false) // Track if update notification was already shown
 
   const requestRegistrationUpdate = React.useCallback(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
@@ -97,6 +98,10 @@ export function ServiceWorkerToast() {
   }, [])
 
   const surfaceWaitingUpdate = React.useCallback(() => {
+    // Prevent duplicate update notifications
+    if (updateShownRef.current) return
+    updateShownRef.current = true
+    
     setNeedRefreshFlag(true)
     setRefreshDismissed(false)
     setMode('update')
@@ -269,6 +274,8 @@ export function ServiceWorkerToast() {
     } else if (mode === 'update') {
       setRefreshDismissed(true)
       setNeedRefreshFlag(false)
+      // Reset the update shown flag so it can show again on next update
+      updateShownRef.current = false
     }
     setVisible(false)
   }
@@ -277,6 +284,8 @@ export function ServiceWorkerToast() {
     setNeedRefreshFlag(false)
     setRefreshDismissed(false)
     setAvailableVersion(null)
+    // Reset the update shown flag
+    updateShownRef.current = false
     pendingReloadRef.current = true
     const wb = wbRef.current
     const postSkipWaiting = () => {
@@ -372,13 +381,22 @@ export function ServiceWorkerToast() {
           {mode === 'offline' && offlineHint ? <p className="mt-2 text-xs text-amber-200/90">{offlineHint}</p> : null}
         <div className={`mt-4 flex gap-2 ${isBlockingMode ? 'text-base' : 'text-sm'}`}>
           {mode === 'update' ? (
-            <button
-              type="button"
-              onClick={triggerUpdate}
-              className="w-full rounded-full bg-emerald-400 px-4 py-2 font-semibold text-emerald-950 transition hover:bg-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-200"
-            >
-              Reload now
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={dismiss}
+                className="flex-1 rounded-full border border-white/30 px-4 py-2 font-medium text-white/80 transition hover:border-white hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
+              >
+                Later
+              </button>
+              <button
+                type="button"
+                onClick={triggerUpdate}
+                className="flex-1 rounded-full bg-emerald-400 px-4 py-2 font-semibold text-emerald-950 transition hover:bg-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-200"
+              >
+                Reload now
+              </button>
+            </>
           ) : mode === 'offline' ? (
             <button
               type="button"
