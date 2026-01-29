@@ -390,6 +390,33 @@ do $$ begin
   end;
 end $$;
 
+-- ========== Purge old completed bug reports (retention) ==========
+-- Delete bug reports with status 'completed' that are older than 10 days
+-- Runs daily at 4 AM UTC
+do $$ begin
+  begin
+    -- First unschedule if exists to allow updates
+    perform cron.unschedule('purge_old_bug_reports');
+  exception
+    when others then
+      null;
+  end;
+  begin
+    perform cron.schedule(
+      'purge_old_bug_reports',
+      '0 4 * * *',
+      $_cron$
+      delete from public.bug_reports
+      where status = 'completed'
+        and timezone('utc', created_at) < ((now() at time zone 'utc')::date - interval '10 days');
+      $_cron$
+    );
+  exception
+    when others then
+      null;
+  end;
+end $$;
+
 -- ========== Plants base table ==========
 -- ARCHITECTURE NOTE: As of 2024, ALL translatable content is stored ONLY in plant_translations.
 -- This table contains ONLY non-translatable base data. No translatable columns exist here
@@ -9939,6 +9966,20 @@ CREATE TABLE IF NOT EXISTS public.bug_reports (
     resolved_at timestamptz
 );
 
+-- Add foreign key to profiles for Supabase PostgREST joins
+-- This enables the profiles:user_id embed syntax in queries
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'bug_reports_user_id_profiles_fkey' 
+        AND table_name = 'bug_reports'
+    ) THEN
+        ALTER TABLE public.bug_reports 
+        ADD CONSTRAINT bug_reports_user_id_profiles_fkey 
+        FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_bug_reports_user ON public.bug_reports(user_id);
 CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON public.bug_reports(status);
 CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON public.bug_reports(created_at DESC);
@@ -10425,57 +10466,60 @@ ALTER TABLE public.bug_points_history ENABLE ROW LEVEL SECURITY;
 
 -- Bug Actions policies
 -- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
+-- Note: Using (select auth.uid()) pattern for consistent RLS evaluation
 DROP POLICY IF EXISTS "Bug catchers can view active actions" ON public.bug_actions;
 CREATE POLICY "Bug catchers can view active actions" ON public.bug_actions
     FOR SELECT
     TO authenticated
-    USING (status = 'active' OR public.is_admin_user(auth.uid()));
+    USING (status = 'active' OR public.is_admin_user((select auth.uid())));
 
 DROP POLICY IF EXISTS "Admins can manage all actions" ON public.bug_actions;
 CREATE POLICY "Admins can manage all actions" ON public.bug_actions
     FOR ALL
     TO authenticated
-    USING (public.is_admin_user(auth.uid()))
-    WITH CHECK (public.is_admin_user(auth.uid()));
+    USING (public.is_admin_user((select auth.uid())))
+    WITH CHECK (public.is_admin_user((select auth.uid())));
 
 -- Bug Action Responses policies
 -- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
+-- Note: Using (select auth.uid()) pattern for consistent RLS evaluation
 DROP POLICY IF EXISTS "Users can view own responses" ON public.bug_action_responses;
 CREATE POLICY "Users can view own responses" ON public.bug_action_responses
     FOR SELECT
     TO authenticated
-    USING (user_id = auth.uid() OR public.is_admin_user(auth.uid()));
+    USING (user_id = (select auth.uid()) OR public.is_admin_user((select auth.uid())));
 
 DROP POLICY IF EXISTS "Users can insert own responses" ON public.bug_action_responses;
 CREATE POLICY "Users can insert own responses" ON public.bug_action_responses
     FOR INSERT
     TO authenticated
-    WITH CHECK (user_id = auth.uid());
+    WITH CHECK (user_id = (select auth.uid()));
 
 DROP POLICY IF EXISTS "Users can update own responses" ON public.bug_action_responses;
 CREATE POLICY "Users can update own responses" ON public.bug_action_responses
     FOR UPDATE
     TO authenticated
-    USING (user_id = auth.uid())
-    WITH CHECK (user_id = auth.uid());
+    USING (user_id = (select auth.uid()))
+    WITH CHECK (user_id = (select auth.uid()));
 
 -- Bug Reports policies
 -- Allow users to view their own reports, admins can view all
 -- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
+-- Note: Using (select auth.uid()) pattern for consistent RLS evaluation
 DROP POLICY IF EXISTS "Users can view own reports" ON public.bug_reports;
 CREATE POLICY "Users can view own reports" ON public.bug_reports
     FOR SELECT
     TO authenticated
     USING (
-        user_id = auth.uid() 
-        OR public.is_admin_user(auth.uid())
+        user_id = (select auth.uid()) 
+        OR public.is_admin_user((select auth.uid()))
     );
 
 DROP POLICY IF EXISTS "Users can insert own reports" ON public.bug_reports;
 CREATE POLICY "Users can insert own reports" ON public.bug_reports
     FOR INSERT
     TO authenticated
-    WITH CHECK (user_id = auth.uid());
+    WITH CHECK (user_id = (select auth.uid()));
 
 -- Allow admins to update any report (for reviewing, completing, closing)
 -- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
@@ -10483,18 +10527,19 @@ DROP POLICY IF EXISTS "Admins can update reports" ON public.bug_reports;
 CREATE POLICY "Admins can update reports" ON public.bug_reports
     FOR UPDATE
     TO authenticated
-    USING (public.is_admin_user(auth.uid()))
-    WITH CHECK (public.is_admin_user(auth.uid()));
+    USING (public.is_admin_user((select auth.uid())))
+    WITH CHECK (public.is_admin_user((select auth.uid())));
 
 -- Bug Points History policies
 -- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
+-- Note: Using (select auth.uid()) pattern for consistent RLS evaluation
 DROP POLICY IF EXISTS "Users can view own points history" ON public.bug_points_history;
 CREATE POLICY "Users can view own points history" ON public.bug_points_history
     FOR SELECT
     TO authenticated
     USING (
-        user_id = auth.uid() 
-        OR public.is_admin_user(auth.uid())
+        user_id = (select auth.uid()) 
+        OR public.is_admin_user((select auth.uid()))
     );
 
 DROP POLICY IF EXISTS "System can insert points history" ON public.bug_points_history;

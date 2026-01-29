@@ -154,20 +154,60 @@ export const AdminBugsPanel: React.FC = () => {
         setActions(actionsData)
       }
 
-      // Load all bug reports with user info
-      const { data: reportsData } = await supabase
+      // Load all bug reports
+      const { data: reportsData, error: reportsError } = await supabase
         .from('bug_reports')
-        .select(`
-          *,
-          profiles:user_id (display_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
       
-      if (reportsData) {
-        setBugReports(reportsData.map(r => ({
+      if (reportsError) {
+        console.error('Error loading bug reports:', reportsError)
+      }
+      
+      if (reportsData && reportsData.length > 0) {
+        // Get unique user IDs from reports
+        const userIds = [...new Set(reportsData.map(r => r.user_id))]
+        
+        // Fetch display names for all users
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', userIds)
+        
+        // Create a map of user_id to display_name
+        const displayNameMap: Record<string, string> = {}
+        if (profilesData) {
+          profilesData.forEach(p => {
+            displayNameMap[p.id] = p.display_name || 'Unknown User'
+          })
+        }
+        
+        // Sort reports: uncompleted first (pending, reviewing), then completed/closed
+        // Within each group, sort by created_at descending (newest first)
+        const statusPriority: Record<string, number> = {
+          'pending': 0,
+          'reviewing': 1,
+          'completed': 2,
+          'closed': 3
+        }
+        
+        const sortedReports = [...reportsData].sort((a, b) => {
+          const priorityA = statusPriority[a.status] ?? 99
+          const priorityB = statusPriority[b.status] ?? 99
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB
+          }
+          // Same status, sort by created_at descending
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        })
+        
+        // Map reports with display names
+        setBugReports(sortedReports.map(r => ({
           ...r,
-          user_display_name: r.profiles?.display_name || 'Unknown User'
+          user_display_name: displayNameMap[r.user_id] || 'Unknown User'
         })))
+      } else {
+        setBugReports([])
       }
 
     } catch (error) {
@@ -1248,7 +1288,7 @@ export const AdminBugsPanel: React.FC = () => {
               <>
                 <Button
                   variant="outline"
-                  className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
+                  className="rounded-xl text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30"
                   onClick={handleCloseReport}
                   disabled={processingReport}
                 >
