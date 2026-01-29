@@ -1192,6 +1192,8 @@ const proAdviceUploadPrefixRaw = (process.env.PRO_ADVICE_UPLOAD_PREFIX || 'pro-a
 const proAdviceUploadPrefix = proAdviceUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'pro-advice'
 const messagesUploadPrefixRaw = (process.env.MESSAGES_UPLOAD_PREFIX || 'messages').trim()
 const messagesUploadPrefix = messagesUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'messages'
+const mockupsUploadPrefixRaw = (process.env.MOCKUPS_UPLOAD_PREFIX || 'Mockups').trim()
+const mockupsUploadPrefix = mockupsUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'Mockups'
 const adminUploadMaxBytes = (() => {
   const raw = Number(process.env.ADMIN_UPLOAD_MAX_BYTES)
   if (Number.isFinite(raw) && raw > 0) return raw
@@ -5815,6 +5817,46 @@ app.post('/api/admin/upload-image', async (req, res) => {
       return [adminUploadPrefix, folder].filter(Boolean).join('/')
     },
     // Admin uploads: UTILITY bucket, 90% quality (highest)
+    bucket: 'UTILITY',
+    webpQuality: 90,
+  })
+})
+
+// Mockups upload - for PWA screenshots and app mockup images
+app.post('/api/admin/upload-mockup', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  let adminUser = null
+  try {
+    adminUser = await getUserFromRequest(req)
+  } catch { }
+  let adminDisplayName = null
+  if (adminUser?.id) {
+    adminDisplayName = await getAdminProfileName(adminUser.id)
+  }
+
+  await handleScopedImageUpload(req, res, {
+    actorId: adminPrincipal,
+    auditLabel: 'mockups',
+    uploaderInfo: {
+      id: adminUser?.id || null,
+      email: adminUser?.email || null,
+      name: adminDisplayName || null,
+    },
+    prefixBuilder: () => {
+      // Always store in the Mockups folder
+      return mockupsUploadPrefix
+    },
+    // Mockups uploads: UTILITY bucket, 90% quality (highest for marketing materials)
     bucket: 'UTILITY',
     webpQuality: 90,
   })
