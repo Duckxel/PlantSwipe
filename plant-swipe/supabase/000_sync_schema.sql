@@ -10386,8 +10386,10 @@ CREATE INDEX IF NOT EXISTS idx_plant_request_users_user_created
 CREATE INDEX IF NOT EXISTS idx_conversations_participant1_created
   ON public.conversations(participant_1, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_friends_user_status_created
-  ON public.friends(user_id, status, created_at DESC);
+-- Note: friends table doesn't have a status column (it only contains accepted friendships)
+-- The status column is on friend_requests table, not friends
+CREATE INDEX IF NOT EXISTS idx_friends_user_created
+  ON public.friends(user_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_message_reactions_user_created
   ON public.message_reactions(user_id, created_at DESC);
