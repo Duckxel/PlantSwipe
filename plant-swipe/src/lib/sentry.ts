@@ -42,6 +42,114 @@ let isInitialized = false
 // GDPR consent state - defaults to true, can be updated later
 let hasConsent = true
 
+// Maintenance mode state
+// When true, Sentry will filter out HTTP errors (4xx/5xx) that are likely due to server restart/deployment
+let isMaintenanceMode = false
+let maintenanceModeTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Track recent server errors for auto-maintenance detection
+const recentServerErrors: number[] = []
+const SERVER_ERROR_WINDOW_MS = 10000 // 10 second window
+const SERVER_ERROR_THRESHOLD = 3 // 3 errors in window triggers maintenance mode
+const MAINTENANCE_AUTO_DISABLE_MS = 60000 // Auto-disable maintenance after 60 seconds
+
+/**
+ * Enable maintenance mode manually
+ * Useful when triggering a deployment or server restart from the UI
+ * @param duration - How long to stay in maintenance mode (ms), defaults to 60 seconds
+ */
+export function enableMaintenanceMode(duration: number = MAINTENANCE_AUTO_DISABLE_MS): void {
+  isMaintenanceMode = true
+  console.info(`[Sentry] Maintenance mode enabled for ${duration}ms`)
+  
+  // Clear existing timeout
+  if (maintenanceModeTimeout) {
+    clearTimeout(maintenanceModeTimeout)
+  }
+  
+  // Auto-disable after duration
+  maintenanceModeTimeout = setTimeout(() => {
+    disableMaintenanceMode()
+  }, duration)
+}
+
+/**
+ * Disable maintenance mode manually
+ */
+export function disableMaintenanceMode(): void {
+  isMaintenanceMode = false
+  if (maintenanceModeTimeout) {
+    clearTimeout(maintenanceModeTimeout)
+    maintenanceModeTimeout = null
+  }
+  console.info('[Sentry] Maintenance mode disabled')
+}
+
+/**
+ * Check if we're in maintenance mode
+ */
+export function isInMaintenanceMode(): boolean {
+  return isMaintenanceMode
+}
+
+/**
+ * Track a server error for auto-maintenance detection
+ * If too many 5xx errors occur in a short window, we assume maintenance
+ */
+function trackServerError(): void {
+  const now = Date.now()
+  recentServerErrors.push(now)
+  
+  // Remove errors outside the window
+  while (recentServerErrors.length > 0 && recentServerErrors[0] < now - SERVER_ERROR_WINDOW_MS) {
+    recentServerErrors.shift()
+  }
+  
+  // If we have too many errors, enable maintenance mode
+  if (recentServerErrors.length >= SERVER_ERROR_THRESHOLD && !isMaintenanceMode) {
+    console.info(`[Sentry] Auto-enabling maintenance mode (${recentServerErrors.length} server errors in ${SERVER_ERROR_WINDOW_MS}ms)`)
+    enableMaintenanceMode()
+  }
+}
+
+/**
+ * Check if an error looks like a maintenance/deployment error
+ */
+function isMaintenanceRelatedError(error: unknown, hint?: { originalException?: unknown }): boolean {
+  // Check error message patterns
+  const errorMessage = error instanceof Error ? error.message : String(error || '')
+  const originalMessage = hint?.originalException instanceof Error 
+    ? hint.originalException.message 
+    : String(hint?.originalException || '')
+  
+  const combinedMessage = `${errorMessage} ${originalMessage}`.toLowerCase()
+  
+  // Common maintenance-related error patterns
+  const maintenancePatterns = [
+    'failed to fetch',
+    'network error',
+    'net::err_',
+    'load failed',
+    'connection refused',
+    'connection reset',
+    'connection closed',
+    'socket hang up',
+    'econnrefused',
+    'econnreset',
+    'etimedout',
+    'service unavailable',
+    'bad gateway',
+    'gateway timeout',
+    '502',
+    '503',
+    '504',
+    'server is restarting',
+    'maintenance',
+  ]
+  
+  return maintenancePatterns.some(pattern => combinedMessage.includes(pattern))
+}
+
 /**
  * Update GDPR consent status
  * Call this when user opts in/out of tracking
@@ -147,20 +255,55 @@ export function initSentry(): void {
         event.tags = event.tags || {}
         event.tags['server'] = serverName
         event.tags['hostname'] = typeof window !== 'undefined' ? window.location.hostname : 'unknown'
+        event.tags['maintenance_mode'] = isMaintenanceMode.toString()
         
-        // Filter out certain errors if needed (e.g., network errors from extensions)
+        // Get error details for filtering
         const error = hint.originalException
-        if (error && typeof error === 'object' && 'message' in error) {
-          const message = String((error as Error).message || '')
-          
-          // Skip common non-actionable errors
-          if (
-            message.includes('ResizeObserver loop') ||
-            message.includes('Non-Error promise rejection') ||
-            message.includes('Load failed') // Safari network error
-          ) {
+        const errorMessage = error && typeof error === 'object' && 'message' in error
+          ? String((error as Error).message || '')
+          : ''
+        
+        // Check if this looks like a server error (5xx) - track for auto-maintenance
+        const is5xxError = errorMessage.match(/\b(50[0-4]|502|503|504)\b/) ||
+          event.tags?.['http.status_code']?.toString().startsWith('5')
+        
+        if (is5xxError) {
+          trackServerError()
+        }
+        
+        // Filter out errors during maintenance mode
+        if (isMaintenanceMode) {
+          // During maintenance, only allow critical non-HTTP errors through
+          if (isMaintenanceRelatedError(error, hint)) {
+            console.debug('[Sentry] Filtered maintenance-related error:', errorMessage.slice(0, 100))
             return null
           }
+          
+          // Also filter HTTP client errors (4xx/5xx) during maintenance
+          if (event.exception?.values?.some(v => 
+            v.type === 'HttpClientError' || 
+            v.value?.includes('status code') ||
+            v.value?.match(/\b[45]\d{2}\b/)
+          )) {
+            console.debug('[Sentry] Filtered HTTP error during maintenance')
+            return null
+          }
+        }
+        
+        // Skip common non-actionable errors (always filter these)
+        if (
+          errorMessage.includes('ResizeObserver loop') ||
+          errorMessage.includes('Non-Error promise rejection') ||
+          errorMessage.includes('signal is aborted without reason') || // AbortController cancellation
+          errorMessage.includes('user aborted') ||
+          errorMessage.includes('AbortError')
+        ) {
+          return null
+        }
+        
+        // Filter "Load failed" only during maintenance (might be valid error otherwise)
+        if (errorMessage.includes('Load failed') && isMaintenanceMode) {
+          return null
         }
         
         return event
@@ -316,4 +459,7 @@ export default {
   setContext,
   updateSentryConsent,
   isSentryInitialized,
+  enableMaintenanceMode,
+  disableMaintenanceMode,
+  isInMaintenanceMode,
 }
