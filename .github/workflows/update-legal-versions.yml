@@ -1,0 +1,162 @@
+name: Update Legal Document Versions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'plant-swipe/src/content/terms-of-service.html'
+      - 'plant-swipe/src/content/privacy-policy.html'
+
+jobs:
+  update-versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check which files changed
+        id: changed-files
+        run: |
+          TERMS_CHANGED=false
+          PRIVACY_CHANGED=false
+          
+          # Check if terms changed
+          if git diff --name-only HEAD~1 HEAD | grep -q "plant-swipe/src/content/terms-of-service.html"; then
+            TERMS_CHANGED=true
+          fi
+          
+          # Check if privacy changed
+          if git diff --name-only HEAD~1 HEAD | grep -q "plant-swipe/src/content/privacy-policy.html"; then
+            PRIVACY_CHANGED=true
+          fi
+          
+          echo "terms_changed=$TERMS_CHANGED" >> $GITHUB_OUTPUT
+          echo "privacy_changed=$PRIVACY_CHANGED" >> $GITHUB_OUTPUT
+          echo "Terms changed: $TERMS_CHANGED"
+          echo "Privacy changed: $PRIVACY_CHANGED"
+
+      - name: Update Terms version
+        if: steps.changed-files.outputs.terms_changed == 'true'
+        run: |
+          VERSION_FILE="plant-swipe/src/content/terms-version.json"
+          
+          # Read current version
+          CURRENT_VERSION=$(node -e "console.log(require('./$VERSION_FILE').version)")
+          echo "Current Terms version: $CURRENT_VERSION"
+          
+          # Increment patch version (1.0.0 -> 1.0.1)
+          NEW_VERSION=$(node -e "
+            const parts = '$CURRENT_VERSION'.split('.');
+            parts[2] = parseInt(parts[2] || 0) + 1;
+            console.log(parts.join('.'));
+          ")
+          echo "New Terms version: $NEW_VERSION"
+          
+          # Get current date in ISO format
+          CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+          
+          # Update the JSON file
+          node -e "
+            const fs = require('fs');
+            const data = require('./$VERSION_FILE');
+            
+            // Update version and date
+            data.version = '$NEW_VERSION';
+            data.lastUpdated = '$CURRENT_DATE';
+            
+            // Add to changelog
+            data.changelog.unshift({
+              version: '$NEW_VERSION',
+              date: '$CURRENT_DATE',
+              summary: 'Terms of Service updated'
+            });
+            
+            // Keep only last 20 changelog entries
+            data.changelog = data.changelog.slice(0, 20);
+            
+            fs.writeFileSync('$VERSION_FILE', JSON.stringify(data, null, 2) + '\n');
+            console.log('Updated $VERSION_FILE');
+          "
+
+      - name: Update Privacy version
+        if: steps.changed-files.outputs.privacy_changed == 'true'
+        run: |
+          VERSION_FILE="plant-swipe/src/content/privacy-version.json"
+          
+          # Read current version
+          CURRENT_VERSION=$(node -e "console.log(require('./$VERSION_FILE').version)")
+          echo "Current Privacy version: $CURRENT_VERSION"
+          
+          # Increment patch version (1.0.0 -> 1.0.1)
+          NEW_VERSION=$(node -e "
+            const parts = '$CURRENT_VERSION'.split('.');
+            parts[2] = parseInt(parts[2] || 0) + 1;
+            console.log(parts.join('.'));
+          ")
+          echo "New Privacy version: $NEW_VERSION"
+          
+          # Get current date in ISO format
+          CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+          
+          # Update the JSON file
+          node -e "
+            const fs = require('fs');
+            const data = require('./$VERSION_FILE');
+            
+            // Update version and date
+            data.version = '$NEW_VERSION';
+            data.lastUpdated = '$CURRENT_DATE';
+            
+            // Add to changelog
+            data.changelog.unshift({
+              version: '$NEW_VERSION',
+              date: '$CURRENT_DATE',
+              summary: 'Privacy Policy updated'
+            });
+            
+            // Keep only last 20 changelog entries
+            data.changelog = data.changelog.slice(0, 20);
+            
+            fs.writeFileSync('$VERSION_FILE', JSON.stringify(data, null, 2) + '\n');
+            console.log('Updated $VERSION_FILE');
+          "
+
+      - name: Commit version updates
+        if: steps.changed-files.outputs.terms_changed == 'true' || steps.changed-files.outputs.privacy_changed == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Add only version files
+          git add plant-swipe/src/content/terms-version.json plant-swipe/src/content/privacy-version.json
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No version changes to commit"
+          else
+            COMMIT_MSG="chore: auto-update legal document versions [skip ci]"
+            
+            if [ "${{ steps.changed-files.outputs.terms_changed }}" == "true" ]; then
+              COMMIT_MSG="$COMMIT_MSG\n\n- Terms of Service version incremented"
+            fi
+            
+            if [ "${{ steps.changed-files.outputs.privacy_changed }}" == "true" ]; then
+              COMMIT_MSG="$COMMIT_MSG\n\n- Privacy Policy version incremented"
+            fi
+            
+            git commit -m "$(echo -e "$COMMIT_MSG")"
+            git push
+            echo "Version files updated and pushed"
+          fi

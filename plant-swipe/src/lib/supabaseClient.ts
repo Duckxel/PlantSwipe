@@ -78,6 +78,8 @@ export type ProfileRow = {
   marketing_consent_date?: string | null
   terms_accepted_date?: string | null
   privacy_policy_accepted_date?: string | null
+  terms_version_accepted?: string | null
+  privacy_version_accepted?: string | null
   // Granular email preferences
   email_product_updates?: boolean | null
   email_tips_advice?: boolean | null

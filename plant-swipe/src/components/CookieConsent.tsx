@@ -5,6 +5,7 @@ import { Link } from '@/components/i18n/Link'
 import { Cookie, Shield, BarChart3, X, Lock } from 'lucide-react'
 import { disableAnalytics, enableAnalytics } from '@/lib/gdprAnalytics'
 import { updateSentryConsent } from '@/lib/sentry'
+import { useAuth } from '@/context/AuthContext'
 
 type ConsentLevel = 'essential' | 'analytics' | 'all' | 'rejected'
 
@@ -12,6 +13,8 @@ type ConsentData = {
   level: ConsentLevel
   date: string
   version: string
+  // Indicates consent was auto-granted because user accepted Terms during signup
+  autoGrantedViaTerms?: boolean
 }
 
 // Check if analytics should be enabled based on consent
@@ -31,6 +34,18 @@ export function hasGivenConsent(): boolean {
   try {
     const stored = localStorage.getItem('cookie_consent')
     return stored !== null
+  } catch {
+    return false
+  }
+}
+
+// Check if consent was auto-granted because user accepted Terms during signup
+export function wasConsentAutoGrantedViaTerms(): boolean {
+  try {
+    const stored = localStorage.getItem('cookie_consent')
+    if (!stored) return false
+    const consent = JSON.parse(stored) as ConsentData
+    return consent.autoGrantedViaTerms === true
   } catch {
     return false
   }
@@ -76,25 +91,71 @@ function clearThirdPartyCookies(): void {
   }
 }
 
+/**
+ * Auto-grant cookie consent for logged-in users who accepted Terms of Service.
+ * GDPR Rationale: Users explicitly consent to Terms of Service and Privacy Policy 
+ * during signup, which includes our cookie policy. This is valid "prior consent".
+ * Users can still manage/withdraw consent anytime via Settings > Cookie Preferences.
+ */
+function autoGrantConsentForLoggedInUser(): void {
+  try {
+    const existingConsent = localStorage.getItem('cookie_consent')
+    // Only auto-grant if no consent has been set yet
+    if (!existingConsent) {
+      const consentData: ConsentData = {
+        // Grant full consent since user agreed to Terms (which includes cookies)
+        level: 'all',
+        date: new Date().toISOString(),
+        version: '1.0',
+        autoGrantedViaTerms: true,
+      }
+      localStorage.setItem('cookie_consent', JSON.stringify(consentData))
+      
+      // Enable analytics and error tracking since consent is granted
+      enableAnalytics()
+      updateSentryConsent()
+      
+      // Dispatch event for other scripts that may be listening
+      window.dispatchEvent(new CustomEvent('cookie_consent_granted', { detail: { level: 'all', autoGranted: true } }))
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
 export function CookieConsent() {
   const { t } = useTranslation('common')
   const [show, setShow] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
+  
+  // Check if user is logged in - if so, they already accepted Terms (including cookies)
+  const { user, loading: authLoading } = useAuth()
 
   useEffect(() => {
-    // Only show on client-side and if no consent given yet
+    // Only show on client-side and wait for auth to be determined
     if (typeof window === 'undefined') return
+    if (authLoading) return // Wait for auth state to be known
     
     // Small delay to avoid flash on page load
     const timer = setTimeout(() => {
       const consent = localStorage.getItem('cookie_consent')
+      
+      // If user is logged in, they already accepted Terms (which includes cookie policy)
+      // Auto-grant consent and don't show the banner
+      if (user) {
+        autoGrantConsentForLoggedInUser()
+        setShow(false)
+        return
+      }
+      
+      // For non-logged-in users, show banner if no consent given yet
       if (!consent) {
         setShow(true)
       }
     }, 500)
     
     return () => clearTimeout(timer)
-  }, [])
+  }, [user, authLoading])
 
   const handleAccept = (level: ConsentLevel) => {
     const consentData: ConsentData = {

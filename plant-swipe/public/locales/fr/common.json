@@ -46,7 +46,9 @@
       "blog": "Blog",
       "contactUs": "Nous contacter",
       "downloadApp": "Télécharger",
-      "termsOfServices": "Conditions d'utilisation"
+      "legal": "Mentions légales",
+      "termsOfServices": "Conditions d'utilisation",
+      "privacyPolicy": "Politique de confidentialité"
     },
     "share": "Partager"
   },
@@ -3041,6 +3043,32 @@
       "acceptAll": "Tout Accepter",
       "rejectAll": "Tout Refuser",
       "cookieUpdated": "Préférences de cookies mises à jour"
+    },
+    "legal": {
+      "updateRequired": "Documents Juridiques Mis à Jour",
+      "updateDescription": "Nous avons mis à jour nos documents juridiques. Veuillez les consulter et accepter les nouvelles conditions pour continuer à utiliser Aphylia.",
+      "termsOfService": "Conditions d'Utilisation",
+      "privacyPolicy": "Politique de Confidentialité",
+      "updatedOn": "Mis à jour le",
+      "readTerms": "Lire les Conditions d'Utilisation",
+      "readPrivacy": "Lire la Politique de Confidentialité",
+      "acceptanceNote": "En cliquant sur « J'accepte », vous acceptez d'être lié par les conditions mises à jour. Si vous refusez, votre compte sera bloqué jusqu'à ce que vous acceptiez.",
+      "accept": "J'accepte",
+      "decline": "Je Refuse",
+      "accepting": "Acceptation...",
+      "declining": "Refus en cours...",
+      "updateFailed": "Échec de l'enregistrement de votre acceptation. Veuillez réessayer.",
+      "declineWarningTitle": "Êtes-vous sûr ?",
+      "consequencesTitle": "Si vous refusez, les conséquences suivantes s'appliqueront :",
+      "consequence1": "Votre compte sera immédiatement bloqué",
+      "consequence2": "Vous serez déconnecté et ne pourrez plus vous reconnecter",
+      "consequence3": "Vous perdrez l'accès à toutes vos données, jardins et plantes",
+      "consequence4": "Pour récupérer l'accès, vous devrez contacter le support",
+      "reconsiderMessage": "Nous vous encourageons à consulter les documents mis à jour. Si vous avez des préoccupations, veuillez contacter notre équipe de support avant de refuser.",
+      "goBack": "Revenir & Accepter",
+      "confirmDecline": "Je Comprends, Refuser",
+      "blockingAccount": "Blocage du compte...",
+      "declinedMessage": "Votre compte a été bloqué car vous avez refusé les conditions mises à jour. Contactez le support si vous souhaitez réactiver votre compte."
     }
   }
 }

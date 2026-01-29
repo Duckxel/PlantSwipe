@@ -176,6 +176,7 @@ type EmailCampaign = {
   sendCompletedAt: string | null
   testMode: boolean
   testEmail: string | null
+  isMarketing: boolean // If true, only users with marketing_consent=true receive this
   createdAt: string
   updatedAt: string
 }
@@ -282,6 +283,7 @@ export const AdminEmailsPanel: React.FC = () => {
     previewText: "",
     testMode: false,
     testEmail: "dev@aphylia.app",
+    isMarketing: false, // If true, only send to users with marketing_consent=true
   })
   const [campaignSaving, setCampaignSaving] = React.useState(false)
   const [sheetOpen, setSheetOpen] = React.useState(false)
@@ -417,6 +419,7 @@ export const AdminEmailsPanel: React.FC = () => {
         previewText: campaignForm.previewText.trim(),
         testMode: campaignForm.testMode,
         testEmail: campaignForm.testMode ? campaignForm.testEmail.trim() : null,
+        isMarketing: campaignForm.isMarketing, // Exclude users without marketing consent
       }
       const resp = await fetch("/api/admin/email-campaigns", {
         method: "POST",
@@ -435,6 +438,7 @@ export const AdminEmailsPanel: React.FC = () => {
         previewText: "",
         testMode: false,
         testEmail: "dev@aphylia.app",
+        isMarketing: false,
       })
       setSheetOpen(false)
       loadCampaigns().catch(() => {})
@@ -715,6 +719,11 @@ export const AdminEmailsPanel: React.FC = () => {
                             {campaign.testMode && (
                               <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
                                 🧪 Test
+                              </div>
+                            )}
+                            {campaign.isMarketing && (
+                              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                                📧 Marketing
                               </div>
                             )}
                             <div className={cn(
@@ -1279,6 +1288,40 @@ export const AdminEmailsPanel: React.FC = () => {
                 placeholder="Notes for your team..."
                 className="rounded-xl border-stone-200 dark:border-[#3e3e42] min-h-[60px] sm:min-h-[80px] text-sm"
               />
+            </div>
+
+            {/* Marketing Email Toggle */}
+            <div className="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <Label className="text-xs sm:text-sm font-medium text-purple-800 dark:text-purple-300">
+                    📧 Marketing Email
+                  </Label>
+                  <p className="text-[10px] sm:text-xs text-purple-600 dark:text-purple-400 mt-0.5">
+                    Only send to users who opted-in to marketing communications
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCampaignForm((prev) => ({ ...prev, isMarketing: !prev.isMarketing }))}
+                  className={cn(
+                    "relative h-6 w-11 rounded-full transition-colors flex-shrink-0",
+                    campaignForm.isMarketing ? "bg-purple-500" : "bg-stone-300 dark:bg-stone-600"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-1 h-4 w-4 rounded-full bg-white transition-transform shadow-sm",
+                      campaignForm.isMarketing ? "left-6" : "left-1"
+                    )}
+                  />
+                </button>
+              </div>
+              {campaignForm.isMarketing && (
+                <p className="text-[10px] sm:text-xs text-purple-700 dark:text-purple-300 mt-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg px-2 py-1.5">
+                  ⚠️ Users who unchecked "Marketing Communications" in Settings will not receive this email.
+                </p>
+              )}
             </div>
 
             {/* Test Mode Toggle */}
