@@ -101,6 +101,7 @@ import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { processAllPlantRequests } from "@/lib/aiPrefillService";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
 import { Languages } from "lucide-react";
+import { captureException } from "@/lib/sentry";
 import { 
   buildCategoryProgress, 
   createEmptyCategoryProgress, 
@@ -2715,6 +2716,13 @@ export const AdminPage: React.FC = () => {
               setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
             } else if (error) {
               console.error(`Failed to process ${plantName}:`, error);
+              // Report to Sentry with context for easier debugging
+              captureException(new Error(`AI Prefill failed for plant: ${plantName}`), {
+                plantName,
+                requestId,
+                errorMessage: error,
+                source: 'AdminPage.aiPrefill',
+              });
             }
           },
           onError: (error) => {
