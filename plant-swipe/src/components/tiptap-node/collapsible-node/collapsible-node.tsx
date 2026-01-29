@@ -1,5 +1,6 @@
 import { NodeViewWrapper, NodeViewContent, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { ChevronDown, ChevronRight, Settings2, GripVertical } from "lucide-react"
 import type { CollapsibleStyle } from "./collapsible-node-extension"
 
@@ -58,8 +59,11 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
 
   const [showSettings, setShowSettings] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
   const titleInputRef = useRef<HTMLInputElement>(null)
   const settingsRef = useRef<HTMLDivElement>(null)
+  const settingsButtonRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   const classes = STYLE_CLASSES[style] || STYLE_CLASSES.default
   const currentStyle = COLLAPSIBLE_STYLES.find((s) => s.value === style) || COLLAPSIBLE_STYLES[0]
@@ -90,6 +94,19 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
     }
   }, [])
 
+  const handleSettingsClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (settingsButtonRef.current) {
+      const rect = settingsButtonRef.current.getBoundingClientRect()
+      // Position dropdown below the button, aligned to the right edge
+      setDropdownPosition({
+        top: rect.bottom + 8,
+        left: Math.max(8, rect.right - 256), // 256px is the dropdown width (w-64)
+      })
+    }
+    setShowSettings(!showSettings)
+  }, [showSettings])
+
   // Focus title input when editing
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -103,13 +120,28 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
     if (!showSettings) return
 
     const handleClickOutside = (e: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      if (
+        settingsRef.current && 
+        !settingsRef.current.contains(target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
         setShowSettings(false)
       }
     }
 
+    // Also close on scroll
+    const handleScroll = () => {
+      setShowSettings(false)
+    }
+
     document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
+    window.addEventListener("scroll", handleScroll, true)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      window.removeEventListener("scroll", handleScroll, true)
+    }
   }, [showSettings])
 
   return (
@@ -182,21 +214,26 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
         {/* Settings button */}
         <div className="relative" ref={settingsRef}>
           <button
+            ref={settingsButtonRef}
             type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              setShowSettings(!showSettings)
-            }}
+            onClick={handleSettingsClick}
             className={`flex-shrink-0 rounded-lg p-1.5 transition-all opacity-60 hover:opacity-100 ${classes.accent} hover:bg-white/50 dark:hover:bg-black/20`}
             aria-label="Section settings"
+            aria-haspopup="true"
+            aria-expanded={showSettings}
           >
             <Settings2 className="h-4 w-4" />
           </button>
 
-          {/* Settings dropdown */}
-          {showSettings && (
+          {/* Settings dropdown - rendered via portal for proper z-index handling */}
+          {showSettings && createPortal(
             <div
-              className="absolute right-0 top-full mt-2 z-50 w-64 rounded-xl border border-stone-200 bg-white p-3 shadow-xl dark:border-stone-700 dark:bg-stone-800"
+              ref={dropdownRef}
+              className="fixed z-[9999] w-64 rounded-xl border border-stone-200 bg-white p-3 shadow-xl dark:border-stone-700 dark:bg-stone-800 animate-in fade-in-0 zoom-in-95 duration-150"
+              style={{
+                top: dropdownPosition.top,
+                left: dropdownPosition.left,
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="space-y-3">
@@ -242,7 +279,8 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
                   </button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       </div>

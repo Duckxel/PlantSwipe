@@ -2,14 +2,20 @@
 
 .collapsible-node {
   // Ensure the node is properly displayed as a block
-  display: block;
+  display: block !important;
   position: relative;
+  // Ensure proper visibility and stacking
+  z-index: 1;
+  // Ensure it's not clipped
+  overflow: visible;
 
   // Header styling
   .collapsible-header {
     display: flex;
     align-items: center;
     user-select: none;
+    position: relative;
+    z-index: 2;
     
     // Prevent text selection during drag
     &:active {
@@ -32,10 +38,15 @@
   // Content wrapper with smooth transitions
   .collapsible-content-wrapper {
     will-change: max-height, opacity;
+    position: relative;
+    z-index: 1;
   }
 
   // Inner content - ensure TipTap editor styles apply
   .collapsible-inner-content {
+    // Ensure content is editable and visible
+    min-height: 1em;
+    
     // Reset some styles to ensure nested content looks correct
     > *:first-child {
       margin-top: 0;
@@ -112,6 +123,7 @@
 
 // Ensure proper rendering in the editor
 .ProseMirror {
+  // Ensure collapsible nodes are visible and properly layered
   .collapsible-node {
     // Cursor positioning
     &::before {
@@ -122,6 +134,11 @@
     &.ProseMirror-selectednode {
       outline: none;
     }
+    
+    // Ensure visibility within the editor
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   // Ensure drag handle works
@@ -131,6 +148,12 @@
     &:active {
       cursor: grabbing;
     }
+  }
+  
+  // Ensure NodeViewWrapper renders correctly
+  [data-type="collapsible"] {
+    display: block !important;
+    position: relative;
   }
 }
 
