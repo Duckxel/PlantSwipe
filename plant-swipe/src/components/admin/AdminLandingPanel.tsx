@@ -90,6 +90,8 @@ type HeroCard = {
   light_level: string
   reminder_text: string
   is_active: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 type LandingStats = {
@@ -102,6 +104,7 @@ type LandingStats = {
   tasks_label: string
   rating_value: string
   rating_label: string
+  updated_at?: string
 }
 
 type StatsTranslation = {
@@ -112,6 +115,8 @@ type StatsTranslation = {
   users_label: string
   tasks_label: string
   rating_label: string
+  created_at?: string
+  updated_at?: string
 }
 
 type Testimonial = {
@@ -125,6 +130,8 @@ type Testimonial = {
   quote: string
   rating: number
   is_active: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 type FAQ = {
@@ -133,6 +140,8 @@ type FAQ = {
   question: string
   answer: string
   is_active: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 type FAQTranslation = {
@@ -141,6 +150,8 @@ type FAQTranslation = {
   language: string
   question: string
   answer: string
+  created_at?: string
+  updated_at?: string
 }
 
 type DemoFeature = {
@@ -150,6 +161,8 @@ type DemoFeature = {
   label: string
   color: string
   is_active: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 type DemoFeatureTranslation = {
@@ -157,6 +170,8 @@ type DemoFeatureTranslation = {
   feature_id: string
   language: string
   label: string
+  created_at?: string
+  updated_at?: string
 }
 
 type UserProfile = {
