@@ -29,6 +29,7 @@ import { ImageGridNode } from "@/components/tiptap-node/image-grid-node/image-gr
 import { ResizableImageNode } from "@/components/tiptap-node/resizable-image-node/resizable-image-node-extension"
 import { EmailCardNode } from "@/components/tiptap-node/email-card-node/email-card-node-extension"
 import { SensitiveCodeNode } from "@/components/tiptap-node/sensitive-code-node/sensitive-code-node-extension"
+import { CollapsibleNode } from "@/components/tiptap-node/collapsible-node/collapsible-node-extension"
 
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "@/components/tiptap-ui-primitive/toolbar"
 import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
@@ -57,6 +58,7 @@ import { DividerDropdownMenu } from "@/components/tiptap-ui/divider-dropdown-men
 import { ImageGridButton } from "@/components/tiptap-ui/image-grid-button"
 import { EmailCardButton } from "@/components/tiptap-ui/email-card-button"
 import { SensitiveCodeButton } from "@/components/tiptap-ui/sensitive-code-button"
+import { CollapsibleButton } from "@/components/tiptap-ui/collapsible-button"
 import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
 import { LinkIcon } from "@/components/tiptap-icons/link-icon"
@@ -73,6 +75,7 @@ import "@/components/tiptap-node/list-node/list-node.scss"
 import "@/components/tiptap-node/image-node/image-node.scss"
 import "@/components/tiptap-node/heading-node/heading-node.scss"
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss"
+import "@/components/tiptap-node/collapsible-node/collapsible-node.scss"
 import "@/components/tiptap-templates/simple/simple-editor.scss"
 
 export type BlogEditorHandle = {
@@ -169,6 +172,7 @@ const MainToolbarContent: React.FC<{
     <ToolbarGroup>
       <EmailButtonButton />
       <EmailCardButton />
+      <CollapsibleButton />
       <SensitiveCodeButton />
       <DividerDropdownMenu portal />
     </ToolbarGroup>
@@ -281,6 +285,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
         ResizableImageNode,
         EmailCardNode,
         SensitiveCodeNode,
+        CollapsibleNode,
         ...(extraExtensions || []),
       ],
       content: initialDocument ?? initialHtml ?? DEFAULT_CONTENT,
