@@ -10230,11 +10230,19 @@ CREATE POLICY "Users can update own responses" ON public.bug_action_responses
     WITH CHECK (user_id = auth.uid());
 
 -- Bug Reports policies
+-- Allow users to view their own reports, admins can view all
 DROP POLICY IF EXISTS "Users can view own reports" ON public.bug_reports;
 CREATE POLICY "Users can view own reports" ON public.bug_reports
     FOR SELECT
     TO authenticated
-    USING (user_id = (select auth.uid()) OR public.is_admin_user((select auth.uid())));
+    USING (
+        user_id = auth.uid() 
+        OR EXISTS (
+            SELECT 1 FROM public.profiles 
+            WHERE id = auth.uid() 
+            AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+        )
+    );
 
 DROP POLICY IF EXISTS "Users can insert own reports" ON public.bug_reports;
 CREATE POLICY "Users can insert own reports" ON public.bug_reports
@@ -10242,19 +10250,35 @@ CREATE POLICY "Users can insert own reports" ON public.bug_reports
     TO authenticated
     WITH CHECK (user_id = auth.uid());
 
+-- Allow admins to update any report (for reviewing, completing, closing)
 DROP POLICY IF EXISTS "Admins can update reports" ON public.bug_reports;
 CREATE POLICY "Admins can update reports" ON public.bug_reports
     FOR UPDATE
     TO authenticated
-    USING (public.is_admin_user((select auth.uid())))
-    WITH CHECK (public.is_admin_user((select auth.uid())));
+    USING (EXISTS (
+        SELECT 1 FROM public.profiles 
+        WHERE id = auth.uid() 
+        AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ))
+    WITH CHECK (EXISTS (
+        SELECT 1 FROM public.profiles 
+        WHERE id = auth.uid() 
+        AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+    ));
 
 -- Bug Points History policies
 DROP POLICY IF EXISTS "Users can view own points history" ON public.bug_points_history;
 CREATE POLICY "Users can view own points history" ON public.bug_points_history
     FOR SELECT
     TO authenticated
-    USING (user_id = (select auth.uid()) OR public.is_admin_user((select auth.uid())));
+    USING (
+        user_id = auth.uid() 
+        OR EXISTS (
+            SELECT 1 FROM public.profiles 
+            WHERE id = auth.uid() 
+            AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
+        )
+    );
 
 DROP POLICY IF EXISTS "System can insert points history" ON public.bug_points_history;
 CREATE POLICY "System can insert points history" ON public.bug_points_history
