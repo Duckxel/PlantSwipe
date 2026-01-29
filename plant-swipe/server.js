@@ -13386,14 +13386,21 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
 // Admin: list remote branches and current branch
 app.get('/api/admin/branches', async (req, res) => {
   try {
+    // Set cache headers to prevent browser caching
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    })
+
     const uid = "public"
     if (!uid) return
 
     // Always operate from the repository root and mark it safe for this process
     const repoRoot = await getRepoRoot()
     const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-    // Keep this fast: limit network timeout and avoid blocking when offline
-    try { await exec(`${gitBase} remote update --prune`, { timeout: 5000 }) } catch { }
+    // Fetch remote branches with reasonable timeout (15s) - this is the key operation for refreshing branches
+    try { await exec(`${gitBase} remote update --prune`, { timeout: 15000 }) } catch (e) { console.warn('[branches] git remote update failed:', e?.message || e) }
     // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
     const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
     let branches = branchesStdout

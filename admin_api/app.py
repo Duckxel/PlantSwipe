@@ -430,7 +430,7 @@ def list_branches():
     repo_root = _get_repo_root()
     git_base = f'git -c "safe.directory={repo_root}" -C "{repo_root}"'
     try:
-        # Prune remotes quickly; ignore failures
+        # Prune remotes and fetch new branches - this is the key operation for refreshing
         subprocess.run(shlex.split(f"{git_base} remote update --prune"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
         # List remote branches
         res = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/remotes/origin"), capture_output=True, text=True, timeout=30, check=False)
@@ -463,7 +463,12 @@ def list_branches():
             # TIME file doesn't exist or can't be read, which is fine
             pass
         
-        return jsonify({"branches": branches, "current": current, "lastUpdateTime": last_update_time})
+        response = jsonify({"branches": branches, "current": current, "lastUpdateTime": last_update_time})
+        # Prevent browser caching to ensure fresh branch data on refresh
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
     except Exception as e:
         return jsonify({"error": str(e) or "Failed to list branches"}), 500
 

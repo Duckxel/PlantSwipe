@@ -3300,15 +3300,21 @@ export const AdminPage: React.FC = () => {
       try {
         const headersNode: Record<string, string> = {
           Accept: "application/json",
+          // Prevent browser caching to ensure fresh branch data
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
         };
         try {
           const session = (await supabase.auth.getSession()).data.session;
           const token = session?.access_token;
           if (token) headersNode["Authorization"] = `Bearer ${token}`;
         } catch {}
-        const respNode = await fetchWithRetry("/api/admin/branches", {
+        // Add cache-busting query param and disable caching to ensure fresh data
+        const cacheBuster = `_t=${Date.now()}`;
+        const respNode = await fetchWithRetry(`/api/admin/branches?${cacheBuster}`, {
           headers: headersNode,
           credentials: "same-origin",
+          cache: "no-store",
         }).catch(() => null);
         let data = await safeJson(respNode || new Response());
         // Guard against accidental inclusion of non-branch items
@@ -3321,15 +3327,21 @@ export const AdminPage: React.FC = () => {
         if (!ok) {
           const adminHeaders: Record<string, string> = {
             Accept: "application/json",
+            // Prevent browser caching to ensure fresh branch data
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
           };
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) adminHeaders["X-Admin-Token"] = String(adminToken);
           } catch {}
-          const respAdmin = await fetchWithRetry("/admin/branches", {
+          // Add cache-busting query param and disable caching to ensure fresh data
+          const adminCacheBuster = `_t=${Date.now()}`;
+          const respAdmin = await fetchWithRetry(`/admin/branches?${adminCacheBuster}`, {
             headers: adminHeaders,
             credentials: "same-origin",
+            cache: "no-store",
           }).catch(() => null);
           if (respAdmin) {
             data = await safeJson(respAdmin);
