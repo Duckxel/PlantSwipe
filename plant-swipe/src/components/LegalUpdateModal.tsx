@@ -1,9 +1,9 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import DOMPurify from 'dompurify'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Link } from '@/components/i18n/Link'
-import { AlertTriangle, FileText, Shield, ExternalLink, ArrowLeft, Ban } from 'lucide-react'
+import { AlertTriangle, FileText, Shield, ArrowLeft, Ban } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 import { 
   CURRENT_TERMS_VERSION, 
@@ -11,6 +11,8 @@ import {
   TERMS_LAST_UPDATED,
   PRIVACY_LAST_UPDATED 
 } from '@/context/AuthContext'
+import termsHtml from '@/content/terms-of-service.html?raw'
+import privacyHtml from '@/content/privacy-policy.html?raw'
 
 type LegalUpdateModalProps = {
   open: boolean
@@ -23,7 +25,7 @@ type LegalUpdateModalProps = {
   onDeclined: () => void
 }
 
-type ModalStep = 'review' | 'confirm-decline'
+type ModalStep = 'review' | 'confirm-decline' | 'view-terms' | 'view-privacy'
 
 /**
  * Compare semantic versions (e.g., "1.0.0" vs "1.0.1")
@@ -98,6 +100,25 @@ export function LegalUpdateModal({
     userTermsAcceptedDate,
     userPrivacyAcceptedDate
   )
+  
+  // Sanitize and prepare the HTML content for inline viewing
+  const sanitizedTermsHtml = useMemo(() => {
+    const withoutEditorArtifacts = termsHtml.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<\/?bdt[^>]*>/gi, '')
+    return DOMPurify.sanitize(withoutEditorArtifacts, {
+      USE_PROFILES: { html: true },
+      FORBID_ATTR: ['style'],
+      FORBID_TAGS: ['style'],
+    })
+  }, [])
+  
+  const sanitizedPrivacyHtml = useMemo(() => {
+    const withoutEditorArtifacts = privacyHtml.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<\/?bdt[^>]*>/gi, '')
+    return DOMPurify.sanitize(withoutEditorArtifacts, {
+      USE_PROFILES: { html: true },
+      FORBID_ATTR: ['style'],
+      FORBID_TAGS: ['style'],
+    })
+  }, [])
   
   const handleAccept = async () => {
     setAccepting(true)
@@ -206,14 +227,14 @@ export function LegalUpdateModal({
                     <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
                       {t('legal.updatedOn', 'Updated on')} {formatDate(TERMS_LAST_UPDATED, currentLocale)}
                     </p>
-                    <Link 
-                      to="/terms" 
-                      target="_blank"
-                      className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 hover:underline mt-2"
+                    <button 
+                      type="button"
+                      onClick={() => setStep('view-terms')}
+                      className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 hover:underline mt-2 bg-transparent border-none cursor-pointer p-0"
                     >
                       {t('legal.readTerms', 'Read Terms of Service')}
-                      <ExternalLink className="w-3 h-3" />
-                    </Link>
+                      <FileText className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
               )}
@@ -233,14 +254,14 @@ export function LegalUpdateModal({
                     <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
                       {t('legal.updatedOn', 'Updated on')} {formatDate(PRIVACY_LAST_UPDATED, currentLocale)}
                     </p>
-                    <Link 
-                      to="/privacy" 
-                      target="_blank"
-                      className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline mt-2"
+                    <button 
+                      type="button"
+                      onClick={() => setStep('view-privacy')}
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline mt-2 bg-transparent border-none cursor-pointer p-0"
                     >
                       {t('legal.readPrivacy', 'Read Privacy Policy')}
-                      <ExternalLink className="w-3 h-3" />
-                    </Link>
+                      <Shield className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
               )}
@@ -340,6 +361,75 @@ export function LegalUpdateModal({
           </>
         )}
       </DialogContent>
+      
+      {/* Document Viewer Dialog - Opens alongside the main modal */}
+      <Dialog open={step === 'view-terms' || step === 'view-privacy'} onOpenChange={() => setStep('review')}>
+        <DialogContent 
+          className="max-w-4xl mx-4 rounded-2xl max-h-[90vh] flex flex-col"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={() => setStep('review')}
+          priorityZIndex={10001}
+        >
+          <DialogHeader className="text-left flex-shrink-0">
+            <div className="flex items-center gap-3 mb-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-xl"
+                onClick={() => setStep('review')}
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+              <div className={`p-2 rounded-xl ${step === 'view-terms' ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-blue-100 dark:bg-blue-900/30'}`}>
+                {step === 'view-terms' ? (
+                  <FileText className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <Shield className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                )}
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-bold">
+                  {step === 'view-terms' 
+                    ? t('legal.termsOfService', 'Terms of Service')
+                    : t('legal.privacyPolicy', 'Privacy Policy')
+                  }
+                </DialogTitle>
+                <DialogDescription className="text-stone-500 dark:text-stone-400 text-sm">
+                  {step === 'view-terms'
+                    ? t('legal.termsVersion', 'Version {{version}} - Updated {{date}}', { 
+                        version: CURRENT_TERMS_VERSION, 
+                        date: formatDate(TERMS_LAST_UPDATED, currentLocale) 
+                      })
+                    : t('legal.privacyVersion', 'Version {{version}} - Updated {{date}}', { 
+                        version: CURRENT_PRIVACY_VERSION, 
+                        date: formatDate(PRIVACY_LAST_UPDATED, currentLocale) 
+                      })
+                  }
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto min-h-0 border border-stone-200 dark:border-stone-700 rounded-xl p-4 md:p-6 bg-stone-50 dark:bg-stone-800/50">
+            <div
+              className="legal-content prose prose-stone dark:prose-invert max-w-none prose-headings:text-stone-900 dark:prose-headings:text-stone-100 prose-p:text-stone-600 dark:prose-p:text-stone-400 prose-a:text-emerald-600 dark:prose-a:text-emerald-400"
+              dangerouslySetInnerHTML={{ 
+                __html: step === 'view-terms' ? sanitizedTermsHtml : sanitizedPrivacyHtml 
+              }}
+            />
+          </div>
+          
+          <div className="flex-shrink-0 pt-4">
+            <Button
+              className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => setStep('review')}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              {t('legal.backToReview', 'Back to Review')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }
