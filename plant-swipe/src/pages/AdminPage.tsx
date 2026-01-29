@@ -619,6 +619,13 @@ export const AdminPage: React.FC = () => {
   const [clearingMemory, setClearingMemory] = React.useState<boolean>(false);
   const [gitPulling, setGitPulling] = React.useState<boolean>(false);
   const [regeneratingSitemap, setRegeneratingSitemap] = React.useState<boolean>(false);
+  const [sitemapInfo, setSitemapInfo] = React.useState<{
+    exists: boolean;
+    lastModified?: string;
+    size?: number;
+    urlCount?: number | null;
+    message?: string;
+  } | null>(null);
   // On initial load, if a broadcast is currently active, auto-open the section
   React.useEffect(() => {
     let cancelled = false;
@@ -1503,6 +1510,29 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  // --- Server Controls: Fetch Sitemap Info ---
+  const fetchSitemapInfo = React.useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/sitemap-info", {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSitemapInfo(data);
+      }
+    } catch {
+      // Silently fail - not critical
+    }
+  }, []);
+
+  // Load sitemap info on mount (when server controls are first opened)
+  React.useEffect(() => {
+    if (serverControlsOpen && !sitemapInfo) {
+      fetchSitemapInfo();
+    }
+  }, [serverControlsOpen, sitemapInfo, fetchSitemapInfo]);
+
   // --- Server Controls: Regenerate Sitemap ---
   const regenerateSitemap = async () => {
     if (regeneratingSitemap) return;
@@ -1533,6 +1563,8 @@ export const AdminPage: React.FC = () => {
           const lines = data.stdout.split("\n").filter((l: string) => l.trim());
           lines.slice(-10).forEach((line: string) => appendConsole(`[sitemap] ${line}`));
         }
+        // Refresh sitemap info after regeneration
+        setTimeout(() => fetchSitemapInfo(), 1000);
       } else {
         throw new Error(data?.error || `HTTP ${response.status}`);
       }
@@ -6108,6 +6140,32 @@ export const AdminPage: React.FC = () => {
                                 <FileText className={`h-4 w-4 ${regeneratingSitemap ? "animate-pulse" : ""}`} />
                                 {regeneratingSitemap ? "Regenerating..." : "Regenerate Sitemap"}
                               </Button>
+                              {/* Sitemap Info */}
+                              {sitemapInfo && (
+                                <div className="text-[10px] text-stone-400 space-y-0.5 pl-1">
+                                  {sitemapInfo.exists ? (
+                                    <>
+                                      <div className="flex items-center gap-1">
+                                        <span className="opacity-70">Last updated:</span>
+                                        <span className="font-medium text-stone-500 dark:text-stone-300">
+                                          {new Date(sitemapInfo.lastModified!).toLocaleString()}
+                                        </span>
+                                      </div>
+                                      {sitemapInfo.urlCount !== null && sitemapInfo.urlCount !== undefined && (
+                                        <div className="flex items-center gap-1">
+                                          <span className="opacity-70">URLs:</span>
+                                          <span className="font-medium">{sitemapInfo.urlCount.toLocaleString()}</span>
+                                          <span className="opacity-70">•</span>
+                                          <span className="opacity-70">Size:</span>
+                                          <span className="font-medium">{(sitemapInfo.size! / 1024).toFixed(1)} KB</span>
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <div className="text-amber-500">{sitemapInfo.message || "Sitemap not found"}</div>
+                                  )}
+                                </div>
+                              )}
 
                               {/* Run Setup Button */}
                               <Button

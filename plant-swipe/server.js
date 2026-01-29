@@ -3556,6 +3556,73 @@ app.get('/api/admin/system-health', async (req, res) => {
   }
 })
 
+// Admin: Get sitemap info (last update time, file size)
+app.get('/api/admin/sitemap-info', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+
+    // Check multiple possible sitemap locations
+    const sitemapPaths = [
+      path.resolve(__dirname, 'public', 'sitemap.xml'),
+      path.resolve(__dirname, 'dist', 'sitemap.xml'),
+    ]
+
+    let sitemapInfo = null
+    for (const sitemapPath of sitemapPaths) {
+      try {
+        const stats = await fs.stat(sitemapPath)
+        if (stats.isFile()) {
+          sitemapInfo = {
+            path: sitemapPath,
+            lastModified: stats.mtime.toISOString(),
+            lastModifiedUnix: Math.floor(stats.mtime.getTime() / 1000),
+            size: stats.size,
+            source: sitemapPath.includes('/dist/') ? 'dist' : 'public'
+          }
+          break
+        }
+      } catch {
+        // File doesn't exist, try next
+      }
+    }
+
+    if (!sitemapInfo) {
+      res.json({
+        ok: true,
+        exists: false,
+        message: 'Sitemap not found. Run "Regenerate Sitemap" to create it.'
+      })
+      return
+    }
+
+    // Try to count URLs in the sitemap
+    let urlCount = null
+    try {
+      const content = await fs.readFile(sitemapInfo.path, 'utf-8')
+      const matches = content.match(/<url>/g)
+      urlCount = matches ? matches.length : 0
+    } catch {
+      // Ignore read errors
+    }
+
+    res.json({
+      ok: true,
+      exists: true,
+      lastModified: sitemapInfo.lastModified,
+      lastModifiedUnix: sitemapInfo.lastModifiedUnix,
+      size: sitemapInfo.size,
+      source: sitemapInfo.source,
+      urlCount
+    })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to get sitemap info' })
+  }
+})
+
 // Admin: fetch admin activity logs for the last N days (default 30)
 app.get('/api/admin/admin-logs', async (req, res) => {
   try {
