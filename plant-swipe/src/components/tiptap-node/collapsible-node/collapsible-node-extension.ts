@@ -86,39 +86,42 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    const { title, isOpen, style } = HTMLAttributes as CollapsibleAttributes
-    const styles = getCollapsibleStyles(style)
+    const { title, style } = HTMLAttributes as CollapsibleAttributes
+    // Note: isOpen is intentionally not used here - rendered HTML always starts collapsed
+    // The isOpen attribute only controls the editor view, not the final rendered output
 
-    // For email compatibility, use a details/summary structure that degrades gracefully
-    // Most email clients will show the content expanded since they don't support details
+    // Use CSS classes for styling so dark mode works via CSS
+    // Inline styles are used as fallback for email clients
+    const styleClass = `collapsible-${style || "default"}`
+
     return [
       "details",
       mergeAttributes(
         {
           "data-type": "collapsible",
           "data-collapsible-style": style || "default",
-          ...(isOpen ? { open: "true" } : {}),
-          style: styles.container,
+          class: `collapsible-block ${styleClass}`,
+          // No 'open' attribute - always starts collapsed in rendered view
         },
         this.options.HTMLAttributes
       ),
       [
         "summary",
-        { style: styles.summary },
+        { class: "collapsible-summary" },
         [
           "span",
-          { style: styles.icon },
-          isOpen ? "▼" : "▶",
+          { class: "collapsible-icon" },
+          "▶", // Arrow pointing right (collapsed state)
         ],
         [
           "span",
-          { style: styles.title },
-          title || "Click to expand",
+          { class: "collapsible-title" },
+          title || "Section title",
         ],
       ],
       [
         "div",
-        { style: styles.content, "data-collapsible-content": "true" },
+        { class: "collapsible-content", "data-collapsible-content": "true" },
         0, // This is where nested content goes
       ],
     ]
@@ -137,7 +140,7 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
             type: this.name,
             attrs: {
               title: options?.title ?? "Section title",
-              isOpen: options?.isOpen ?? false, // Collapsed by default
+              isOpen: options?.isOpen ?? true, // Open by default in editor for editing
               style: options?.style ?? "default",
             },
             content: [
@@ -169,79 +172,5 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
   // No custom keyboard shortcuts needed - all shortcuts should work normally inside
   // the collapsible content area since we're using NodeViewContent
 })
-
-function getCollapsibleStyles(style: CollapsibleStyle): Record<string, string> {
-  // Email-compatible styles using solid colors
-  const baseContainer = `
-    border-radius: 12px;
-    margin: 16px 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    overflow: hidden;
-  `.replace(/\s+/g, " ").trim()
-
-  const styleMap: Record<CollapsibleStyle, { bg: string; border: string; summaryBg: string; accentColor: string }> = {
-    default: {
-      bg: "#f9fafb",
-      border: "1px solid #e5e7eb",
-      summaryBg: "#f3f4f6",
-      accentColor: "#374151",
-    },
-    info: {
-      bg: "#eff6ff",
-      border: "1px solid #bfdbfe",
-      summaryBg: "#dbeafe",
-      accentColor: "#1d4ed8",
-    },
-    tip: {
-      bg: "#ecfdf5",
-      border: "1px solid #a7f3d0",
-      summaryBg: "#d1fae5",
-      accentColor: "#047857",
-    },
-    warning: {
-      bg: "#fffbeb",
-      border: "1px solid #fde68a",
-      summaryBg: "#fef3c7",
-      accentColor: "#b45309",
-    },
-    note: {
-      bg: "#faf5ff",
-      border: "1px solid #e9d5ff",
-      summaryBg: "#f3e8ff",
-      accentColor: "#7c3aed",
-    },
-  }
-
-  const s = styleMap[style] ?? styleMap.default
-
-  return {
-    container: `${baseContainer} background-color: ${s.bg}; border: ${s.border};`,
-    summary: `
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 14px 16px;
-      background-color: ${s.summaryBg};
-      cursor: pointer;
-      user-select: none;
-      font-weight: 600;
-      color: ${s.accentColor};
-      list-style: none;
-    `.replace(/\s+/g, " ").trim(),
-    icon: `
-      font-size: 10px;
-      color: ${s.accentColor};
-      transition: transform 0.2s ease;
-    `.replace(/\s+/g, " ").trim(),
-    title: `
-      flex: 1;
-      font-size: 15px;
-    `.replace(/\s+/g, " ").trim(),
-    content: `
-      padding: 16px;
-      border-top: 1px solid ${s.border.split(' ').pop()};
-    `.replace(/\s+/g, " ").trim(),
-  }
-}
 
 export default CollapsibleNode

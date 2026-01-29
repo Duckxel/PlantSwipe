@@ -44,7 +44,7 @@ export const CollapsibleButton = forwardRef<HTMLButtonElement, CollapsibleButton
         if (editor) {
           editor.chain().focus().setCollapsible({
             title: "Section title",
-            isOpen: false, // Collapsed by default
+            isOpen: true, // Open in editor so user can see and edit content
             style,
           }).run()
         }

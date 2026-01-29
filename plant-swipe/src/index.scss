@@ -252,6 +252,111 @@
   @apply text-emerald-600 dark:text-emerald-300 underline underline-offset-4;
 }
 
+/* Collapsible blocks in rendered blog content */
+.blog-article-content details.collapsible-block {
+  @apply rounded-xl border my-6 overflow-hidden;
+  
+  /* Light mode default */
+  @apply bg-stone-50 border-stone-200;
+  
+  /* Dark mode */
+  @apply dark:bg-stone-900/50 dark:border-stone-700;
+}
+
+.blog-article-content details.collapsible-block summary.collapsible-summary {
+  @apply flex items-center gap-3 px-4 py-3 cursor-pointer select-none font-semibold;
+  @apply bg-stone-100 dark:bg-stone-800;
+  @apply text-stone-700 dark:text-stone-200;
+  list-style: none;
+  
+  &::-webkit-details-marker {
+    display: none;
+  }
+  
+  &:hover {
+    @apply bg-stone-200 dark:bg-stone-700;
+  }
+}
+
+.blog-article-content details.collapsible-block .collapsible-icon {
+  @apply text-xs transition-transform duration-200;
+  @apply text-stone-500 dark:text-stone-400;
+}
+
+.blog-article-content details.collapsible-block[open] .collapsible-icon {
+  transform: rotate(90deg);
+}
+
+.blog-article-content details.collapsible-block .collapsible-title {
+  @apply flex-1 text-sm;
+}
+
+.blog-article-content details.collapsible-block .collapsible-content {
+  @apply p-4 border-t;
+  @apply border-stone-200 dark:border-stone-700;
+  @apply text-stone-700 dark:text-stone-200;
+}
+
+/* Collapsible style variants - Info */
+.blog-article-content details.collapsible-info {
+  @apply bg-blue-50 border-blue-200 dark:bg-blue-950/50 dark:border-blue-800;
+}
+.blog-article-content details.collapsible-info summary {
+  @apply bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300;
+  &:hover { @apply bg-blue-200 dark:bg-blue-800/50; }
+}
+.blog-article-content details.collapsible-info .collapsible-icon {
+  @apply text-blue-500 dark:text-blue-400;
+}
+.blog-article-content details.collapsible-info .collapsible-content {
+  @apply border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100;
+}
+
+/* Collapsible style variants - Tip */
+.blog-article-content details.collapsible-tip {
+  @apply bg-emerald-50 border-emerald-200 dark:bg-emerald-950/50 dark:border-emerald-800;
+}
+.blog-article-content details.collapsible-tip summary {
+  @apply bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300;
+  &:hover { @apply bg-emerald-200 dark:bg-emerald-800/50; }
+}
+.blog-article-content details.collapsible-tip .collapsible-icon {
+  @apply text-emerald-500 dark:text-emerald-400;
+}
+.blog-article-content details.collapsible-tip .collapsible-content {
+  @apply border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100;
+}
+
+/* Collapsible style variants - Warning */
+.blog-article-content details.collapsible-warning {
+  @apply bg-amber-50 border-amber-200 dark:bg-amber-950/50 dark:border-amber-800;
+}
+.blog-article-content details.collapsible-warning summary {
+  @apply bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300;
+  &:hover { @apply bg-amber-200 dark:bg-amber-800/50; }
+}
+.blog-article-content details.collapsible-warning .collapsible-icon {
+  @apply text-amber-500 dark:text-amber-400;
+}
+.blog-article-content details.collapsible-warning .collapsible-content {
+  @apply border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100;
+}
+
+/* Collapsible style variants - Note */
+.blog-article-content details.collapsible-note {
+  @apply bg-purple-50 border-purple-200 dark:bg-purple-950/50 dark:border-purple-800;
+}
+.blog-article-content details.collapsible-note summary {
+  @apply bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300;
+  &:hover { @apply bg-purple-200 dark:bg-purple-800/50; }
+}
+.blog-article-content details.collapsible-note .collapsible-icon {
+  @apply text-purple-500 dark:text-purple-400;
+}
+.blog-article-content details.collapsible-note .collapsible-content {
+  @apply border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-100;
+}
+
   .legal-content [align] {
     text-align: left !important;
   }
