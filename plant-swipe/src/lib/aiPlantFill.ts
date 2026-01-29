@@ -1,8 +1,10 @@
 import { supabase } from "@/lib/supabaseClient"
 
 // Retry configuration for handling timeouts and rate limits
-const MAX_RETRIES = 3
+const MAX_RETRIES = 2 // Reduced from 3 since server already has 10min timeout
+const MAX_RETRIES_GATEWAY_TIMEOUT = 2 // Keep retries low to avoid long waits
 const INITIAL_RETRY_DELAY = 2000 // 2 seconds
+const INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT = 3000 // 3 seconds for gateway timeouts
 
 // Helper to delay execution (abortable)
 const delay = (ms: number, signal?: AbortSignal | null) => new Promise<void>((resolve, reject) => {
@@ -20,6 +22,9 @@ const delay = (ms: number, signal?: AbortSignal | null) => new Promise<void>((re
 // Helper to check if error is retryable (504, 502, 503, 429)
 const isRetryableStatus = (status: number) => [502, 503, 504, 429].includes(status)
 
+// Helper to check if status is a gateway timeout (needs extra patience)
+const isGatewayTimeout = (status: number) => status === 504
+
 // Helper to check if error is an abort error
 const isAbortError = (err: unknown): boolean => {
   if (err instanceof DOMException && err.name === 'AbortError') return true
@@ -29,13 +34,19 @@ const isAbortError = (err: unknown): boolean => {
 }
 
 // Fetch with retry logic and exponential backoff
+// For 504 gateway timeouts, uses more retries and longer delays to give server time to complete
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = MAX_RETRIES
+  baseMaxRetries = MAX_RETRIES
 ): Promise<Response> {
   let lastError: Error | null = null
+  let lastStatus: number | null = null
   const signal = options.signal
+  
+  // Start with base retries, but allow escalation for gateway timeouts
+  let maxRetries = baseMaxRetries
+  let initialDelay = INITIAL_RETRY_DELAY
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     // Check if aborted before each attempt
@@ -48,8 +59,16 @@ async function fetchWithRetry(
       
       // If it's a retryable error and we have retries left, retry
       if (isRetryableStatus(response.status) && attempt < maxRetries) {
-        const retryDelay = INITIAL_RETRY_DELAY * Math.pow(2, attempt)
-        console.log(`[AI Fill] Request failed with ${response.status}, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries})`)
+        // For 504 gateway timeouts, use slightly longer delays
+        if (isGatewayTimeout(response.status) && initialDelay < INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT) {
+          initialDelay = INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT
+          console.log(`[AI Fill] Gateway timeout (504) detected, using ${initialDelay}ms delay between retries`)
+        }
+        
+        lastStatus = response.status
+        const retryDelay = initialDelay * Math.pow(2, attempt)
+        const statusDesc = isGatewayTimeout(response.status) ? 'Gateway timeout' : `Status ${response.status}`
+        console.log(`[AI Fill] ${statusDesc}, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries})`)
         await delay(retryDelay, signal)
         continue
       }
@@ -65,7 +84,7 @@ async function fetchWithRetry(
       
       // Network errors - retry if we have attempts left
       if (attempt < maxRetries) {
-        const retryDelay = INITIAL_RETRY_DELAY * Math.pow(2, attempt)
+        const retryDelay = initialDelay * Math.pow(2, attempt)
         console.log(`[AI Fill] Network error, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries}):`, lastError.message)
         try {
           await delay(retryDelay, signal)
@@ -77,6 +96,10 @@ async function fetchWithRetry(
     }
   }
   
+  // Provide more informative error message
+  if (lastStatus === 504) {
+    throw new Error(`Gateway timeout after ${maxRetries + 1} attempts. The AI backend is taking too long to respond.`)
+  }
   throw lastError || new Error('Request failed after retries')
 }
 
@@ -216,12 +239,23 @@ export async function fetchAiPlantFill({
       } catch {}
 
       if (!response.ok) {
-        const message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+        let message: string
+        if (response.status === 504) {
+          message = `Gateway timeout for "${fieldKey}" - AI backend took too long to respond`
+        } else if (response.status === 503) {
+          message = `Service unavailable for "${fieldKey}" - AI backend is temporarily down`
+        } else if (response.status === 502) {
+          message = `Bad gateway for "${fieldKey}" - proxy error communicating with AI backend`
+        } else if (response.status === 429) {
+          message = `Rate limited for "${fieldKey}" - too many AI requests`
+        } else {
+          message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+        }
         throw new Error(message)
       }
 
       if (!payload?.success) {
-        const message = payload?.error || `AI fill failed for "${fieldKey}"`
+        const message = payload?.error || `AI fill failed for "${fieldKey}" - no success response`
         throw new Error(message)
       }
 
