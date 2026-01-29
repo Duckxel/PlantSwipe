@@ -580,11 +580,14 @@ export const GlobalImageLibrary: React.FC = () => {
             return (
               <div
                 key={entry.id}
-                className="group rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5 cursor-pointer"
-                onClick={() => setSelectedEntry(entry)}
+                className="group rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5"
               >
-                {/* Image Preview */}
-                <div className="aspect-video bg-stone-100 dark:bg-[#2a2a2d] relative overflow-hidden">
+                {/* Image Preview - Clickable to open modal */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedEntry(entry)}
+                  className="w-full aspect-video bg-stone-100 dark:bg-[#2a2a2d] relative overflow-hidden rounded-t-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset"
+                >
                   {isImage && entry.url ? (
                     <img
                       src={entry.url}
@@ -607,61 +610,65 @@ export const GlobalImageLibrary: React.FC = () => {
                     {sourceConfig.label}
                   </div>
                   
-                  {/* Overlay Actions */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center gap-2 p-4 pointer-events-none group-hover:pointer-events-auto">
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="rounded-lg bg-white/90 text-stone-900 hover:bg-white pointer-events-auto"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleCopy(entry.id, displayLink)
-                      }}
-                      disabled={copiedId === entry.id}
-                    >
-                      {copiedId === entry.id ? (
-                        <>
-                          <Check className="mr-1.5 h-3.5 w-3.5" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="mr-1.5 h-3.5 w-3.5" />
-                          Copy
-                        </>
-                      )}
-                    </Button>
-                    {entry.url && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="rounded-lg bg-white/90 text-stone-900 hover:bg-white pointer-events-auto"
-                        onClick={(e) => e.stopPropagation()}
-                        asChild
-                      >
-                        <a href={entry.url} target="_blank" rel="noreferrer">
-                          <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                          Open
-                        </a>
-                      </Button>
-                    )}
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="rounded-lg bg-red-500 text-white hover:bg-red-600 pointer-events-auto"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDelete(entry)
-                      }}
-                      disabled={deletingId === entry.id}
-                    >
-                      {deletingId === entry.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
+                  {/* Click to view hint */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <span className="text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 px-3 py-1.5 rounded-lg">
+                      Click to view
+                    </span>
                   </div>
+                </button>
+                
+                {/* Action Buttons - Always visible */}
+                <div className="flex items-center gap-1 px-3 py-2 border-b border-stone-100 dark:border-[#2a2a2d]">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-xs rounded-md"
+                    onClick={() => handleCopy(entry.id, displayLink)}
+                    disabled={copiedId === entry.id}
+                  >
+                    {copiedId === entry.id ? (
+                      <>
+                        <Check className="mr-1 h-3.5 w-3.5 text-emerald-600" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="mr-1 h-3.5 w-3.5" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                  {entry.url && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs rounded-md"
+                      asChild
+                    >
+                      <a href={entry.url} target="_blank" rel="noreferrer">
+                        <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                        Open
+                      </a>
+                    </Button>
+                  )}
+                  <div className="flex-1" />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
+                    onClick={() => handleDelete(entry)}
+                    disabled={deletingId === entry.id}
+                  >
+                    {deletingId === entry.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
                 </div>
 
                 {/* Info */}
