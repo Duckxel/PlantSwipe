@@ -336,7 +336,7 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
   <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
   <meta name="color-scheme" content="light dark">
   <meta name="supported-color-schemes" content="light dark">
-  <title>${escapeHtml(subject) || 'Aphylia'}</title>
+  <title>${subject || 'Aphylia'}</title>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
   <!--[if mso]>
   <noscript>
@@ -726,17 +726,15 @@ async function processEmailCampaigns() {
             url: websiteUrl.replace(/^https?:\/\//, ''), // Website URL without protocol (e.g., "aphylia.app")
             code: 'XXXXXX'                           // Placeholder for campaign emails (real codes are for transactional emails)
           }
-          const replaceVars = createTemplateReplacer(context)
-
           // Get user's language-specific content (fallback to campaign's default content)
           const translation = emailTranslations.get(userLang)
           const rawSubject = translation?.subject || campaign.subject
           const rawBodyHtml = translation?.bodyHtml || campaign.body_html
 
           // Escape HTML characters in values injected into the body to prevent XSS
-          const bodyHtmlRaw = replaceVars(rawBodyHtml, true)
+          const bodyHtmlRaw = replaceTemplateVariables(rawBodyHtml, context, true)
           // Do not escape values in subject (email clients handle text subjects)
-          const subject = replaceVars(rawSubject, false)
+          const subject = replaceTemplateVariables(rawSubject, context, false)
           // Sanitize the body HTML to fix email-incompatible CSS (gradients, flexbox, shadows, etc.)
           const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
           // Wrap the body HTML with our beautiful styled email template (with localized wrapper)
@@ -4278,13 +4276,13 @@ function escapeHtml(value) {
 }
 
 /**
- * Creates a template variable replacer function for email templates.
- * Replaces {{variable}} placeholders with values from the context object.
- * @param {Object} context - Object containing variable values (keys should be lowercase)
- * @returns {function(string, boolean): string} Replacer function that takes (template, shouldEscape)
+ * Replaces {{variables}} in a string with values from a context object.
+ * @param {string} str - The template string
+ * @param {object} context - Map of variable names to values
+ * @param {boolean} escape - Whether to HTML-escape the values (default: false)
  */
-function createTemplateReplacer(context) {
-  return (str, escape = false) => (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
+function replaceTemplateVariables(str, context, escape = false) {
+  return (str || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
     const val = context[k.toLowerCase()]
     if (val === undefined || val === null) return `{{${k}}}`
     return escape ? escapeHtml(String(val)) : String(val)
@@ -8688,12 +8686,10 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       url: websiteUrl.replace(/^https?:\/\//, ''),
       code: 'XXXXXX',
     }
-    const replaceVars = createTemplateReplacer(context)
-
     // Do not escape values in subject (email clients handle text subjects)
-    const subject = replaceVars(rawSubject, false)
+    const subject = replaceTemplateVariables(rawSubject, context, false)
     // Escape HTML characters in values injected into the body to prevent XSS
-    const bodyHtmlRaw = replaceVars(rawBodyHtml, true)
+    const bodyHtmlRaw = replaceTemplateVariables(rawBodyHtml, context, true)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
     const html = wrapEmailHtml(bodyHtml, subject, lang)
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
@@ -8867,12 +8863,10 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
       time: extraContext.time || currentTimestamp,
     }
 
-    const replaceVars = createTemplateReplacer(context)
-
     // Do not escape values in subject (email clients handle text subjects)
-    const subject = replaceVars(rawSubject, false)
+    const subject = replaceTemplateVariables(rawSubject, context, false)
     // Escape HTML characters in values injected into the body to prevent XSS
-    const bodyHtmlRaw = replaceVars(rawBodyHtml, true)
+    const bodyHtmlRaw = replaceTemplateVariables(rawBodyHtml, context, true)
     const bodyHtml = sanitizeHtmlForEmail(bodyHtmlRaw)
     const html = wrapEmailHtml(bodyHtml, subject, lang)
     const text = bodyHtml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
