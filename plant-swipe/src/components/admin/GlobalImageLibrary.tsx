@@ -586,7 +586,7 @@ export const GlobalImageLibrary: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSelectedEntry(entry)}
-                  className="w-full aspect-video bg-stone-100 dark:bg-[#2a2a2d] relative overflow-hidden rounded-t-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset"
+                  className="w-full aspect-video bg-stone-100 dark:bg-[#2a2a2d] relative overflow-hidden rounded-t-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset cursor-pointer"
                 >
                   {isImage && entry.url ? (
                     <img
@@ -609,66 +609,47 @@ export const GlobalImageLibrary: React.FC = () => {
                     <SourceIcon className="h-3 w-3" />
                     {sourceConfig.label}
                   </div>
-                  
-                  {/* Click to view hint */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                    <span className="text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 px-3 py-1.5 rounded-lg">
-                      Click to view
-                    </span>
-                  </div>
                 </button>
                 
-                {/* Action Buttons - Always visible */}
-                <div className="flex items-center gap-1 px-3 py-2 border-b border-stone-100 dark:border-[#2a2a2d]">
-                  <Button
+                {/* Action Buttons - Icon only */}
+                <div className="flex items-center justify-end gap-1 px-2 py-1.5 border-b border-stone-100 dark:border-[#2a2a2d]">
+                  <button
                     type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 px-2 text-xs rounded-md"
                     onClick={() => handleCopy(entry.id, displayLink)}
                     disabled={copiedId === entry.id}
+                    className="h-7 w-7 flex items-center justify-center rounded-md text-stone-500 hover:text-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 dark:hover:text-stone-300 transition-colors disabled:opacity-50"
+                    title="Copy URL"
                   >
                     {copiedId === entry.id ? (
-                      <>
-                        <Check className="mr-1 h-3.5 w-3.5 text-emerald-600" />
-                        Copied
-                      </>
+                      <Check className="h-4 w-4 text-emerald-600" />
                     ) : (
-                      <>
-                        <Copy className="mr-1 h-3.5 w-3.5" />
-                        Copy
-                      </>
+                      <Copy className="h-4 w-4" />
                     )}
-                  </Button>
+                  </button>
                   {entry.url && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 px-2 text-xs rounded-md"
-                      asChild
+                    <a
+                      href={entry.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="h-7 w-7 flex items-center justify-center rounded-md text-stone-500 hover:text-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 dark:hover:text-stone-300 transition-colors"
+                      title="Open in new tab"
                     >
-                      <a href={entry.url} target="_blank" rel="noreferrer">
-                        <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                        Open
-                      </a>
-                    </Button>
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
                   )}
-                  <div className="flex-1" />
-                  <Button
+                  <button
                     type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
                     onClick={() => handleDelete(entry)}
                     disabled={deletingId === entry.id}
+                    className="h-7 w-7 flex items-center justify-center rounded-md text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                    title="Delete"
                   >
                     {deletingId === entry.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     )}
-                  </Button>
+                  </button>
                 </div>
 
                 {/* Info */}
