@@ -39,7 +39,6 @@ export const GlobalDragHandle = Extension.create<GlobalDragHandleOptions>({
 
   addProseMirrorPlugins() {
     const { enabled } = this.options
-    const editor = this.editor
 
     if (!enabled) return []
 
@@ -104,13 +103,6 @@ export const GlobalDragHandle = Extension.create<GlobalDragHandleOptions>({
     // Skip excluded nodes
     if (excludeNodes?.includes(extension.name)) {
       return {}
-    }
-
-    // Only modify block nodes
-    const context = {
-      name: extension.name,
-      options: extension.options,
-      storage: extension.storage,
     }
 
     return {
