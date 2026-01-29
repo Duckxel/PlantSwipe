@@ -6,8 +6,15 @@
  * - Consent-aware initialization (respects cookie preferences)
  * - PII scrubbing (no emails, IPs anonymized)
  * - Enhanced error context for developers
- * - Performance monitoring
- * - Session replay with privacy controls
+ * - Lightweight performance monitoring (optimized for minimal overhead)
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Session replay is disabled by default (heavy DOM observation)
+ * - Long task and INP monitoring disabled (continuous overhead)
+ * - Console capture disabled (intercepts all console calls)
+ * - HTTP client integration disabled (monitors all requests)
+ * - Consent check results are cached to avoid repeated localStorage reads
+ * - Reduced trace sample rate for lower overhead
  * 
  * Import this module early in your application (before React renders).
  */
@@ -24,6 +31,11 @@ const SERVER_NAME = (import.meta.env as Record<string, string>).VITE_SERVER_NAME
 // Track initialization state
 let sentryInitialized = false
 let consentGiven = false
+
+// Cache consent check to avoid repeated localStorage reads (performance optimization)
+let consentCacheTimestamp = 0
+let cachedConsentResult = false
+const CONSENT_CACHE_TTL = 5000 // Cache consent check for 5 seconds
 
 /**
  * Error categories for better organization in Sentry dashboard
@@ -47,17 +59,42 @@ export type ErrorCategoryType = typeof ErrorCategory[keyof typeof ErrorCategory]
 /**
  * Check if user has given consent for analytics/error tracking
  * GDPR requires explicit consent before sending data
+ * 
+ * PERFORMANCE: Results are cached for CONSENT_CACHE_TTL ms to avoid
+ * repeated synchronous localStorage reads which can block the main thread.
  */
 export function hasTrackingConsent(): boolean {
+  const now = Date.now()
+  
+  // Return cached result if still valid
+  if (now - consentCacheTimestamp < CONSENT_CACHE_TTL) {
+    return cachedConsentResult
+  }
+  
   try {
     const stored = localStorage.getItem('cookie_consent')
-    if (!stored) return false
+    if (!stored) {
+      cachedConsentResult = false
+      consentCacheTimestamp = now
+      return false
+    }
     const consent = JSON.parse(stored)
     // Analytics consent includes error tracking
-    return consent.level === 'analytics' || consent.level === 'all'
+    cachedConsentResult = consent.level === 'analytics' || consent.level === 'all'
+    consentCacheTimestamp = now
+    return cachedConsentResult
   } catch {
+    cachedConsentResult = false
+    consentCacheTimestamp = now
     return false
   }
+}
+
+/**
+ * Invalidate the consent cache - call this when consent changes
+ */
+export function invalidateConsentCache(): void {
+  consentCacheTimestamp = 0
 }
 
 /**
@@ -140,49 +177,38 @@ export function initSentry(): void {
       // GDPR: Disable sending by default until consent is given
       enabled: consentGiven,
       
-      // Send structured logs to Sentry
-      _experiments: {
-        enableLogs: true,
-      },
+      // PERFORMANCE: Disabled experimental features to reduce overhead
+      // _experiments: { enableLogs: true },
       
-      // Integrations with GDPR-compliant settings
+      // PERFORMANCE OPTIMIZED: Minimal integrations for lower overhead
+      // Heavy integrations (replay, console capture, http monitoring) are disabled
       integrations: [
-        // Browser tracing for performance monitoring
+        // Browser tracing for performance monitoring - OPTIMIZED
         Sentry.browserTracingIntegration({
-          // Don't include URL query params (may contain PII)
-          enableLongTask: true,
-          enableInp: true,
+          // PERFORMANCE: Disabled long task monitoring (continuous overhead)
+          enableLongTask: false,
+          // PERFORMANCE: Disabled INP monitoring (continuous overhead)
+          enableInp: false,
         }),
-        // Replay for session recordings on errors - with privacy controls
-        Sentry.replayIntegration({
-          // GDPR: Mask all text by default to avoid capturing PII
-          maskAllText: true,
-          // GDPR: Block all media to avoid capturing images of sensitive content
-          blockAllMedia: true,
-          // Mask all inputs including select, textarea
-          maskAllInputs: true,
-          // Network request capture settings
-          networkDetailAllowUrls: [], // Don't capture network details by default
-          networkRequestHeaders: [], // Don't capture request headers
-          networkResponseHeaders: [], // Don't capture response headers
-        }),
-        // Capture console errors
-        Sentry.captureConsoleIntegration({
-          levels: ['error', 'warn'],
-        }),
-        // Enhanced context from HTTP requests
-        Sentry.httpClientIntegration({
-          failedRequestStatusCodes: [[400, 599]],
-        }),
+        // PERFORMANCE: Session Replay DISABLED - heavy DOM observation overhead
+        // Even with 0% sample rate, the integration still initializes observers
+        // Sentry.replayIntegration({ ... }),
+        
+        // PERFORMANCE: Console capture DISABLED - intercepts all console calls
+        // Sentry.captureConsoleIntegration({ levels: ['error', 'warn'] }),
+        
+        // PERFORMANCE: HTTP client integration DISABLED - monitors all requests
+        // Sentry.httpClientIntegration({ failedRequestStatusCodes: [[400, 599]] }),
       ],
 
-      // Tracing - capture 20% of transactions in production (cost-effective)
-      tracesSampleRate: isProduction ? 0.2 : 1.0,
+      // PERFORMANCE: Reduced trace sample rate for lower overhead
+      // 10% in production provides good coverage with less impact
+      tracesSampleRate: isProduction ? 0.1 : 0.5,
 
-      // Session replay settings
-      // GDPR: Only capture replays on errors, not random sessions
-      replaysSessionSampleRate: 0, // Don't capture random sessions
-      replaysOnErrorSampleRate: consentGiven ? 1.0 : 0, // Only on errors, only with consent
+      // PERFORMANCE: Session replay completely disabled
+      // Replay has significant overhead even when not actively recording
+      replaysSessionSampleRate: 0,
+      replaysOnErrorSampleRate: 0,
 
       // GDPR: Don't automatically send PII
       sendDefaultPii: false,
@@ -285,6 +311,8 @@ export function initSentry(): void {
  * Call this when user updates their cookie preferences
  */
 export function updateSentryConsent(): void {
+  // Invalidate cache to get fresh consent value
+  invalidateConsentCache()
   const newConsent = hasTrackingConsent()
   
   if (newConsent !== consentGiven) {
@@ -577,6 +605,13 @@ export function setContext(name: string, context: Record<string, unknown>): void
 // Listen for consent changes
 if (typeof window !== 'undefined') {
   window.addEventListener('cookie_consent_granted', () => {
+    invalidateConsentCache()
+    updateSentryConsent()
+  })
+  
+  // Also listen for consent withdrawal
+  window.addEventListener('cookie_consent_rejected', () => {
+    invalidateConsentCache()
     updateSentryConsent()
   })
 }
