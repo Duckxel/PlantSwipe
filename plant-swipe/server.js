@@ -1338,6 +1338,8 @@ async function handleScopedImageUpload(req, res, options = {}) {
     bucket = adminUploadBucket,
     webpQuality = adminUploadWebpQuality,
     maxDimension = adminUploadMaxDimension,
+    // Additional metadata to merge with the default metadata (e.g., tag, device)
+    extraMetadataBuilder = null,
   } = options
 
   singleAdminImageUpload(req, res, (err) => {
@@ -1483,6 +1485,11 @@ async function handleScopedImageUpload(req, res, options = {}) {
         payload.warning = 'Bucket is not public; no public URL is available'
       }
 
+      // Build extra metadata if builder is provided
+      const extraMetadata = typeof extraMetadataBuilder === 'function' 
+        ? extraMetadataBuilder({ req, file }) 
+        : {}
+
       await recordAdminMediaUpload({
         adminId: uploaderInfo?.id || null,
         adminEmail: uploaderInfo?.email || null,
@@ -1502,6 +1509,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
           originalTypeSegment,
           scope: auditLabel,
           optimized: shouldOptimize,
+          ...extraMetadata,
         },
       })
 
@@ -5859,6 +5867,14 @@ app.post('/api/admin/upload-mockup', async (req, res) => {
     // Mockups uploads: UTILITY bucket, 90% quality (highest for marketing materials)
     bucket: 'UTILITY',
     webpQuality: 90,
+    // Extract tag and device from request body for mockup metadata
+    extraMetadataBuilder: ({ req }) => {
+      const validTags = ['screenshot', 'mockup']
+      const validDevices = ['phone', 'computer', 'tablet']
+      const tag = validTags.includes(req.body?.tag) ? req.body.tag : null
+      const device = validDevices.includes(req.body?.device) ? req.body.device : null
+      return { tag, device }
+    },
   })
 })
 

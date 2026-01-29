@@ -16,12 +16,15 @@ import {
   User,
   ImageIcon,
   Smartphone,
+  Monitor,
+  Tablet,
+  Camera,
+  Image,
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import { SearchInput } from "@/components/ui/search-input"
 
 type UploadResult = {
@@ -39,6 +42,9 @@ type UploadResult = {
   compressionPercent?: number | null
   optimized?: boolean
 }
+
+type ImageTag = "screenshot" | "mockup"
+type DeviceTag = "phone" | "computer" | "tablet"
 
 type MediaEntry = {
   id: string
@@ -61,6 +67,8 @@ type MediaEntry = {
     storageName?: string | null
     displayName?: string | null
     typeSegment?: string | null
+    tag?: ImageTag | null
+    device?: DeviceTag | null
     [key: string]: unknown
   } | null
   createdAt: string | null
@@ -105,7 +113,8 @@ export const AdminMockupsPanel: React.FC = () => {
   const [uploadError, setUploadError] = React.useState<string | null>(null)
   const [uploadResult, setUploadResult] = React.useState<UploadResult | null>(null)
   const [copiedField, setCopiedField] = React.useState<"url" | "path" | null>(null)
-  const [optimize, setOptimize] = React.useState(true)
+  const [imageTag, setImageTag] = React.useState<ImageTag>("screenshot")
+  const [deviceTag, setDeviceTag] = React.useState<DeviceTag>("phone")
   const inputRef = React.useRef<HTMLInputElement | null>(null)
 
   // Library state
@@ -222,7 +231,9 @@ export const AdminMockupsPanel: React.FC = () => {
         }
         const form = new FormData()
         form.append("file", file)
-        form.append("optimize", optimize ? "true" : "false")
+        form.append("optimize", "true") // Always optimize images
+        form.append("tag", imageTag)
+        form.append("device", deviceTag)
         form.append("folder", "Mockups") // This will be overridden by the backend
         const headers: Record<string, string> = {}
         if (token) headers["Authorization"] = `Bearer ${token}`
@@ -249,7 +260,7 @@ export const AdminMockupsPanel: React.FC = () => {
         if (inputRef.current) inputRef.current.value = ""
       }
     },
-    [adminToken, optimize, fetchMockups],
+    [adminToken, imageTag, deviceTag, fetchMockups],
   )
 
   const handleDrop = React.useCallback(
@@ -368,38 +379,103 @@ export const AdminMockupsPanel: React.FC = () => {
           </p>
         </div>
 
-        {/* Optimization Toggle */}
-        <div className="flex items-center justify-between rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4">
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "w-10 h-10 rounded-lg flex items-center justify-center",
-              optimize 
-                ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400"
-            )}>
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <label 
-                htmlFor="mockup-optimize-toggle" 
-                className="text-sm font-medium text-stone-900 dark:text-white cursor-pointer"
+        {/* Tag and Device Selectors */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Image Tag Selector */}
+          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4">
+            <label className="text-sm font-medium text-stone-900 dark:text-white mb-3 block">
+              Image Type
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setImageTag("screenshot")}
+                disabled={uploading}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all",
+                  imageTag === "screenshot"
+                    ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border-2 border-emerald-500"
+                    : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 border-2 border-transparent hover:border-stone-300 dark:hover:border-stone-600"
+                )}
               >
-                Optimize file
-              </label>
-              <p className="text-xs text-stone-500 dark:text-stone-400">
-                {optimize 
-                  ? "PNG, JPG, WebP will be compressed and converted to WebP"
-                  : "File will be uploaded as-is without optimization"
-                }
-              </p>
+                <Camera className="h-4 w-4" />
+                Screenshot
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageTag("mockup")}
+                disabled={uploading}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all",
+                  imageTag === "mockup"
+                    ? "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border-2 border-purple-500"
+                    : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 border-2 border-transparent hover:border-stone-300 dark:hover:border-stone-600"
+                )}
+              >
+                <Image className="h-4 w-4" />
+                Mockup
+              </button>
             </div>
           </div>
-          <Switch 
-            id="mockup-optimize-toggle"
-            checked={optimize}
-            onCheckedChange={setOptimize}
-            disabled={uploading}
-          />
+
+          {/* Device Tag Selector */}
+          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4">
+            <label className="text-sm font-medium text-stone-900 dark:text-white mb-3 block">
+              Device Type
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDeviceTag("phone")}
+                disabled={uploading}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                  deviceTag === "phone"
+                    ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-2 border-blue-500"
+                    : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 border-2 border-transparent hover:border-stone-300 dark:hover:border-stone-600"
+                )}
+              >
+                <Smartphone className="h-4 w-4" />
+                Phone
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeviceTag("tablet")}
+                disabled={uploading}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                  deviceTag === "tablet"
+                    ? "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 border-2 border-orange-500"
+                    : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 border-2 border-transparent hover:border-stone-300 dark:hover:border-stone-600"
+                )}
+              >
+                <Tablet className="h-4 w-4" />
+                Tablet
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeviceTag("computer")}
+                disabled={uploading}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                  deviceTag === "computer"
+                    ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border-2 border-indigo-500"
+                    : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 border-2 border-transparent hover:border-stone-300 dark:hover:border-stone-600"
+                )}
+              >
+                <Monitor className="h-4 w-4" />
+                Computer
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Optimization Info */}
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3">
+          <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+          <p className="text-sm text-emerald-700 dark:text-emerald-300">
+            All images are automatically optimized and converted to WebP format for best performance.
+          </p>
         </div>
 
         {/* Drop Zone */}
@@ -482,7 +558,7 @@ export const AdminMockupsPanel: React.FC = () => {
           <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4">
             <div className="flex items-center gap-3 text-sm text-stone-600 dark:text-stone-400">
               <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
-              {optimize ? "Optimizing and uploading..." : "Uploading..."} This usually takes a few seconds.
+              Optimizing and uploading... This usually takes a few seconds.
             </div>
           </div>
         )}
@@ -748,6 +824,36 @@ export const AdminMockupsPanel: React.FC = () => {
                       {storageName}
                     </h3>
                     
+                    {/* Tag and Device Badges */}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {entry.metadata?.tag && (
+                        <span className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium",
+                          entry.metadata.tag === "screenshot"
+                            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                            : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                        )}>
+                          {entry.metadata.tag === "screenshot" ? <Camera className="h-3 w-3" /> : <Image className="h-3 w-3" />}
+                          {entry.metadata.tag}
+                        </span>
+                      )}
+                      {entry.metadata?.device && (
+                        <span className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium",
+                          entry.metadata.device === "phone"
+                            ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                            : entry.metadata.device === "tablet"
+                            ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300"
+                            : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                        )}>
+                          {entry.metadata.device === "phone" ? <Smartphone className="h-3 w-3" /> : 
+                           entry.metadata.device === "tablet" ? <Tablet className="h-3 w-3" /> : 
+                           <Monitor className="h-3 w-3" />}
+                          {entry.metadata.device}
+                        </span>
+                      )}
+                    </div>
+                    
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
                       <span className="flex items-center gap-1">
                         <HardDrive className="h-3 w-3" />
@@ -808,13 +914,43 @@ export const AdminMockupsPanel: React.FC = () => {
               {/* Details */}
               <div className="lg:w-1/3 p-6 space-y-4 overflow-y-auto max-h-[60vh]">
                 <div>
-                  <h3 className="text-lg font-bold text-stone-900 dark:text-white mb-1">
+                  <h3 className="text-lg font-bold text-stone-900 dark:text-white mb-2">
                     {selectedEntry.metadata?.storageName || selectedEntry.metadata?.displayName || "Mockup Details"}
                   </h3>
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-purple-600 bg-purple-100 dark:bg-purple-900/30">
-                    <Smartphone className="h-3 w-3" />
-                    Mockup
-                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedEntry.metadata?.tag && (
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
+                        selectedEntry.metadata.tag === "screenshot"
+                          ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                          : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                      )}>
+                        {selectedEntry.metadata.tag === "screenshot" ? <Camera className="h-3 w-3" /> : <Image className="h-3 w-3" />}
+                        {selectedEntry.metadata.tag}
+                      </span>
+                    )}
+                    {selectedEntry.metadata?.device && (
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
+                        selectedEntry.metadata.device === "phone"
+                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                          : selectedEntry.metadata.device === "tablet"
+                          ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300"
+                          : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                      )}>
+                        {selectedEntry.metadata.device === "phone" ? <Smartphone className="h-3 w-3" /> : 
+                         selectedEntry.metadata.device === "tablet" ? <Tablet className="h-3 w-3" /> : 
+                         <Monitor className="h-3 w-3" />}
+                        {selectedEntry.metadata.device}
+                      </span>
+                    )}
+                    {!selectedEntry.metadata?.tag && !selectedEntry.metadata?.device && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-purple-600 bg-purple-100 dark:bg-purple-900/30">
+                        <Smartphone className="h-3 w-3" />
+                        Mockup
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-3 text-sm">
