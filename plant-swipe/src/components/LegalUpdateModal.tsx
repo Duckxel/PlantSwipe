@@ -159,6 +159,7 @@ export function LegalUpdateModal({
         className="max-w-lg mx-4 rounded-2xl"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
+        hideCloseButton
       >
         {step === 'review' ? (
           <>
