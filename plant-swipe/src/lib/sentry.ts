@@ -25,6 +25,116 @@ const SERVER_NAME = (import.meta.env as Record<string, string>).VITE_SERVER_NAME
 let sentryInitialized = false
 let consentGiven = false
 
+// Maintenance mode tracking
+// When true, suppress HTTP errors that are expected during service restarts
+let maintenanceMode = false
+let maintenanceModeTimeout: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Enable maintenance mode to suppress expected HTTP errors during restarts
+ * Automatically disables after the specified timeout (default: 60 seconds)
+ * 
+ * @param durationMs - How long to stay in maintenance mode (default: 60000ms)
+ */
+export function enableMaintenanceMode(durationMs: number = 60000): void {
+  maintenanceMode = true
+  console.log('[Sentry] Maintenance mode enabled - suppressing expected HTTP errors')
+  
+  // Clear any existing timeout
+  if (maintenanceModeTimeout) {
+    clearTimeout(maintenanceModeTimeout)
+  }
+  
+  // Auto-disable after timeout
+  maintenanceModeTimeout = setTimeout(() => {
+    disableMaintenanceMode()
+  }, durationMs)
+}
+
+/**
+ * Disable maintenance mode and resume normal error reporting
+ */
+export function disableMaintenanceMode(): void {
+  maintenanceMode = false
+  if (maintenanceModeTimeout) {
+    clearTimeout(maintenanceModeTimeout)
+    maintenanceModeTimeout = null
+  }
+  console.log('[Sentry] Maintenance mode disabled - normal error reporting resumed')
+}
+
+/**
+ * Check if maintenance mode is currently active
+ */
+export function isMaintenanceModeActive(): boolean {
+  return maintenanceMode
+}
+
+/**
+ * URLs that are expected to have transient errors during restarts
+ * Errors from these URLs during maintenance mode will be suppressed
+ */
+const MAINTENANCE_IGNORED_URL_PATTERNS = [
+  /\/admin\/restart/,
+  /\/admin\/reload/,
+  /\/admin\/branches/,
+  /\/api\/admin\/branches/,
+  /\/api\/broadcast\/active/,
+  /\/api\/health/,
+  /\/api\/admin\/stats/,
+  /\/api\/admin\/online/,
+]
+
+/**
+ * Check if an error should be suppressed based on maintenance mode and URL
+ */
+function shouldSuppressMaintenanceError(error: Error | unknown, event: Sentry.Event): boolean {
+  if (!maintenanceMode) {
+    return false
+  }
+  
+  // Check if this is an HTTP client error (502, 503, 400 during restarts)
+  const errorMessage = error instanceof Error ? error.message : String(error)
+  const isHttpError = errorMessage.includes('HTTP Client Error with status code:')
+  
+  if (!isHttpError) {
+    return false
+  }
+  
+  // Extract status code from message
+  const statusMatch = errorMessage.match(/status code:\s*(\d+)/)
+  const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : 0
+  
+  // Suppress 502, 503 (Bad Gateway, Service Unavailable) and 400 (Bad Request during restart)
+  const suppressibleStatusCodes = [400, 502, 503, 504]
+  if (!suppressibleStatusCodes.includes(statusCode)) {
+    return false
+  }
+  
+  // Check URL from event tags or breadcrumbs
+  const url = event.tags?.url as string || 
+              event.request?.url || 
+              (event.breadcrumbs?.find(b => b.category === 'fetch' || b.category === 'xhr')?.data?.url as string)
+  
+  if (url) {
+    // Check if URL matches any of the maintenance-ignored patterns
+    for (const pattern of MAINTENANCE_IGNORED_URL_PATTERNS) {
+      if (pattern.test(url)) {
+        console.log(`[Sentry] Suppressing expected maintenance error for ${url} (${statusCode})`)
+        return true
+      }
+    }
+  }
+  
+  // During maintenance mode, suppress all 502/503 errors as they're likely due to service restart
+  if (statusCode === 502 || statusCode === 503) {
+    console.log(`[Sentry] Suppressing ${statusCode} error during maintenance mode`)
+    return true
+  }
+  
+  return false
+}
+
 /**
  * Error categories for better organization in Sentry dashboard
  */
@@ -196,6 +306,11 @@ export function initSentry(): void {
 
         // Re-check consent at send time (user may have withdrawn)
         if (!hasTrackingConsent()) {
+          return null
+        }
+
+        // Suppress expected HTTP errors during maintenance mode (restart/refresh operations)
+        if (shouldSuppressMaintenanceError(error, event)) {
           return null
         }
 

@@ -110,6 +110,7 @@ import {
   type CategoryProgress, 
   type PlantFormCategory 
 } from "@/lib/plantFormCategories";
+import { enableMaintenanceMode, disableMaintenanceMode } from "@/lib/sentry";
 import {
   Dialog,
   DialogTrigger,
@@ -1149,6 +1150,8 @@ export const AdminPage: React.FC = () => {
   const restartServer = async () => {
     if (restarting) return;
     setRestarting(true);
+    // Enable Sentry maintenance mode to suppress expected 502/400 errors during restart
+    enableMaintenanceMode(90000); // 90 seconds should be enough for restart + health checks
     try {
       setConsoleOpen(true);
       appendConsole("[restart] Restart services requested?");
@@ -1267,6 +1270,8 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[restart] Failed to restart services: ? ${message}`);
     } finally {
       setRestarting(false);
+      // Disable maintenance mode now that restart is complete (or failed)
+      disableMaintenanceMode();
     }
   };
 
@@ -1279,6 +1284,8 @@ export const AdminPage: React.FC = () => {
       return;
     }
     setRestarting(true);
+    // Enable Sentry maintenance mode to suppress expected 502/400 errors during restart
+    enableMaintenanceMode(120000); // 2 minutes for server restart operations
     try {
       setConsoleLines([]);
       setConsoleOpen(true);
@@ -1338,6 +1345,8 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[restart] Failed: ${message}`);
     } finally {
       setRestarting(false);
+      // Disable maintenance mode now that restart is complete (or failed)
+      disableMaintenanceMode();
     }
   };
 
@@ -3371,6 +3380,8 @@ export const AdminPage: React.FC = () => {
   const pullLatest = async () => {
     if (pulling) return;
     setPulling(true);
+    // Enable Sentry maintenance mode to suppress expected 502/400 errors during pull and restart
+    enableMaintenanceMode(300000); // 5 minutes for pull, build, and restart operations
     try {
       // Use streaming endpoint for live logs
       setConsoleLines([]);
@@ -3581,6 +3592,8 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[pull] Failed to pull & build: ? ${message}`);
     } finally {
       setPulling(false);
+      // Disable maintenance mode now that pull & build is complete (or failed)
+      disableMaintenanceMode();
     }
   };
 
