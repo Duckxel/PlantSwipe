@@ -379,6 +379,9 @@ export async function processPlantRequest(
     let plant: Plant = { ...emptyPlant }
     
     // Run AI Fill (using English name for better AI results)
+    // Use continueOnFieldError: true to allow partial fills when some fields fail
+    // This prevents a single field timeout from failing the entire plant
+    const fieldErrors: Array<{ field: string; error: string }> = []
     const aiData = await fetchAiPlantFill({
       plantName: englishPlantName,
       schema: plantSchema,
@@ -386,6 +389,7 @@ export async function processPlantRequest(
       fields: aiFieldOrder,
       language: 'en',
       signal,
+      continueOnFieldError: true,
       onProgress: ({ field, completed, total }) => {
         if (field !== 'init' && field !== 'complete') {
           onFieldStart?.({ field, fieldsCompleted: completed, totalFields: total })
@@ -397,10 +401,27 @@ export async function processPlantRequest(
           onFieldComplete?.({ field, fieldsCompleted, totalFields })
         }
       },
+      onFieldError: ({ field, error }) => {
+        console.warn(`[aiPrefillService] Field "${field}" failed for plant "${englishPlantName}": ${error}`)
+        fieldErrors.push({ field, error })
+      },
     })
     
     if (signal?.aborted) {
       throw new Error('Operation cancelled')
+    }
+    
+    // Log any field errors that occurred during AI fill
+    if (fieldErrors.length > 0) {
+      console.warn(`[aiPrefillService] ${fieldErrors.length} field(s) failed for "${englishPlantName}":`, 
+        fieldErrors.map(e => `${e.field}: ${e.error}`).join(', '))
+      
+      // If more than half of the fields failed, consider this a critical failure
+      const criticalFailureThreshold = Math.ceil(aiFieldOrder.length / 2)
+      if (fieldErrors.length >= criticalFailureThreshold) {
+        const failedFields = fieldErrors.map(e => e.field).join(', ')
+        throw new Error(`Too many fields failed (${fieldErrors.length}/${aiFieldOrder.length}): ${failedFields}`)
+      }
     }
     
     // Apply AI data to plant
