@@ -28,13 +28,19 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
 
   group: "block",
 
+  // Allow any block content: paragraphs, headings, lists, blockquotes, code blocks, images, etc.
+  // Using "block+" allows all registered block nodes
   content: "block+",
 
   draggable: true,
 
   selectable: true,
 
-  defining: true,
+  // Set to false to allow content transformations (like turning text into headings/lists) inside the node
+  defining: false,
+
+  // Allow content to be joined with surrounding content when appropriate
+  isolating: false,
 
   addOptions() {
     return {
@@ -156,21 +162,29 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
 
   addKeyboardShortcuts() {
     return {
-      // Allow Enter to create new paragraph inside collapsible
-      Enter: ({ editor }) => {
-        const { state } = editor
-        const { selection } = state
-        const { $from } = selection
-
-        // Check if we're inside a collapsible node
-        for (let d = $from.depth; d > 0; d--) {
-          if ($from.node(d).type.name === this.name) {
-            // We're inside a collapsible, let default behavior handle it
-            return false
-          }
-        }
-        return false
-      },
+      // Allow all keyboard shortcuts to work normally inside collapsible
+      // This includes Enter for new paragraphs, Tab for list indentation, etc.
+      // By returning false, we let the default/other extension behavior handle these
+      Enter: () => false,
+      Tab: () => false,
+      "Shift-Tab": () => false,
+      Backspace: () => false,
+      Delete: () => false,
+      // Allow text formatting shortcuts
+      "Mod-b": () => false,
+      "Mod-i": () => false,
+      "Mod-u": () => false,
+      // Allow heading shortcuts
+      "Mod-Alt-1": () => false,
+      "Mod-Alt-2": () => false,
+      "Mod-Alt-3": () => false,
+      "Mod-Alt-4": () => false,
+      "Mod-Alt-5": () => false,
+      "Mod-Alt-6": () => false,
+      // Allow list shortcuts
+      "Mod-Shift-7": () => false,
+      "Mod-Shift-8": () => false,
+      "Mod-Shift-9": () => false,
     }
   },
 })

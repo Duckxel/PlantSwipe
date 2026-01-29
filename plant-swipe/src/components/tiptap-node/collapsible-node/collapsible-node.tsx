@@ -151,11 +151,12 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
         selected ? "ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-[#0f0f11]" : ""
       }`}
     >
-      {/* Header */}
+      {/* Header - marked as non-editable to prevent cursor issues */}
       <div
         className={`collapsible-header flex items-center gap-2 rounded-t-xl px-3 py-3 transition-colors ${classes.header} ${
           !isEditingTitle ? classes.headerHover : ""
         }`}
+        contentEditable={false}
       >
         {/* Drag handle */}
         <div
@@ -287,23 +288,28 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
 
       {/* Content area - animated */}
       <div
-        className={`collapsible-content-wrapper overflow-hidden transition-all duration-200 ease-in-out ${
-          isOpen ? "opacity-100" : "opacity-0 max-h-0"
+        className={`collapsible-content-wrapper transition-all duration-200 ease-in-out ${
+          isOpen ? "opacity-100" : "opacity-0 max-h-0 overflow-hidden"
         }`}
         style={{
           maxHeight: isOpen ? "none" : "0",
         }}
+        data-state={isOpen ? "open" : "closed"}
       >
         <div className={`collapsible-content border-t p-4 ${classes.content}`}>
-          <NodeViewContent className="collapsible-inner-content" />
+          <NodeViewContent 
+            className="collapsible-inner-content" 
+            as="div"
+          />
         </div>
       </div>
 
-      {/* Collapsed preview */}
+      {/* Collapsed preview - non-editable hint */}
       {!isOpen && (
         <div
           className={`px-4 py-2 text-xs text-stone-400 dark:text-stone-500 italic border-t ${classes.content} cursor-pointer`}
           onClick={handleToggle}
+          contentEditable={false}
         >
           Click to expand and see content...
         </div>
