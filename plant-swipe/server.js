@@ -13399,8 +13399,30 @@ app.get('/api/admin/branches', async (req, res) => {
     // Always operate from the repository root and mark it safe for this process
     const repoRoot = await getRepoRoot()
     const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-    // Fetch remote branches with reasonable timeout (15s) - this is the key operation for refreshing branches
-    try { await exec(`${gitBase} remote update --prune`, { timeout: 15000 }) } catch (e) { console.warn('[branches] git remote update failed:', e?.message || e) }
+    // Fetch remote branches with prune to remove deleted branches - this is the key operation for refreshing branches
+    // Using git fetch --prune origin is more reliable than git remote update --prune
+    let pruneWarning = null
+    try {
+      await exec(`${gitBase} fetch --prune origin`, { timeout: 20000 })
+      console.log('[branches] Successfully fetched and pruned remote branches from origin')
+    } catch (e) {
+      console.warn('[branches] git fetch --prune origin failed:', e?.message || e)
+      // Fallback: try git remote update --prune as secondary option
+      try {
+        await exec(`${gitBase} remote update --prune`, { timeout: 15000 })
+        console.log('[branches] Fallback: git remote update --prune succeeded')
+      } catch (e2) {
+        console.warn('[branches] Fallback git remote update --prune also failed:', e2?.message || e2)
+        pruneWarning = 'Could not sync with remote - showing cached branches'
+      }
+    }
+    // Extra safety: explicitly prune any stale remote-tracking refs that might remain
+    try {
+      await exec(`${gitBase} remote prune origin`, { timeout: 5000 })
+    } catch (e) {
+      // Non-fatal: fetch --prune should have already handled this
+      console.warn('[branches] Extra prune command failed (non-fatal):', e?.message || e)
+    }
     // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
     const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
     let branches = branchesStdout
@@ -13441,7 +13463,10 @@ app.get('/api/admin/branches', async (req, res) => {
       const adminName = null
       if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'list_branches', ${current || null}, ${sql.json({ count: branches.length })})`
     } catch { }
-    res.json({ branches, current, lastUpdateTime })
+    // Include warning in response if remote sync failed (frontend can optionally display this)
+    const response = { branches, current, lastUpdateTime }
+    if (pruneWarning) response.warning = pruneWarning
+    res.json(response)
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to list branches' })
   }
