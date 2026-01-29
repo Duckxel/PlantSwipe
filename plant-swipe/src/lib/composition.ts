@@ -421,3 +421,9 @@ export const conservationStatusEnum = createEnumTools([
   { dbValue: 'critically endangered', uiValue: 'Critically Endangered', aliases: ['criticallyendangered'] },
   { dbValue: 'extinct', uiValue: 'Extinct' },
 ])
+
+export const timePeriodEnum = createEnumTools([
+  { dbValue: 'week', uiValue: 'week', aliases: ['weekly', 'per week', 'per-week', 'weeks', 'wk', 'wks'] },
+  { dbValue: 'month', uiValue: 'month', aliases: ['monthly', 'per month', 'per-month', 'months', 'mo', 'mos'] },
+  { dbValue: 'year', uiValue: 'year', aliases: ['yearly', 'annual', 'annually', 'per year', 'per-year', 'years', 'yr', 'yrs'] },
+])

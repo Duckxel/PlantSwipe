@@ -41,6 +41,7 @@ import {
   sowTypeEnum,
   polenizerEnum,
   conservationStatusEnum,
+  timePeriodEnum,
 } from "@/lib/composition"
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
@@ -288,16 +289,26 @@ const normalizeSeasonSlug = (value?: string | null): string | null => {
   return slug || null
 }
 
+const normalizeTimePeriodSlug = (value?: string | null): string | null => {
+  if (!value) return null
+  const slug = timePeriodEnum.toDb(value)
+  return slug || null
+}
+
 function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSchedule[] {
   if (!entries?.length) return []
   return entries
     .map((entry) => {
       const qty = entry.quantity
       const parsedQuantity = typeof qty === 'string' ? parseInt(qty, 10) : qty
+      // Normalize timePeriod to valid DB values: 'week', 'month', 'year', or undefined
+      const rawTimePeriod = entry.timePeriod && typeof entry.timePeriod === 'string' ? entry.timePeriod.trim() : undefined
+      const normalizedTimePeriod = normalizeTimePeriodSlug(rawTimePeriod) as PlantWateringSchedule['timePeriod'] | undefined
       return {
         ...entry,
         quantity: Number.isFinite(parsedQuantity as number) ? Number(parsedQuantity) : undefined,
         season: entry.season && typeof entry.season === 'string' ? entry.season.trim() : undefined,
+        timePeriod: normalizedTimePeriod || undefined,
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
@@ -490,9 +501,10 @@ async function upsertWateringSchedules(plantId: string, schedules: Plant["plantC
   const entries = normalizeSchedules(schedules?.watering?.schedules)
   const rows = entries.map((entry) => ({
     plant_id: plantId,
-      season: normalizeSeasonSlug(entry.season),
+    season: normalizeSeasonSlug(entry.season),
     quantity: entry.quantity ?? null,
-    time_period: entry.timePeriod || null,
+    // Use normalizeTimePeriodSlug to ensure only valid DB values: 'week', 'month', 'year', or null
+    time_period: normalizeTimePeriodSlug(entry.timePeriod) || null,
   }))
   if (!rows.length) return
   const { error } = await supabase.from('plant_watering_schedules').insert(rows)
