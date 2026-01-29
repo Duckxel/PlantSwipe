@@ -136,8 +136,8 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
           return commands.insertContent({
             type: this.name,
             attrs: {
-              title: options?.title ?? "Click to expand",
-              isOpen: options?.isOpen ?? true,
+              title: options?.title ?? "Section title",
+              isOpen: options?.isOpen ?? false, // Collapsed by default
               style: options?.style ?? "default",
             },
             content: [

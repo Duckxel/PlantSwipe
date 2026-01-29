@@ -149,13 +149,70 @@
   }
 }
 
-// Dark mode adjustments
+// Dark mode adjustments - ensure text is visible
 .dark {
   .collapsible-node {
     .collapsible-inner-content {
+      // Ensure text colors are visible in dark mode
+      color: #e7e5e4; // stone-200 equivalent
+      
+      p, span, li, td, th, label {
+        color: inherit;
+      }
+      
+      // Headings should be brighter
+      h1, h2, h3, h4, h5, h6 {
+        color: #fafaf9; // stone-50 equivalent
+      }
+      
+      // Muted text elements
       blockquote {
         opacity: 0.9;
+        color: #a8a29e; // stone-400 equivalent
       }
+      
+      // Code blocks
+      code {
+        background-color: rgba(41, 37, 36, 0.8); // stone-800 with opacity
+        color: #e7e5e4;
+      }
+      
+      pre {
+        background-color: rgba(28, 25, 23, 0.9); // stone-900 with opacity
+        color: #e7e5e4;
+      }
+      
+      // Links
+      a {
+        color: #6ee7b7; // emerald-300
+      }
+      
+      // Lists - ensure bullet/number colors
+      ul li::marker,
+      ol li::marker {
+        color: #a8a29e; // stone-400
+      }
+      
+      // Placeholder text
+      .is-empty::before {
+        color: #78716c !important; // stone-500
+      }
+    }
+    
+    // Collapsed preview text
+    .collapsible-content {
+      color: #e7e5e4;
+    }
+  }
+}
+
+// Light mode text colors (explicit for consistency)
+.collapsible-node {
+  .collapsible-inner-content {
+    color: #1c1917; // stone-900
+    
+    h1, h2, h3, h4, h5, h6 {
+      color: #0c0a09; // stone-950
     }
   }
 }

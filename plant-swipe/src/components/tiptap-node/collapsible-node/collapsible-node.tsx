@@ -296,16 +296,16 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
         }}
         data-state={isOpen ? "open" : "closed"}
       >
-        <div className={`collapsible-content border-t p-4 ${classes.content}`}>
+        <div className={`collapsible-content border-t p-4 ${classes.content} text-stone-900 dark:text-stone-200`}>
           {/* NodeViewContent renders the editable content - this is where paragraphs, lists, etc. go */}
-          <NodeViewContent className="collapsible-inner-content" />
+          <NodeViewContent className="collapsible-inner-content text-inherit" />
         </div>
       </div>
 
       {/* Collapsed preview - non-editable hint */}
       {!isOpen && (
         <div
-          className={`px-4 py-2 text-xs text-stone-400 dark:text-stone-500 italic border-t ${classes.content} cursor-pointer`}
+          className={`px-4 py-2 text-xs text-stone-500 dark:text-stone-400 italic border-t ${classes.content} cursor-pointer hover:text-stone-600 dark:hover:text-stone-300 transition-colors`}
           onClick={handleToggle}
           contentEditable={false}
         >
