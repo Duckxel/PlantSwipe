@@ -126,6 +126,16 @@ export const AdminMockupsPanel: React.FC = () => {
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedEntry, setSelectedEntry] = React.useState<MediaEntry | null>(null)
+  
+  // Filter state
+  const [filterTag, setFilterTag] = React.useState<ImageTag | "all">("all")
+  const [filterDevice, setFilterDevice] = React.useState<DeviceTag | "all">("all")
+  
+  // Edit state (for modal)
+  const [isEditing, setIsEditing] = React.useState(false)
+  const [editTag, setEditTag] = React.useState<ImageTag | null>(null)
+  const [editDevice, setEditDevice] = React.useState<DeviceTag | null>(null)
+  const [updating, setUpdating] = React.useState(false)
 
   const runtimeEnv = (globalThis as typeof globalThis & RuntimeEnv).__ENV__
   const adminToken =
@@ -351,19 +361,101 @@ export const AdminMockupsPanel: React.FC = () => {
     }
   }, [])
 
-  // Filter entries by search
+  // Update media metadata (tag/device)
+  const handleUpdateMetadata = React.useCallback(
+    async (entryId: string, tag: ImageTag | null, device: DeviceTag | null) => {
+      setError(null)
+      setUpdating(true)
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        if (!token && !adminToken) {
+          setError("You must be signed in as an admin to update mockups.")
+          return
+        }
+        const headers: Record<string, string> = { 
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        }
+        if (token) headers["Authorization"] = `Bearer ${token}`
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken)
+
+        const resp = await fetch(`/api/admin/media/${entryId}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ tag, device }),
+          credentials: "same-origin",
+        })
+        const data = await resp.json().catch(() => null)
+        if (!resp.ok) {
+          throw new Error(data?.error || "Failed to update mockup")
+        }
+        
+        // Update the entry in the list
+        if (data?.media) {
+          setEntries((prev) =>
+            prev.map((item) => (item.id === entryId ? data.media : item))
+          )
+          // Also update selectedEntry if it's the same one
+          if (selectedEntry?.id === entryId) {
+            setSelectedEntry(data.media)
+          }
+        }
+        setIsEditing(false)
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to update mockup"
+        setError(message)
+      } finally {
+        setUpdating(false)
+      }
+    },
+    [adminToken, selectedEntry],
+  )
+
+  // Start editing mode with current values
+  const startEditing = React.useCallback((entry: MediaEntry) => {
+    setEditTag((entry.metadata?.tag as ImageTag) || null)
+    setEditDevice((entry.metadata?.device as DeviceTag) || null)
+    setIsEditing(true)
+  }, [])
+
+  // Cancel editing
+  const cancelEditing = React.useCallback(() => {
+    setIsEditing(false)
+    setEditTag(null)
+    setEditDevice(null)
+  }, [])
+
+  // Filter entries by search, tag, and device
   const visibleEntries = React.useMemo(() => {
-    if (!searchQuery.trim()) return entries
-    const query = searchQuery.toLowerCase()
-    return entries.filter((entry) => {
-      const name = entry.metadata?.storageName || entry.metadata?.displayName || entry.path
-      return (
-        name.toLowerCase().includes(query) ||
-        entry.adminName?.toLowerCase().includes(query) ||
-        entry.adminEmail?.toLowerCase().includes(query)
-      )
-    })
-  }, [entries, searchQuery])
+    let filtered = entries
+
+    // Filter by tag
+    if (filterTag !== "all") {
+      filtered = filtered.filter((entry) => entry.metadata?.tag === filterTag)
+    }
+
+    // Filter by device
+    if (filterDevice !== "all") {
+      filtered = filtered.filter((entry) => entry.metadata?.device === filterDevice)
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter((entry) => {
+        const name = entry.metadata?.storageName || entry.metadata?.displayName || entry.path
+        return (
+          name.toLowerCase().includes(query) ||
+          entry.adminName?.toLowerCase().includes(query) ||
+          entry.adminEmail?.toLowerCase().includes(query)
+        )
+      })
+    }
+
+    return filtered
+  }, [entries, searchQuery, filterTag, filterDevice])
 
   return (
     <div className="space-y-8">
@@ -675,25 +767,148 @@ export const AdminMockupsPanel: React.FC = () => {
           </Button>
         </div>
 
-        {/* Search */}
+        {/* Search and Filters */}
         {entries.length > 0 && (
-          <div className="relative max-w-md">
-            <SearchInput
-              placeholder="Search mockups..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              variant="lg"
-              className="rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] z-10"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+          <div className="space-y-4">
+            {/* Search */}
+            <div className="relative max-w-md">
+              <SearchInput
+                placeholder="Search mockups..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                variant="lg"
+                className="rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] z-10"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Controls */}
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Tag Filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-stone-600 dark:text-stone-400">Type:</span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFilterTag("all")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                      filterTag === "all"
+                        ? "bg-stone-900 dark:bg-white text-white dark:text-stone-900"
+                        : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                    )}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTag("screenshot")}
+                    className={cn(
+                      "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                      filterTag === "screenshot"
+                        ? "bg-emerald-500 text-white"
+                        : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                    )}
+                  >
+                    <Camera className="h-3 w-3" />
+                    Screenshot
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTag("mockup")}
+                    className={cn(
+                      "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                      filterTag === "mockup"
+                        ? "bg-purple-500 text-white"
+                        : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                    )}
+                  >
+                    <Image className="h-3 w-3" />
+                    Mockup
+                  </button>
+                </div>
+              </div>
+
+              {/* Device Filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-stone-600 dark:text-stone-400">Device:</span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFilterDevice("all")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                      filterDevice === "all"
+                        ? "bg-stone-900 dark:bg-white text-white dark:text-stone-900"
+                        : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                    )}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterDevice("phone")}
+                    className={cn(
+                      "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                      filterDevice === "phone"
+                        ? "bg-blue-500 text-white"
+                        : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                    )}
+                  >
+                    <Smartphone className="h-3 w-3" />
+                    Phone
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterDevice("tablet")}
+                    className={cn(
+                      "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                      filterDevice === "tablet"
+                        ? "bg-orange-500 text-white"
+                        : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                    )}
+                  >
+                    <Tablet className="h-3 w-3" />
+                    Tablet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterDevice("computer")}
+                    className={cn(
+                      "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                      filterDevice === "computer"
+                        ? "bg-indigo-500 text-white"
+                        : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                    )}
+                  >
+                    <Monitor className="h-3 w-3" />
+                    Computer
+                  </button>
+                </div>
+              </div>
+
+              {/* Clear Filters */}
+              {(filterTag !== "all" || filterDevice !== "all") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterTag("all")
+                    setFilterDevice("all")
+                  }}
+                  className="text-xs text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 underline"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -715,24 +930,32 @@ export const AdminMockupsPanel: React.FC = () => {
         ) : visibleEntries.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] p-12 text-center">
             <div className="mx-auto w-12 h-12 rounded-2xl bg-stone-100 dark:bg-[#2a2a2d] flex items-center justify-center mb-4">
-              {searchQuery ? (
+              {searchQuery || filterTag !== "all" || filterDevice !== "all" ? (
                 <Search className="h-6 w-6 text-stone-400" />
               ) : (
                 <Smartphone className="h-6 w-6 text-stone-400" />
               )}
             </div>
             <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">
-              {searchQuery ? "No results found" : "No mockups yet"}
+              {searchQuery || filterTag !== "all" || filterDevice !== "all" ? "No results found" : "No mockups yet"}
             </h3>
             <p className="text-sm text-stone-500 dark:text-stone-400">
-              {searchQuery 
-                ? `No mockups match "${searchQuery}"`
+              {searchQuery || filterTag !== "all" || filterDevice !== "all"
+                ? "No mockups match your current filters."
                 : "Upload some PWA screenshots and mockups to see them here."
               }
             </p>
-            {searchQuery && (
-              <Button variant="outline" onClick={() => setSearchQuery('')} className="rounded-xl mt-4">
-                Clear search
+            {(searchQuery || filterTag !== "all" || filterDevice !== "all") && (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setSearchQuery('')
+                  setFilterTag("all")
+                  setFilterDevice("all")
+                }} 
+                className="rounded-xl mt-4"
+              >
+                Clear all filters
               </Button>
             )}
           </div>
@@ -883,7 +1106,10 @@ export const AdminMockupsPanel: React.FC = () => {
       {selectedEntry && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
-          onClick={() => setSelectedEntry(null)}
+          onClick={() => {
+            setSelectedEntry(null)
+            cancelEditing()
+          }}
         >
           <div
             className="relative max-w-4xl w-full max-h-[90vh] bg-white dark:bg-[#1e1e20] rounded-2xl overflow-hidden shadow-2xl"
@@ -891,7 +1117,10 @@ export const AdminMockupsPanel: React.FC = () => {
           >
             <button
               type="button"
-              onClick={() => setSelectedEntry(null)}
+              onClick={() => {
+                setSelectedEntry(null)
+                cancelEditing()
+              }}
               className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
             >
               <X className="h-5 w-5" />
@@ -917,40 +1146,171 @@ export const AdminMockupsPanel: React.FC = () => {
                   <h3 className="text-lg font-bold text-stone-900 dark:text-white mb-2">
                     {selectedEntry.metadata?.storageName || selectedEntry.metadata?.displayName || "Mockup Details"}
                   </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedEntry.metadata?.tag && (
-                      <span className={cn(
-                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
-                        selectedEntry.metadata.tag === "screenshot"
-                          ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
-                          : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-                      )}>
-                        {selectedEntry.metadata.tag === "screenshot" ? <Camera className="h-3 w-3" /> : <Image className="h-3 w-3" />}
-                        {selectedEntry.metadata.tag}
-                      </span>
-                    )}
-                    {selectedEntry.metadata?.device && (
-                      <span className={cn(
-                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
-                        selectedEntry.metadata.device === "phone"
-                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                          : selectedEntry.metadata.device === "tablet"
-                          ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300"
-                          : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                      )}>
-                        {selectedEntry.metadata.device === "phone" ? <Smartphone className="h-3 w-3" /> : 
-                         selectedEntry.metadata.device === "tablet" ? <Tablet className="h-3 w-3" /> : 
-                         <Monitor className="h-3 w-3" />}
-                        {selectedEntry.metadata.device}
-                      </span>
-                    )}
-                    {!selectedEntry.metadata?.tag && !selectedEntry.metadata?.device && (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-purple-600 bg-purple-100 dark:bg-purple-900/30">
-                        <Smartphone className="h-3 w-3" />
-                        Mockup
-                      </span>
-                    )}
-                  </div>
+                  
+                  {/* Tag/Device Display or Edit */}
+                  {isEditing ? (
+                    <div className="space-y-3 p-3 rounded-xl bg-stone-50 dark:bg-[#2a2a2d] border border-stone-200 dark:border-[#3e3e42]">
+                      {/* Edit Tag */}
+                      <div>
+                        <label className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400 mb-2 block">
+                          Image Type
+                        </label>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditTag("screenshot")}
+                            disabled={updating}
+                            className={cn(
+                              "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all",
+                              editTag === "screenshot"
+                                ? "bg-emerald-500 text-white"
+                                : "bg-white dark:bg-[#1e1e20] text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300"
+                            )}
+                          >
+                            <Camera className="h-3.5 w-3.5" />
+                            Screenshot
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditTag("mockup")}
+                            disabled={updating}
+                            className={cn(
+                              "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all",
+                              editTag === "mockup"
+                                ? "bg-purple-500 text-white"
+                                : "bg-white dark:bg-[#1e1e20] text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-[#3e3e42] hover:border-purple-300"
+                            )}
+                          >
+                            <Image className="h-3.5 w-3.5" />
+                            Mockup
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Edit Device */}
+                      <div>
+                        <label className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400 mb-2 block">
+                          Device Type
+                        </label>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditDevice("phone")}
+                            disabled={updating}
+                            className={cn(
+                              "flex-1 flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium transition-all",
+                              editDevice === "phone"
+                                ? "bg-blue-500 text-white"
+                                : "bg-white dark:bg-[#1e1e20] text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-[#3e3e42] hover:border-blue-300"
+                            )}
+                          >
+                            <Smartphone className="h-3.5 w-3.5" />
+                            Phone
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditDevice("tablet")}
+                            disabled={updating}
+                            className={cn(
+                              "flex-1 flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium transition-all",
+                              editDevice === "tablet"
+                                ? "bg-orange-500 text-white"
+                                : "bg-white dark:bg-[#1e1e20] text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-[#3e3e42] hover:border-orange-300"
+                            )}
+                          >
+                            <Tablet className="h-3.5 w-3.5" />
+                            Tablet
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditDevice("computer")}
+                            disabled={updating}
+                            className={cn(
+                              "flex-1 flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium transition-all",
+                              editDevice === "computer"
+                                ? "bg-indigo-500 text-white"
+                                : "bg-white dark:bg-[#1e1e20] text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-[#3e3e42] hover:border-indigo-300"
+                            )}
+                          >
+                            <Monitor className="h-3.5 w-3.5" />
+                            Computer
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Save/Cancel buttons */}
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 rounded-lg"
+                          onClick={cancelEditing}
+                          disabled={updating}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-700"
+                          onClick={() => handleUpdateMetadata(selectedEntry.id, editTag, editDevice)}
+                          disabled={updating}
+                        >
+                          {updating ? (
+                            <>
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Check className="mr-1.5 h-3.5 w-3.5" />
+                              Save
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedEntry.metadata?.tag && (
+                        <span className={cn(
+                          "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
+                          selectedEntry.metadata.tag === "screenshot"
+                            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                            : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                        )}>
+                          {selectedEntry.metadata.tag === "screenshot" ? <Camera className="h-3 w-3" /> : <Image className="h-3 w-3" />}
+                          {selectedEntry.metadata.tag}
+                        </span>
+                      )}
+                      {selectedEntry.metadata?.device && (
+                        <span className={cn(
+                          "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
+                          selectedEntry.metadata.device === "phone"
+                            ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                            : selectedEntry.metadata.device === "tablet"
+                            ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300"
+                            : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                        )}>
+                          {selectedEntry.metadata.device === "phone" ? <Smartphone className="h-3 w-3" /> : 
+                           selectedEntry.metadata.device === "tablet" ? <Tablet className="h-3 w-3" /> : 
+                           <Monitor className="h-3 w-3" />}
+                          {selectedEntry.metadata.device}
+                        </span>
+                      )}
+                      {!selectedEntry.metadata?.tag && !selectedEntry.metadata?.device && (
+                        <span className="text-xs text-stone-400 italic">No tags set</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => startEditing(selectedEntry)}
+                        className="ml-auto text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium"
+                      >
+                        Edit tags
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-3 text-sm">

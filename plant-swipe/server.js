@@ -6350,9 +6350,124 @@ app.delete('/api/admin/media/:id', async (req, res) => {
   res.json({ ok: true, id: mediaId, storageWarning })
 })
 app.options('/api/admin/media/:id', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'DELETE,PATCH,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
+})
+
+// Update media metadata (tag, device)
+app.patch('/api/admin/media/:id', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const admin = await ensureEditor(req, res)
+  if (!admin) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch { }
+
+  const mediaId = String(req.params?.id || '').trim()
+  if (!mediaId) {
+    res.status(400).json({ error: 'Missing media id' })
+    return
+  }
+
+  // Validate and extract tag/device from body
+  const validTags = ['screenshot', 'mockup']
+  const validDevices = ['phone', 'computer', 'tablet']
+  const body = req.body || {}
+  
+  // Only allow updating tag and device, and validate values
+  const updates = {}
+  if (body.tag !== undefined) {
+    if (body.tag === null || validTags.includes(body.tag)) {
+      updates.tag = body.tag
+    } else {
+      res.status(400).json({ error: `Invalid tag value. Must be one of: ${validTags.join(', ')}` })
+      return
+    }
+  }
+  if (body.device !== undefined) {
+    if (body.device === null || validDevices.includes(body.device)) {
+      updates.device = body.device
+    } else {
+      res.status(400).json({ error: `Invalid device value. Must be one of: ${validDevices.join(', ')}` })
+      return
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: 'No valid fields to update. Provide tag and/or device.' })
+    return
+  }
+
+  try {
+    let updatedRow = null
+    if (sql) {
+      // Fetch current metadata, merge updates, and save
+      const rows = await sql`
+        select id, metadata from public.admin_media_uploads where id = ${mediaId} limit 1
+      `
+      if (!rows || rows.length === 0) {
+        res.status(404).json({ error: 'Media not found' })
+        return
+      }
+      const currentMetadata = rows[0].metadata || {}
+      const newMetadata = { ...currentMetadata, ...updates }
+      
+      const updated = await sql`
+        update public.admin_media_uploads
+        set metadata = ${sql.json(newMetadata)}
+        where id = ${mediaId}
+        returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at
+      `
+      updatedRow = updated?.[0] || null
+    } else {
+      // Fetch current record
+      const { data: current, error: fetchError } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .select('id, metadata')
+        .eq('id', mediaId)
+        .maybeSingle()
+      
+      if (fetchError) {
+        res.status(500).json({ error: fetchError.message || 'Failed to load media record' })
+        return
+      }
+      if (!current) {
+        res.status(404).json({ error: 'Media not found' })
+        return
+      }
+      
+      const currentMetadata = current.metadata || {}
+      const newMetadata = { ...currentMetadata, ...updates }
+      
+      const { data, error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .update({ metadata: newMetadata })
+        .eq('id', mediaId)
+        .select('id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, upload_source, created_at')
+        .maybeSingle()
+      
+      if (error) {
+        res.status(500).json({ error: error.message || 'Failed to update media record' })
+        return
+      }
+      updatedRow = data
+    }
+
+    if (!updatedRow) {
+      res.status(404).json({ error: 'Media not found' })
+      return
+    }
+
+    res.json({ ok: true, media: normalizeAdminMediaRow(updatedRow) })
+  } catch (err) {
+    console.error('[media-update] failed to update media metadata', err)
+    res.status(500).json({ error: err?.message || 'Failed to update media record' })
+  }
 })
 
 app.get('/api/env.js', (req, res) => {
