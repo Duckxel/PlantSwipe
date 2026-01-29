@@ -1,10 +1,13 @@
 /**
  * Sentry error tracking and console logging integration
  * 
- * This module initializes Sentry with console capture to send ALL console output
- * (log, info, warn, error, debug, assert) to Sentry for easier debugging.
+ * This module initializes Sentry with:
+ * - Console capture (log, info, error, debug, assert - excludes warn to avoid flooding)
+ * - Long Task monitoring for detecting slow JavaScript execution
+ * - INP (Interaction to Next Paint) monitoring for Core Web Vitals
+ * - HTTP client integration for request/response tracking
  * 
- * Console messages are captured as breadcrumbs by default and errors as events.
+ * Console messages are captured as breadcrumbs and sent with error events.
  */
 
 import * as Sentry from '@sentry/react'
@@ -76,22 +79,32 @@ export function initSentry(): void {
       dsn: SENTRY_DSN,
       environment,
       
-      // Integrations for console capture and more
+      // Integrations for monitoring and debugging
       integrations: [
-        // Capture console.* calls as breadcrumbs
+        // Console Capture Integration
+        // Captures console.* calls as breadcrumbs (excluding 'warn' to avoid flooding devs)
         Sentry.captureConsoleIntegration({
-          // Capture all console levels: log, info, warn, error, debug, assert
-          levels: ['log', 'info', 'warn', 'error', 'debug', 'assert'],
+          levels: ['log', 'info', 'error', 'debug', 'assert'],
         }),
         
-        // Automatically capture errors from the browser
+        // Browser Tracing Integration with Long Task and INP monitoring
         Sentry.browserTracingIntegration({
-          // Instrument page load and navigation
+          // Enable INP (Interaction to Next Paint) monitoring for Core Web Vitals
           enableInp: true,
+          // Enable Long Task monitoring to detect slow JavaScript execution (>50ms)
+          enableLongTask: true,
+          // Enable long animation frame detection
+          enableLongAnimationFrame: true,
         }),
         
-        // Capture HTTP request breadcrumbs
-        Sentry.httpClientIntegration(),
+        // HTTP Client Integration
+        // Captures failed HTTP requests (4xx/5xx) as errors with request/response details
+        Sentry.httpClientIntegration({
+          // Capture errors for 4xx and 5xx status codes
+          failedRequestStatusCodes: [[400, 599]],
+          // Capture request/response targets
+          failedRequestTargets: [/.*/],
+        }),
         
         // Replay integration for session replay (optional - enable if needed)
         // Sentry.replayIntegration({
