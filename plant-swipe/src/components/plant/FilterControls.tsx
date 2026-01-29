@@ -46,7 +46,7 @@ interface FilterControlsProps {
   usageOptions: string[]
 }
 
-export const FilterControls: React.FC<FilterControlsProps> = ({
+const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   searchSort,
   setSearchSort,
   seasonFilter,
@@ -540,3 +540,8 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
     </div>
   )
 }
+
+// ⚡ Bolt: Memoize FilterControls to prevent re-renders on every swipe.
+// The parent PlantSwipe re-renders frequently (index changes), but filter props
+// (options, handlers) remain stable.
+export const FilterControls = React.memo(FilterControlsComponent)
