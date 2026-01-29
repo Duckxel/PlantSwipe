@@ -42,14 +42,13 @@
     z-index: 1;
   }
 
-  // Inner content - ensure TipTap editor styles apply
+  // Inner content - inherit editor styles, minimal overrides
   .collapsible-inner-content {
     // Ensure content is editable and visible
     min-height: 1.5em;
-    // Critical: Allow editing within the content area
     outline: none;
     
-    // Reset some styles to ensure nested content looks correct
+    // Reset margins for first/last children
     > *:first-child {
       margin-top: 0;
     }
@@ -58,173 +57,9 @@
       margin-bottom: 0;
     }
 
-    // Ensure nested paragraphs have proper spacing
-    p {
-      margin: 0.75em 0;
-      
-      &:first-child {
-        margin-top: 0;
-      }
-      
-      &:last-child {
-        margin-bottom: 0;
-      }
-    }
-
-    // Ensure headings in nested content look good
-    h1, h2, h3, h4, h5, h6 {
-      margin-top: 1em;
-      margin-bottom: 0.5em;
-      font-weight: bold;
-      
-      &:first-child {
-        margin-top: 0;
-      }
-    }
-
-    h1 { font-size: 2em; }
-    h2 { font-size: 1.5em; }
-    h3 { font-size: 1.25em; }
-    h4 { font-size: 1.1em; }
-    h5 { font-size: 1em; }
-    h6 { font-size: 0.9em; }
-
-    // Lists inside collapsible - bullet and ordered
-    ul, ol {
-      margin: 0.75em 0;
-      padding-left: 1.5em;
-      
-      li {
-        margin: 0.25em 0;
-        
-        p {
-          margin: 0;
-        }
-      }
-    }
-
-    ul {
-      list-style-type: disc;
-      
-      ul {
-        list-style-type: circle;
-        
-        ul {
-          list-style-type: square;
-        }
-      }
-    }
-
-    ol {
-      list-style-type: decimal;
-    }
-
-    // Task lists inside collapsible
-    ul[data-type="taskList"] {
-      list-style: none;
-      padding-left: 0;
-      
-      li {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.5em;
-        
-        > label {
-          flex-shrink: 0;
-          margin-top: 0.25em;
-        }
-        
-        > div {
-          flex: 1;
-          min-width: 0;
-        }
-      }
-    }
-
-    // Blockquotes inside collapsible
-    blockquote {
-      margin: 1em 0;
-      padding-left: 1em;
-      border-left: 3px solid currentColor;
-      opacity: 0.8;
-    }
-
-    // Code blocks inside collapsible
-    pre {
-      margin: 1em 0;
-      padding: 1em;
-      border-radius: 8px;
-      overflow-x: auto;
-      background-color: rgba(0, 0, 0, 0.05);
-      
-      code {
-        background: none;
-        padding: 0;
-        font-size: 0.9em;
-      }
-    }
-
-    // Inline code
-    code {
-      background-color: rgba(0, 0, 0, 0.08);
-      padding: 0.125em 0.25em;
-      border-radius: 4px;
-      font-size: 0.9em;
-    }
-
-    // Horizontal rules
-    hr {
-      margin: 1.5em 0;
-      border: none;
-      border-top: 2px solid rgba(0, 0, 0, 0.1);
-    }
-
-    // Images inside collapsible
-    img {
-      max-width: 100%;
-      height: auto;
-      border-radius: 8px;
-    }
-
-    // Nested collapsibles
+    // Nested collapsibles spacing
     .collapsible-node {
       margin: 1em 0;
-    }
-
-    // Text formatting
-    strong, b {
-      font-weight: bold;
-    }
-
-    em, i {
-      font-style: italic;
-    }
-
-    u {
-      text-decoration: underline;
-    }
-
-    s, strike {
-      text-decoration: line-through;
-    }
-
-    // Links
-    a {
-      color: #059669;
-      text-decoration: underline;
-      
-      &:hover {
-        color: #047857;
-      }
-    }
-
-    // Placeholder for empty content
-    &:empty::before,
-    > p:only-child:empty::before {
-      content: "Type your content here...";
-      color: #9ca3af;
-      font-style: italic;
-      pointer-events: none;
     }
   }
 
@@ -271,17 +106,10 @@
     
     // Ensure the inner content area is editable
     .collapsible-inner-content {
-      // This is the editable content area - ensure cursor works properly
       cursor: text;
       min-height: 1.5em;
       
-      // Ensure focus is visible
       &:focus {
-        outline: none;
-      }
-      
-      // Ensure all child elements can receive focus
-      > * {
         outline: none;
       }
     }

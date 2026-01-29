@@ -32,9 +32,13 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
   // Using "block+" allows all registered block nodes
   content: "block+",
 
+  // Allow dragging via the drag handle
   draggable: true,
 
-  selectable: true,
+  // IMPORTANT: Set to false to prevent clicking inside from selecting the whole node
+  // This allows clicking inside the content to place a text cursor there
+  // Dragging still works via the drag handle
+  selectable: false,
 
   // IMPORTANT: Must be false to allow editing inside the node
   atom: false,
@@ -122,10 +126,7 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(CollapsibleNodeComponent, {
-      // Ensure content is properly editable
-      contentDOMElementTag: "div",
-    })
+    return ReactNodeViewRenderer(CollapsibleNodeComponent)
   },
 
   addCommands() {
@@ -166,33 +167,8 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
     }
   },
 
-  addKeyboardShortcuts() {
-    return {
-      // Allow all keyboard shortcuts to work normally inside collapsible
-      // This includes Enter for new paragraphs, Tab for list indentation, etc.
-      // By returning false, we let the default/other extension behavior handle these
-      Enter: () => false,
-      Tab: () => false,
-      "Shift-Tab": () => false,
-      Backspace: () => false,
-      Delete: () => false,
-      // Allow text formatting shortcuts
-      "Mod-b": () => false,
-      "Mod-i": () => false,
-      "Mod-u": () => false,
-      // Allow heading shortcuts
-      "Mod-Alt-1": () => false,
-      "Mod-Alt-2": () => false,
-      "Mod-Alt-3": () => false,
-      "Mod-Alt-4": () => false,
-      "Mod-Alt-5": () => false,
-      "Mod-Alt-6": () => false,
-      // Allow list shortcuts
-      "Mod-Shift-7": () => false,
-      "Mod-Shift-8": () => false,
-      "Mod-Shift-9": () => false,
-    }
-  },
+  // No custom keyboard shortcuts needed - all shortcuts should work normally inside
+  // the collapsible content area since we're using NodeViewContent
 })
 
 function getCollapsibleStyles(style: CollapsibleStyle): Record<string, string> {
