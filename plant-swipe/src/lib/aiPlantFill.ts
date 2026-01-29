@@ -2,7 +2,6 @@ import { supabase } from "@/lib/supabaseClient"
 
 // Retry configuration for handling timeouts and rate limits
 const MAX_RETRIES = 2 // Reduced from 3 since server already has 10min timeout
-const MAX_RETRIES_GATEWAY_TIMEOUT = 2 // Keep retries low to avoid long waits
 const INITIAL_RETRY_DELAY = 2000 // 2 seconds
 const INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT = 3000 // 3 seconds for gateway timeouts
 
