@@ -69,6 +69,7 @@ const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
 const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
 const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
+const SetupPageLazy = lazy(() => import("@/pages/SetupPage").then(module => ({ default: module.SetupPage })))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -1395,6 +1396,41 @@ export default function PlantSwipe() {
     // Landing page has its own layout, skip the app shell
     // Show landing page for both logged out users AND logged in users visiting "/"
     const isLandingPage = currentView === "landing"
+    
+    // Setup page has its own full-screen layout
+    const isSetupPage = pathWithoutLang === "/setup"
+    
+    // Check if user needs to complete setup (logged in but setup not completed)
+    // Only redirect if not already on setup page and not on excluded pages (landing, terms, privacy, etc.)
+    const needsSetup = user && profile && profile.setup_completed === false
+    const setupExcludedPaths = ['/setup', '/terms', '/privacy', '/contact', '/about', '/error']
+    const shouldRedirectToSetup = needsSetup && !setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+
+    // Setup page - full screen wizard experience
+    if (isSetupPage && user) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <ErrorBoundary fallback={routeErrorFallback}>
+            <Suspense fallback={routeLoadingFallback}>
+              <Routes>
+                <Route path="/setup" element={<SetupPageLazy />} />
+                <Route path="*" element={<Navigate to="/setup" replace />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+          <CookieConsent />
+        </AuthActionsProvider>
+      )
+    }
+
+    // Redirect to setup if user needs to complete it
+    if (shouldRedirectToSetup) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <Navigate to="/setup" replace />
+        </AuthActionsProvider>
+      )
+    }
 
     if (isLandingPage) {
       return (
@@ -1785,6 +1821,16 @@ export default function PlantSwipe() {
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
                   <SettingsPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/setup"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <SetupPageLazy />
                 </Suspense>
               ) : (
                 <Navigate to="/" replace />
