@@ -3072,6 +3072,79 @@
       "termsVersion": "Version {{version}} - Updated {{date}}",
       "privacyVersion": "Version {{version}} - Updated {{date}}",
       "backToReview": "Back to Review"
+    },
+    "setup": {
+      "welcome": {
+        "title": "Welcome to Aphylia!",
+        "description": "I'm your garden assistant. I will accompany you through this journey to make your garden grow and bloom into the most beautiful one!",
+        "subtitle": "First, let's get to know each other and the environment where your garden will evolve.",
+        "getStarted": "Let's get started"
+      },
+      "gardenType": {
+        "title": "Where is your garden located?",
+        "subtitle": "This helps us recommend the right plants for you",
+        "outside": "Outside, in a yard",
+        "outsideDesc": "I have an outdoor garden or yard",
+        "inside": "Inside your home",
+        "insideDesc": "I grow plants indoors",
+        "both": "Both inside and outside",
+        "bothDesc": "I have plants everywhere!"
+      },
+      "experience": {
+        "title": "What's your gardening level?",
+        "subtitle": "We'll adapt our advice to your expertise",
+        "novice": "Novice",
+        "noviceDesc": "I'm just starting my gardening journey",
+        "intermediate": "Intermediate",
+        "intermediateDesc": "I have some experience with plants",
+        "expert": "Expert",
+        "expertDesc": "Gardening is my passion!"
+      },
+      "purpose": {
+        "title": "What is your purpose for your garden?",
+        "subtitle": "We'll personalize your plant recommendations",
+        "eat": "Grow food",
+        "eatDesc": "Vegetables and fruits for my own consumption",
+        "ornamental": "Ornamental garden",
+        "ornamentalDesc": "Beautiful flowers and decorative plants",
+        "various": "A bit of everything!",
+        "variousDesc": "As many various plants as possible"
+      },
+      "notificationTime": {
+        "title": "When should we remind you?",
+        "subtitle": "Choose your preferred notification time",
+        "early": "Early bird",
+        "earlyDesc": "6:00 AM - Start the day with your plants",
+        "morning": "Sleep in",
+        "morningDesc": "10:00 AM - After your morning coffee",
+        "midday": "Midday energy",
+        "middayDesc": "2:00 PM - A break in your afternoon",
+        "afternoon": "After work",
+        "afternoonDesc": "5:00 PM - Wind down with your garden"
+      },
+      "notifications": {
+        "title": "Stay on top of your garden",
+        "description": "Enable notifications to get reminders about watering, fertilizing, and caring for your plants at the perfect time.",
+        "enable": "Enable notifications",
+        "skip": "Maybe later"
+      },
+      "complete": {
+        "title": "You're all set!",
+        "description": "Your garden assistant is ready to help you grow the most beautiful plants. Let's start exploring!",
+        "button": "Start exploring"
+      },
+      "settings": {
+        "title": "Garden Preferences",
+        "description": "Update your gardening preferences and notification settings.",
+        "gardenType": "Garden Location",
+        "gardenTypeDescription": "Where do you grow your plants?",
+        "experienceLevel": "Experience Level",
+        "experienceLevelDescription": "Your gardening expertise level",
+        "lookingFor": "Garden Purpose",
+        "lookingForDescription": "What's your main gardening goal?",
+        "notificationTime": "Notification Time",
+        "notificationTimeDescription": "When should we send you reminders?"
+      }
     }
   }
 }
