@@ -29,6 +29,182 @@ interface SetupData {
 
 const STEPS: SetupStep[] = ['welcome', 'accent', 'location', 'garden_type', 'experience', 'purpose', 'notification_time', 'notifications', 'complete']
 
+// Liana/Vine Progress Bar Component
+const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
+  // Leaf positions along the vine (percentage positions)
+  const leafPositions = [
+    { x: 12, y: -8, rotate: -30, side: 'top' },
+    { x: 24, y: 8, rotate: 30, side: 'bottom' },
+    { x: 36, y: -8, rotate: -25, side: 'top' },
+    { x: 48, y: 8, rotate: 35, side: 'bottom' },
+    { x: 60, y: -8, rotate: -35, side: 'top' },
+    { x: 72, y: 8, rotate: 25, side: 'bottom' },
+    { x: 84, y: -8, rotate: -30, side: 'top' },
+    { x: 96, y: 8, rotate: 30, side: 'bottom' },
+  ]
+
+  return (
+    <div className="flex-1 h-10 relative">
+      {/* Background track - subtle vine path */}
+      <svg 
+        className="absolute inset-0 w-full h-full" 
+        viewBox="0 0 100 20" 
+        preserveAspectRatio="none"
+      >
+        {/* Background wavy path */}
+        <path
+          d="M 0 10 Q 12 5, 25 10 T 50 10 T 75 10 T 100 10"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="text-stone-200 dark:text-stone-700"
+        />
+      </svg>
+      
+      {/* Foreground growing vine */}
+      <svg 
+        className="absolute inset-0 w-full h-full" 
+        viewBox="0 0 100 20" 
+        preserveAspectRatio="none"
+      >
+        {/* Clip path for the growing effect */}
+        <defs>
+          <clipPath id="vineClip">
+            <motion.rect
+              x="0"
+              y="0"
+              height="20"
+              initial={{ width: 0 }}
+              animate={{ width: progress }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+            />
+          </clipPath>
+          {/* Leaf shape */}
+          <symbol id="leaf" viewBox="0 0 10 10">
+            <path
+              d="M 5 0 Q 8 3, 5 10 Q 2 3, 5 0"
+              fill="currentColor"
+            />
+            {/* Leaf vein */}
+            <path
+              d="M 5 1 L 5 8"
+              stroke="currentColor"
+              strokeWidth="0.3"
+              opacity="0.5"
+              fill="none"
+            />
+          </symbol>
+        </defs>
+        
+        {/* Growing vine path */}
+        <g clipPath="url(#vineClip)">
+          <path
+            d="M 0 10 Q 12 5, 25 10 T 50 10 T 75 10 T 100 10"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            className="text-accent"
+          />
+          {/* Swirly tendrils */}
+          <path
+            d="M 20 10 Q 22 6, 18 4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+            strokeLinecap="round"
+            className="text-accent"
+            opacity="0.6"
+          />
+          <path
+            d="M 45 10 Q 47 14, 43 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+            strokeLinecap="round"
+            className="text-accent"
+            opacity="0.6"
+          />
+          <path
+            d="M 70 10 Q 72 6, 68 4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+            strokeLinecap="round"
+            className="text-accent"
+            opacity="0.6"
+          />
+        </g>
+      </svg>
+      
+      {/* Animated leaves */}
+      <div className="absolute inset-0">
+        {leafPositions.map((leaf, index) => {
+          const shouldShow = (leaf.x / 100) * 100 <= progress
+          
+          return (
+            <motion.div
+              key={index}
+              className="absolute"
+              style={{
+                left: `${leaf.x}%`,
+                top: '50%',
+                transform: `translateY(-50%)`,
+              }}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ 
+                scale: shouldShow ? 1 : 0, 
+                opacity: shouldShow ? 1 : 0,
+              }}
+              transition={{ 
+                duration: 0.3, 
+                delay: shouldShow ? 0.1 : 0,
+                type: "spring",
+                stiffness: 300,
+                damping: 15
+              }}
+            >
+              <svg 
+                width="14" 
+                height="14" 
+                viewBox="0 0 10 10"
+                className="text-accent"
+                style={{
+                  transform: `translateY(${leaf.y}px) rotate(${leaf.rotate}deg)`,
+                }}
+              >
+                <path
+                  d="M 5 0 Q 9 4, 5 10 Q 1 4, 5 0"
+                  fill="currentColor"
+                />
+                <path
+                  d="M 5 2 L 5 8"
+                  stroke="white"
+                  strokeWidth="0.5"
+                  opacity="0.3"
+                  fill="none"
+                />
+              </svg>
+            </motion.div>
+          )
+        })}
+      </div>
+      
+      {/* Growing tip / bud at the end */}
+      <motion.div
+        className="absolute top-1/2 -translate-y-1/2"
+        style={{ left: `${Math.min(progress, 98)}%` }}
+        initial={{ scale: 0 }}
+        animate={{ scale: progress > 5 ? 1 : 0 }}
+        transition={{ type: "spring", stiffness: 300 }}
+      >
+        <div className="w-3 h-3 rounded-full bg-accent shadow-lg shadow-accent/30" />
+      </motion.div>
+    </div>
+  )
+}
+
 // Common countries for quick selection
 const POPULAR_COUNTRIES = [
   'France', 'United States', 'United Kingdom', 'Canada', 'Germany', 
@@ -776,15 +952,8 @@ export function SetupPage() {
             )}
             {(isWelcomeStep || isCompleteStep) && <div className="w-10" />}
             
-            {/* Progress bar */}
-            <div className="flex-1 h-1.5 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
-              <motion.div 
-                className="h-full bg-accent rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-              />
-            </div>
+            {/* Liana Progress Bar */}
+            <LianaProgressBar progress={progress} />
             
             {/* Logo icon */}
             <div className="w-10 flex items-center justify-center">
