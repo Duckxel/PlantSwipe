@@ -204,6 +204,7 @@ alter table if exists public.profiles drop column if exists avatar_url;
 -- New public profile fields
 alter table if exists public.profiles add column if not exists username text;
 alter table if exists public.profiles add column if not exists country text;
+alter table if exists public.profiles add column if not exists city text;
 alter table if exists public.profiles add column if not exists bio text;
 alter table if exists public.profiles add column if not exists favorite_plant text;
 alter table if exists public.profiles add column if not exists avatar_url text;

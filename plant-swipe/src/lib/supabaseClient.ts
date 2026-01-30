@@ -61,6 +61,7 @@ export type ProfileRow = {
   roles?: string[] | null // User roles: admin, editor, pro, merchant, creator, vip, plus
   username?: string | null
   country?: string | null
+  city?: string | null
   bio?: string | null
   favorite_plant?: string | null
   avatar_url?: string | null

@@ -3080,6 +3080,19 @@
         "subtitle": "First, let's get to know each other and the environment where your garden will evolve.",
         "getStarted": "Let's get started"
       },
+      "accent": {
+        "title": "Choose your accent color",
+        "subtitle": "Personalize your Aphylia experience",
+        "selected": "Selected"
+      },
+      "location": {
+        "title": "Where are you located?",
+        "subtitle": "This helps us provide local gardening advice",
+        "country": "Country",
+        "countryPlaceholder": "Or type your country...",
+        "city": "City",
+        "cityPlaceholder": "Enter your city..."
+      },
       "gardenType": {
         "title": "Where is your garden located?",
         "subtitle": "This helps us recommend the right plants for you",

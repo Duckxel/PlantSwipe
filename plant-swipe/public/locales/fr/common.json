@@ -3080,6 +3080,19 @@
         "subtitle": "D'abord, apprenons à nous connaître et découvrons l'environnement où votre jardin va évoluer.",
         "getStarted": "C'est parti !"
       },
+      "accent": {
+        "title": "Choisissez votre couleur d'accent",
+        "subtitle": "Personnalisez votre expérience Aphylia",
+        "selected": "Sélectionné"
+      },
+      "location": {
+        "title": "Où êtes-vous situé ?",
+        "subtitle": "Cela nous aide à fournir des conseils de jardinage locaux",
+        "country": "Pays",
+        "countryPlaceholder": "Ou tapez votre pays...",
+        "city": "Ville",
+        "cityPlaceholder": "Entrez votre ville..."
+      },
       "gardenType": {
         "title": "Où se trouve votre jardin ?",
         "subtitle": "Cela nous aide à vous recommander les bonnes plantes",

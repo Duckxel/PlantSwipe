@@ -5,9 +5,12 @@ import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
-import { Check, ChevronLeft, ChevronRight, Bell, Home, Flower2, Salad, Trees, Sparkles, Sun, Coffee, Clock, Leaf, Sprout } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Check, ChevronLeft, ChevronRight, Bell, Home, Flower2, Salad, Trees, Sparkles, Sun, Coffee, Clock, Leaf, Sprout, Palette, MapPin } from "lucide-react"
+import { ACCENT_OPTIONS, applyAccentByKey, type AccentKey } from "@/lib/accent"
 
-type SetupStep = 'welcome' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
+type SetupStep = 'welcome' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
 
 type GardenType = 'inside' | 'outside' | 'both'
 type ExperienceLevel = 'novice' | 'intermediate' | 'expert'
@@ -15,13 +18,23 @@ type LookingFor = 'eat' | 'ornamental' | 'various'
 type NotificationTime = '6h' | '10h' | '14h' | '17h'
 
 interface SetupData {
+  accent_key: AccentKey
+  country: string
+  city: string
   garden_type: GardenType | null
   experience_level: ExperienceLevel | null
   looking_for: LookingFor | null
   notification_time: NotificationTime | null
 }
 
-const STEPS: SetupStep[] = ['welcome', 'garden_type', 'experience', 'purpose', 'notification_time', 'notifications', 'complete']
+const STEPS: SetupStep[] = ['welcome', 'accent', 'location', 'garden_type', 'experience', 'purpose', 'notification_time', 'notifications', 'complete']
+
+// Common countries for quick selection
+const POPULAR_COUNTRIES = [
+  'France', 'United States', 'United Kingdom', 'Canada', 'Germany', 
+  'Spain', 'Italy', 'Belgium', 'Switzerland', 'Netherlands',
+  'Australia', 'Japan', 'Brazil', 'Mexico', 'Portugal'
+]
 
 export function SetupPage() {
   const { t } = useTranslation('common')
@@ -30,6 +43,9 @@ export function SetupPage() {
   
   const [currentStep, setCurrentStep] = React.useState<SetupStep>('welcome')
   const [setupData, setSetupData] = React.useState<SetupData>({
+    accent_key: 'emerald',
+    country: '',
+    city: '',
     garden_type: null,
     experience_level: null,
     looking_for: null,
@@ -66,6 +82,15 @@ export function SetupPage() {
       setDirection(-1)
       setCurrentStep(STEPS[prevIndex])
     }
+  }
+
+  const handleAccentSelect = (key: AccentKey) => {
+    setSetupData(prev => ({ ...prev, accent_key: key }))
+    applyAccentByKey(key) // Apply immediately for preview
+  }
+
+  const handleCountrySelect = (country: string) => {
+    setSetupData(prev => ({ ...prev, country }))
   }
 
   const handleGardenTypeSelect = (type: GardenType) => {
@@ -113,6 +138,9 @@ export function SetupPage() {
         .from('profiles')
         .update({
           setup_completed: true,
+          accent_key: setupData.accent_key,
+          country: setupData.country || null,
+          city: setupData.city || null,
           garden_type: setupData.garden_type,
           experience_level: setupData.experience_level,
           looking_for: setupData.looking_for,
@@ -281,6 +309,159 @@ export function SetupPage() {
                 <ChevronRight className="w-5 h-5 ml-2" />
               </Button>
             </motion.div>
+          </motion.div>
+        )
+
+      case 'accent':
+        return (
+          <motion.div
+            key="accent"
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.3 }}
+            className="max-w-lg mx-auto"
+          >
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center mb-8"
+            >
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-400 to-fuchsia-600 flex items-center justify-center shadow-xl">
+                <Palette className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-2">
+                {t('setup.accent.title', 'Choose your accent color')}
+              </h2>
+              <p className="text-stone-500 dark:text-stone-400">
+                {t('setup.accent.subtitle', 'Personalize your Aphylia experience')}
+              </p>
+            </motion.div>
+
+            <div className="grid grid-cols-5 gap-3 mb-8">
+              {ACCENT_OPTIONS.map((accent, index) => (
+                <motion.button
+                  key={accent.key}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: index * 0.05 }}
+                  onClick={() => handleAccentSelect(accent.key)}
+                  className={`relative aspect-square rounded-2xl transition-all ${
+                    setupData.accent_key === accent.key 
+                      ? 'ring-4 ring-offset-2 ring-stone-400 dark:ring-stone-500 scale-110' 
+                      : 'hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: `hsl(${accent.hsl})` }}
+                  title={accent.label}
+                >
+                  {setupData.accent_key === accent.key && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute inset-0 flex items-center justify-center"
+                    >
+                      <Check className="w-6 h-6" style={{ color: `hsl(${accent.foreground})` }} />
+                    </motion.div>
+                  )}
+                </motion.button>
+              ))}
+            </div>
+
+            <div className="text-center">
+              <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">
+                {t('setup.accent.selected', 'Selected')}: <span className="font-semibold">{ACCENT_OPTIONS.find(a => a.key === setupData.accent_key)?.label}</span>
+              </p>
+              <Button 
+                onClick={goToNextStep}
+                size="lg"
+                className="rounded-full px-8 py-6 text-lg font-semibold"
+              >
+                {t('common.continue', 'Continue')}
+                <ChevronRight className="w-5 h-5 ml-2" />
+              </Button>
+            </div>
+          </motion.div>
+        )
+
+      case 'location':
+        return (
+          <motion.div
+            key="location"
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.3 }}
+            className="max-w-lg mx-auto"
+          >
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center mb-8"
+            >
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-400 to-cyan-600 flex items-center justify-center shadow-xl">
+                <MapPin className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-2">
+                {t('setup.location.title', 'Where are you located?')}
+              </h2>
+              <p className="text-stone-500 dark:text-stone-400">
+                {t('setup.location.subtitle', 'This helps us provide local gardening advice')}
+              </p>
+            </motion.div>
+
+            <div className="space-y-6">
+              {/* Country Selection */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">{t('setup.location.country', 'Country')}</Label>
+                <div className="flex flex-wrap gap-2">
+                  {POPULAR_COUNTRIES.map((country) => (
+                    <button
+                      key={country}
+                      onClick={() => handleCountrySelect(country)}
+                      className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                        setupData.country === country
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-stone-100 dark:bg-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-600'
+                      }`}
+                    >
+                      {country}
+                    </button>
+                  ))}
+                </div>
+                <Input
+                  placeholder={t('setup.location.countryPlaceholder', 'Or type your country...')}
+                  value={setupData.country}
+                  onChange={(e) => setSetupData(prev => ({ ...prev, country: e.target.value }))}
+                  className="rounded-xl"
+                />
+              </div>
+
+              {/* City Input */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">{t('setup.location.city', 'City')} <span className="text-stone-400 font-normal">({t('common.optional', 'optional')})</span></Label>
+                <Input
+                  placeholder={t('setup.location.cityPlaceholder', 'Enter your city...')}
+                  value={setupData.city}
+                  onChange={(e) => setSetupData(prev => ({ ...prev, city: e.target.value }))}
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="text-center mt-8">
+              <Button 
+                onClick={goToNextStep}
+                size="lg"
+                className="rounded-full px-8 py-6 text-lg font-semibold"
+              >
+                {t('common.continue', 'Continue')}
+                <ChevronRight className="w-5 h-5 ml-2" />
+              </Button>
+            </div>
           </motion.div>
         )
 
@@ -691,7 +872,7 @@ export function SetupPage() {
       {/* Step indicator dots */}
       {currentStep !== 'welcome' && currentStep !== 'complete' && (
         <div className="fixed bottom-8 left-0 right-0 flex justify-center gap-2">
-          {STEPS.slice(1, -1).map((step, index) => (
+          {STEPS.slice(1, -1).map((step) => (
             <motion.div
               key={step}
               className={`w-2 h-2 rounded-full ${
