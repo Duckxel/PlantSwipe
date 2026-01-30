@@ -651,6 +651,48 @@ export default function PlantSwipe() {
   const preparedPlants = useMemo(() => {
     const { aliasMap } = colorLookups
     
+    // ⚡ Bolt: Cache tokenization results for unique color strings
+    // This avoids redundant regex splitting and alias lookups for common colors (e.g. "green")
+    // repeated across thousands of plants.
+    const colorTokenCache = new Map<string, Set<string>>()
+
+    const getTokensForColor = (color: string): Set<string> => {
+      const cached = colorTokenCache.get(color)
+      if (cached) {
+        return cached
+      }
+
+      const tokens = new Set<string>()
+      tokens.add(color)
+
+      // Check aliases for the full color string (e.g. "dark-green" -> "vert fonce")
+      const fullColorAliases = aliasMap.get(color)
+      if (fullColorAliases) {
+        for (const alias of fullColorAliases) {
+          tokens.add(alias)
+        }
+      }
+
+      // Split compound colors and add individual tokens
+      const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
+      splitTokens.forEach(token => {
+        tokens.add(token)
+
+        // O(1) expansion of tokens to all their aliases (canonical + translations)
+        // Uses the pre-calculated aliasMap to avoid object iteration
+        const aliases = aliasMap.get(token)
+        if (aliases) {
+          // Fast add of all aliases
+          for (const alias of aliases) {
+            tokens.add(alias)
+          }
+        }
+      })
+
+      colorTokenCache.set(color, tokens)
+      return tokens
+    }
+
     return plants.map((p) => {
       // Colors - build both array (for iteration) and Sets (for O(1) lookups)
       const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
@@ -666,31 +708,10 @@ export default function PlantSwipe() {
       // (e.g., plant with "red" will also match filter "rouge")
       const colorTokens = new Set<string>()
       normalizedColors.forEach(color => {
-        colorTokens.add(color)
-
-        // Check aliases for the full color string (e.g. "dark-green" -> "vert fonce")
-        const fullColorAliases = aliasMap.get(color)
-        if (fullColorAliases) {
-          for (const alias of fullColorAliases) {
-            colorTokens.add(alias)
-          }
+        const cachedTokens = getTokensForColor(color)
+        for (const t of cachedTokens) {
+          colorTokens.add(t)
         }
-
-        // Split compound colors and add individual tokens
-        const tokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
-        tokens.forEach(token => {
-          colorTokens.add(token)
-
-          // O(1) expansion of tokens to all their aliases (canonical + translations)
-          // Uses the pre-calculated aliasMap to avoid object iteration
-          const aliases = aliasMap.get(token)
-          if (aliases) {
-            // Fast add of all aliases
-            for (const alias of aliases) {
-              colorTokens.add(alias)
-            }
-          }
-        })
       })
 
       // Search string
