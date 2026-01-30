@@ -344,14 +344,17 @@ export async function processPlantRequest(
     }
     
     // Check if a plant with this English name already exists in the database
+    // Check against: name, scientific_name, and common names (identity->commonNames, givenNames, synonyms)
+    // This prevents creating duplicate plants when the requested name is a common name of an existing plant
     const { data: existingPlant } = await supabase
       .from('plants')
-      .select('id, name')
-      .ilike('name', englishPlantName)
+      .select('id, name, scientific_name, identity')
+      .or(`name.ilike.${englishPlantName},scientific_name.ilike.${englishPlantName},identity->>commonNames.ilike.%${englishPlantName}%,identity->>givenNames.ilike.%${englishPlantName}%,identity->>synonyms.ilike.%${englishPlantName}%`)
+      .limit(1)
       .maybeSingle()
     
     if (existingPlant) {
-      console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists (id: ${existingPlant.id}), skipping and marking request as complete`)
+      console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists as "${existingPlant.name}" (id: ${existingPlant.id}), skipping and marking request as complete`)
       
       // Delete the request since the plant already exists
       const { error: deleteError } = await supabase
