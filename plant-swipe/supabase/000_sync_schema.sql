@@ -212,6 +212,7 @@ alter table if exists public.profiles add column if not exists timezone text;
 alter table if exists public.profiles add column if not exists experience_years integer;
 -- Accent color preference; default to a green tone for new accounts
 alter table if exists public.profiles add column if not exists accent_key text default 'emerald';
+COMMENT ON COLUMN public.profiles.accent_key IS 'User accent color preference. Valid values: emerald, crimson, royal, purple, gold, coral, neon, turquoise';
 -- Privacy setting: when true, profile is only visible to friends
 alter table if exists public.profiles add column if not exists is_private boolean not null default false;
 -- Friend requests setting: when true, users cannot send friend requests (prevents unwanted invites)
