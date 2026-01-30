@@ -363,11 +363,17 @@ export function SetupPage() {
   const [hasSearched, setHasSearched] = React.useState(false) // Track if we've searched at least once
   const [detectingGPS, setDetectingGPS] = React.useState(false)
   const suggestionsRef = React.useRef<HTMLDivElement>(null)
+  const locationDetectionAttempted = React.useRef(false)
 
-  // Auto-detect location and timezone on component mount
+  // Auto-detect location and timezone on component mount (runs only once)
   // Note: We DON'T auto-change language here - respect the URL language choice
   React.useEffect(() => {
-    if (locationDetected) return
+    // Only run once - use ref to prevent multiple attempts
+    if (locationDetectionAttempted.current || locationDetected) {
+      setLocationLoading(false)
+      return
+    }
+    locationDetectionAttempted.current = true
     
     const detectLocation = async () => {
       setLocationLoading(true)
@@ -385,16 +391,6 @@ export function SetupPage() {
               timezone: data.timezone || prev.timezone || 'UTC',
             }))
             
-            // Only auto-set language if user is on default (English) route
-            // If they navigated to /fr/setup explicitly, respect that choice
-            if (currentLang === 'en') {
-              const detectedLang = COUNTRY_TO_LANGUAGE[data.countryCode] || 'en'
-              if (detectedLang !== 'en') {
-                changeLanguage(detectedLang)
-                console.log('[setup] Auto-switching language to:', detectedLang)
-              }
-            }
-            
             setLocationDetected(true)
             console.log('[setup] Location detected:', data.country, data.city, 'Timezone:', data.timezone)
           }
@@ -407,7 +403,8 @@ export function SetupPage() {
     }
     
     detectLocation()
-  }, [locationDetected, changeLanguage, currentLang])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty deps - only run on mount
 
   // Redirect if no user or already completed setup
   React.useEffect(() => {
