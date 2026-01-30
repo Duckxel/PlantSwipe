@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Check, ChevronLeft, ChevronRight, Bell, Home, Flower2, Salad, Trees, Sparkles, Sun, Coffee, Clock, Leaf, Sprout, Palette, MapPin } from "lucide-react"
+import { ChevronLeft, Bell, Home, Flower2, Salad, Trees, Sparkles, Sun, Coffee, Clock, Leaf, Sprout, Palette, MapPin } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, type AccentKey } from "@/lib/accent"
 
 type SetupStep = 'welcome' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
@@ -49,10 +49,10 @@ export function SetupPage() {
     garden_type: null,
     experience_level: null,
     looking_for: null,
-    notification_time: '10h', // Default
+    notification_time: '10h',
   })
   const [saving, setSaving] = React.useState(false)
-  const [direction, setDirection] = React.useState<1 | -1>(1) // For animation direction
+  const [direction, setDirection] = React.useState<1 | -1>(1)
 
   // Redirect if no user or already completed setup
   React.useEffect(() => {
@@ -86,7 +86,7 @@ export function SetupPage() {
 
   const handleAccentSelect = (key: AccentKey) => {
     setSetupData(prev => ({ ...prev, accent_key: key }))
-    applyAccentByKey(key) // Apply immediately for preview
+    applyAccentByKey(key)
   }
 
   const handleCountrySelect = (country: string) => {
@@ -95,22 +95,18 @@ export function SetupPage() {
 
   const handleGardenTypeSelect = (type: GardenType) => {
     setSetupData(prev => ({ ...prev, garden_type: type }))
-    setTimeout(goToNextStep, 300)
   }
 
   const handleExperienceSelect = (level: ExperienceLevel) => {
     setSetupData(prev => ({ ...prev, experience_level: level }))
-    setTimeout(goToNextStep, 300)
   }
 
   const handlePurposeSelect = (purpose: LookingFor) => {
     setSetupData(prev => ({ ...prev, looking_for: purpose }))
-    setTimeout(goToNextStep, 300)
   }
 
   const handleNotificationTimeSelect = (time: NotificationTime) => {
     setSetupData(prev => ({ ...prev, notification_time: time }))
-    setTimeout(goToNextStep, 300)
   }
 
   const requestNotificationPermission = async () => {
@@ -122,10 +118,6 @@ export function SetupPage() {
     } catch (err) {
       console.warn('[setup] Failed to request notification permission:', err)
     }
-    goToNextStep()
-  }
-
-  const skipNotifications = () => {
     goToNextStep()
   }
 
@@ -162,10 +154,30 @@ export function SetupPage() {
     }
   }
 
+  // Check if current step has a valid selection for continue button
+  const canContinue = () => {
+    switch (currentStep) {
+      case 'accent':
+        return true // Always has default
+      case 'location':
+        return true // Optional
+      case 'garden_type':
+        return setupData.garden_type !== null
+      case 'experience':
+        return setupData.experience_level !== null
+      case 'purpose':
+        return setupData.looking_for !== null
+      case 'notification_time':
+        return setupData.notification_time !== null
+      default:
+        return true
+    }
+  }
+
   // Animation variants
   const slideVariants = {
     enter: (direction: number) => ({
-      x: direction > 0 ? 300 : -300,
+      x: direction > 0 ? 100 : -100,
       opacity: 0,
     }),
     center: {
@@ -173,74 +185,47 @@ export function SetupPage() {
       opacity: 1,
     },
     exit: (direction: number) => ({
-      x: direction < 0 ? 300 : -300,
+      x: direction < 0 ? 100 : -100,
       opacity: 0,
     }),
   }
 
-  const cardVariants = {
-    initial: { scale: 0.95, opacity: 0 },
-    animate: { scale: 1, opacity: 1 },
-    hover: { scale: 1.02, y: -4 },
-    tap: { scale: 0.98 },
-    selected: { scale: 1, borderColor: 'rgb(16, 185, 129)', backgroundColor: 'rgb(236, 253, 245)' },
-  }
-
-  const OptionCard: React.FC<{
+  // Pill option component - Brilliant style
+  const PillOption: React.FC<{
     selected: boolean
     onClick: () => void
-    icon: React.ReactNode
-    title: string
-    description?: string
-    delay?: number
-  }> = ({ selected, onClick, icon, title, description, delay = 0 }) => (
+    label: string
+    index: number
+  }> = ({ selected, onClick, label, index }) => (
     <motion.button
-      initial="initial"
-      animate="animate"
-      whileHover="hover"
-      whileTap="tap"
-      variants={cardVariants}
-      transition={{ delay, duration: 0.2 }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.08 }}
       onClick={onClick}
-      className={`relative w-full p-5 rounded-2xl border-2 text-left transition-colors ${
+      style={{ marginLeft: `${index * 12}px` }}
+      className={`px-6 py-3 rounded-full text-base font-medium transition-all duration-200 ${
         selected 
-          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-400' 
-          : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800/50 hover:border-emerald-300 dark:hover:border-emerald-600'
+          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' 
+          : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700'
       }`}
     >
-      <div className="flex items-start gap-4">
-        <div className={`p-3 rounded-xl ${
-          selected 
-            ? 'bg-emerald-500 text-white' 
-            : 'bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300'
-        }`}>
-          {icon}
-        </div>
-        <div className="flex-1">
-          <h3 className={`font-semibold text-lg ${
-            selected ? 'text-emerald-700 dark:text-emerald-300' : 'text-stone-800 dark:text-stone-100'
-          }`}>
-            {title}
-          </h3>
-          {description && (
-            <p className={`text-sm mt-1 ${
-              selected ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-500 dark:text-stone-400'
-            }`}>
-              {description}
-            </p>
-          )}
-        </div>
-        {selected && (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="absolute top-4 right-4 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center"
-          >
-            <Check className="w-4 h-4 text-white" />
-          </motion.div>
-        )}
-      </div>
+      {label}
     </motion.button>
+  )
+
+  // Question header with icon
+  const QuestionHeader: React.FC<{
+    icon: React.ReactNode
+    question: string
+  }> = ({ icon, question }) => (
+    <div className="flex items-center gap-4 mb-10">
+      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg">
+        {icon}
+      </div>
+      <h2 className="text-xl md:text-2xl font-bold text-stone-800 dark:text-stone-100">
+        {question}
+      </h2>
+    </div>
   )
 
   // Render step content
@@ -255,24 +240,23 @@ export function SetupPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.3 }}
-            className="flex flex-col items-center text-center max-w-lg mx-auto"
+            transition={{ duration: 0.25 }}
+            className="flex flex-col items-center text-center max-w-md mx-auto"
           >
-            {/* Logo/Mascot */}
             <motion.div 
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="w-32 h-32 mb-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-2xl shadow-emerald-500/30"
+              className="w-24 h-24 mb-8 rounded-3xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-2xl shadow-emerald-500/30"
             >
-              <Leaf className="w-16 h-16 text-white" />
+              <Leaf className="w-12 h-12 text-white" />
             </motion.div>
             
             <motion.h1 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-3xl font-bold text-stone-800 dark:text-stone-100 mb-4"
+              className="text-2xl md:text-3xl font-bold text-stone-800 dark:text-stone-100 mb-4"
             >
               {t('setup.welcome.title', 'Welcome to Aphylia!')}
             </motion.h1>
@@ -281,7 +265,7 @@ export function SetupPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="text-stone-600 dark:text-stone-300 text-lg mb-8 leading-relaxed"
+              className="text-stone-600 dark:text-stone-300 text-base md:text-lg mb-6 leading-relaxed"
             >
               {t('setup.welcome.description', "I'm your garden assistant. I will accompany you through this journey to make your garden grow and bloom into the most beautiful one!")}
             </motion.p>
@@ -294,21 +278,6 @@ export function SetupPage() {
             >
               {t('setup.welcome.subtitle', "First, let's get to know each other and the environment where your garden will evolve.")}
             </motion.p>
-            
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <Button 
-                onClick={goToNextStep}
-                size="lg"
-                className="rounded-full px-8 py-6 text-lg font-semibold bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/30"
-              >
-                {t('setup.welcome.getStarted', "Let's get started")}
-                <ChevronRight className="w-5 h-5 ml-2" />
-              </Button>
-            </motion.div>
           </motion.div>
         )
 
@@ -321,67 +290,36 @@ export function SetupPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.3 }}
-            className="max-w-lg mx-auto"
+            transition={{ duration: 0.25 }}
+            className="max-w-md mx-auto"
           >
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-8"
-            >
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-400 to-fuchsia-600 flex items-center justify-center shadow-xl">
-                <Palette className="w-8 h-8 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-2">
-                {t('setup.accent.title', 'Choose your accent color')}
-              </h2>
-              <p className="text-stone-500 dark:text-stone-400">
-                {t('setup.accent.subtitle', 'Personalize your Aphylia experience')}
-              </p>
-            </motion.div>
+            <QuestionHeader 
+              icon={<Palette className="w-6 h-6 text-white" />}
+              question={t('setup.accent.title', 'Choose your accent color')}
+            />
 
-            <div className="grid grid-cols-5 gap-3 mb-8">
+            <div className="grid grid-cols-5 gap-3 mb-6">
               {ACCENT_OPTIONS.map((accent, index) => (
                 <motion.button
                   key={accent.key}
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: index * 0.05 }}
+                  transition={{ delay: index * 0.04 }}
                   onClick={() => handleAccentSelect(accent.key)}
-                  className={`relative aspect-square rounded-2xl transition-all ${
+                  className={`relative aspect-square rounded-2xl transition-all duration-200 ${
                     setupData.accent_key === accent.key 
-                      ? 'ring-4 ring-offset-2 ring-stone-400 dark:ring-stone-500 scale-110' 
+                      ? 'ring-4 ring-offset-2 ring-offset-white dark:ring-offset-stone-900 ring-stone-400 dark:ring-stone-500 scale-110' 
                       : 'hover:scale-105'
                   }`}
                   style={{ backgroundColor: `hsl(${accent.hsl})` }}
                   title={accent.label}
-                >
-                  {setupData.accent_key === accent.key && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute inset-0 flex items-center justify-center"
-                    >
-                      <Check className="w-6 h-6" style={{ color: `hsl(${accent.foreground})` }} />
-                    </motion.div>
-                  )}
-                </motion.button>
+                />
               ))}
             </div>
 
-            <div className="text-center">
-              <p className="text-sm text-stone-500 dark:text-stone-400 mb-4">
-                {t('setup.accent.selected', 'Selected')}: <span className="font-semibold">{ACCENT_OPTIONS.find(a => a.key === setupData.accent_key)?.label}</span>
-              </p>
-              <Button 
-                onClick={goToNextStep}
-                size="lg"
-                className="rounded-full px-8 py-6 text-lg font-semibold"
-              >
-                {t('common.continue', 'Continue')}
-                <ChevronRight className="w-5 h-5 ml-2" />
-              </Button>
-            </div>
+            <p className="text-sm text-stone-500 dark:text-stone-400 text-center">
+              {t('setup.accent.selected', 'Selected')}: <span className="font-medium text-stone-700 dark:text-stone-200">{ACCENT_OPTIONS.find(a => a.key === setupData.accent_key)?.label}</span>
+            </p>
           </motion.div>
         )
 
@@ -394,38 +332,26 @@ export function SetupPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.3 }}
-            className="max-w-lg mx-auto"
+            transition={{ duration: 0.25 }}
+            className="max-w-md mx-auto"
           >
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-8"
-            >
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-400 to-cyan-600 flex items-center justify-center shadow-xl">
-                <MapPin className="w-8 h-8 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-2">
-                {t('setup.location.title', 'Where are you located?')}
-              </h2>
-              <p className="text-stone-500 dark:text-stone-400">
-                {t('setup.location.subtitle', 'This helps us provide local gardening advice')}
-              </p>
-            </motion.div>
+            <QuestionHeader 
+              icon={<MapPin className="w-6 h-6 text-white" />}
+              question={t('setup.location.title', 'Where are you located?')}
+            />
 
             <div className="space-y-6">
-              {/* Country Selection */}
               <div className="space-y-3">
-                <Label className="text-sm font-medium">{t('setup.location.country', 'Country')}</Label>
+                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">{t('setup.location.country', 'Country')}</Label>
                 <div className="flex flex-wrap gap-2">
-                  {POPULAR_COUNTRIES.map((country) => (
+                  {POPULAR_COUNTRIES.slice(0, 8).map((country) => (
                     <button
                       key={country}
                       onClick={() => handleCountrySelect(country)}
                       className={`px-3 py-1.5 rounded-full text-sm transition-all ${
                         setupData.country === country
                           ? 'bg-emerald-500 text-white'
-                          : 'bg-stone-100 dark:bg-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-600'
+                          : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
                       }`}
                     >
                       {country}
@@ -436,31 +362,21 @@ export function SetupPage() {
                   placeholder={t('setup.location.countryPlaceholder', 'Or type your country...')}
                   value={setupData.country}
                   onChange={(e) => setSetupData(prev => ({ ...prev, country: e.target.value }))}
-                  className="rounded-xl"
+                  className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
                 />
               </div>
 
-              {/* City Input */}
               <div className="space-y-3">
-                <Label className="text-sm font-medium">{t('setup.location.city', 'City')} <span className="text-stone-400 font-normal">({t('common.optional', 'optional')})</span></Label>
+                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
+                  {t('setup.location.city', 'City')} <span className="text-stone-400 font-normal">({t('common.optional', 'optional')})</span>
+                </Label>
                 <Input
                   placeholder={t('setup.location.cityPlaceholder', 'Enter your city...')}
                   value={setupData.city}
                   onChange={(e) => setSetupData(prev => ({ ...prev, city: e.target.value }))}
-                  className="rounded-xl"
+                  className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
                 />
               </div>
-            </div>
-
-            <div className="text-center mt-8">
-              <Button 
-                onClick={goToNextStep}
-                size="lg"
-                className="rounded-full px-8 py-6 text-lg font-semibold"
-              >
-                {t('common.continue', 'Continue')}
-                <ChevronRight className="w-5 h-5 ml-2" />
-              </Button>
             </div>
           </motion.div>
         )
@@ -474,46 +390,32 @@ export function SetupPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.3 }}
-            className="max-w-lg mx-auto"
+            transition={{ duration: 0.25 }}
+            className="max-w-md mx-auto"
           >
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-8"
-            >
-              <h2 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-2">
-                {t('setup.gardenType.title', 'Where is your garden located?')}
-              </h2>
-              <p className="text-stone-500 dark:text-stone-400">
-                {t('setup.gardenType.subtitle', 'This helps us recommend the right plants for you')}
-              </p>
-            </motion.div>
+            <QuestionHeader 
+              icon={<Trees className="w-6 h-6 text-white" />}
+              question={t('setup.gardenType.title', 'Where is your garden located?')}
+            />
 
-            <div className="space-y-4">
-              <OptionCard
+            <div className="flex flex-col gap-3">
+              <PillOption
                 selected={setupData.garden_type === 'outside'}
                 onClick={() => handleGardenTypeSelect('outside')}
-                icon={<Trees className="w-6 h-6" />}
-                title={t('setup.gardenType.outside', 'Outside, in a yard')}
-                description={t('setup.gardenType.outsideDesc', 'I have an outdoor garden or yard')}
-                delay={0.1}
+                label={t('setup.gardenType.outside', 'Outside, in a yard')}
+                index={0}
               />
-              <OptionCard
+              <PillOption
                 selected={setupData.garden_type === 'inside'}
                 onClick={() => handleGardenTypeSelect('inside')}
-                icon={<Home className="w-6 h-6" />}
-                title={t('setup.gardenType.inside', 'Inside your home')}
-                description={t('setup.gardenType.insideDesc', 'I grow plants indoors')}
-                delay={0.2}
+                label={t('setup.gardenType.inside', 'Inside your home')}
+                index={1}
               />
-              <OptionCard
+              <PillOption
                 selected={setupData.garden_type === 'both'}
                 onClick={() => handleGardenTypeSelect('both')}
-                icon={<Sparkles className="w-6 h-6" />}
-                title={t('setup.gardenType.both', 'Both inside and outside')}
-                description={t('setup.gardenType.bothDesc', 'I have plants everywhere!')}
-                delay={0.3}
+                label={t('setup.gardenType.both', 'Both inside and outside')}
+                index={2}
               />
             </div>
           </motion.div>
@@ -528,46 +430,32 @@ export function SetupPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.3 }}
-            className="max-w-lg mx-auto"
+            transition={{ duration: 0.25 }}
+            className="max-w-md mx-auto"
           >
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-8"
-            >
-              <h2 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-2">
-                {t('setup.experience.title', "What's your gardening level?")}
-              </h2>
-              <p className="text-stone-500 dark:text-stone-400">
-                {t('setup.experience.subtitle', "We'll adapt our advice to your expertise")}
-              </p>
-            </motion.div>
+            <QuestionHeader 
+              icon={<Sprout className="w-6 h-6 text-white" />}
+              question={t('setup.experience.title', "What's your gardening level?")}
+            />
 
-            <div className="space-y-4">
-              <OptionCard
+            <div className="flex flex-col gap-3">
+              <PillOption
                 selected={setupData.experience_level === 'novice'}
                 onClick={() => handleExperienceSelect('novice')}
-                icon={<Sprout className="w-6 h-6" />}
-                title={t('setup.experience.novice', 'Novice')}
-                description={t('setup.experience.noviceDesc', "I'm just starting my gardening journey")}
-                delay={0.1}
+                label={t('setup.experience.novice', 'Novice')}
+                index={0}
               />
-              <OptionCard
+              <PillOption
                 selected={setupData.experience_level === 'intermediate'}
                 onClick={() => handleExperienceSelect('intermediate')}
-                icon={<Leaf className="w-6 h-6" />}
-                title={t('setup.experience.intermediate', 'Intermediate')}
-                description={t('setup.experience.intermediateDesc', 'I have some experience with plants')}
-                delay={0.2}
+                label={t('setup.experience.intermediate', 'Intermediate')}
+                index={1}
               />
-              <OptionCard
+              <PillOption
                 selected={setupData.experience_level === 'expert'}
                 onClick={() => handleExperienceSelect('expert')}
-                icon={<Trees className="w-6 h-6" />}
-                title={t('setup.experience.expert', 'Expert')}
-                description={t('setup.experience.expertDesc', 'Gardening is my passion!')}
-                delay={0.3}
+                label={t('setup.experience.expert', 'Expert')}
+                index={2}
               />
             </div>
           </motion.div>
@@ -582,46 +470,32 @@ export function SetupPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.3 }}
-            className="max-w-lg mx-auto"
+            transition={{ duration: 0.25 }}
+            className="max-w-md mx-auto"
           >
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-8"
-            >
-              <h2 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-2">
-                {t('setup.purpose.title', 'What is your purpose for your garden?')}
-              </h2>
-              <p className="text-stone-500 dark:text-stone-400">
-                {t('setup.purpose.subtitle', "We'll personalize your plant recommendations")}
-              </p>
-            </motion.div>
+            <QuestionHeader 
+              icon={<Flower2 className="w-6 h-6 text-white" />}
+              question={t('setup.purpose.title', 'What is your purpose for your garden?')}
+            />
 
-            <div className="space-y-4">
-              <OptionCard
+            <div className="flex flex-col gap-3">
+              <PillOption
                 selected={setupData.looking_for === 'eat'}
                 onClick={() => handlePurposeSelect('eat')}
-                icon={<Salad className="w-6 h-6" />}
-                title={t('setup.purpose.eat', 'Grow food')}
-                description={t('setup.purpose.eatDesc', 'Vegetables and fruits for my own consumption')}
-                delay={0.1}
+                label={t('setup.purpose.eat', 'Grow vegetables and fruits')}
+                index={0}
               />
-              <OptionCard
+              <PillOption
                 selected={setupData.looking_for === 'ornamental'}
                 onClick={() => handlePurposeSelect('ornamental')}
-                icon={<Flower2 className="w-6 h-6" />}
-                title={t('setup.purpose.ornamental', 'Ornamental garden')}
-                description={t('setup.purpose.ornamentalDesc', 'Beautiful flowers and decorative plants')}
-                delay={0.2}
+                label={t('setup.purpose.ornamental', 'Have an ornamental flower garden')}
+                index={1}
               />
-              <OptionCard
+              <PillOption
                 selected={setupData.looking_for === 'various'}
                 onClick={() => handlePurposeSelect('various')}
-                icon={<Sparkles className="w-6 h-6" />}
-                title={t('setup.purpose.various', 'A bit of everything!')}
-                description={t('setup.purpose.variousDesc', 'As many various plants as possible')}
-                delay={0.3}
+                label={t('setup.purpose.various', 'Have as many various plants as possible!')}
+                index={2}
               />
             </div>
           </motion.div>
@@ -636,54 +510,38 @@ export function SetupPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.3 }}
-            className="max-w-lg mx-auto"
+            transition={{ duration: 0.25 }}
+            className="max-w-md mx-auto"
           >
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-8"
-            >
-              <h2 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-2">
-                {t('setup.notificationTime.title', 'When should we remind you?')}
-              </h2>
-              <p className="text-stone-500 dark:text-stone-400">
-                {t('setup.notificationTime.subtitle', 'Choose your preferred notification time')}
-              </p>
-            </motion.div>
+            <QuestionHeader 
+              icon={<Clock className="w-6 h-6 text-white" />}
+              question={t('setup.notificationTime.title', 'When should we remind you?')}
+            />
 
-            <div className="space-y-4">
-              <OptionCard
+            <div className="flex flex-col gap-3">
+              <PillOption
                 selected={setupData.notification_time === '6h'}
                 onClick={() => handleNotificationTimeSelect('6h')}
-                icon={<Sun className="w-6 h-6" />}
-                title={t('setup.notificationTime.early', 'Early bird')}
-                description={t('setup.notificationTime.earlyDesc', '6:00 AM - Start the day with your plants')}
-                delay={0.1}
+                label={t('setup.notificationTime.early', 'Early bird - 6:00 AM')}
+                index={0}
               />
-              <OptionCard
+              <PillOption
                 selected={setupData.notification_time === '10h'}
                 onClick={() => handleNotificationTimeSelect('10h')}
-                icon={<Coffee className="w-6 h-6" />}
-                title={t('setup.notificationTime.morning', 'Sleep in')}
-                description={t('setup.notificationTime.morningDesc', '10:00 AM - After your morning coffee')}
-                delay={0.2}
+                label={t('setup.notificationTime.morning', 'Sleep in - 10:00 AM')}
+                index={1}
               />
-              <OptionCard
+              <PillOption
                 selected={setupData.notification_time === '14h'}
                 onClick={() => handleNotificationTimeSelect('14h')}
-                icon={<Clock className="w-6 h-6" />}
-                title={t('setup.notificationTime.midday', 'Midday energy')}
-                description={t('setup.notificationTime.middayDesc', '2:00 PM - A break in your afternoon')}
-                delay={0.3}
+                label={t('setup.notificationTime.midday', 'Midday energy - 2:00 PM')}
+                index={2}
               />
-              <OptionCard
+              <PillOption
                 selected={setupData.notification_time === '17h'}
                 onClick={() => handleNotificationTimeSelect('17h')}
-                icon={<Home className="w-6 h-6" />}
-                title={t('setup.notificationTime.afternoon', 'After work')}
-                description={t('setup.notificationTime.afternoonDesc', '5:00 PM - Wind down with your garden')}
-                delay={0.4}
+                label={t('setup.notificationTime.afternoon', 'After work - 5:00 PM')}
+                index={3}
               />
             </div>
           </motion.div>
@@ -698,59 +556,37 @@ export function SetupPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.3 }}
-            className="flex flex-col items-center text-center max-w-lg mx-auto"
+            transition={{ duration: 0.25 }}
+            className="max-w-md mx-auto"
           >
-            <motion.div 
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="w-24 h-24 mb-6 rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-xl shadow-blue-500/30"
-            >
-              <Bell className="w-12 h-12 text-white" />
-            </motion.div>
-
-            <motion.h2 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-3"
-            >
-              {t('setup.notifications.title', 'Stay on top of your garden')}
-            </motion.h2>
+            <QuestionHeader 
+              icon={<Bell className="w-6 h-6 text-white" />}
+              question={t('setup.notifications.title', 'Stay on top of your garden')}
+            />
 
             <motion.p 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="text-stone-500 dark:text-stone-400 mb-8"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-stone-500 dark:text-stone-400 mb-8 -mt-4"
             >
               {t('setup.notifications.description', "Enable notifications to get reminders about watering, fertilizing, and caring for your plants at the perfect time.")}
             </motion.p>
 
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="space-y-3 w-full"
-            >
-              <Button 
+            <div className="flex flex-col gap-3">
+              <PillOption
+                selected={false}
                 onClick={requestNotificationPermission}
-                size="lg"
-                className="w-full rounded-full py-6 text-lg font-semibold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/30"
-              >
-                <Bell className="w-5 h-5 mr-2" />
-                {t('setup.notifications.enable', 'Enable notifications')}
-              </Button>
-              <Button 
-                onClick={skipNotifications}
-                variant="ghost"
-                size="lg"
-                className="w-full rounded-full py-6 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"
-              >
-                {t('setup.notifications.skip', 'Maybe later')}
-              </Button>
-            </motion.div>
+                label={t('setup.notifications.enable', 'Enable notifications')}
+                index={0}
+              />
+              <PillOption
+                selected={false}
+                onClick={goToNextStep}
+                label={t('setup.notifications.skip', 'Maybe later')}
+                index={1}
+              />
+            </div>
           </motion.div>
         )
 
@@ -763,23 +599,23 @@ export function SetupPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.3 }}
-            className="flex flex-col items-center text-center max-w-lg mx-auto"
+            transition={{ duration: 0.25 }}
+            className="flex flex-col items-center text-center max-w-md mx-auto"
           >
             <motion.div 
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
-              className="w-32 h-32 mb-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-2xl shadow-emerald-500/30"
+              transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              className="w-24 h-24 mb-8 rounded-3xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-2xl shadow-emerald-500/30"
             >
-              <Check className="w-16 h-16 text-white" />
+              <Sparkles className="w-12 h-12 text-white" />
             </motion.div>
 
             <motion.h2 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="text-3xl font-bold text-stone-800 dark:text-stone-100 mb-4"
+              transition={{ delay: 0.2 }}
+              className="text-2xl md:text-3xl font-bold text-stone-800 dark:text-stone-100 mb-4"
             >
               {t('setup.complete.title', "You're all set!")}
             </motion.h2>
@@ -787,27 +623,11 @@ export function SetupPage() {
             <motion.p 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="text-stone-500 dark:text-stone-400 text-lg mb-8"
+              transition={{ delay: 0.3 }}
+              className="text-stone-500 dark:text-stone-400 text-base md:text-lg mb-8"
             >
               {t('setup.complete.description', "Your garden assistant is ready to help you grow the most beautiful plants. Let's start exploring!")}
             </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <Button 
-                onClick={completeSetup}
-                size="lg"
-                disabled={saving}
-                className="rounded-full px-10 py-6 text-lg font-semibold bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/30"
-              >
-                {saving ? t('common.saving', 'Saving...') : t('setup.complete.button', 'Start exploring')}
-                {!saving && <Sparkles className="w-5 h-5 ml-2" />}
-              </Button>
-            </motion.div>
           </motion.div>
         )
 
@@ -819,75 +639,70 @@ export function SetupPage() {
   // Don't render anything while checking auth
   if (!user) return null
 
+  const showContinueButton = currentStep !== 'notifications'
+  const isCompleteStep = currentStep === 'complete'
+  const isWelcomeStep = currentStep === 'welcome'
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#0f1a14] dark:via-[#0d1410] dark:to-[#0a0c0b]">
-      {/* Progress bar */}
-      <div className="fixed top-0 left-0 right-0 z-50">
-        <div className="h-1 bg-stone-200 dark:bg-stone-800">
-          <motion.div 
-            className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600"
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-          />
+    <div className="min-h-screen bg-white dark:bg-stone-900 flex flex-col">
+      {/* Header with progress bar and back button */}
+      <div className="sticky top-0 z-50 bg-white dark:bg-stone-900">
+        <div className="flex items-center gap-4 px-4 py-4 max-w-2xl mx-auto">
+          {/* Back button */}
+          {!isWelcomeStep && !isCompleteStep && (
+            <button
+              onClick={goToPreviousStep}
+              className="p-2 -ml-2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+          {(isWelcomeStep || isCompleteStep) && <div className="w-10" />}
+          
+          {/* Progress bar */}
+          <div className="flex-1 h-1.5 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
+            <motion.div 
+              className="h-full bg-emerald-500 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            />
+          </div>
+          
+          {/* Spacer for symmetry */}
+          <div className="w-10" />
         </div>
       </div>
 
-      {/* Navigation */}
-      {currentStep !== 'welcome' && currentStep !== 'complete' && (
-        <div className="fixed top-4 left-4 z-50">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={goToPreviousStep}
-            className="rounded-full text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-white/50 dark:hover:bg-stone-800/50"
-          >
-            <ChevronLeft className="w-5 h-5 mr-1" />
-            {t('common.back', 'Back')}
-          </Button>
-        </div>
-      )}
-
-      {/* Skip option */}
-      {currentStep !== 'welcome' && currentStep !== 'complete' && currentStep !== 'notifications' && (
-        <div className="fixed top-4 right-4 z-50">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={goToNextStep}
-            className="rounded-full text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300"
-          >
-            {t('common.skip', 'Skip')}
-          </Button>
-        </div>
-      )}
-
       {/* Main content */}
-      <div className="flex items-center justify-center min-h-screen p-6 pt-16">
+      <div className="flex-1 flex items-center justify-center px-6 py-8">
         <AnimatePresence mode="wait" custom={direction}>
           {renderStepContent()}
         </AnimatePresence>
       </div>
 
-      {/* Step indicator dots */}
-      {currentStep !== 'welcome' && currentStep !== 'complete' && (
-        <div className="fixed bottom-8 left-0 right-0 flex justify-center gap-2">
-          {STEPS.slice(1, -1).map((step) => (
-            <motion.div
-              key={step}
-              className={`w-2 h-2 rounded-full ${
-                STEPS.indexOf(step) <= currentStepIndex 
-                  ? 'bg-emerald-500' 
-                  : 'bg-stone-300 dark:bg-stone-600'
+      {/* Continue button */}
+      {showContinueButton && (
+        <div className="sticky bottom-0 bg-white dark:bg-stone-900 border-t border-stone-100 dark:border-stone-800 p-4">
+          <div className="max-w-md mx-auto">
+            <Button 
+              onClick={isCompleteStep ? completeSetup : goToNextStep}
+              disabled={!canContinue() || saving}
+              size="lg"
+              className={`w-full rounded-full py-6 text-base font-semibold transition-all duration-200 ${
+                canContinue() 
+                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/30' 
+                  : 'bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500 cursor-not-allowed'
               }`}
-              initial={{ scale: 0.8, opacity: 0.5 }}
-              animate={{ 
-                scale: step === currentStep ? 1.2 : 1, 
-                opacity: 1 
-              }}
-              transition={{ duration: 0.2 }}
-            />
-          ))}
+            >
+              {saving 
+                ? t('common.saving', 'Saving...') 
+                : isCompleteStep 
+                  ? t('setup.complete.button', 'Start exploring')
+                  : t('common.continue', 'Continue')
+              }
+            </Button>
+          </div>
         </div>
       )}
     </div>
