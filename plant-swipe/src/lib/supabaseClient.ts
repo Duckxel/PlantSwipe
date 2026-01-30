@@ -93,6 +93,12 @@ export type ProfileRow = {
   // Personalization preferences
   personalized_recommendations?: boolean | null
   analytics_improvement?: boolean | null
+  // User setup/onboarding preferences
+  setup_completed?: boolean | null
+  garden_type?: 'inside' | 'outside' | 'both' | null
+  experience_level?: 'novice' | 'intermediate' | 'expert' | null
+  looking_for?: 'eat' | 'ornamental' | 'various' | null
+  notification_time?: '6h' | '10h' | '14h' | '17h' | null
 }
 
 export type BlogPostRow = {
