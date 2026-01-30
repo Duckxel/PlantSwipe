@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Leaf, Sprout, Palette, MapPin } from "lucide-react"
+import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, type AccentKey } from "@/lib/accent"
 
 type SetupStep = 'welcome' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
@@ -274,13 +274,24 @@ export function SetupPage() {
             transition={{ duration: 0.25 }}
             className="flex flex-col items-center text-center max-w-md mx-auto"
           >
+            {/* Animated logo with glow effect */}
             <motion.div 
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
+              initial={{ scale: 0, rotate: -10 }}
+              animate={{ scale: 1, rotate: 0 }}
               transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="w-24 h-24 mb-8 rounded-3xl bg-accent flex items-center justify-center shadow-2xl"
+              className="relative mb-8"
             >
-              <Leaf className="w-12 h-12 text-accent-foreground" />
+              {/* Glow background */}
+              <div className="absolute inset-0 bg-accent/30 rounded-full blur-2xl scale-150" />
+              {/* Logo container */}
+              <div className="relative w-28 h-28 rounded-3xl bg-gradient-to-br from-accent/20 to-accent/5 dark:from-accent/30 dark:to-accent/10 flex items-center justify-center shadow-2xl border border-accent/20">
+                <img 
+                  src="/icons/plant-swipe-icon.svg" 
+                  alt="Aphylia"
+                  className="w-20 h-20 plant-icon-theme"
+                  draggable="false"
+                />
+              </div>
             </motion.div>
             
             <motion.h1 
@@ -655,13 +666,55 @@ export function SetupPage() {
             transition={{ duration: 0.25 }}
             className="flex flex-col items-center text-center max-w-md mx-auto"
           >
+            {/* Celebratory logo with sparkles */}
             <motion.div 
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="w-24 h-24 mb-8 rounded-3xl bg-accent flex items-center justify-center shadow-2xl"
+              className="relative mb-8"
             >
-              <Sparkles className="w-12 h-12 text-accent-foreground" />
+              {/* Animated sparkles around the logo */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+                className="absolute -top-2 -right-2"
+              >
+                <Sparkles className="w-6 h-6 text-accent" />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className="absolute -bottom-1 -left-2"
+              >
+                <Sparkles className="w-5 h-5 text-accent/70" />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="absolute top-1/2 -right-4"
+              >
+                <Sparkles className="w-4 h-4 text-accent/50" />
+              </motion.div>
+              
+              {/* Glow background */}
+              <div className="absolute inset-0 bg-accent/40 rounded-full blur-2xl scale-150" />
+              
+              {/* Logo with checkmark badge */}
+              <div className="relative w-28 h-28 rounded-3xl bg-accent flex items-center justify-center shadow-2xl">
+                <img 
+                  src="/icons/plant-swipe-icon.svg" 
+                  alt="Aphylia"
+                  className="w-16 h-16 brightness-0 invert"
+                  draggable="false"
+                />
+                {/* Success checkmark badge */}
+                <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white dark:bg-stone-800 shadow-lg flex items-center justify-center border-2 border-accent">
+                  <Check className="w-6 h-6 text-accent" />
+                </div>
+              </div>
             </motion.div>
 
             <motion.h2 
@@ -697,68 +750,87 @@ export function SetupPage() {
   const isWelcomeStep = currentStep === 'welcome'
 
   return (
-    <div className="min-h-screen bg-white dark:bg-stone-900 flex flex-col">
-      {/* Header with progress bar and back button */}
-      <div className="sticky top-0 z-50 bg-white dark:bg-stone-900">
-        <div className="flex items-center gap-4 px-4 py-4 max-w-2xl mx-auto">
-          {/* Back button */}
-          {!isWelcomeStep && !isCompleteStep && (
-            <button
-              onClick={goToPreviousStep}
-              className="p-2 -ml-2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors"
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </button>
-          )}
-          {(isWelcomeStep || isCompleteStep) && <div className="w-10" />}
-          
-          {/* Progress bar */}
-          <div className="flex-1 h-1.5 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
-            <motion.div 
-              className="h-full bg-accent rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-            />
-          </div>
-          
-          {/* Spacer for symmetry */}
-          <div className="w-10" />
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 flex items-center justify-center px-6 py-8">
-        <AnimatePresence mode="wait" custom={direction}>
-          {renderStepContent()}
-        </AnimatePresence>
-      </div>
-
-      {/* Continue button */}
-      {showContinueButton && (
-        <div className="sticky bottom-0 bg-white dark:bg-stone-900 border-t border-stone-100 dark:border-stone-800 p-4">
-          <div className="max-w-md mx-auto">
-            <Button 
-              onClick={isCompleteStep ? completeSetup : goToNextStep}
-              disabled={!canContinue() || saving}
-              size="lg"
-              className={`w-full rounded-full py-6 text-base font-semibold transition-all duration-200 ${
-                canContinue() 
-                  ? 'bg-accent hover:opacity-90 text-accent-foreground shadow-lg' 
-                  : 'bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500 cursor-not-allowed'
-              }`}
-            >
-              {saving 
-                ? t('common.saving', 'Saving...') 
-                : isCompleteStep 
-                  ? t('setup.complete.button', 'Start exploring')
-                  : t('common.continue', 'Continue')
-              }
-            </Button>
+    <>
+      {/* Logo theme styles */}
+      <style>{`
+        .plant-icon-theme {
+          filter: brightness(0) saturate(100%);
+        }
+        .dark .plant-icon-theme {
+          filter: brightness(0) saturate(100%) invert(100%);
+        }
+      `}</style>
+      
+      <div className="min-h-screen bg-white dark:bg-stone-900 flex flex-col">
+        {/* Header with logo, progress bar and back button */}
+        <div className="sticky top-0 z-50 bg-white dark:bg-stone-900">
+          <div className="flex items-center gap-4 px-4 py-4 max-w-2xl mx-auto">
+            {/* Back button */}
+            {!isWelcomeStep && !isCompleteStep && (
+              <button
+                onClick={goToPreviousStep}
+                className="p-2 -ml-2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+            )}
+            {(isWelcomeStep || isCompleteStep) && <div className="w-10" />}
+            
+            {/* Progress bar */}
+            <div className="flex-1 h-1.5 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
+              <motion.div 
+                className="h-full bg-accent rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              />
+            </div>
+            
+            {/* Logo icon */}
+            <div className="w-10 flex items-center justify-center">
+              <img 
+                src="/icons/plant-swipe-icon.svg" 
+                alt="Aphylia"
+                className="w-8 h-8 plant-icon-theme opacity-60"
+                draggable="false"
+              />
+            </div>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Main content */}
+        <div className="flex-1 flex items-center justify-center px-6 py-8">
+          <AnimatePresence mode="wait" custom={direction}>
+            {renderStepContent()}
+          </AnimatePresence>
+        </div>
+
+        {/* Continue button */}
+        {showContinueButton && (
+          <div className="sticky bottom-0 bg-white dark:bg-stone-900 border-t border-stone-100 dark:border-stone-800 p-4">
+            <div className="max-w-md mx-auto">
+              <Button 
+                onClick={isCompleteStep ? completeSetup : goToNextStep}
+                disabled={!canContinue() || saving}
+                size="lg"
+                className={`w-full rounded-full py-6 text-base font-semibold transition-all duration-200 ${
+                  canContinue() 
+                    ? 'bg-accent hover:opacity-90 text-accent-foreground shadow-lg' 
+                    : 'bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500 cursor-not-allowed'
+                }`}
+              >
+                {saving 
+                  ? t('common.saving', 'Saving...') 
+                  : isCompleteStep 
+                    ? t('setup.complete.button', 'Start exploring')
+                    : t('common.continue', 'Continue')
+                }
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
