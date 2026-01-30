@@ -462,8 +462,7 @@ export function SetupPage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08 }}
       onClick={onClick}
-      style={{ marginLeft: `${index * 12}px` }}
-      className={`px-6 py-3 rounded-full text-base font-medium transition-all duration-200 ${
+      className={`w-full px-6 py-4 rounded-2xl text-base font-medium transition-all duration-200 text-center ${
         selected 
           ? 'bg-accent text-accent-foreground shadow-lg' 
           : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700'
