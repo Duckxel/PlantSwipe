@@ -733,8 +733,12 @@ export default function PlantSwipe() {
         }
       })
 
-      // Search string
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`.toLowerCase()
+      // Search string - includes name, scientific name, meaning, colors, common names and synonyms
+      // This allows users to search by any name they might know the plant by
+      const commonNames = (p.identity?.commonNames || []).join(' ')
+      const synonyms = (p.identity?.synonyms || []).join(' ')
+      const givenNames = (p.identity?.givenNames || []).join(' ')
+      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
 
       // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null

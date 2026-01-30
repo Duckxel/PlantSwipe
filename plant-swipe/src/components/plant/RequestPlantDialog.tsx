@@ -54,6 +54,28 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
 
       const normalize = (value: string | null | undefined) => (value ?? '').toLowerCase().trim()
 
+      // First, check if a plant with this name already exists in the database
+      // Check against: name, scientific_name, and common names (identity->commonNames, givenNames, synonyms)
+      const { data: existingPlant, error: plantSearchError } = await supabase
+        .from('plants')
+        .select('id, name, scientific_name, identity')
+        .or(`name.ilike.%${normalizedName}%,scientific_name.ilike.%${normalizedName}%,identity->>commonNames.ilike.%${normalizedName}%,identity->>givenNames.ilike.%${normalizedName}%,identity->>synonyms.ilike.%${normalizedName}%`)
+        .limit(1)
+        .maybeSingle()
+
+      if (plantSearchError) {
+        console.error('[RequestPlantDialog] Error checking existing plants:', plantSearchError)
+        // Continue even if check fails - don't block the request
+      }
+
+      if (existingPlant) {
+        setError(t('requestPlant.plantAlreadyExists', { 
+          plantName: existingPlant.name,
+          defaultValue: `This plant already exists in our database as "${existingPlant.name}". Try searching for it in the encyclopedia!`
+        }))
+        return
+      }
+
       // Get all existing active requests to check for similar names
       // We fetch all because we need to do client-side similarity matching
       const { data: existingRequests, error: searchError } = await supabase
