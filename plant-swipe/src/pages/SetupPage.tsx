@@ -43,113 +43,122 @@ const STEPS: SetupStep[] = ['welcome', 'accent', 'location', 'garden_type', 'exp
 
 // Liana/Vine Progress Bar Component
 const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
-  // Leaf positions along the vine (percentage positions)
+  // Leaf positions along the vine - positioned at wave peaks/troughs for better connection
   const leafPositions = [
-    { x: 10, y: -9, rotate: -45, size: 12 },
-    { x: 22, y: 7, rotate: 40, size: 10 },
-    { x: 32, y: -8, rotate: -35, size: 11 },
-    { x: 44, y: 8, rotate: 50, size: 10 },
-    { x: 55, y: -9, rotate: -40, size: 12 },
-    { x: 66, y: 7, rotate: 35, size: 11 },
-    { x: 77, y: -8, rotate: -50, size: 10 },
-    { x: 88, y: 8, rotate: 45, size: 12 },
+    { x: 5, y: -6, rotate: -50, size: 10 },
+    { x: 15, y: 6, rotate: 45, size: 11 },
+    { x: 25, y: -6, rotate: -45, size: 10 },
+    { x: 35, y: 6, rotate: 50, size: 11 },
+    { x: 45, y: -6, rotate: -50, size: 10 },
+    { x: 55, y: 6, rotate: 45, size: 11 },
+    { x: 65, y: -6, rotate: -45, size: 10 },
+    { x: 75, y: 6, rotate: 50, size: 11 },
+    { x: 85, y: -6, rotate: -50, size: 10 },
+    { x: 95, y: 6, rotate: 45, size: 11 },
   ]
 
   return (
-    <div className="flex-1 h-12 relative overflow-visible">
-      {/* Background track - STRAIGHT line */}
+    <div className="flex-1 h-10 relative">
       <svg 
         className="absolute inset-0 w-full h-full" 
-        viewBox="0 0 100 24" 
-        preserveAspectRatio="none"
-      >
-        <line
-          x1="0"
-          y1="12"
-          x2="100"
-          y2="12"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          className="text-stone-200 dark:text-stone-700"
-        />
-      </svg>
-      
-      {/* Foreground growing swirly vine */}
-      <svg 
-        className="absolute inset-0 w-full h-full overflow-visible" 
-        viewBox="0 0 100 24" 
+        viewBox="0 0 100 20" 
         preserveAspectRatio="none"
         style={{ overflow: 'visible' }}
       >
         <defs>
-          <clipPath id="vineClip">
+          {/* Clip for the vine (0 to progress) */}
+          <clipPath id="vineClipGrow">
             <motion.rect
               x="0"
-              y="-10"
-              height="44"
+              y="-5"
+              height="30"
               initial={{ width: 0 }}
               animate={{ width: progress }}
               transition={{ duration: 0.5, ease: "easeOut" }}
             />
           </clipPath>
+          {/* Clip for the remaining line (progress to 100) */}
+          <clipPath id="lineClipRemain">
+            <motion.rect
+              y="-5"
+              height="30"
+              width="100"
+              initial={{ x: 0 }}
+              animate={{ x: progress }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+            />
+          </clipPath>
         </defs>
         
-        {/* Growing swirly vine path with more curves */}
-        <g clipPath="url(#vineClip)">
-          {/* Main vine - very swirly */}
+        {/* Background straight line - ONLY shows after the vine */}
+        <g clipPath="url(#lineClipRemain)">
+          <line
+            x1="0"
+            y1="10"
+            x2="100"
+            y2="10"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            className="text-stone-300 dark:text-stone-600"
+          />
+        </g>
+        
+        {/* Growing vine with smooth waves */}
+        <g clipPath="url(#vineClipGrow)">
+          {/* Main vine stem - smooth wave pattern */}
           <path
-            d="M 0 12 
-               Q 5 8, 10 12 
-               Q 15 16, 20 12 
-               Q 25 8, 30 12 
-               Q 35 16, 40 12 
-               Q 45 8, 50 12 
-               Q 55 16, 60 12 
-               Q 65 8, 70 12 
-               Q 75 16, 80 12 
-               Q 85 8, 90 12 
-               Q 95 16, 100 12"
+            d="M 0 10 
+               C 5 10, 5 5, 10 5
+               C 15 5, 15 15, 20 15
+               C 25 15, 25 5, 30 5
+               C 35 5, 35 15, 40 15
+               C 45 15, 45 5, 50 5
+               C 55 5, 55 15, 60 15
+               C 65 15, 65 5, 70 5
+               C 75 5, 75 15, 80 15
+               C 85 15, 85 5, 90 5
+               C 95 5, 95 15, 100 15"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2.5"
+            strokeWidth="3"
             strokeLinecap="round"
+            strokeLinejoin="round"
             className="text-accent"
           />
           
-          {/* Curly tendrils - more of them! */}
-          <path d="M 8 12 Q 6 7, 9 4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
-          <path d="M 8 12 Q 10 6, 7 3" fill="none" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" className="text-accent" opacity="0.5" />
+          {/* Curly tendrils sprouting from the vine */}
+          {/* Top tendrils at wave peaks */}
+          <path d="M 10 5 Q 8 2, 11 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
+          <path d="M 10 5 Q 12 1, 8 -1" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
           
-          <path d="M 18 12 Q 20 17, 17 20" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
-          <path d="M 18 12 Q 16 18, 19 21" fill="none" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" className="text-accent" opacity="0.5" />
+          <path d="M 30 5 Q 28 2, 31 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
+          <path d="M 30 5 Q 32 1, 28 -1" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
           
-          <path d="M 28 12 Q 26 7, 29 4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
+          <path d="M 50 5 Q 48 2, 51 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
           
-          <path d="M 38 12 Q 40 17, 37 20" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
-          <path d="M 38 12 Q 36 18, 39 21" fill="none" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" className="text-accent" opacity="0.5" />
+          <path d="M 70 5 Q 68 2, 71 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
+          <path d="M 70 5 Q 72 1, 68 -1" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
           
-          <path d="M 48 12 Q 46 7, 49 4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
-          <path d="M 48 12 Q 50 6, 47 3" fill="none" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" className="text-accent" opacity="0.5" />
+          <path d="M 90 5 Q 88 2, 91 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
           
-          <path d="M 58 12 Q 60 17, 57 20" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
+          {/* Bottom tendrils at wave troughs */}
+          <path d="M 20 15 Q 22 18, 19 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
+          <path d="M 20 15 Q 18 19, 21 21" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
           
-          <path d="M 68 12 Q 66 7, 69 4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
-          <path d="M 68 12 Q 70 6, 67 3" fill="none" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" className="text-accent" opacity="0.5" />
+          <path d="M 40 15 Q 42 18, 39 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
           
-          <path d="M 78 12 Q 80 17, 77 20" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
-          <path d="M 78 12 Q 76 18, 79 21" fill="none" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" className="text-accent" opacity="0.5" />
+          <path d="M 60 15 Q 62 18, 59 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
+          <path d="M 60 15 Q 58 19, 61 21" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
           
-          <path d="M 88 12 Q 86 7, 89 4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
-          
-          <path d="M 95 12 Q 97 17, 94 20" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-accent" opacity="0.7" />
+          <path d="M 80 15 Q 82 18, 79 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
         </g>
       </svg>
       
-      {/* Animated leaves */}
+      {/* Animated leaves - positioned at vine wave points */}
       <div className="absolute inset-0" style={{ overflow: 'visible' }}>
         {leafPositions.map((leaf, index) => {
-          const shouldShow = leaf.x <= progress
+          const shouldShow = leaf.x <= progress - 2
           
           return (
             <motion.div
@@ -159,46 +168,39 @@ const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
                 left: `${leaf.x}%`,
                 top: '50%',
               }}
-              initial={{ scale: 0, opacity: 0 }}
+              initial={{ scale: 0, opacity: 0, rotate: leaf.rotate - 20 }}
               animate={{ 
                 scale: shouldShow ? 1 : 0, 
                 opacity: shouldShow ? 1 : 0,
+                rotate: shouldShow ? leaf.rotate : leaf.rotate - 20,
               }}
               transition={{ 
-                duration: 0.3, 
-                delay: shouldShow ? 0.15 : 0,
+                duration: 0.4, 
+                delay: shouldShow ? 0.1 : 0,
                 type: "spring",
-                stiffness: 400,
-                damping: 15
+                stiffness: 300,
+                damping: 12
               }}
             >
               <svg 
                 width={leaf.size} 
-                height={leaf.size} 
-                viewBox="0 0 12 12"
-                className="text-accent"
+                height={leaf.size * 1.3} 
+                viewBox="0 0 10 13"
+                className="text-accent drop-shadow-sm"
                 style={{
-                  transform: `translateY(${leaf.y}px) translateX(-50%) rotate(${leaf.rotate}deg)`,
+                  transform: `translateY(${leaf.y}px) translateX(-50%)`,
                 }}
               >
-                {/* Leaf shape */}
+                {/* Leaf shape - more natural */}
                 <path
-                  d="M 6 0 Q 11 5, 6 12 Q 1 5, 6 0"
+                  d="M 5 0 Q 10 4, 5 13 Q 0 4, 5 0"
                   fill="currentColor"
                 />
-                {/* Leaf vein */}
+                {/* Central vein */}
                 <path
-                  d="M 6 2 L 6 10"
+                  d="M 5 1.5 L 5 11"
                   stroke="white"
-                  strokeWidth="0.6"
-                  opacity="0.4"
-                  fill="none"
-                />
-                {/* Side veins */}
-                <path
-                  d="M 6 4 L 4 5.5 M 6 6 L 4 7.5 M 6 4 L 8 5.5 M 6 6 L 8 7.5"
-                  stroke="white"
-                  strokeWidth="0.4"
+                  strokeWidth="0.5"
                   opacity="0.3"
                   fill="none"
                 />
@@ -208,36 +210,33 @@ const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
         })}
       </div>
       
-      {/* Growing tip - LEAF shape instead of round */}
+      {/* Growing tip - small bud */}
       <motion.div
         className="absolute top-1/2"
-        style={{ left: `${Math.min(progress, 97)}%` }}
+        style={{ left: `${Math.min(progress, 98)}%` }}
         initial={{ scale: 0, opacity: 0 }}
         animate={{ 
-          scale: progress > 3 ? 1 : 0,
-          opacity: progress > 3 ? 1 : 0
+          scale: progress > 2 ? 1 : 0,
+          opacity: progress > 2 ? 1 : 0
         }}
         transition={{ type: "spring", stiffness: 400, damping: 15 }}
       >
         <svg 
-          width="16" 
-          height="16" 
+          width="12" 
+          height="12" 
           viewBox="0 0 12 12"
-          className="text-accent drop-shadow-lg"
+          className="text-accent drop-shadow-md"
           style={{
-            transform: 'translateY(-50%) translateX(-30%) rotate(45deg)',
+            transform: 'translateY(-50%) translateX(-50%)',
           }}
         >
-          {/* Growing leaf tip */}
+          {/* Small sprouting bud */}
+          <ellipse cx="6" cy="6" rx="4" ry="5" fill="currentColor" />
           <path
-            d="M 6 0 Q 11 5, 6 12 Q 1 5, 6 0"
-            fill="currentColor"
-          />
-          <path
-            d="M 6 2 L 6 10"
-            stroke="white"
-            strokeWidth="0.6"
-            opacity="0.4"
+            d="M 6 2 Q 8 0, 6 -2"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
             fill="none"
           />
         </svg>
