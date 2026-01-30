@@ -6,6 +6,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
 import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { useHotkeys } from "react-hotkeys-hook";
 import { useDebounce } from "@/hooks/useDebounce";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -171,6 +172,21 @@ export default function PlantSwipe() {
   const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
   const [searchBarVisible, setSearchBarVisible] = useState(true)
   const lastScrollY = React.useRef(0)
+
+  // Search shortcut
+  const searchInputRef = React.useRef<HTMLInputElement>(null)
+  useHotkeys(['meta+k', 'ctrl+k'], (e) => {
+    e.preventDefault()
+    searchInputRef.current?.focus()
+  })
+
+  const [shortcutLabel, setShortcutLabel] = useState<string | undefined>(undefined)
+  React.useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      const isMac = navigator.platform.toLowerCase().includes('mac')
+      setShortcutLabel(isMac ? '⌘K' : 'Ctrl+K')
+    }
+  }, [])
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -1599,6 +1615,7 @@ export default function PlantSwipe() {
                       </Label>
                       <SearchInput
                         id="plant-search-main"
+                        ref={searchInputRef}
                         variant="lg"
                         className="rounded-2xl"
                         placeholder={t("plant.searchPlaceholder")}
@@ -1607,6 +1624,7 @@ export default function PlantSwipe() {
                           setQuery(e.target.value)
                         }}
                         onClear={() => setQuery("")}
+                        shortcut={shortcutLabel}
                       />
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">

@@ -14,6 +14,8 @@ export interface SearchInputProps
   wrapperClassName?: string
   /** Callback to clear the input. If provided, a clear button will appear when there is text. */
   onClear?: () => void
+  /** Keyboard shortcut hint to display (e.g., "⌘K") */
+  shortcut?: string
 }
 
 /**
@@ -45,7 +47,7 @@ export interface SearchInputProps
  * />
  */
 const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
-  ({ className, loading, icon, variant = "default", wrapperClassName, onClear, ...props }, ref) => {
+  ({ className, loading, icon, variant = "default", wrapperClassName, onClear, shortcut, ...props }, ref) => {
     const showIcon = icon !== null
     const isSmall = variant === "sm"
     const isLarge = variant === "lg"
@@ -54,6 +56,8 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
     // Only show if onClear is provided, we have a value, and we're not loading (spinner takes precedence)
     const hasValue = props.value !== undefined && props.value !== null && String(props.value).length > 0
     const showClear = !!onClear && hasValue && !loading
+    // Show shortcut if provided, no value, and not loading
+    const showShortcut = !!shortcut && !hasValue && !loading
 
     // Calculate padding based on icon visibility and size
     const getLeftPadding = () => {
@@ -97,8 +101,8 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
                 : "h-10 rounded-xl pr-4 text-sm md:h-9",
             // Dynamic left padding based on icon
             getLeftPadding(),
-            // Loading/Clear state - add right padding for spinner or clear button
-            (loading || showClear) && (isLarge ? "pr-11" : isSmall ? "pr-8" : "pr-10"),
+            // Loading/Clear/Shortcut state - add right padding for spinner, clear button, or shortcut
+            (loading || showClear || showShortcut) && (isLarge ? "pr-11" : isSmall ? "pr-8" : "pr-10"),
             className
           )}
           {...props}
@@ -117,6 +121,18 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
           >
             <X className={cn(isLarge ? "h-5 w-5" : isSmall ? "h-3.5 w-3.5" : "h-4 w-4")} />
           </button>
+        )}
+
+        {/* Shortcut Hint */}
+        {showShortcut && (
+          <kbd
+            className={cn(
+              "pointer-events-none absolute top-1/2 -translate-y-1/2 select-none opacity-50 font-mono font-medium text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded px-1.5 flex items-center justify-center",
+              isLarge ? "right-4 text-xs h-6" : isSmall ? "right-2.5 text-[10px] h-4" : "right-3 text-[10px] h-5"
+            )}
+          >
+            {shortcut}
+          </kbd>
         )}
 
         {/* Loading spinner */}
