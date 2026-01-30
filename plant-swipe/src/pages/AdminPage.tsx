@@ -337,6 +337,7 @@ const PROMOTION_MONTH_LABELS: Record<PromotionMonthSlug, string> = {
 type PlantDashboardRow = {
   id: string;
   name: string;
+  givenNames: string[];
   status: NormalizedPlantStatus;
   promotionMonth: PromotionMonthSlug | null;
   primaryImage: string | null;
@@ -2228,14 +2229,66 @@ export const AdminPage: React.FC = () => {
     }
     setAddFromSearchLoading(true);
     try {
-      const { data, error } = await supabase
+      // Search by name, scientific_name, or given_names (common names from translations)
+      // First, search plants by name or scientific_name
+      const { data: directMatches, error: directError } = await supabase
         .from("plants")
         .select("id, name, scientific_name, status")
         .or(`name.ilike.%${trimmed}%,scientific_name.ilike.%${trimmed}%`)
         .order("name")
         .limit(20);
-      if (error) throw error;
-      setAddFromSearchResults(data || []);
+      if (directError) throw directError;
+
+      // Also search by given_names in translations table
+      const { data: translationMatches, error: transError } = await supabase
+        .from("plant_translations")
+        .select("plant_id, given_names, plants!inner(id, name, scientific_name, status)")
+        .eq("language", "en")
+        .limit(100);
+      if (transError) throw transError;
+
+      // Filter translation matches where given_names contains the search term
+      const termLower = trimmed.toLowerCase();
+      const translationPlantIds = new Set<string>();
+      const translationPlants: Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }> = [];
+      
+      (translationMatches || []).forEach((row: any) => {
+        const givenNames = Array.isArray(row?.given_names) ? row.given_names : [];
+        const matchesGivenName = givenNames.some(
+          (gn: unknown) => typeof gn === "string" && gn.toLowerCase().includes(termLower)
+        );
+        if (matchesGivenName && row?.plants?.id && !translationPlantIds.has(row.plants.id)) {
+          translationPlantIds.add(row.plants.id);
+          translationPlants.push({
+            id: String(row.plants.id),
+            name: String(row.plants.name || ""),
+            scientific_name: row.plants.scientific_name || null,
+            status: row.plants.status || null,
+          });
+        }
+      });
+
+      // Merge results, avoiding duplicates
+      const seenIds = new Set<string>();
+      const merged: Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }> = [];
+      
+      (directMatches || []).forEach((plant: any) => {
+        if (plant?.id && !seenIds.has(plant.id)) {
+          seenIds.add(plant.id);
+          merged.push(plant);
+        }
+      });
+      
+      translationPlants.forEach((plant) => {
+        if (!seenIds.has(plant.id)) {
+          seenIds.add(plant.id);
+          merged.push(plant);
+        }
+      });
+
+      // Sort by name and limit to 20
+      merged.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      setAddFromSearchResults(merged.slice(0, 20));
     } catch (err) {
       console.error("Failed to search plants:", err);
       setAddFromSearchResults([]);
@@ -2419,7 +2472,8 @@ export const AdminPage: React.FC = () => {
     setPlantDashboardError(null);
     setPlantDashboardLoading(true);
     try {
-      const { data, error } = await supabase
+      // First, get all plants
+      const { data: plantsData, error: plantsError } = await supabase
         .from("plants")
         .select(
           `
@@ -2437,6 +2491,28 @@ export const AdminPage: React.FC = () => {
         )
         .order("name", { ascending: true });
 
+      if (plantsError) throw new Error(plantsError.message);
+
+      // Then, get English translations for all plants
+      const plantIds = (plantsData || []).map((p: any) => p.id);
+      const { data: translationsData } = await supabase
+        .from("plant_translations")
+        .select("plant_id, given_names")
+        .eq("language", "en")
+        .in("plant_id", plantIds.length > 0 ? plantIds : ["00000000-0000-0000-0000-000000000000"]); // Use dummy ID if no plants
+
+      // Build a map of plant_id -> given_names
+      const givenNamesMap = new Map<string, string[]>();
+      (translationsData || []).forEach((t: any) => {
+        if (t?.plant_id && Array.isArray(t.given_names)) {
+          givenNamesMap.set(t.plant_id, t.given_names.map((n: unknown) => String(n || "")));
+        }
+      });
+
+      // Now combine the data
+      const data = plantsData;
+      const error = plantsError;
+
       if (error) throw new Error(error.message);
 
       const rows: PlantDashboardRow[] = (data ?? [])
@@ -2450,9 +2526,13 @@ export const AdminPage: React.FC = () => {
             images.find((img: any) => img?.use === "discovery") ??
             images[0];
 
+          // Get given_names from the map
+          const givenNames = givenNamesMap.get(String(row.id)) || [];
+
             return {
               id: String(row.id),
               name: row?.name ? String(row.name) : "Unnamed plant",
+              givenNames,
               status: normalizePlantStatus(row?.status),
               promotionMonth: toPromotionMonthSlug(row?.promotion_month),
               primaryImage: primaryImage?.link
@@ -2657,8 +2737,10 @@ export const AdminPage: React.FC = () => {
               ? !plant.promotionMonth
               : plant.promotionMonth === selectedPromotionMonth;
         if (!matchesPromotion) return false;
+        // Search by name OR givenNames (common names)
         const matchesSearch = term
-          ? plant.name.toLowerCase().includes(term)
+          ? plant.name.toLowerCase().includes(term) ||
+            plant.givenNames.some((gn) => gn.toLowerCase().includes(term))
           : true;
         return matchesSearch;
       })
