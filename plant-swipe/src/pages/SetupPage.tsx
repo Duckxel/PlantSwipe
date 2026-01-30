@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronLeft, Bell, Home, Flower2, Salad, Trees, Sparkles, Sun, Coffee, Clock, Leaf, Sprout, Palette, MapPin } from "lucide-react"
+import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Leaf, Sprout, Palette, MapPin } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, type AccentKey } from "@/lib/accent"
 
 type SetupStep = 'welcome' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
