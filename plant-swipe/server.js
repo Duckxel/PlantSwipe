@@ -3207,8 +3207,9 @@ function getVisitsTableIdentifierParts() {
 const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch { }
-// Increase JSON body limit to handle base64 encoded images (e.g. for plant scan identification)
-app.use(express.json({ limit: '15mb' }))
+// Limit JSON body size to 100kb to prevent DoS (large uploads use multer/multipart)
+// Was previously 15mb for legacy base64 uploads which are now deprecated
+app.use(express.json({ limit: '100kb' }))
 
 // =============================================================================
 // CSRF (Cross-Site Request Forgery) Protection
