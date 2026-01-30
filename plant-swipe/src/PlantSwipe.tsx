@@ -1411,15 +1411,13 @@ export default function PlantSwipe() {
     const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !isExcludedFromSetup
 
     // Setup page - full screen wizard experience
+    // Render directly without nested Routes since we've already determined the path
     if (isSetupPage && user) {
       return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
           <ErrorBoundary fallback={routeErrorFallback}>
             <Suspense fallback={routeLoadingFallback}>
-              <Routes>
-                <Route path="/setup" element={<SetupPageLazy />} />
-                <Route path="*" element={<Navigate to="/setup" replace />} />
-              </Routes>
+              <SetupPageLazy />
             </Suspense>
           </ErrorBoundary>
           <CookieConsent />
