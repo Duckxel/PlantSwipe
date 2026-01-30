@@ -25,7 +25,7 @@ export const ACCENT_OPTIONS: AccentOption[] = [
   { key: 'purple', label: 'Purple', hsl: '258 83% 58%', hex: '#7C3AED', foreground: '0 0% 98%' },
   { key: 'gold', label: 'Gold', hsl: '38 92% 50%', hex: '#F59E0B', foreground: '0 0% 9%' },
   { key: 'coral', label: 'Coral', hsl: '351 95% 72%', hex: '#FB7185', foreground: '0 0% 9%' },
-  { key: 'neon', label: 'Neon Green', hsl: '84 81% 44%', hex: '#84CC16', foreground: '0 0% 9%' },
+  { key: 'neon', label: 'Lime', hsl: '84 81% 44%', hex: '#84CC16', foreground: '0 0% 9%' },
   { key: 'turquoise', label: 'Turquoise', hsl: '173 80% 40%', hex: '#14B8A6', foreground: '0 0% 98%' },
 ]
 
