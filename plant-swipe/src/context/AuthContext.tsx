@@ -258,6 +258,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timezone: detectedTimezone,
       language: detectedLanguage,
       accent_key: 'emerald',
+      // Setup wizard - new users must complete setup
+      setup_completed: false,
       // GDPR consent tracking
       terms_accepted_date: consentTimestamp,
       privacy_policy_accepted_date: consentTimestamp,

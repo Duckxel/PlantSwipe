@@ -1401,9 +1401,10 @@ export default function PlantSwipe() {
     const isSetupPage = pathWithoutLang === "/setup"
     
     // Check if user needs to complete setup (logged in but setup not completed)
+    // Triggers for: setup_completed === false, null, or undefined (new users)
     // Only redirect if not already on setup page and not on excluded pages (landing, terms, privacy, etc.)
-    const needsSetup = user && profile && profile.setup_completed === false
-    const setupExcludedPaths = ['/setup', '/terms', '/privacy', '/contact', '/about', '/error']
+    const needsSetup = user && profile && profile.setup_completed !== true
+    const setupExcludedPaths = ['/setup', '/terms', '/privacy', '/contact', '/about', '/error', '/download']
     const shouldRedirectToSetup = needsSetup && !setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
 
     // Setup page - full screen wizard experience
