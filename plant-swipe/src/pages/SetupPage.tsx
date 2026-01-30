@@ -56,19 +56,48 @@ const STEPS: SetupStep[] = ['welcome', 'accent', 'location', 'garden_type', 'exp
 
 // Liana/Vine Progress Bar Component
 const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
-  // Leaf positions along the vine - positioned at wave peaks/troughs for better connection
+  // Track the animated progress value for syncing leaves
+  const [animatedProgress, setAnimatedProgress] = React.useState(0)
+  const animationDuration = 0.5 // seconds
+  
+  // Animate progress changes smoothly
+  React.useEffect(() => {
+    const startProgress = animatedProgress
+    const targetProgress = progress
+    const startTime = performance.now()
+    
+    const animate = (currentTime: number) => {
+      const elapsed = (currentTime - startTime) / 1000
+      const t = Math.min(elapsed / animationDuration, 1)
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - t, 3)
+      const currentProgress = startProgress + (targetProgress - startProgress) * eased
+      
+      setAnimatedProgress(currentProgress)
+      
+      if (t < 1) {
+        requestAnimationFrame(animate)
+      }
+    }
+    
+    requestAnimationFrame(animate)
+  }, [progress])
+  
+  // Leaf positions along the vine - positioned at wave peaks/troughs
   const leafPositions = [
-    { x: 5, y: -6, rotate: -50, size: 10 },
-    { x: 15, y: 6, rotate: 45, size: 11 },
-    { x: 25, y: -6, rotate: -45, size: 10 },
-    { x: 35, y: 6, rotate: 50, size: 11 },
-    { x: 45, y: -6, rotate: -50, size: 10 },
-    { x: 55, y: 6, rotate: 45, size: 11 },
-    { x: 65, y: -6, rotate: -45, size: 10 },
-    { x: 75, y: 6, rotate: 50, size: 11 },
-    { x: 85, y: -6, rotate: -50, size: 10 },
-    { x: 95, y: 6, rotate: 45, size: 11 },
+    { x: 10, y: -5, rotate: -50, size: 10 },
+    { x: 20, y: 5, rotate: 45, size: 11 },
+    { x: 30, y: -5, rotate: -45, size: 10 },
+    { x: 40, y: 5, rotate: 50, size: 11 },
+    { x: 50, y: -5, rotate: -50, size: 10 },
+    { x: 60, y: 5, rotate: 45, size: 11 },
+    { x: 70, y: -5, rotate: -45, size: 10 },
+    { x: 80, y: 5, rotate: 50, size: 11 },
+    { x: 90, y: -5, rotate: -50, size: 10 },
   ]
+
+  // Use a unique ID for clip paths to avoid conflicts if multiple instances
+  const clipId = React.useId()
 
   return (
     <div className="flex-1 h-10 relative">
@@ -79,32 +108,28 @@ const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
         style={{ overflow: 'visible' }}
       >
         <defs>
-          {/* Clip for the vine (0 to progress) */}
-          <clipPath id="vineClipGrow">
-            <motion.rect
+          {/* Clip for the vine - uses animated progress for smooth sync */}
+          <clipPath id={`vineClip-${clipId}`}>
+            <rect
               x="0"
               y="-5"
               height="30"
-              initial={{ width: 0 }}
-              animate={{ width: progress }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
+              width={animatedProgress}
             />
           </clipPath>
-          {/* Clip for the remaining line (progress to 100) */}
-          <clipPath id="lineClipRemain">
-            <motion.rect
+          {/* Clip for the remaining line */}
+          <clipPath id={`lineClip-${clipId}`}>
+            <rect
+              x={animatedProgress}
               y="-5"
               height="30"
-              width="100"
-              initial={{ x: 0 }}
-              animate={{ x: progress }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
+              width={100 - animatedProgress}
             />
           </clipPath>
         </defs>
         
         {/* Background straight line - ONLY shows after the vine */}
-        <g clipPath="url(#lineClipRemain)">
+        <g clipPath={`url(#lineClip-${clipId})`}>
           <line
             x1="0"
             y1="10"
@@ -118,7 +143,7 @@ const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
         </g>
         
         {/* Growing vine with smooth waves */}
-        <g clipPath="url(#vineClipGrow)">
+        <g clipPath={`url(#vineClip-${clipId})`}>
           {/* Main vine stem - smooth wave pattern */}
           <path
             d="M 0 10 
@@ -166,12 +191,23 @@ const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
           
           <path d="M 80 15 Q 82 18, 79 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
         </g>
+        
+        {/* Growing tip - rendered inside SVG and clipped with the vine */}
+        <g clipPath={`url(#vineClip-${clipId})`}>
+          {/* Small leaf-shaped tip at the end of the vine path */}
+          {animatedProgress > 2 && (
+            <g transform={`translate(${Math.min(animatedProgress, 100)}, ${animatedProgress % 20 < 10 ? 5 + (animatedProgress % 10) : 15 - (animatedProgress % 10)})`}>
+              <ellipse cx="0" cy="0" rx="2" ry="2.5" fill="currentColor" className="text-accent" />
+            </g>
+          )}
+        </g>
       </svg>
       
-      {/* Animated leaves - positioned at vine wave points */}
+      {/* Animated leaves - positioned at vine wave points, synced with animated progress */}
       <div className="absolute inset-0" style={{ overflow: 'visible' }}>
         {leafPositions.map((leaf, index) => {
-          const shouldShow = leaf.x <= progress - 2
+          // Leaf appears when the animated vine has passed its position
+          const shouldShow = animatedProgress >= leaf.x + 2
           
           return (
             <motion.div
@@ -188,11 +224,10 @@ const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
                 rotate: shouldShow ? leaf.rotate : leaf.rotate - 20,
               }}
               transition={{ 
-                duration: 0.4, 
-                delay: shouldShow ? 0.1 : 0,
+                duration: 0.3, 
                 type: "spring",
-                stiffness: 300,
-                damping: 12
+                stiffness: 400,
+                damping: 15
               }}
             >
               <svg 
@@ -222,38 +257,6 @@ const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
           )
         })}
       </div>
-      
-      {/* Growing tip - small bud */}
-      <motion.div
-        className="absolute top-1/2"
-        style={{ left: `${Math.min(progress, 98)}%` }}
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ 
-          scale: progress > 2 ? 1 : 0,
-          opacity: progress > 2 ? 1 : 0
-        }}
-        transition={{ type: "spring", stiffness: 400, damping: 15 }}
-      >
-        <svg 
-          width="12" 
-          height="12" 
-          viewBox="0 0 12 12"
-          className="text-accent drop-shadow-md"
-          style={{
-            transform: 'translateY(-50%) translateX(-50%)',
-          }}
-        >
-          {/* Small sprouting bud */}
-          <ellipse cx="6" cy="6" rx="4" ry="5" fill="currentColor" />
-          <path
-            d="M 6 2 Q 8 0, 6 -2"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-        </svg>
-      </motion.div>
     </div>
   )
 }
