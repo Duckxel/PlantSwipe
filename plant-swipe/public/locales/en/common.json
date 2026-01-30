@@ -605,6 +605,11 @@
       "light": "Light",
       "dark": "Dark",
       "currentTheme": "Current theme"
+    },
+    "accent": {
+      "title": "Accent Color",
+      "description": "Choose your personal accent color that appears throughout the app.",
+      "current": "Current:"
     }
   },
     "plant": {

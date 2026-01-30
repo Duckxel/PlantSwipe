@@ -9,10 +9,11 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette } from "lucide-react"
 import { Link } from "@/components/i18n/Link"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
+import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
 
@@ -1900,6 +1901,57 @@ export default function SettingsPage() {
                   </select>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Accent Color */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Palette className="h-5 w-5 text-accent" />
+                <CardTitle>{t('settings.accent.title', { defaultValue: 'Accent Color' })}</CardTitle>
+              </div>
+              <CardDescription>{t('settings.accent.description', { defaultValue: 'Choose your personal accent color that appears throughout the app.' })}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-4 gap-3">
+                {ACCENT_OPTIONS.map((opt) => {
+                  const isActive = (profile as any)?.accent_key === opt.key
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={async () => {
+                        if (!user?.id) return
+                        setSaving(true)
+                        try {
+                          const { error: updateError } = await supabase
+                            .from('profiles')
+                            .update({ accent_key: opt.key })
+                            .eq('id', user.id)
+                          if (updateError) throw updateError
+                          applyAccentByKey(opt.key as AccentKey)
+                          saveAccentKey(opt.key as AccentKey)
+                          await refreshProfile()
+                          setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                        } catch (e: any) {
+                          setError(e?.message || t('common.error'))
+                        } finally {
+                          setSaving(false)
+                        }
+                      }}
+                      disabled={saving}
+                      className={`h-12 rounded-xl relative transition-all ${isActive ? 'ring-2 ring-offset-2 ring-stone-500 dark:ring-stone-400 scale-105' : 'hover:scale-105'}`}
+                      title={opt.label}
+                      style={{ backgroundColor: opt.hex }}
+                      aria-pressed={isActive}
+                    />
+                  )
+                })}
+              </div>
+              <p className="text-xs opacity-60">
+                {t('settings.accent.current', { defaultValue: 'Current:' })} <span className="font-medium">{ACCENT_OPTIONS.find(o => o.key === (profile as any)?.accent_key)?.label || 'Emerald'}</span>
+              </p>
             </CardContent>
           </Card>
 

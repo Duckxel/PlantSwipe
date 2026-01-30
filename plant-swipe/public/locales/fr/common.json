@@ -605,6 +605,11 @@
       "light": "Clair",
       "dark": "Sombre",
       "currentTheme": "Thème actuel"
+    },
+    "accent": {
+      "title": "Couleur d'accentuation",
+      "description": "Choisissez votre couleur d'accentuation personnelle qui apparaît dans toute l'application.",
+      "current": "Actuelle :"
     }
   },
     "plant": {

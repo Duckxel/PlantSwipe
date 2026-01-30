@@ -4310,17 +4310,17 @@ function OverviewSection({
     const profile = memberProfiles[member.userId];
     const accentKey = profile?.accentKey || member.accentKey;
     if (accentKey) {
-      const option = getAccentOption(accentKey);
-      if (option) return option.cssVar || option.value;
+      const option = getAccentOption(accentKey as any);
+      if (option) return option.hex;
     }
     // Fallback colors based on name hash
     const colors = [
-      "#10b981",
-      "#3b82f6",
-      "#8b5cf6",
-      "#ec4899",
-      "#f59e0b",
-      "#06b6d4",
+      "#22C55E", // Emerald
+      "#2563EB", // Royal Blue
+      "#7C3AED", // Purple
+      "#E11D48", // Crimson
+      "#F59E0B", // Gold
+      "#14B8A6", // Turquoise
     ];
     const name = member.displayName || member.email || member.userId;
     let hash = 0;

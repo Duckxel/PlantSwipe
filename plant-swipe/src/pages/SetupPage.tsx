@@ -236,7 +236,7 @@ export function SetupPage() {
       style={{ marginLeft: `${index * 12}px` }}
       className={`px-6 py-3 rounded-full text-base font-medium transition-all duration-200 ${
         selected 
-          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' 
+          ? 'bg-accent text-accent-foreground shadow-lg' 
           : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700'
       }`}
     >
@@ -250,7 +250,7 @@ export function SetupPage() {
     question: string
   }> = ({ icon, question }) => (
     <div className="flex items-center gap-4 mb-10">
-      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg">
+      <div className="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center shadow-lg">
         {icon}
       </div>
       <h2 className="text-xl md:text-2xl font-bold text-stone-800 dark:text-stone-100">
@@ -278,9 +278,9 @@ export function SetupPage() {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="w-24 h-24 mb-8 rounded-3xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-2xl shadow-emerald-500/30"
+              className="w-24 h-24 mb-8 rounded-3xl bg-accent flex items-center justify-center shadow-2xl"
             >
-              <Leaf className="w-12 h-12 text-white" />
+              <Leaf className="w-12 h-12 text-accent-foreground" />
             </motion.div>
             
             <motion.h1 
@@ -373,7 +373,7 @@ export function SetupPage() {
 
             {locationLoading ? (
               <div className="flex flex-col items-center justify-center py-12">
-                <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+                <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mb-4" />
                 <p className="text-stone-500 dark:text-stone-400 text-sm">
                   {t('setup.location.detecting', 'Detecting your location...')}
                 </p>
@@ -384,7 +384,7 @@ export function SetupPage() {
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2 rounded-xl"
+                    className="flex items-center gap-2 text-sm text-accent bg-accent/10 px-4 py-2 rounded-xl"
                   >
                     <MapPin className="w-4 h-4" />
                     {t('setup.location.detected', 'Location detected automatically. You can change it below.')}
@@ -402,7 +402,7 @@ export function SetupPage() {
                         onClick={() => handleCountrySelect(country)}
                         className={`px-3 py-1.5 rounded-full text-sm transition-all ${
                           setupData.country === country
-                            ? 'bg-emerald-500 text-white'
+                            ? 'bg-accent text-accent-foreground'
                             : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
                         }`}
                       >
@@ -659,9 +659,9 @@ export function SetupPage() {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="w-24 h-24 mb-8 rounded-3xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-2xl shadow-emerald-500/30"
+              className="w-24 h-24 mb-8 rounded-3xl bg-accent flex items-center justify-center shadow-2xl"
             >
-              <Sparkles className="w-12 h-12 text-white" />
+              <Sparkles className="w-12 h-12 text-accent-foreground" />
             </motion.div>
 
             <motion.h2 
@@ -715,7 +715,7 @@ export function SetupPage() {
           {/* Progress bar */}
           <div className="flex-1 h-1.5 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
             <motion.div 
-              className="h-full bg-emerald-500 rounded-full"
+              className="h-full bg-accent rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.3, ease: "easeOut" }}
@@ -744,7 +744,7 @@ export function SetupPage() {
               size="lg"
               className={`w-full rounded-full py-6 text-base font-semibold transition-all duration-200 ${
                 canContinue() 
-                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/30' 
+                  ? 'bg-accent hover:opacity-90 text-accent-foreground shadow-lg' 
                   : 'bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500 cursor-not-allowed'
               }`}
             >
