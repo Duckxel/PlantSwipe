@@ -1948,6 +1948,154 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Garden Preferences */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🌱</span>
+                <CardTitle>{t('setup.settings.title', { defaultValue: 'Garden Preferences' })}</CardTitle>
+              </div>
+              <CardDescription>{t('setup.settings.description', { defaultValue: 'Update your gardening preferences and notification settings.' })}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Garden Type */}
+              <div className="grid gap-2">
+                <Label htmlFor="garden-type-select">{t('setup.settings.gardenType', { defaultValue: 'Garden Location' })}</Label>
+                <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.gardenTypeDescription', { defaultValue: 'Where do you grow your plants?' })}</p>
+                <select
+                  id="garden-type-select"
+                  value={(profile as any)?.garden_type || ''}
+                  onChange={async (e) => {
+                    if (!user?.id) return
+                    setSaving(true)
+                    try {
+                      const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ garden_type: e.target.value || null })
+                        .eq('id', user.id)
+                      if (updateError) throw updateError
+                      await refreshProfile()
+                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('common.error'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                >
+                  <option value="">{t('common.select', { defaultValue: 'Select...' })}</option>
+                  <option value="inside">{t('setup.gardenType.inside', { defaultValue: 'Inside your home' })}</option>
+                  <option value="outside">{t('setup.gardenType.outside', { defaultValue: 'Outside, in a yard' })}</option>
+                  <option value="both">{t('setup.gardenType.both', { defaultValue: 'Both inside and outside' })}</option>
+                </select>
+              </div>
+
+              {/* Experience Level */}
+              <div className="grid gap-2">
+                <Label htmlFor="experience-level-select">{t('setup.settings.experienceLevel', { defaultValue: 'Experience Level' })}</Label>
+                <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.experienceLevelDescription', { defaultValue: 'Your gardening expertise level' })}</p>
+                <select
+                  id="experience-level-select"
+                  value={(profile as any)?.experience_level || ''}
+                  onChange={async (e) => {
+                    if (!user?.id) return
+                    setSaving(true)
+                    try {
+                      const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ experience_level: e.target.value || null })
+                        .eq('id', user.id)
+                      if (updateError) throw updateError
+                      await refreshProfile()
+                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('common.error'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                >
+                  <option value="">{t('common.select', { defaultValue: 'Select...' })}</option>
+                  <option value="novice">{t('setup.experience.novice', { defaultValue: 'Novice' })}</option>
+                  <option value="intermediate">{t('setup.experience.intermediate', { defaultValue: 'Intermediate' })}</option>
+                  <option value="expert">{t('setup.experience.expert', { defaultValue: 'Expert' })}</option>
+                </select>
+              </div>
+
+              {/* Garden Purpose */}
+              <div className="grid gap-2">
+                <Label htmlFor="looking-for-select">{t('setup.settings.lookingFor', { defaultValue: 'Garden Purpose' })}</Label>
+                <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.lookingForDescription', { defaultValue: "What's your main gardening goal?" })}</p>
+                <select
+                  id="looking-for-select"
+                  value={(profile as any)?.looking_for || ''}
+                  onChange={async (e) => {
+                    if (!user?.id) return
+                    setSaving(true)
+                    try {
+                      const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ looking_for: e.target.value || null })
+                        .eq('id', user.id)
+                      if (updateError) throw updateError
+                      await refreshProfile()
+                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('common.error'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                >
+                  <option value="">{t('common.select', { defaultValue: 'Select...' })}</option>
+                  <option value="eat">{t('setup.purpose.eat', { defaultValue: 'Grow food' })}</option>
+                  <option value="ornamental">{t('setup.purpose.ornamental', { defaultValue: 'Ornamental garden' })}</option>
+                  <option value="various">{t('setup.purpose.various', { defaultValue: 'A bit of everything!' })}</option>
+                </select>
+              </div>
+
+              {/* Notification Time */}
+              <div className="grid gap-2">
+                <Label htmlFor="notification-time-select">{t('setup.settings.notificationTime', { defaultValue: 'Notification Time' })}</Label>
+                <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.notificationTimeDescription', { defaultValue: 'When should we send you reminders?' })}</p>
+                <select
+                  id="notification-time-select"
+                  value={(profile as any)?.notification_time || '10h'}
+                  onChange={async (e) => {
+                    if (!user?.id) return
+                    setSaving(true)
+                    try {
+                      const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ notification_time: e.target.value })
+                        .eq('id', user.id)
+                      if (updateError) throw updateError
+                      await refreshProfile()
+                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('common.error'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                >
+                  <option value="6h">{t('setup.notificationTime.early', { defaultValue: 'Early bird' })} - 6:00 AM</option>
+                  <option value="10h">{t('setup.notificationTime.morning', { defaultValue: 'Sleep in' })} - 10:00 AM</option>
+                  <option value="14h">{t('setup.notificationTime.midday', { defaultValue: 'Midday energy' })} - 2:00 PM</option>
+                  <option value="17h">{t('setup.notificationTime.afternoon', { defaultValue: 'After work' })} - 5:00 PM</option>
+                </select>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
