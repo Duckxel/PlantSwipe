@@ -355,6 +355,11 @@ do $$ begin
     );
 end $$;
 
+-- Grant permissions on profiles table to authenticated users
+-- This ensures users can read/write their own profile data (subject to RLS policies)
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
+GRANT SELECT ON public.profiles TO anon;
+
 -- Aggregated like counts (security definer to bypass profiles RLS)
 create or replace function public.top_liked_plants(limit_count integer default 5)
 returns table (plant_id text, likes bigint)
