@@ -199,6 +199,8 @@ interface GardenAnalyticsSectionProps {
   serverToday?: string | null;
   streak?: number;
   onNavigateToSettings?: () => void;
+  /** When true, hide all AI-powered features (gardener advice) */
+  hideAiFeatures?: boolean;
 }
 
 // Color palette for charts
@@ -236,6 +238,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   serverToday: serverTodayProp,
   streak: streakProp,
   onNavigateToSettings,
+  hideAiFeatures = false,
 }) => {
   // Default serverToday to current date if not provided
   const serverToday = serverTodayProp || new Date().toISOString().slice(0, 10);
@@ -998,7 +1001,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               </Card>
             )}
 
-            {/* Gardener Advice Section */}
+            {/* Gardener Advice Section - Hidden when AI features are disabled */}
+            {!hideAiFeatures && (
             <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/50 dark:from-amber-900/10 dark:via-[#1f1f1f] dark:to-emerald-900/10 backdrop-blur p-6 relative overflow-hidden">
               <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-amber-200/30 to-emerald-200/30 dark:from-amber-500/10 dark:to-emerald-500/10 rounded-full blur-3xl" />
               <div className="relative">
@@ -1318,6 +1322,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 )}
               </div>
             </Card>
+            )}
         </div>
       )}
 

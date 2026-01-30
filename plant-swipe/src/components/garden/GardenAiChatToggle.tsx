@@ -1,14 +1,16 @@
 /**
- * Garden AI Chat Toggle
+ * Garden AI Features Toggle
  * 
- * Toggle to show/hide the AI chat bubble in this garden.
- * When checked (hide_ai_chat = true), the chat bubble will not appear.
- * Default is unchecked (chat visible).
+ * Toggle to enable/disable ALL AI features in this garden.
+ * When disabled (hide_ai_chat = true):
+ * - The AI chat bubble will not appear
+ * - The Gardener Advice section will be hidden
+ * Default is enabled (AI features visible).
  */
 
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Sparkles, Loader2, Check } from "lucide-react";
+import { Sparkles, Loader2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
 import type { Garden } from "@/types/garden";
@@ -26,13 +28,13 @@ export const GardenAiChatToggle: React.FC<GardenAiChatToggleProps> = ({
 }) => {
   const { t } = useTranslation("common");
   const [isUpdating, setIsUpdating] = useState(false);
-  const [hideChat, setHideChat] = useState(garden?.hideAiChat ?? false);
+  const [hideAiFeatures, setHideAiFeatures] = useState(garden?.hideAiChat ?? false);
   const [error, setError] = useState<string | null>(null);
 
   const handleToggle = async () => {
     if (!garden || !canEdit || isUpdating) return;
 
-    const newValue = !hideChat;
+    const newValue = !hideAiFeatures;
     setIsUpdating(true);
     setError(null);
 
@@ -44,10 +46,10 @@ export const GardenAiChatToggle: React.FC<GardenAiChatToggleProps> = ({
 
       if (updateError) throw updateError;
 
-      setHideChat(newValue);
+      setHideAiFeatures(newValue);
       await onSaved();
     } catch (err: unknown) {
-      console.error("Failed to update AI chat setting:", err);
+      console.error("Failed to update AI features setting:", err);
       setError(t("common.error", "Something went wrong"));
     } finally {
       setIsUpdating(false);
@@ -59,48 +61,67 @@ export const GardenAiChatToggle: React.FC<GardenAiChatToggleProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-4">
-        <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex-shrink-0">
-          <Sparkles className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+        <div className={`p-2.5 rounded-xl flex-shrink-0 ${hideAiFeatures ? 'bg-stone-100 dark:bg-stone-800' : 'bg-emerald-100 dark:bg-emerald-900/30'}`}>
+          <Sparkles className={`w-5 h-5 ${hideAiFeatures ? 'text-stone-400' : 'text-emerald-600 dark:text-emerald-400'}`} />
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="font-medium text-sm">
-            {t("gardenSettings.aiChat.hideLabel", "Hide AI Chat")}
+            {t("gardenSettings.aiFeatures.label", "AI Features")}
           </h4>
           <p className="text-xs text-muted-foreground mt-0.5">
             {t(
-              "gardenSettings.aiChat.hideDescription",
-              "When enabled, the AI assistant chat bubble will not appear in this garden"
+              "gardenSettings.aiFeatures.description",
+              "Control all AI-powered features including the chat assistant and weekly gardener advice"
             )}
           </p>
         </div>
       </div>
 
+      {/* Feature list showing what will be affected */}
+      <div className="bg-stone-50 dark:bg-stone-800/50 rounded-xl p-3 space-y-2">
+        <p className="text-xs font-medium text-stone-600 dark:text-stone-300">
+          {t("gardenSettings.aiFeatures.affectedFeatures", "This setting affects:")}
+        </p>
+        <ul className="text-xs text-muted-foreground space-y-1">
+          <li className="flex items-center gap-2">
+            {hideAiFeatures ? <X className="w-3 h-3 text-red-500" /> : <Check className="w-3 h-3 text-emerald-500" />}
+            {t("gardenSettings.aiFeatures.chatBubble", "AI Chat Assistant (bottom right)")}
+          </li>
+          <li className="flex items-center gap-2">
+            {hideAiFeatures ? <X className="w-3 h-3 text-red-500" /> : <Check className="w-3 h-3 text-emerald-500" />}
+            {t("gardenSettings.aiFeatures.gardenerAdvice", "Weekly Gardener Advice")}
+          </li>
+        </ul>
+      </div>
+
       <div className="flex items-center gap-3">
         <Button
-          variant={hideChat ? "default" : "outline"}
+          variant={hideAiFeatures ? "outline" : "default"}
           size="sm"
           onClick={handleToggle}
           disabled={!canEdit || isUpdating}
           className={`rounded-xl gap-2 ${
-            hideChat 
-              ? "bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900" 
-              : ""
+            !hideAiFeatures 
+              ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+              : "border-stone-300 dark:border-stone-600"
           }`}
         >
           {isUpdating ? (
             <Loader2 className="w-4 h-4 animate-spin" />
-          ) : hideChat ? (
+          ) : !hideAiFeatures ? (
             <Check className="w-4 h-4" />
-          ) : null}
-          {hideChat
-            ? t("gardenSettings.aiChat.hidden", "Hidden")
-            : t("gardenSettings.aiChat.visible", "Visible")}
+          ) : (
+            <X className="w-4 h-4" />
+          )}
+          {hideAiFeatures
+            ? t("gardenSettings.aiFeatures.disabled", "Disabled")
+            : t("gardenSettings.aiFeatures.enabled", "Enabled")}
         </Button>
 
         <span className="text-xs text-muted-foreground">
-          {hideChat
-            ? t("gardenSettings.aiChat.chatIsHidden", "Chat bubble is hidden")
-            : t("gardenSettings.aiChat.chatIsVisible", "Chat bubble is visible")}
+          {hideAiFeatures
+            ? t("gardenSettings.aiFeatures.statusDisabled", "AI features are disabled")
+            : t("gardenSettings.aiFeatures.statusEnabled", "AI features are enabled")}
         </span>
       </div>
 
@@ -110,7 +131,7 @@ export const GardenAiChatToggle: React.FC<GardenAiChatToggleProps> = ({
 
       {!canEdit && (
         <p className="text-xs text-muted-foreground italic">
-          {t("gardenSettings.aiChat.ownerOnly", "Only garden owners can change this setting")}
+          {t("gardenSettings.aiFeatures.ownerOnly", "Only garden owners can change this setting")}
         </p>
       )}
     </div>

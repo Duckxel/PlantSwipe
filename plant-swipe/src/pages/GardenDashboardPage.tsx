@@ -3093,6 +3093,7 @@ export const GardenDashboardPage: React.FC = () => {
                       members={members}
                       dailyStats={dailyStats}
                       onNavigateToSettings={() => navigate(`/garden/${id}/settings`)}
+                      hideAiFeatures={garden?.hideAiChat ?? false}
                     />
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />

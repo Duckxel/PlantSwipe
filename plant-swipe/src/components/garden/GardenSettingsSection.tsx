@@ -210,10 +210,10 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
             <div>
               <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-emerald-600" />
-                {t("gardenDashboard.settingsSection.aiAssistant", "AI Assistant")}
+                {t("gardenDashboard.settingsSection.aiFeatures", "AI Features")}
               </h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {t("gardenDashboard.settingsSection.aiAssistantDescription", "Configure the Aphylia AI chat assistant for this garden.")}
+                {t("gardenDashboard.settingsSection.aiFeaturesDescription", "Enable or disable all AI-powered features for this garden, including the chat assistant and gardener advice.")}
               </p>
               <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-6">
                 <GardenAiChatToggle
