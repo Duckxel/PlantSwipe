@@ -3098,7 +3098,8 @@
         "city": "City",
         "cityPlaceholder": "Enter your city...",
         "detecting": "Detecting your location...",
-        "detected": "Location detected automatically. You can change it below."
+        "detected": "Location detected automatically!",
+        "timezoneSet": "Timezone:"
       },
       "gardenType": {
         "title": "Where is your garden located?",

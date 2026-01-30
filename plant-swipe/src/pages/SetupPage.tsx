@@ -1,6 +1,6 @@
 import React from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { useLanguageNavigate, useChangeLanguage } from "@/lib/i18nRouting"
 import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
@@ -9,6 +9,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, type AccentKey } from "@/lib/accent"
+
+// Country code to language mapping
+const COUNTRY_TO_LANGUAGE: Record<string, 'en' | 'fr'> = {
+  'FR': 'fr', // France
+  'BE': 'fr', // Belgium (French-speaking regions)
+  'CH': 'fr', // Switzerland (French-speaking regions)
+  'CA': 'fr', // Canada (Quebec)
+  'LU': 'fr', // Luxembourg
+  'MC': 'fr', // Monaco
+  // All others default to English
+}
 
 type SetupStep = 'welcome' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
 
@@ -21,6 +32,7 @@ interface SetupData {
   accent_key: AccentKey
   country: string
   city: string
+  timezone: string
   garden_type: GardenType | null
   experience_level: ExperienceLevel | null
   looking_for: LookingFor | null
@@ -244,6 +256,7 @@ const POPULAR_COUNTRIES = [
 export function SetupPage() {
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
+  const changeLanguage = useChangeLanguage()
   const { user, profile, refreshProfile } = useAuth()
   
   const [currentStep, setCurrentStep] = React.useState<SetupStep>('welcome')
@@ -251,6 +264,7 @@ export function SetupPage() {
     accent_key: 'emerald',
     country: '',
     city: '',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     garden_type: null,
     experience_level: null,
     looking_for: null,
@@ -258,37 +272,46 @@ export function SetupPage() {
   })
   const [saving, setSaving] = React.useState(false)
   const [direction, setDirection] = React.useState<1 | -1>(1)
-  const [locationLoading, setLocationLoading] = React.useState(false)
+  const [locationLoading, setLocationLoading] = React.useState(true) // Start as loading
   const [locationDetected, setLocationDetected] = React.useState(false)
 
-  // Auto-detect location when entering location step
+  // Auto-detect location, timezone, and language on component mount
   React.useEffect(() => {
-    if (currentStep === 'location' && !locationDetected) {
-      const detectLocation = async () => {
-        setLocationLoading(true)
-        try {
-          // Use ip-api.com for free IP geolocation (no API key required)
-          const response = await fetch('https://ip-api.com/json/?fields=status,country,city')
-          if (response.ok) {
-            const data = await response.json()
-            if (data.status === 'success') {
-              setSetupData(prev => ({
-                ...prev,
-                country: prev.country || data.country || '',
-                city: prev.city || data.city || '',
-              }))
-              setLocationDetected(true)
-            }
+    if (locationDetected) return
+    
+    const detectLocation = async () => {
+      setLocationLoading(true)
+      try {
+        // Use ip-api.com for free IP geolocation (includes timezone)
+        const response = await fetch('https://ip-api.com/json/?fields=status,country,countryCode,city,timezone')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.status === 'success') {
+            // Update location data
+            setSetupData(prev => ({
+              ...prev,
+              country: data.country || prev.country || '',
+              city: data.city || prev.city || '',
+              timezone: data.timezone || prev.timezone || 'UTC',
+            }))
+            
+            // Auto-set language based on country code
+            const detectedLang = COUNTRY_TO_LANGUAGE[data.countryCode] || 'en'
+            changeLanguage(detectedLang)
+            
+            setLocationDetected(true)
+            console.log('[setup] Location detected:', data.country, data.city, 'Timezone:', data.timezone, 'Language:', detectedLang)
           }
-        } catch (err) {
-          console.warn('[setup] Failed to detect location:', err)
-        } finally {
-          setLocationLoading(false)
         }
+      } catch (err) {
+        console.warn('[setup] Failed to detect location:', err)
+      } finally {
+        setLocationLoading(false)
       }
-      detectLocation()
     }
-  }, [currentStep, locationDetected])
+    
+    detectLocation()
+  }, [locationDetected, changeLanguage])
 
   // Redirect if no user or already completed setup
   React.useEffect(() => {
@@ -369,6 +392,7 @@ export function SetupPage() {
           accent_key: setupData.accent_key,
           country: setupData.country || null,
           city: setupData.city || null,
+          timezone: setupData.timezone || null,
           garden_type: setupData.garden_type,
           experience_level: setupData.experience_level,
           looking_for: setupData.looking_for,
@@ -587,66 +611,72 @@ export function SetupPage() {
               question={t('setup.location.title', 'Where are you located?')}
             />
 
-            {locationLoading ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mb-4" />
-                <p className="text-stone-500 dark:text-stone-400 text-sm">
-                  {t('setup.location.detecting', 'Detecting your location...')}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {locationDetected && setupData.country && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2 text-sm text-accent bg-accent/10 px-4 py-2 rounded-xl"
-                  >
-                    <MapPin className="w-4 h-4" />
-                    {t('setup.location.detected', 'Location detected automatically. You can change it below.')}
-                  </motion.div>
-                )}
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
-                    {t('setup.location.country', 'Country')} <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="flex flex-wrap gap-2">
-                    {POPULAR_COUNTRIES.slice(0, 8).map((country) => (
-                      <button
-                        key={country}
-                        onClick={() => handleCountrySelect(country)}
-                        className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                          setupData.country === country
-                            ? 'bg-accent text-accent-foreground'
-                            : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
-                        }`}
-                      >
-                        {country}
-                      </button>
-                    ))}
+            <div className="space-y-6">
+              {locationDetected && setupData.country && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-2"
+                >
+                  <div className="flex items-center gap-2 text-sm text-accent bg-accent/10 px-4 py-2 rounded-xl">
+                    <Check className="w-4 h-4" />
+                    {t('setup.location.detected', 'Location detected automatically!')}
                   </div>
-                  <Input
-                    placeholder={t('setup.location.countryPlaceholder', 'Or type your country...')}
-                    value={setupData.country}
-                    onChange={(e) => setSetupData(prev => ({ ...prev, country: e.target.value }))}
-                    className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
-                  />
+                  {setupData.timezone && (
+                    <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400 px-4">
+                      <Clock className="w-3 h-3" />
+                      {t('setup.location.timezoneSet', 'Timezone:')} {setupData.timezone}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+              
+              {!locationDetected && locationLoading && (
+                <div className="flex items-center gap-3 text-sm text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-4 py-3 rounded-xl">
+                  <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  {t('setup.location.detecting', 'Detecting your location...')}
                 </div>
+              )}
 
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
-                    {t('setup.location.city', 'City')}
-                  </Label>
-                  <Input
-                    placeholder={t('setup.location.cityPlaceholder', 'Enter your city...')}
-                    value={setupData.city}
-                    onChange={(e) => setSetupData(prev => ({ ...prev, city: e.target.value }))}
-                    className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
-                  />
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
+                  {t('setup.location.country', 'Country')} <span className="text-red-500">*</span>
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {POPULAR_COUNTRIES.slice(0, 8).map((country) => (
+                    <button
+                      key={country}
+                      onClick={() => handleCountrySelect(country)}
+                      className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                        setupData.country === country
+                          ? 'bg-accent text-accent-foreground'
+                          : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
+                      }`}
+                    >
+                      {country}
+                    </button>
+                  ))}
                 </div>
+                <Input
+                  placeholder={t('setup.location.countryPlaceholder', 'Or type your country...')}
+                  value={setupData.country}
+                  onChange={(e) => setSetupData(prev => ({ ...prev, country: e.target.value }))}
+                  className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
+                />
               </div>
-            )}
+
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
+                  {t('setup.location.city', 'City')}
+                </Label>
+                <Input
+                  placeholder={t('setup.location.cityPlaceholder', 'Enter your city...')}
+                  value={setupData.city}
+                  onChange={(e) => setSetupData(prev => ({ ...prev, city: e.target.value }))}
+                  className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
+                />
+              </div>
+            </div>
           </motion.div>
         )
 
