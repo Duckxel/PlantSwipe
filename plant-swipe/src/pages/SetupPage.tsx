@@ -378,21 +378,22 @@ export function SetupPage() {
     const detectLocation = async () => {
       setLocationLoading(true)
       try {
-        // Use ip-api.com for free IP geolocation (includes timezone)
-        const response = await fetch('https://ip-api.com/json/?fields=status,country,countryCode,city,timezone')
+        // Use ipapi.co for free HTTPS IP geolocation (includes timezone)
+        // Free tier: 1000 requests/day, no API key required
+        const response = await fetch('https://ipapi.co/json/')
         if (response.ok) {
           const data = await response.json()
-          if (data.status === 'success') {
+          if (!data.error) {
             // Update location data
             setSetupData(prev => ({
               ...prev,
-              country: data.country || prev.country || '',
+              country: data.country_name || prev.country || '',
               city: data.city || prev.city || '',
               timezone: data.timezone || prev.timezone || 'UTC',
             }))
             
             setLocationDetected(true)
-            console.log('[setup] Location detected:', data.country, data.city, 'Timezone:', data.timezone)
+            console.log('[setup] Location detected:', data.country_name, data.city, 'Timezone:', data.timezone)
           }
         }
       } catch (err) {
