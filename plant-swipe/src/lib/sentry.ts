@@ -280,9 +280,6 @@ export function initSentry(): void {
     Sentry.init({
       dsn: SENTRY_DSN,
       
-      // Server identification - ensures correct server name is transmitted to Sentry
-      serverName: SERVER_NAME,
-      
       // Environment configuration
       environment: import.meta.env.MODE || 'production',
       
