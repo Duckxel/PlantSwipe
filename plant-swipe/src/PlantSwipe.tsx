@@ -1405,7 +1405,7 @@ export default function PlantSwipe() {
     // Only redirect if not already on setup page and not on excluded pages (landing, terms, privacy, etc.)
     // IMPORTANT: Legal update modal takes priority over setup - don't redirect if user needs to accept new terms
     const needsSetup = user && profile && profile.setup_completed !== true
-    const setupExcludedPaths = ['/setup', '/terms', '/privacy', '/contact', '/about', '/error', '/download']
+    const setupExcludedPaths = ['/setup', '/terms', '/privacy', '/contact', '/about', '/error', '/download', '/admin', '/']
     const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
 
     // Setup page - full screen wizard experience
