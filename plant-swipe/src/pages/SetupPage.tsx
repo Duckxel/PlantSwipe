@@ -516,7 +516,7 @@ export function SetupPage() {
               question={t('setup.accent.title', 'Choose your accent color')}
             />
 
-            <div className="grid grid-cols-5 gap-3 mb-6">
+            <div className="grid grid-cols-4 gap-3 mb-6">
               {ACCENT_OPTIONS.map((accent, index) => (
                 <motion.button
                   key={accent.key}
