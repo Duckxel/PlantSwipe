@@ -6,13 +6,16 @@
  * - Consent-aware initialization (respects cookie preferences)
  * - PII scrubbing (no emails, IPs anonymized)
  * - Enhanced error context for developers
- * - Lightweight performance monitoring (optimized for minimal overhead)
+ * - Performance monitoring with Long Task and INP tracking
+ * 
+ * ENABLED FEATURES:
+ * - Long task monitoring (tracks tasks >50ms blocking main thread)
+ * - INP monitoring (Interaction to Next Paint - Core Web Vital)
+ * - Console capture for 'error' only (avoids noise from log/info/warn)
+ * - HTTP client integration (tracks failed HTTP requests 400-599)
  * 
  * PERFORMANCE OPTIMIZATIONS:
  * - Session replay is disabled (heavy DOM observation overhead)
- * - Long task and INP monitoring disabled (continuous overhead)
- * - Console capture limited to 'error' only (not 'warn' to reduce noise)
- * - HTTP client integration disabled (monitors all requests)
  * - Consent check results are cached to avoid repeated localStorage reads
  * - Reduced trace sample rate for lower overhead
  * 
@@ -289,32 +292,34 @@ export function initSentry(): void {
       // PERFORMANCE: Disabled experimental features to reduce overhead
       // _experiments: { enableLogs: true },
       
-      // PERFORMANCE OPTIMIZED: Minimal integrations for lower overhead
-      // Heavy integrations (replay, http monitoring) are disabled
+      // Integrations with performance monitoring enabled
       integrations: [
-        // Browser tracing for performance monitoring - OPTIMIZED
+        // Browser tracing for performance monitoring with Long Task and INP
         Sentry.browserTracingIntegration({
-          // PERFORMANCE: Disabled long task monitoring (continuous overhead)
-          enableLongTask: false,
-          // PERFORMANCE: Disabled INP monitoring (continuous overhead)
-          enableInp: false,
+          // Long task monitoring: tracks tasks >50ms blocking main thread
+          enableLongTask: true,
+          // INP monitoring: Interaction to Next Paint (Core Web Vital)
+          enableInp: true,
         }),
         // PERFORMANCE: Session Replay DISABLED - heavy DOM observation overhead
         // Even with 0% sample rate, the integration still initializes observers
         // Sentry.replayIntegration({ ... }),
         
-        // Console capture - only 'error' level for debugging (not 'warn' to reduce noise)
-        // This helps devs track console.error() calls while avoiding React warnings etc.
+        // Console capture - only 'error' level to avoid noise
+        // Captures console.error() calls which typically indicate real issues
+        // Excludes 'log', 'info', 'warn' to prevent flooding with routine messages
         Sentry.captureConsoleIntegration({
-          levels: ['error'], // Only errors, not warnings (reduces noise + overhead)
+          levels: ['error'],
         }),
         
-        // PERFORMANCE: HTTP client integration DISABLED - monitors all requests
-        // Sentry.httpClientIntegration({ failedRequestStatusCodes: [[400, 599]] }),
+        // HTTP client integration - tracks failed HTTP requests (400-599 status codes)
+        Sentry.httpClientIntegration({
+          failedRequestStatusCodes: [[400, 599]],
+        }),
       ],
 
-      // PERFORMANCE: Reduced trace sample rate for lower overhead
-      // 10% in production provides good coverage with less impact
+      // Trace sample rate for performance monitoring (Long Task, INP, HTTP)
+      // 10% in production provides good coverage with reasonable overhead
       tracesSampleRate: isProduction ? 0.1 : 0.5,
 
       // PERFORMANCE: Session replay completely disabled
