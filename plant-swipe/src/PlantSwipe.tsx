@@ -1402,11 +1402,13 @@ export default function PlantSwipe() {
     
     // Check if user needs to complete setup (logged in but setup not completed)
     // Triggers for: setup_completed === false, null, or undefined (new users)
-    // Only redirect if not already on setup page and not on excluded pages (landing, terms, privacy, etc.)
+    // Only redirect if not already on setup page and not on excluded pages
     // IMPORTANT: Legal update modal takes priority over setup - don't redirect if user needs to accept new terms
     const needsSetup = user && profile && profile.setup_completed !== true
-    const setupExcludedPaths = ['/setup', '/terms', '/privacy', '/contact', '/about', '/error', '/download', '/admin', '/']
-    const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    // Only exclude: setup page itself, admin panel, and landing page (exact match for "/")
+    const setupExcludedPaths = ['/setup', '/admin']
+    const isExcludedFromSetup = pathWithoutLang === '/' || setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !isExcludedFromSetup
 
     // Setup page - full screen wizard experience
     if (isSetupPage && user) {
