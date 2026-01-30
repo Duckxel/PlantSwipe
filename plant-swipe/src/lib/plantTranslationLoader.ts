@@ -729,6 +729,8 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         spiked: basePlant.spiked ?? transIdentity.spiked ?? false,
         multicolor: basePlant.multicolor ?? transIdentity.multicolor ?? false,
         bicolor: basePlant.bicolor ?? transIdentity.bicolor ?? false,
+        // Translatable field from plant_translations - needed for search
+        givenNames: translation.given_names || transIdentity.givenNames || [],
         // Map other flat fields if needed for preview
       }
 

@@ -344,17 +344,19 @@ export async function processPlantRequest(
     }
     
     // Check if a plant with this English name already exists in the database
-    // Check against: name, scientific_name, and common names (identity->commonNames, givenNames, synonyms)
+    // Check against: name, scientific_name, and common names (given_names from plant_translations)
     // This prevents creating duplicate plants when the requested name is a common name of an existing plant
-    const { data: existingPlant } = await supabase
+    
+    // First, check by name or scientific_name in plants table
+    const { data: existingByName } = await supabase
       .from('plants')
-      .select('id, name, scientific_name, identity')
-      .or(`name.ilike.${englishPlantName},scientific_name.ilike.${englishPlantName},identity->>commonNames.ilike.%${englishPlantName}%,identity->>givenNames.ilike.%${englishPlantName}%,identity->>synonyms.ilike.%${englishPlantName}%`)
+      .select('id, name, scientific_name')
+      .or(`name.ilike.${englishPlantName},scientific_name.ilike.${englishPlantName}`)
       .limit(1)
       .maybeSingle()
     
-    if (existingPlant) {
-      console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists as "${existingPlant.name}" (id: ${existingPlant.id}), skipping and marking request as complete`)
+    if (existingByName) {
+      console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists as "${existingByName.name}" (id: ${existingByName.id}), skipping and marking request as complete`)
       
       // Delete the request since the plant already exists
       const { error: deleteError } = await supabase
@@ -366,7 +368,47 @@ export async function processPlantRequest(
         console.error('Failed to delete plant request:', deleteError)
       }
       
-      return { success: true, plantId: existingPlant.id }
+      return { success: true, plantId: existingByName.id }
+    }
+    
+    // Also check by given_names (common names) in plant_translations table
+    // Search in English translations for any plant that has this name as a common name
+    const searchTermLower = englishPlantName.toLowerCase()
+    const { data: translationMatches } = await supabase
+      .from('plant_translations')
+      .select('plant_id, given_names, plants!inner(id, name)')
+      .eq('language', 'en')
+      .limit(100)
+    
+    // Check if any plant has this name as a given_name (common name)
+    let existingByCommonName: { id: string; name: string } | null = null
+    if (translationMatches) {
+      for (const row of translationMatches as any[]) {
+        const givenNames = Array.isArray(row?.given_names) ? row.given_names : []
+        const matchesGivenName = givenNames.some(
+          (gn: unknown) => typeof gn === 'string' && gn.toLowerCase() === searchTermLower
+        )
+        if (matchesGivenName && row?.plants?.id) {
+          existingByCommonName = { id: String(row.plants.id), name: String(row.plants.name || '') }
+          break
+        }
+      }
+    }
+    
+    if (existingByCommonName) {
+      console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists as common name for "${existingByCommonName.name}" (id: ${existingByCommonName.id}), skipping and marking request as complete`)
+      
+      // Delete the request since the plant already exists
+      const { error: deleteError } = await supabase
+        .from('requested_plants')
+        .delete()
+        .eq('id', requestId)
+      
+      if (deleteError) {
+        console.error('Failed to delete plant request:', deleteError)
+      }
+      
+      return { success: true, plantId: existingByCommonName.id }
     }
     
     // Stage 1: AI Fill (using English name internally, but display original name)
