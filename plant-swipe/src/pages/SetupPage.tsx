@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { SearchInput } from "@/components/ui/search-input"
 import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Loader2, X } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, type AccentKey } from "@/lib/accent"
+import { useDebounce } from "@/hooks/useDebounce"
 
 // Country code to language mapping
 const COUNTRY_TO_LANGUAGE: Record<string, 'en' | 'fr'> = {
@@ -359,11 +360,12 @@ export function SetupPage() {
   
   // Location search state
   const [locationSearch, setLocationSearch] = React.useState('')
+  const debouncedLocationSearch = useDebounce(locationSearch, 350) // Debounce search input
   const [locationSuggestions, setLocationSuggestions] = React.useState<LocationSuggestion[]>([])
   const [showSuggestions, setShowSuggestions] = React.useState(false)
   const [searchingLocation, setSearchingLocation] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false) // Track if we've searched at least once
   const [detectingGPS, setDetectingGPS] = React.useState(false)
-  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
   const suggestionsRef = React.useRef<HTMLDivElement>(null)
 
   // Auto-detect location and timezone on component mount
@@ -433,56 +435,72 @@ export function SetupPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Search for location suggestions using Open-Meteo geocoding API
-  const searchLocations = React.useCallback(async (query: string) => {
-    if (query.length < 2) {
+  // Search for location suggestions when debounced query changes
+  React.useEffect(() => {
+    if (debouncedLocationSearch.length < 2) {
       setLocationSuggestions([])
+      setHasSearched(false)
       return
     }
 
-    setSearchingLocation(true)
-    try {
-      const resp = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=${currentLang}&format=json`
-      )
-      if (resp.ok) {
-        const data = await resp.json()
-        if (data.results && Array.isArray(data.results)) {
-          setLocationSuggestions(
-            data.results.map((r: any) => ({
-              id: r.id,
-              name: r.name,
-              country: r.country || '',
-              admin1: r.admin1 || '',
-              latitude: r.latitude,
-              longitude: r.longitude,
-              timezone: r.timezone,
-            }))
-          )
-        } else {
+    let cancelled = false
+    
+    const searchLocations = async () => {
+      setSearchingLocation(true)
+      try {
+        const resp = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(debouncedLocationSearch)}&count=8&language=${currentLang}&format=json`
+        )
+        if (cancelled) return
+        
+        if (resp.ok) {
+          const data = await resp.json()
+          if (cancelled) return
+          
+          if (data.results && Array.isArray(data.results)) {
+            setLocationSuggestions(
+              data.results.map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                country: r.country || '',
+                admin1: r.admin1 || '',
+                latitude: r.latitude,
+                longitude: r.longitude,
+                timezone: r.timezone,
+              }))
+            )
+          } else {
+            setLocationSuggestions([])
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[setup] Location search failed:', err)
           setLocationSuggestions([])
         }
+      } finally {
+        if (!cancelled) {
+          setSearchingLocation(false)
+          setHasSearched(true)
+        }
       }
-    } catch (err) {
-      console.error('[setup] Location search failed:', err)
-      setLocationSuggestions([])
-    } finally {
-      setSearchingLocation(false)
     }
-  }, [currentLang])
 
-  // Handle location search input change with debounce
+    searchLocations()
+    
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedLocationSearch, currentLang])
+
+  // Handle location search input change - just update the state, debounce handles the rest
   const handleLocationSearchChange = (value: string) => {
     setLocationSearch(value)
     setShowSuggestions(true)
-    
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current)
+    // Reset hasSearched when user types to prevent showing "no results" during typing
+    if (value !== debouncedLocationSearch) {
+      setHasSearched(false)
     }
-    
-    searchTimeoutRef.current = setTimeout(() => {
-      searchLocations(value)
-    }, 300)
   }
 
   // Handle selecting a location suggestion
@@ -926,8 +944,8 @@ export function SetupPage() {
                       </div>
                     )}
                     
-                    {/* No results */}
-                    {showSuggestions && locationSearch.length >= 2 && !searchingLocation && locationSuggestions.length === 0 && (
+                    {/* No results - only show after search completes with no results */}
+                    {showSuggestions && hasSearched && !searchingLocation && locationSuggestions.length === 0 && debouncedLocationSearch.length >= 2 && (
                       <div className="absolute z-50 w-full mt-2 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl p-4 text-center text-sm text-stone-500">
                         {t('setup.location.noResults', 'No cities found. Try a different search.')}
                       </div>
