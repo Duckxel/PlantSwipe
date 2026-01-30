@@ -8,7 +8,8 @@ import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Search, Loader2, X } from "lucide-react"
+import { SearchInput } from "@/components/ui/search-input"
+import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Loader2, X } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, type AccentKey } from "@/lib/accent"
 
 // Country code to language mapping
@@ -817,19 +818,20 @@ export function SetupPage() {
                     {t('setup.location.searchLabel', 'Search for your city')}
                   </Label>
                   <div className="relative" ref={suggestionsRef}>
-                    <div className="relative">
-                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
-                      <Input
-                        value={locationSearch}
-                        onChange={(e) => handleLocationSearchChange(e.target.value)}
-                        onFocus={() => locationSearch.length >= 2 && setShowSuggestions(true)}
-                        placeholder={t('setup.location.searchPlaceholder', 'Type a city name...')}
-                        className="rounded-xl pl-12 pr-12 py-6 text-base bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
-                      />
-                      {searchingLocation && (
-                        <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-stone-400" />
-                      )}
-                    </div>
+                    <SearchInput
+                      variant="lg"
+                      value={locationSearch}
+                      onChange={(e) => handleLocationSearchChange(e.target.value)}
+                      onFocus={() => locationSearch.length >= 2 && setShowSuggestions(true)}
+                      onClear={locationSearch ? () => {
+                        setLocationSearch('')
+                        setLocationSuggestions([])
+                        setShowSuggestions(false)
+                      } : undefined}
+                      placeholder={t('setup.location.searchPlaceholder', 'Type a city name...')}
+                      loading={searchingLocation}
+                      className="bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
+                    />
                     
                     {/* Suggestions dropdown */}
                     {showSuggestions && locationSuggestions.length > 0 && (
