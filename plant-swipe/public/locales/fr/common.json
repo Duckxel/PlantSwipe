@@ -3093,13 +3093,16 @@
       "location": {
         "title": "Où êtes-vous situé ?",
         "subtitle": "Cela nous aide à fournir des conseils de jardinage locaux",
-        "country": "Pays",
-        "countryPlaceholder": "Ou tapez votre pays...",
-        "city": "Ville",
-        "cityPlaceholder": "Entrez votre ville...",
+        "searchLabel": "Rechercher votre ville",
+        "searchPlaceholder": "Tapez un nom de ville...",
         "detecting": "Détection de votre position...",
         "detected": "Position détectée automatiquement !",
-        "timezoneSet": "Fuseau horaire :"
+        "timezoneSet": "Fuseau horaire :",
+        "noResults": "Aucune ville trouvée. Essayez une autre recherche.",
+        "detectButton": "Utiliser ma position actuelle",
+        "detectingGPS": "Détection...",
+        "detectFailed": "Impossible de détecter la position. Veuillez rechercher manuellement.",
+        "geoNotSupported": "La géolocalisation n'est pas prise en charge par votre navigateur"
       },
       "gardenType": {
         "title": "Où se trouve votre jardin ?",

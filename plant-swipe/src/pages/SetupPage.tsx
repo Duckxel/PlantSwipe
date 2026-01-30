@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check } from "lucide-react"
+import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Search, Loader2, X } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, type AccentKey } from "@/lib/accent"
 
 // Country code to language mapping
@@ -38,6 +38,17 @@ interface SetupData {
   experience_level: ExperienceLevel | null
   looking_for: LookingFor | null
   notification_time: NotificationTime | null
+}
+
+// Location suggestion from geocoding API
+interface LocationSuggestion {
+  id: number
+  name: string
+  country: string
+  admin1?: string // State/Province
+  latitude: number
+  longitude: number
+  timezone?: string
 }
 
 const STEPS: SetupStep[] = ['welcome', 'accent', 'location', 'garden_type', 'experience', 'purpose', 'notification_time', 'notifications', 'complete']
@@ -246,13 +257,6 @@ const LianaProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
   )
 }
 
-// Common countries for quick selection
-const POPULAR_COUNTRIES = [
-  'France', 'United States', 'United Kingdom', 'Canada', 'Germany', 
-  'Spain', 'Italy', 'Belgium', 'Switzerland', 'Netherlands',
-  'Australia', 'Japan', 'Brazil', 'Mexico', 'Portugal'
-]
-
 export function SetupPage() {
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
@@ -282,6 +286,15 @@ export function SetupPage() {
   const [direction, setDirection] = React.useState<1 | -1>(1)
   const [locationLoading, setLocationLoading] = React.useState(true) // Start as loading
   const [locationDetected, setLocationDetected] = React.useState(false)
+  
+  // Location search state
+  const [locationSearch, setLocationSearch] = React.useState('')
+  const [locationSuggestions, setLocationSuggestions] = React.useState<LocationSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = React.useState(false)
+  const [searchingLocation, setSearchingLocation] = React.useState(false)
+  const [detectingGPS, setDetectingGPS] = React.useState(false)
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+  const suggestionsRef = React.useRef<HTMLDivElement>(null)
 
   // Auto-detect location and timezone on component mount
   // Note: We DON'T auto-change language here - respect the URL language choice
@@ -339,6 +352,143 @@ export function SetupPage() {
     }
   }, [user, profile?.setup_completed, navigate])
 
+  // Close suggestions when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Search for location suggestions using Open-Meteo geocoding API
+  const searchLocations = React.useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setLocationSuggestions([])
+      return
+    }
+
+    setSearchingLocation(true)
+    try {
+      const resp = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=${currentLang}&format=json`
+      )
+      if (resp.ok) {
+        const data = await resp.json()
+        if (data.results && Array.isArray(data.results)) {
+          setLocationSuggestions(
+            data.results.map((r: any) => ({
+              id: r.id,
+              name: r.name,
+              country: r.country || '',
+              admin1: r.admin1 || '',
+              latitude: r.latitude,
+              longitude: r.longitude,
+              timezone: r.timezone,
+            }))
+          )
+        } else {
+          setLocationSuggestions([])
+        }
+      }
+    } catch (err) {
+      console.error('[setup] Location search failed:', err)
+      setLocationSuggestions([])
+    } finally {
+      setSearchingLocation(false)
+    }
+  }, [currentLang])
+
+  // Handle location search input change with debounce
+  const handleLocationSearchChange = (value: string) => {
+    setLocationSearch(value)
+    setShowSuggestions(true)
+    
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+    
+    searchTimeoutRef.current = setTimeout(() => {
+      searchLocations(value)
+    }, 300)
+  }
+
+  // Handle selecting a location suggestion
+  const handleSelectLocation = (suggestion: LocationSuggestion) => {
+    setSetupData(prev => ({
+      ...prev,
+      city: suggestion.name,
+      country: suggestion.country,
+      timezone: suggestion.timezone || prev.timezone,
+    }))
+    setLocationSearch('')
+    setLocationSuggestions([])
+    setShowSuggestions(false)
+    setLocationDetected(true)
+  }
+
+  // Clear selected location
+  const handleClearLocation = () => {
+    setSetupData(prev => ({
+      ...prev,
+      city: '',
+      country: '',
+    }))
+    setLocationDetected(false)
+  }
+
+  // Detect location using browser geolocation
+  const detectLocationGPS = async () => {
+    if (!navigator.geolocation) {
+      alert(t('setup.location.geoNotSupported', 'Geolocation is not supported by your browser'))
+      return
+    }
+
+    setDetectingGPS(true)
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords
+          
+          // Use Nominatim for reverse geocoding
+          const resp = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+            { headers: { 'Accept': 'application/json' } }
+          )
+          
+          if (resp.ok) {
+            const data = await resp.json()
+            const detectedCity = data.address?.city || data.address?.town || data.address?.village || data.address?.municipality || ''
+            const detectedCountry = data.address?.country || ''
+            
+            if (detectedCity || detectedCountry) {
+              setSetupData(prev => ({
+                ...prev,
+                city: detectedCity,
+                country: detectedCountry,
+              }))
+              setLocationDetected(true)
+            }
+          }
+        } catch (err) {
+          console.error('[setup] Reverse geocoding failed:', err)
+          alert(t('setup.location.detectFailed', 'Unable to detect location. Please search manually.'))
+        } finally {
+          setDetectingGPS(false)
+        }
+      },
+      (error) => {
+        console.error('[setup] Geolocation error:', error)
+        setDetectingGPS(false)
+        alert(t('setup.location.detectFailed', 'Unable to detect location. Please search manually.'))
+      },
+      { timeout: 10000 }
+    )
+  }
+
   const currentStepIndex = STEPS.indexOf(currentStep)
   const progress = ((currentStepIndex) / (STEPS.length - 1)) * 100
 
@@ -361,10 +511,6 @@ export function SetupPage() {
   const handleAccentSelect = (key: AccentKey) => {
     setSetupData(prev => ({ ...prev, accent_key: key }))
     applyAccentByKey(key)
-  }
-
-  const handleCountrySelect = (country: string) => {
-    setSetupData(prev => ({ ...prev, country }))
   }
 
   const handleGardenTypeSelect = (type: GardenType) => {
@@ -625,71 +771,123 @@ export function SetupPage() {
               question={t('setup.location.title', 'Where are you located?')}
             />
 
-            <div className="space-y-6">
-              {locationDetected && setupData.country && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-2"
-                >
-                  <div className="flex items-center gap-2 text-sm text-accent bg-accent/10 px-4 py-2 rounded-xl">
-                    <Check className="w-4 h-4" />
-                    {t('setup.location.detected', 'Location detected automatically!')}
-                  </div>
-                  {setupData.timezone && (
-                    <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400 px-4">
-                      <Clock className="w-3 h-3" />
-                      {t('setup.location.timezoneSet', 'Timezone:')} {setupData.timezone}
-                    </div>
-                  )}
-                </motion.div>
-              )}
-              
+            <div className="space-y-5">
+              {/* Auto-detecting indicator */}
               {!locationDetected && locationLoading && (
                 <div className="flex items-center gap-3 text-sm text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-4 py-3 rounded-xl">
-                  <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   {t('setup.location.detecting', 'Detecting your location...')}
                 </div>
               )}
 
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
-                  {t('setup.location.country', 'Country')} <span className="text-red-500">*</span>
-                </Label>
-                <div className="flex flex-wrap gap-2">
-                  {POPULAR_COUNTRIES.slice(0, 8).map((country) => (
-                    <button
-                      key={country}
-                      onClick={() => handleCountrySelect(country)}
-                      className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                        setupData.country === country
-                          ? 'bg-accent text-accent-foreground'
-                          : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
-                      }`}
-                    >
-                      {country}
-                    </button>
-                  ))}
+              {/* Selected location display */}
+              {setupData.city && setupData.country ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex items-center gap-3 p-4 rounded-2xl border-2 border-accent bg-accent/10"
+                >
+                  <MapPin className="w-6 h-6 text-accent flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-stone-800 dark:text-stone-100 truncate">
+                      {setupData.city}
+                    </div>
+                    <div className="text-sm text-stone-600 dark:text-stone-400 truncate">
+                      {setupData.country}
+                    </div>
+                    {setupData.timezone && (
+                      <div className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-500 mt-1">
+                        <Clock className="w-3 h-3" />
+                        {setupData.timezone}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearLocation}
+                    className="p-2 rounded-full hover:bg-accent/20 transition-colors"
+                  >
+                    <X className="w-5 h-5 text-accent" />
+                  </button>
+                </motion.div>
+              ) : (
+                /* Search input with suggestions */
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
+                    {t('setup.location.searchLabel', 'Search for your city')}
+                  </Label>
+                  <div className="relative" ref={suggestionsRef}>
+                    <div className="relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
+                      <Input
+                        value={locationSearch}
+                        onChange={(e) => handleLocationSearchChange(e.target.value)}
+                        onFocus={() => locationSearch.length >= 2 && setShowSuggestions(true)}
+                        placeholder={t('setup.location.searchPlaceholder', 'Type a city name...')}
+                        className="rounded-xl pl-12 pr-12 py-6 text-base bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
+                      />
+                      {searchingLocation && (
+                        <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-stone-400" />
+                      )}
+                    </div>
+                    
+                    {/* Suggestions dropdown */}
+                    {showSuggestions && locationSuggestions.length > 0 && (
+                      <div className="absolute z-50 w-full mt-2 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl overflow-hidden">
+                        {locationSuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors text-left"
+                            onClick={() => handleSelectLocation(suggestion)}
+                          >
+                            <MapPin className="w-5 h-5 text-stone-400 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-stone-800 dark:text-stone-100 truncate">
+                                {suggestion.name}
+                              </div>
+                              <div className="text-sm text-stone-500 dark:text-stone-400 truncate">
+                                {suggestion.admin1 ? `${suggestion.admin1}, ` : ''}{suggestion.country}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* No results */}
+                    {showSuggestions && locationSearch.length >= 2 && !searchingLocation && locationSuggestions.length === 0 && (
+                      <div className="absolute z-50 w-full mt-2 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl p-4 text-center text-sm text-stone-500">
+                        {t('setup.location.noResults', 'No cities found. Try a different search.')}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <Input
-                  placeholder={t('setup.location.countryPlaceholder', 'Or type your country...')}
-                  value={setupData.country}
-                  onChange={(e) => setSetupData(prev => ({ ...prev, country: e.target.value }))}
-                  className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
-                />
-              </div>
+              )}
 
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
-                  {t('setup.location.city', 'City')}
-                </Label>
-                <Input
-                  placeholder={t('setup.location.cityPlaceholder', 'Enter your city...')}
-                  value={setupData.city}
-                  onChange={(e) => setSetupData(prev => ({ ...prev, city: e.target.value }))}
-                  className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
-                />
-              </div>
+              {/* Detect Location Button */}
+              {!setupData.city && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={detectLocationGPS}
+                    disabled={detectingGPS}
+                    className="flex items-center gap-2 px-5 py-3 rounded-full text-sm font-medium bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-all disabled:opacity-50"
+                  >
+                    {detectingGPS ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {t('setup.location.detectingGPS', 'Detecting...')}
+                      </>
+                    ) : (
+                      <>
+                        <MapPin className="w-4 h-4" />
+                        {t('setup.location.detectButton', 'Use my current location')}
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
         )

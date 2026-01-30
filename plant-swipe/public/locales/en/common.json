@@ -3093,13 +3093,16 @@
       "location": {
         "title": "Where are you located?",
         "subtitle": "This helps us provide local gardening advice",
-        "country": "Country",
-        "countryPlaceholder": "Or type your country...",
-        "city": "City",
-        "cityPlaceholder": "Enter your city...",
+        "searchLabel": "Search for your city",
+        "searchPlaceholder": "Type a city name...",
         "detecting": "Detecting your location...",
         "detected": "Location detected automatically!",
-        "timezoneSet": "Timezone:"
+        "timezoneSet": "Timezone:",
+        "noResults": "No cities found. Try a different search.",
+        "detectButton": "Use my current location",
+        "detectingGPS": "Detecting...",
+        "detectFailed": "Unable to detect location. Please search manually.",
+        "geoNotSupported": "Geolocation is not supported by your browser"
       },
       "gardenType": {
         "title": "Where is your garden located?",
