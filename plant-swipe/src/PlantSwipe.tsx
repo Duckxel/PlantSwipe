@@ -1403,9 +1403,10 @@ export default function PlantSwipe() {
     // Check if user needs to complete setup (logged in but setup not completed)
     // Triggers for: setup_completed === false, null, or undefined (new users)
     // Only redirect if not already on setup page and not on excluded pages (landing, terms, privacy, etc.)
+    // IMPORTANT: Legal update modal takes priority over setup - don't redirect if user needs to accept new terms
     const needsSetup = user && profile && profile.setup_completed !== true
     const setupExcludedPaths = ['/setup', '/terms', '/privacy', '/contact', '/about', '/error', '/download']
-    const shouldRedirectToSetup = needsSetup && !setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
 
     // Setup page - full screen wizard experience
     if (isSetupPage && user) {
@@ -1420,6 +1421,26 @@ export default function PlantSwipe() {
             </Suspense>
           </ErrorBoundary>
           <CookieConsent />
+          
+          {/* Legal Document Update Modal - show even on setup page if terms need updating */}
+          {showLegalUpdateModal && profile && (
+            <LegalUpdateModal
+              open={showLegalUpdateModal}
+              userId={user.id}
+              userTermsVersion={profile.terms_version_accepted ?? null}
+              userPrivacyVersion={profile.privacy_version_accepted ?? null}
+              userTermsAcceptedDate={profile.terms_accepted_date ?? null}
+              userPrivacyAcceptedDate={profile.privacy_policy_accepted_date ?? null}
+              onAccepted={() => {
+                setLegalUpdateDismissed(true)
+                refreshProfile().catch(() => {})
+              }}
+              onDeclined={async () => {
+                await signOut()
+                alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+              }}
+            />
+          )}
         </AuthActionsProvider>
       )
     }
