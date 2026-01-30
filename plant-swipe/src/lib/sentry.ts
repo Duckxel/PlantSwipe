@@ -11,7 +11,7 @@
  * ENABLED FEATURES:
  * - Long task monitoring (tracks tasks >50ms blocking main thread)
  * - INP monitoring (Interaction to Next Paint - Core Web Vital)
- * - Console capture for 'log', 'info', 'error' (not 'warn' to avoid flooding)
+ * - Console capture for 'error' only (avoids noise from log/info/warn)
  * - HTTP client integration (tracks failed HTTP requests 400-599)
  * 
  * PERFORMANCE OPTIMIZATIONS:
@@ -305,10 +305,11 @@ export function initSentry(): void {
         // Even with 0% sample rate, the integration still initializes observers
         // Sentry.replayIntegration({ ... }),
         
-        // Console capture - 'log', 'info', 'error' levels for debugging
-        // Excludes 'warn' to avoid flooding devs with React warnings etc.
+        // Console capture - only 'error' level to avoid noise
+        // Captures console.error() calls which typically indicate real issues
+        // Excludes 'log', 'info', 'warn' to prevent flooding with routine messages
         Sentry.captureConsoleIntegration({
-          levels: ['log', 'info', 'error'], // Excludes 'warn' to reduce noise
+          levels: ['error'],
         }),
         
         // HTTP client integration - tracks failed HTTP requests (400-599 status codes)
