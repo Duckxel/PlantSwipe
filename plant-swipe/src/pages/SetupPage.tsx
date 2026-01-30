@@ -1,7 +1,8 @@
 import React from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useLanguageNavigate, useChangeLanguage } from "@/lib/i18nRouting"
+import { useLanguageNavigate, useChangeLanguage, useLanguage } from "@/lib/i18nRouting"
 import { useTranslation } from "react-i18next"
+import i18n from "@/lib/i18n"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
@@ -256,7 +257,15 @@ export function SetupPage() {
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
   const changeLanguage = useChangeLanguage()
+  const currentLang = useLanguage()
   const { user, profile, refreshProfile } = useAuth()
+  
+  // Sync i18n with URL language on mount
+  React.useEffect(() => {
+    if (i18n.language !== currentLang) {
+      i18n.changeLanguage(currentLang)
+    }
+  }, [currentLang])
   
   const [currentStep, setCurrentStep] = React.useState<SetupStep>('welcome')
   const [setupData, setSetupData] = React.useState<SetupData>({
@@ -274,7 +283,8 @@ export function SetupPage() {
   const [locationLoading, setLocationLoading] = React.useState(true) // Start as loading
   const [locationDetected, setLocationDetected] = React.useState(false)
 
-  // Auto-detect location, timezone, and language on component mount
+  // Auto-detect location and timezone on component mount
+  // Note: We DON'T auto-change language here - respect the URL language choice
   React.useEffect(() => {
     if (locationDetected) return
     
@@ -294,12 +304,18 @@ export function SetupPage() {
               timezone: data.timezone || prev.timezone || 'UTC',
             }))
             
-            // Auto-set language based on country code
-            const detectedLang = COUNTRY_TO_LANGUAGE[data.countryCode] || 'en'
-            changeLanguage(detectedLang)
+            // Only auto-set language if user is on default (English) route
+            // If they navigated to /fr/setup explicitly, respect that choice
+            if (currentLang === 'en') {
+              const detectedLang = COUNTRY_TO_LANGUAGE[data.countryCode] || 'en'
+              if (detectedLang !== 'en') {
+                changeLanguage(detectedLang)
+                console.log('[setup] Auto-switching language to:', detectedLang)
+              }
+            }
             
             setLocationDetected(true)
-            console.log('[setup] Location detected:', data.country, data.city, 'Timezone:', data.timezone, 'Language:', detectedLang)
+            console.log('[setup] Location detected:', data.country, data.city, 'Timezone:', data.timezone)
           }
         }
       } catch (err) {
@@ -310,7 +326,7 @@ export function SetupPage() {
     }
     
     detectLocation()
-  }, [locationDetected, changeLanguage])
+  }, [locationDetected, changeLanguage, currentLang])
 
   // Redirect if no user or already completed setup
   React.useEffect(() => {
