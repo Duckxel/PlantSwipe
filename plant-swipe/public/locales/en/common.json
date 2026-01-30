@@ -3091,7 +3091,9 @@
         "country": "Country",
         "countryPlaceholder": "Or type your country...",
         "city": "City",
-        "cityPlaceholder": "Enter your city..."
+        "cityPlaceholder": "Enter your city...",
+        "detecting": "Detecting your location...",
+        "detected": "Location detected automatically. You can change it below."
       },
       "gardenType": {
         "title": "Where is your garden located?",

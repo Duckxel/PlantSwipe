@@ -53,6 +53,37 @@ export function SetupPage() {
   })
   const [saving, setSaving] = React.useState(false)
   const [direction, setDirection] = React.useState<1 | -1>(1)
+  const [locationLoading, setLocationLoading] = React.useState(false)
+  const [locationDetected, setLocationDetected] = React.useState(false)
+
+  // Auto-detect location when entering location step
+  React.useEffect(() => {
+    if (currentStep === 'location' && !locationDetected) {
+      const detectLocation = async () => {
+        setLocationLoading(true)
+        try {
+          // Use ip-api.com for free IP geolocation (no API key required)
+          const response = await fetch('https://ip-api.com/json/?fields=status,country,city')
+          if (response.ok) {
+            const data = await response.json()
+            if (data.status === 'success') {
+              setSetupData(prev => ({
+                ...prev,
+                country: prev.country || data.country || '',
+                city: prev.city || data.city || '',
+              }))
+              setLocationDetected(true)
+            }
+          }
+        } catch (err) {
+          console.warn('[setup] Failed to detect location:', err)
+        } finally {
+          setLocationLoading(false)
+        }
+      }
+      detectLocation()
+    }
+  }, [currentStep, locationDetected])
 
   // Redirect if no user or already completed setup
   React.useEffect(() => {
@@ -160,7 +191,7 @@ export function SetupPage() {
       case 'accent':
         return true // Always has default
       case 'location':
-        return true // Optional
+        return setupData.country.trim().length > 0 // Country is required
       case 'garden_type':
         return setupData.garden_type !== null
       case 'experience':
@@ -340,44 +371,66 @@ export function SetupPage() {
               question={t('setup.location.title', 'Where are you located?')}
             />
 
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">{t('setup.location.country', 'Country')}</Label>
-                <div className="flex flex-wrap gap-2">
-                  {POPULAR_COUNTRIES.slice(0, 8).map((country) => (
-                    <button
-                      key={country}
-                      onClick={() => handleCountrySelect(country)}
-                      className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                        setupData.country === country
-                          ? 'bg-emerald-500 text-white'
-                          : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
-                      }`}
-                    >
-                      {country}
-                    </button>
-                  ))}
-                </div>
-                <Input
-                  placeholder={t('setup.location.countryPlaceholder', 'Or type your country...')}
-                  value={setupData.country}
-                  onChange={(e) => setSetupData(prev => ({ ...prev, country: e.target.value }))}
-                  className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
-                />
+            {locationLoading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+                <p className="text-stone-500 dark:text-stone-400 text-sm">
+                  {t('setup.location.detecting', 'Detecting your location...')}
+                </p>
               </div>
+            ) : (
+              <div className="space-y-6">
+                {locationDetected && setupData.country && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2 rounded-xl"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    {t('setup.location.detected', 'Location detected automatically. You can change it below.')}
+                  </motion.div>
+                )}
 
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
-                  {t('setup.location.city', 'City')} <span className="text-stone-400 font-normal">({t('common.optional', 'optional')})</span>
-                </Label>
-                <Input
-                  placeholder={t('setup.location.cityPlaceholder', 'Enter your city...')}
-                  value={setupData.city}
-                  onChange={(e) => setSetupData(prev => ({ ...prev, city: e.target.value }))}
-                  className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
-                />
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
+                    {t('setup.location.country', 'Country')} <span className="text-red-500">*</span>
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {POPULAR_COUNTRIES.slice(0, 8).map((country) => (
+                      <button
+                        key={country}
+                        onClick={() => handleCountrySelect(country)}
+                        className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                          setupData.country === country
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700'
+                        }`}
+                      >
+                        {country}
+                      </button>
+                    ))}
+                  </div>
+                  <Input
+                    placeholder={t('setup.location.countryPlaceholder', 'Or type your country...')}
+                    value={setupData.country}
+                    onChange={(e) => setSetupData(prev => ({ ...prev, country: e.target.value }))}
+                    className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
+                    {t('setup.location.city', 'City')}
+                  </Label>
+                  <Input
+                    placeholder={t('setup.location.cityPlaceholder', 'Enter your city...')}
+                    value={setupData.city}
+                    onChange={(e) => setSetupData(prev => ({ ...prev, city: e.target.value }))}
+                    className="rounded-xl bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </motion.div>
         )
 
