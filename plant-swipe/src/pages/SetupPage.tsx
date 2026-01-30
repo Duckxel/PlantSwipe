@@ -1,6 +1,6 @@
 import React from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useLanguageNavigate, useChangeLanguage, useLanguage } from "@/lib/i18nRouting"
+import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { useAuth } from "@/context/AuthContext"
@@ -11,17 +11,6 @@ import { SearchInput } from "@/components/ui/search-input"
 import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Loader2, X } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, getAccentHex, type AccentKey } from "@/lib/accent"
 import { useDebounce } from "@/hooks/useDebounce"
-
-// Country code to language mapping
-const COUNTRY_TO_LANGUAGE: Record<string, 'en' | 'fr'> = {
-  'FR': 'fr', // France
-  'BE': 'fr', // Belgium (French-speaking regions)
-  'CH': 'fr', // Switzerland (French-speaking regions)
-  'CA': 'fr', // Canada (Quebec)
-  'LU': 'fr', // Luxembourg
-  'MC': 'fr', // Monaco
-  // All others default to English
-}
 
 type SetupStep = 'welcome' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
 
@@ -327,7 +316,6 @@ const LianaProgressBar: React.FC<{ progress: number; flowerColor?: string }> = (
 export function SetupPage() {
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
-  const changeLanguage = useChangeLanguage()
   const currentLang = useLanguage()
   const { user, profile, refreshProfile } = useAuth()
   
