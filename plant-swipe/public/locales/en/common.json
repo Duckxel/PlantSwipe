@@ -608,7 +608,7 @@
     }
   },
     "plant": {
-      "searchPlaceholder": "Search name, meaning, color?",
+      "searchPlaceholder": "Search by name or given names...",
       "seedsOnly": "Seeds only",
       "favoritesOnly": "Favorites only",
       "favoritesFirst": "Favorites first",

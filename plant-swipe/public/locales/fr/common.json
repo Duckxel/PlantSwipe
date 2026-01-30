@@ -608,7 +608,7 @@
     }
   },
     "plant": {
-      "searchPlaceholder": "Rechercher nom, signification, couleur ?",
+      "searchPlaceholder": "Rechercher par nom ou noms communs...",
       "seedsOnly": "Graines uniquement",
       "favoritesOnly": "Favoris uniquement",
       "favoritesFirst": "Favoris en premier",
