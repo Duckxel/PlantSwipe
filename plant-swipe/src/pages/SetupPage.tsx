@@ -105,6 +105,19 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
   
   // Gap between filled vine and remaining line
   const gapSize = 3
+  
+  // Calculate Y position on the wave for a given X
+  const getWaveY = (x: number): number => {
+    // Wave oscillates between 6 and 10 with period of 10
+    const phase = (x % 10) / 10
+    if (phase < 0.5) {
+      // Going from 8 to peak (6) to 8
+      return 8 - 2 * Math.sin(phase * 2 * Math.PI)
+    } else {
+      // Going from 8 to trough (10) to 8
+      return 8 - 2 * Math.sin(phase * 2 * Math.PI)
+    }
+  }
 
   return (
     <div className="flex-1 h-8 relative">
@@ -115,13 +128,13 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
         style={{ overflow: 'visible' }}
       >
         <defs>
-          {/* Clip for the vine - uses animated progress for smooth sync */}
+          {/* Clip for the vine - uses animated progress, starts at 0 when progress is 0 */}
           <clipPath id={`vineClip-${clipId}`}>
             <rect
-              x="-2"
+              x="0"
               y="-5"
               height="30"
-              width={Math.max(0, animatedProgress + 2)}
+              width={Math.max(0, animatedProgress)}
             />
           </clipPath>
           {/* Clip for the remaining line - with gap */}
@@ -150,49 +163,49 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
         </g>
         
         {/* Growing vine - accent color, high frequency wave */}
-        <g clipPath={`url(#vineClip-${clipId})`}>
-          {/* Main vine stem - much higher frequency (20 half-waves), rounded ends, accent color */}
-          <path
-            d="M 0 8 
-               C 2.5 8, 2.5 6, 5 6
-               C 7.5 6, 7.5 10, 10 10
-               C 12.5 10, 12.5 6, 15 6
-               C 17.5 6, 17.5 10, 20 10
-               C 22.5 10, 22.5 6, 25 6
-               C 27.5 6, 27.5 10, 30 10
-               C 32.5 10, 32.5 6, 35 6
-               C 37.5 6, 37.5 10, 40 10
-               C 42.5 10, 42.5 6, 45 6
-               C 47.5 6, 47.5 10, 50 10
-               C 52.5 10, 52.5 6, 55 6
-               C 57.5 6, 57.5 10, 60 10
-               C 62.5 10, 62.5 6, 65 6
-               C 67.5 6, 67.5 10, 70 10
-               C 72.5 10, 72.5 6, 75 6
-               C 77.5 6, 77.5 10, 80 10
-               C 82.5 10, 82.5 6, 85 6
-               C 87.5 6, 87.5 10, 90 10
-               C 92.5 10, 92.5 6, 95 6
-               C 97.5 6, 97.5 8, 100 8"
-            fill="none"
-            stroke={accentColor || 'currentColor'}
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </g>
-        
-        {/* Growing tip - rounded bud at the end, accent color */}
-        <g clipPath={`url(#vineClip-${clipId})`}>
-          {animatedProgress > 2 && (
-            <circle 
-              cx={Math.min(animatedProgress, 100)} 
-              cy={8 + Math.sin(animatedProgress * Math.PI / 5) * 2}
-              r="2"
-              fill={accentColor || 'currentColor'}
+        {animatedProgress > 0 && (
+          <g clipPath={`url(#vineClip-${clipId})`}>
+            {/* Main vine stem - much higher frequency (20 half-waves), rounded ends, accent color */}
+            <path
+              d="M 0 8 
+                 C 2.5 8, 2.5 6, 5 6
+                 C 7.5 6, 7.5 10, 10 10
+                 C 12.5 10, 12.5 6, 15 6
+                 C 17.5 6, 17.5 10, 20 10
+                 C 22.5 10, 22.5 6, 25 6
+                 C 27.5 6, 27.5 10, 30 10
+                 C 32.5 10, 32.5 6, 35 6
+                 C 37.5 6, 37.5 10, 40 10
+                 C 42.5 10, 42.5 6, 45 6
+                 C 47.5 6, 47.5 10, 50 10
+                 C 52.5 10, 52.5 6, 55 6
+                 C 57.5 6, 57.5 10, 60 10
+                 C 62.5 10, 62.5 6, 65 6
+                 C 67.5 6, 67.5 10, 70 10
+                 C 72.5 10, 72.5 6, 75 6
+                 C 77.5 6, 77.5 10, 80 10
+                 C 82.5 10, 82.5 6, 85 6
+                 C 87.5 6, 87.5 10, 90 10
+                 C 92.5 10, 92.5 6, 95 6
+                 C 97.5 6, 97.5 8, 100 8"
+              fill="none"
+              stroke={accentColor || 'currentColor'}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
-          )}
-        </g>
+          </g>
+        )}
+        
+        {/* Rounded end cap at the vine tip */}
+        {animatedProgress > 1 && animatedProgress < 99 && (
+          <circle 
+            cx={animatedProgress} 
+            cy={getWaveY(animatedProgress)}
+            r="1.25"
+            fill={accentColor || 'currentColor'}
+          />
+        )}
       </svg>
       
       {/* Animated leaves - accent color, attached to vine */}
