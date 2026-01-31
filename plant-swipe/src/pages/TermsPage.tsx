@@ -4,9 +4,10 @@ import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import termsHtml from "@/content/terms-of-service.html?raw"
+import termsVersion from "@/content/terms-version.json"
 
 export default function TermsPage() {
-  const { t } = useTranslation("common")
+  const { t, i18n } = useTranslation("common")
   const currentYear = new Date().getFullYear()
   const seoTitle = t("seo.terms.title", { defaultValue: "Aphylia Terms of Service & GDPR notice" })
   const seoDescription = t("seo.terms.description", {
@@ -14,7 +15,16 @@ export default function TermsPage() {
   })
   usePageMetadata({ title: seoTitle, description: seoDescription })
 
-  const lastUpdated = "November 15, 2025"
+  // Get version and format date from JSON
+  const version = termsVersion.version
+  const lastUpdated = useMemo(() => {
+    const date = new Date(termsVersion.lastUpdated)
+    return date.toLocaleDateString(i18n.language === 'fr' ? 'fr-FR' : 'en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  }, [i18n.language])
 
   const sanitizedTermsHtml = useMemo(() => {
     const withoutEditorArtifacts = termsHtml.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<\/?bdt[^>]*>/gi, "")
@@ -41,7 +51,7 @@ export default function TermsPage() {
           })}
         </p>
         <p className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-          {t("termsPage.hero.updated", { defaultValue: "Last updated" })}: {lastUpdated || currentYear}
+          {t("termsPage.hero.updated", { defaultValue: "Last updated" })}: {lastUpdated || currentYear} · {t("termsPage.hero.version", { defaultValue: "Version" })} {version}
         </p>
       </section>
 
