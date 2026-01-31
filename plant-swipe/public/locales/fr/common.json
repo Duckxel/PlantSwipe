@@ -469,7 +469,9 @@
     "unexpectedError": "Erreur inattendue",
     "acceptTermsLabel": "J'ai lu et j'accepte les",
     "termsLinkLabel": "Conditions d'utilisation",
-    "mustAcceptTerms": "Veuillez accepter les conditions d'utilisation pour continuer"
+    "privacyLinkLabel": "Politique de confidentialité",
+    "andText": "et la",
+    "mustAcceptTerms": "Veuillez accepter les conditions d'utilisation et la politique de confidentialité pour continuer"
   },
   "settings": {
     "title": "Paramètres du compte",
@@ -2984,7 +2986,8 @@
         "eyebrow": "Vos données, vos droits",
         "title": "Politique de Confidentialité Aphylia",
         "subtitle": "Découvrez comment nous collectons, utilisons et protégeons vos données personnelles. Votre vie privée est importante pour nous et nous nous engageons à respecter le RGPD.",
-        "updated": "Dernière mise à jour"
+        "updated": "Dernière mise à jour",
+        "version": "Version"
       },
       "legalContent": {
         "label": "Politique de Confidentialité Complète"

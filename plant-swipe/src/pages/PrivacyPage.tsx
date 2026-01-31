@@ -4,9 +4,10 @@ import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import privacyHtml from "@/content/privacy-policy.html?raw"
+import privacyVersion from "@/content/privacy-version.json"
 
 export default function PrivacyPage() {
-  const { t } = useTranslation("common")
+  const { t, i18n } = useTranslation("common")
   const currentYear = new Date().getFullYear()
   const seoTitle = t("seo.privacy.title", { defaultValue: "Aphylia Privacy Policy & GDPR Rights" })
   const seoDescription = t("seo.privacy.description", {
@@ -14,7 +15,16 @@ export default function PrivacyPage() {
   })
   usePageMetadata({ title: seoTitle, description: seoDescription })
 
-  const lastUpdated = "January 27, 2026"
+  // Get version and format date from JSON
+  const version = privacyVersion.version
+  const lastUpdated = useMemo(() => {
+    const date = new Date(privacyVersion.lastUpdated)
+    return date.toLocaleDateString(i18n.language === 'fr' ? 'fr-FR' : 'en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  }, [i18n.language])
 
   const sanitizedPrivacyHtml = useMemo(() => {
     const withoutEditorArtifacts = privacyHtml.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<\/?bdt[^>]*>/gi, "")
@@ -41,7 +51,7 @@ export default function PrivacyPage() {
           })}
         </p>
         <p className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-          {t("privacyPage.hero.updated", { defaultValue: "Last updated" })}: {lastUpdated || currentYear}
+          {t("privacyPage.hero.updated", { defaultValue: "Last updated" })}: {lastUpdated || currentYear} · {t("privacyPage.hero.version", { defaultValue: "Version" })} {version}
         </p>
       </section>
 

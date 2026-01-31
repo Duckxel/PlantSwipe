@@ -469,7 +469,9 @@
     "unexpectedError": "Unexpected error",
     "acceptTermsLabel": "I have read and agree to the",
     "termsLinkLabel": "Terms of Service",
-    "mustAcceptTerms": "Please accept the Terms of Service to continue"
+    "privacyLinkLabel": "Privacy Policy",
+    "andText": "and",
+    "mustAcceptTerms": "Please accept the Terms of Service and Privacy Policy to continue"
   },
   "settings": {
     "title": "Account Settings",
@@ -2984,7 +2986,8 @@
         "eyebrow": "Your data, your rights",
         "title": "Aphylia Privacy Policy",
         "subtitle": "Learn how we collect, use, and protect your personal data. Your privacy is important to us and we are committed to GDPR compliance.",
-        "updated": "Last updated"
+        "updated": "Last updated",
+        "version": "Version"
       },
       "legalContent": {
         "label": "Full Privacy Policy"
