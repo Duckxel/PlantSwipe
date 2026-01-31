@@ -72,40 +72,39 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
     requestAnimationFrame(animate)
   }, [progress])
   
-  // Leaf positions - at wave peaks (top) and troughs (bottom), matching the high-frequency wave
-  // Wave peaks at: 5, 15, 25, 35, 45, 55, 65, 75, 85, 95 (y=6, top)
-  // Wave troughs at: 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 (y=10, bottom)
+  // Leaf positions - varied spacing, alternating top/bottom with different rotations
+  // Top leaves (at peaks y=6): point upward-outward, attached at bottom of leaf
+  // Bottom leaves (at troughs y=10): point downward-outward, attached at top of leaf
   const leafPositions = [
-    { x: 5, y: -4, rotate: -45, size: 9 },
-    { x: 10, y: 3, rotate: 135, size: 9 },
-    { x: 15, y: -4, rotate: -50, size: 10 },
-    { x: 20, y: 3, rotate: 130, size: 9 },
-    { x: 25, y: -4, rotate: -45, size: 9 },
-    { x: 30, y: 3, rotate: 135, size: 10 },
-    { x: 35, y: -4, rotate: -50, size: 9 },
-    { x: 40, y: 3, rotate: 130, size: 9 },
-    { x: 45, y: -4, rotate: -45, size: 10 },
-    { x: 50, y: 3, rotate: 135, size: 9 },
-    { x: 55, y: -4, rotate: -50, size: 9 },
-    { x: 60, y: 3, rotate: 130, size: 10 },
-    { x: 65, y: -4, rotate: -45, size: 9 },
-    { x: 70, y: 3, rotate: 135, size: 9 },
-    { x: 75, y: -4, rotate: -50, size: 10 },
-    { x: 80, y: 3, rotate: 130, size: 9 },
-    { x: 85, y: -4, rotate: -45, size: 9 },
-    { x: 90, y: 3, rotate: 135, size: 10 },
-    { x: 95, y: -4, rotate: -50, size: 9 },
+    // Top leaves - attached at vine peak (y=6), pointing up and out
+    { x: 5, y: 6, isTop: true, rotate: -35, size: 8 },
+    { x: 18, y: 6, isTop: true, rotate: -55, size: 9 },
+    { x: 35, y: 6, isTop: true, rotate: -40, size: 10 },
+    { x: 48, y: 6, isTop: true, rotate: -50, size: 8 },
+    { x: 65, y: 6, isTop: true, rotate: -35, size: 9 },
+    { x: 78, y: 6, isTop: true, rotate: -55, size: 10 },
+    { x: 92, y: 6, isTop: true, rotate: -45, size: 8 },
+    // Bottom leaves - attached at vine trough (y=10), pointing down and out
+    { x: 12, y: 10, isTop: false, rotate: 145, size: 9 },
+    { x: 28, y: 10, isTop: false, rotate: 125, size: 8 },
+    { x: 42, y: 10, isTop: false, rotate: 140, size: 10 },
+    { x: 58, y: 10, isTop: false, rotate: 130, size: 9 },
+    { x: 72, y: 10, isTop: false, rotate: 145, size: 8 },
+    { x: 85, y: 10, isTop: false, rotate: 135, size: 9 },
   ]
   
   // Flower positions - placed at specific peaks
   const flowerPositions = [
-    { x: 25, y: -6, size: 11 },
-    { x: 55, y: -6, size: 12 },
-    { x: 85, y: -6, size: 11 },
+    { x: 25, y: 6, size: 11 },
+    { x: 55, y: 6, size: 12 },
+    { x: 88, y: 6, size: 11 },
   ]
 
   // Use a unique ID for clip paths to avoid conflicts if multiple instances
   const clipId = React.useId()
+  
+  // Gap between filled vine and remaining line
+  const gapSize = 3
 
   return (
     <div className="flex-1 h-8 relative">
@@ -125,18 +124,18 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
               width={Math.max(0, animatedProgress + 2)}
             />
           </clipPath>
-          {/* Clip for the remaining line */}
+          {/* Clip for the remaining line - with gap */}
           <clipPath id={`lineClip-${clipId}`}>
             <rect
-              x={Math.max(0, animatedProgress)}
+              x={Math.max(0, animatedProgress + gapSize)}
               y="-5"
               height="30"
-              width={Math.max(0, 102 - animatedProgress)}
+              width={Math.max(0, 102 - animatedProgress - gapSize)}
             />
           </clipPath>
         </defs>
         
-        {/* Background line - dark on light theme, white on dark theme */}
+        {/* Background line - dark on light theme, light on dark theme */}
         <g clipPath={`url(#lineClip-${clipId})`}>
           <line
             x1="0"
@@ -146,13 +145,13 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
             stroke="currentColor"
             strokeWidth="2.5"
             strokeLinecap="round"
-            className="text-stone-400 dark:text-stone-400"
+            className="text-stone-400 dark:text-stone-500"
           />
         </g>
         
-        {/* Growing vine - high frequency wave, same amplitude */}
+        {/* Growing vine - accent color, high frequency wave */}
         <g clipPath={`url(#vineClip-${clipId})`}>
-          {/* Main vine stem - much higher frequency (20 half-waves), rounded ends */}
+          {/* Main vine stem - much higher frequency (20 half-waves), rounded ends, accent color */}
           <path
             d="M 0 8 
                C 2.5 8, 2.5 6, 5 6
@@ -176,32 +175,33 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
                C 92.5 10, 92.5 6, 95 6
                C 97.5 6, 97.5 8, 100 8"
             fill="none"
-            stroke="currentColor"
+            stroke={accentColor || 'currentColor'}
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-stone-500 dark:text-stone-400"
           />
         </g>
         
-        {/* Growing tip - rounded bud at the end */}
+        {/* Growing tip - rounded bud at the end, accent color */}
         <g clipPath={`url(#vineClip-${clipId})`}>
           {animatedProgress > 2 && (
             <circle 
               cx={Math.min(animatedProgress, 100)} 
               cy={8 + Math.sin(animatedProgress * Math.PI / 5) * 2}
               r="2"
-              fill="currentColor" 
-              className="text-stone-500 dark:text-stone-400" 
+              fill={accentColor || 'currentColor'}
             />
           )}
         </g>
       </svg>
       
-      {/* Animated leaves - use accent color */}
+      {/* Animated leaves - accent color, attached to vine */}
       <div className="absolute inset-0" style={{ overflow: 'visible' }}>
         {leafPositions.map((leaf, index) => {
           const shouldShow = animatedProgress >= leaf.x + 2
+          // Calculate pixel offset from center (8 is center in viewBox units)
+          // Top leaves: y=6 means -2 from center, Bottom leaves: y=10 means +2 from center
+          const yOffset = ((leaf.y - 8) / 16) * 32 // Convert viewBox units to pixels (h-8 = 32px)
           
           return (
             <motion.div
@@ -210,6 +210,7 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
               style={{
                 left: `${leaf.x}%`,
                 top: '50%',
+                transformOrigin: leaf.isTop ? 'center bottom' : 'center top',
               }}
               initial={{ scale: 0, opacity: 0, rotate: leaf.rotate - 20 }}
               animate={{ 
@@ -230,11 +231,14 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
                 viewBox="0 0 10 13"
                 className="drop-shadow-sm"
                 style={{
-                  transform: `translateY(${leaf.y}px) translateX(-50%)`,
+                  // Position so the attachment point (bottom for top leaves, top for bottom leaves) is at the vine
+                  transform: leaf.isTop 
+                    ? `translateY(${yOffset - leaf.size * 1.3}px) translateX(-50%)` 
+                    : `translateY(${yOffset}px) translateX(-50%)`,
                   color: accentColor || 'currentColor',
                 }}
               >
-                {/* Leaf shape - natural teardrop */}
+                {/* Leaf shape - natural teardrop, tip at top (0), base at bottom (13) */}
                 <path
                   d="M 5 0 Q 10 4, 5 13 Q 0 4, 5 0"
                   fill="currentColor"
@@ -253,10 +257,11 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
         })}
       </div>
       
-      {/* Animated flowers - use accent color */}
+      {/* Animated flowers - petals: white on dark, dark on light; center: yellow */}
       <div className="absolute inset-0" style={{ overflow: 'visible' }}>
         {flowerPositions.map((flower, index) => {
           const shouldShow = animatedProgress >= flower.x + 4
+          const yOffset = ((flower.y - 8) / 16) * 32
           
           return (
             <motion.div
@@ -286,21 +291,20 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
                 viewBox="0 0 24 24"
                 className="drop-shadow-md"
                 style={{
-                  transform: `translateY(${flower.y}px) translateX(-50%)`,
-                  color: accentColor || 'currentColor',
+                  transform: `translateY(${yOffset - flower.size}px) translateX(-50%)`,
                 }}
               >
-                {/* 5-petal flower */}
-                <g fill="currentColor">
+                {/* 5-petal flower - white on dark theme, dark on light theme */}
+                <g className="fill-stone-700 dark:fill-white">
                   <ellipse cx="12" cy="5" rx="3.5" ry="4.5" />
                   <ellipse cx="12" cy="5" rx="3.5" ry="4.5" transform="rotate(72 12 12)" />
                   <ellipse cx="12" cy="5" rx="3.5" ry="4.5" transform="rotate(144 12 12)" />
                   <ellipse cx="12" cy="5" rx="3.5" ry="4.5" transform="rotate(216 12 12)" />
                   <ellipse cx="12" cy="5" rx="3.5" ry="4.5" transform="rotate(288 12 12)" />
                 </g>
-                {/* Center of flower - yellow */}
-                <circle cx="12" cy="12" r="3" fill="#FCD34D" />
-                <circle cx="12" cy="12" r="1.5" fill="#F59E0B" />
+                {/* Center of flower - accent color */}
+                <circle cx="12" cy="12" r="3" fill={accentColor || '#FCD34D'} />
+                <circle cx="12" cy="12" r="1.5" fill={accentColor || '#F59E0B'} style={{ filter: 'brightness(0.7)' }} />
               </svg>
             </motion.div>
           )
