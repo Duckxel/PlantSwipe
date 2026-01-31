@@ -72,23 +72,25 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
     requestAnimationFrame(animate)
   }, [progress])
   
-  // Leaf positions - elegant pairs growing from the vine
+  // Leaf positions - alternating above and below the vine at wave peaks/troughs
+  // x positions: peaks at 5,15,25,35,45,55,65,75,85,95 | troughs at 10,20,30,40,50,60,70,80,90
   const leafPositions = [
-    // Paired leaves at various points - left and right of stem
-    { x: 8, dir: 'left', size: 7 },
-    { x: 8, dir: 'right', size: 7 },
-    { x: 22, dir: 'left', size: 8 },
-    { x: 22, dir: 'right', size: 8 },
-    { x: 38, dir: 'left', size: 7 },
-    { x: 38, dir: 'right', size: 7 },
-    { x: 52, dir: 'left', size: 8 },
-    { x: 52, dir: 'right', size: 8 },
-    { x: 68, dir: 'left', size: 7 },
-    { x: 68, dir: 'right', size: 7 },
-    { x: 82, dir: 'left', size: 8 },
-    { x: 82, dir: 'right', size: 8 },
-    { x: 95, dir: 'left', size: 7 },
-    { x: 95, dir: 'right', size: 7 },
+    // Above the vine (at peaks, y=6) - pointing upward and outward
+    { x: 5, y: 6, rotation: -30 },
+    { x: 15, y: 6, rotation: -50 },
+    { x: 35, y: 6, rotation: -35 },
+    { x: 45, y: 6, rotation: -55 },
+    { x: 65, y: 6, rotation: -40 },
+    { x: 75, y: 6, rotation: -50 },
+    { x: 95, y: 6, rotation: -45 },
+    // Below the vine (at troughs, y=10) - pointing downward and outward  
+    { x: 10, y: 10, rotation: 130 },
+    { x: 20, y: 10, rotation: 150 },
+    { x: 40, y: 10, rotation: 135 },
+    { x: 50, y: 10, rotation: 145 },
+    { x: 70, y: 10, rotation: 130 },
+    { x: 80, y: 10, rotation: 150 },
+    { x: 90, y: 10, rotation: 140 },
   ]
   
   // Flower positions - placed at specific peaks
@@ -206,60 +208,69 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
         )}
       </svg>
       
-      {/* Animated leaves - elegant simple leaves branching from vine */}
-      <svg 
-        className="absolute inset-0 w-full h-full" 
-        viewBox="0 0 100 16" 
-        preserveAspectRatio="none"
-        style={{ overflow: 'visible' }}
-      >
-        {leafPositions.map((leaf, index) => {
-          const shouldShow = animatedProgress >= leaf.x + 1
-          // Get Y position on the wave
-          const waveY = getWaveY(leaf.x)
-          const isLeft = leaf.dir === 'left'
-          
-          // Rotation: left leaves point up-left, right leaves point up-right
-          const baseRotate = isLeft ? -45 : 45
-          
-          return (
-            <motion.g
-              key={index}
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ 
-                scale: shouldShow ? 1 : 0, 
-                opacity: shouldShow ? 1 : 0,
-              }}
-              transition={{ 
-                duration: 0.3, 
-                type: "spring",
-                stiffness: 400,
-                damping: 15
-              }}
-              style={{ 
-                transformOrigin: `${leaf.x}px ${waveY}px`,
+      {/* Animated leaves - clean visible leaves */}
+      {leafPositions.map((leaf, index) => {
+        const shouldShow = animatedProgress >= leaf.x
+        const isAbove = leaf.y === 6
+        // Convert viewBox coordinates to percentage positions
+        // viewBox is 100 wide, container is 100% wide, so x% = x
+        // viewBox is 16 tall, container is 32px (h-8), center is at 50%
+        // y=6 is above center (6/16 = 37.5%), y=10 is below center (10/16 = 62.5%)
+        const topPercent = (leaf.y / 16) * 100
+        
+        return (
+          <motion.div
+            key={index}
+            className="absolute"
+            style={{
+              left: `${leaf.x}%`,
+              top: `${topPercent}%`,
+            }}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ 
+              scale: shouldShow ? 1 : 0, 
+              opacity: shouldShow ? 1 : 0,
+            }}
+            transition={{ 
+              duration: 0.25, 
+              type: "spring",
+              stiffness: 500,
+              damping: 20
+            }}
+          >
+            {/* Leaf SVG - positioned so stem connects to vine */}
+            <svg 
+              width="12" 
+              height="14" 
+              viewBox="0 0 12 14"
+              style={{
+                transform: `translate(-50%, ${isAbove ? '-100%' : '0%'}) rotate(${leaf.rotation}deg)`,
+                transformOrigin: isAbove ? 'center bottom' : 'center top',
               }}
             >
-              {/* Simple elegant leaf shape */}
-              <g transform={`translate(${leaf.x}, ${waveY}) rotate(${baseRotate}) scale(${leaf.size / 10})`}>
-                {/* Leaf blade - simple teardrop */}
-                <path
-                  d="M 0 0 Q -2 -4, 0 -8 Q 2 -4, 0 0"
-                  fill={accentColor || 'currentColor'}
-                />
-                {/* Subtle center vein */}
-                <path
-                  d="M 0 -1 L 0 -7"
-                  stroke="white"
-                  strokeWidth="0.3"
-                  opacity="0.3"
-                  fill="none"
-                />
-              </g>
-            </motion.g>
-          )
-        })}
-      </svg>
+              {/* Leaf shape - elegant pointed oval */}
+              <path
+                d="M 6 0 C 10 3, 10 11, 6 14 C 2 11, 2 3, 6 0"
+                fill={accentColor || 'currentColor'}
+              />
+              {/* Center vein */}
+              <path
+                d="M 6 2 L 6 12"
+                stroke="rgba(255,255,255,0.3)"
+                strokeWidth="0.8"
+                fill="none"
+              />
+              {/* Side veins */}
+              <path
+                d="M 6 4 L 4 5.5 M 6 4 L 8 5.5 M 6 7 L 3.5 9 M 6 7 L 8.5 9 M 6 10 L 4.5 11.5 M 6 10 L 7.5 11.5"
+                stroke="rgba(255,255,255,0.2)"
+                strokeWidth="0.5"
+                fill="none"
+              />
+            </svg>
+          </motion.div>
+        )
+      })}
       
       {/* Animated flowers - petals: white on dark, dark on light; center: yellow */}
       <div className="absolute inset-0" style={{ overflow: 'visible' }}>
