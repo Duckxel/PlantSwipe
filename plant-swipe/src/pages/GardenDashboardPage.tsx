@@ -430,6 +430,7 @@ export const GardenDashboardPage: React.FC = () => {
                   locationLat: data.garden.locationLat || null,
                   locationLon: data.garden.locationLon || null,
                   preferredLanguage: data.garden.preferredLanguage || null,
+                  hideAiChat: Boolean(data.garden.hideAiChat ?? data.garden.hide_ai_chat ?? false),
                 });
                 hydratedGarden = true;
               }
@@ -3093,6 +3094,7 @@ export const GardenDashboardPage: React.FC = () => {
                       members={members}
                       dailyStats={dailyStats}
                       onNavigateToSettings={() => navigate(`/garden/${id}/settings`)}
+                      hideAiFeatures={garden?.hideAiChat ?? false}
                     />
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />

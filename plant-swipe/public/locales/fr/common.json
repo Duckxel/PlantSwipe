@@ -1801,8 +1801,8 @@
       "deleteGardenWarning": "Cela supprimera définitivement le jardin, toutes ses plantes, tâches et entrées de journal. Cette action ne peut pas être annulée.",
       "leaveGardenTitle": "Quitter ce jardin",
       "leaveGardenWarning": "Vous n'aurez plus accès à ce jardin. Un propriétaire peut vous réinviter.",
-      "aiAssistant": "Assistant IA",
-      "aiAssistantDescription": "Configurez l'assistant IA Aphylia pour ce jardin."
+      "aiFeatures": "Fonctionnalités IA",
+      "aiFeaturesDescription": "Activez ou désactivez toutes les fonctionnalités IA pour ce jardin, y compris l'assistant de chat et les conseils du jardinier."
     },
     "gardenSettings": {
       "aiChat": {
@@ -1814,6 +1814,18 @@
         "visible": "Visible",
         "chatIsHidden": "Le bouton de chat est masqué",
         "chatIsVisible": "Le bouton de chat est visible",
+        "ownerOnly": "Seuls les propriétaires du jardin peuvent modifier ce paramètre"
+      },
+      "aiFeatures": {
+        "label": "Fonctionnalités IA",
+        "description": "Contrôlez toutes les fonctionnalités IA, y compris l'assistant de chat et les conseils hebdomadaires du jardinier",
+        "affectedFeatures": "Ce paramètre affecte :",
+        "chatBubble": "Assistant de chat IA (en bas à droite)",
+        "gardenerAdvice": "Conseils hebdomadaires du jardinier",
+        "enabled": "Activé",
+        "disabled": "Désactivé",
+        "statusEnabled": "Les fonctionnalités IA sont activées",
+        "statusDisabled": "Les fonctionnalités IA sont désactivées",
         "ownerOnly": "Seuls les propriétaires du jardin peuvent modifier ce paramètre"
       }
     },

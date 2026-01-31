@@ -1801,8 +1801,8 @@
       "deleteGardenWarning": "This will permanently delete the garden, all its plants, tasks, and journal entries. This action cannot be undone.",
       "leaveGardenTitle": "Leave this garden",
       "leaveGardenWarning": "You will no longer have access to this garden. You can be re-invited by an owner.",
-      "aiAssistant": "AI Assistant",
-      "aiAssistantDescription": "Configure the Aphylia AI chat assistant for this garden."
+      "aiFeatures": "AI Features",
+      "aiFeaturesDescription": "Enable or disable all AI-powered features for this garden, including the chat assistant and gardener advice."
     },
     "gardenSettings": {
       "aiChat": {
@@ -1814,6 +1814,18 @@
         "visible": "Visible",
         "chatIsHidden": "Chat bubble is hidden",
         "chatIsVisible": "Chat bubble is visible",
+        "ownerOnly": "Only garden owners can change this setting"
+      },
+      "aiFeatures": {
+        "label": "AI Features",
+        "description": "Control all AI-powered features including the chat assistant and weekly gardener advice",
+        "affectedFeatures": "This setting affects:",
+        "chatBubble": "AI Chat Assistant (bottom right)",
+        "gardenerAdvice": "Weekly Gardener Advice",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "statusEnabled": "AI features are enabled",
+        "statusDisabled": "AI features are disabled",
         "ownerOnly": "Only garden owners can change this setting"
       }
     },
