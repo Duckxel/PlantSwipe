@@ -16768,12 +16768,13 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       let gRows = []
       let gardenQuerySuccess = false
 
-      // Attempt 1: Full query with privacy, streak, location, and preferred_language
+      // Attempt 1: Full query with privacy, streak, location, preferred_language, and hide_ai_chat
       try {
         console.log('[overview] Fetching garden', gardenId, '(attempt 1: full query)')
         gRows = await sql`
           select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy,
-                 location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language
+                 location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language,
+                 coalesce(hide_ai_chat, false) as hide_ai_chat
           from public.gardens where id = ${gardenId} limit 1
         `
         console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
@@ -16786,7 +16787,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           console.log('[overview] Fetching garden', gardenId, '(attempt 2: without privacy)')
           gRows = await sql`
             select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy,
-                   location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language
+                   location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language,
+                   coalesce(hide_ai_chat, false) as hide_ai_chat
             from public.gardens where id = ${gardenId} limit 1
           `
           console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
@@ -16799,7 +16801,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             console.log('[overview] Fetching garden', gardenId, '(attempt 3: minimal)')
             gRows = await sql`
               select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy,
-                     location_city, location_country, location_timezone, location_lat, location_lon, 'en' as preferred_language
+                     location_city, location_country, location_timezone, location_lat, location_lon, 'en' as preferred_language,
+                     false as hide_ai_chat
               from public.gardens where id = ${gardenId} limit 1
             `
             console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
@@ -17053,6 +17056,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       locationLat: garden.location_lat || null,
       locationLon: garden.location_lon || null,
       preferredLanguage: garden.preferred_language || 'en',
+      hideAiChat: Boolean(garden.hide_ai_chat ?? false),
     } : null
 
     // Check access: members always allowed, otherwise check privacy

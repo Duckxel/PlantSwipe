@@ -8,10 +8,10 @@
  * Default is enabled (AI features visible).
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Sparkles, Loader2, Check, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/lib/supabaseClient";
 import type { Garden } from "@/types/garden";
 
@@ -28,29 +28,38 @@ export const GardenAiChatToggle: React.FC<GardenAiChatToggleProps> = ({
 }) => {
   const { t } = useTranslation("common");
   const [isUpdating, setIsUpdating] = useState(false);
-  const [hideAiFeatures, setHideAiFeatures] = useState(garden?.hideAiChat ?? false);
+  // AI features enabled means hide_ai_chat is false
+  const [aiEnabled, setAiEnabled] = useState(!(garden?.hideAiChat ?? false));
   const [error, setError] = useState<string | null>(null);
 
-  const handleToggle = async () => {
+  // Sync with garden prop when it changes
+  useEffect(() => {
+    setAiEnabled(!(garden?.hideAiChat ?? false));
+  }, [garden?.hideAiChat]);
+
+  const handleToggle = async (checked: boolean) => {
     if (!garden || !canEdit || isUpdating) return;
 
-    const newValue = !hideAiFeatures;
+    // checked = true means AI is enabled, so hide_ai_chat = false
+    const hideAiChat = !checked;
     setIsUpdating(true);
     setError(null);
 
     try {
       const { error: updateError } = await supabase
         .from("gardens")
-        .update({ hide_ai_chat: newValue })
+        .update({ hide_ai_chat: hideAiChat })
         .eq("id", garden.id);
 
       if (updateError) throw updateError;
 
-      setHideAiFeatures(newValue);
+      setAiEnabled(checked);
       await onSaved();
     } catch (err: unknown) {
       console.error("Failed to update AI features setting:", err);
       setError(t("common.error", "Something went wrong"));
+      // Revert on error
+      setAiEnabled(!checked);
     } finally {
       setIsUpdating(false);
     }
@@ -60,21 +69,55 @@ export const GardenAiChatToggle: React.FC<GardenAiChatToggleProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-4">
-        <div className={`p-2.5 rounded-xl flex-shrink-0 ${hideAiFeatures ? 'bg-stone-100 dark:bg-stone-800' : 'bg-emerald-100 dark:bg-emerald-900/30'}`}>
-          <Sparkles className={`w-5 h-5 ${hideAiFeatures ? 'text-stone-400' : 'text-emerald-600 dark:text-emerald-400'}`} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-sm">
-            {t("gardenSettings.aiFeatures.label", "AI Features")}
-          </h4>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {t(
-              "gardenSettings.aiFeatures.description",
-              "Control all AI-powered features including the chat assistant and weekly gardener advice"
+      {/* Main toggle row */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className={`p-2.5 rounded-xl flex-shrink-0 ${!aiEnabled ? 'bg-stone-100 dark:bg-stone-800' : 'bg-emerald-100 dark:bg-emerald-900/30'}`}>
+            {isUpdating ? (
+              <Loader2 className="w-5 h-5 animate-spin text-stone-400" />
+            ) : (
+              <Sparkles className={`w-5 h-5 ${!aiEnabled ? 'text-stone-400' : 'text-emerald-600 dark:text-emerald-400'}`} />
             )}
-          </p>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-medium text-sm">
+              {t("gardenSettings.aiFeatures.label", "AI Features")}
+            </h4>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t(
+                "gardenSettings.aiFeatures.description",
+                "Control all AI-powered features including the chat assistant and weekly gardener advice"
+              )}
+            </p>
+          </div>
         </div>
+        
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <Switch
+            checked={aiEnabled}
+            onCheckedChange={handleToggle}
+            disabled={!canEdit || isUpdating}
+            id="ai-features-toggle"
+          />
+        </div>
+      </div>
+
+      {/* Status indicator */}
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+        aiEnabled 
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' 
+          : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400'
+      }`}>
+        {aiEnabled ? (
+          <Check className="w-4 h-4" />
+        ) : (
+          <X className="w-4 h-4" />
+        )}
+        <span>
+          {aiEnabled
+            ? t("gardenSettings.aiFeatures.statusEnabled", "AI features are enabled")
+            : t("gardenSettings.aiFeatures.statusDisabled", "AI features are disabled")}
+        </span>
       </div>
 
       {/* Feature list showing what will be affected */}
@@ -84,45 +127,14 @@ export const GardenAiChatToggle: React.FC<GardenAiChatToggleProps> = ({
         </p>
         <ul className="text-xs text-muted-foreground space-y-1">
           <li className="flex items-center gap-2">
-            {hideAiFeatures ? <X className="w-3 h-3 text-red-500" /> : <Check className="w-3 h-3 text-emerald-500" />}
+            {!aiEnabled ? <X className="w-3 h-3 text-red-500" /> : <Check className="w-3 h-3 text-emerald-500" />}
             {t("gardenSettings.aiFeatures.chatBubble", "AI Chat Assistant (bottom right)")}
           </li>
           <li className="flex items-center gap-2">
-            {hideAiFeatures ? <X className="w-3 h-3 text-red-500" /> : <Check className="w-3 h-3 text-emerald-500" />}
+            {!aiEnabled ? <X className="w-3 h-3 text-red-500" /> : <Check className="w-3 h-3 text-emerald-500" />}
             {t("gardenSettings.aiFeatures.gardenerAdvice", "Weekly Gardener Advice")}
           </li>
         </ul>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Button
-          variant={hideAiFeatures ? "outline" : "default"}
-          size="sm"
-          onClick={handleToggle}
-          disabled={!canEdit || isUpdating}
-          className={`rounded-xl gap-2 ${
-            !hideAiFeatures 
-              ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
-              : "border-stone-300 dark:border-stone-600"
-          }`}
-        >
-          {isUpdating ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : !hideAiFeatures ? (
-            <Check className="w-4 h-4" />
-          ) : (
-            <X className="w-4 h-4" />
-          )}
-          {hideAiFeatures
-            ? t("gardenSettings.aiFeatures.disabled", "Disabled")
-            : t("gardenSettings.aiFeatures.enabled", "Enabled")}
-        </Button>
-
-        <span className="text-xs text-muted-foreground">
-          {hideAiFeatures
-            ? t("gardenSettings.aiFeatures.statusDisabled", "AI features are disabled")
-            : t("gardenSettings.aiFeatures.statusEnabled", "AI features are enabled")}
-        </span>
       </div>
 
       {error && (
