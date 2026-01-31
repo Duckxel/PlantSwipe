@@ -169,6 +169,21 @@ export default function PlantSwipe() {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
   })
+
+  const [isLargeScreen, setIsLargeScreen] = useState(() => {
+    if (typeof window === "undefined") return true
+    return window.innerWidth >= 1024
+  })
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(min-width: 1024px)")
+    const handleChange = (e: MediaQueryListEvent) => setIsLargeScreen(e.matches)
+    mq.addEventListener("change", handleChange)
+    setIsLargeScreen(mq.matches)
+    return () => mq.removeEventListener("change", handleChange)
+  }, [])
+
   const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
   const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
   const [searchBarVisible, setSearchBarVisible] = useState(true)
@@ -1619,9 +1634,10 @@ export default function PlantSwipe() {
             }`}
           >
             {/* Sidebar / Filters - desktop only */}
-            {currentView === "search" && showFilters && (
+            {/* // ⚡ Bolt: Prevent duplicate rendering of FilterControls by checking isLargeScreen */}
+            {currentView === "search" && showFilters && isLargeScreen && (
               <aside
-                className="hidden lg:block lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain"
+                className="lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain"
                 aria-label="Filters"
               >
                 <div className="space-y-6 pr-2">
@@ -1731,39 +1747,42 @@ export default function PlantSwipe() {
                     </div>
                   </div>
                   {/* Mobile filter dropdown */}
-                  <div className={`lg:hidden mt-3 ${showFilters ? "max-h-[50vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6" : "hidden"}`}>
-                    <FilterControls
-                      searchSort={searchSort}
-                      setSearchSort={setSearchSort}
-                      seasonFilter={seasonFilter}
-                      setSeasonFilter={setSeasonFilter}
-                      colorFilter={colorFilter}
-                      setColorFilter={setColorFilter}
-                      typeFilter={typeFilter}
-                      setTypeFilter={setTypeFilter}
-                      usageFilters={usageFilters}
-                      setUsageFilters={setUsageFilters}
-                      habitatFilters={habitatFilters}
-                      setHabitatFilters={setHabitatFilters}
-                      maintenanceFilter={maintenanceFilter}
-                      setMaintenanceFilter={setMaintenanceFilter}
-                      petSafe={petSafe}
-                      setPetSafe={setPetSafe}
-                      humanSafe={humanSafe}
-                      setHumanSafe={setHumanSafe}
-                      livingSpaceFilters={livingSpaceFilters}
-                      setLivingSpaceFilters={setLivingSpaceFilters}
-                      onlySeeds={onlySeeds}
-                      setOnlySeeds={setOnlySeeds}
-                      onlyFavorites={onlyFavorites}
-                      setOnlyFavorites={setOnlyFavorites}
-                      colorOptions={colorOptions}
-                      primaryColors={primaryColors}
-                      advancedColors={advancedColors}
-                      typeOptions={typeOptions}
-                      usageOptions={usageOptions}
-                    />
-                  </div>
+                  {/* // ⚡ Bolt: Prevent duplicate rendering of FilterControls by checking !isLargeScreen */}
+                  {!isLargeScreen && (
+                    <div className={`mt-3 ${showFilters ? "max-h-[50vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6" : "hidden"}`}>
+                      <FilterControls
+                        searchSort={searchSort}
+                        setSearchSort={setSearchSort}
+                        seasonFilter={seasonFilter}
+                        setSeasonFilter={setSeasonFilter}
+                        colorFilter={colorFilter}
+                        setColorFilter={setColorFilter}
+                        typeFilter={typeFilter}
+                        setTypeFilter={setTypeFilter}
+                        usageFilters={usageFilters}
+                        setUsageFilters={setUsageFilters}
+                        habitatFilters={habitatFilters}
+                        setHabitatFilters={setHabitatFilters}
+                        maintenanceFilter={maintenanceFilter}
+                        setMaintenanceFilter={setMaintenanceFilter}
+                        petSafe={petSafe}
+                        setPetSafe={setPetSafe}
+                        humanSafe={humanSafe}
+                        setHumanSafe={setHumanSafe}
+                        livingSpaceFilters={livingSpaceFilters}
+                        setLivingSpaceFilters={setLivingSpaceFilters}
+                        onlySeeds={onlySeeds}
+                        setOnlySeeds={setOnlySeeds}
+                        onlyFavorites={onlyFavorites}
+                        setOnlyFavorites={setOnlyFavorites}
+                        colorOptions={colorOptions}
+                        primaryColors={primaryColors}
+                        advancedColors={advancedColors}
+                        typeOptions={typeOptions}
+                        usageOptions={usageOptions}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
