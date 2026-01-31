@@ -605,6 +605,11 @@
       "light": "Clair",
       "dark": "Sombre",
       "currentTheme": "Thème actuel"
+    },
+    "accent": {
+      "title": "Couleur d'accentuation",
+      "description": "Choisissez votre couleur d'accentuation personnelle qui apparaît dans toute l'application.",
+      "current": "Actuelle :"
     }
   },
     "plant": {
@@ -3072,6 +3077,98 @@
       "termsVersion": "Version {{version}} - Mis à jour le {{date}}",
       "privacyVersion": "Version {{version}} - Mis à jour le {{date}}",
       "backToReview": "Retour à la Révision"
+    },
+    "setup": {
+      "welcome": {
+        "title": "Bienvenue sur Aphylia !",
+        "description": "Je suis votre assistant jardinier. Je vous accompagnerai tout au long de ce voyage pour faire grandir et fleurir votre jardin en le plus beau qui soit !",
+        "subtitle": "D'abord, apprenons à nous connaître et découvrons l'environnement où votre jardin va évoluer.",
+        "getStarted": "C'est parti !"
+      },
+      "accent": {
+        "title": "Choisissez votre couleur d'accent",
+        "subtitle": "Personnalisez votre expérience Aphylia",
+        "selected": "Sélectionné"
+      },
+      "location": {
+        "title": "Où êtes-vous situé ?",
+        "subtitle": "Cela nous aide à fournir des conseils de jardinage locaux",
+        "searchLabel": "Rechercher votre ville",
+        "searchPlaceholder": "Tapez un nom de ville...",
+        "detecting": "Détection de votre position...",
+        "detected": "Position détectée automatiquement !",
+        "timezoneSet": "Fuseau horaire :",
+        "noResults": "Aucune ville trouvée. Essayez une autre recherche.",
+        "detectButton": "Utiliser ma position actuelle",
+        "detectingGPS": "Détection...",
+        "detectFailed": "Impossible de détecter la position. Veuillez rechercher manuellement.",
+        "geoNotSupported": "La géolocalisation n'est pas prise en charge par votre navigateur"
+      },
+      "gardenType": {
+        "title": "Où se trouve votre jardin ?",
+        "subtitle": "Cela nous aide à vous recommander les bonnes plantes",
+        "outside": "À l'extérieur, dans un jardin",
+        "outsideDesc": "J'ai un jardin ou une cour extérieure",
+        "inside": "À l'intérieur de votre maison",
+        "insideDesc": "Je cultive des plantes en intérieur",
+        "both": "À l'intérieur et à l'extérieur",
+        "bothDesc": "J'ai des plantes partout !"
+      },
+      "experience": {
+        "title": "Quel est votre niveau en jardinage ?",
+        "subtitle": "Nous adapterons nos conseils à votre expertise",
+        "novice": "Débutant",
+        "noviceDesc": "Je débute mon aventure de jardinier",
+        "intermediate": "Intermédiaire",
+        "intermediateDesc": "J'ai un peu d'expérience avec les plantes",
+        "expert": "Expert",
+        "expertDesc": "Le jardinage est ma passion !"
+      },
+      "purpose": {
+        "title": "Quel est l'objectif de votre jardin ?",
+        "subtitle": "Nous personnaliserons vos recommandations de plantes",
+        "eat": "Cultiver pour manger",
+        "eatDesc": "Légumes et fruits pour ma consommation personnelle",
+        "ornamental": "Jardin d'ornement",
+        "ornamentalDesc": "De belles fleurs et plantes décoratives",
+        "various": "Un peu de tout !",
+        "variousDesc": "Le plus de plantes variées possible"
+      },
+      "notificationTime": {
+        "title": "Quand devons-nous vous rappeler ?",
+        "subtitle": "Choisissez votre heure de notification préférée",
+        "early": "Lève-tôt",
+        "earlyDesc": "6h00 - Commencez la journée avec vos plantes",
+        "morning": "Grasse matinée",
+        "morningDesc": "10h00 - Après votre café du matin",
+        "midday": "Énergie de midi",
+        "middayDesc": "14h00 - Une pause dans votre après-midi",
+        "afternoon": "Après le travail",
+        "afternoonDesc": "17h00 - Détendez-vous avec votre jardin"
+      },
+      "notifications": {
+        "title": "Restez au top de votre jardin",
+        "description": "Activez les notifications pour recevoir des rappels d'arrosage, de fertilisation et d'entretien de vos plantes au moment parfait.",
+        "enable": "Activer les notifications",
+        "skip": "Plus tard"
+      },
+      "complete": {
+        "title": "Vous êtes prêt !",
+        "description": "Votre assistant jardinier est prêt à vous aider à faire pousser les plus belles plantes. Commençons l'exploration !",
+        "button": "Commencer à explorer"
+      },
+      "settings": {
+        "title": "Préférences de Jardinage",
+        "description": "Modifiez vos préférences de jardinage et paramètres de notification.",
+        "gardenType": "Emplacement du Jardin",
+        "gardenTypeDescription": "Où cultivez-vous vos plantes ?",
+        "experienceLevel": "Niveau d'Expérience",
+        "experienceLevelDescription": "Votre niveau d'expertise en jardinage",
+        "lookingFor": "Objectif du Jardin",
+        "lookingForDescription": "Quel est votre principal objectif de jardinage ?",
+        "notificationTime": "Heure de Notification",
+        "notificationTimeDescription": "Quand devons-nous vous envoyer des rappels ?"
+      }
     }
   }
 }

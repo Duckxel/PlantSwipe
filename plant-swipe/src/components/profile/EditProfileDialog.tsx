@@ -70,7 +70,7 @@ export const EditProfileDialog: React.FC<{
 
           <div className="grid gap-2">
             <div className="text-sm font-medium">{t('profile.editProfile.accentColor')}</div>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {ACCENT_OPTIONS.map((opt) => {
                 const active = values.accent_key === opt.key
                 return (
@@ -78,9 +78,9 @@ export const EditProfileDialog: React.FC<{
                     key={opt.key}
                     type="button"
                     onClick={() => chooseAccent(opt.key)}
-                    className={`h-10 rounded-xl border relative ${active ? 'ring-2 ring-offset-2' : ''}`}
+                    className={`h-10 rounded-xl border-0 relative ${active ? 'ring-2 ring-offset-2 ring-stone-500 dark:ring-stone-400' : ''}`}
                     title={opt.label}
-                    style={{ backgroundColor: `hsl(${opt.hsl})`, boxShadow: active ? `0 0 0 2px hsl(${opt.hsl}) inset` : undefined }}
+                    style={{ backgroundColor: opt.hex }}
                     aria-pressed={active}
                   >
                   </button>
