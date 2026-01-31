@@ -1518,7 +1518,7 @@ export default function PlantSwipe() {
                   </div>
                 )}
                 {authMode === 'signup' && (
-                  <>
+                  <div className="mt-2 space-y-3">
                     <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
                       <input
                         id="auth-accept-terms"
@@ -1562,7 +1562,7 @@ export default function PlantSwipe() {
                         {t('auth.marketingConsentLabel', 'Receive occasional emails about new features and updates')}
                       </Label>
                     </div>
-                  </>
+                  </div>
                 )}
                 {authError && <div className="text-sm text-red-600">{authError}</div>}
                 <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
@@ -2200,7 +2200,7 @@ export default function PlantSwipe() {
               </div>
             )}
             {authMode === 'signup' && (
-              <>
+              <div className="mt-2 space-y-3">
                 <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
                   <input
                     id="auth-accept-terms-2"
@@ -2244,7 +2244,7 @@ export default function PlantSwipe() {
                     {t('auth.marketingConsentLabel', 'Receive occasional emails about new features and updates')}
                   </Label>
                 </div>
-              </>
+              </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
             <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
