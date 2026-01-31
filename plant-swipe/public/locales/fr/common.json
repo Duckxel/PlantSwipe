@@ -469,7 +469,9 @@
     "unexpectedError": "Erreur inattendue",
     "acceptTermsLabel": "J'ai lu et j'accepte les",
     "termsLinkLabel": "Conditions d'utilisation",
-    "mustAcceptTerms": "Veuillez accepter les conditions d'utilisation pour continuer"
+    "privacyLinkLabel": "Politique de confidentialité",
+    "andText": "et la",
+    "mustAcceptTerms": "Veuillez accepter les conditions d'utilisation et la politique de confidentialité pour continuer"
   },
   "settings": {
     "title": "Paramètres du compte",

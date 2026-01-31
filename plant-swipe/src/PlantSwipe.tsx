@@ -243,6 +243,7 @@ export default function PlantSwipe() {
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
+  const privacyPath = React.useMemo(() => addLanguagePrefix('/privacy', currentLang), [currentLang])
   
   // Legal update modal - show when user's accepted versions are outdated OR acceptance dates are missing
   const [legalUpdateDismissed, setLegalUpdateDismissed] = useState(false)
@@ -1536,6 +1537,15 @@ export default function PlantSwipe() {
                           className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
                         >
                           {t('auth.termsLinkLabel')}
+                        </a>{" "}
+                        {t('auth.andText')}{" "}
+                        <a
+                          href={privacyPath}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                        >
+                          {t('auth.privacyLinkLabel')}
                         </a>.
                       </Label>
                     </div>
@@ -2209,6 +2219,15 @@ export default function PlantSwipe() {
                       className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
                     >
                       {t('auth.termsLinkLabel')}
+                    </a>{" "}
+                    {t('auth.andText')}{" "}
+                    <a
+                      href={privacyPath}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                    >
+                      {t('auth.privacyLinkLabel')}
                     </a>.
                   </Label>
                 </div>
