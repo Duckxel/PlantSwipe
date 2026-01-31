@@ -72,24 +72,23 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
     requestAnimationFrame(animate)
   }, [progress])
   
-  // Leaf positions - placed along the wave, alternating sides
-  // Uses getWaveY to position exactly on the curve
+  // Leaf positions - elegant pairs growing from the vine
   const leafPositions = [
-    // Leaves growing upward from peaks and slopes
-    { x: 6, side: 'top', rotate: -40, size: 10, curve: 'left' },
-    { x: 16, side: 'top', rotate: -55, size: 9, curve: 'right' },
-    { x: 32, side: 'top', rotate: -35, size: 11, curve: 'left' },
-    { x: 46, side: 'top', rotate: -50, size: 9, curve: 'right' },
-    { x: 62, side: 'top', rotate: -40, size: 10, curve: 'left' },
-    { x: 76, side: 'top', rotate: -55, size: 9, curve: 'right' },
-    { x: 93, side: 'top', rotate: -45, size: 10, curve: 'left' },
-    // Leaves growing downward from troughs and slopes
-    { x: 11, side: 'bottom', rotate: 140, size: 9, curve: 'right' },
-    { x: 23, side: 'bottom', rotate: 125, size: 10, curve: 'left' },
-    { x: 38, side: 'bottom', rotate: 145, size: 9, curve: 'right' },
-    { x: 52, side: 'bottom', rotate: 130, size: 10, curve: 'left' },
-    { x: 68, side: 'bottom', rotate: 140, size: 9, curve: 'right' },
-    { x: 82, side: 'bottom', rotate: 135, size: 10, curve: 'left' },
+    // Paired leaves at various points - left and right of stem
+    { x: 8, dir: 'left', size: 7 },
+    { x: 8, dir: 'right', size: 7 },
+    { x: 22, dir: 'left', size: 8 },
+    { x: 22, dir: 'right', size: 8 },
+    { x: 38, dir: 'left', size: 7 },
+    { x: 38, dir: 'right', size: 7 },
+    { x: 52, dir: 'left', size: 8 },
+    { x: 52, dir: 'right', size: 8 },
+    { x: 68, dir: 'left', size: 7 },
+    { x: 68, dir: 'right', size: 7 },
+    { x: 82, dir: 'left', size: 8 },
+    { x: 82, dir: 'right', size: 8 },
+    { x: 95, dir: 'left', size: 7 },
+    { x: 95, dir: 'right', size: 7 },
   ]
   
   // Flower positions - placed at specific peaks
@@ -207,106 +206,60 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
         )}
       </svg>
       
-      {/* Animated leaves - accent color, attached to vine */}
-      <div className="absolute inset-0" style={{ overflow: 'visible' }}>
+      {/* Animated leaves - elegant simple leaves branching from vine */}
+      <svg 
+        className="absolute inset-0 w-full h-full" 
+        viewBox="0 0 100 16" 
+        preserveAspectRatio="none"
+        style={{ overflow: 'visible' }}
+      >
         {leafPositions.map((leaf, index) => {
-          const shouldShow = animatedProgress >= leaf.x + 2
-          // Get exact Y position on the wave for this leaf
+          const shouldShow = animatedProgress >= leaf.x + 1
+          // Get Y position on the wave
           const waveY = getWaveY(leaf.x)
-          // Convert viewBox Y (0-16) to pixel offset from center
-          const yOffset = ((waveY - 8) / 16) * 32
-          const isTop = leaf.side === 'top'
+          const isLeft = leaf.dir === 'left'
+          
+          // Rotation: left leaves point up-left, right leaves point up-right
+          const baseRotate = isLeft ? -45 : 45
           
           return (
-            <motion.div
+            <motion.g
               key={index}
-              className="absolute"
-              style={{
-                left: `${leaf.x}%`,
-                top: '50%',
-                transformOrigin: isTop ? '50% 100%' : '50% 0%',
-              }}
-              initial={{ scale: 0, opacity: 0, rotate: leaf.rotate + (isTop ? 15 : -15) }}
+              initial={{ scale: 0, opacity: 0 }}
               animate={{ 
                 scale: shouldShow ? 1 : 0, 
                 opacity: shouldShow ? 1 : 0,
-                rotate: shouldShow ? leaf.rotate : leaf.rotate + (isTop ? 15 : -15),
               }}
               transition={{ 
-                duration: 0.35, 
+                duration: 0.3, 
                 type: "spring",
-                stiffness: 350,
-                damping: 12
+                stiffness: 400,
+                damping: 15
+              }}
+              style={{ 
+                transformOrigin: `${leaf.x}px ${waveY}px`,
               }}
             >
-              <svg 
-                width={leaf.size} 
-                height={leaf.size * 1.5} 
-                viewBox="0 0 12 18"
-                className="drop-shadow-sm"
-                style={{
-                  transform: isTop 
-                    ? `translate(-50%, ${yOffset - leaf.size * 1.5 + 2}px)` 
-                    : `translate(-50%, ${yOffset - 2}px)`,
-                  color: accentColor || 'currentColor',
-                }}
-              >
-                {/* Leaf with stem - more natural shape */}
-                {/* Stem connects to vine */}
+              {/* Simple elegant leaf shape */}
+              <g transform={`translate(${leaf.x}, ${waveY}) rotate(${baseRotate}) scale(${leaf.size / 10})`}>
+                {/* Leaf blade - simple teardrop */}
                 <path
-                  d={isTop 
-                    ? "M 6 18 Q 6 15, 6 14" 
-                    : "M 6 0 Q 6 3, 6 4"
-                  }
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  fill="none"
-                  strokeLinecap="round"
+                  d="M 0 0 Q -2 -4, 0 -8 Q 2 -4, 0 0"
+                  fill={accentColor || 'currentColor'}
                 />
-                {/* Leaf blade - curved natural shape */}
+                {/* Subtle center vein */}
                 <path
-                  d={isTop
-                    ? (leaf.curve === 'left' 
-                        ? "M 6 14 Q 1 10, 2 5 Q 3 1, 6 0 Q 9 1, 10 5 Q 11 10, 6 14" 
-                        : "M 6 14 Q 11 10, 10 5 Q 9 1, 6 0 Q 3 1, 2 5 Q 1 10, 6 14")
-                    : (leaf.curve === 'left'
-                        ? "M 6 4 Q 1 8, 2 13 Q 3 17, 6 18 Q 9 17, 10 13 Q 11 8, 6 4"
-                        : "M 6 4 Q 11 8, 10 13 Q 9 17, 6 18 Q 3 17, 2 13 Q 1 8, 6 4")
-                  }
-                  fill="currentColor"
-                />
-                {/* Central vein */}
-                <path
-                  d={isTop ? "M 6 13 Q 6 7, 6 1" : "M 6 5 Q 6 11, 6 17"}
+                  d="M 0 -1 L 0 -7"
                   stroke="white"
-                  strokeWidth="0.6"
-                  opacity="0.25"
+                  strokeWidth="0.3"
+                  opacity="0.3"
                   fill="none"
-                  strokeLinecap="round"
                 />
-                {/* Side veins */}
-                <g stroke="white" strokeWidth="0.4" opacity="0.2" fill="none">
-                  {isTop ? (
-                    <>
-                      <path d="M 6 11 Q 4 10, 3 8" />
-                      <path d="M 6 11 Q 8 10, 9 8" />
-                      <path d="M 6 7 Q 4 6, 3.5 4" />
-                      <path d="M 6 7 Q 8 6, 8.5 4" />
-                    </>
-                  ) : (
-                    <>
-                      <path d="M 6 7 Q 4 8, 3 10" />
-                      <path d="M 6 7 Q 8 8, 9 10" />
-                      <path d="M 6 11 Q 4 12, 3.5 14" />
-                      <path d="M 6 11 Q 8 12, 8.5 14" />
-                    </>
-                  )}
-                </g>
-              </svg>
-            </motion.div>
+              </g>
+            </motion.g>
           )
         })}
-      </div>
+      </svg>
       
       {/* Animated flowers - petals: white on dark, dark on light; center: yellow */}
       <div className="absolute inset-0" style={{ overflow: 'visible' }}>
