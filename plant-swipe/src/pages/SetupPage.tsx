@@ -208,20 +208,17 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
         )}
       </svg>
       
-      {/* Animated leaves - clean visible leaves */}
+      {/* Animated leaves - clean simple leaves */}
       {leafPositions.map((leaf, index) => {
         const shouldShow = animatedProgress >= leaf.x
         const isAbove = leaf.y === 6
-        // Convert viewBox coordinates to percentage positions
-        // viewBox is 100 wide, container is 100% wide, so x% = x
-        // viewBox is 16 tall, container is 32px (h-8), center is at 50%
-        // y=6 is above center (6/16 = 37.5%), y=10 is below center (10/16 = 62.5%)
+        // Position: y=6 is 37.5% from top, y=10 is 62.5% from top
         const topPercent = (leaf.y / 16) * 100
         
         return (
           <motion.div
             key={index}
-            className="absolute"
+            className="absolute pointer-events-none"
             style={{
               left: `${leaf.x}%`,
               top: `${topPercent}%`,
@@ -238,34 +235,20 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
               damping: 20
             }}
           >
-            {/* Leaf SVG - positioned so stem connects to vine */}
             <svg 
-              width="12" 
-              height="14" 
-              viewBox="0 0 12 14"
+              width="10" 
+              height="12" 
+              viewBox="0 0 10 12"
               style={{
                 transform: `translate(-50%, ${isAbove ? '-100%' : '0%'}) rotate(${leaf.rotation}deg)`,
                 transformOrigin: isAbove ? 'center bottom' : 'center top',
+                overflow: 'visible',
               }}
             >
-              {/* Leaf shape - elegant pointed oval */}
+              {/* Simple leaf shape */}
               <path
-                d="M 6 0 C 10 3, 10 11, 6 14 C 2 11, 2 3, 6 0"
+                d="M 5 0 Q 9 3, 5 12 Q 1 3, 5 0"
                 fill={accentColor || 'currentColor'}
-              />
-              {/* Center vein */}
-              <path
-                d="M 6 2 L 6 12"
-                stroke="rgba(255,255,255,0.3)"
-                strokeWidth="0.8"
-                fill="none"
-              />
-              {/* Side veins */}
-              <path
-                d="M 6 4 L 4 5.5 M 6 4 L 8 5.5 M 6 7 L 3.5 9 M 6 7 L 8.5 9 M 6 10 L 4.5 11.5 M 6 10 L 7.5 11.5"
-                stroke="rgba(255,255,255,0.2)"
-                strokeWidth="0.5"
-                fill="none"
               />
             </svg>
           </motion.div>
