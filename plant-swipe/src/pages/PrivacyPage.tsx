@@ -14,7 +14,7 @@ export default function PrivacyPage() {
   })
   usePageMetadata({ title: seoTitle, description: seoDescription })
 
-  const lastUpdated = "January 27, 2026"
+  const lastUpdated = "January 31, 2026"
 
   const sanitizedPrivacyHtml = useMemo(() => {
     const withoutEditorArtifacts = privacyHtml.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<\/?bdt[^>]*>/gi, "")
