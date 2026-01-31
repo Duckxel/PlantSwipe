@@ -72,25 +72,24 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
     requestAnimationFrame(animate)
   }, [progress])
   
-  // Leaf positions - varied spacing, alternating top/bottom with different rotations
-  // Top leaves (at peaks y=6): point upward-outward, attached at bottom of leaf
-  // Bottom leaves (at troughs y=10): point downward-outward, attached at top of leaf
+  // Leaf positions - placed along the wave, alternating sides
+  // Uses getWaveY to position exactly on the curve
   const leafPositions = [
-    // Top leaves - attached at vine peak (y=6), pointing up and out
-    { x: 5, y: 6, isTop: true, rotate: -35, size: 8 },
-    { x: 18, y: 6, isTop: true, rotate: -55, size: 9 },
-    { x: 35, y: 6, isTop: true, rotate: -40, size: 10 },
-    { x: 48, y: 6, isTop: true, rotate: -50, size: 8 },
-    { x: 65, y: 6, isTop: true, rotate: -35, size: 9 },
-    { x: 78, y: 6, isTop: true, rotate: -55, size: 10 },
-    { x: 92, y: 6, isTop: true, rotate: -45, size: 8 },
-    // Bottom leaves - attached at vine trough (y=10), pointing down and out
-    { x: 12, y: 10, isTop: false, rotate: 145, size: 9 },
-    { x: 28, y: 10, isTop: false, rotate: 125, size: 8 },
-    { x: 42, y: 10, isTop: false, rotate: 140, size: 10 },
-    { x: 58, y: 10, isTop: false, rotate: 130, size: 9 },
-    { x: 72, y: 10, isTop: false, rotate: 145, size: 8 },
-    { x: 85, y: 10, isTop: false, rotate: 135, size: 9 },
+    // Leaves growing upward from peaks and slopes
+    { x: 6, side: 'top', rotate: -40, size: 10, curve: 'left' },
+    { x: 16, side: 'top', rotate: -55, size: 9, curve: 'right' },
+    { x: 32, side: 'top', rotate: -35, size: 11, curve: 'left' },
+    { x: 46, side: 'top', rotate: -50, size: 9, curve: 'right' },
+    { x: 62, side: 'top', rotate: -40, size: 10, curve: 'left' },
+    { x: 76, side: 'top', rotate: -55, size: 9, curve: 'right' },
+    { x: 93, side: 'top', rotate: -45, size: 10, curve: 'left' },
+    // Leaves growing downward from troughs and slopes
+    { x: 11, side: 'bottom', rotate: 140, size: 9, curve: 'right' },
+    { x: 23, side: 'bottom', rotate: 125, size: 10, curve: 'left' },
+    { x: 38, side: 'bottom', rotate: 145, size: 9, curve: 'right' },
+    { x: 52, side: 'bottom', rotate: 130, size: 10, curve: 'left' },
+    { x: 68, side: 'bottom', rotate: 140, size: 9, curve: 'right' },
+    { x: 82, side: 'bottom', rotate: 135, size: 10, curve: 'left' },
   ]
   
   // Flower positions - placed at specific peaks
@@ -212,9 +211,11 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
       <div className="absolute inset-0" style={{ overflow: 'visible' }}>
         {leafPositions.map((leaf, index) => {
           const shouldShow = animatedProgress >= leaf.x + 2
-          // Calculate pixel offset from center (8 is center in viewBox units)
-          // Top leaves: y=6 means -2 from center, Bottom leaves: y=10 means +2 from center
-          const yOffset = ((leaf.y - 8) / 16) * 32 // Convert viewBox units to pixels (h-8 = 32px)
+          // Get exact Y position on the wave for this leaf
+          const waveY = getWaveY(leaf.x)
+          // Convert viewBox Y (0-16) to pixel offset from center
+          const yOffset = ((waveY - 8) / 16) * 32
+          const isTop = leaf.side === 'top'
           
           return (
             <motion.div
@@ -223,47 +224,84 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
               style={{
                 left: `${leaf.x}%`,
                 top: '50%',
-                transformOrigin: leaf.isTop ? 'center bottom' : 'center top',
+                transformOrigin: isTop ? '50% 100%' : '50% 0%',
               }}
-              initial={{ scale: 0, opacity: 0, rotate: leaf.rotate - 20 }}
+              initial={{ scale: 0, opacity: 0, rotate: leaf.rotate + (isTop ? 15 : -15) }}
               animate={{ 
                 scale: shouldShow ? 1 : 0, 
                 opacity: shouldShow ? 1 : 0,
-                rotate: shouldShow ? leaf.rotate : leaf.rotate - 20,
+                rotate: shouldShow ? leaf.rotate : leaf.rotate + (isTop ? 15 : -15),
               }}
               transition={{ 
-                duration: 0.3, 
+                duration: 0.35, 
                 type: "spring",
-                stiffness: 400,
-                damping: 15
+                stiffness: 350,
+                damping: 12
               }}
             >
               <svg 
                 width={leaf.size} 
-                height={leaf.size * 1.3} 
-                viewBox="0 0 10 13"
+                height={leaf.size * 1.5} 
+                viewBox="0 0 12 18"
                 className="drop-shadow-sm"
                 style={{
-                  // Position so the attachment point (bottom for top leaves, top for bottom leaves) is at the vine
-                  transform: leaf.isTop 
-                    ? `translateY(${yOffset - leaf.size * 1.3}px) translateX(-50%)` 
-                    : `translateY(${yOffset}px) translateX(-50%)`,
+                  transform: isTop 
+                    ? `translate(-50%, ${yOffset - leaf.size * 1.5 + 2}px)` 
+                    : `translate(-50%, ${yOffset - 2}px)`,
                   color: accentColor || 'currentColor',
                 }}
               >
-                {/* Leaf shape - natural teardrop, tip at top (0), base at bottom (13) */}
+                {/* Leaf with stem - more natural shape */}
+                {/* Stem connects to vine */}
                 <path
-                  d="M 5 0 Q 10 4, 5 13 Q 0 4, 5 0"
+                  d={isTop 
+                    ? "M 6 18 Q 6 15, 6 14" 
+                    : "M 6 0 Q 6 3, 6 4"
+                  }
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  fill="none"
+                  strokeLinecap="round"
+                />
+                {/* Leaf blade - curved natural shape */}
+                <path
+                  d={isTop
+                    ? (leaf.curve === 'left' 
+                        ? "M 6 14 Q 1 10, 2 5 Q 3 1, 6 0 Q 9 1, 10 5 Q 11 10, 6 14" 
+                        : "M 6 14 Q 11 10, 10 5 Q 9 1, 6 0 Q 3 1, 2 5 Q 1 10, 6 14")
+                    : (leaf.curve === 'left'
+                        ? "M 6 4 Q 1 8, 2 13 Q 3 17, 6 18 Q 9 17, 10 13 Q 11 8, 6 4"
+                        : "M 6 4 Q 11 8, 10 13 Q 9 17, 6 18 Q 3 17, 2 13 Q 1 8, 6 4")
+                  }
                   fill="currentColor"
                 />
                 {/* Central vein */}
                 <path
-                  d="M 5 1.5 L 5 11"
+                  d={isTop ? "M 6 13 Q 6 7, 6 1" : "M 6 5 Q 6 11, 6 17"}
                   stroke="white"
-                  strokeWidth="0.5"
-                  opacity="0.3"
+                  strokeWidth="0.6"
+                  opacity="0.25"
                   fill="none"
+                  strokeLinecap="round"
                 />
+                {/* Side veins */}
+                <g stroke="white" strokeWidth="0.4" opacity="0.2" fill="none">
+                  {isTop ? (
+                    <>
+                      <path d="M 6 11 Q 4 10, 3 8" />
+                      <path d="M 6 11 Q 8 10, 9 8" />
+                      <path d="M 6 7 Q 4 6, 3.5 4" />
+                      <path d="M 6 7 Q 8 6, 8.5 4" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M 6 7 Q 4 8, 3 10" />
+                      <path d="M 6 7 Q 8 8, 9 10" />
+                      <path d="M 6 11 Q 4 12, 3.5 14" />
+                      <path d="M 6 11 Q 8 12, 8.5 14" />
+                    </>
+                  )}
+                </g>
               </svg>
             </motion.div>
           )
