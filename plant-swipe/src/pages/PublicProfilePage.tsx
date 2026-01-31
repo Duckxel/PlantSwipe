@@ -6,7 +6,7 @@ import { createPortal } from "react-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
-import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
+import { applyAccentByKey, saveAccentKey, getAccentOption, type AccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
 import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle, Bug, Medal } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
@@ -1017,7 +1017,12 @@ export default function PublicProfilePage() {
                 <div className="flex-1 min-w-0 text-center sm:text-left">
                   <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
                     <div className="flex items-center gap-1 min-w-0 max-w-full">
-                      <span className="text-xl sm:text-2xl font-semibold truncate max-w-[200px] sm:max-w-[300px]">{pp.display_name || pp.username || t('profile.member')}</span>
+                      <span 
+                        className="text-xl sm:text-2xl font-semibold truncate max-w-[200px] sm:max-w-[300px]"
+                        style={pp.accent_key ? { color: getAccentOption(pp.accent_key as AccentKey)?.hex } : undefined}
+                      >
+                        {pp.display_name || pp.username || t('profile.member')}
+                      </span>
                       <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
                     </div>
                     {pp.isAdminViewingPrivateNonFriend && (
@@ -1450,7 +1455,7 @@ export default function PublicProfilePage() {
                 country: (pp.country || ''),
                 bio: (pp.bio || ''),
                 experience_years: (profile?.experience_years != null ? String(profile.experience_years) : ''),
-                accent_key: null,
+                accent_key: (pp.accent_key as AccentKey) || null,
               }}
               submitting={editSubmitting}
               error={editError}

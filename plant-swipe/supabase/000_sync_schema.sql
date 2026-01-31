@@ -204,6 +204,7 @@ alter table if exists public.profiles drop column if exists avatar_url;
 -- New public profile fields
 alter table if exists public.profiles add column if not exists username text;
 alter table if exists public.profiles add column if not exists country text;
+alter table if exists public.profiles add column if not exists city text;
 alter table if exists public.profiles add column if not exists bio text;
 alter table if exists public.profiles add column if not exists favorite_plant text;
 alter table if exists public.profiles add column if not exists avatar_url text;
@@ -211,6 +212,7 @@ alter table if exists public.profiles add column if not exists timezone text;
 alter table if exists public.profiles add column if not exists experience_years integer;
 -- Accent color preference; default to a green tone for new accounts
 alter table if exists public.profiles add column if not exists accent_key text default 'emerald';
+COMMENT ON COLUMN public.profiles.accent_key IS 'User accent color preference. Valid values: emerald, crimson, royal, purple, gold, coral, neon, turquoise';
 -- Privacy setting: when true, profile is only visible to friends
 alter table if exists public.profiles add column if not exists is_private boolean not null default false;
 -- Friend requests setting: when true, users cannot send friend requests (prevents unwanted invites)
@@ -354,6 +356,11 @@ do $$ begin
       or public.is_admin_user((select auth.uid()))
     );
 end $$;
+
+-- Grant permissions on profiles table to authenticated users
+-- This ensures users can read/write their own profile data (subject to RLS policies)
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
+GRANT SELECT ON public.profiles TO anon;
 
 -- Aggregated like counts (security definer to bypass profiles RLS)
 create or replace function public.top_liked_plants(limit_count integer default 5)
@@ -10745,6 +10752,32 @@ ADD COLUMN IF NOT EXISTS terms_version_accepted text DEFAULT '1.0.0';
 
 ALTER TABLE IF EXISTS public.profiles
 ADD COLUMN IF NOT EXISTS privacy_version_accepted text DEFAULT '1.0.0';
+
+-- User Setup/Onboarding Preferences
+-- Stores user preferences from the initial setup wizard after signup
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS setup_completed boolean DEFAULT false;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS garden_type text CHECK (garden_type IS NULL OR garden_type IN ('inside', 'outside', 'both'));
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS experience_level text CHECK (experience_level IS NULL OR experience_level IN ('novice', 'intermediate', 'expert'));
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS looking_for text CHECK (looking_for IS NULL OR looking_for IN ('eat', 'ornamental', 'various'));
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS notification_time text DEFAULT '10h' CHECK (notification_time IS NULL OR notification_time IN ('6h', '10h', '14h', '17h'));
+
+-- Create index for quick lookups on setup_completed
+CREATE INDEX IF NOT EXISTS idx_profiles_setup_completed ON public.profiles(setup_completed);
+
+COMMENT ON COLUMN public.profiles.setup_completed IS 'Whether the user has completed the initial setup wizard';
+COMMENT ON COLUMN public.profiles.garden_type IS 'Garden location preference: inside, outside, or both';
+COMMENT ON COLUMN public.profiles.experience_level IS 'User gardening experience: novice, intermediate, or expert';
+COMMENT ON COLUMN public.profiles.looking_for IS 'User gardening goal: eat (vegetables/fruits), ornamental (flowers), or various (diverse plants)';
+COMMENT ON COLUMN public.profiles.notification_time IS 'Preferred notification time: 6h, 10h, 14h, or 17h';
 
 -- GDPR Audit Log Table
 CREATE TABLE IF NOT EXISTS public.gdpr_audit_log (

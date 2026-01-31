@@ -69,6 +69,7 @@ const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
 const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
 const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
+const SetupPageLazy = lazy(() => import("@/pages/SetupPage").then(module => ({ default: module.SetupPage })))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -1395,6 +1396,63 @@ export default function PlantSwipe() {
     // Landing page has its own layout, skip the app shell
     // Show landing page for both logged out users AND logged in users visiting "/"
     const isLandingPage = currentView === "landing"
+    
+    // Setup page has its own full-screen layout
+    const isSetupPage = pathWithoutLang === "/setup"
+    
+    // Check if user needs to complete setup (logged in but setup not completed)
+    // Triggers for: setup_completed === false, null, or undefined (new users)
+    // Only redirect if not already on setup page and not on excluded pages
+    // IMPORTANT: Legal update modal takes priority over setup - don't redirect if user needs to accept new terms
+    const needsSetup = user && profile && profile.setup_completed !== true
+    // Only exclude: setup page itself, admin panel, and landing page (exact match for "/")
+    const setupExcludedPaths = ['/setup', '/admin']
+    const isExcludedFromSetup = pathWithoutLang === '/' || setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !isExcludedFromSetup
+
+    // Setup page - full screen wizard experience
+    // Render directly without nested Routes since we've already determined the path
+    if (isSetupPage && user) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <ErrorBoundary fallback={routeErrorFallback}>
+            <Suspense fallback={routeLoadingFallback}>
+              <SetupPageLazy />
+            </Suspense>
+          </ErrorBoundary>
+          <CookieConsent />
+          
+          {/* Legal Document Update Modal - show even on setup page if terms need updating */}
+          {showLegalUpdateModal && profile && (
+            <LegalUpdateModal
+              open={showLegalUpdateModal}
+              userId={user.id}
+              userTermsVersion={profile.terms_version_accepted ?? null}
+              userPrivacyVersion={profile.privacy_version_accepted ?? null}
+              userTermsAcceptedDate={profile.terms_accepted_date ?? null}
+              userPrivacyAcceptedDate={profile.privacy_policy_accepted_date ?? null}
+              onAccepted={() => {
+                setLegalUpdateDismissed(true)
+                refreshProfile().catch(() => {})
+              }}
+              onDeclined={async () => {
+                await signOut()
+                alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+              }}
+            />
+          )}
+        </AuthActionsProvider>
+      )
+    }
+
+    // Redirect to setup if user needs to complete it
+    if (shouldRedirectToSetup) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <Navigate to="/setup" replace />
+        </AuthActionsProvider>
+      )
+    }
 
     if (isLandingPage) {
       return (
@@ -1785,6 +1843,16 @@ export default function PlantSwipe() {
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
                   <SettingsPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/setup"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <SetupPageLazy />
                 </Suspense>
               ) : (
                 <Navigate to="/" replace />
