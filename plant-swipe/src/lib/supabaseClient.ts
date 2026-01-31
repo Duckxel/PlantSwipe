@@ -61,6 +61,7 @@ export type ProfileRow = {
   roles?: string[] | null // User roles: admin, editor, pro, merchant, creator, vip, plus
   username?: string | null
   country?: string | null
+  city?: string | null
   bio?: string | null
   favorite_plant?: string | null
   avatar_url?: string | null
@@ -73,6 +74,32 @@ export type ProfileRow = {
   notify_push?: boolean | null
   notify_email?: boolean | null
   threat_level?: number | null
+  // GDPR consent tracking
+  marketing_consent?: boolean | null
+  marketing_consent_date?: string | null
+  terms_accepted_date?: string | null
+  privacy_policy_accepted_date?: string | null
+  terms_version_accepted?: string | null
+  privacy_version_accepted?: string | null
+  // Granular email preferences
+  email_product_updates?: boolean | null
+  email_tips_advice?: boolean | null
+  email_community_highlights?: boolean | null
+  email_promotions?: boolean | null
+  // Granular push preferences
+  push_task_reminders?: boolean | null
+  push_friend_activity?: boolean | null
+  push_messages?: boolean | null
+  push_garden_updates?: boolean | null
+  // Personalization preferences
+  personalized_recommendations?: boolean | null
+  analytics_improvement?: boolean | null
+  // User setup/onboarding preferences
+  setup_completed?: boolean | null
+  garden_type?: 'inside' | 'outside' | 'both' | null
+  experience_level?: 'novice' | 'intermediate' | 'expert' | null
+  looking_for?: 'eat' | 'ornamental' | 'various' | null
+  notification_time?: '6h' | '10h' | '14h' | '17h' | null
 }
 
 export type BlogPostRow = {

@@ -32,6 +32,113 @@ import { useLocation } from "react-router-dom"
 import { Link } from "@/components/i18n/Link"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 
+// =============================================================================
+// TRIGGER VARIABLE CATALOG - Variables available for each trigger type
+// Templates MUST use these exact variable names for proper substitution
+// =============================================================================
+const TRIGGER_VARIABLES: Record<string, { 
+  variables: { token: string; description: string; required?: boolean }[]
+  category: 'general' | 'security' | 'marketing'
+}> = {
+  // General/Marketing triggers
+  WELCOME_EMAIL: {
+    category: 'general',
+    variables: [
+      { token: '{{user}}', description: "User's display name (capitalized)", required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{url}}', description: 'Website URL (aphylia.app)' },
+      { token: '{{random}}', description: '10 random alphanumeric characters' },
+    ]
+  },
+  BAN_USER: {
+    category: 'general',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
+  // Security triggers - Email Change
+  EMAIL_CHANGE_VERIFICATION: {
+    category: 'security',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{url}}', description: 'Secure link to verify new email (verification URL)', required: true },
+      { token: '{{new_email}}', description: 'The new email address being verified' },
+      { token: '{{old_email}}', description: 'The previous email address' },
+    ]
+  },
+  EMAIL_CHANGE_NOTIFICATION: {
+    category: 'security',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{old_email}}', description: 'The previous email address (recipient)', required: true },
+      { token: '{{new_email}}', description: 'The new email address', required: true },
+      { token: '{{time}}', description: 'When the change occurred (UTC)' },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
+  // Security triggers - Password
+  PASSWORD_RESET_REQUEST: {
+    category: 'security',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{url}}', description: 'Secure password reset link', required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{time}}', description: 'When the request was made (UTC)' },
+    ]
+  },
+  PASSWORD_CHANGE_CONFIRMATION: {
+    category: 'security',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{time}}', description: 'When the password was changed (UTC)', required: true },
+      { token: '{{device}}', description: 'Device/browser used (e.g., Chrome on Windows)' },
+      { token: '{{location}}', description: 'Geographic location (city, country)' },
+      { token: '{{ip_address}}', description: 'IP address of the request' },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
+  // Security triggers - Login
+  SUSPICIOUS_LOGIN_ALERT: {
+    category: 'security',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{location}}', description: 'Login location (city, country)', required: true },
+      { token: '{{device}}', description: 'Device/browser used', required: true },
+      { token: '{{ip_address}}', description: 'IP address of the login' },
+      { token: '{{time}}', description: 'When the login occurred (UTC)' },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
+  NEW_DEVICE_LOGIN: {
+    category: 'security',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{device}}', description: 'New device/browser detected', required: true },
+      { token: '{{location}}', description: 'Login location (city, country)' },
+      { token: '{{ip_address}}', description: 'IP address of the login' },
+      { token: '{{time}}', description: 'When the login occurred (UTC)' },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
+}
+
+// Get category badge color
+const getCategoryConfig = (category: 'general' | 'security' | 'marketing') => {
+  switch (category) {
+    case 'security':
+      return { label: 'Security', bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400', icon: '🔐' }
+    case 'marketing':
+      return { label: 'Marketing', bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400', icon: '📣' }
+    default:
+      return { label: 'General', bg: 'bg-stone-100 dark:bg-stone-800', text: 'text-stone-700 dark:text-stone-300', icon: '📧' }
+  }
+}
+
 type EmailTemplate = {
   id: string
   title: string
@@ -69,6 +176,7 @@ type EmailCampaign = {
   sendCompletedAt: string | null
   testMode: boolean
   testEmail: string | null
+  isMarketing: boolean // If true, only users with marketing_consent=true receive this
   createdAt: string
   updatedAt: string
 }
@@ -175,6 +283,7 @@ export const AdminEmailsPanel: React.FC = () => {
     previewText: "",
     testMode: false,
     testEmail: "dev@aphylia.app",
+    isMarketing: false, // If true, only send to users with marketing_consent=true
   })
   const [campaignSaving, setCampaignSaving] = React.useState(false)
   const [sheetOpen, setSheetOpen] = React.useState(false)
@@ -310,6 +419,7 @@ export const AdminEmailsPanel: React.FC = () => {
         previewText: campaignForm.previewText.trim(),
         testMode: campaignForm.testMode,
         testEmail: campaignForm.testMode ? campaignForm.testEmail.trim() : null,
+        isMarketing: campaignForm.isMarketing, // Exclude users without marketing consent
       }
       const resp = await fetch("/api/admin/email-campaigns", {
         method: "POST",
@@ -328,6 +438,7 @@ export const AdminEmailsPanel: React.FC = () => {
         previewText: "",
         testMode: false,
         testEmail: "dev@aphylia.app",
+        isMarketing: false,
       })
       setSheetOpen(false)
       loadCampaigns().catch(() => {})
@@ -610,6 +721,11 @@ export const AdminEmailsPanel: React.FC = () => {
                                 🧪 Test
                               </div>
                             )}
+                            {campaign.isMarketing && (
+                              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                                📧 Marketing
+                              </div>
+                            )}
                             <div className={cn(
                               "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium",
                               statusConfig.bg, statusConfig.text
@@ -722,126 +838,206 @@ export const AdminEmailsPanel: React.FC = () => {
               <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4">
                 <p className="text-sm text-amber-800 dark:text-amber-200">
                   <strong>💡 How it works:</strong> When enabled, these emails are automatically sent when specific events occur (e.g., new user signup). 
-                  Configure a template and enable the trigger to start sending.
+                  Configure a template and enable the trigger to start sending. <strong>Your template MUST use the listed variables</strong> for proper personalization.
                 </p>
               </div>
               
               <div className="grid gap-4">
-                {triggers.map((trigger) => (
+                {triggers.map((trigger) => {
+                  const triggerVars = TRIGGER_VARIABLES[trigger.triggerType]
+                  const categoryConfig = triggerVars ? getCategoryConfig(triggerVars.category) : getCategoryConfig('general')
+                  
+                  return (
                   <div
                     key={trigger.id}
-                    className="rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 sm:p-6"
+                    className={cn(
+                      "rounded-xl sm:rounded-2xl border bg-white dark:bg-[#1e1e20] p-5 sm:p-6",
+                      triggerVars?.category === 'security' 
+                        ? "border-red-200 dark:border-red-900/50" 
+                        : "border-stone-200 dark:border-[#3e3e42]"
+                    )}
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                      {/* Icon and Info */}
-                      <div className="flex items-start gap-4 flex-1">
-                        <div className={cn(
-                          "flex-shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center",
-                          trigger.isEnabled 
-                            ? "bg-emerald-100 dark:bg-emerald-900/30" 
-                            : "bg-stone-100 dark:bg-[#2a2a2d]"
-                        )}>
-                          <Zap className={cn(
-                            "h-5 w-5 sm:h-6 sm:w-6",
+                    <div className="flex flex-col gap-4">
+                      {/* Header Row */}
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                        {/* Icon and Info */}
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className={cn(
+                            "flex-shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl",
                             trigger.isEnabled 
-                              ? "text-emerald-600 dark:text-emerald-400" 
-                              : "text-stone-400"
-                          )} />
+                              ? "bg-emerald-100 dark:bg-emerald-900/30" 
+                              : "bg-stone-100 dark:bg-[#2a2a2d]"
+                          )}>
+                            {triggerVars?.category === 'security' ? '🔐' : <Zap className={cn(
+                              "h-5 w-5 sm:h-6 sm:w-6",
+                              trigger.isEnabled 
+                                ? "text-emerald-600 dark:text-emerald-400" 
+                                : "text-stone-400"
+                            )} />}
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <h3 className="font-semibold text-stone-900 dark:text-white text-base sm:text-lg">
+                                {trigger.displayName}
+                              </h3>
+                              {/* Category Badge */}
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-medium",
+                                categoryConfig.bg, categoryConfig.text
+                              )}>
+                                {categoryConfig.icon} {categoryConfig.label}
+                              </span>
+                              {/* Status Badge */}
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-full text-xs font-medium",
+                                trigger.isEnabled
+                                  ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-500"
+                              )}>
+                                {trigger.isEnabled ? "Active" : "Disabled"}
+                              </span>
+                            </div>
+                            
+                            {trigger.description && (
+                              <p className="text-sm text-stone-500 dark:text-stone-400 mb-2">
+                                {trigger.description}
+                              </p>
+                            )}
+                            
+                            <div className="text-xs text-stone-400 font-mono">
+                              Trigger ID: <code className="bg-stone-100 dark:bg-[#2a2a2d] px-1.5 py-0.5 rounded">{trigger.triggerType}</code>
+                            </div>
+                          </div>
                         </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-stone-900 dark:text-white text-base sm:text-lg">
-                              {trigger.displayName}
-                            </h3>
-                            <span className={cn(
-                              "px-2 py-0.5 rounded-full text-xs font-medium",
-                              trigger.isEnabled
-                                ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-                                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-500"
-                            )}>
-                              {trigger.isEnabled ? "Active" : "Disabled"}
+
+                        {/* Controls */}
+                        <div className="flex flex-col gap-3 sm:min-w-[280px]">
+                          {/* Template Selection */}
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                              Email Template
+                            </Label>
+                            <Select
+                              value={trigger.templateId || ""}
+                              onChange={(e) => {
+                                const newTemplateId = e.target.value || null
+                                handleUpdateTrigger(trigger, { templateId: newTemplateId })
+                              }}
+                              disabled={savingTrigger === trigger.id}
+                              className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                            >
+                              <option value="">No template (disabled)</option>
+                              {templates.map((tpl) => (
+                                <option key={tpl.id} value={tpl.id}>
+                                  {tpl.title} (v{tpl.version})
+                                </option>
+                              ))}
+                            </Select>
+                            {trigger.templateId && trigger.templateTitle && (
+                              <p className="text-xs text-stone-500">
+                                Using: <span className="font-medium">{trigger.templateTitle}</span>
+                              </p>
+                            )}
+                            {!trigger.templateId && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400">
+                                ⚠️ Select a template to enable this trigger
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Enable/Disable Toggle */}
+                          <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
+                            <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                              Send Automatically
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTrigger(trigger, { isEnabled: !trigger.isEnabled })}
+                              disabled={savingTrigger === trigger.id || !trigger.templateId}
+                              className={cn(
+                                "relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                                trigger.isEnabled ? "bg-emerald-500" : "bg-stone-300 dark:bg-stone-600"
+                              )}
+                              title={!trigger.templateId ? "Select a template first" : trigger.isEnabled ? "Disable" : "Enable"}
+                            >
+                              {savingTrigger === trigger.id ? (
+                                <Loader2 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-white" />
+                              ) : (
+                                <span
+                                  className={cn(
+                                    "absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+                                    trigger.isEnabled ? "left-6" : "left-1"
+                                  )}
+                                />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Variables Section - Highlighted */}
+                      {triggerVars && triggerVars.variables.length > 0 && (
+                        <div className={cn(
+                          "rounded-xl p-4 border",
+                          triggerVars.category === 'security'
+                            ? "bg-red-50/50 dark:bg-red-900/10 border-red-200/50 dark:border-red-900/30"
+                            : "bg-purple-50/50 dark:bg-purple-900/10 border-purple-200/50 dark:border-purple-900/30"
+                        )}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+                              📋 Required Template Variables
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                              Use these in your template
                             </span>
                           </div>
                           
-                          {trigger.description && (
-                            <p className="text-sm text-stone-500 dark:text-stone-400 mb-3">
-                              {trigger.description}
-                            </p>
-                          )}
-                          
-                          <div className="text-xs text-stone-400 font-mono">
-                            Trigger: {trigger.triggerType}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Controls */}
-                      <div className="flex flex-col gap-3 sm:min-w-[280px]">
-                        {/* Template Selection */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                            Email Template
-                          </Label>
-                          <Select
-                            value={trigger.templateId || ""}
-                            onChange={(e) => {
-                              const newTemplateId = e.target.value || null
-                              handleUpdateTrigger(trigger, { templateId: newTemplateId })
-                            }}
-                            disabled={savingTrigger === trigger.id}
-                            className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-                          >
-                            <option value="">No template (disabled)</option>
-                            {templates.map((tpl) => (
-                              <option key={tpl.id} value={tpl.id}>
-                                {tpl.title} (v{tpl.version})
-                              </option>
-                            ))}
-                          </Select>
-                          {trigger.templateId && trigger.templateTitle && (
-                            <p className="text-xs text-stone-500">
-                              Using latest version of: <span className="font-medium">{trigger.templateTitle}</span>
-                            </p>
-                          )}
-                          {!trigger.templateId && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400">
-                              ⚠️ Select a template to enable this trigger
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Enable/Disable Toggle */}
-                        <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
-                          <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
-                            Send Automatically
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateTrigger(trigger, { isEnabled: !trigger.isEnabled })}
-                            disabled={savingTrigger === trigger.id || !trigger.templateId}
-                            className={cn(
-                              "relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                              trigger.isEnabled ? "bg-emerald-500" : "bg-stone-300 dark:bg-stone-600"
-                            )}
-                            title={!trigger.templateId ? "Select a template first" : trigger.isEnabled ? "Disable" : "Enable"}
-                          >
-                            {savingTrigger === trigger.id ? (
-                              <Loader2 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-white" />
-                            ) : (
-                              <span
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {triggerVars.variables.map((v) => (
+                              <div 
+                                key={v.token}
                                 className={cn(
-                                  "absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
-                                  trigger.isEnabled ? "left-6" : "left-1"
+                                  "flex items-start gap-2 p-2 rounded-lg cursor-pointer transition-colors",
+                                  v.required 
+                                    ? "bg-white dark:bg-[#1e1e20] border border-amber-300 dark:border-amber-700"
+                                    : "bg-white/50 dark:bg-[#1e1e20]/50 hover:bg-white dark:hover:bg-[#1e1e20]"
                                 )}
-                              />
-                            )}
-                          </button>
+                                onClick={() => {
+                                  navigator.clipboard?.writeText(v.token)
+                                }}
+                                title="Click to copy"
+                              >
+                                <code className={cn(
+                                  "px-2 py-0.5 rounded text-xs font-mono shrink-0",
+                                  v.required
+                                    ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-bold"
+                                    : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                                )}>
+                                  {v.token}
+                                </code>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[11px] text-stone-600 dark:text-stone-400 leading-tight">
+                                    {v.description}
+                                  </p>
+                                  {v.required && (
+                                    <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 uppercase">
+                                      Required
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          <p className="mt-3 text-[10px] text-stone-500 dark:text-stone-500">
+                            💡 Click any variable to copy it. Yellow-bordered variables are <strong>required</strong> for this email type.
+                          </p>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           )}
@@ -1092,6 +1288,40 @@ export const AdminEmailsPanel: React.FC = () => {
                 placeholder="Notes for your team..."
                 className="rounded-xl border-stone-200 dark:border-[#3e3e42] min-h-[60px] sm:min-h-[80px] text-sm"
               />
+            </div>
+
+            {/* Marketing Email Toggle */}
+            <div className="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <Label className="text-xs sm:text-sm font-medium text-purple-800 dark:text-purple-300">
+                    📧 Marketing Email
+                  </Label>
+                  <p className="text-[10px] sm:text-xs text-purple-600 dark:text-purple-400 mt-0.5">
+                    Only send to users who opted-in to marketing communications
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCampaignForm((prev) => ({ ...prev, isMarketing: !prev.isMarketing }))}
+                  className={cn(
+                    "relative h-6 w-11 rounded-full transition-colors flex-shrink-0",
+                    campaignForm.isMarketing ? "bg-purple-500" : "bg-stone-300 dark:bg-stone-600"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-1 h-4 w-4 rounded-full bg-white transition-transform shadow-sm",
+                      campaignForm.isMarketing ? "left-6" : "left-1"
+                    )}
+                  />
+                </button>
+              </div>
+              {campaignForm.isMarketing && (
+                <p className="text-[10px] sm:text-xs text-purple-700 dark:text-purple-300 mt-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg px-2 py-1.5">
+                  ⚠️ Users who unchecked "Marketing Communications" in Settings will not receive this email.
+                </p>
+              )}
             </div>
 
             {/* Test Mode Toggle */}

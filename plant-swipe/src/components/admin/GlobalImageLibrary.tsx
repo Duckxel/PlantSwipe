@@ -21,6 +21,7 @@ import {
   Mail,
   Shield,
   Sparkles,
+  Smartphone,
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
@@ -83,6 +84,7 @@ const SOURCE_CONFIG: Record<string, { label: string; icon: React.ComponentType<{
   "pro-advice": { label: "Pro Advice", icon: Sparkles, color: "text-amber-600 bg-amber-100 dark:bg-amber-900/30" },
   email: { label: "Email", icon: Mail, color: "text-rose-600 bg-rose-100 dark:bg-rose-900/30" },
   contact_screenshot: { label: "Contact Form", icon: MessageSquare, color: "text-indigo-600 bg-indigo-100 dark:bg-indigo-900/30" },
+  mockups: { label: "Mockups", icon: Smartphone, color: "text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30" },
 }
 
 function getSourceConfig(source: string | null) {
@@ -578,17 +580,20 @@ export const GlobalImageLibrary: React.FC = () => {
             return (
               <div
                 key={entry.id}
-                className="group rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5"
+                className="group rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/5"
               >
-                {/* Image Preview */}
-                <div className="aspect-video bg-stone-100 dark:bg-[#2a2a2d] relative overflow-hidden">
+                {/* Image Preview - Clickable to open modal */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedEntry(entry)}
+                  className="w-full aspect-video bg-stone-100 dark:bg-[#2a2a2d] relative overflow-hidden rounded-t-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset cursor-pointer"
+                >
                   {isImage && entry.url ? (
                     <img
                       src={entry.url}
                       alt={storageName}
-                      className="w-full h-full object-cover cursor-pointer"
+                      className="w-full h-full object-cover"
                       loading="lazy"
-                      onClick={() => setSelectedEntry(entry)}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -604,55 +609,47 @@ export const GlobalImageLibrary: React.FC = () => {
                     <SourceIcon className="h-3 w-3" />
                     {sourceConfig.label}
                   </div>
-                  
-                  {/* Overlay Actions */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center gap-2 p-4">
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="rounded-lg bg-white/90 text-stone-900 hover:bg-white"
-                      onClick={() => handleCopy(entry.id, displayLink)}
-                      disabled={copiedId === entry.id}
-                    >
-                      {copiedId === entry.id ? (
-                        <>
-                          <Check className="mr-1.5 h-3.5 w-3.5" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="mr-1.5 h-3.5 w-3.5" />
-                          Copy
-                        </>
-                      )}
-                    </Button>
-                    {entry.url && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="rounded-lg bg-white/90 text-stone-900 hover:bg-white"
-                        asChild
-                      >
-                        <a href={entry.url} target="_blank" rel="noreferrer">
-                          <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                          Open
-                        </a>
-                      </Button>
+                </button>
+                
+                {/* Action Buttons - Icon only */}
+                <div className="flex items-center justify-end gap-1 px-2 py-1.5 border-b border-stone-100 dark:border-[#2a2a2d]">
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(entry.id, displayLink)}
+                    disabled={copiedId === entry.id}
+                    className="h-7 w-7 flex items-center justify-center rounded-md text-stone-500 hover:text-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 dark:hover:text-stone-300 transition-colors disabled:opacity-50"
+                    title="Copy URL"
+                  >
+                    {copiedId === entry.id ? (
+                      <Check className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
                     )}
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="rounded-lg bg-red-500 text-white hover:bg-red-600"
-                      onClick={() => handleDelete(entry)}
-                      disabled={deletingId === entry.id}
+                  </button>
+                  {entry.url && (
+                    <a
+                      href={entry.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="h-7 w-7 flex items-center justify-center rounded-md text-stone-500 hover:text-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 dark:hover:text-stone-300 transition-colors"
+                      title="Open in new tab"
                     >
-                      {deletingId === entry.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                  </div>
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(entry)}
+                    disabled={deletingId === entry.id}
+                    className="h-7 w-7 flex items-center justify-center rounded-md text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                    title="Delete"
+                  >
+                    {deletingId === entry.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
 
                 {/* Info */}
@@ -675,7 +672,10 @@ export const GlobalImageLibrary: React.FC = () => {
                   {/* Uploader - Clickable */}
                   <button
                     type="button"
-                    onClick={() => setSelectedUser(entry.adminId)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedUser(entry.adminId)
+                    }}
                     disabled={!entry.adminId}
                     className={cn(
                       "mt-2 flex items-center gap-1.5 text-xs",

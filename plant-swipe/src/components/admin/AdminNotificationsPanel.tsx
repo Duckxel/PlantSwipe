@@ -94,6 +94,7 @@ type NotificationAutomation = {
   lastRunAt: string | null
   lastRunSummary: Record<string, unknown> | null
   recipientCount: number
+  sentTodayCount: number
   createdAt: string
   updatedAt: string
 }
@@ -1043,7 +1044,12 @@ export function AdminNotificationsPanel() {
                 {automations.map((automation) => (
                   <div
                     key={automation.id}
-                    className="rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 sm:p-6"
+                    className={cn(
+                      "rounded-xl sm:rounded-2xl border p-5 sm:p-6 transition-all",
+                      automation.sentTodayCount > 0
+                        ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
+                        : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
+                    )}
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                       {/* Icon and Info */}
@@ -1063,7 +1069,7 @@ export function AdminNotificationsPanel() {
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <h3 className="font-semibold text-stone-900 dark:text-white text-base sm:text-lg">
                               {automation.displayName}
                             </h3>
@@ -1075,6 +1081,12 @@ export function AdminNotificationsPanel() {
                             )}>
                               {automation.isEnabled ? "Active" : "Disabled"}
                             </span>
+                            {automation.sentTodayCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" />
+                                {automation.sentTodayCount} sent today
+                              </span>
+                            )}
                           </div>
 
                           {automation.description && (

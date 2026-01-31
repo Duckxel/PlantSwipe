@@ -23,6 +23,7 @@ type CampaignRow = {
   timezone: string | null
   test_mode: boolean | null
   test_email: string | null
+  is_marketing: boolean | null // If true, only send to users with marketing_consent=true
 }
 
 type Recipient = {
@@ -352,7 +353,12 @@ async function processCampaign(
       }]
     } else {
       // Normal mode: collect all recipients
-      recipients = await collectRecipients(client, options.recipientLimit)
+      // If campaign is marked as marketing, only include users with marketing_consent=true
+      const isMarketingCampaign = claimed.is_marketing === true
+      if (isMarketingCampaign) {
+        console.log(`[email-campaign-runner] MARKETING CAMPAIGN: filtering to users with marketing_consent=true`)
+      }
+      recipients = await collectRecipients(client, options.recipientLimit, isMarketingCampaign)
     }
 
     summary.totalRecipients = recipients.length
@@ -547,6 +553,7 @@ async function processCampaign(
 async function collectRecipients(
   client: SupabaseClient,
   limit?: number,
+  isMarketing?: boolean, // If true, only include users with marketing_consent=true
 ): Promise<Recipient[]> {
   const recipients: Recipient[] = []
   const perPage = 200
@@ -574,6 +581,13 @@ async function collectRecipients(
       // Skip users who have explicitly opted out of email campaigns
       // notify_email defaults to true (null means opted in)
       if (profile?.notifyEmail === false) continue
+
+      // For marketing emails, skip users who haven't given marketing consent
+      // GDPR: marketing_consent defaults to false - users must actively opt-in (pre-ticked boxes don't constitute valid consent)
+      // but users can uncheck it during signup or later in Settings
+      if (isMarketing && profile?.marketingConsent === false) {
+        continue
+      }
 
       const displayName =
         profile?.displayName ||
@@ -613,6 +627,7 @@ type ProfileMeta = {
   timezone: string | null
   language: string
   notifyEmail: boolean | null
+  marketingConsent: boolean | null // If false, user has explicitly opted out of marketing emails
 }
 
 async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<Map<string, ProfileMeta>> {
@@ -620,7 +635,7 @@ async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<
   if (!ids.length) return map
   const { data, error } = await client
     .from("profiles")
-    .select("id, display_name, timezone, language, notify_email")
+    .select("id, display_name, timezone, language, notify_email, marketing_consent")
     .in("id", ids)
   if (error) {
     console.warn("[email-campaign-runner] failed to load profile metadata", error)
@@ -633,6 +648,7 @@ async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<
         timezone: typeof row.timezone === "string" && row.timezone.trim().length ? row.timezone : null,
         language: typeof row.language === "string" && row.language.trim().length ? row.language : DEFAULT_LANGUAGE,
         notifyEmail: row.notify_email === false ? false : null, // null means opted in (default)
+        marketingConsent: row.marketing_consent === true ? true : row.marketing_consent === false ? false : null,
       })
     }
   }

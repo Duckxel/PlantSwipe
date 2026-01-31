@@ -78,6 +78,7 @@ import {
   HardDrive,
   ArrowRight,
   FileImage,
+  FileText,
   MessageSquare as MessageSquareIcon,
   MessageSquareText,
   BookOpen,
@@ -109,6 +110,7 @@ import {
   type CategoryProgress, 
   type PlantFormCategory 
 } from "@/lib/plantFormCategories";
+import { enableMaintenanceMode, disableMaintenanceMode } from "@/lib/sentry";
 import {
   Dialog,
   DialogTrigger,
@@ -335,6 +337,7 @@ const PROMOTION_MONTH_LABELS: Record<PromotionMonthSlug, string> = {
 type PlantDashboardRow = {
   id: string;
   name: string;
+  givenNames: string[];
   status: NormalizedPlantStatus;
   promotionMonth: PromotionMonthSlug | null;
   primaryImage: string | null;
@@ -617,6 +620,14 @@ export const AdminPage: React.FC = () => {
   const [runningSetup, setRunningSetup] = React.useState<boolean>(false);
   const [clearingMemory, setClearingMemory] = React.useState<boolean>(false);
   const [gitPulling, setGitPulling] = React.useState<boolean>(false);
+  const [regeneratingSitemap, setRegeneratingSitemap] = React.useState<boolean>(false);
+  const [sitemapInfo, setSitemapInfo] = React.useState<{
+    exists: boolean;
+    lastModified?: string;
+    size?: number;
+    urlCount?: number | null;
+    message?: string;
+  } | null>(null);
   // On initial load, if a broadcast is currently active, auto-open the section
   React.useEffect(() => {
     let cancelled = false;
@@ -1140,6 +1151,8 @@ export const AdminPage: React.FC = () => {
   const restartServer = async () => {
     if (restarting) return;
     setRestarting(true);
+    // Enable Sentry maintenance mode to suppress expected 502/400 errors during restart
+    enableMaintenanceMode(90000); // 90 seconds should be enough for restart + health checks
     try {
       setConsoleOpen(true);
       appendConsole("[restart] Restart services requested?");
@@ -1258,6 +1271,8 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[restart] Failed to restart services: ? ${message}`);
     } finally {
       setRestarting(false);
+      // Disable maintenance mode now that restart is complete (or failed)
+      disableMaintenanceMode();
     }
   };
 
@@ -1270,6 +1285,8 @@ export const AdminPage: React.FC = () => {
       return;
     }
     setRestarting(true);
+    // Enable Sentry maintenance mode to suppress expected 502/400 errors during restart
+    enableMaintenanceMode(120000); // 2 minutes for server restart operations
     try {
       setConsoleLines([]);
       setConsoleOpen(true);
@@ -1329,6 +1346,8 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[restart] Failed: ${message}`);
     } finally {
       setRestarting(false);
+      // Disable maintenance mode now that restart is complete (or failed)
+      disableMaintenanceMode();
     }
   };
 
@@ -1498,6 +1517,72 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[git] Failed: ${message}`);
     } finally {
       setGitPulling(false);
+    }
+  };
+
+  // --- Server Controls: Fetch Sitemap Info ---
+  const fetchSitemapInfo = React.useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/sitemap-info", {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSitemapInfo(data);
+      }
+    } catch {
+      // Silently fail - not critical
+    }
+  }, []);
+
+  // Load sitemap info on mount (when server controls are first opened)
+  React.useEffect(() => {
+    if (serverControlsOpen && !sitemapInfo) {
+      fetchSitemapInfo();
+    }
+  }, [serverControlsOpen, sitemapInfo, fetchSitemapInfo]);
+
+  // --- Server Controls: Regenerate Sitemap ---
+  const regenerateSitemap = async () => {
+    if (regeneratingSitemap) return;
+    setRegeneratingSitemap(true);
+    try {
+      setConsoleOpen(true);
+      appendConsole("[sitemap] Regenerating sitemap...");
+
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+
+      const response = await fetch("/admin/regenerate-sitemap", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: "{}",
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data?.ok) {
+        appendConsole("[sitemap] Sitemap regenerated successfully");
+        if (data?.stdout) {
+          // Show last few lines of output
+          const lines = data.stdout.split("\n").filter((l: string) => l.trim());
+          lines.slice(-10).forEach((line: string) => appendConsole(`[sitemap] ${line}`));
+        }
+        // Refresh sitemap info after regeneration
+        setTimeout(() => fetchSitemapInfo(), 1000);
+      } else {
+        throw new Error(data?.error || `HTTP ${response.status}`);
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[sitemap] Failed to regenerate sitemap: ${message}`);
+    } finally {
+      setRegeneratingSitemap(false);
     }
   };
 
@@ -2144,14 +2229,66 @@ export const AdminPage: React.FC = () => {
     }
     setAddFromSearchLoading(true);
     try {
-      const { data, error } = await supabase
+      // Search by name, scientific_name, or given_names (common names from translations)
+      // First, search plants by name or scientific_name
+      const { data: directMatches, error: directError } = await supabase
         .from("plants")
         .select("id, name, scientific_name, status")
         .or(`name.ilike.%${trimmed}%,scientific_name.ilike.%${trimmed}%`)
         .order("name")
         .limit(20);
-      if (error) throw error;
-      setAddFromSearchResults(data || []);
+      if (directError) throw directError;
+
+      // Also search by given_names in translations table
+      const { data: translationMatches, error: transError } = await supabase
+        .from("plant_translations")
+        .select("plant_id, given_names, plants!inner(id, name, scientific_name, status)")
+        .eq("language", "en")
+        .limit(100);
+      if (transError) throw transError;
+
+      // Filter translation matches where given_names contains the search term
+      const termLower = trimmed.toLowerCase();
+      const translationPlantIds = new Set<string>();
+      const translationPlants: Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }> = [];
+      
+      (translationMatches || []).forEach((row: any) => {
+        const givenNames = Array.isArray(row?.given_names) ? row.given_names : [];
+        const matchesGivenName = givenNames.some(
+          (gn: unknown) => typeof gn === "string" && gn.toLowerCase().includes(termLower)
+        );
+        if (matchesGivenName && row?.plants?.id && !translationPlantIds.has(row.plants.id)) {
+          translationPlantIds.add(row.plants.id);
+          translationPlants.push({
+            id: String(row.plants.id),
+            name: String(row.plants.name || ""),
+            scientific_name: row.plants.scientific_name || null,
+            status: row.plants.status || null,
+          });
+        }
+      });
+
+      // Merge results, avoiding duplicates
+      const seenIds = new Set<string>();
+      const merged: Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }> = [];
+      
+      (directMatches || []).forEach((plant: any) => {
+        if (plant?.id && !seenIds.has(plant.id)) {
+          seenIds.add(plant.id);
+          merged.push(plant);
+        }
+      });
+      
+      translationPlants.forEach((plant) => {
+        if (!seenIds.has(plant.id)) {
+          seenIds.add(plant.id);
+          merged.push(plant);
+        }
+      });
+
+      // Sort by name and limit to 20
+      merged.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      setAddFromSearchResults(merged.slice(0, 20));
     } catch (err) {
       console.error("Failed to search plants:", err);
       setAddFromSearchResults([]);
@@ -2335,7 +2472,8 @@ export const AdminPage: React.FC = () => {
     setPlantDashboardError(null);
     setPlantDashboardLoading(true);
     try {
-      const { data, error } = await supabase
+      // First, get all plants
+      const { data: plantsData, error: plantsError } = await supabase
         .from("plants")
         .select(
           `
@@ -2353,6 +2491,28 @@ export const AdminPage: React.FC = () => {
         )
         .order("name", { ascending: true });
 
+      if (plantsError) throw new Error(plantsError.message);
+
+      // Then, get English translations for all plants
+      const plantIds = (plantsData || []).map((p: any) => p.id);
+      const { data: translationsData } = await supabase
+        .from("plant_translations")
+        .select("plant_id, given_names")
+        .eq("language", "en")
+        .in("plant_id", plantIds.length > 0 ? plantIds : ["00000000-0000-0000-0000-000000000000"]); // Use dummy ID if no plants
+
+      // Build a map of plant_id -> given_names
+      const givenNamesMap = new Map<string, string[]>();
+      (translationsData || []).forEach((t: any) => {
+        if (t?.plant_id && Array.isArray(t.given_names)) {
+          givenNamesMap.set(t.plant_id, t.given_names.map((n: unknown) => String(n || "")));
+        }
+      });
+
+      // Now combine the data
+      const data = plantsData;
+      const error = plantsError;
+
       if (error) throw new Error(error.message);
 
       const rows: PlantDashboardRow[] = (data ?? [])
@@ -2366,9 +2526,13 @@ export const AdminPage: React.FC = () => {
             images.find((img: any) => img?.use === "discovery") ??
             images[0];
 
+          // Get given_names from the map
+          const givenNames = givenNamesMap.get(String(row.id)) || [];
+
             return {
               id: String(row.id),
               name: row?.name ? String(row.name) : "Unnamed plant",
+              givenNames,
               status: normalizePlantStatus(row?.status),
               promotionMonth: toPromotionMonthSlug(row?.promotion_month),
               primaryImage: primaryImage?.link
@@ -2573,8 +2737,10 @@ export const AdminPage: React.FC = () => {
               ? !plant.promotionMonth
               : plant.promotionMonth === selectedPromotionMonth;
         if (!matchesPromotion) return false;
+        // Search by name OR givenNames (common names)
         const matchesSearch = term
-          ? plant.name.toLowerCase().includes(term)
+          ? plant.name.toLowerCase().includes(term) ||
+            plant.givenNames.some((gn) => gn.toLowerCase().includes(term))
           : true;
         return matchesSearch;
       })
@@ -3216,15 +3382,21 @@ export const AdminPage: React.FC = () => {
       try {
         const headersNode: Record<string, string> = {
           Accept: "application/json",
+          // Prevent browser caching to ensure fresh branch data
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
         };
         try {
           const session = (await supabase.auth.getSession()).data.session;
           const token = session?.access_token;
           if (token) headersNode["Authorization"] = `Bearer ${token}`;
         } catch {}
-        const respNode = await fetchWithRetry("/api/admin/branches", {
+        // Add cache-busting query param and disable caching to ensure fresh data
+        const cacheBuster = `_t=${Date.now()}`;
+        const respNode = await fetchWithRetry(`/api/admin/branches?${cacheBuster}`, {
           headers: headersNode,
           credentials: "same-origin",
+          cache: "no-store",
         }).catch(() => null);
         let data = await safeJson(respNode || new Response());
         // Guard against accidental inclusion of non-branch items
@@ -3237,15 +3409,21 @@ export const AdminPage: React.FC = () => {
         if (!ok) {
           const adminHeaders: Record<string, string> = {
             Accept: "application/json",
+            // Prevent browser caching to ensure fresh branch data
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
           };
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) adminHeaders["X-Admin-Token"] = String(adminToken);
           } catch {}
-          const respAdmin = await fetchWithRetry("/admin/branches", {
+          // Add cache-busting query param and disable caching to ensure fresh data
+          const adminCacheBuster = `_t=${Date.now()}`;
+          const respAdmin = await fetchWithRetry(`/admin/branches?${adminCacheBuster}`, {
             headers: adminHeaders,
             credentials: "same-origin",
+            cache: "no-store",
           }).catch(() => null);
           if (respAdmin) {
             data = await safeJson(respAdmin);
@@ -3296,6 +3474,8 @@ export const AdminPage: React.FC = () => {
   const pullLatest = async () => {
     if (pulling) return;
     setPulling(true);
+    // Enable Sentry maintenance mode to suppress expected 502/400 errors during pull and restart
+    enableMaintenanceMode(300000); // 5 minutes for pull, build, and restart operations
     try {
       // Use streaming endpoint for live logs
       setConsoleLines([]);
@@ -3506,6 +3686,8 @@ export const AdminPage: React.FC = () => {
       appendConsole(`[pull] Failed to pull & build: ? ${message}`);
     } finally {
       setPulling(false);
+      // Disable maintenance mode now that pull & build is complete (or failed)
+      disableMaintenanceMode();
     }
   };
 
@@ -5261,6 +5443,9 @@ export const AdminPage: React.FC = () => {
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
               <div className="text-sm font-semibold">Admin Panel</div>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500 text-white">
+                v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-2">
                 {navItems.map(({ key, label, Icon, path }) => {
@@ -5321,7 +5506,12 @@ export const AdminPage: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                       <div>
-                        <div className="text-lg font-semibold">Admin Panel</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-semibold">Admin Panel</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500 text-white">
+                            v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+                          </span>
+                        </div>
                         <div className="text-xs text-stone-600 dark:text-stone-300">
                           Control Center
                         </div>
@@ -5558,6 +5748,50 @@ export const AdminPage: React.FC = () => {
                               {!dbProbe?.ok && (
                                 <ErrorBadge code={dbProbe.errorCode} />
                               )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* App Version Card */}
+                    <Card className={`${glassCardClass} relative overflow-hidden`}>
+                      {/* Subtle decorative glow from the badge */}
+                      <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-violet-500/10 dark:bg-violet-500/5 blur-3xl pointer-events-none" />
+                      
+                      <CardContent className="p-4 relative">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            {/* Icon with enhanced styling */}
+                            <div className="relative">
+                              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 blur-lg opacity-40" />
+                              <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-purple-600 flex items-center justify-center shadow-xl shadow-violet-500/30 ring-1 ring-white/20">
+                                <Sparkles className="h-6 w-6 text-white drop-shadow-sm" />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold">
+                                App Version
+                              </div>
+                              <div className="text-xs text-violet-600/70 dark:text-violet-300/60">
+                                Aphylia Release
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Version badge section */}
+                          <div className="flex flex-col items-end gap-1.5">
+                            <div className="relative group">
+                              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 blur-md opacity-50 group-hover:opacity-70 transition-opacity" />
+                              <span className="relative inline-flex items-center px-4 py-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-bold text-sm shadow-lg shadow-violet-500/25 ring-1 ring-white/20">
+                                v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs opacity-60">
+                              <GitBranch className="h-3.5 w-3.5" />
+                              <span className="font-mono tracking-tight">
+                                {(import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev'}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -5953,7 +6187,7 @@ export const AdminPage: React.FC = () => {
                             Server Controls
                           </button>
                           {serverControlsOpen && (
-                            <div className="mt-3 space-y-3" id="server-controls">
+                            <form className="mt-3 space-y-3" id="server-controls" onSubmit={(e) => e.preventDefault()} autoComplete="off">
                               {/* Root Password Input (shared) */}
                               <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 space-y-2 bg-stone-50/50 dark:bg-stone-900/20">
                                 <div className="text-xs font-medium text-stone-600 dark:text-stone-400">
@@ -5966,6 +6200,7 @@ export const AdminPage: React.FC = () => {
                                   onChange={(e) => setSetupPassword(e.target.value)}
                                   className="rounded-xl text-sm"
                                   disabled={runningSetup || restarting}
+                                  autoComplete="off"
                                 />
                               </div>
 
@@ -6002,6 +6237,43 @@ export const AdminPage: React.FC = () => {
                                 {clearingMemory ? "Clearing..." : "Clear Memory"}
                               </Button>
 
+                              {/* Regenerate Sitemap Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={regenerateSitemap}
+                                disabled={regeneratingSitemap}
+                              >
+                                <FileText className={`h-4 w-4 ${regeneratingSitemap ? "animate-pulse" : ""}`} />
+                                {regeneratingSitemap ? "Regenerating..." : "Regenerate Sitemap"}
+                              </Button>
+                              {/* Sitemap Info */}
+                              {sitemapInfo && (
+                                <div className="text-[10px] text-stone-400 space-y-0.5 pl-1">
+                                  {sitemapInfo.exists ? (
+                                    <>
+                                      <div className="flex items-center gap-1">
+                                        <span className="opacity-70">Last updated:</span>
+                                        <span className="font-medium text-stone-500 dark:text-stone-300">
+                                          {new Date(sitemapInfo.lastModified!).toLocaleString()}
+                                        </span>
+                                      </div>
+                                      {sitemapInfo.urlCount !== null && sitemapInfo.urlCount !== undefined && (
+                                        <div className="flex items-center gap-1">
+                                          <span className="opacity-70">URLs:</span>
+                                          <span className="font-medium">{sitemapInfo.urlCount.toLocaleString()}</span>
+                                          <span className="opacity-70">•</span>
+                                          <span className="opacity-70">Size:</span>
+                                          <span className="font-medium">{(sitemapInfo.size! / 1024).toFixed(1)} KB</span>
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <div className="text-amber-500">{sitemapInfo.message || "Sitemap not found"}</div>
+                                  )}
+                                </div>
+                              )}
+
                               {/* Run Setup Button */}
                               <Button
                                 variant="outline"
@@ -6015,7 +6287,7 @@ export const AdminPage: React.FC = () => {
                               <div className="text-[10px] text-stone-400">
                                 setup.sh runs the full server provisioning script with root privileges
                               </div>
-                            </div>
+                            </form>
                           )}
                         </div>
                       </CardContent>

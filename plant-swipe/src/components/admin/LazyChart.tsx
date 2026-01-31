@@ -1,5 +1,5 @@
  // @ts-nocheck
-import React, { Suspense, createContext, useContext, useState, useEffect } from 'react'
+import React, { Suspense, createContext, useContext, useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import type {
   ResponsiveContainerProps,
@@ -63,10 +63,80 @@ const ChartSkeleton: React.FC<{ height?: number | string }> = ({ height = 200 })
   </div>
 )
 
+// Hook to safely measure container dimensions before rendering chart
+// This prevents the recharts warning about negative dimensions (-1, -1)
+const useSafeContainerDimensions = (minWidth = 1, minHeight = 1) => {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null)
+  
+  // Use layout effect for synchronous measurement to avoid flash
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    
+    const measureDimensions = () => {
+      const { width, height } = container.getBoundingClientRect()
+      // Only set dimensions if they are valid (greater than minWidth/minHeight)
+      if (width >= minWidth && height >= minHeight) {
+        setDimensions({ width, height })
+      }
+    }
+    
+    // Initial measurement
+    measureDimensions()
+    
+    // Use ResizeObserver for reliable dimension tracking
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        if (width >= minWidth && height >= minHeight) {
+          setDimensions({ width, height })
+        }
+      }
+    })
+    
+    resizeObserver.observe(container)
+    
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [minWidth, minHeight])
+  
+  return { containerRef, dimensions, isReady: dimensions !== null }
+}
+
 // Chart components that use the shared context
+// SafeResponsiveContainer waits for valid dimensions before rendering
 const ResponsiveContainerImpl: React.FC<ResponsiveContainerProps> = (props) => {
   const charts = useCharts()
-  return <charts.ResponsiveContainer {...props} />
+  const { containerRef, isReady } = useSafeContainerDimensions(1, 1)
+  
+  return (
+    <div 
+      ref={containerRef} 
+      style={{ 
+        width: props.width ?? '100%', 
+        height: props.height ?? '100%',
+        minWidth: props.minWidth ?? 1,
+        minHeight: props.minHeight ?? 1,
+      }}
+    >
+      {isReady ? (
+        <charts.ResponsiveContainer 
+          debounce={50}
+          minWidth={1}
+          minHeight={1}
+          {...props}
+          width="100%"
+          height="100%"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+        </div>
+      )}
+    </div>
+  )
 }
 ResponsiveContainerImpl.displayName = 'ResponsiveContainer'
 
@@ -203,3 +273,58 @@ export const ChartSuspense: React.FC<{ children: React.ReactNode; fallback?: Rea
     </RechartsProvider>
   </Suspense>
 )
+
+// Standalone SafeResponsiveContainer for use with direct recharts imports
+// This prevents the negative dimensions (-1, -1) warning by waiting for valid measurements
+export const SafeResponsiveContainer: React.FC<
+  ResponsiveContainerProps & { 
+    loadingFallback?: React.ReactNode 
+  }
+> = ({ loadingFallback, children, ...props }) => {
+  const { containerRef, isReady } = useSafeContainerDimensions(1, 1)
+  // Dynamically import ResponsiveContainer from recharts
+  const [RechartResponsiveContainer, setRechartResponsiveContainer] = useState<
+    typeof import('recharts').ResponsiveContainer | null
+  >(null)
+  
+  useEffect(() => {
+    import('recharts').then((mod) => {
+      setRechartResponsiveContainer(() => mod.ResponsiveContainer)
+    })
+  }, [])
+  
+  return (
+    <div 
+      ref={containerRef} 
+      style={{ 
+        width: props.width ?? '100%', 
+        height: props.height ?? '100%',
+        minWidth: props.minWidth ?? 1,
+        minHeight: props.minHeight ?? 1,
+      }}
+    >
+      {isReady && RechartResponsiveContainer ? (
+        <RechartResponsiveContainer 
+          debounce={50}
+          minWidth={1}
+          minHeight={1}
+          {...props}
+          width="100%"
+          height="100%"
+        >
+          {children}
+        </RechartResponsiveContainer>
+      ) : (
+        loadingFallback ?? (
+          <div className="w-full h-full flex items-center justify-center">
+            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+SafeResponsiveContainer.displayName = 'SafeResponsiveContainer'
+
+// Export the hook for custom implementations
+export { useSafeContainerDimensions }

@@ -1,12 +1,13 @@
 import React from "react"
-import { CloudUpload, Inbox } from "lucide-react"
+import { CloudUpload, Inbox, Smartphone } from "lucide-react"
 import { useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { AdminUploadPanel } from "@/components/admin/AdminUploadPanel"
 import { GlobalImageLibrary } from "@/components/admin/GlobalImageLibrary"
+import { AdminMockupsPanel } from "@/components/admin/AdminMockupsPanel"
 import { Link } from "@/components/i18n/Link"
 
-type UploadMediaSection = "upload" | "library"
+type UploadMediaSection = "upload" | "library" | "mockups"
 
 const sectionTabs: Array<{
   key: UploadMediaSection
@@ -17,6 +18,7 @@ const sectionTabs: Array<{
 }> = [
   { key: "upload", label: "Upload", description: "Add new files", Icon: CloudUpload, path: "/admin/upload" },
   { key: "library", label: "Library", description: "Global image database", Icon: Inbox, path: "/admin/upload/library" },
+  { key: "mockups", label: "Mockups", description: "PWA screenshots & mockups", Icon: Smartphone, path: "/admin/upload/mockups" },
 ]
 
 export const AdminUploadMediaPanel: React.FC = () => {
@@ -24,6 +26,7 @@ export const AdminUploadMediaPanel: React.FC = () => {
   const currentPath = location.pathname
   const section: UploadMediaSection = React.useMemo(() => {
     if (currentPath.includes("/admin/upload/library")) return "library"
+    if (currentPath.includes("/admin/upload/mockups")) return "mockups"
     return "upload"
   }, [currentPath])
 
@@ -39,7 +42,7 @@ export const AdminUploadMediaPanel: React.FC = () => {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {sectionTabs.map(({ key, label, Icon, path }) => (
             <Link
               key={key}
@@ -61,6 +64,7 @@ export const AdminUploadMediaPanel: React.FC = () => {
       {/* Content */}
       {section === "upload" && <AdminUploadPanel />}
       {section === "library" && <GlobalImageLibrary />}
+      {section === "mockups" && <AdminMockupsPanel />}
     </div>
   )
 }

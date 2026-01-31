@@ -208,6 +208,48 @@ if [[ -n "$SUDO" ]]; then
   fi
 fi
 
+# Ensure CA certificates are up-to-date (fixes SSL certificate verification errors)
+# This runs early to ensure database connections work correctly
+ensure_ca_certificates() {
+  if [[ "$CAN_SUDO" != "true" ]]; then
+    return 0  # Skip if we can't sudo
+  fi
+  
+  # Check if update-ca-certificates is available
+  if ! command -v update-ca-certificates >/dev/null 2>&1; then
+    return 0
+  fi
+  
+  # Only update if ca-certificates package can be upgraded or certs are old
+  # This is a quick check to avoid unnecessary apt operations
+  local ca_cert_file="/etc/ssl/certs/ca-certificates.crt"
+  local needs_update=false
+  
+  # Check if CA cert file is older than 30 days
+  if [[ -f "$ca_cert_file" ]]; then
+    local file_age_days
+    file_age_days=$(( ($(date +%s) - $(stat -c %Y "$ca_cert_file" 2>/dev/null || echo 0)) / 86400 ))
+    if [[ $file_age_days -gt 30 ]]; then
+      needs_update=true
+      log "CA certificates are $file_age_days days old, updating..."
+    fi
+  else
+    needs_update=true
+    log "CA certificates file not found, installing..."
+  fi
+  
+  if [[ "$needs_update" == "true" ]]; then
+    # Update CA certificates (quick operation, doesn't require full apt update)
+    if $SUDO apt-get install -y --only-upgrade ca-certificates >/dev/null 2>&1; then
+      $SUDO update-ca-certificates >/dev/null 2>&1 || true
+      log "CA certificates updated successfully"
+    fi
+  fi
+}
+
+# Run CA certificate check early (before any network operations that might need SSL)
+ensure_ca_certificates
+
 # Optional: skip restarting services (useful for streaming logs via SSE)
 # Enable with --no-restart flag or SKIP_SERVICE_RESTARTS=true|1 env var
 SKIP_RESTARTS=false
@@ -717,16 +759,18 @@ if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
 fi
 
 log "Building application with Bun…"
-# Limit memory to prevent OOM on low-RAM servers (default 512MB, override with NODE_BUILD_MEMORY)
-NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
+# Limit memory to prevent OOM on low-RAM servers (default 1536MB/1.5GB for TypeScript compilation, override with NODE_BUILD_MEMORY)
+NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
+export NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY"
+log "Using NODE_OPTIONS: $NODE_OPTIONS"
 if [[ "$REPO_OWNER" != "" ]]; then
   OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
   OWNER_BUN_PATH="$OWNER_HOME/.bun/bin"
   if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
+    sudo -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
   elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
     if $SUDO -n true >/dev/null 2>&1; then
-      $SUDO -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
+      $SUDO -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
     else
       CI=${CI:-true} bun run build
     fi

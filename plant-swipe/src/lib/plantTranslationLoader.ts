@@ -260,8 +260,9 @@ export function mergePlantWithTranslation(
         ...translationPlanting,
         calendar: {
           ...planting?.calendar,
-          promotionMonth: planting?.calendar?.promotionMonth || (Array.isArray(basePlant.plant_month) && basePlant.plant_month.length > 0
-            ? basePlant.plant_month[0]
+          // promotion_month in plants table is text slug ('january', etc.) - convert to number (1-12)
+          promotionMonth: planting?.calendar?.promotionMonth || monthSlugToNumber(basePlant.promotion_month) || (Array.isArray(basePlant.plant_month) && basePlant.plant_month.length > 0
+            ? monthSlugToNumber(basePlant.plant_month[0]) ?? undefined
             : undefined),
         },
         sitePrep: translationPlanting?.sitePrep || planting?.sitePrep || undefined,
@@ -555,6 +556,12 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
             rarity: (basePlant.rarity || 'Common') as Plant['rarity'],
             classification: basePlant.plant_type ? { type: basePlant.plant_type } : undefined,
             popularity: popularityMap.get(String(basePlant.id)),
+            // promotion_month in plants table is text slug ('january', etc.) - convert to number (1-12)
+            planting: {
+              calendar: {
+                promotionMonth: monthSlugToNumber(basePlant.promotion_month) ?? undefined,
+              },
+            },
           }
 
       return sanitizeDeep(plant) as Plant
@@ -722,6 +729,8 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         spiked: basePlant.spiked ?? transIdentity.spiked ?? false,
         multicolor: basePlant.multicolor ?? transIdentity.multicolor ?? false,
         bicolor: basePlant.bicolor ?? transIdentity.bicolor ?? false,
+        // Translatable field from plant_translations - needed for search
+        givenNames: translation.given_names || transIdentity.givenNames || [],
         // Map other flat fields if needed for preview
       }
 
@@ -790,9 +799,11 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
             updatedAt: basePlant.updated_time,
         },
         
+        // promotion_month is stored in plants table as text slug ('january', 'february', etc.)
+        // Convert to number (1-12) for isPlantOfTheMonth() comparison
         planting: {
             calendar: {
-                promotionMonth: basePlant.promotion_month
+                promotionMonth: monthSlugToNumber(basePlant.promotion_month) ?? undefined
             }
         },
         

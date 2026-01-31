@@ -1,4 +1,8 @@
 {
+  "_meta": {
+    "version": "1.0.0",
+    "lastUpdated": "2026-01-27"
+  },
   "common": {
     "appName": "Aphylia",
     "discovery": "Discovery",
@@ -42,7 +46,9 @@
       "blog": "Blog",
       "contactUs": "Contact Us",
       "downloadApp": "Download",
-      "termsOfServices": "Terms of Services"
+      "legal": "Legal",
+      "termsOfServices": "Terms of Service",
+      "privacyPolicy": "Privacy Policy"
     },
     "share": "Share"
   },
@@ -480,8 +486,16 @@
     "notifications": {
       "preferencesTitle": "Notification Preferences",
       "preferencesDescription": "Choose which notifications you want to receive.",
+      "pushTitle": "Push Notifications",
+      "pushMasterDescription": "Control push notifications on your devices.",
+      "enablePush": "Enable Push Notifications",
+      "enablePushDescription": "Turn on to receive any push notifications. Turn off to disable all push notifications.",
       "pushNotifications": "Push Notifications",
       "pushDescription": "Receive push notifications for reminders, task updates, and important alerts.",
+      "emailTitle": "Email Notifications",
+      "emailMasterDescription": "Choose which emails you want to receive from Aphylia.",
+      "enableEmail": "Enable Email Notifications",
+      "enableEmailDescription": "Turn on to receive email notifications. Turn off to disable all emails except account security.",
       "emailCampaigns": "Email Campaigns",
       "emailDescription": "Receive newsletters, product updates, and promotional emails from Aphylia.",
       "browserTitle": "Browser Push Setup",
@@ -591,10 +605,15 @@
       "light": "Light",
       "dark": "Dark",
       "currentTheme": "Current theme"
+    },
+    "accent": {
+      "title": "Accent Color",
+      "description": "Choose your personal accent color that appears throughout the app.",
+      "current": "Current:"
     }
   },
     "plant": {
-      "searchPlaceholder": "Search name, meaning, color?",
+      "searchPlaceholder": "Search by name or given names...",
       "seedsOnly": "Seeds only",
       "favoritesOnly": "Favorites only",
       "favoritesFirst": "Favorites first",
@@ -1782,8 +1801,8 @@
       "deleteGardenWarning": "This will permanently delete the garden, all its plants, tasks, and journal entries. This action cannot be undone.",
       "leaveGardenTitle": "Leave this garden",
       "leaveGardenWarning": "You will no longer have access to this garden. You can be re-invited by an owner.",
-      "aiAssistant": "AI Assistant",
-      "aiAssistantDescription": "Configure the Aphylia AI chat assistant for this garden."
+      "aiFeatures": "AI Features",
+      "aiFeaturesDescription": "Enable or disable all AI-powered features for this garden, including the chat assistant and gardener advice."
     },
     "gardenSettings": {
       "aiChat": {
@@ -1795,6 +1814,18 @@
         "visible": "Visible",
         "chatIsHidden": "Chat bubble is hidden",
         "chatIsVisible": "Chat bubble is visible",
+        "ownerOnly": "Only garden owners can change this setting"
+      },
+      "aiFeatures": {
+        "label": "AI Features",
+        "description": "Control all AI-powered features including the chat assistant and weekly gardener advice",
+        "affectedFeatures": "This setting affects:",
+        "chatBubble": "AI Chat Assistant (bottom right)",
+        "gardenerAdvice": "Weekly Gardener Advice",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "statusEnabled": "AI features are enabled",
+        "statusDisabled": "AI features are disabled",
         "ownerOnly": "Only garden owners can change this setting"
       }
     },
@@ -2906,6 +2937,249 @@
         "loadFailed": "Failed to load your scans",
         "notAPlant": "This doesn't appear to be a plant. Please try a different image.",
         "identifyFailed": "Failed to identify plant. Please try again."
+      }
+    },
+    "cookieConsent": {
+      "title": "Cookie Preferences",
+      "description": "We use cookies to improve your experience. You can choose which cookies to accept.",
+      "essentialTitle": "Essential Cookies",
+      "essentialDesc": "Required for basic site functionality like authentication and preferences. These cannot be disabled.",
+      "securityTitle": "Security (reCAPTCHA)",
+      "securityDesc": "Google reCAPTCHA protects against spam and abuse. Loaded only when you accept cookies.",
+      "analyticsTitle": "Analytics (Google Analytics)",
+      "analyticsDesc": "Help us understand how visitors interact with our website. Your IP is anonymized.",
+      "rejectAll": "Reject All",
+      "essentialOnly": "Essential Only",
+      "acceptAll": "Accept All",
+      "hideDetails": "Hide details",
+      "showDetails": "Show details",
+      "privacyPolicy": "Privacy Policy"
+    },
+    "gdpr": {
+      "title": "Data & Consent",
+      "description": "Manage your data and consent preferences under GDPR.",
+      "exportData": "Export My Data",
+      "exportDataDescription": "Download all data we have about you in a machine-readable format.",
+      "exportInfo": "Your export will include your profile, gardens, plants, messages, friends, bookmarks, and all other personal data.",
+      "downloadData": "Download My Data",
+      "exporting": "Preparing export...",
+      "exportSuccess": "Your data has been exported successfully.",
+      "exportFailed": "Failed to export your data",
+      "deleteAccount": "Delete My Account",
+      "deleteAccountDescription": "Permanently delete your account and all associated data. This action cannot be undone.",
+      "marketingConsent": "Marketing Communications",
+      "marketingConsentDescription": "Receive occasional emails about new features and updates.",
+      "consentUpdated": "Your preferences have been saved.",
+      "consentUpdateFailed": "Failed to update consent preferences",
+      "consentHistory": "Consent History",
+      "termsAccepted": "Terms of Service accepted",
+      "privacyAccepted": "Privacy Policy accepted",
+      "lastUpdated": "Last updated:",
+      "notSet": "Not set",
+      "viewTerms": "Terms of Service",
+      "viewPrivacy": "Privacy Policy"
+    },
+    "privacyPage": {
+      "hero": {
+        "eyebrow": "Your data, your rights",
+        "title": "Aphylia Privacy Policy",
+        "subtitle": "Learn how we collect, use, and protect your personal data. Your privacy is important to us and we are committed to GDPR compliance.",
+        "updated": "Last updated"
+      },
+      "legalContent": {
+        "label": "Full Privacy Policy"
+      },
+      "contact": {
+        "title": "Questions about your data?",
+        "subtitle": "Contact us via the Contact page if you have any questions about how we handle your data or to exercise your GDPR rights.",
+        "badge": "GDPR Compliant"
+      }
+    },
+    "seo": {
+      "privacy": {
+        "title": "Aphylia Privacy Policy & GDPR Rights",
+        "description": "Learn how Aphylia protects your personal data and your GDPR rights including data access, export, and deletion."
+      }
+    },
+    "prefs": {
+      "pushCategories": "Choose which notifications to receive:",
+      "pushTaskReminders": "Task Reminders",
+      "pushTaskRemindersDesc": "Watering, fertilizing, and plant care reminders",
+      "pushTaskRemindersSuccess": "Task reminder preferences updated",
+      "pushMessages": "Messages",
+      "pushMessagesDesc": "New messages from friends",
+      "pushMessagesSuccess": "Message notification preferences updated",
+      "pushFriendActivity": "Friend Activity",
+      "pushFriendActivityDesc": "Friend requests and activity updates",
+      "pushFriendActivitySuccess": "Friend activity preferences updated",
+      "pushGardenUpdates": "Garden Updates",
+      "pushGardenUpdatesDesc": "Activity in your shared gardens",
+      "pushGardenUpdatesSuccess": "Garden update preferences updated",
+      "emailCategories": "Choose which emails to receive:",
+      "emailProductUpdates": "Product Updates & New Features",
+      "emailProductUpdatesDesc": "Learn about new features and improvements",
+      "emailProductUpdatesSuccess": "Product updates preference updated",
+      "emailTipsAdvice": "Gardening Tips & Advice",
+      "emailTipsAdviceDesc": "Seasonal tips, plant care guides, and expert advice",
+      "emailTipsAdviceSuccess": "Tips & advice preference updated",
+      "emailCommunity": "Community Highlights",
+      "emailCommunityDesc": "Featured gardens, success stories, and community news",
+      "emailCommunitySuccess": "Community highlights preference updated",
+      "emailPromotions": "Promotions & Special Offers",
+      "emailPromotionsDesc": "Exclusive deals, discounts, and partner offers",
+      "emailPromotionsSuccess": "Promotions preference updated",
+      "securityEmailsNote": "Note: Security-related emails (password changes, suspicious activity) cannot be disabled.",
+      "personalizationTitle": "Personalization & Analytics",
+      "personalizationDescription": "Control how we personalize your experience and use data to improve the app.",
+      "personalizedRecommendations": "Personalized Recommendations",
+      "personalizedRecommendationsDesc": "Get plant suggestions and content based on your interests and garden activity.",
+      "personalizedSuccess": "Personalization preference updated",
+      "analyticsImprovement": "Help Improve Aphylia",
+      "analyticsImprovementDesc": "Allow anonymous usage data collection to help us improve the app experience.",
+      "analyticsSuccess": "Analytics preference updated",
+      "privacyNote": "We never sell your data. See our Privacy Policy for details on how we protect your information.",
+      "updateFailed": "Failed to update preference",
+      "quickActionsTitle": "Quick Actions",
+      "quickActionsDescription": "Quickly adjust multiple settings at once.",
+      "optOutAll": "Opt-out of Non-Essential Processing",
+      "optOutSuccess": "Opted out of all non-essential data processing",
+      "disableAllNotifications": "Disable All Notifications",
+      "disableAllNotificationsSuccess": "All notifications disabled",
+      "quickActionsNote": "You can re-enable individual settings at any time in the Notifications tab.",
+      "cookieTitle": "Cookie Preferences",
+      "cookieDescription": "Manage how we use cookies on your device.",
+      "currentCookieStatus": "Current Status",
+      "cookieNotSet": "Not set",
+      "cookieAll": "All cookies",
+      "cookieAnalytics": "Essential + Analytics",
+      "cookieEssential": "Essential only",
+      "cookieRejected": "Rejected",
+      "cookieInfo": "Essential cookies are required for basic functionality. Analytics cookies help us understand how you use the app.",
+      "essentialOnly": "Essential Only",
+      "acceptAnalytics": "Accept Analytics",
+      "acceptAll": "Accept All",
+      "rejectAll": "Reject All",
+      "cookieUpdated": "Cookie preferences updated"
+    },
+    "legal": {
+      "updateRequired": "Legal Documents Updated",
+      "updateDescription": "We have updated our legal documents. Please review and accept the new terms to continue using Aphylia.",
+      "termsOfService": "Terms of Service",
+      "privacyPolicy": "Privacy Policy",
+      "updatedOn": "Updated on",
+      "readTerms": "Read Terms of Service",
+      "readPrivacy": "Read Privacy Policy",
+      "acceptanceNote": "By clicking \"I Accept\", you agree to be bound by the updated terms. If you decline, your account will be blocked until you accept.",
+      "accept": "I Accept",
+      "decline": "I Decline",
+      "accepting": "Accepting...",
+      "declining": "Declining...",
+      "updateFailed": "Failed to save your acceptance. Please try again.",
+      "declineWarningTitle": "Are you sure?",
+      "consequencesTitle": "If you decline, the following will happen:",
+      "consequence1": "Your account will be immediately blocked",
+      "consequence2": "You will be signed out and unable to log back in",
+      "consequence3": "You will lose access to all your data, gardens, and plants",
+      "consequence4": "To regain access, you must contact support",
+      "reconsiderMessage": "We encourage you to review the updated documents. If you have concerns, please contact our support team before declining.",
+      "goBack": "Go Back & Accept",
+      "confirmDecline": "I Understand, Decline",
+      "blockingAccount": "Blocking account...",
+      "declinedMessage": "Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.",
+      "termsVersion": "Version {{version}} - Updated {{date}}",
+      "privacyVersion": "Version {{version}} - Updated {{date}}",
+      "backToReview": "Back to Review"
+    },
+    "setup": {
+      "welcome": {
+        "title": "Welcome to Aphylia!",
+        "description": "I'm your garden assistant. I will accompany you through this journey to make your garden grow and bloom into the most beautiful one!",
+        "subtitle": "First, let's get to know each other and the environment where your garden will evolve.",
+        "getStarted": "Let's get started"
+      },
+      "accent": {
+        "title": "Choose your accent color",
+        "subtitle": "Personalize your Aphylia experience",
+        "selected": "Selected"
+      },
+      "location": {
+        "title": "Where are you located?",
+        "subtitle": "This helps us provide local gardening advice",
+        "searchLabel": "Search for your city",
+        "searchPlaceholder": "Type a city name...",
+        "detecting": "Detecting your location...",
+        "detected": "Location detected automatically!",
+        "timezoneSet": "Timezone:",
+        "noResults": "No cities found. Try a different search.",
+        "detectButton": "Use my current location",
+        "detectingGPS": "Detecting...",
+        "detectFailed": "Unable to detect location. Please search manually.",
+        "geoNotSupported": "Geolocation is not supported by your browser"
+      },
+      "gardenType": {
+        "title": "Where is your garden located?",
+        "subtitle": "This helps us recommend the right plants for you",
+        "outside": "Outside, in a yard",
+        "outsideDesc": "I have an outdoor garden or yard",
+        "inside": "Inside your home",
+        "insideDesc": "I grow plants indoors",
+        "both": "Both inside and outside",
+        "bothDesc": "I have plants everywhere!"
+      },
+      "experience": {
+        "title": "What's your gardening level?",
+        "subtitle": "We'll adapt our advice to your expertise",
+        "novice": "Novice",
+        "noviceDesc": "I'm just starting my gardening journey",
+        "intermediate": "Intermediate",
+        "intermediateDesc": "I have some experience with plants",
+        "expert": "Expert",
+        "expertDesc": "Gardening is my passion!"
+      },
+      "purpose": {
+        "title": "What is your purpose for your garden?",
+        "subtitle": "We'll personalize your plant recommendations",
+        "eat": "Grow food",
+        "eatDesc": "Vegetables and fruits for my own consumption",
+        "ornamental": "Ornamental garden",
+        "ornamentalDesc": "Beautiful flowers and decorative plants",
+        "various": "A bit of everything!",
+        "variousDesc": "As many various plants as possible"
+      },
+      "notificationTime": {
+        "title": "When should we remind you?",
+        "subtitle": "Choose your preferred notification time",
+        "early": "Early bird",
+        "earlyDesc": "6:00 AM - Start the day with your plants",
+        "morning": "Sleep in",
+        "morningDesc": "10:00 AM - After your morning coffee",
+        "midday": "Midday energy",
+        "middayDesc": "2:00 PM - A break in your afternoon",
+        "afternoon": "After work",
+        "afternoonDesc": "5:00 PM - Wind down with your garden"
+      },
+      "notifications": {
+        "title": "Stay on top of your garden",
+        "description": "Enable notifications to get reminders about watering, fertilizing, and caring for your plants at the perfect time.",
+        "enable": "Enable notifications",
+        "skip": "Maybe later"
+      },
+      "complete": {
+        "title": "You're all set!",
+        "description": "Your garden assistant is ready to help you grow the most beautiful plants. Let's start exploring!",
+        "button": "Start exploring"
+      },
+      "settings": {
+        "title": "Garden Preferences",
+        "description": "Update your gardening preferences and notification settings.",
+        "gardenType": "Garden Location",
+        "gardenTypeDescription": "Where do you grow your plants?",
+        "experienceLevel": "Experience Level",
+        "experienceLevelDescription": "Your gardening expertise level",
+        "lookingFor": "Garden Purpose",
+        "lookingForDescription": "What's your main gardening goal?",
+        "notificationTime": "Notification Time",
+        "notificationTimeDescription": "When should we send you reminders?"
       }
     }
   }

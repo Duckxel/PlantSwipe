@@ -12,6 +12,128 @@ from pathlib import Path
 import shlex
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
+# Sentry error monitoring
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
+
+SENTRY_DSN = "https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520"
+
+# Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
+SERVER_NAME = os.environ.get("PLANTSWIPE_SERVER_NAME") or os.environ.get("SERVER_NAME") or "unknown"
+
+def _init_sentry() -> None:
+    """Initialize Sentry for error tracking in the Admin API.
+    
+    GDPR Compliance Notes:
+    - send_default_pii is False to avoid capturing user IP addresses and cookies
+    - Error scrubbing removes email patterns from error messages
+    - Only operational metadata is captured, no personal data
+    """
+    try:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[FlaskIntegration()],
+            environment=os.environ.get("FLASK_ENV", "production"),
+            # Server identification
+            server_name=SERVER_NAME,
+            # Send structured logs to Sentry
+            _experiments={
+                "enable_logs": True,
+            },
+            # Tracing - capture 20% of transactions in production (cost-effective)
+            traces_sample_rate=0.2,
+            # GDPR: Do NOT send PII automatically
+            # This prevents IP addresses, cookies, and request data from being sent
+            send_default_pii=False,
+            # Filter out common non-actionable errors
+            before_send=_sentry_before_send,
+            # GDPR: Scrub sensitive data from events
+            before_send_transaction=_sentry_before_send_transaction,
+        )
+        # Set server tag on all events
+        sentry_sdk.set_tag("server", SERVER_NAME)
+        sentry_sdk.set_tag("app", "plant-swipe-admin-api")
+        print(f"[Sentry] Admin API initialized for server: {SERVER_NAME} (GDPR-compliant)")
+    except Exception as e:
+        print(f"[Sentry] Failed to initialize: {e}")
+
+
+def _scrub_pii_from_string(value: str) -> str:
+    """Scrub PII patterns from a string."""
+    import re
+    if not value:
+        return value
+    # Scrub email addresses
+    value = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL_REDACTED]', value)
+    # Scrub potential passwords in URLs or logs
+    value = re.sub(r'password[=:][^\s&"\']+', 'password=[REDACTED]', value, flags=re.IGNORECASE)
+    # Scrub bearer tokens
+    value = re.sub(r'Bearer\s+[A-Za-z0-9\-_\.]+', 'Bearer [REDACTED]', value)
+    return value
+
+
+def _sentry_before_send(event, hint):
+    """Filter out non-actionable errors and scrub PII before sending to Sentry.
+    
+    GDPR Compliance:
+    - Scrubs email addresses from error messages
+    - Scrubs passwords and tokens
+    - Filters out expected client errors
+    """
+    if "exc_info" in hint:
+        exc_type, exc_value, _ = hint["exc_info"]
+        # Don't report 401 Unauthorized errors (expected for auth failures)
+        if hasattr(exc_value, "code") and exc_value.code == 401:
+            return None
+        # Don't report 400 Bad Request errors (client errors)
+        if hasattr(exc_value, "code") and exc_value.code == 400:
+            return None
+    
+    # Scrub PII from exception message
+    if event.get("exception", {}).get("values"):
+        for exc in event["exception"]["values"]:
+            if exc.get("value"):
+                exc["value"] = _scrub_pii_from_string(exc["value"])
+    
+    # Scrub PII from request data if present
+    if event.get("request", {}).get("data"):
+        data = event["request"]["data"]
+        if isinstance(data, str):
+            event["request"]["data"] = _scrub_pii_from_string(data)
+    
+    # Don't send request headers (may contain auth tokens)
+    if event.get("request", {}).get("headers"):
+        # Only keep safe headers
+        safe_headers = {"Content-Type", "Accept", "User-Agent"}
+        event["request"]["headers"] = {
+            k: v for k, v in event["request"]["headers"].items() 
+            if k in safe_headers
+        }
+    
+    # Add operational context for debugging
+    event.setdefault("contexts", {})
+    event["contexts"]["server"] = {
+        "name": SERVER_NAME,
+        "type": "admin-api",
+    }
+    
+    return event
+
+
+def _sentry_before_send_transaction(event, hint):
+    """Filter transactions and scrub any PII."""
+    # Scrub URL query parameters that might contain PII
+    if event.get("request", {}).get("url"):
+        url = event["request"]["url"]
+        # Remove query string entirely (may contain tokens/ids)
+        if "?" in url:
+            event["request"]["url"] = url.split("?")[0] + "?[PARAMS_REDACTED]"
+    return event
+
+
+# Initialize Sentry before Flask app is created
+_init_sentry()
+
 
 def _get_env_var(name: str, default: Optional[str] = None) -> str:
     value = os.environ.get(name, default)
@@ -33,17 +155,10 @@ def _parse_allowed_services(env_value: str) -> Set[str]:
     return services
 
 
-APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
-ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
-# Allow nginx, node app, and admin api by default; can be overridden via env
-ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
-DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
-
-ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
-
 HMAC_HEADER = "X-Button-Token"
 
 # Load .env files from the repo's plant-swipe directory to unify configuration
+# IMPORTANT: This MUST be called BEFORE reading config variables
 def _load_repo_env():
     try:
         here = Path(__file__).resolve().parent
@@ -72,9 +187,51 @@ def _load_repo_env():
     except Exception:
         pass
 
+# Load env files FIRST before reading config variables
 _load_repo_env()
 
+# Now read config variables AFTER env files are loaded
+APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
+ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
+# Allow nginx, node app, and admin api by default; can be overridden via env
+ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
+DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
+
+ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
+
 app = Flask(__name__)
+
+
+# JSON error handlers for proper API responses
+@app.errorhandler(400)
+def bad_request_handler(error):
+    description = getattr(error, 'description', 'Bad Request')
+    return jsonify({"ok": False, "error": "Bad Request", "message": description}), 400
+
+
+@app.errorhandler(401)
+def unauthorized_handler(error):
+    description = getattr(error, 'description', 'Unauthorized')
+    return jsonify({"ok": False, "error": "Unauthorized", "message": description}), 401
+
+
+@app.errorhandler(403)
+def forbidden_handler(error):
+    description = getattr(error, 'description', 'Forbidden')
+    return jsonify({"ok": False, "error": "Forbidden", "message": description}), 403
+
+
+@app.errorhandler(404)
+def not_found_handler(error):
+    description = getattr(error, 'description', 'Not Found')
+    return jsonify({"ok": False, "error": "Not Found", "message": description}), 404
+
+
+@app.errorhandler(500)
+def internal_error_handler(error):
+    description = getattr(error, 'description', 'Internal Server Error')
+    return jsonify({"ok": False, "error": "Internal Server Error", "message": description}), 500
+
 
 # Optional: forward admin actions to Node app for centralized logging
 def _log_admin_action(action: str, target: str = "", detail: dict | None = None) -> None:
@@ -191,13 +348,25 @@ def _sql_schema_path(repo_root: str) -> str:
 
 
 def _ensure_sslmode_in_url(db_url: str) -> str:
+    """Ensure SSL mode is set to 'require' for non-local databases.
+    
+    Uses 'require' which enables SSL encryption but does NOT verify the server certificate.
+    This avoids 'certificate verify failed' errors when CA certificates are outdated.
+    
+    If the URL already has a stricter mode (verify-ca, verify-full), it will be
+    changed to 'require' to avoid certificate verification failures.
+    """
     try:
         u = urlparse(db_url)
         host = (u.hostname or '').lower()
         if host in ("localhost", "127.0.0.1"):
             return db_url
         q = dict(parse_qsl(u.query, keep_blank_values=True))
-        if 'sslmode' not in q:
+        current_sslmode = q.get('sslmode', '').lower()
+        # Force 'require' mode to avoid certificate verification issues
+        # 'require' = use SSL but don't verify certificate
+        # 'verify-ca' and 'verify-full' = use SSL and verify certificate (can fail with outdated CAs)
+        if current_sslmode not in ('require', 'prefer', 'allow'):
             q['sslmode'] = 'require'
             new_query = urlencode(q)
             return urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
@@ -261,7 +430,7 @@ def list_branches():
     repo_root = _get_repo_root()
     git_base = f'git -c "safe.directory={repo_root}" -C "{repo_root}"'
     try:
-        # Prune remotes quickly; ignore failures
+        # Prune remotes and fetch new branches - this is the key operation for refreshing
         subprocess.run(shlex.split(f"{git_base} remote update --prune"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
         # List remote branches
         res = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/remotes/origin"), capture_output=True, text=True, timeout=30, check=False)
@@ -294,7 +463,12 @@ def list_branches():
             # TIME file doesn't exist or can't be read, which is fine
             pass
         
-        return jsonify({"branches": branches, "current": current, "lastUpdateTime": last_update_time})
+        response = jsonify({"branches": branches, "current": current, "lastUpdateTime": last_update_time})
+        # Prevent browser caching to ensure fresh branch data on refresh
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
     except Exception as e:
         return jsonify({"error": str(e) or "Failed to list branches"}), 500
 
@@ -531,6 +705,114 @@ def sync_schema():
             pass
         return jsonify({"ok": False, "error": "psql not available on server"}), 500
 
+    def _run_psql_with_ssl_fallback(cmd_args, db_url, timeout_secs=180):
+        """Run psql with SSL, with multiple fallback strategies for certificate verification issues.
+        
+        Tries multiple approaches to work around SSL certificate verification failures:
+        1. Standard require mode with non-existent root cert
+        2. Download fresh CA bundle from curl.se and use it
+        3. Use system CA bundle with explicit path
+        """
+        from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+        import tempfile
+        import urllib.request
+        
+        def build_psql_env(ca_cert_path=None, use_nonexistent=False):
+            """Build environment for psql with SSL settings."""
+            env = os.environ.copy()
+            # Remove any existing SSL settings
+            for key in list(env.keys()):
+                if key.startswith("PGSSL") or key.startswith("SSL_"):
+                    del env[key]
+            
+            env["PGSSLMODE"] = "require"
+            
+            if use_nonexistent:
+                env["PGSSLROOTCERT"] = "/nonexistent/.postgresql/root.crt"
+            elif ca_cert_path:
+                env["PGSSLROOTCERT"] = ca_cert_path
+            
+            return env
+        
+        def modify_url_sslmode(url, mode="require"):
+            """Ensure URL has the specified sslmode."""
+            try:
+                u = urlparse(url)
+                q = dict(parse_qsl(u.query, keep_blank_values=True))
+                q["sslmode"] = mode
+                new_query = urlencode(q)
+                return urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
+            except Exception:
+                return url
+        
+        def update_cmd_url(cmd, old_url, new_url):
+            """Replace URL in command args."""
+            return [new_url if arg == old_url else arg for arg in cmd]
+        
+        # Modify URL to ensure sslmode=require
+        db_url_modified = modify_url_sslmode(db_url, "require")
+        cmd_modified = update_cmd_url(list(cmd_args), db_url, db_url_modified)
+        
+        # Strategy 1: Try with non-existent root cert (should skip verification)
+        psql_env = build_psql_env(use_nonexistent=True)
+        res = subprocess.run(cmd_modified, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env)
+        
+        stderr_lower = (res.stderr or "").lower()
+        if res.returncode == 0 or "certificate" not in stderr_lower:
+            return res
+        
+        # Strategy 2: Try downloading fresh CA certificates from curl.se
+        try:
+            ca_bundle_url = "https://curl.se/ca/cacert.pem"
+            ca_temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False)
+            try:
+                # Download CA bundle with a short timeout
+                req = urllib.request.Request(ca_bundle_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    ca_content = response.read().decode('utf-8')
+                    ca_temp_file.write(ca_content)
+                    ca_temp_file.close()
+                
+                # Try with fresh CA bundle
+                psql_env = build_psql_env(ca_cert_path=ca_temp_file.name)
+                res = subprocess.run(cmd_modified, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env)
+                
+                if res.returncode == 0 or "certificate" not in (res.stderr or "").lower():
+                    # Clean up temp file on success
+                    try:
+                        os.unlink(ca_temp_file.name)
+                    except:
+                        pass
+                    return res
+            except Exception as e:
+                pass  # Continue to next strategy
+            finally:
+                try:
+                    os.unlink(ca_temp_file.name)
+                except:
+                    pass
+        except Exception:
+            pass
+        
+        # Strategy 3: Try with common system CA paths
+        ca_paths = [
+            "/etc/ssl/certs/ca-certificates.crt",  # Debian/Ubuntu
+            "/etc/pki/tls/certs/ca-bundle.crt",    # RHEL/CentOS
+            "/etc/ssl/ca-bundle.pem",               # OpenSUSE
+            "/etc/ssl/cert.pem",                    # Alpine/macOS
+            "/usr/local/share/ca-certificates/cacert.pem",  # Custom location
+        ]
+        
+        for ca_path in ca_paths:
+            if os.path.isfile(ca_path):
+                psql_env = build_psql_env(ca_cert_path=ca_path)
+                res = subprocess.run(cmd_modified, capture_output=True, text=True, timeout=timeout_secs, check=False, env=psql_env)
+                if res.returncode == 0 or "certificate" not in (res.stderr or "").lower():
+                    return res
+        
+        # Return last result if all strategies failed
+        return res
+    
     try:
         # Run psql with ON_ERROR_STOP for atomic failure
         # Use -a (echo all commands) and -e (echo errors) for better debugging
@@ -544,7 +826,17 @@ def sync_schema():
             "-e",  # Echo errors
             "-f", sql_path,
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False)
+        
+        res = _run_psql_with_ssl_fallback(cmd, db_url, timeout_secs=180)
+        
+        # Prepare environment for potential follow-up psql calls (admin_secrets update)
+        # Use the same SSL settings as the main call to avoid certificate verification
+        psql_env = os.environ.copy()
+        for key in list(psql_env.keys()):
+            if key.startswith("PGSSL"):
+                del psql_env[key]
+        psql_env["PGSSLMODE"] = "require"
+        psql_env["PGSSLROOTCERT"] = "/nonexistent/.postgresql/root.crt"
         out = (res.stdout or "")
         err = (res.stderr or "")
         
@@ -591,12 +883,14 @@ def sync_schema():
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
                 """
                 # Use subprocess to pipe SQL to psql to avoid escaping issues with shell arguments
+                # Use same SSL environment as the main psql call
                 p = subprocess.Popen(
                     ["psql", db_url, "-q", "-f", "-"],
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
-                    text=True
+                    text=True,
+                    env=psql_env
                 )
                 _, secret_err = p.communicate(input=secret_sql)
                 if p.returncode != 0:
@@ -905,6 +1199,88 @@ def git_pull():
         return jsonify({"ok": False, "error": "Git pull timed out"}), 504
     except Exception as e:
         return jsonify({"ok": False, "error": str(e) or "Failed to run git pull"}), 500
+
+
+def _sitemap_script_path(repo_root: str) -> str:
+    return str(Path(repo_root) / "scripts" / "generate-sitemap-daily.sh")
+
+
+@app.get("/admin/regenerate-sitemap")
+@app.post("/admin/regenerate-sitemap")
+def regenerate_sitemap():
+    """Regenerate the sitemap by running the sitemap generation script."""
+    _verify_request()
+    repo_root = _get_repo_root()
+    script_path = _sitemap_script_path(repo_root)
+    if not os.path.isfile(script_path):
+        detail = {"error": "sitemap script not found", "path": script_path}
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": f"sitemap script not found at {script_path}"}), 500
+
+    _ensure_executable(script_path)
+    env = os.environ.copy()
+    env.setdefault("CI", os.environ.get("CI", "true"))
+    env["PLANTSWIPE_REPO_DIR"] = repo_root
+
+    try:
+        res = subprocess.run(
+            [script_path],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout for sitemap generation
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail={"error": "timeout"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": "Sitemap generation timed out"}), 504
+    except Exception as e:
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail={"error": str(e) or "unexpected failure"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(e) or "Failed to run sitemap script"}), 500
+
+    stdout = res.stdout or ""
+    stderr = res.stderr or ""
+    stdout_tail = "\n".join(stdout.splitlines()[-100:])
+    stderr_tail = "\n".join(stderr.splitlines()[-50:])
+    detail = {
+        "returncode": res.returncode,
+        "stdoutTail": stdout_tail,
+        "stderrTail": stderr_tail or None,
+    }
+    if res.returncode != 0:
+        try:
+            _log_admin_action("regenerate_sitemap_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({
+            "ok": False,
+            "error": "Sitemap generation failed",
+            "returncode": res.returncode,
+            "stdout": stdout_tail,
+            "stderr": stderr_tail,
+        }), 500
+
+    try:
+        _log_admin_action("regenerate_sitemap", detail=detail)
+    except Exception:
+        pass
+    return jsonify({
+        "ok": True,
+        "message": "Sitemap regenerated successfully",
+        "returncode": res.returncode,
+        "stdout": stdout_tail,
+        "stderr": stderr_tail,
+    })
 
 
 if __name__ == "__main__":

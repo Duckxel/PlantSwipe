@@ -9,11 +9,38 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette } from "lucide-react"
+import { Link } from "@/components/i18n/Link"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
+import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
+
+/**
+ * Fetch a CSRF token for security-sensitive operations
+ * Tokens are single-use and expire after 15 minutes
+ */
+async function getCsrfToken(): Promise<string> {
+  const session = (await supabase.auth.getSession()).data.session
+  const headers: Record<string, string> = {}
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  
+  const response = await fetch('/api/csrf-token', {
+    method: 'GET',
+    headers,
+    credentials: 'same-origin',
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to get CSRF token')
+  }
+  
+  const data = await response.json()
+  return data.token
+}
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
@@ -60,6 +87,29 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = React.useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
+  
+  // GDPR consent states
+  const [marketingConsent, setMarketingConsent] = React.useState(false)
+  const [marketingConsentDate, setMarketingConsentDate] = React.useState<string | null>(null)
+  const [termsAcceptedDate, setTermsAcceptedDate] = React.useState<string | null>(null)
+  const [privacyAcceptedDate, setPrivacyAcceptedDate] = React.useState<string | null>(null)
+  const [exporting, setExporting] = React.useState(false)
+  
+  // Granular email preferences
+  const [emailProductUpdates, setEmailProductUpdates] = React.useState(true)
+  const [emailTipsAdvice, setEmailTipsAdvice] = React.useState(true)
+  const [emailCommunityHighlights, setEmailCommunityHighlights] = React.useState(true)
+  const [emailPromotions, setEmailPromotions] = React.useState(false)
+  
+  // Granular push preferences
+  const [pushTaskReminders, setPushTaskReminders] = React.useState(true)
+  const [pushFriendActivity, setPushFriendActivity] = React.useState(true)
+  const [pushMessages, setPushMessages] = React.useState(true)
+  const [pushGardenUpdates, setPushGardenUpdates] = React.useState(true)
+  
+  // Personalization preferences
+  const [personalizedRecommendations, setPersonalizedRecommendations] = React.useState(true)
+  const [analyticsImprovement, setAnalyticsImprovement] = React.useState(true)
 
   // Get detected timezone from browser
   const detectedTimezone = React.useMemo(() => {
@@ -202,6 +252,37 @@ export default function SettingsPage() {
           setNotifyPush(true)
           setNotifyEmail(true)
         }
+
+        // Try to fetch GDPR consent data (columns may not exist yet)
+        try {
+          const { data: consentData } = await supabase
+            .from('profiles')
+            .select('marketing_consent, marketing_consent_date, terms_accepted_date, privacy_policy_accepted_date, email_product_updates, email_tips_advice, email_community_highlights, email_promotions, push_task_reminders, push_friend_activity, push_messages, push_garden_updates, personalized_recommendations, analytics_improvement')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (consentData) {
+            setMarketingConsent(Boolean(consentData.marketing_consent))
+            setMarketingConsentDate(consentData.marketing_consent_date || null)
+            setTermsAcceptedDate(consentData.terms_accepted_date || null)
+            setPrivacyAcceptedDate(consentData.privacy_policy_accepted_date || null)
+            // Granular email preferences (default to true if null)
+            setEmailProductUpdates(consentData.email_product_updates !== false)
+            setEmailTipsAdvice(consentData.email_tips_advice !== false)
+            setEmailCommunityHighlights(consentData.email_community_highlights !== false)
+            setEmailPromotions(Boolean(consentData.email_promotions))
+            // Granular push preferences (default to true if null)
+            setPushTaskReminders(consentData.push_task_reminders !== false)
+            setPushFriendActivity(consentData.push_friend_activity !== false)
+            setPushMessages(consentData.push_messages !== false)
+            setPushGardenUpdates(consentData.push_garden_updates !== false)
+            // Personalization preferences (default to true if null)
+            setPersonalizedRecommendations(consentData.personalized_recommendations !== false)
+            setAnalyticsImprovement(consentData.analytics_improvement !== false)
+          }
+        } catch {
+          // Columns don't exist yet - use defaults
+          setMarketingConsent(false)
+        }
       } catch (e: any) {
         setError(e?.message || t('settings.failedToLoad'))
       } finally {
@@ -227,11 +308,84 @@ export default function SettingsPage() {
     setSuccess(null)
 
     try {
+      // Get CSRF token and auth session for security-sensitive operations
+      const csrfToken = await getCsrfToken()
+      const session = (await supabase.auth.getSession()).data.session
+      
+      // Build secure headers with both CSRF and Authorization
+      const secureHeaders: Record<string, string> = { 
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      }
+      if (session?.access_token) {
+        secureHeaders['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      // Check if email is already in use by another user (CSRF + Auth protected)
+      const checkResponse = await fetch('/api/security/check-email-available', {
+        method: 'POST',
+        headers: secureHeaders,
+        body: JSON.stringify({ 
+          email: newEmail,
+          currentUserId: user?.id 
+        }),
+        credentials: 'same-origin',
+      })
+      
+      // Handle security errors (CSRF, Auth)
+      if (checkResponse.status === 401 || checkResponse.status === 403) {
+        const errorData = await checkResponse.json().catch(() => ({}))
+        if (errorData.code === 'CSRF_INVALID') {
+          throw new Error(t('settings.security.csrfError', { defaultValue: 'Security validation failed. Please refresh the page and try again.' }))
+        }
+        if (errorData.code === 'AUTH_REQUIRED' || errorData.code === 'AUTH_MISMATCH') {
+          throw new Error(t('settings.security.authError', { defaultValue: 'Authentication failed. Please sign in again and retry.' }))
+        }
+        // Generic auth error
+        throw new Error(errorData.error || t('settings.security.authError', { defaultValue: 'Authentication failed. Please sign in again and retry.' }))
+      }
+      
+      const checkResult = await checkResponse.json().catch(() => ({ available: true }))
+      
+      if (!checkResult.available) {
+        throw new Error(t('settings.email.emailAlreadyInUse', { defaultValue: 'This email is already in use by another account.' }))
+      }
+
+      const oldEmailAddress = email // Store old email before change
+      
       const { error: updateError } = await supabase.auth.updateUser({
         email: newEmail
       })
 
       if (updateError) throw updateError
+
+      // Send notification to OLD email about the change (CSRF + Auth protected, non-blocking)
+      // Need a fresh CSRF token since the previous one was used
+      if (user?.id && oldEmailAddress) {
+        Promise.all([getCsrfToken(), supabase.auth.getSession()]).then(([notifCsrfToken, sessionRes]) => {
+          const notifHeaders: Record<string, string> = { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': notifCsrfToken,
+          }
+          if (sessionRes.data.session?.access_token) {
+            notifHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
+          }
+          fetch('/api/security/email-changed-notification', {
+            method: 'POST',
+            headers: notifHeaders,
+            body: JSON.stringify({
+              userId: user.id,
+              oldEmail: oldEmailAddress,
+              newEmail: newEmail,
+              userDisplayName: profile?.display_name || 'User',
+              userLanguage: (profile as any)?.language || 'en',
+            }),
+            credentials: 'same-origin',
+          })
+        }).catch((err) => {
+          console.warn('[email-change] Failed to send notification email:', err)
+        })
+      }
 
       setSuccess(t('settings.email.updateRequestSent'))
       setNewEmail("")
@@ -262,6 +416,12 @@ export default function SettingsPage() {
       return
     }
 
+    // Check if new password is the same as current password
+    if (newPassword === currentPassword) {
+      setError(t('settings.password.newPasswordSameAsCurrent', { defaultValue: 'New password must be different from your current password.' }))
+      return
+    }
+
     setSaving(true)
     setError(null)
     setSuccess(null)
@@ -281,6 +441,33 @@ export default function SettingsPage() {
       })
 
       if (updateError) throw updateError
+
+      // Send password change confirmation email (CSRF + Auth protected, non-blocking)
+      if (user?.id && email) {
+        Promise.all([getCsrfToken(), supabase.auth.getSession()]).then(([csrfToken, sessionRes]) => {
+          const pwHeaders: Record<string, string> = { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken,
+          }
+          if (sessionRes.data.session?.access_token) {
+            pwHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
+          }
+          fetch('/api/security/password-changed', {
+            method: 'POST',
+            headers: pwHeaders,
+            body: JSON.stringify({
+              userId: user.id,
+              userEmail: email,
+              userDisplayName: profile?.display_name || 'User',
+              userLanguage: (profile as any)?.language || 'en',
+              // Browser will auto-detect device from user-agent on server
+            }),
+            credentials: 'same-origin',
+          })
+        }).catch((err) => {
+          console.warn('[password-change] Failed to send confirmation email:', err)
+        })
+      }
 
       setSuccess(t('settings.password.updated'))
       setCurrentPassword("")
@@ -502,6 +689,189 @@ export default function SettingsPage() {
       setDeleting(false)
     }
   }
+
+  // GDPR: Toggle marketing consent
+  const handleToggleMarketingConsent = async () => {
+    if (!user?.id) return
+
+    const newValue = !marketingConsent
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/account/consent', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ marketingConsent: newValue }),
+        credentials: 'same-origin',
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to update consent')
+      }
+
+      const result = await response.json()
+      setMarketingConsent(newValue)
+      setMarketingConsentDate(result.updatedAt || new Date().toISOString())
+      setSuccess(t('gdpr.consentUpdated', { defaultValue: 'Your preferences have been saved.' }))
+      await refreshProfile()
+    } catch (e: any) {
+      setError(e?.message || t('gdpr.consentUpdateFailed', { defaultValue: 'Failed to update consent preferences' }))
+      setMarketingConsent(!newValue)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // GDPR: Export user data
+  const handleExportData = async () => {
+    if (!user?.id) return
+
+    setExporting(true)
+    setError(null)
+
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/account/export', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: 'same-origin',
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to export data')
+      }
+
+      // Download the JSON file
+      const data = await response.json()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `aphylia-data-export-${Date.now()}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      setSuccess(t('gdpr.exportSuccess', { defaultValue: 'Your data has been exported successfully.' }))
+    } catch (e: any) {
+      setError(e?.message || t('gdpr.exportFailed', { defaultValue: 'Failed to export your data' }))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // Format date for display
+  const formatConsentDate = (dateStr: string | null): string => {
+    if (!dateStr) return t('gdpr.notSet', { defaultValue: 'Not set' })
+    try {
+      return new Date(dateStr).toLocaleDateString(currentLang, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  // Generic preference update handler
+  const handleUpdatePreference = async (
+    column: string, 
+    newValue: boolean, 
+    setState: React.Dispatch<React.SetStateAction<boolean>>,
+    successKey: string,
+    errorKey: string
+  ) => {
+    if (!user?.id) return
+
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ [column]: newValue })
+        .eq('id', user.id)
+
+      if (updateError) {
+        if (updateError.message?.includes('column') || updateError.code === '42703') {
+          throw new Error(t('settings.columnNotReady', { defaultValue: 'This feature is not available yet.' }))
+        }
+        throw updateError
+      }
+
+      setState(newValue)
+      setSuccess(t(successKey, { defaultValue: 'Preference updated' }))
+      await refreshProfile()
+    } catch (e: any) {
+      setError(e?.message || t(errorKey, { defaultValue: 'Failed to update preference' }))
+      setState(!newValue)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Granular preference handlers
+  const handleToggleEmailProductUpdates = () => handleUpdatePreference(
+    'email_product_updates', !emailProductUpdates, setEmailProductUpdates,
+    'prefs.emailProductUpdatesSuccess', 'prefs.updateFailed'
+  )
+  const handleToggleEmailTipsAdvice = () => handleUpdatePreference(
+    'email_tips_advice', !emailTipsAdvice, setEmailTipsAdvice,
+    'prefs.emailTipsAdviceSuccess', 'prefs.updateFailed'
+  )
+  const handleToggleEmailCommunityHighlights = () => handleUpdatePreference(
+    'email_community_highlights', !emailCommunityHighlights, setEmailCommunityHighlights,
+    'prefs.emailCommunitySuccess', 'prefs.updateFailed'
+  )
+  const handleToggleEmailPromotions = () => handleUpdatePreference(
+    'email_promotions', !emailPromotions, setEmailPromotions,
+    'prefs.emailPromotionsSuccess', 'prefs.updateFailed'
+  )
+  const handleTogglePushTaskReminders = () => handleUpdatePreference(
+    'push_task_reminders', !pushTaskReminders, setPushTaskReminders,
+    'prefs.pushTaskRemindersSuccess', 'prefs.updateFailed'
+  )
+  const handleTogglePushFriendActivity = () => handleUpdatePreference(
+    'push_friend_activity', !pushFriendActivity, setPushFriendActivity,
+    'prefs.pushFriendActivitySuccess', 'prefs.updateFailed'
+  )
+  const handleTogglePushMessages = () => handleUpdatePreference(
+    'push_messages', !pushMessages, setPushMessages,
+    'prefs.pushMessagesSuccess', 'prefs.updateFailed'
+  )
+  const handleTogglePushGardenUpdates = () => handleUpdatePreference(
+    'push_garden_updates', !pushGardenUpdates, setPushGardenUpdates,
+    'prefs.pushGardenUpdatesSuccess', 'prefs.updateFailed'
+  )
+  const handleTogglePersonalizedRecommendations = () => handleUpdatePreference(
+    'personalized_recommendations', !personalizedRecommendations, setPersonalizedRecommendations,
+    'prefs.personalizedSuccess', 'prefs.updateFailed'
+  )
+  const handleToggleAnalyticsImprovement = () => handleUpdatePreference(
+    'analytics_improvement', !analyticsImprovement, setAnalyticsImprovement,
+    'prefs.analyticsSuccess', 'prefs.updateFailed'
+  )
 
   // Tab configuration
   const tabs: { id: SettingsTab; icon: React.ReactNode; label: string }[] = [
@@ -792,57 +1162,249 @@ export default function SettingsPage() {
       {/* Notifications Tab */}
       {activeTab === 'notifications' && (
         <div className="space-y-6">
-          {/* Notification Preferences */}
+          {/* Master Push Notifications Toggle */}
           <Card className={glassCard}>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Bell className="h-5 w-5 text-emerald-600" />
-                <CardTitle>{t('settings.notifications.preferencesTitle', { defaultValue: 'Notification Preferences' })}</CardTitle>
+                <CardTitle>{t('settings.notifications.pushTitle', { defaultValue: 'Push Notifications' })}</CardTitle>
               </div>
               <CardDescription>
-                {t('settings.notifications.preferencesDescription', { defaultValue: 'Choose which notifications you want to receive.' })}
+                {t('settings.notifications.pushMasterDescription', { defaultValue: 'Control push notifications on your devices.' })}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Push Notifications Toggle */}
-              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+              {/* Master Push Toggle */}
+              <div className="flex items-start gap-3 p-4 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/10">
                 <input
                   type="checkbox"
-                  id="notify-push"
+                  id="notify-push-master"
                   checked={notifyPush}
                   onChange={handleToggleNotifyPush}
                   disabled={saving}
                   className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
                 />
                 <div className="flex-1">
-                  <Label htmlFor="notify-push" className="font-semibold cursor-pointer text-base">
-                    {t('settings.notifications.pushNotifications', { defaultValue: 'Push Notifications' })}
+                  <Label htmlFor="notify-push-master" className="font-semibold cursor-pointer text-base">
+                    {t('settings.notifications.enablePush', { defaultValue: 'Enable Push Notifications' })}
                   </Label>
                   <p className="text-sm opacity-70 mt-1">
-                    {t('settings.notifications.pushDescription', { defaultValue: 'Receive push notifications for reminders, task updates, and important alerts.' })}
+                    {t('settings.notifications.enablePushDescription', { defaultValue: 'Turn on to receive any push notifications. Turn off to disable all push notifications.' })}
                   </p>
                 </div>
               </div>
 
-              {/* Email Campaigns Toggle */}
-              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+              {/* Granular Push Preferences */}
+              {notifyPush && (
+                <div className="space-y-3 pl-4 border-l-2 border-stone-200 dark:border-[#3e3e42]">
+                  <p className="text-sm font-medium opacity-70 mb-3">{t('prefs.pushCategories', { defaultValue: 'Choose which notifications to receive:' })}</p>
+                  
+                  {/* Task Reminders */}
+                  <div className="flex items-start gap-3 p-3 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/50 dark:bg-[#1c1c1f]/50">
+                    <input
+                      type="checkbox"
+                      id="push-task-reminders"
+                      checked={pushTaskReminders}
+                      onChange={handleTogglePushTaskReminders}
+                      disabled={saving}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="push-task-reminders" className="font-medium cursor-pointer text-sm">
+                        {t('prefs.pushTaskReminders', { defaultValue: 'Task Reminders' })}
+                      </Label>
+                      <p className="text-xs opacity-60 mt-0.5">
+                        {t('prefs.pushTaskRemindersDesc', { defaultValue: 'Watering, fertilizing, and plant care reminders' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Messages */}
+                  <div className="flex items-start gap-3 p-3 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/50 dark:bg-[#1c1c1f]/50">
+                    <input
+                      type="checkbox"
+                      id="push-messages"
+                      checked={pushMessages}
+                      onChange={handleTogglePushMessages}
+                      disabled={saving}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="push-messages" className="font-medium cursor-pointer text-sm">
+                        {t('prefs.pushMessages', { defaultValue: 'Messages' })}
+                      </Label>
+                      <p className="text-xs opacity-60 mt-0.5">
+                        {t('prefs.pushMessagesDesc', { defaultValue: 'New messages from friends' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Friend Activity */}
+                  <div className="flex items-start gap-3 p-3 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/50 dark:bg-[#1c1c1f]/50">
+                    <input
+                      type="checkbox"
+                      id="push-friend-activity"
+                      checked={pushFriendActivity}
+                      onChange={handleTogglePushFriendActivity}
+                      disabled={saving}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="push-friend-activity" className="font-medium cursor-pointer text-sm">
+                        {t('prefs.pushFriendActivity', { defaultValue: 'Friend Activity' })}
+                      </Label>
+                      <p className="text-xs opacity-60 mt-0.5">
+                        {t('prefs.pushFriendActivityDesc', { defaultValue: 'Friend requests and activity updates' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Garden Updates */}
+                  <div className="flex items-start gap-3 p-3 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/50 dark:bg-[#1c1c1f]/50">
+                    <input
+                      type="checkbox"
+                      id="push-garden-updates"
+                      checked={pushGardenUpdates}
+                      onChange={handleTogglePushGardenUpdates}
+                      disabled={saving}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="push-garden-updates" className="font-medium cursor-pointer text-sm">
+                        {t('prefs.pushGardenUpdates', { defaultValue: 'Garden Updates' })}
+                      </Label>
+                      <p className="text-xs opacity-60 mt-0.5">
+                        {t('prefs.pushGardenUpdatesDesc', { defaultValue: 'Activity in your shared gardens' })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Email Notifications */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-blue-600" />
+                <CardTitle>{t('settings.notifications.emailTitle', { defaultValue: 'Email Notifications' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('settings.notifications.emailMasterDescription', { defaultValue: 'Choose which emails you want to receive from Aphylia.' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Master Email Toggle */}
+              <div className="flex items-start gap-3 p-4 rounded-2xl border-2 border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-900/10">
                 <input
                   type="checkbox"
-                  id="notify-email"
+                  id="notify-email-master"
                   checked={notifyEmail}
                   onChange={handleToggleNotifyEmail}
                   disabled={saving}
-                  className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-blue-600 focus:ring-blue-500"
                 />
                 <div className="flex-1">
-                  <Label htmlFor="notify-email" className="font-semibold cursor-pointer text-base">
-                    {t('settings.notifications.emailCampaigns', { defaultValue: 'Email Campaigns' })}
+                  <Label htmlFor="notify-email-master" className="font-semibold cursor-pointer text-base">
+                    {t('settings.notifications.enableEmail', { defaultValue: 'Enable Email Notifications' })}
                   </Label>
                   <p className="text-sm opacity-70 mt-1">
-                    {t('settings.notifications.emailDescription', { defaultValue: 'Receive newsletters, product updates, and promotional emails from Aphylia.' })}
+                    {t('settings.notifications.enableEmailDescription', { defaultValue: 'Turn on to receive email notifications. Turn off to disable all emails except account security.' })}
                   </p>
                 </div>
               </div>
+
+              {/* Granular Email Preferences */}
+              {notifyEmail && (
+                <div className="space-y-3 pl-4 border-l-2 border-stone-200 dark:border-[#3e3e42]">
+                  <p className="text-sm font-medium opacity-70 mb-3">{t('prefs.emailCategories', { defaultValue: 'Choose which emails to receive:' })}</p>
+                  
+                  {/* Product Updates */}
+                  <div className="flex items-start gap-3 p-3 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/50 dark:bg-[#1c1c1f]/50">
+                    <input
+                      type="checkbox"
+                      id="email-product-updates"
+                      checked={emailProductUpdates}
+                      onChange={handleToggleEmailProductUpdates}
+                      disabled={saving}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="email-product-updates" className="font-medium cursor-pointer text-sm">
+                        {t('prefs.emailProductUpdates', { defaultValue: 'Product Updates & New Features' })}
+                      </Label>
+                      <p className="text-xs opacity-60 mt-0.5">
+                        {t('prefs.emailProductUpdatesDesc', { defaultValue: 'Learn about new features and improvements' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Tips & Advice */}
+                  <div className="flex items-start gap-3 p-3 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/50 dark:bg-[#1c1c1f]/50">
+                    <input
+                      type="checkbox"
+                      id="email-tips-advice"
+                      checked={emailTipsAdvice}
+                      onChange={handleToggleEmailTipsAdvice}
+                      disabled={saving}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="email-tips-advice" className="font-medium cursor-pointer text-sm">
+                        {t('prefs.emailTipsAdvice', { defaultValue: 'Gardening Tips & Advice' })}
+                      </Label>
+                      <p className="text-xs opacity-60 mt-0.5">
+                        {t('prefs.emailTipsAdviceDesc', { defaultValue: 'Seasonal tips, plant care guides, and expert advice' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Community Highlights */}
+                  <div className="flex items-start gap-3 p-3 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/50 dark:bg-[#1c1c1f]/50">
+                    <input
+                      type="checkbox"
+                      id="email-community-highlights"
+                      checked={emailCommunityHighlights}
+                      onChange={handleToggleEmailCommunityHighlights}
+                      disabled={saving}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="email-community-highlights" className="font-medium cursor-pointer text-sm">
+                        {t('prefs.emailCommunity', { defaultValue: 'Community Highlights' })}
+                      </Label>
+                      <p className="text-xs opacity-60 mt-0.5">
+                        {t('prefs.emailCommunityDesc', { defaultValue: 'Featured gardens, success stories, and community news' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Promotions */}
+                  <div className="flex items-start gap-3 p-3 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/50 dark:bg-[#1c1c1f]/50">
+                    <input
+                      type="checkbox"
+                      id="email-promotions"
+                      checked={emailPromotions}
+                      onChange={handleToggleEmailPromotions}
+                      disabled={saving}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="email-promotions" className="font-medium cursor-pointer text-sm">
+                        {t('prefs.emailPromotions', { defaultValue: 'Promotions & Special Offers' })}
+                      </Label>
+                      <p className="text-xs opacity-60 mt-0.5">
+                        {t('prefs.emailPromotionsDesc', { defaultValue: 'Exclusive deals, discounts, and partner offers' })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs opacity-50 mt-2">
+                {t('prefs.securityEmailsNote', { defaultValue: 'Note: Security-related emails (password changes, suspicious activity) cannot be disabled.' })}
+              </p>
             </CardContent>
           </Card>
 
@@ -1021,6 +1583,260 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Quick Actions for Privacy */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Settings className="h-5 w-5 text-orange-600" />
+                <CardTitle>{t('prefs.quickActionsTitle', { defaultValue: 'Quick Actions' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('prefs.quickActionsDescription', { defaultValue: 'Quickly adjust multiple settings at once.' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="outline"
+                  className="rounded-2xl"
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true)
+                    try {
+                      await supabase.from('profiles').update({
+                        marketing_consent: false,
+                        email_product_updates: false,
+                        email_tips_advice: false,
+                        email_community_highlights: false,
+                        email_promotions: false,
+                        personalized_recommendations: false,
+                        analytics_improvement: false,
+                      }).eq('id', user?.id)
+                      setMarketingConsent(false)
+                      setEmailProductUpdates(false)
+                      setEmailTipsAdvice(false)
+                      setEmailCommunityHighlights(false)
+                      setEmailPromotions(false)
+                      setPersonalizedRecommendations(false)
+                      setAnalyticsImprovement(false)
+                      setSuccess(t('prefs.optOutSuccess', { defaultValue: 'Opted out of all non-essential data processing' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('prefs.updateFailed'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                >
+                  {t('prefs.optOutAll', { defaultValue: 'Opt-out of Non-Essential Processing' })}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-2xl"
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true)
+                    try {
+                      await supabase.from('profiles').update({
+                        notify_email: false,
+                        notify_push: false,
+                        email_product_updates: false,
+                        email_tips_advice: false,
+                        email_community_highlights: false,
+                        email_promotions: false,
+                        push_task_reminders: false,
+                        push_friend_activity: false,
+                        push_messages: false,
+                        push_garden_updates: false,
+                      }).eq('id', user?.id)
+                      setNotifyEmail(false)
+                      setNotifyPush(false)
+                      setEmailProductUpdates(false)
+                      setEmailTipsAdvice(false)
+                      setEmailCommunityHighlights(false)
+                      setEmailPromotions(false)
+                      setPushTaskReminders(false)
+                      setPushFriendActivity(false)
+                      setPushMessages(false)
+                      setPushGardenUpdates(false)
+                      setSuccess(t('prefs.disableAllNotificationsSuccess', { defaultValue: 'All notifications disabled' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('prefs.updateFailed'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                >
+                  {t('prefs.disableAllNotifications', { defaultValue: 'Disable All Notifications' })}
+                </Button>
+              </div>
+              <p className="text-xs opacity-50">
+                {t('prefs.quickActionsNote', { defaultValue: 'You can re-enable individual settings at any time in the Notifications tab.' })}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* GDPR Data & Consent Management */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-blue-600" />
+                <CardTitle>{t('gdpr.title', { defaultValue: 'Data & Consent' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('gdpr.description', { defaultValue: 'Manage your data and consent preferences under GDPR.' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Marketing Consent Toggle */}
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <input
+                  type="checkbox"
+                  id="marketing-consent"
+                  checked={marketingConsent}
+                  onChange={handleToggleMarketingConsent}
+                  disabled={saving}
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="marketing-consent" className="font-semibold cursor-pointer text-base">
+                    {t('gdpr.marketingConsent', { defaultValue: 'Marketing Communications' })}
+                  </Label>
+                  <p className="text-sm opacity-70 mt-1">
+                    {t('gdpr.marketingConsentDescription', { defaultValue: 'Receive occasional emails about new features and updates.' })}
+                  </p>
+                  {marketingConsentDate && (
+                    <p className="text-xs opacity-50 mt-2">
+                      {t('gdpr.lastUpdated', { defaultValue: 'Last updated:' })} {formatConsentDate(marketingConsentDate)}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Consent History */}
+              <div className="p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <h4 className="font-semibold text-sm mb-3">{t('gdpr.consentHistory', { defaultValue: 'Consent History' })}</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="opacity-70">{t('gdpr.termsAccepted', { defaultValue: 'Terms of Service accepted' })}</span>
+                    <span className="font-medium">{formatConsentDate(termsAcceptedDate)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="opacity-70">{t('gdpr.privacyAccepted', { defaultValue: 'Privacy Policy accepted' })}</span>
+                    <span className="font-medium">{formatConsentDate(privacyAcceptedDate)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Legal Documents Links */}
+              <div className="flex flex-wrap gap-3">
+                <Link 
+                  to="/terms" 
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1c1c1f] hover:bg-stone-50 dark:hover:bg-[#252528] transition-colors text-sm"
+                >
+                  <FileText className="h-4 w-4" />
+                  {t('gdpr.viewTerms', { defaultValue: 'Terms of Service' })}
+                  <ExternalLink className="h-3 w-3 opacity-50" />
+                </Link>
+                <Link 
+                  to="/privacy" 
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1c1c1f] hover:bg-stone-50 dark:hover:bg-[#252528] transition-colors text-sm"
+                >
+                  <Shield className="h-4 w-4" />
+                  {t('gdpr.viewPrivacy', { defaultValue: 'Privacy Policy' })}
+                  <ExternalLink className="h-3 w-3 opacity-50" />
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Personalization & Analytics */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Settings className="h-5 w-5 text-purple-600" />
+                <CardTitle>{t('prefs.personalizationTitle', { defaultValue: 'Personalization & Analytics' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('prefs.personalizationDescription', { defaultValue: 'Control how we personalize your experience and use data to improve the app.' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Personalized Recommendations */}
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <input
+                  type="checkbox"
+                  id="personalized-recommendations"
+                  checked={personalizedRecommendations}
+                  onChange={handleTogglePersonalizedRecommendations}
+                  disabled={saving}
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-purple-600 focus:ring-purple-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="personalized-recommendations" className="font-semibold cursor-pointer text-base">
+                    {t('prefs.personalizedRecommendations', { defaultValue: 'Personalized Recommendations' })}
+                  </Label>
+                  <p className="text-sm opacity-70 mt-1">
+                    {t('prefs.personalizedRecommendationsDesc', { defaultValue: 'Get plant suggestions and content based on your interests and garden activity.' })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Analytics for Improvement */}
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <input
+                  type="checkbox"
+                  id="analytics-improvement"
+                  checked={analyticsImprovement}
+                  onChange={handleToggleAnalyticsImprovement}
+                  disabled={saving}
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-purple-600 focus:ring-purple-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="analytics-improvement" className="font-semibold cursor-pointer text-base">
+                    {t('prefs.analyticsImprovement', { defaultValue: 'Help Improve Aphylia' })}
+                  </Label>
+                  <p className="text-sm opacity-70 mt-1">
+                    {t('prefs.analyticsImprovementDesc', { defaultValue: 'Allow anonymous usage data collection to help us improve the app experience.' })}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs opacity-50">
+                {t('prefs.privacyNote', { defaultValue: 'We never sell your data. See our Privacy Policy for details on how we protect your information.' })}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Data Export */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Download className="h-5 w-5 text-emerald-600" />
+                <CardTitle>{t('gdpr.exportData', { defaultValue: 'Export My Data' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('gdpr.exportDataDescription', { defaultValue: 'Download all data we have about you in a machine-readable format.' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm opacity-80">
+                {t('gdpr.exportInfo', { defaultValue: 'Your export will include your profile, gardens, plants, messages, friends, bookmarks, and all other personal data.' })}
+              </p>
+              <Button
+                onClick={handleExportData}
+                disabled={exporting}
+                className="rounded-2xl"
+                variant="outline"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {exporting 
+                  ? t('gdpr.exporting', { defaultValue: 'Preparing export...' })
+                  : t('gdpr.downloadData', { defaultValue: 'Download My Data' })
+                }
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -1088,6 +1904,57 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* Accent Color */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Palette className="h-5 w-5 text-accent" />
+                <CardTitle>{t('settings.accent.title', { defaultValue: 'Accent Color' })}</CardTitle>
+              </div>
+              <CardDescription>{t('settings.accent.description', { defaultValue: 'Choose your personal accent color that appears throughout the app.' })}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-4 gap-3">
+                {ACCENT_OPTIONS.map((opt) => {
+                  const isActive = (profile as any)?.accent_key === opt.key
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={async () => {
+                        if (!user?.id) return
+                        setSaving(true)
+                        try {
+                          const { error: updateError } = await supabase
+                            .from('profiles')
+                            .update({ accent_key: opt.key })
+                            .eq('id', user.id)
+                          if (updateError) throw updateError
+                          applyAccentByKey(opt.key as AccentKey)
+                          saveAccentKey(opt.key as AccentKey)
+                          await refreshProfile()
+                          setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                        } catch (e: any) {
+                          setError(e?.message || t('common.error'))
+                        } finally {
+                          setSaving(false)
+                        }
+                      }}
+                      disabled={saving}
+                      className={`h-12 rounded-xl relative transition-all ${isActive ? 'ring-2 ring-offset-2 ring-stone-500 dark:ring-stone-400 scale-105' : 'hover:scale-105'}`}
+                      title={opt.label}
+                      style={{ backgroundColor: opt.hex }}
+                      aria-pressed={isActive}
+                    />
+                  )
+                })}
+              </div>
+              <p className="text-xs opacity-60">
+                {t('settings.accent.current', { defaultValue: 'Current:' })} <span className="font-medium">{ACCENT_OPTIONS.find(o => o.key === (profile as any)?.accent_key)?.label || 'Emerald'}</span>
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Timezone */}
           <Card className={glassCard}>
             <CardHeader>
@@ -1131,6 +1998,154 @@ export default function SettingsPage() {
               >
                 {saving ? t('common.saving', { defaultValue: 'Saving...' }) : t('settings.timezone.save', { defaultValue: 'Save Timezone' })}
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Garden Preferences */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🌱</span>
+                <CardTitle>{t('setup.settings.title', { defaultValue: 'Garden Preferences' })}</CardTitle>
+              </div>
+              <CardDescription>{t('setup.settings.description', { defaultValue: 'Update your gardening preferences and notification settings.' })}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Garden Type */}
+              <div className="grid gap-2">
+                <Label htmlFor="garden-type-select">{t('setup.settings.gardenType', { defaultValue: 'Garden Location' })}</Label>
+                <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.gardenTypeDescription', { defaultValue: 'Where do you grow your plants?' })}</p>
+                <select
+                  id="garden-type-select"
+                  value={(profile as any)?.garden_type || ''}
+                  onChange={async (e) => {
+                    if (!user?.id) return
+                    setSaving(true)
+                    try {
+                      const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ garden_type: e.target.value || null })
+                        .eq('id', user.id)
+                      if (updateError) throw updateError
+                      await refreshProfile()
+                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('common.error'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                >
+                  <option value="">{t('common.select', { defaultValue: 'Select...' })}</option>
+                  <option value="inside">{t('setup.gardenType.inside', { defaultValue: 'Inside your home' })}</option>
+                  <option value="outside">{t('setup.gardenType.outside', { defaultValue: 'Outside, in a yard' })}</option>
+                  <option value="both">{t('setup.gardenType.both', { defaultValue: 'Both inside and outside' })}</option>
+                </select>
+              </div>
+
+              {/* Experience Level */}
+              <div className="grid gap-2">
+                <Label htmlFor="experience-level-select">{t('setup.settings.experienceLevel', { defaultValue: 'Experience Level' })}</Label>
+                <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.experienceLevelDescription', { defaultValue: 'Your gardening expertise level' })}</p>
+                <select
+                  id="experience-level-select"
+                  value={(profile as any)?.experience_level || ''}
+                  onChange={async (e) => {
+                    if (!user?.id) return
+                    setSaving(true)
+                    try {
+                      const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ experience_level: e.target.value || null })
+                        .eq('id', user.id)
+                      if (updateError) throw updateError
+                      await refreshProfile()
+                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('common.error'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                >
+                  <option value="">{t('common.select', { defaultValue: 'Select...' })}</option>
+                  <option value="novice">{t('setup.experience.novice', { defaultValue: 'Novice' })}</option>
+                  <option value="intermediate">{t('setup.experience.intermediate', { defaultValue: 'Intermediate' })}</option>
+                  <option value="expert">{t('setup.experience.expert', { defaultValue: 'Expert' })}</option>
+                </select>
+              </div>
+
+              {/* Garden Purpose */}
+              <div className="grid gap-2">
+                <Label htmlFor="looking-for-select">{t('setup.settings.lookingFor', { defaultValue: 'Garden Purpose' })}</Label>
+                <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.lookingForDescription', { defaultValue: "What's your main gardening goal?" })}</p>
+                <select
+                  id="looking-for-select"
+                  value={(profile as any)?.looking_for || ''}
+                  onChange={async (e) => {
+                    if (!user?.id) return
+                    setSaving(true)
+                    try {
+                      const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ looking_for: e.target.value || null })
+                        .eq('id', user.id)
+                      if (updateError) throw updateError
+                      await refreshProfile()
+                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('common.error'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                >
+                  <option value="">{t('common.select', { defaultValue: 'Select...' })}</option>
+                  <option value="eat">{t('setup.purpose.eat', { defaultValue: 'Grow food' })}</option>
+                  <option value="ornamental">{t('setup.purpose.ornamental', { defaultValue: 'Ornamental garden' })}</option>
+                  <option value="various">{t('setup.purpose.various', { defaultValue: 'A bit of everything!' })}</option>
+                </select>
+              </div>
+
+              {/* Notification Time */}
+              <div className="grid gap-2">
+                <Label htmlFor="notification-time-select">{t('setup.settings.notificationTime', { defaultValue: 'Notification Time' })}</Label>
+                <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.notificationTimeDescription', { defaultValue: 'When should we send you reminders?' })}</p>
+                <select
+                  id="notification-time-select"
+                  value={(profile as any)?.notification_time || '10h'}
+                  onChange={async (e) => {
+                    if (!user?.id) return
+                    setSaving(true)
+                    try {
+                      const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ notification_time: e.target.value })
+                        .eq('id', user.id)
+                      if (updateError) throw updateError
+                      await refreshProfile()
+                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+                    } catch (e: any) {
+                      setError(e?.message || t('common.error'))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                >
+                  <option value="6h">{t('setup.notificationTime.early', { defaultValue: 'Early bird' })} - 6:00 AM</option>
+                  <option value="10h">{t('setup.notificationTime.morning', { defaultValue: 'Sleep in' })} - 10:00 AM</option>
+                  <option value="14h">{t('setup.notificationTime.midday', { defaultValue: 'Midday energy' })} - 2:00 PM</option>
+                  <option value="17h">{t('setup.notificationTime.afternoon', { defaultValue: 'After work' })} - 5:00 PM</option>
+                </select>
+              </div>
             </CardContent>
           </Card>
         </div>

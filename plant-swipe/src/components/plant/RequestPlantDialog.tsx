@@ -54,6 +54,64 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
 
       const normalize = (value: string | null | undefined) => (value ?? '').toLowerCase().trim()
 
+      // First, check if a plant with this name already exists in the database
+      // Check against: name, scientific_name in plants table
+      const { data: existingByName, error: plantSearchError } = await supabase
+        .from('plants')
+        .select('id, name, scientific_name')
+        .or(`name.ilike.%${normalizedName}%,scientific_name.ilike.%${normalizedName}%`)
+        .limit(1)
+        .maybeSingle()
+
+      if (plantSearchError) {
+        console.error('[RequestPlantDialog] Error checking existing plants:', plantSearchError)
+        // Continue even if check fails - don't block the request
+      }
+
+      if (existingByName) {
+        setError(t('requestPlant.plantAlreadyExists', { 
+          plantName: existingByName.name,
+          defaultValue: `This plant already exists in our database as "${existingByName.name}". Try searching for it in the encyclopedia!`
+        }))
+        return
+      }
+
+      // Also check given_names in plant_translations table
+      // This catches cases where user searches by a common name like "Swiss Cheese Plant"
+      const { data: translationMatches, error: translationError } = await supabase
+        .from('plant_translations')
+        .select('plant_id, given_names, plants!inner(id, name)')
+        .eq('language', 'en')
+        .limit(100)
+
+      if (translationError) {
+        console.error('[RequestPlantDialog] Error checking translations:', translationError)
+        // Continue even if check fails - don't block the request
+      }
+
+      // Check if any plant has this name as a given_name
+      let existingByGivenName: { id: string; name: string } | null = null
+      if (translationMatches) {
+        for (const row of translationMatches as any[]) {
+          const givenNames = Array.isArray(row?.given_names) ? row.given_names : []
+          const matchesGivenName = givenNames.some(
+            (gn: unknown) => typeof gn === 'string' && gn.toLowerCase().includes(normalizedName)
+          )
+          if (matchesGivenName && row?.plants?.id) {
+            existingByGivenName = { id: String(row.plants.id), name: String(row.plants.name || '') }
+            break
+          }
+        }
+      }
+
+      if (existingByGivenName) {
+        setError(t('requestPlant.plantAlreadyExists', { 
+          plantName: existingByGivenName.name,
+          defaultValue: `This plant already exists in our database as "${existingByGivenName.name}". Try searching for it in the encyclopedia!`
+        }))
+        return
+      }
+
       // Get all existing active requests to check for similar names
       // We fetch all because we need to do client-side similarity matching
       const { data: existingRequests, error: searchError } = await supabase

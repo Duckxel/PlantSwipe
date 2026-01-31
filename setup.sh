@@ -307,7 +307,68 @@ fi
 
 log "Installing base packages…"
 $PM_UPDATE
-$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd certbot python3-certbot-nginx unzip
+$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd certbot python3-certbot-nginx unzip unattended-upgrades apt-listchanges
+
+# Configure unattended-upgrades for automatic security updates
+log "Configuring unattended-upgrades for automatic security updates…"
+configure_unattended_upgrades() {
+  local config_file="/etc/apt/apt.conf.d/50unattended-upgrades"
+  local auto_file="/etc/apt/apt.conf.d/20auto-upgrades"
+  
+  # Create unattended-upgrades configuration
+  $SUDO bash -c "cat > '$config_file' <<'EOF'
+// Unattended-Upgrades configuration for PlantSwipe server
+// Only install security updates automatically (safe for production)
+
+Unattended-Upgrade::Allowed-Origins {
+    \"\${distro_id}:\${distro_codename}\";
+    \"\${distro_id}:\${distro_codename}-security\";
+    \"\${distro_id}ESMApps:\${distro_codename}-apps-security\";
+    \"\${distro_id}ESM:\${distro_codename}-infra-security\";
+};
+
+// Packages to never update automatically (add any critical packages here)
+Unattended-Upgrade::Package-Blacklist {
+    // \"nginx\";  // Uncomment to prevent nginx auto-updates
+};
+
+// Automatically reboot at 5:00 AM if required (e.g., kernel updates)
+Unattended-Upgrade::Automatic-Reboot \"true\";
+Unattended-Upgrade::Automatic-Reboot-Time \"05:00\";
+
+// Only reboot if no users are logged in (safer)
+Unattended-Upgrade::Automatic-Reboot-WithUsers \"false\";
+
+// Remove unused kernel packages and dependencies
+Unattended-Upgrade::Remove-Unused-Kernel-Packages \"true\";
+Unattended-Upgrade::Remove-Unused-Dependencies \"true\";
+
+// Log to syslog
+Unattended-Upgrade::SyslogEnable \"true\";
+
+// Don't install updates that require dpkg prompts
+Unattended-Upgrade::DevRelease \"false\";
+EOF
+"
+
+  # Enable automatic updates
+  $SUDO bash -c "cat > '$auto_file' <<'EOF'
+// Enable automatic updates
+APT::Periodic::Update-Package-Lists \"1\";
+APT::Periodic::Unattended-Upgrade \"1\";
+APT::Periodic::Download-Upgradeable-Packages \"1\";
+APT::Periodic::AutocleanInterval \"7\";
+EOF
+"
+
+  # Enable and start the unattended-upgrades service
+  $SUDO systemctl enable unattended-upgrades || true
+  $SUDO systemctl start unattended-upgrades || true
+  
+  log "Unattended-upgrades configured: security updates daily, auto-reboot at 5 AM if needed"
+}
+
+configure_unattended_upgrades
 
 # Ensure global AWS RDS CA bundle for TLS to Supabase Postgres
 log "Installing AWS RDS global CA bundle for TLS…"
@@ -652,6 +713,139 @@ fi
 
 log "Using Bun $(bun --version 2>/dev/null || echo 'version unknown') as primary package manager."
 
+# Install Sentry for error monitoring (server-side and client-side)
+log "Installing Sentry for error monitoring…"
+install_sentry() {
+  local bun_path=""
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+    if [[ -x "$SERVICE_HOME/.bun/bin/bun" ]]; then
+      bun_path="$SERVICE_HOME/.bun/bin"
+    elif [[ -x "/usr/local/bin/bun" ]]; then
+      bun_path="/usr/local/bin"
+    elif [[ -x "$HOME/.bun/bin/bun" ]]; then
+      bun_path="$HOME/.bun/bin"
+    fi
+  fi
+  
+  # Check if Sentry packages are already installed
+  local needs_server=true
+  local needs_client=true
+  
+  if [[ -f "$NODE_DIR/package.json" ]]; then
+    if grep -q '"@sentry/bun"' "$NODE_DIR/package.json" 2>/dev/null; then
+      needs_server=false
+      log "Sentry server-side (@sentry/bun) is already installed."
+    fi
+    if grep -q '"@sentry/react"' "$NODE_DIR/package.json" 2>/dev/null; then
+      needs_client=false
+      log "Sentry client-side (@sentry/react) is already installed."
+    fi
+  fi
+  
+  # Install missing packages
+  local packages_to_add=""
+  if $needs_server; then
+    packages_to_add="@sentry/bun"
+  fi
+  if $needs_client; then
+    packages_to_add="$packages_to_add @sentry/react"
+  fi
+  
+  if [[ -n "$packages_to_add" ]]; then
+    log "Adding Sentry packages: $packages_to_add"
+    if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+      if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add $packages_to_add" 2>&1; then
+        log "Sentry packages installed successfully."
+      else
+        log "[WARN] Failed to install Sentry packages. You can manually install with: cd $NODE_DIR && bun add $packages_to_add"
+      fi
+    else
+      if bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add $packages_to_add" 2>&1; then
+        log "Sentry packages installed successfully."
+      else
+        log "[WARN] Failed to install Sentry packages. You can manually install with: cd $NODE_DIR && bun add $packages_to_add"
+      fi
+    fi
+  else
+    log "All Sentry packages are already installed."
+  fi
+}
+
+install_sentry
+
+# Verify Sentry configuration in server.js
+verify_sentry_server_config() {
+  local server_file="$NODE_DIR/server.js"
+  
+  if [[ ! -f "$server_file" ]]; then
+    log "[WARN] server.js not found at $server_file. Skipping Sentry verification."
+    return 1
+  fi
+  
+  # Check if Sentry is already configured
+  if grep -q "@sentry/bun" "$server_file" 2>/dev/null; then
+    log "Sentry is configured in server.js."
+    return 0
+  else
+    log "[WARN] Sentry is not configured in server.js. Please ensure @sentry/bun is imported and initialized."
+    return 1
+  fi
+}
+
+# Verify Sentry configuration in client-side code
+verify_sentry_client_config() {
+  local sentry_lib="$NODE_DIR/src/lib/sentry.ts"
+  local main_file="$NODE_DIR/src/main.tsx"
+  
+  if [[ -f "$sentry_lib" ]]; then
+    log "Sentry client configuration found at $sentry_lib"
+  else
+    log "[WARN] Sentry client configuration not found at $sentry_lib"
+  fi
+  
+  if [[ -f "$main_file" ]] && grep -q "initSentry" "$main_file" 2>/dev/null; then
+    log "Sentry is initialized in main.tsx"
+  else
+    log "[WARN] Sentry initialization not found in main.tsx"
+  fi
+}
+
+verify_sentry_server_config
+verify_sentry_client_config
+
+# Verify Sentry configuration in Admin API (Python)
+verify_sentry_admin_api_config() {
+  local admin_app="$REPO_DIR/admin_api/app.py"
+  local admin_requirements="$REPO_DIR/admin_api/requirements.txt"
+  
+  if [[ -f "$admin_requirements" ]] && grep -q "sentry-sdk" "$admin_requirements" 2>/dev/null; then
+    log "Sentry SDK is configured in Admin API requirements.txt"
+  else
+    log "[WARN] Sentry SDK not found in Admin API requirements.txt"
+  fi
+  
+  if [[ -f "$admin_app" ]] && grep -q "sentry_sdk" "$admin_app" 2>/dev/null; then
+    log "Sentry is initialized in Admin API app.py"
+  else
+    log "[WARN] Sentry initialization not found in Admin API app.py"
+  fi
+}
+
+# Verify Sentry configuration in Sitemap generator
+verify_sentry_sitemap_config() {
+  local sitemap_script="$NODE_DIR/scripts/generate-sitemap.js"
+  
+  if [[ -f "$sitemap_script" ]] && grep -q "@sentry/node" "$sitemap_script" 2>/dev/null; then
+    log "Sentry is configured in sitemap generator"
+  else
+    log "[WARN] Sentry not found in sitemap generator script"
+  fi
+}
+
+verify_sentry_admin_api_config
+verify_sentry_sitemap_config
+
 # Build frontend and API bundle using Bun
 # Delegate to refresh script if available (avoids code duplication and uses optimized build)
 REFRESH_SCRIPT="$REPO_DIR/scripts/refresh-plant-swipe.sh"
@@ -660,7 +854,8 @@ if [[ -f "$REFRESH_SCRIPT" ]]; then
   # Set environment for refresh script
   export PLANTSWIPE_REPO_DIR="$REPO_DIR"
   export PLANTSWIPE_REPO_OWNER="$SERVICE_USER"
-  export NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
+  export NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
+  export NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY"
   export SKIP_SERVICE_RESTARTS=true  # Don't restart services yet (setup will do it later)
   export SKIP_SUPABASE_DEPLOY=true   # Skip Supabase deploy (setup handles it separately)
   export SKIP_ENV_SYNC=true          # Skip env sync (setup handles it separately)
@@ -693,7 +888,8 @@ if [[ -f "$REFRESH_SCRIPT" ]]; then
     fi
     sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
     log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
-    sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
+    NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
+    sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
   fi
 else
   # Fallback: refresh script not found, do direct install/build with Bun
@@ -715,8 +911,8 @@ else
   fi
   sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
   log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
-  NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-512}"
-  sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
+  NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
+  sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
 fi
 
 # Link web root expected by nginx config to the repo copy, unless that would create
@@ -1649,23 +1845,77 @@ rebuild_admin_api_venv() {
 
 rebuild_admin_api_venv
 
-# Admin API environment file (placeholders) — user must update secrets later
+# Admin API environment file — generate secure secrets on first run
 log "Ensuring Admin API env at $ADMIN_ENV_FILE…"
 $SUDO mkdir -p "$ADMIN_ENV_DIR"
+
+# Generate a secure random secret for ADMIN_BUTTON_SECRET
+generate_secure_secret() {
+  # Try openssl first (most secure), fall back to /dev/urandom
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  elif [[ -r /dev/urandom ]]; then
+    head -c 32 /dev/urandom | xxd -p | tr -d '\n'
+  else
+    # Last resort: use date + random for some entropy
+    echo "$(date +%s%N)$(shuf -i 1000000000-9999999999 -n 1)" | sha256sum | cut -d' ' -f1
+  fi
+}
+
+# Read ADMIN_STATIC_TOKEN from plant-swipe/.env file (prefer ADMIN_STATIC_TOKEN, then VITE_ADMIN_STATIC_TOKEN)
+ADMIN_STATIC_TOKEN_VALUE=""
+for env_file in "$NODE_DIR/.env" "$NODE_DIR/.env.server"; do
+  if [[ -z "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+    ADMIN_STATIC_TOKEN_VALUE="$(read_env_kv "$env_file" ADMIN_STATIC_TOKEN)"
+  fi
+  if [[ -z "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+    ADMIN_STATIC_TOKEN_VALUE="$(read_env_kv "$env_file" VITE_ADMIN_STATIC_TOKEN)"
+  fi
+done
+
 if [[ ! -f "$ADMIN_ENV_FILE" ]]; then
-  $SUDO bash -c "cat > '$ADMIN_ENV_FILE' <<'EOF'
-# Admin API environment — fill in after setup
-# Change this secret! If blank, only static token auth (if provided) is used.
-ADMIN_BUTTON_SECRET=change-me
+  # Generate a unique secure secret for this installation
+  ADMIN_BUTTON_SECRET_VALUE="$(generate_secure_secret)"
+  log "Generated new ADMIN_BUTTON_SECRET for this installation"
+  
+  if [[ -n "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+    log "Read ADMIN_STATIC_TOKEN from plant-swipe/.env"
+  else
+    log "[INFO] ADMIN_STATIC_TOKEN not found in plant-swipe/.env - will be empty (HMAC auth only)"
+  fi
+  
+  $SUDO bash -c "cat > '$ADMIN_ENV_FILE' <<EOF
+# Admin API environment — auto-generated by setup.sh
+# ADMIN_BUTTON_SECRET: Used for HMAC signature verification (X-Button-Token header)
+# Generated automatically - unique per installation
+ADMIN_BUTTON_SECRET=$ADMIN_BUTTON_SECRET_VALUE
 # Which services Admin API may restart (systemd unit names without or with .service)
 ADMIN_ALLOWED_SERVICES=nginx,plant-swipe-node,admin-api
 # Default when /admin/restart-app is called without payload
 ADMIN_DEFAULT_SERVICE=plant-swipe-node
-# Optional: a shared static token to authorize admin actions via X-Admin-Token
-ADMIN_STATIC_TOKEN=
+# ADMIN_STATIC_TOKEN: Shared token for X-Admin-Token header authentication
+# Read from plant-swipe/.env (ADMIN_STATIC_TOKEN or VITE_ADMIN_STATIC_TOKEN)
+ADMIN_STATIC_TOKEN=$ADMIN_STATIC_TOKEN_VALUE
 EOF
 "
   $SUDO chmod 0640 "$ADMIN_ENV_FILE"
+else
+  # File exists - update ADMIN_STATIC_TOKEN if we found a new value and it's different
+  if [[ -n "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+    EXISTING_TOKEN="$(read_env_kv "$ADMIN_ENV_FILE" ADMIN_STATIC_TOKEN)"
+    if [[ "$EXISTING_TOKEN" != "$ADMIN_STATIC_TOKEN_VALUE" ]]; then
+      log "Updating ADMIN_STATIC_TOKEN in existing $ADMIN_ENV_FILE"
+      $SUDO sed -i "s|^ADMIN_STATIC_TOKEN=.*|ADMIN_STATIC_TOKEN=$ADMIN_STATIC_TOKEN_VALUE|" "$ADMIN_ENV_FILE"
+    fi
+  fi
+  
+  # Check if ADMIN_BUTTON_SECRET is still the placeholder and regenerate if so
+  EXISTING_SECRET="$(read_env_kv "$ADMIN_ENV_FILE" ADMIN_BUTTON_SECRET)"
+  if [[ "$EXISTING_SECRET" == "change-me" || -z "$EXISTING_SECRET" ]]; then
+    ADMIN_BUTTON_SECRET_VALUE="$(generate_secure_secret)"
+    log "Regenerating ADMIN_BUTTON_SECRET (was placeholder or empty)"
+    $SUDO sed -i "s|^ADMIN_BUTTON_SECRET=.*|ADMIN_BUTTON_SECRET=$ADMIN_BUTTON_SECRET_VALUE|" "$ADMIN_ENV_FILE"
+  fi
 fi
 
 # Install systemd services
@@ -1752,6 +2002,46 @@ WantedBy=timers.target
 EOF
 "
 
+# CA certificates auto-update timer (weekly)
+# This ensures the system CA certificates stay up-to-date for SSL connections
+# (e.g., connecting to Supabase database which requires valid CA certs)
+SERVICE_CA_UPDATE="plantswipe-ca-update"
+CA_UPDATE_SERVICE_FILE="/etc/systemd/system/$SERVICE_CA_UPDATE.service"
+CA_UPDATE_TIMER_FILE="/etc/systemd/system/$SERVICE_CA_UPDATE.timer"
+
+log "Installing CA certificates auto-update service…"
+$SUDO bash -c "cat > '$CA_UPDATE_SERVICE_FILE' <<EOF
+[Unit]
+Description=Update CA certificates for PlantSwipe SSL connections
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'apt-get update -qq && apt-get install -y --only-upgrade ca-certificates && update-ca-certificates'
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+"
+
+log "Installing CA certificates auto-update timer (weekly)…"
+$SUDO bash -c "cat > '$CA_UPDATE_TIMER_FILE' <<EOF
+[Unit]
+Description=Weekly CA certificates update for PlantSwipe
+
+[Timer]
+# Run weekly on Sunday at 4:00 AM
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target
+EOF
+"
+
 # Ensure ownership for admin dir (www-data runs the service)
 $SUDO chown -R www-data:www-data "$ADMIN_DIR" || true
 
@@ -1785,8 +2075,12 @@ fi
 # Enable and restart services to pick up updated unit files
 log "Enabling and restarting services…"
 $SUDO systemctl daemon-reload
-$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVICE_SITEMAP.timer"
+$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVICE_SITEMAP.timer" "$SERVICE_CA_UPDATE.timer"
 $SUDO systemctl start "$SERVICE_SITEMAP.timer" || log "[WARN] Failed to start $SERVICE_SITEMAP.timer"
+$SUDO systemctl start "$SERVICE_CA_UPDATE.timer" || log "[WARN] Failed to start $SERVICE_CA_UPDATE.timer"
+# Run CA update immediately to fix any current SSL issues
+log "Running initial CA certificates update…"
+$SUDO systemctl start "$SERVICE_CA_UPDATE.service" || log "[WARN] CA certificates update failed (will retry on timer)"
 $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
 if [[ -x "$SITEMAP_GENERATOR_BIN" ]]; then
   if ! $SUDO systemctl start "$SERVICE_SITEMAP.service"; then

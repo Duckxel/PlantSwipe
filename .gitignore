@@ -63,6 +63,14 @@ domain.json
 .bun/
 *.bun
 
+# Admin API environment file (created locally, contains secrets)
+admin_env
+
+# Core dump files (crash artifacts, not needed)
+core
+core.*
+*.core
+
 # Editor settings that may auto-generate
 *.sublime-workspace
 *.sublime-project
@@ -77,3 +85,4 @@ yarn.lock
 .yarn/
 .yarnrc.yml
 .pnp.*
+admin_api/__pycache__/

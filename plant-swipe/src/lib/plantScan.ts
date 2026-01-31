@@ -213,6 +213,15 @@ function escapeIlikePattern(input: string): string {
  * Try to find a matching plant in our database
  * Uses multiple search strategies for best matching
  * All strategies are executed before returning - Request Plant should only appear after this completes
+ * 
+ * Search strategies include:
+ * 1. Exact name/scientific_name match
+ * 2. Scientific name from genus + species
+ * 3. Partial name match
+ * 4. Genus-only match
+ * 5. API common names against name/scientific_name
+ * 6. Scanned name against database common names (identity->commonNames)
+ * 7. API common names against database common names
  */
 async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Promise<string | undefined> {
   if (!topMatch?.name) {
@@ -222,6 +231,9 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
   
   console.log('[plantScan] Starting database match for:', topMatch.name)
   console.log('[plantScan] Taxonomy info - Genus:', topMatch.genus, 'Species:', topMatch.species, 'Infraspecies:', topMatch.infraspecies)
+  if (topMatch.commonNames?.length) {
+    console.log('[plantScan] API common names:', topMatch.commonNames.slice(0, 5))
+  }
   
   // Sanitize inputs to prevent ILIKE injection
   const safeName = escapeIlikePattern(topMatch.name)
@@ -229,7 +241,7 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
   const safeSpecies = topMatch.species ? escapeIlikePattern(topMatch.species) : null
   
   try {
-    // Strategy 1: Exact name match (case-insensitive)
+    // Strategy 1: Exact name match (case-insensitive) on name and scientific_name
     const { data: exactMatch, error: exactError } = await supabase
       .from('plants')
       .select('id, name, scientific_name')
@@ -260,7 +272,7 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
       }
     }
     
-    // Strategy 3: Partial name match (contains)
+    // Strategy 3: Partial name match (contains) on name and scientific_name
     const { data: partialMatch, error: partialError } = await supabase
       .from('plants')
       .select('id, name, scientific_name')
@@ -290,11 +302,11 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
       }
     }
     
-    // Strategy 5: Search by common names if available
+    // Strategy 5: Search API common names against database name/scientific_name
     if (topMatch.commonNames && topMatch.commonNames.length > 0) {
-      console.log('[plantScan] Trying Strategy 5 with common names:', topMatch.commonNames.slice(0, 3))
+      console.log('[plantScan] Trying Strategy 5 with API common names against name/scientific_name')
       
-      for (const commonName of topMatch.commonNames.slice(0, 3)) {
+      for (const commonName of topMatch.commonNames.slice(0, 5)) {
         const safeCommonName = escapeIlikePattern(commonName)
         const { data: commonNameMatch, error: commonError } = await supabase
           .from('plants')
@@ -304,13 +316,63 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
           .single()
         
         if (commonNameMatch && !commonError) {
-          console.log('[plantScan] ✓ Strategy 5 (common name) found:', commonNameMatch.name, 'via', commonName)
+          console.log('[plantScan] ✓ Strategy 5 (API common name vs name/scientific) found:', commonNameMatch.name, 'via', commonName)
           return commonNameMatch.id
         }
       }
     }
     
-    console.log('[plantScan] ✗ No match found after all 5 strategies')
+    // Strategy 6: Search scanned plant name against database common names (identity->commonNames)
+    // The identity column is JSONB with commonNames as an array of strings
+    // We search the text representation of the array for partial matches
+    console.log('[plantScan] Trying Strategy 6: scanned name against database common names')
+    const { data: dbCommonNameMatch, error: dbCommonError } = await supabase
+      .from('plants')
+      .select('id, name, scientific_name, identity')
+      .ilike('identity->>commonNames', `%${safeName}%`)
+      .limit(1)
+      .single()
+    
+    if (dbCommonNameMatch && !dbCommonError) {
+      console.log('[plantScan] ✓ Strategy 6 (scanned name vs DB common names) found:', dbCommonNameMatch.name)
+      return dbCommonNameMatch.id
+    }
+    
+    // Strategy 7: Search API common names against database common names (identity->commonNames)
+    if (topMatch.commonNames && topMatch.commonNames.length > 0) {
+      console.log('[plantScan] Trying Strategy 7: API common names against database common names')
+      
+      for (const commonName of topMatch.commonNames.slice(0, 5)) {
+        const safeCommonName = escapeIlikePattern(commonName)
+        const { data: crossCommonMatch, error: crossError } = await supabase
+          .from('plants')
+          .select('id, name, scientific_name, identity')
+          .ilike('identity->>commonNames', `%${safeCommonName}%`)
+          .limit(1)
+          .single()
+        
+        if (crossCommonMatch && !crossError) {
+          console.log('[plantScan] ✓ Strategy 7 (API common name vs DB common names) found:', crossCommonMatch.name, 'via', commonName)
+          return crossCommonMatch.id
+        }
+      }
+    }
+    
+    // Strategy 8: Also search against identity->givenNames and identity->synonyms
+    console.log('[plantScan] Trying Strategy 8: scanned name against database givenNames and synonyms')
+    const { data: altNameMatch, error: altError } = await supabase
+      .from('plants')
+      .select('id, name, scientific_name, identity')
+      .or(`identity->>givenNames.ilike.%${safeName}%,identity->>synonyms.ilike.%${safeName}%`)
+      .limit(1)
+      .single()
+    
+    if (altNameMatch && !altError) {
+      console.log('[plantScan] ✓ Strategy 8 (scanned name vs DB givenNames/synonyms) found:', altNameMatch.name)
+      return altNameMatch.id
+    }
+    
+    console.log('[plantScan] ✗ No match found after all 8 strategies')
     return undefined
     
   } catch (err) {

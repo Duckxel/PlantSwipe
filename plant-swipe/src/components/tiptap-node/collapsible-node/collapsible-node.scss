@@ -1,0 +1,235 @@
+// Collapsible Node Styles for TipTap Editor
+
+.collapsible-node {
+  // Ensure the node is properly displayed as a block
+  display: block !important;
+  position: relative;
+  // Ensure proper visibility and stacking
+  z-index: 1;
+  // Ensure it's not clipped
+  overflow: visible;
+
+  // Header styling
+  .collapsible-header {
+    display: flex;
+    align-items: center;
+    user-select: none;
+    position: relative;
+    z-index: 2;
+    
+    // Prevent text selection during drag
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  // Drag handle
+  .collapsible-drag-handle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    &:hover {
+      opacity: 1;
+    }
+  }
+
+  // Content wrapper with smooth transitions
+  .collapsible-content-wrapper {
+    will-change: max-height, opacity;
+    position: relative;
+    z-index: 1;
+  }
+
+  // Inner content - inherit editor styles, minimal overrides
+  .collapsible-inner-content {
+    // Ensure content is editable and visible
+    min-height: 1.5em;
+    outline: none;
+    
+    // Reset margins for first/last children
+    > *:first-child {
+      margin-top: 0;
+    }
+
+    > *:last-child {
+      margin-bottom: 0;
+    }
+
+    // Nested collapsibles spacing
+    .collapsible-node {
+      margin: 1em 0;
+    }
+  }
+
+  // Selected state
+  &[data-selected="true"],
+  &:focus-within {
+    outline: none;
+  }
+}
+
+// Ensure proper rendering in the editor
+.ProseMirror {
+  // Ensure collapsible nodes are visible and properly layered
+  .collapsible-node {
+    // Cursor positioning
+    &::before {
+      content: none;
+    }
+
+    // Gap cursor support
+    &.ProseMirror-selectednode {
+      outline: none;
+    }
+    
+    // Ensure visibility within the editor
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  // Ensure drag handle works
+  [data-drag-handle] {
+    cursor: grab;
+    
+    &:active {
+      cursor: grabbing;
+    }
+  }
+  
+  // Ensure NodeViewWrapper renders correctly
+  [data-type="collapsible"] {
+    display: block !important;
+    position: relative;
+    
+    // Ensure the inner content area is editable
+    .collapsible-inner-content {
+      cursor: text;
+      min-height: 1.5em;
+      
+      &:focus {
+        outline: none;
+      }
+    }
+  }
+}
+
+// Animation for expand/collapse
+@keyframes collapsible-expand {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes collapsible-collapse {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.collapsible-content-wrapper {
+  &[data-state="open"] {
+    animation: collapsible-expand 0.2s ease-out;
+  }
+  
+  &[data-state="closed"] {
+    animation: collapsible-collapse 0.2s ease-out;
+  }
+}
+
+// Dark mode adjustments - ensure text is visible
+.dark {
+  .collapsible-node {
+    .collapsible-inner-content {
+      // Ensure text colors are visible in dark mode
+      color: #e7e5e4; // stone-200 equivalent
+      
+      p, span, li, td, th, label {
+        color: inherit;
+      }
+      
+      // Headings should be brighter
+      h1, h2, h3, h4, h5, h6 {
+        color: #fafaf9; // stone-50 equivalent
+      }
+      
+      // Muted text elements
+      blockquote {
+        opacity: 0.9;
+        color: #a8a29e; // stone-400 equivalent
+      }
+      
+      // Code blocks
+      code {
+        background-color: rgba(41, 37, 36, 0.8); // stone-800 with opacity
+        color: #e7e5e4;
+      }
+      
+      pre {
+        background-color: rgba(28, 25, 23, 0.9); // stone-900 with opacity
+        color: #e7e5e4;
+      }
+      
+      // Links
+      a {
+        color: #6ee7b7; // emerald-300
+      }
+      
+      // Lists - ensure bullet/number colors
+      ul li::marker,
+      ol li::marker {
+        color: #a8a29e; // stone-400
+      }
+      
+      // Placeholder text
+      .is-empty::before {
+        color: #78716c !important; // stone-500
+      }
+    }
+    
+    // Collapsed preview text
+    .collapsible-content {
+      color: #e7e5e4;
+    }
+  }
+}
+
+// Light mode text colors (explicit for consistency)
+.collapsible-node {
+  .collapsible-inner-content {
+    color: #1c1917; // stone-900
+    
+    h1, h2, h3, h4, h5, h6 {
+      color: #0c0a09; // stone-950
+    }
+  }
+}
+
+// Print styles
+@media print {
+  .collapsible-node {
+    // Always show content when printing
+    .collapsible-content-wrapper {
+      max-height: none !important;
+      opacity: 1 !important;
+    }
+    
+    // Hide interactive elements
+    .collapsible-drag-handle,
+    button[aria-label="Section settings"] {
+      display: none;
+    }
+  }
+}

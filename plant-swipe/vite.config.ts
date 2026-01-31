@@ -78,35 +78,10 @@ export default defineConfig({
         'locales/fr/common.json',
           'offline.html',
       ],
-      manifest: {
-        id: 'aphylia',
-        name: 'Aphylia',
-        short_name: 'Aphylia',
-        description: 'Discover, swipe and manage the perfect plants for every garden.',
-        lang: 'en',
-        theme_color: '#052e16',
-        background_color: '#03120c',
-        display: 'standalone',
-        display_override: ['window-controls-overlay', 'standalone'],
-        scope,
-        start_url: scope === '/' ? '/discovery' : `${scope}discovery`,
-        orientation: 'portrait-primary',
-        categories: ['productivity', 'lifestyle', 'utilities'],
-        // Cleared for general audiences today, while remaining flexible enough for
-        // the upcoming social/community and subscription experiences.
-        iarc_rating_id: 'IARC21-00000000-0000000000000000',
-        icons: [
-          { src: 'icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable any' },
-          { src: 'icons/plant-swipe-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
-          { src: 'icons/plant-swipe-icon-outline.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
-        ],
-        shortcuts: [
-          { name: 'Swipe plants', url: scope === '/' ? '/swipe' : `${scope}swipe`, description: 'Jump directly into swipe mode' },
-          { name: 'My gardens', url: scope === '/' ? '/gardens' : `${scope}gardens`, description: 'Open your garden dashboard' },
-        ],
-      },
+      // Manifest is served dynamically from /api/manifest.webmanifest
+      // This allows screenshots to be loaded from the database at runtime
+      // The manifest link is in index.html pointing to the API endpoint
+      manifest: false,
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff,woff2,ttf}'],
         // Never precache runtime env endpoints; they must come from the active host

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Flame, PartyPopper, Sparkles, Loader2, Sprout, HardHat, ArrowUp } from "lucide-react";
+import { Flame, PartyPopper, Sparkles, Loader2, Sprout, FlaskConical, ArrowUp } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 
@@ -174,7 +174,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                   {isInProgress && (
                     <div className="absolute bottom-2 right-2 z-10">
                       <Badge className="rounded-full p-1.5 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
-                        <HardHat className="h-3 w-3" />
+                        <FlaskConical className="h-3 w-3" />
                       </Badge>
                     </div>
                   )}
@@ -220,7 +220,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                   {isInProgress && (
                     <div className="absolute bottom-3 right-3 z-10">
                       <Badge className="rounded-full p-2 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
-                        <HardHat className="h-5 w-5" />
+                        <FlaskConical className="h-5 w-5" />
                       </Badge>
                     </div>
                   )}

@@ -347,7 +347,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             onMouseDown={(e) => e.stopPropagation()}
             aria-pressed={liked}
             aria-label={liked ? "Unlike" : "Like"}
-            className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 cursor-pointer select-none ${
+            className={`h-12 w-12 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
               liked ? "bg-rose-600 text-white border-rose-500 hover:bg-rose-700" : "bg-white text-black border-white hover:bg-gray-100"
             }`}
           >
@@ -503,7 +503,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       }}
                       aria-pressed={liked}
                       aria-label={liked ? "Unlike" : "Like"}
-                      className={`h-14 w-14 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 cursor-pointer select-none ${
+                      className={`h-14 w-14 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ${
                         liked ? "bg-rose-600 text-white border-rose-500" : "bg-white text-black border-white"
                       }`}
                       style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
@@ -554,7 +554,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     >
                       <button
                         type="button"
-                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
+                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         onClick={(e) => { e.stopPropagation(); handlePrevious() }}
                         aria-label={t("plant.back")}
                         title={t("plant.back")}
@@ -563,7 +563,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       </button>
                       <button
                         type="button"
-                        className="rounded-2xl h-11 bg-white text-black active:scale-95 flex items-center justify-center shadow-lg"
+                        className="rounded-2xl h-11 bg-white text-black active:scale-95 flex items-center justify-center shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         onClick={(e) => { e.stopPropagation(); handleInfo() }}
                       >
                         {t("plant.info")}
@@ -571,7 +571,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       </button>
                       <button
                         type="button"
-                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20"
+                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         onClick={(e) => { e.stopPropagation(); handlePass() }}
                         aria-label={t("plant.next")}
                         title={t("plant.next")}

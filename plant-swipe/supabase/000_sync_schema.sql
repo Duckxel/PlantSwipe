@@ -204,6 +204,7 @@ alter table if exists public.profiles drop column if exists avatar_url;
 -- New public profile fields
 alter table if exists public.profiles add column if not exists username text;
 alter table if exists public.profiles add column if not exists country text;
+alter table if exists public.profiles add column if not exists city text;
 alter table if exists public.profiles add column if not exists bio text;
 alter table if exists public.profiles add column if not exists favorite_plant text;
 alter table if exists public.profiles add column if not exists avatar_url text;
@@ -211,6 +212,7 @@ alter table if exists public.profiles add column if not exists timezone text;
 alter table if exists public.profiles add column if not exists experience_years integer;
 -- Accent color preference; default to a green tone for new accounts
 alter table if exists public.profiles add column if not exists accent_key text default 'emerald';
+COMMENT ON COLUMN public.profiles.accent_key IS 'User accent color preference. Valid values: emerald, crimson, royal, purple, gold, coral, neon, turquoise';
 -- Privacy setting: when true, profile is only visible to friends
 alter table if exists public.profiles add column if not exists is_private boolean not null default false;
 -- Friend requests setting: when true, users cannot send friend requests (prevents unwanted invites)
@@ -280,6 +282,7 @@ grant execute on function public.has_any_role(uuid, text[]) to anon, authenticat
 alter table public.profiles enable row level security;
 -- Helper to avoid RLS self-recursion when checking admin
 -- Uses SECURITY DEFINER to bypass RLS on public.profiles
+-- Checks both is_admin flag AND 'admin' role in roles array
 create or replace function public.is_admin_user(_user_id uuid)
 returns boolean
 language sql
@@ -288,7 +291,7 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.profiles
-    where id = _user_id and is_admin = true
+    where id = _user_id and (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
   );
 $$;
 grant execute on function public.is_admin_user(uuid) to anon, authenticated;
@@ -354,6 +357,11 @@ do $$ begin
     );
 end $$;
 
+-- Grant permissions on profiles table to authenticated users
+-- This ensures users can read/write their own profile data (subject to RLS policies)
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
+GRANT SELECT ON public.profiles TO anon;
+
 -- Aggregated like counts (security definer to bypass profiles RLS)
 create or replace function public.top_liked_plants(limit_count integer default 5)
 returns table (plant_id text, likes bigint)
@@ -381,6 +389,33 @@ do $$ begin
       $_cron$
       delete from public.web_visits
       where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '35 days');
+      $_cron$
+    );
+  exception
+    when others then
+      null;
+  end;
+end $$;
+
+-- ========== Purge old completed bug reports (retention) ==========
+-- Delete bug reports with status 'completed' that are older than 10 days
+-- Runs daily at 4 AM UTC
+do $$ begin
+  begin
+    -- First unschedule if exists to allow updates
+    perform cron.unschedule('purge_old_bug_reports');
+  exception
+    when others then
+      null;
+  end;
+  begin
+    perform cron.schedule(
+      'purge_old_bug_reports',
+      '0 4 * * *',
+      $_cron$
+      delete from public.bug_reports
+      where status = 'completed'
+        and timezone('utc', created_at) < ((now() at time zone 'utc')::date - interval '10 days');
       $_cron$
     );
   exception
@@ -1713,6 +1748,8 @@ create index if not exists admin_media_uploads_created_idx on public.admin_media
 create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
 create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
 create index if not exists admin_media_uploads_source_idx on public.admin_media_uploads (upload_source);
+-- GIN index for efficient JSONB queries on metadata (tag, device filtering)
+create index if not exists admin_media_uploads_metadata_idx on public.admin_media_uploads using gin (metadata jsonb_path_ops);
 
 -- Add upload_source column to existing installations (safe to run multiple times)
 do $$ begin
@@ -1742,6 +1779,45 @@ set upload_source = coalesce(
   end
 )
 where upload_source is null;
+
+-- ========== admin_media_uploads RLS ==========
+alter table public.admin_media_uploads enable row level security;
+
+-- Select: admins see all, users see their own uploads
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_media_uploads' and policyname='amu_select') then
+    drop policy amu_select on public.admin_media_uploads;
+  end if;
+  create policy amu_select on public.admin_media_uploads for select to authenticated
+    using (
+      admin_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Insert: authenticated users can insert their own uploads
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_media_uploads' and policyname='amu_insert') then
+    drop policy amu_insert on public.admin_media_uploads;
+  end if;
+  create policy amu_insert on public.admin_media_uploads for insert to authenticated
+    with check (
+      admin_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Delete: users can delete their own uploads, admins can delete any
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_media_uploads' and policyname='amu_delete') then
+    drop policy amu_delete on public.admin_media_uploads;
+  end if;
+  create policy amu_delete on public.admin_media_uploads for delete to authenticated
+    using (
+      admin_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
 
 -- ========== Team Members (About page) ==========
 create table if not exists public.team_members (
@@ -4695,6 +4771,7 @@ alter table public.admin_email_campaigns add column if not exists created_by uui
 alter table public.admin_email_campaigns add column if not exists updated_by uuid references public.profiles(id) on delete set null;
 alter table public.admin_email_campaigns add column if not exists test_mode boolean default false;
 alter table public.admin_email_campaigns add column if not exists test_email text;
+alter table public.admin_email_campaigns add column if not exists is_marketing boolean default false; -- If true, only send to users with marketing_consent=true
 alter table public.admin_email_campaigns add column if not exists send_summary jsonb;
 
 alter table public.admin_email_campaigns enable row level security;
@@ -6264,7 +6341,10 @@ GRANT EXECUTE ON FUNCTION refresh_garden_task_cache(uuid, date) TO authenticated
 GRANT EXECUTE ON FUNCTION cleanup_old_garden_task_cache() TO authenticated;
 
 -- Create a view for easy querying of today's cache
-CREATE OR REPLACE VIEW garden_task_cache_today AS
+-- Use security_invoker to enforce RLS policies of the querying user, not the view owner
+CREATE OR REPLACE VIEW garden_task_cache_today
+WITH (security_invoker = true)
+AS
 SELECT
   c.garden_id,
   c.cache_date,
@@ -8727,7 +8807,7 @@ END $$;
 
 -- ========== Helper Functions ==========
 
--- Function to get or create a conversation between two users
+-- Function to get or create a conversation between two users (with rate limiting for new conversations)
 CREATE OR REPLACE FUNCTION public.get_or_create_conversation(_user1_id UUID, _user2_id UUID)
 RETURNS UUID
 LANGUAGE plpgsql
@@ -8741,6 +8821,9 @@ DECLARE
   v_conversation_id UUID;
   v_are_friends BOOLEAN;
   v_are_blocked BOOLEAN;
+  v_conversation_count INTEGER;
+  v_rate_limit INTEGER := 30; -- Max new conversations per hour
+  v_window_interval INTERVAL := '1 hour';
 BEGIN
   v_caller := auth.uid();
   IF v_caller IS NULL THEN
@@ -8792,6 +8875,16 @@ BEGIN
     RETURN v_conversation_id;
   END IF;
   
+  -- Rate limiting for NEW conversation creation only
+  SELECT COUNT(*)::INTEGER INTO v_conversation_count
+  FROM public.conversations
+  WHERE participant_1 = v_caller
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_conversation_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before starting more conversations.';
+  END IF;
+  
   -- Create new conversation
   INSERT INTO public.conversations (participant_1, participant_2)
   VALUES (v_p1, v_p2)
@@ -8803,7 +8896,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_or_create_conversation(UUID, UUID) TO authenticated;
 
--- Function to send a message
+-- Function to send a message (with rate limiting)
 CREATE OR REPLACE FUNCTION public.send_message(
   _conversation_id UUID,
   _content TEXT,
@@ -8825,10 +8918,23 @@ DECLARE
   v_p1 UUID;
   v_p2 UUID;
   v_is_muted BOOLEAN;
+  v_message_count INTEGER;
+  v_rate_limit INTEGER := 300; -- Max messages per hour (5/min sustained)
+  v_window_interval INTERVAL := '1 hour';
 BEGIN
   v_caller := auth.uid();
   IF v_caller IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  
+  -- Rate limiting: Count messages sent by this user in the last hour
+  SELECT COUNT(*)::INTEGER INTO v_message_count
+  FROM public.messages
+  WHERE sender_id = v_caller
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_message_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before sending more messages.';
   END IF;
   
   -- Verify caller is participant
@@ -9313,93 +9419,331 @@ create trigger ensure_single_landing_showcase_config_trigger
   before insert on public.landing_showcase_config
   for each row execute function public.ensure_single_landing_showcase_config();
 
--- RLS Policies for Landing Page Tables
--- All landing tables are publicly readable but only admin-writable
+-- ========== Updated_at Triggers for Landing Page Tables ==========
+-- Create a generic updated_at trigger function
+create or replace function public.update_landing_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
 
+-- Add updated_at triggers for all landing tables that have the column
+drop trigger if exists landing_page_settings_updated_at on public.landing_page_settings;
+create trigger landing_page_settings_updated_at
+  before update on public.landing_page_settings
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_hero_cards_updated_at on public.landing_hero_cards;
+create trigger landing_hero_cards_updated_at
+  before update on public.landing_hero_cards
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_stats_updated_at on public.landing_stats;
+create trigger landing_stats_updated_at
+  before update on public.landing_stats
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_stats_translations_updated_at on public.landing_stats_translations;
+create trigger landing_stats_translations_updated_at
+  before update on public.landing_stats_translations
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_testimonials_updated_at on public.landing_testimonials;
+create trigger landing_testimonials_updated_at
+  before update on public.landing_testimonials
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_faq_updated_at on public.landing_faq;
+create trigger landing_faq_updated_at
+  before update on public.landing_faq
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_faq_translations_updated_at on public.landing_faq_translations;
+create trigger landing_faq_translations_updated_at
+  before update on public.landing_faq_translations
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_demo_features_updated_at on public.landing_demo_features;
+create trigger landing_demo_features_updated_at
+  before update on public.landing_demo_features
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_demo_feature_translations_updated_at on public.landing_demo_feature_translations;
+create trigger landing_demo_feature_translations_updated_at
+  before update on public.landing_demo_feature_translations
+  for each row execute function public.update_landing_updated_at();
+
+drop trigger if exists landing_showcase_config_updated_at on public.landing_showcase_config;
+create trigger landing_showcase_config_updated_at
+  before update on public.landing_showcase_config
+  for each row execute function public.update_landing_updated_at();
+
+-- ========== RLS Policies for Landing Page Tables ==========
+-- All landing tables are publicly readable but only admin-writable
+-- Using separate policies for INSERT, UPDATE, DELETE with proper WITH CHECK clauses
+
+-- Helper function to check if user is admin (cached for performance)
+create or replace function public.is_landing_admin()
+returns boolean as $$
+begin
+  return exists (
+    select 1 from public.profiles 
+    where id = auth.uid() and is_admin = true
+  );
+end;
+$$ language plpgsql security definer stable;
+
+-- ========== landing_page_settings RLS ==========
 alter table public.landing_page_settings enable row level security;
+
 drop policy if exists "Landing page settings are publicly readable" on public.landing_page_settings;
-create policy "Landing page settings are publicly readable" on public.landing_page_settings for select using (true);
+create policy "Landing page settings are publicly readable" 
+  on public.landing_page_settings for select using (true);
+
 drop policy if exists "Admins can manage landing page settings" on public.landing_page_settings;
-create policy "Admins can manage landing page settings" on public.landing_page_settings for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing page settings" on public.landing_page_settings;
+create policy "Admins can insert landing page settings" 
+  on public.landing_page_settings for insert 
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can update landing page settings" on public.landing_page_settings;
+create policy "Admins can update landing page settings" 
+  on public.landing_page_settings for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing page settings" on public.landing_page_settings;
+create policy "Admins can delete landing page settings" 
+  on public.landing_page_settings for delete 
+  using (public.is_landing_admin());
 
 -- Insert default settings row if not exists
 insert into public.landing_page_settings (id)
 select gen_random_uuid()
 where not exists (select 1 from public.landing_page_settings limit 1);
 
+-- ========== landing_hero_cards RLS ==========
 alter table public.landing_hero_cards enable row level security;
+
 drop policy if exists "Landing hero cards are publicly readable" on public.landing_hero_cards;
-create policy "Landing hero cards are publicly readable" on public.landing_hero_cards for select using (true);
+create policy "Landing hero cards are publicly readable" 
+  on public.landing_hero_cards for select using (true);
+
 drop policy if exists "Admins can manage landing hero cards" on public.landing_hero_cards;
-create policy "Admins can manage landing hero cards" on public.landing_hero_cards for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing hero cards" on public.landing_hero_cards;
+create policy "Admins can insert landing hero cards" 
+  on public.landing_hero_cards for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing hero cards" on public.landing_hero_cards;
+create policy "Admins can update landing hero cards" 
+  on public.landing_hero_cards for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing hero cards" on public.landing_hero_cards;
+create policy "Admins can delete landing hero cards" 
+  on public.landing_hero_cards for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_stats RLS ==========
 alter table public.landing_stats enable row level security;
+
 drop policy if exists "Landing stats are publicly readable" on public.landing_stats;
-create policy "Landing stats are publicly readable" on public.landing_stats for select using (true);
+create policy "Landing stats are publicly readable" 
+  on public.landing_stats for select using (true);
+
 drop policy if exists "Admins can manage landing stats" on public.landing_stats;
-create policy "Admins can manage landing stats" on public.landing_stats for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing stats" on public.landing_stats;
+create policy "Admins can insert landing stats" 
+  on public.landing_stats for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing stats" on public.landing_stats;
+create policy "Admins can update landing stats" 
+  on public.landing_stats for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing stats" on public.landing_stats;
+create policy "Admins can delete landing stats" 
+  on public.landing_stats for delete 
+  using (public.is_landing_admin());
+
+-- Insert default stats row if not exists
+insert into public.landing_stats (id)
+select gen_random_uuid()
+where not exists (select 1 from public.landing_stats limit 1);
+
+-- ========== landing_stats_translations RLS ==========
 alter table public.landing_stats_translations enable row level security;
+
 drop policy if exists "Landing stats translations are publicly readable" on public.landing_stats_translations;
-create policy "Landing stats translations are publicly readable" on public.landing_stats_translations for select using (true);
+create policy "Landing stats translations are publicly readable" 
+  on public.landing_stats_translations for select using (true);
+
 drop policy if exists "Admins can manage landing stats translations" on public.landing_stats_translations;
-create policy "Admins can manage landing stats translations" on public.landing_stats_translations for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing stats translations" on public.landing_stats_translations;
+create policy "Admins can insert landing stats translations" 
+  on public.landing_stats_translations for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing stats translations" on public.landing_stats_translations;
+create policy "Admins can update landing stats translations" 
+  on public.landing_stats_translations for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing stats translations" on public.landing_stats_translations;
+create policy "Admins can delete landing stats translations" 
+  on public.landing_stats_translations for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_testimonials RLS ==========
 alter table public.landing_testimonials enable row level security;
+
 drop policy if exists "Landing testimonials are publicly readable" on public.landing_testimonials;
-create policy "Landing testimonials are publicly readable" on public.landing_testimonials for select using (true);
+create policy "Landing testimonials are publicly readable" 
+  on public.landing_testimonials for select using (true);
+
 drop policy if exists "Admins can manage landing testimonials" on public.landing_testimonials;
-create policy "Admins can manage landing testimonials" on public.landing_testimonials for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing testimonials" on public.landing_testimonials;
+create policy "Admins can insert landing testimonials" 
+  on public.landing_testimonials for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing testimonials" on public.landing_testimonials;
+create policy "Admins can update landing testimonials" 
+  on public.landing_testimonials for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing testimonials" on public.landing_testimonials;
+create policy "Admins can delete landing testimonials" 
+  on public.landing_testimonials for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_faq RLS ==========
 alter table public.landing_faq enable row level security;
+
 drop policy if exists "Landing FAQ are publicly readable" on public.landing_faq;
-create policy "Landing FAQ are publicly readable" on public.landing_faq for select using (true);
+create policy "Landing FAQ are publicly readable" 
+  on public.landing_faq for select using (true);
+
 drop policy if exists "Admins can manage landing FAQ" on public.landing_faq;
-create policy "Admins can manage landing FAQ" on public.landing_faq for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing FAQ" on public.landing_faq;
+create policy "Admins can insert landing FAQ" 
+  on public.landing_faq for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing FAQ" on public.landing_faq;
+create policy "Admins can update landing FAQ" 
+  on public.landing_faq for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing FAQ" on public.landing_faq;
+create policy "Admins can delete landing FAQ" 
+  on public.landing_faq for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_faq_translations RLS ==========
 alter table public.landing_faq_translations enable row level security;
+
 drop policy if exists "Landing FAQ translations are publicly readable" on public.landing_faq_translations;
-create policy "Landing FAQ translations are publicly readable" on public.landing_faq_translations for select using (true);
+create policy "Landing FAQ translations are publicly readable" 
+  on public.landing_faq_translations for select using (true);
+
 drop policy if exists "Admins can manage landing FAQ translations" on public.landing_faq_translations;
-create policy "Admins can manage landing FAQ translations" on public.landing_faq_translations for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing FAQ translations" on public.landing_faq_translations;
+create policy "Admins can insert landing FAQ translations" 
+  on public.landing_faq_translations for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing FAQ translations" on public.landing_faq_translations;
+create policy "Admins can update landing FAQ translations" 
+  on public.landing_faq_translations for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing FAQ translations" on public.landing_faq_translations;
+create policy "Admins can delete landing FAQ translations" 
+  on public.landing_faq_translations for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_demo_features RLS ==========
 alter table public.landing_demo_features enable row level security;
+
 drop policy if exists "Landing demo features are publicly readable" on public.landing_demo_features;
-create policy "Landing demo features are publicly readable" on public.landing_demo_features for select using (true);
+create policy "Landing demo features are publicly readable" 
+  on public.landing_demo_features for select using (true);
+
 drop policy if exists "Admins can manage landing demo features" on public.landing_demo_features;
-create policy "Admins can manage landing demo features" on public.landing_demo_features for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing demo features" on public.landing_demo_features;
+create policy "Admins can insert landing demo features" 
+  on public.landing_demo_features for insert 
+  with check (public.is_landing_admin());
 
+drop policy if exists "Admins can update landing demo features" on public.landing_demo_features;
+create policy "Admins can update landing demo features" 
+  on public.landing_demo_features for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing demo features" on public.landing_demo_features;
+create policy "Admins can delete landing demo features" 
+  on public.landing_demo_features for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_demo_feature_translations RLS ==========
 alter table public.landing_demo_feature_translations enable row level security;
-drop policy if exists "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations;
-create policy "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations for select using (true);
-drop policy if exists "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations;
-create policy "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
 
+drop policy if exists "Landing demo feature translations are publicly readable" on public.landing_demo_feature_translations;
+create policy "Landing demo feature translations are publicly readable" 
+  on public.landing_demo_feature_translations for select using (true);
+
+drop policy if exists "Admins can manage landing demo feature translations" on public.landing_demo_feature_translations;
+drop policy if exists "Admins can insert landing demo feature translations" on public.landing_demo_feature_translations;
+create policy "Admins can insert landing demo feature translations" 
+  on public.landing_demo_feature_translations for insert 
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can update landing demo feature translations" on public.landing_demo_feature_translations;
+create policy "Admins can update landing demo feature translations" 
+  on public.landing_demo_feature_translations for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing demo feature translations" on public.landing_demo_feature_translations;
+create policy "Admins can delete landing demo feature translations" 
+  on public.landing_demo_feature_translations for delete 
+  using (public.is_landing_admin());
+
+-- ========== landing_showcase_config RLS ==========
 alter table public.landing_showcase_config enable row level security;
+
 drop policy if exists "Landing showcase config is publicly readable" on public.landing_showcase_config;
-create policy "Landing showcase config is publicly readable" on public.landing_showcase_config for select using (true);
+create policy "Landing showcase config is publicly readable" 
+  on public.landing_showcase_config for select using (true);
+
 drop policy if exists "Admins can manage landing showcase config" on public.landing_showcase_config;
-create policy "Admins can manage landing showcase config" on public.landing_showcase_config for all using (
-  exists (select 1 from public.profiles where id = auth.uid() and is_admin = true)
-);
+drop policy if exists "Admins can insert landing showcase config" on public.landing_showcase_config;
+create policy "Admins can insert landing showcase config" 
+  on public.landing_showcase_config for insert 
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can update landing showcase config" on public.landing_showcase_config;
+create policy "Admins can update landing showcase config" 
+  on public.landing_showcase_config for update 
+  using (public.is_landing_admin())
+  with check (public.is_landing_admin());
+
+drop policy if exists "Admins can delete landing showcase config" on public.landing_showcase_config;
+create policy "Admins can delete landing showcase config" 
+  on public.landing_showcase_config for delete 
+  using (public.is_landing_admin());
 
 -- Insert default showcase config row if not exists
 insert into public.landing_showcase_config (id)
@@ -9670,6 +10014,20 @@ CREATE TABLE IF NOT EXISTS public.bug_reports (
     updated_at timestamptz DEFAULT now(),
     resolved_at timestamptz
 );
+
+-- Add foreign key to profiles for Supabase PostgREST joins
+-- This enables the profiles:user_id embed syntax in queries
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'bug_reports_user_id_profiles_fkey' 
+        AND table_name = 'bug_reports'
+    ) THEN
+        ALTER TABLE public.bug_reports 
+        ADD CONSTRAINT bug_reports_user_id_profiles_fkey 
+        FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_bug_reports_user ON public.bug_reports(user_id);
 CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON public.bug_reports(status);
@@ -10156,81 +10514,82 @@ ALTER TABLE public.bug_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bug_points_history ENABLE ROW LEVEL SECURITY;
 
 -- Bug Actions policies
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
+-- Note: Using (select auth.uid()) pattern for consistent RLS evaluation
 DROP POLICY IF EXISTS "Bug catchers can view active actions" ON public.bug_actions;
 CREATE POLICY "Bug catchers can view active actions" ON public.bug_actions
     FOR SELECT
     TO authenticated
-    USING (status = 'active' OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (status = 'active' OR public.is_admin_user((select auth.uid())));
 
 DROP POLICY IF EXISTS "Admins can manage all actions" ON public.bug_actions;
 CREATE POLICY "Admins can manage all actions" ON public.bug_actions
     FOR ALL
     TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ))
-    WITH CHECK (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (public.is_admin_user((select auth.uid())))
+    WITH CHECK (public.is_admin_user((select auth.uid())));
 
 -- Bug Action Responses policies
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
+-- Note: Using (select auth.uid()) pattern for consistent RLS evaluation
 DROP POLICY IF EXISTS "Users can view own responses" ON public.bug_action_responses;
 CREATE POLICY "Users can view own responses" ON public.bug_action_responses
     FOR SELECT
     TO authenticated
-    USING (user_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (user_id = (select auth.uid()) OR public.is_admin_user((select auth.uid())));
 
 DROP POLICY IF EXISTS "Users can insert own responses" ON public.bug_action_responses;
 CREATE POLICY "Users can insert own responses" ON public.bug_action_responses
     FOR INSERT
     TO authenticated
-    WITH CHECK (user_id = auth.uid());
+    WITH CHECK (user_id = (select auth.uid()));
 
 DROP POLICY IF EXISTS "Users can update own responses" ON public.bug_action_responses;
 CREATE POLICY "Users can update own responses" ON public.bug_action_responses
     FOR UPDATE
     TO authenticated
-    USING (user_id = auth.uid())
-    WITH CHECK (user_id = auth.uid());
+    USING (user_id = (select auth.uid()))
+    WITH CHECK (user_id = (select auth.uid()));
 
 -- Bug Reports policies
+-- Allow users to view their own reports, admins can view all
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
+-- Note: Using (select auth.uid()) pattern for consistent RLS evaluation
 DROP POLICY IF EXISTS "Users can view own reports" ON public.bug_reports;
 CREATE POLICY "Users can view own reports" ON public.bug_reports
     FOR SELECT
     TO authenticated
-    USING (user_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (
+        user_id = (select auth.uid()) 
+        OR public.is_admin_user((select auth.uid()))
+    );
 
 DROP POLICY IF EXISTS "Users can insert own reports" ON public.bug_reports;
 CREATE POLICY "Users can insert own reports" ON public.bug_reports
     FOR INSERT
     TO authenticated
-    WITH CHECK (user_id = auth.uid());
+    WITH CHECK (user_id = (select auth.uid()));
 
+-- Allow admins to update any report (for reviewing, completing, closing)
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
 DROP POLICY IF EXISTS "Admins can update reports" ON public.bug_reports;
 CREATE POLICY "Admins can update reports" ON public.bug_reports
     FOR UPDATE
     TO authenticated
-    USING (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ))
-    WITH CHECK (EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (public.is_admin_user((select auth.uid())))
+    WITH CHECK (public.is_admin_user((select auth.uid())));
 
 -- Bug Points History policies
+-- Uses is_admin_user() SECURITY DEFINER function to bypass profiles RLS
+-- Note: Using (select auth.uid()) pattern for consistent RLS evaluation
 DROP POLICY IF EXISTS "Users can view own points history" ON public.bug_points_history;
 CREATE POLICY "Users can view own points history" ON public.bug_points_history
     FOR SELECT
     TO authenticated
-    USING (user_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (is_admin = true OR 'admin' = ANY(COALESCE(roles, '{}')))
-    ));
+    USING (
+        user_id = (select auth.uid()) 
+        OR public.is_admin_user((select auth.uid()))
+    );
 
 DROP POLICY IF EXISTS "System can insert points history" ON public.bug_points_history;
 CREATE POLICY "System can insert points history" ON public.bug_points_history
@@ -10248,3 +10607,285 @@ GRANT SELECT, INSERT ON public.bug_points_history TO authenticated;
 GRANT ALL ON public.bug_actions TO authenticated;
 GRANT ALL ON public.bug_reports TO authenticated;
 
+-- =============================================================================
+-- RATE LIMITING TRIGGERS AND INDEXES
+-- =============================================================================
+
+-- Plant Request Rate Limiting
+CREATE OR REPLACE FUNCTION public.check_plant_request_rate_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_request_count INTEGER;
+  v_rate_limit INTEGER := 10; -- Max plant requests per hour
+  v_window_interval INTERVAL := '1 hour';
+BEGIN
+  -- Count requests by this user in the last hour
+  SELECT COUNT(*)::INTEGER INTO v_request_count
+  FROM public.plant_request_users
+  WHERE user_id = NEW.user_id
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_request_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before requesting more plants.';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS plant_request_rate_limit_trigger ON public.plant_request_users;
+CREATE TRIGGER plant_request_rate_limit_trigger
+  BEFORE INSERT ON public.plant_request_users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_plant_request_rate_limit();
+
+-- Friend Request Rate Limiting
+CREATE OR REPLACE FUNCTION public.check_friend_request_rate_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_request_count INTEGER;
+  v_rate_limit INTEGER := 50; -- Max friend requests per hour
+  v_window_interval INTERVAL := '1 hour';
+BEGIN
+  -- Only check for new pending requests (not status updates)
+  IF NEW.status = 'pending' THEN
+    -- Count pending friend requests sent by this user in the last hour
+    SELECT COUNT(*)::INTEGER INTO v_request_count
+    FROM public.friends
+    WHERE user_id = NEW.user_id
+      AND status = 'pending'
+      AND created_at > NOW() - v_window_interval;
+    
+    IF v_request_count >= v_rate_limit THEN
+      RAISE EXCEPTION 'Rate limit exceeded. Please wait before sending more friend requests.';
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS friend_request_rate_limit_trigger ON public.friends;
+CREATE TRIGGER friend_request_rate_limit_trigger
+  BEFORE INSERT ON public.friends
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_friend_request_rate_limit();
+
+-- Reaction Rate Limiting
+CREATE OR REPLACE FUNCTION public.check_reaction_rate_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_reaction_count INTEGER;
+  v_rate_limit INTEGER := 500; -- Max reactions per hour
+  v_window_interval INTERVAL := '1 hour';
+BEGIN
+  -- Count reactions added by this user in the last hour
+  SELECT COUNT(*)::INTEGER INTO v_reaction_count
+  FROM public.message_reactions
+  WHERE user_id = NEW.user_id
+    AND created_at > NOW() - v_window_interval;
+  
+  IF v_reaction_count >= v_rate_limit THEN
+    RAISE EXCEPTION 'Rate limit exceeded. Please wait before adding more reactions.';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS reaction_rate_limit_trigger ON public.message_reactions;
+CREATE TRIGGER reaction_rate_limit_trigger
+  BEFORE INSERT ON public.message_reactions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.check_reaction_rate_limit();
+
+-- Rate Limiting Indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_messages_sender_created 
+  ON public.messages(sender_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_plant_request_users_user_created
+  ON public.plant_request_users(user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_participant1_created
+  ON public.conversations(participant_1, created_at DESC);
+
+-- Note: friends table doesn't have a status column (it only contains accepted friendships)
+-- The status column is on friend_requests table, not friends
+CREATE INDEX IF NOT EXISTS idx_friends_user_created
+  ON public.friends(user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_message_reactions_user_created
+  ON public.message_reactions(user_id, created_at DESC);
+
+
+-- ========== GDPR COMPLIANCE ==========
+-- Added for GDPR compliance requirements including consent tracking and audit logging
+
+-- Add consent tracking columns to profiles
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS marketing_consent boolean DEFAULT false;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS marketing_consent_date timestamptz;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS terms_accepted_date timestamptz;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS privacy_policy_accepted_date timestamptz;
+
+-- Track which version of legal documents user accepted
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS terms_version_accepted text DEFAULT '1.0.0';
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS privacy_version_accepted text DEFAULT '1.0.0';
+
+-- User Setup/Onboarding Preferences
+-- Stores user preferences from the initial setup wizard after signup
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS setup_completed boolean DEFAULT false;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS garden_type text CHECK (garden_type IS NULL OR garden_type IN ('inside', 'outside', 'both'));
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS experience_level text CHECK (experience_level IS NULL OR experience_level IN ('novice', 'intermediate', 'expert'));
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS looking_for text CHECK (looking_for IS NULL OR looking_for IN ('eat', 'ornamental', 'various'));
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS notification_time text DEFAULT '10h' CHECK (notification_time IS NULL OR notification_time IN ('6h', '10h', '14h', '17h'));
+
+-- Create index for quick lookups on setup_completed
+CREATE INDEX IF NOT EXISTS idx_profiles_setup_completed ON public.profiles(setup_completed);
+
+COMMENT ON COLUMN public.profiles.setup_completed IS 'Whether the user has completed the initial setup wizard';
+COMMENT ON COLUMN public.profiles.garden_type IS 'Garden location preference: inside, outside, or both';
+COMMENT ON COLUMN public.profiles.experience_level IS 'User gardening experience: novice, intermediate, or expert';
+COMMENT ON COLUMN public.profiles.looking_for IS 'User gardening goal: eat (vegetables/fruits), ornamental (flowers), or various (diverse plants)';
+COMMENT ON COLUMN public.profiles.notification_time IS 'Preferred notification time: 6h, 10h, 14h, or 17h';
+
+-- GDPR Audit Log Table
+CREATE TABLE IF NOT EXISTS public.gdpr_audit_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  action text NOT NULL,
+  details jsonb DEFAULT '{}'::jsonb,
+  ip_address inet,
+  user_agent text,
+  created_at timestamptz NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE public.gdpr_audit_log IS 'GDPR compliance audit log tracking data access, exports, and deletions';
+COMMENT ON COLUMN public.gdpr_audit_log.action IS 'Type of GDPR action: DATA_EXPORT, ACCOUNT_DELETION, CONSENT_UPDATE, DATA_ACCESS';
+
+CREATE INDEX IF NOT EXISTS gdpr_audit_log_user_id_idx ON public.gdpr_audit_log(user_id);
+CREATE INDEX IF NOT EXISTS gdpr_audit_log_action_idx ON public.gdpr_audit_log(action);
+CREATE INDEX IF NOT EXISTS gdpr_audit_log_created_at_idx ON public.gdpr_audit_log(created_at DESC);
+
+ALTER TABLE public.gdpr_audit_log ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='gdpr_audit_log' AND policyname='gdpr_audit_log_admin_select') THEN
+    DROP POLICY gdpr_audit_log_admin_select ON public.gdpr_audit_log;
+  END IF;
+  CREATE POLICY gdpr_audit_log_admin_select ON public.gdpr_audit_log FOR SELECT TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = (SELECT auth.uid()) AND p.is_admin = true));
+END $$;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='gdpr_audit_log' AND policyname='gdpr_audit_log_insert_all') THEN
+    DROP POLICY gdpr_audit_log_insert_all ON public.gdpr_audit_log;
+  END IF;
+  CREATE POLICY gdpr_audit_log_insert_all ON public.gdpr_audit_log FOR INSERT TO public
+    WITH CHECK (true);
+END $$;
+
+GRANT SELECT ON public.gdpr_audit_log TO authenticated;
+GRANT INSERT ON public.gdpr_audit_log TO authenticated;
+
+-- Cookie Consent Tracking Table (optional server-side tracking)
+CREATE TABLE IF NOT EXISTS public.user_cookie_consent (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  session_id text,
+  consent_level text NOT NULL CHECK (consent_level IN ('essential', 'analytics', 'all', 'rejected')),
+  consent_version text DEFAULT '1.0',
+  consented_at timestamptz NOT NULL DEFAULT NOW(),
+  updated_at timestamptz NOT NULL DEFAULT NOW(),
+  ip_address inet,
+  user_agent text
+);
+
+CREATE INDEX IF NOT EXISTS user_cookie_consent_user_idx ON public.user_cookie_consent(user_id);
+CREATE INDEX IF NOT EXISTS user_cookie_consent_session_idx ON public.user_cookie_consent(session_id);
+
+ALTER TABLE public.user_cookie_consent ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='user_cookie_consent' AND policyname='cookie_consent_own') THEN
+    DROP POLICY cookie_consent_own ON public.user_cookie_consent;
+  END IF;
+  CREATE POLICY cookie_consent_own ON public.user_cookie_consent FOR ALL TO authenticated
+    USING (user_id = (SELECT auth.uid()))
+    WITH CHECK (user_id = (SELECT auth.uid()));
+END $$;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='user_cookie_consent' AND policyname='cookie_consent_insert_anon') THEN
+    DROP POLICY cookie_consent_insert_anon ON public.user_cookie_consent;
+  END IF;
+  CREATE POLICY cookie_consent_insert_anon ON public.user_cookie_consent FOR INSERT TO public
+    WITH CHECK (true);
+END $$;
+
+GRANT SELECT, INSERT, UPDATE ON public.user_cookie_consent TO authenticated;
+GRANT INSERT ON public.user_cookie_consent TO anon;
+
+-- ========== Granular Communication Preferences ==========
+-- Email notification preferences
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_product_updates boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_tips_advice boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_community_highlights boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS email_promotions boolean DEFAULT false;
+
+-- Push notification preferences
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_task_reminders boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_friend_activity boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_messages boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS push_garden_updates boolean DEFAULT true;
+
+-- Personalization preferences
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS personalized_recommendations boolean DEFAULT true;
+
+ALTER TABLE IF EXISTS public.profiles
+ADD COLUMN IF NOT EXISTS analytics_improvement boolean DEFAULT true;

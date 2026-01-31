@@ -172,8 +172,20 @@ registerRoute(
   })
 )
 
+// Only cache images from same-origin or known safe domains
+// External images (e.g., third-party plant photos) are not cached to avoid CSP violations
+const allowedImageOrigins = [
+  self.location.origin,
+  'https://media.aphylia.app',
+  'https://lxnkcguwewrskqnyzjwi.supabase.co',
+]
+
 registerRoute(
-  ({ request }) => request.destination === 'image',
+  ({ request, url }) => {
+    if (request.destination !== 'image') return false
+    // Only cache images from allowed origins
+    return allowedImageOrigins.some(origin => url.href.startsWith(origin))
+  },
   new StaleWhileRevalidate({
     cacheName: 'image-cache',
     plugins: [

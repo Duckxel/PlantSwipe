@@ -30,16 +30,93 @@
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-      <!-- Google tag (gtag.js) -->
-      <script async src="https://www.googletagmanager.com/gtag/js?id=G-LDSYW5QNK5"></script>
+      <!-- 
+        GDPR-Compliant Google Analytics & reCAPTCHA Loading
+        - Google Analytics: Only loads after user gives analytics consent
+        - reCAPTCHA: Loads after any consent (essential for security)
+        See src/lib/gdprScripts.ts for the consent-aware loader
+      -->
       <script>
+        // GDPR-Compliant Analytics Loader
+        // Analytics will only be initialized after user consent
         window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', 'G-LDSYW5QNK5');
+        window.gtag = function(){dataLayer.push(arguments);};
+        
+        // Function to load Google Analytics after consent
+        window.__loadGoogleAnalytics = function() {
+          if (window.__gaLoaded) return;
+          window.__gaLoaded = true;
+          
+          var script = document.createElement('script');
+          script.async = true;
+          script.src = 'https://www.googletagmanager.com/gtag/js?id=G-LDSYW5QNK5';
+          document.head.appendChild(script);
+          
+          script.onload = function() {
+            gtag('js', new Date());
+            // Configure with anonymize_ip for additional privacy
+            gtag('config', 'G-LDSYW5QNK5', {
+              'anonymize_ip': true,
+              'cookie_flags': 'SameSite=None;Secure'
+            });
+            console.log('[GDPR] Google Analytics loaded with user consent');
+          };
+        };
+        
+        // Function to load reCAPTCHA (loads after any consent or when needed for security)
+        window.__loadRecaptcha = function() {
+          if (window.__recaptchaLoaded) return Promise.resolve();
+          
+          return new Promise(function(resolve, reject) {
+            window.__recaptchaLoaded = true;
+            
+            var script = document.createElement('script');
+            script.async = true;
+            script.src = 'https://www.google.com/recaptcha/enterprise.js?render=6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd';
+            document.head.appendChild(script);
+            
+            script.onload = function() {
+              console.log('[GDPR] reCAPTCHA loaded');
+              resolve();
+            };
+            script.onerror = function() {
+              window.__recaptchaLoaded = false;
+              reject(new Error('Failed to load reCAPTCHA'));
+            };
+          });
+        };
+        
+        // Check for existing consent on page load
+        (function() {
+          try {
+            var stored = localStorage.getItem('cookie_consent');
+            if (stored) {
+              var consent = JSON.parse(stored);
+              // Load analytics if user has given analytics or all consent
+              if (consent.level === 'analytics' || consent.level === 'all') {
+                window.__loadGoogleAnalytics();
+              }
+              // Load reCAPTCHA for any consent level except rejected
+              if (consent.level !== 'rejected') {
+                window.__loadRecaptcha();
+              }
+            }
+          } catch (e) {
+            console.warn('[GDPR] Error checking consent:', e);
+          }
+        })();
+        
+        // Listen for consent events
+        window.addEventListener('cookie_consent_granted', function(e) {
+          var level = e.detail && e.detail.level;
+          if (level === 'analytics' || level === 'all') {
+            window.__loadGoogleAnalytics();
+          }
+          if (level !== 'rejected') {
+            window.__loadRecaptcha();
+          }
+        });
       </script>
-      <!-- Google reCAPTCHA Enterprise v3 -->
-      <script src="https://www.google.com/recaptcha/enterprise.js?render=6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd"></script>
       <script>
         (function() {
           try {
@@ -60,6 +137,8 @@
       <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
       <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png" />
       <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+      <!-- PWA Manifest - Dynamic manifest with screenshots from database -->
+      <link rel="manifest" href="/api/manifest.webmanifest" />
       <style>
         :root {
           color: #0f172a;

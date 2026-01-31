@@ -6,6 +6,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
 import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { useHotkeys } from "react-hotkeys-hook";
 import { useDebounce } from "@/hooks/useDebounce";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -19,6 +20,8 @@ import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 import { MessageNotificationToast } from "@/components/messaging/MessageNotificationToast";
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
+import { CookieConsent } from "@/components/CookieConsent";
+import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -59,12 +62,14 @@ const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
 const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
 const PricingPageLazy = lazy(() => import("@/pages/PricingPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
+const PrivacyPageLazy = lazy(() => import("@/pages/PrivacyPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
 const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
 const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
 const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
+const SetupPageLazy = lazy(() => import("@/pages/SetupPage").then(module => ({ default: module.SetupPage })))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -85,6 +90,8 @@ type PreparedPlant = Plant & {
   _createdAtTs: number             // Pre-parsed timestamp for sorting
   _popularityLikes: number         // Pre-extracted popularity for sorting
   _hasImage: boolean               // Pre-computed image availability
+  _isPromoted: boolean             // Pre-computed promotion status (Plant of the Month)
+  _isInProgress: boolean           // Pre-computed status for sorting
 }
 
 type ExtendedWindow = Window & {
@@ -162,10 +169,40 @@ export default function PlantSwipe() {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
   })
+
+  const [isLargeScreen, setIsLargeScreen] = useState(() => {
+    if (typeof window === "undefined") return true
+    return window.innerWidth >= 1024
+  })
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(min-width: 1024px)")
+    const handleChange = (e: MediaQueryListEvent) => setIsLargeScreen(e.matches)
+    mq.addEventListener("change", handleChange)
+    setIsLargeScreen(mq.matches)
+    return () => mq.removeEventListener("change", handleChange)
+  }, [])
+
   const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
   const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
   const [searchBarVisible, setSearchBarVisible] = useState(true)
   const lastScrollY = React.useRef(0)
+
+  // Search shortcut
+  const searchInputRef = React.useRef<HTMLInputElement>(null)
+  useHotkeys(['meta+k', 'ctrl+k'], (e) => {
+    e.preventDefault()
+    searchInputRef.current?.focus()
+  })
+
+  const [shortcutLabel, setShortcutLabel] = useState<string | undefined>(undefined)
+  React.useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      const isMac = navigator.platform.toLowerCase().includes('mac')
+      setShortcutLabel(isMac ? '⌘K' : 'Ctrl+K')
+    }
+  }, [])
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -202,9 +239,20 @@ export default function PlantSwipe() {
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
   const [authAcceptedTerms, setAuthAcceptedTerms] = useState(false)
+  const [authMarketingConsent, setAuthMarketingConsent] = useState(false) // GDPR: Must be unchecked by default - pre-ticked boxes don't constitute valid consent (Recital 32)
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
+  
+  // Legal update modal - show when user's accepted versions are outdated OR acceptance dates are missing
+  const [legalUpdateDismissed, setLegalUpdateDismissed] = useState(false)
+  const { needsUpdate: needsLegalUpdate } = useNeedsLegalUpdate(
+    profile?.terms_version_accepted,
+    profile?.privacy_version_accepted,
+    profile?.terms_accepted_date,
+    profile?.privacy_policy_accepted_date
+  )
+  const showLegalUpdateModal = Boolean(user && profile && needsLegalUpdate && !legalUpdateDismissed)
 
   const [plants, setPlants] = useState<Plant[]>(() => {
     if (typeof localStorage === 'undefined') return []
@@ -636,7 +684,50 @@ export default function PlantSwipe() {
   // Enhanced: Now includes color translations for bi-directional language matching
   const preparedPlants = useMemo(() => {
     const { aliasMap } = colorLookups
+    const now = new Date()
     
+    // ⚡ Bolt: Cache tokenization results for unique color strings
+    // This avoids redundant regex splitting and alias lookups for common colors (e.g. "green")
+    // repeated across thousands of plants.
+    const colorTokenCache = new Map<string, Set<string>>()
+
+    const getTokensForColor = (color: string): Set<string> => {
+      const cached = colorTokenCache.get(color)
+      if (cached) {
+        return cached
+      }
+
+      const tokens = new Set<string>()
+      tokens.add(color)
+
+      // Check aliases for the full color string (e.g. "dark-green" -> "vert fonce")
+      const fullColorAliases = aliasMap.get(color)
+      if (fullColorAliases) {
+        for (const alias of fullColorAliases) {
+          tokens.add(alias)
+        }
+      }
+
+      // Split compound colors and add individual tokens
+      const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
+      splitTokens.forEach(token => {
+        tokens.add(token)
+
+        // O(1) expansion of tokens to all their aliases (canonical + translations)
+        // Uses the pre-calculated aliasMap to avoid object iteration
+        const aliases = aliasMap.get(token)
+        if (aliases) {
+          // Fast add of all aliases
+          for (const alias of aliases) {
+            tokens.add(alias)
+          }
+        }
+      })
+
+      colorTokenCache.set(color, tokens)
+      return tokens
+    }
+
     return plants.map((p) => {
       // Colors - build both array (for iteration) and Sets (for O(1) lookups)
       const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
@@ -652,35 +743,18 @@ export default function PlantSwipe() {
       // (e.g., plant with "red" will also match filter "rouge")
       const colorTokens = new Set<string>()
       normalizedColors.forEach(color => {
-        colorTokens.add(color)
-
-        // Check aliases for the full color string (e.g. "dark-green" -> "vert fonce")
-        const fullColorAliases = aliasMap.get(color)
-        if (fullColorAliases) {
-          for (const alias of fullColorAliases) {
-            colorTokens.add(alias)
-          }
+        const cachedTokens = getTokensForColor(color)
+        for (const t of cachedTokens) {
+          colorTokens.add(t)
         }
-
-        // Split compound colors and add individual tokens
-        const tokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
-        tokens.forEach(token => {
-          colorTokens.add(token)
-
-          // O(1) expansion of tokens to all their aliases (canonical + translations)
-          // Uses the pre-calculated aliasMap to avoid object iteration
-          const aliases = aliasMap.get(token)
-          if (aliases) {
-            // Fast add of all aliases
-            for (const alias of aliases) {
-              colorTokens.add(alias)
-            }
-          }
-        })
       })
 
-      // Search string
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`.toLowerCase()
+      // Search string - includes name, scientific name, meaning, colors, common names and synonyms
+      // This allows users to search by any name they might know the plant by
+      const commonNames = (p.identity?.commonNames || []).join(' ')
+      const synonyms = (p.identity?.synonyms || []).join(' ')
+      const givenNames = (p.identity?.givenNames || []).join(' ')
+      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
 
       // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
@@ -720,6 +794,13 @@ export default function PlantSwipe() {
       const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
       const hasImage = hasLegacyImage || hasImagesArray
 
+      // Pre-compute promotion status
+      const isPromoted = isPlantOfTheMonth(p, now)
+
+      // Pre-compute in-progress status
+      const status = p.meta?.status?.toLowerCase()
+      const isInProgress = status === 'in progres' || status === 'in progress'
+
       return {
         ...p,
         _searchString: searchString,
@@ -737,7 +818,9 @@ export default function PlantSwipe() {
         _seasonsSet: seasonsSet,
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
-        _hasImage: hasImage
+        _hasImage: hasImage,
+        _isPromoted: isPromoted,
+        _isInProgress: isInProgress
       } as PreparedPlant
     })
   }, [plants, colorLookups])
@@ -914,6 +997,7 @@ export default function PlantSwipe() {
     
     // Only shuffle if we haven't done initial shuffle yet, or explicit epoch triggered
     if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
+      // Fisher-Yates shuffle for unbiased randomization
       const shuffleArray = <T,>(arr: T[]): T[] => {
         const result = arr.slice()
         for (let i = result.length - 1; i > 0; i--) {
@@ -923,6 +1007,10 @@ export default function PlantSwipe() {
         return result
       }
       
+      // Discovery Algorithm:
+      // 1. Plants with promotion_month matching current month appear FIRST (shuffled among themselves)
+      // 2. All other plants follow (shuffled among themselves)
+      // This ensures "Plant of the Month" plants get priority visibility in Discovery
       const now = new Date()
       const promoted: string[] = []
       const regular: string[] = []
@@ -935,6 +1023,7 @@ export default function PlantSwipe() {
         }
       })
       
+      // Promoted plants first, then regular plants (both groups shuffled internally)
       const newOrder = promoted.length === 0
         ? shuffleArray(swipeablePlants.map(p => p.id))
         : [...shuffleArray(promoted), ...shuffleArray(regular)]
@@ -958,21 +1047,25 @@ export default function PlantSwipe() {
   }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
-    // Helper to check if a plant is "in progress"
-    const isPlantInProgress = (p: Plant) => {
-      const status = p.meta?.status?.toLowerCase()
-      return status === 'in progres' || status === 'in progress'
-    }
-
-    // For default sort, push "in progress" plants to the bottom
+    // For default sort:
+    // 1. Promotion Month plants first (featured for current month)
+    // 2. Regular plants in the middle
+    // 3. In-progress plants last
     if (searchSort === "default") {
       const arr = filtered.slice() as PreparedPlant[]
       arr.sort((a, b) => {
-        const aInProgress = isPlantInProgress(a) ? 1 : 0
-        const bInProgress = isPlantInProgress(b) ? 1 : 0
+        // Priority: Promotion Month > Regular > In Progress
+        // Use pre-computed boolean flags for O(1) checks during sort
+        const aPromoted = a._isPromoted ? -1 : 0
+        const bPromoted = b._isPromoted ? -1 : 0
+        if (aPromoted !== bPromoted) return aPromoted - bPromoted
+        
+        const aInProgress = a._isInProgress ? 1 : 0
+        const bInProgress = b._isInProgress ? 1 : 0
         if (aInProgress !== bInProgress) return aInProgress - bInProgress
-        // Maintain original order for same status
-        return 0
+        
+        // Maintain alphabetical order within same priority
+        return a.name.localeCompare(b.name)
       })
       return arr
     }
@@ -1228,12 +1321,17 @@ export default function PlantSwipe() {
     try {
       console.log('[auth] submit start', { mode: authMode })
       
-      // Execute reCAPTCHA v3 Enterprise
+      // Execute reCAPTCHA v3 Enterprise (consent-aware, may return null)
       let recaptchaToken: string | undefined
       try {
         const action = authMode === 'signup' ? 'signup' : 'login'
-        recaptchaToken = await executeRecaptcha(action)
-        console.log('[auth] reCAPTCHA token obtained')
+        const token = await executeRecaptcha(action)
+        recaptchaToken = token ?? undefined
+        if (token) {
+          console.log('[auth] reCAPTCHA token obtained')
+        } else {
+          console.log('[auth] reCAPTCHA skipped (no consent or unavailable)')
+        }
       } catch (recaptchaError) {
         console.warn('[auth] reCAPTCHA execution failed', recaptchaError)
         // Continue without token - backend will decide how to handle
@@ -1252,7 +1350,7 @@ export default function PlantSwipe() {
           setAuthSubmitting(false)
           return
         }
-        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, recaptchaToken })
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, recaptchaToken, marketingConsent: authMarketingConsent })
         if (error) {
           console.error('[auth] signup error', error)
           setAuthError(error)
@@ -1292,6 +1390,7 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (!authOpen) {
       setAuthAcceptedTerms(false)
+      setAuthMarketingConsent(false) // Reset to default (unchecked - GDPR compliant)
       setAuthSubmitting(false)
       setAuthError(null)
       setAuthEmail("")
@@ -1304,6 +1403,7 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (authMode !== 'signup') {
       setAuthAcceptedTerms(false)
+      setAuthMarketingConsent(false) // Reset to default (unchecked - GDPR compliant)
     }
   }, [authMode])
 
@@ -1311,6 +1411,63 @@ export default function PlantSwipe() {
     // Landing page has its own layout, skip the app shell
     // Show landing page for both logged out users AND logged in users visiting "/"
     const isLandingPage = currentView === "landing"
+    
+    // Setup page has its own full-screen layout
+    const isSetupPage = pathWithoutLang === "/setup"
+    
+    // Check if user needs to complete setup (logged in but setup not completed)
+    // Triggers for: setup_completed === false, null, or undefined (new users)
+    // Only redirect if not already on setup page and not on excluded pages
+    // IMPORTANT: Legal update modal takes priority over setup - don't redirect if user needs to accept new terms
+    const needsSetup = user && profile && profile.setup_completed !== true
+    // Only exclude: setup page itself, admin panel, and landing page (exact match for "/")
+    const setupExcludedPaths = ['/setup', '/admin']
+    const isExcludedFromSetup = pathWithoutLang === '/' || setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !isExcludedFromSetup
+
+    // Setup page - full screen wizard experience
+    // Render directly without nested Routes since we've already determined the path
+    if (isSetupPage && user) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <ErrorBoundary fallback={routeErrorFallback}>
+            <Suspense fallback={routeLoadingFallback}>
+              <SetupPageLazy />
+            </Suspense>
+          </ErrorBoundary>
+          <CookieConsent />
+          
+          {/* Legal Document Update Modal - show even on setup page if terms need updating */}
+          {showLegalUpdateModal && profile && (
+            <LegalUpdateModal
+              open={showLegalUpdateModal}
+              userId={user.id}
+              userTermsVersion={profile.terms_version_accepted ?? null}
+              userPrivacyVersion={profile.privacy_version_accepted ?? null}
+              userTermsAcceptedDate={profile.terms_accepted_date ?? null}
+              userPrivacyAcceptedDate={profile.privacy_policy_accepted_date ?? null}
+              onAccepted={() => {
+                setLegalUpdateDismissed(true)
+                refreshProfile().catch(() => {})
+              }}
+              onDeclined={async () => {
+                await signOut()
+                alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+              }}
+            />
+          )}
+        </AuthActionsProvider>
+      )
+    }
+
+    // Redirect to setup if user needs to complete it
+    if (shouldRedirectToSetup) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <Navigate to="/setup" replace />
+        </AuthActionsProvider>
+      )
+    }
 
     if (isLandingPage) {
       return (
@@ -1360,27 +1517,42 @@ export default function PlantSwipe() {
                   </div>
                 )}
                 {authMode === 'signup' && (
-                  <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
-                    <input
-                      id="auth-accept-terms"
-                      type="checkbox"
-                      checked={authAcceptedTerms}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
-                      disabled={authSubmitting}
-                      className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
-                    />
-                    <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
-                      {t('auth.acceptTermsLabel')}{" "}
-                      <a
-                        href={termsPath}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
-                      >
-                        {t('auth.termsLinkLabel')}
-                      </a>.
-                    </Label>
-                  </div>
+                  <>
+                    <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                      <input
+                        id="auth-accept-terms"
+                        type="checkbox"
+                        checked={authAcceptedTerms}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
+                        disabled={authSubmitting}
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                      />
+                      <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                        {t('auth.acceptTermsLabel')}{" "}
+                        <a
+                          href={termsPath}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                        >
+                          {t('auth.termsLinkLabel')}
+                        </a>.
+                      </Label>
+                    </div>
+                    <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                      <input
+                        id="auth-marketing-consent"
+                        type="checkbox"
+                        checked={authMarketingConsent}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthMarketingConsent(e.target.checked)}
+                        disabled={authSubmitting}
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                      />
+                      <Label htmlFor="auth-marketing-consent" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                        {t('auth.marketingConsentLabel', 'Receive occasional emails about new features and updates')}
+                      </Label>
+                    </div>
+                  </>
                 )}
                 {authError && <div className="text-sm text-red-600">{authError}</div>}
                 <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
@@ -1401,6 +1573,31 @@ export default function PlantSwipe() {
               </div>
             </DialogContent>
           </Dialog>
+          
+          {/* GDPR Cookie Consent Banner */}
+          <CookieConsent />
+          
+          {/* Legal Document Update Modal */}
+          {showLegalUpdateModal && user && profile && (
+            <LegalUpdateModal
+              open={showLegalUpdateModal}
+              userId={user.id}
+              userTermsVersion={profile.terms_version_accepted ?? null}
+              userPrivacyVersion={profile.privacy_version_accepted ?? null}
+              userTermsAcceptedDate={profile.terms_accepted_date ?? null}
+              userPrivacyAcceptedDate={profile.privacy_policy_accepted_date ?? null}
+              onAccepted={() => {
+                setLegalUpdateDismissed(true)
+                refreshProfile().catch(() => {})
+              }}
+              onDeclined={async () => {
+                // User declined - they will be blocked (threat_level = 3)
+                // Sign them out and show message
+                await signOut()
+                alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+              }}
+            />
+          )}
         </AuthActionsProvider>
       )
     }
@@ -1437,9 +1634,10 @@ export default function PlantSwipe() {
             }`}
           >
             {/* Sidebar / Filters - desktop only */}
-            {currentView === "search" && showFilters && (
+            {/* // ⚡ Bolt: Prevent duplicate rendering of FilterControls by checking isLargeScreen */}
+            {currentView === "search" && showFilters && isLargeScreen && (
               <aside
-                className="hidden lg:block lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain"
+                className="lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain"
                 aria-label="Filters"
               >
                 <div className="space-y-6 pr-2">
@@ -1495,6 +1693,7 @@ export default function PlantSwipe() {
                       </Label>
                       <SearchInput
                         id="plant-search-main"
+                        ref={searchInputRef}
                         variant="lg"
                         className="rounded-2xl"
                         placeholder={t("plant.searchPlaceholder")}
@@ -1503,6 +1702,7 @@ export default function PlantSwipe() {
                           setQuery(e.target.value)
                         }}
                         onClear={() => setQuery("")}
+                        shortcut={shortcutLabel}
                       />
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
@@ -1547,39 +1747,42 @@ export default function PlantSwipe() {
                     </div>
                   </div>
                   {/* Mobile filter dropdown */}
-                  <div className={`lg:hidden mt-3 ${showFilters ? "max-h-[50vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6" : "hidden"}`}>
-                    <FilterControls
-                      searchSort={searchSort}
-                      setSearchSort={setSearchSort}
-                      seasonFilter={seasonFilter}
-                      setSeasonFilter={setSeasonFilter}
-                      colorFilter={colorFilter}
-                      setColorFilter={setColorFilter}
-                      typeFilter={typeFilter}
-                      setTypeFilter={setTypeFilter}
-                      usageFilters={usageFilters}
-                      setUsageFilters={setUsageFilters}
-                      habitatFilters={habitatFilters}
-                      setHabitatFilters={setHabitatFilters}
-                      maintenanceFilter={maintenanceFilter}
-                      setMaintenanceFilter={setMaintenanceFilter}
-                      petSafe={petSafe}
-                      setPetSafe={setPetSafe}
-                      humanSafe={humanSafe}
-                      setHumanSafe={setHumanSafe}
-                      livingSpaceFilters={livingSpaceFilters}
-                      setLivingSpaceFilters={setLivingSpaceFilters}
-                      onlySeeds={onlySeeds}
-                      setOnlySeeds={setOnlySeeds}
-                      onlyFavorites={onlyFavorites}
-                      setOnlyFavorites={setOnlyFavorites}
-                      colorOptions={colorOptions}
-                      primaryColors={primaryColors}
-                      advancedColors={advancedColors}
-                      typeOptions={typeOptions}
-                      usageOptions={usageOptions}
-                    />
-                  </div>
+                  {/* // ⚡ Bolt: Prevent duplicate rendering of FilterControls by checking !isLargeScreen */}
+                  {!isLargeScreen && (
+                    <div className={`mt-3 ${showFilters ? "max-h-[50vh] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-4 space-y-6" : "hidden"}`}>
+                      <FilterControls
+                        searchSort={searchSort}
+                        setSearchSort={setSearchSort}
+                        seasonFilter={seasonFilter}
+                        setSeasonFilter={setSeasonFilter}
+                        colorFilter={colorFilter}
+                        setColorFilter={setColorFilter}
+                        typeFilter={typeFilter}
+                        setTypeFilter={setTypeFilter}
+                        usageFilters={usageFilters}
+                        setUsageFilters={setUsageFilters}
+                        habitatFilters={habitatFilters}
+                        setHabitatFilters={setHabitatFilters}
+                        maintenanceFilter={maintenanceFilter}
+                        setMaintenanceFilter={setMaintenanceFilter}
+                        petSafe={petSafe}
+                        setPetSafe={setPetSafe}
+                        humanSafe={humanSafe}
+                        setHumanSafe={setHumanSafe}
+                        livingSpaceFilters={livingSpaceFilters}
+                        setLivingSpaceFilters={setLivingSpaceFilters}
+                        onlySeeds={onlySeeds}
+                        setOnlySeeds={setOnlySeeds}
+                        onlyFavorites={onlyFavorites}
+                        setOnlyFavorites={setOnlyFavorites}
+                        colorOptions={colorOptions}
+                        primaryColors={primaryColors}
+                        advancedColors={advancedColors}
+                        typeOptions={typeOptions}
+                        usageOptions={usageOptions}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1665,6 +1868,16 @@ export default function PlantSwipe() {
               )}
             />
             <Route
+              path="/setup"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <SetupPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
               path="/bug-catcher"
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
@@ -1727,6 +1940,14 @@ export default function PlantSwipe() {
               element={
                 <Suspense fallback={routeLoadingFallback}>
                   <TermsPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/privacy"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PrivacyPageLazy />
                 </Suspense>
               }
             />
@@ -1969,27 +2190,42 @@ export default function PlantSwipe() {
               </div>
             )}
             {authMode === 'signup' && (
-              <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
-                <input
-                  id="auth-accept-terms"
-                  type="checkbox"
-                  checked={authAcceptedTerms}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
-                  disabled={authSubmitting}
-                  className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
-                />
-                <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
-                  {t('auth.acceptTermsLabel')}{" "}
-                  <a
-                    href={termsPath}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
-                  >
-                    {t('auth.termsLinkLabel')}
-                  </a>.
-                </Label>
-              </div>
+              <>
+                <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                  <input
+                    id="auth-accept-terms-2"
+                    type="checkbox"
+                    checked={authAcceptedTerms}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
+                    disabled={authSubmitting}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                  />
+                  <Label htmlFor="auth-accept-terms-2" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                    {t('auth.acceptTermsLabel')}{" "}
+                    <a
+                      href={termsPath}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                    >
+                      {t('auth.termsLinkLabel')}
+                    </a>.
+                  </Label>
+                </div>
+                <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                  <input
+                    id="auth-marketing-consent-2"
+                    type="checkbox"
+                    checked={authMarketingConsent}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthMarketingConsent(e.target.checked)}
+                    disabled={authSubmitting}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                  />
+                  <Label htmlFor="auth-marketing-consent-2" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                    {t('auth.marketingConsentLabel', 'Receive occasional emails about new features and updates')}
+                  </Label>
+                </div>
+              </>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
             <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
@@ -2024,6 +2260,31 @@ export default function PlantSwipe() {
           navigate(`/messages?conversation=${conversationId}`)
         }}
       />
+      
+      {/* GDPR Cookie Consent Banner */}
+      <CookieConsent />
+      
+      {/* Legal Document Update Modal */}
+      {showLegalUpdateModal && user && profile && (
+        <LegalUpdateModal
+          open={showLegalUpdateModal}
+          userId={user.id}
+          userTermsVersion={profile.terms_version_accepted ?? null}
+          userPrivacyVersion={profile.privacy_version_accepted ?? null}
+          userTermsAcceptedDate={profile.terms_accepted_date ?? null}
+          userPrivacyAcceptedDate={profile.privacy_policy_accepted_date ?? null}
+          onAccepted={() => {
+            setLegalUpdateDismissed(true)
+            refreshProfile().catch(() => {})
+          }}
+          onDeclined={async () => {
+            // User declined - they will be blocked (threat_level = 3)
+            // Sign them out and show message
+            await signOut()
+            alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+          }}
+        />
+      )}
     </div>
     </AuthActionsProvider>
   )

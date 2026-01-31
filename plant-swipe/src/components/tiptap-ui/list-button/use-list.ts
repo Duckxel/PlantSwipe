@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { type Editor } from "@tiptap/react"
-import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 
 // --- Hooks ---
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
@@ -14,11 +13,8 @@ import { ListTodoIcon } from "@/components/tiptap-icons/list-todo-icon"
 
 // --- Lib ---
 import {
-  findNodePosition,
   isNodeInSchema,
   isNodeTypeSelected,
-  isValidPosition,
-  selectionWithinConvertibleTypes,
 } from "@/lib/tiptap-utils"
 
 export type ListType = "bulletList" | "orderedList" | "taskList"
@@ -69,52 +65,20 @@ export const LIST_SHORTCUT_KEYS: Record<ListType, string> = {
  */
 export function canToggleList(
   editor: Editor | null,
-  type: ListType,
-  turnInto: boolean = true
+  type: ListType
 ): boolean {
   if (!editor || !editor.isEditable) return false
   if (!isNodeInSchema(type, editor) || isNodeTypeSelected(editor, ["image"]))
     return false
 
-  if (!turnInto) {
-    switch (type) {
-      case "bulletList":
-        return editor.can().toggleBulletList()
-      case "orderedList":
-        return editor.can().toggleOrderedList()
-      case "taskList":
-        return editor.can().toggleList("taskList", "taskItem")
-      default:
-        return false
-    }
-  }
-
-  // Ensure selection is in nodes we're allowed to convert
-  if (
-    !selectionWithinConvertibleTypes(editor, [
-      "paragraph",
-      "heading",
-      "bulletList",
-      "orderedList",
-      "taskList",
-      "blockquote",
-      "codeBlock",
-    ])
-  )
-    return false
-
-  // Either we can set list directly on the selection,
-  // or we can clear formatting/nodes to arrive at a list.
+  // Use TipTap's native can() check
   switch (type) {
     case "bulletList":
-      return editor.can().toggleBulletList() || editor.can().clearNodes()
+      return editor.can().toggleBulletList()
     case "orderedList":
-      return editor.can().toggleOrderedList() || editor.can().clearNodes()
+      return editor.can().toggleOrderedList()
     case "taskList":
-      return (
-        editor.can().toggleList("taskList", "taskItem") ||
-        editor.can().clearNodes()
-      )
+      return editor.can().toggleList("taskList", "taskItem")
     default:
       return false
   }
@@ -140,79 +104,25 @@ export function isListActive(editor: Editor | null, type: ListType): boolean {
 
 /**
  * Toggles list in the editor
+ * Uses TipTap's native toggle commands which handle nested content properly
  */
 export function toggleList(editor: Editor | null, type: ListType): boolean {
   if (!editor || !editor.isEditable) return false
-  if (!canToggleList(editor, type)) return false
 
   try {
-    const view = editor.view
-    let state = view.state
-    let tr = state.tr
+    const chain = editor.chain().focus(undefined, { scrollIntoView: false })
 
-    // No selection, find the the cursor position
-    if (state.selection.empty || state.selection instanceof TextSelection) {
-      const pos = findNodePosition({
-        editor,
-        node: state.selection.$anchor.node(1),
-      })?.pos
-      if (!isValidPosition(pos)) return false
-
-      tr = tr.setSelection(NodeSelection.create(state.doc, pos))
-      view.dispatch(tr)
-      state = view.state
+    // Use TipTap's native toggle commands - they handle nesting correctly
+    switch (type) {
+      case "bulletList":
+        return chain.toggleBulletList().run()
+      case "orderedList":
+        return chain.toggleOrderedList().run()
+      case "taskList":
+        return chain.toggleList("taskList", "taskItem").run()
+      default:
+        return false
     }
-
-    const selection = state.selection
-
-    let chain = editor.chain().focus()
-
-    // Handle NodeSelection
-    if (selection instanceof NodeSelection) {
-      const firstChild = selection.node.firstChild?.firstChild
-      const lastChild = selection.node.lastChild?.lastChild
-
-      const from = firstChild
-        ? selection.from + firstChild.nodeSize
-        : selection.from + 1
-
-      const to = lastChild
-        ? selection.to - lastChild.nodeSize
-        : selection.to - 1
-
-      const resolvedFrom = state.doc.resolve(from)
-      const resolvedTo = state.doc.resolve(to)
-
-      chain = chain
-        .setTextSelection(TextSelection.between(resolvedFrom, resolvedTo))
-        .clearNodes()
-    }
-
-    if (editor.isActive(type)) {
-      // Unwrap list
-      chain
-        .liftListItem("listItem")
-        .lift("bulletList")
-        .lift("orderedList")
-        .lift("taskList")
-        .run()
-    } else {
-      // Wrap in specific list type
-      const toggleMap: Record<ListType, () => typeof chain> = {
-        bulletList: () => chain.toggleBulletList(),
-        orderedList: () => chain.toggleOrderedList(),
-        taskList: () => chain.toggleList("taskList", "taskItem"),
-      }
-
-      const toggle = toggleMap[type]
-      if (!toggle) return false
-
-      toggle().run()
-    }
-
-    editor.chain().focus().selectTextblockEnd().run()
-
-    return true
   } catch {
     return false
   }
@@ -305,13 +215,18 @@ export function useList(config: UseListConfig) {
   }, [editor, type, hideWhenUnavailable])
 
   const handleToggle = useCallback(() => {
-    if (!editor) return false
+    if (!editor || !editor.isEditable) return false
 
-    const success = toggleList(editor, type)
-    if (success) {
-      onToggled?.()
+    try {
+      const success = toggleList(editor, type)
+      if (success) {
+        onToggled?.()
+      }
+      return success
+    } catch (error) {
+      console.error('Error toggling list:', error)
+      return false
     }
-    return success
   }, [editor, type, onToggled])
 
   return {

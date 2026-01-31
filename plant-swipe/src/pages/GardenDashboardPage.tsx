@@ -430,6 +430,7 @@ export const GardenDashboardPage: React.FC = () => {
                   locationLat: data.garden.locationLat || null,
                   locationLon: data.garden.locationLon || null,
                   preferredLanguage: data.garden.preferredLanguage || null,
+                  hideAiChat: Boolean(data.garden.hideAiChat ?? data.garden.hide_ai_chat ?? false),
                 });
                 hydratedGarden = true;
               }
@@ -2920,6 +2921,7 @@ export const GardenDashboardPage: React.FC = () => {
                                       onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
                                       disabled={completingPlantIds.has(gp.id)}
                                       onClick={() => completeAllTodayForPlant(gp.id)}
+                                      aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: gp.nickname || gp.plant?.name || "Plant" })}
                                     >
                                       {completingPlantIds.has(gp.id) ? (
                                         <span className="animate-pulse">...</span>
@@ -3092,6 +3094,7 @@ export const GardenDashboardPage: React.FC = () => {
                       members={members}
                       dailyStats={dailyStats}
                       onNavigateToSettings={() => navigate(`/garden/${id}/settings`)}
+                      hideAiFeatures={garden?.hideAiChat ?? false}
                     />
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
@@ -3911,6 +3914,7 @@ function RoutineSection({
                       className="rounded-xl"
                       onClick={() => completeAllTodayForPlant(gp.id)}
                       disabled={completingPlantIds.has(gp.id)}
+                      aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: gp.nickname || gp.plant?.name || "Plant" })}
                     >
                       {completingPlantIds.has(gp.id) ? (
                         <span className="flex items-center gap-1">
@@ -4308,17 +4312,17 @@ function OverviewSection({
     const profile = memberProfiles[member.userId];
     const accentKey = profile?.accentKey || member.accentKey;
     if (accentKey) {
-      const option = getAccentOption(accentKey);
-      if (option) return option.cssVar || option.value;
+      const option = getAccentOption(accentKey as any);
+      if (option) return option.hex;
     }
     // Fallback colors based on name hash
     const colors = [
-      "#10b981",
-      "#3b82f6",
-      "#8b5cf6",
-      "#ec4899",
-      "#f59e0b",
-      "#06b6d4",
+      "#22C55E", // Emerald
+      "#2563EB", // Royal Blue
+      "#7C3AED", // Purple
+      "#E11D48", // Crimson
+      "#F59E0B", // Gold
+      "#14B8A6", // Turquoise
     ];
     const name = member.displayName || member.email || member.userId;
     let hash = 0;
