@@ -14,7 +14,7 @@ export default function TermsPage() {
   })
   usePageMetadata({ title: seoTitle, description: seoDescription })
 
-  const lastUpdated = "January 31, 2026"
+  const lastUpdated = "November 15, 2025"
 
   const sanitizedTermsHtml = useMemo(() => {
     const withoutEditorArtifacts = termsHtml.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<\/?bdt[^>]*>/gi, "")
