@@ -44,7 +44,7 @@ interface LocationSuggestion {
 const STEPS: SetupStep[] = ['welcome', 'accent', 'location', 'garden_type', 'experience', 'purpose', 'notification_time', 'notifications', 'complete']
 
 // Liana/Vine Progress Bar Component with leaves and flowers
-const LianaProgressBar: React.FC<{ progress: number; flowerColor?: string }> = ({ progress, flowerColor }) => {
+const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = ({ progress, accentColor }) => {
   // Track the animated progress value for syncing leaves
   const [animatedProgress, setAnimatedProgress] = React.useState(0)
   const animationDuration = 0.5 // seconds
@@ -72,34 +72,37 @@ const LianaProgressBar: React.FC<{ progress: number; flowerColor?: string }> = (
     requestAnimationFrame(animate)
   }, [progress])
   
-  // Leaf positions along the vine - positioned at wave peaks/troughs
+  // Leaf positions along the vine - more frequent, smaller amplitude
   const leafPositions = [
-    { x: 10, y: -5, rotate: -50, size: 10 },
-    { x: 20, y: 5, rotate: 45, size: 11 },
-    { x: 30, y: -5, rotate: -45, size: 10 },
-    { x: 40, y: 5, rotate: 50, size: 11 },
-    { x: 50, y: -5, rotate: -50, size: 10 },
-    { x: 60, y: 5, rotate: 45, size: 11 },
-    { x: 70, y: -5, rotate: -45, size: 10 },
-    { x: 80, y: 5, rotate: 50, size: 11 },
-    { x: 90, y: -5, rotate: -50, size: 10 },
+    { x: 8, y: -4, rotate: -45, size: 9 },
+    { x: 16, y: 4, rotate: 45, size: 10 },
+    { x: 24, y: -4, rotate: -50, size: 9 },
+    { x: 32, y: 4, rotate: 50, size: 10 },
+    { x: 40, y: -4, rotate: -45, size: 9 },
+    { x: 48, y: 4, rotate: 45, size: 10 },
+    { x: 56, y: -4, rotate: -50, size: 9 },
+    { x: 64, y: 4, rotate: 50, size: 10 },
+    { x: 72, y: -4, rotate: -45, size: 9 },
+    { x: 80, y: 4, rotate: 45, size: 10 },
+    { x: 88, y: -4, rotate: -50, size: 9 },
+    { x: 96, y: 4, rotate: 50, size: 9 },
   ]
   
-  // Flower positions - fewer flowers, placed at specific points
+  // Flower positions - placed at specific points
   const flowerPositions = [
-    { x: 15, y: -7, size: 12 },
-    { x: 45, y: -6, size: 14 },
-    { x: 75, y: -7, size: 12 },
+    { x: 20, y: -6, size: 11 },
+    { x: 52, y: -5, size: 12 },
+    { x: 84, y: -6, size: 11 },
   ]
 
   // Use a unique ID for clip paths to avoid conflicts if multiple instances
   const clipId = React.useId()
 
   return (
-    <div className="flex-1 h-10 relative">
+    <div className="flex-1 h-8 relative">
       <svg 
         className="absolute inset-0 w-full h-full" 
-        viewBox="0 0 100 20" 
+        viewBox="0 0 100 16" 
         preserveAspectRatio="none"
         style={{ overflow: 'visible' }}
       >
@@ -107,102 +110,81 @@ const LianaProgressBar: React.FC<{ progress: number; flowerColor?: string }> = (
           {/* Clip for the vine - uses animated progress for smooth sync */}
           <clipPath id={`vineClip-${clipId}`}>
             <rect
-              x="0"
+              x="-2"
               y="-5"
               height="30"
-              width={animatedProgress}
+              width={Math.max(0, animatedProgress + 2)}
             />
           </clipPath>
           {/* Clip for the remaining line */}
           <clipPath id={`lineClip-${clipId}`}>
             <rect
-              x={animatedProgress}
+              x={Math.max(0, animatedProgress)}
               y="-5"
               height="30"
-              width={100 - animatedProgress}
+              width={Math.max(0, 102 - animatedProgress)}
             />
           </clipPath>
         </defs>
         
-        {/* Background straight line - ONLY shows after the vine */}
+        {/* Background line - white/dark based on theme */}
         <g clipPath={`url(#lineClip-${clipId})`}>
           <line
             x1="0"
-            y1="10"
+            y1="8"
             x2="100"
-            y2="10"
+            y2="8"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="2.5"
             strokeLinecap="round"
             className="text-stone-300 dark:text-stone-600"
           />
         </g>
         
-        {/* Growing vine with smooth waves */}
+        {/* Growing vine - simplified wave with higher frequency, lower amplitude */}
         <g clipPath={`url(#vineClip-${clipId})`}>
-          {/* Main vine stem - smooth wave pattern */}
+          {/* Main vine stem - gentler waves, more frequent, rounded ends */}
           <path
-            d="M 0 10 
-               C 5 10, 5 5, 10 5
-               C 15 5, 15 15, 20 15
-               C 25 15, 25 5, 30 5
-               C 35 5, 35 15, 40 15
-               C 45 15, 45 5, 50 5
-               C 55 5, 55 15, 60 15
-               C 65 15, 65 5, 70 5
-               C 75 5, 75 15, 80 15
-               C 85 15, 85 5, 90 5
-               C 95 5, 95 15, 100 15"
+            d="M 0 8 
+               C 2 8, 4 6, 8 6
+               C 12 6, 12 10, 16 10
+               C 20 10, 20 6, 24 6
+               C 28 6, 28 10, 32 10
+               C 36 10, 36 6, 40 6
+               C 44 6, 44 10, 48 10
+               C 52 10, 52 6, 56 6
+               C 60 6, 60 10, 64 10
+               C 68 10, 68 6, 72 6
+               C 76 6, 76 10, 80 10
+               C 84 10, 84 6, 88 6
+               C 92 6, 92 10, 96 10
+               C 98 10, 100 8, 100 8"
             fill="none"
             stroke="currentColor"
-            strokeWidth="3"
+            strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-accent"
+            className="text-stone-400 dark:text-stone-500"
           />
-          
-          {/* Curly tendrils sprouting from the vine */}
-          {/* Top tendrils at wave peaks */}
-          <path d="M 10 5 Q 8 2, 11 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
-          <path d="M 10 5 Q 12 1, 8 -1" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
-          
-          <path d="M 30 5 Q 28 2, 31 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
-          <path d="M 30 5 Q 32 1, 28 -1" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
-          
-          <path d="M 50 5 Q 48 2, 51 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
-          
-          <path d="M 70 5 Q 68 2, 71 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
-          <path d="M 70 5 Q 72 1, 68 -1" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
-          
-          <path d="M 90 5 Q 88 2, 91 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
-          
-          {/* Bottom tendrils at wave troughs */}
-          <path d="M 20 15 Q 22 18, 19 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
-          <path d="M 20 15 Q 18 19, 21 21" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
-          
-          <path d="M 40 15 Q 42 18, 39 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
-          
-          <path d="M 60 15 Q 62 18, 59 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
-          <path d="M 60 15 Q 58 19, 61 21" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="text-accent" opacity="0.5" />
-          
-          <path d="M 80 15 Q 82 18, 79 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-accent" opacity="0.8" />
         </g>
         
-        {/* Growing tip - rendered inside SVG and clipped with the vine */}
+        {/* Growing tip - rounded bud at the end */}
         <g clipPath={`url(#vineClip-${clipId})`}>
-          {/* Small leaf-shaped tip at the end of the vine path */}
           {animatedProgress > 2 && (
-            <g transform={`translate(${Math.min(animatedProgress, 100)}, ${animatedProgress % 20 < 10 ? 5 + (animatedProgress % 10) : 15 - (animatedProgress % 10)})`}>
-              <ellipse cx="0" cy="0" rx="2" ry="2.5" fill="currentColor" className="text-accent" />
-            </g>
+            <circle 
+              cx={Math.min(animatedProgress, 100)} 
+              cy={8 + Math.sin(animatedProgress * Math.PI / 8) * 2}
+              r="2"
+              fill="currentColor" 
+              className="text-stone-400 dark:text-stone-500" 
+            />
           )}
         </g>
       </svg>
       
-      {/* Animated leaves - positioned at vine wave points, synced with animated progress */}
+      {/* Animated leaves - use accent color */}
       <div className="absolute inset-0" style={{ overflow: 'visible' }}>
         {leafPositions.map((leaf, index) => {
-          // Leaf appears when the animated vine has passed its position
           const shouldShow = animatedProgress >= leaf.x + 2
           
           return (
@@ -230,9 +212,10 @@ const LianaProgressBar: React.FC<{ progress: number; flowerColor?: string }> = (
                 width={leaf.size} 
                 height={leaf.size * 1.3} 
                 viewBox="0 0 10 13"
-                className="text-accent drop-shadow-sm"
+                className="drop-shadow-sm"
                 style={{
                   transform: `translateY(${leaf.y}px) translateX(-50%)`,
+                  color: accentColor || 'currentColor',
                 }}
               >
                 {/* Leaf shape - natural teardrop */}
@@ -254,10 +237,9 @@ const LianaProgressBar: React.FC<{ progress: number; flowerColor?: string }> = (
         })}
       </div>
       
-      {/* Animated flowers - positioned along the vine, color based on user's accent */}
+      {/* Animated flowers - use accent color */}
       <div className="absolute inset-0" style={{ overflow: 'visible' }}>
         {flowerPositions.map((flower, index) => {
-          // Flower appears when the animated vine has passed its position
           const shouldShow = animatedProgress >= flower.x + 4
           
           return (
@@ -289,21 +271,20 @@ const LianaProgressBar: React.FC<{ progress: number; flowerColor?: string }> = (
                 className="drop-shadow-md"
                 style={{
                   transform: `translateY(${flower.y}px) translateX(-50%)`,
-                  color: flowerColor || 'currentColor',
+                  color: accentColor || 'currentColor',
                 }}
               >
                 {/* 5-petal flower */}
                 <g fill="currentColor">
-                  {/* Petals */}
-                  <ellipse cx="12" cy="5" rx="4" ry="5" />
-                  <ellipse cx="12" cy="5" rx="4" ry="5" transform="rotate(72 12 12)" />
-                  <ellipse cx="12" cy="5" rx="4" ry="5" transform="rotate(144 12 12)" />
-                  <ellipse cx="12" cy="5" rx="4" ry="5" transform="rotate(216 12 12)" />
-                  <ellipse cx="12" cy="5" rx="4" ry="5" transform="rotate(288 12 12)" />
+                  <ellipse cx="12" cy="5" rx="3.5" ry="4.5" />
+                  <ellipse cx="12" cy="5" rx="3.5" ry="4.5" transform="rotate(72 12 12)" />
+                  <ellipse cx="12" cy="5" rx="3.5" ry="4.5" transform="rotate(144 12 12)" />
+                  <ellipse cx="12" cy="5" rx="3.5" ry="4.5" transform="rotate(216 12 12)" />
+                  <ellipse cx="12" cy="5" rx="3.5" ry="4.5" transform="rotate(288 12 12)" />
                 </g>
                 {/* Center of flower - yellow */}
-                <circle cx="12" cy="12" r="3.5" fill="#FCD34D" />
-                <circle cx="12" cy="12" r="2" fill="#F59E0B" />
+                <circle cx="12" cy="12" r="3" fill="#FCD34D" />
+                <circle cx="12" cy="12" r="1.5" fill="#F59E0B" />
               </svg>
             </motion.div>
           )
@@ -1295,7 +1276,7 @@ export function SetupPage() {
             {(isWelcomeStep || isCompleteStep) && <div className="w-10" />}
             
             {/* Liana Progress Bar */}
-            <LianaProgressBar progress={progress} flowerColor={getAccentHex(setupData.accent_key)} />
+            <LianaProgressBar progress={progress} accentColor={getAccentHex(setupData.accent_key)} />
             
             {/* Logo icon */}
             <div className="w-10 flex items-center justify-center">
