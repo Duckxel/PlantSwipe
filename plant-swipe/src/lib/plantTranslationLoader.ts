@@ -663,10 +663,25 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     }
 
     // Load translations for ALL languages (including English)
+    // ⚡ Bolt: Select only used columns to reduce payload size
+    const translationColumns = [
+      'plant_id',
+      'name',
+      'scientific_name',
+      'meaning',
+      'identity',
+      'usage',
+      'ecology',
+      'given_names',
+      'advice_medicinal',
+      'origin',
+      'overview',
+    ].join(',')
+
     const plantIds = plants.map((p) => p.id)
     const { data: translationsData } = await supabase
       .from('plant_translations')
-      .select('*')
+      .select(translationColumns)
       .eq('language', language)
       .in('plant_id', plantIds)
 
