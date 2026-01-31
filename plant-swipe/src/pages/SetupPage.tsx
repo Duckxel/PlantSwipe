@@ -72,27 +72,36 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
     requestAnimationFrame(animate)
   }, [progress])
   
-  // Leaf positions along the vine - more frequent, smaller amplitude
+  // Leaf positions - at wave peaks (top) and troughs (bottom), matching the high-frequency wave
+  // Wave peaks at: 5, 15, 25, 35, 45, 55, 65, 75, 85, 95 (y=6, top)
+  // Wave troughs at: 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 (y=10, bottom)
   const leafPositions = [
-    { x: 8, y: -4, rotate: -45, size: 9 },
-    { x: 16, y: 4, rotate: 45, size: 10 },
-    { x: 24, y: -4, rotate: -50, size: 9 },
-    { x: 32, y: 4, rotate: 50, size: 10 },
-    { x: 40, y: -4, rotate: -45, size: 9 },
-    { x: 48, y: 4, rotate: 45, size: 10 },
-    { x: 56, y: -4, rotate: -50, size: 9 },
-    { x: 64, y: 4, rotate: 50, size: 10 },
-    { x: 72, y: -4, rotate: -45, size: 9 },
-    { x: 80, y: 4, rotate: 45, size: 10 },
-    { x: 88, y: -4, rotate: -50, size: 9 },
-    { x: 96, y: 4, rotate: 50, size: 9 },
+    { x: 5, y: -4, rotate: -45, size: 9 },
+    { x: 10, y: 3, rotate: 135, size: 9 },
+    { x: 15, y: -4, rotate: -50, size: 10 },
+    { x: 20, y: 3, rotate: 130, size: 9 },
+    { x: 25, y: -4, rotate: -45, size: 9 },
+    { x: 30, y: 3, rotate: 135, size: 10 },
+    { x: 35, y: -4, rotate: -50, size: 9 },
+    { x: 40, y: 3, rotate: 130, size: 9 },
+    { x: 45, y: -4, rotate: -45, size: 10 },
+    { x: 50, y: 3, rotate: 135, size: 9 },
+    { x: 55, y: -4, rotate: -50, size: 9 },
+    { x: 60, y: 3, rotate: 130, size: 10 },
+    { x: 65, y: -4, rotate: -45, size: 9 },
+    { x: 70, y: 3, rotate: 135, size: 9 },
+    { x: 75, y: -4, rotate: -50, size: 10 },
+    { x: 80, y: 3, rotate: 130, size: 9 },
+    { x: 85, y: -4, rotate: -45, size: 9 },
+    { x: 90, y: 3, rotate: 135, size: 10 },
+    { x: 95, y: -4, rotate: -50, size: 9 },
   ]
   
-  // Flower positions - placed at specific points
+  // Flower positions - placed at specific peaks
   const flowerPositions = [
-    { x: 20, y: -6, size: 11 },
-    { x: 52, y: -5, size: 12 },
-    { x: 84, y: -6, size: 11 },
+    { x: 25, y: -6, size: 11 },
+    { x: 55, y: -6, size: 12 },
+    { x: 85, y: -6, size: 11 },
   ]
 
   // Use a unique ID for clip paths to avoid conflicts if multiple instances
@@ -127,7 +136,7 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
           </clipPath>
         </defs>
         
-        {/* Background line - white/dark based on theme */}
+        {/* Background line - dark on light theme, white on dark theme */}
         <g clipPath={`url(#lineClip-${clipId})`}>
           <line
             x1="0"
@@ -137,34 +146,41 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
             stroke="currentColor"
             strokeWidth="2.5"
             strokeLinecap="round"
-            className="text-stone-300 dark:text-stone-600"
+            className="text-stone-400 dark:text-stone-400"
           />
         </g>
         
-        {/* Growing vine - simplified wave with higher frequency, lower amplitude */}
+        {/* Growing vine - high frequency wave, same amplitude */}
         <g clipPath={`url(#vineClip-${clipId})`}>
-          {/* Main vine stem - gentler waves, more frequent, rounded ends */}
+          {/* Main vine stem - much higher frequency (20 half-waves), rounded ends */}
           <path
             d="M 0 8 
-               C 2 8, 4 6, 8 6
-               C 12 6, 12 10, 16 10
-               C 20 10, 20 6, 24 6
-               C 28 6, 28 10, 32 10
-               C 36 10, 36 6, 40 6
-               C 44 6, 44 10, 48 10
-               C 52 10, 52 6, 56 6
-               C 60 6, 60 10, 64 10
-               C 68 10, 68 6, 72 6
-               C 76 6, 76 10, 80 10
-               C 84 10, 84 6, 88 6
-               C 92 6, 92 10, 96 10
-               C 98 10, 100 8, 100 8"
+               C 2.5 8, 2.5 6, 5 6
+               C 7.5 6, 7.5 10, 10 10
+               C 12.5 10, 12.5 6, 15 6
+               C 17.5 6, 17.5 10, 20 10
+               C 22.5 10, 22.5 6, 25 6
+               C 27.5 6, 27.5 10, 30 10
+               C 32.5 10, 32.5 6, 35 6
+               C 37.5 6, 37.5 10, 40 10
+               C 42.5 10, 42.5 6, 45 6
+               C 47.5 6, 47.5 10, 50 10
+               C 52.5 10, 52.5 6, 55 6
+               C 57.5 6, 57.5 10, 60 10
+               C 62.5 10, 62.5 6, 65 6
+               C 67.5 6, 67.5 10, 70 10
+               C 72.5 10, 72.5 6, 75 6
+               C 77.5 6, 77.5 10, 80 10
+               C 82.5 10, 82.5 6, 85 6
+               C 87.5 6, 87.5 10, 90 10
+               C 92.5 10, 92.5 6, 95 6
+               C 97.5 6, 97.5 8, 100 8"
             fill="none"
             stroke="currentColor"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-stone-400 dark:text-stone-500"
+            className="text-stone-500 dark:text-stone-400"
           />
         </g>
         
@@ -173,10 +189,10 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
           {animatedProgress > 2 && (
             <circle 
               cx={Math.min(animatedProgress, 100)} 
-              cy={8 + Math.sin(animatedProgress * Math.PI / 8) * 2}
+              cy={8 + Math.sin(animatedProgress * Math.PI / 5) * 2}
               r="2"
               fill="currentColor" 
-              className="text-stone-400 dark:text-stone-500" 
+              className="text-stone-500 dark:text-stone-400" 
             />
           )}
         </g>
@@ -1278,12 +1294,13 @@ export function SetupPage() {
             {/* Liana Progress Bar */}
             <LianaProgressBar progress={progress} accentColor={getAccentHex(setupData.accent_key)} />
             
-            {/* Logo icon */}
+            {/* Logo icon - flipped to face the progress bar */}
             <div className="w-10 flex items-center justify-center">
               <img 
                 src="/icons/plant-swipe-icon.svg" 
                 alt="Aphylia"
                 className="w-8 h-8 plant-icon-theme opacity-60"
+                style={{ transform: 'scaleX(-1)' }}
                 draggable="false"
               />
             </div>
