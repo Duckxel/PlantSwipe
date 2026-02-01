@@ -2890,7 +2890,7 @@ export const AdminPage: React.FC = () => {
           },
           onPlantComplete: ({ plantName, requestId, success, error }) => {
             const durationMs = Date.now() - plantStartTime;
-            setAiPrefillCompletedPlants((prev) => [...prev.slice(-4), { name: plantName, success, error, durationMs }]);
+            setAiPrefillCompletedPlants((prev) => [...prev, { name: plantName, success, error, durationMs }]);
             if (success) {
               // Remove completed plant from the local list immediately for visual feedback
               setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
@@ -8291,13 +8291,13 @@ export const AdminPage: React.FC = () => {
                               </div>
                             )}
 
-                            {/* Recently completed plants */}
+                            {/* Recently completed plants - shown during running */}
                             {aiPrefillCompletedPlants.length > 0 && (
                               <div className="space-y-2">
                                 <div className="text-[11px] uppercase tracking-wider font-medium text-stone-400 dark:text-stone-500">
-                                  Completed
+                                  Completed ({aiPrefillCompletedPlants.length})
                                 </div>
-                                <div className="space-y-1.5">
+                                <div className="space-y-1.5 max-h-48 overflow-y-auto">
                                   {aiPrefillCompletedPlants.slice().reverse().map((plant, idx) => (
                                     <div
                                       key={`${plant.name}-${idx}`}
@@ -8329,7 +8329,7 @@ export const AdminPage: React.FC = () => {
                                         </span>
                                       )}
                                       {!plant.success && plant.error && (
-                                        <span className="truncate text-[10px] text-red-500 dark:text-red-400 ml-2">{plant.error}</span>
+                                        <span className="truncate text-[10px] text-red-500 dark:text-red-400 ml-2" title={plant.error}>{plant.error}</span>
                                       )}
                                     </div>
                                   ))}
@@ -8353,6 +8353,66 @@ export const AdminPage: React.FC = () => {
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
+                          </div>
+                        )}
+
+                        {/* AI Prefill Completed Plants - Shown after completion/cancellation */}
+                        {aiPrefillCompletedPlants.length > 0 && !aiPrefillRunning && (
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 shadow-sm space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs font-medium text-stone-600 dark:text-stone-300">
+                                  Processed Plants
+                                </div>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 dark:bg-[#2a2a2d] text-stone-500 dark:text-stone-400">
+                                  {aiPrefillCompletedPlants.filter(p => p.success).length} success / {aiPrefillCompletedPlants.filter(p => !p.success).length} failed
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="text-[10px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                                onClick={() => setAiPrefillCompletedPlants([])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                              {aiPrefillCompletedPlants.slice().reverse().map((plant, idx) => (
+                                <div
+                                  key={`${plant.name}-${idx}`}
+                                  className={`flex items-center gap-2.5 text-xs rounded-lg px-3 py-2 transition-all ${
+                                    plant.success 
+                                      ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30'
+                                      : 'bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30'
+                                  }`}
+                                >
+                                  <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${
+                                    plant.success 
+                                      ? 'bg-emerald-500/20 dark:bg-emerald-500/30' 
+                                      : 'bg-red-500/20 dark:bg-red-500/30'
+                                  }`}>
+                                    {plant.success ? (
+                                      <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                    ) : (
+                                      <X className="h-3 w-3 text-red-600 dark:text-red-400" />
+                                    )}
+                                  </div>
+                                  <span className={`truncate font-medium ${
+                                    plant.success 
+                                      ? 'text-emerald-800 dark:text-emerald-200' 
+                                      : 'text-red-800 dark:text-red-200'
+                                  }`}>{plant.name}</span>
+                                  {plant.durationMs && (
+                                    <span className="ml-auto text-[10px] font-mono text-stone-500 dark:text-stone-400 bg-white dark:bg-[#1e1e20] px-1.5 py-0.5 rounded">
+                                      {formatDuration(plant.durationMs)}
+                                    </span>
+                                  )}
+                                  {!plant.success && plant.error && (
+                                    <span className="truncate text-[10px] text-red-500 dark:text-red-400 ml-2" title={plant.error}>{plant.error}</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
 
