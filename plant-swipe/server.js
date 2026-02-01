@@ -2660,6 +2660,10 @@ async function generateFieldData(options) {
     `Respond with JSON shaped exactly like:\n{"${fieldKey}": ...}\nDo not include any other keys or commentary.`
   )
 
+  // Use shorter timeout for simple fields (2 min) vs complex fields (10 min)
+  const defaultTimeout = SIMPLE_ENUM_FIELDS.has(fieldKey) ? 120000 : 600000
+  const timeout = Number(process.env.OPENAI_TIMEOUT_MS) || defaultTimeout
+
   const response = await openaiClient.responses.create(
     {
       model: openaiModel,
@@ -2667,7 +2671,7 @@ async function generateFieldData(options) {
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) }
+    { timeout }
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
