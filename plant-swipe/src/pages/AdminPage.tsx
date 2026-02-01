@@ -2338,25 +2338,30 @@ export const AdminPage: React.FC = () => {
           // Continue without translations if they fail to load
         }
         
-        // Step 3: Load related data (colors, images, etc.)
+        // Step 3: Load related data (colors, images, watering schedules, sources, infusion mixes)
         const { data: colorLinks } = await supabase
           .from('plant_colors')
           .select('color_id')
           .eq('plant_id', plantId);
         
+        const { data: plantImages } = await supabase
+          .from('plant_images')
+          .select('link, use')
+          .eq('plant_id', plantId);
+        
         const { data: wateringSchedules } = await supabase
-          .from('watering_schedules')
-          .select('*')
+          .from('plant_watering_schedules')
+          .select('season, quantity, time_period')
           .eq('plant_id', plantId);
         
         const { data: plantSources } = await supabase
           .from('plant_sources')
-          .select('*')
+          .select('name, url')
           .eq('plant_id', plantId);
         
         const { data: infusionMixes } = await supabase
-          .from('infusion_mixes')
-          .select('*')
+          .from('plant_infusion_mixes')
+          .select('mix_name, benefit')
           .eq('plant_id', plantId);
         
         // Step 4: Create the new plant record (copy all non-translatable fields)
@@ -2414,19 +2419,34 @@ export const AdminPage: React.FC = () => {
           await supabase.from('plant_colors').insert(newColorLinks);
         }
         
-        // Step 7: Copy watering schedules
+        // Step 7: Copy plant images
+        if (plantImages && plantImages.length > 0) {
+          const newImages = plantImages.map((img) => ({
+            plant_id: newId,
+            link: img.link,
+            use: img.use,
+          }));
+          
+          const { error: imagesInsertError } = await supabase.from('plant_images').insert(newImages);
+          if (imagesInsertError) {
+            console.error('Failed to copy plant images:', imagesInsertError);
+            // Continue even if images fail
+          }
+        }
+        
+        // Step 8: Copy watering schedules
         if (wateringSchedules && wateringSchedules.length > 0) {
           const newSchedules = wateringSchedules.map((s) => ({
             plant_id: newId,
             season: s.season,
-            frequency: s.frequency,
-            amount: s.amount,
+            quantity: s.quantity,
+            time_period: s.time_period,
           }));
           
-          await supabase.from('watering_schedules').insert(newSchedules);
+          await supabase.from('plant_watering_schedules').insert(newSchedules);
         }
         
-        // Step 8: Copy plant sources
+        // Step 9: Copy plant sources
         if (plantSources && plantSources.length > 0) {
           const newSources = plantSources.map((s) => ({
             plant_id: newId,
@@ -2437,14 +2457,15 @@ export const AdminPage: React.FC = () => {
           await supabase.from('plant_sources').insert(newSources);
         }
         
-        // Step 9: Copy infusion mixes
+        // Step 10: Copy infusion mixes
         if (infusionMixes && infusionMixes.length > 0) {
           const newMixes = infusionMixes.map((m) => ({
             plant_id: newId,
-            plant_name: m.plant_name,
+            mix_name: m.mix_name,
+            benefit: m.benefit,
           }));
           
-          await supabase.from('infusion_mixes').insert(newMixes);
+          await supabase.from('plant_infusion_mixes').insert(newMixes);
         }
         
         // Success! Show success message and navigate
@@ -2590,13 +2611,13 @@ export const AdminPage: React.FC = () => {
       await supabase.from('plant_images').delete().eq('plant_id', plantId);
       
       // Delete watering schedules
-      await supabase.from('watering_schedules').delete().eq('plant_id', plantId);
+      await supabase.from('plant_watering_schedules').delete().eq('plant_id', plantId);
       
       // Delete plant sources
       await supabase.from('plant_sources').delete().eq('plant_id', plantId);
       
       // Delete infusion mixes
-      await supabase.from('infusion_mixes').delete().eq('plant_id', plantId);
+      await supabase.from('plant_infusion_mixes').delete().eq('plant_id', plantId);
       
       // Finally delete the plant itself
       const { error } = await supabase.from('plants').delete().eq('id', plantId);
