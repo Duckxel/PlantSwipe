@@ -32,6 +32,7 @@ import {
   ShieldX,
   UserSearch,
   AlertTriangle,
+  AlertCircle,
   Gavel,
   Search,
   ChevronDown,
