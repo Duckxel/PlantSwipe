@@ -817,13 +817,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [searchParams] = useSearchParams()
   const prefillFromId = searchParams.get('prefillFrom')
   const duplicatedFromName = searchParams.get('duplicatedFrom')
+  // Support initial name from query parameter (e.g., /create?name=Rose) or from prop
+  const initialNameFromUrl = searchParams.get('name')
+  const effectiveInitialName = initialName || initialNameFromUrl || ""
   const languageNavigate = useLanguageNavigate()
   const { profile } = useAuth()
   // Get the language from the URL path (e.g., /fr/admin/plants/create -> 'fr')
   const urlLanguage = useLanguage()
   const [language, setLanguage] = React.useState<SupportedLanguage>(urlLanguage)
   const languageRef = React.useRef<SupportedLanguage>(urlLanguage)
-  const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
+  const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: effectiveInitialName, id: id || emptyPlant.id }))
   // Cache of plant data per language to preserve edits when switching languages
   const [plantByLanguage, setPlantByLanguage] = React.useState<Partial<Record<SupportedLanguage, Plant>>>({})
   // Track which languages have been loaded from DB

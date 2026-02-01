@@ -98,7 +98,6 @@ import {
   savePersistedBroadcast,
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
-import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { processAllPlantRequests } from "@/lib/aiPrefillService";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
 import { Languages } from "lucide-react";
@@ -1766,12 +1765,6 @@ export const AdminPage: React.FC = () => {
   const [requestUsers, setRequestUsers] = React.useState<
     Array<{ id: string; display_name: string | null; email: string | null }>
   >([]);
-  const [createPlantDialogOpen, setCreatePlantDialogOpen] =
-    React.useState<boolean>(false);
-  const [createPlantRequestId, setCreatePlantRequestId] = React.useState<
-    string | null
-  >(null);
-  const [createPlantName, setCreatePlantName] = React.useState<string>("");
   
   // Plant request editing state
   const [editingRequestId, setEditingRequestId] = React.useState<string | null>(null);
@@ -2100,11 +2093,11 @@ export const AdminPage: React.FC = () => {
 
   const handleOpenCreatePlantDialog = React.useCallback(
     (req: PlantRequestRow) => {
-      setCreatePlantRequestId(req.id);
-      setCreatePlantName(req.plant_name);
-      setCreatePlantDialogOpen(true);
+      // Navigate to the create plant page with the requested plant name as a query parameter
+      const encodedName = encodeURIComponent(req.plant_name);
+      navigate(`/create?name=${encodedName}`);
     },
-    [],
+    [navigate],
   );
 
   // Start editing a plant request name
@@ -2802,21 +2795,6 @@ export const AdminPage: React.FC = () => {
   );
   const noPlantStatusesSelected = visiblePlantStatusesSet.size === 0;
 
-  const handlePlantCreated = React.useCallback(async () => {
-    // Optionally complete the request after plant is created
-    if (createPlantRequestId) {
-      try {
-        await completePlantRequest(createPlantRequestId);
-      } catch (err) {
-        console.error("Failed to complete request after creating plant:", err);
-      }
-    }
-    setCreatePlantDialogOpen(false);
-    setCreatePlantRequestId(null);
-    setCreatePlantName("");
-    // Refresh the requests list
-    await loadPlantRequests({ initial: false });
-  }, [createPlantRequestId, completePlantRequest, loadPlantRequests]);
 
   // AI Prefill All functionality
   const aiFieldOrder = React.useMemo(() => [
@@ -8565,32 +8543,6 @@ export const AdminPage: React.FC = () => {
                       </DialogContent>
                     </Dialog>
 
-                    {/* Create Plant Dialog */}
-                    <Dialog
-                      open={createPlantDialogOpen}
-                      onOpenChange={setCreatePlantDialogOpen}
-                    >
-                      <DialogContent className="rounded-2xl max-w-4xl max-h-[90vh] overflow-y-auto p-0">
-                        <DialogHeader className="px-6 pt-6 pb-4">
-                          <DialogTitle>Add Plant from Request</DialogTitle>
-                          <DialogDescription>
-                            Create a new plant entry for "{createPlantName}".
-                            The plant name will be pre-filled.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="px-6 pb-6 overflow-y-auto">
-                          <CreatePlantPage
-                            onCancel={() => {
-                              setCreatePlantDialogOpen(false);
-                              setCreatePlantRequestId(null);
-                              setCreatePlantName("");
-                            }}
-                            onSaved={handlePlantCreated}
-                            initialName={createPlantName}
-                          />
-                        </div>
-                      </DialogContent>
-                    </Dialog>
                     </div>
                   )}
 
