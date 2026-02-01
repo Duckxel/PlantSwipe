@@ -221,7 +221,7 @@ export async function fetchAiPlantFill({
   // This reduces HTTP round-trips by processing multiple fields per request
   for (const batch of batches) {
     if (signal?.aborted) {
-      throw new Error('AI fill was cancelled')
+      throw new DOMException('AI fill was cancelled', 'AbortError')
     }
 
     // Notify progress for each field in the batch that we're starting
@@ -296,7 +296,7 @@ export async function fetchAiPlantFill({
     const batchResults = await Promise.allSettled(
       batch.map(async (fieldKey) => {
         if (signal?.aborted) {
-          throw new Error('AI fill was cancelled')
+          throw new DOMException('AI fill was cancelled', 'AbortError')
         }
 
         const response = await fetchWithRetry('/api/admin/ai/plant-fill/field', {
