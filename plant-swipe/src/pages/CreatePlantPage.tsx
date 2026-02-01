@@ -1323,15 +1323,69 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           }
           savedId = data?.id || plantId
         } else {
-          // For non-English: update meta fields AND non-translatable shared data in plants table
+          // For non-English: update ALL non-translatable fields in plants table
+          // These fields are shared across all languages, so edits in any language should be saved
           const nonEnglishUpdatePayload = {
+            // Meta fields
             status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
-            // Non-translatable fields that can be edited in any language
+            // Non-translatable identity fields
+            scientific_name: plantToSave.identity?.scientificName || null,
+            promotion_month: normalizedPromotionMonth,
+            family: plantToSave.identity?.family || null,
+            life_cycle: normalizedLifeCycle || null,
+            season: normalizedIdentitySeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
+            spiked: coerceBoolean(plantToSave.identity?.spiked, false),
+            toxicity_human: normalizedToxicityHuman || null,
+            toxicity_pets: normalizedToxicityPets || null,
+            scent: coerceBoolean(plantToSave.identity?.scent, false),
+            living_space: normalizedLivingSpace || null,
+            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+            maintenance_level: normalizedMaintenance || null,
+            multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
+            bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
+            // Non-translatable basic type fields
+            plant_type: normalizedPlantType || null,
+            utility: normalizedUtility,
+            comestible_part: normalizedComestible,
+            fruit_type: normalizedFruit,
+            // Non-translatable plant care fields
+            temperature_max: plantToSave.plantCare?.temperatureMax || null,
+            temperature_min: plantToSave.plantCare?.temperatureMin || null,
+            temperature_ideal: plantToSave.plantCare?.temperatureIdeal || null,
+            hygrometry: plantToSave.plantCare?.hygrometry || null,
+            level_sun: normalizedLevelSun || null,
+            habitat: normalizedHabitat,
+            watering_type: normalizedWateringType,
+            division: normalizedDivision,
+            soil: normalizedSoil,
+            mulching: normalizedMulching,
+            nutrition_need: normalizedNutritionNeed,
+            fertilizer: normalizedFertilizer,
+            // Non-translatable growth fields
+            sowing_month: monthNumbersToSlugs(plantToSave.growth?.sowingMonth),
+            flowering_month: monthNumbersToSlugs(plantToSave.growth?.floweringMonth),
+            fruiting_month: monthNumbersToSlugs(plantToSave.growth?.fruitingMonth),
+            height_cm: plantToSave.growth?.height || null,
+            wingspan_cm: plantToSave.growth?.wingspan || null,
+            tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
+            sow_type: normalizedSowType,
+            separation_cm: plantToSave.growth?.separation || null,
+            transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
+            // Non-translatable usage fields
+            infusion: coerceBoolean(plantToSave.usage?.infusion, false),
+            aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
+            // Non-translatable ecology fields
+            melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
+            polenizer: normalizedPolenizer,
+            be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
+            conservation_status: normalizedConservationStatus || null,
+            // Non-translatable miscellaneous fields
             companions: plantToSave.miscellaneous?.companions || [],
-            // Note: pests, diseases, spice_mixes are now in plant_translations (translatable)
+            // Note: pests, diseases, spice_mixes are in plant_translations (translatable)
           }
           const { error: metaUpdateError } = await supabase
             .from('plants')
