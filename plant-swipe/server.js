@@ -2597,11 +2597,36 @@ function coerceValueForSchema(schemaNode, value, existingValue) {
   return value
 }
 
+// Fields that are simple enum selections - use lower reasoning effort for faster processing
+const SIMPLE_ENUM_FIELDS = new Set([
+  'plantType',    // Single enum selection
+  'utility',      // Array of enum values
+  'comestiblePart', // Array of enum values  
+  'fruitType',    // Array of enum values
+  'seasons',      // Array of enum values
+])
+
+// Fields that require more complex analysis - use medium reasoning effort
+const COMPLEX_FIELDS = new Set([
+  'description',
+  'identity',
+  'plantCare',
+  'growth',
+  'usage',
+  'ecology',
+  'danger',
+  'miscellaneous',
+])
+
 async function generateFieldData(options) {
   const { plantName, fieldKey, fieldSchema, existingField } = options || {}
   if (!openaiClient) {
     throw new Error('OpenAI client not configured')
   }
+
+  // Determine reasoning effort based on field complexity
+  // Simple enum fields use 'low' effort (faster), complex fields use 'medium' effort (more accurate)
+  const reasoningEffort = SIMPLE_ENUM_FIELDS.has(fieldKey) ? 'low' : 'medium'
 
   const hintList = Array.from(collectFieldHints(fieldSchema, fieldKey)).slice(0, 50)
   const commonInstructions = [
@@ -2638,7 +2663,7 @@ async function generateFieldData(options) {
   const response = await openaiClient.responses.create(
     {
       model: openaiModel,
-      reasoning: { effort: 'medium' },
+      reasoning: { effort: reasoningEffort },
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
     },
@@ -4113,6 +4138,114 @@ app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
     console.error('[server] AI plant field fill failed:', err)
     if (!res.headersSent) {
       res.status(500).json({ error: err?.message || 'Failed to fill field' })
+    }
+  }
+})
+
+// Admin/Editor: Batch AI plant field fill - process multiple fields in parallel
+app.options('/api/admin/ai/plant-fill/batch', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/admin/ai/plant-fill/batch', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const fieldKeys = Array.isArray(body.fieldKeys) ? body.fieldKeys.filter(k => typeof k === 'string' && k.trim()) : []
+    
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    if (!fieldKeys.length) {
+      res.status(400).json({ error: 'At least one field key is required' })
+      return
+    }
+    if (fieldKeys.length > 6) {
+      res.status(400).json({ error: 'Maximum 6 fields per batch request' })
+      return
+    }
+
+    const schema = body.schema
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      res.status(400).json({ error: 'Valid schema object is required' })
+      return
+    }
+
+    const sanitizedSchemaRaw = sanitizeTemplate(schema)
+    if (!sanitizedSchemaRaw || Array.isArray(sanitizedSchemaRaw) || typeof sanitizedSchemaRaw !== 'object') {
+      res.status(400).json({ error: 'Invalid schema provided' })
+      return
+    }
+
+    const sanitizedSchema = sanitizedSchemaRaw
+    const existingDataRaw = body.existingData && typeof body.existingData === 'object' && !Array.isArray(body.existingData)
+      ? stripDisallowedKeys(body.existingData) || {}
+      : {}
+
+    // Process all fields in parallel
+    const results = await Promise.allSettled(
+      fieldKeys.map(async (fieldKey) => {
+        const fieldSchema = sanitizedSchema[fieldKey]
+        if (!fieldSchema) {
+          throw new Error(`Schema for field "${fieldKey}" not found`)
+        }
+
+        const existingFieldRaw = existingDataRaw[fieldKey]
+        let existingField = existingFieldRaw
+        if (existingFieldRaw && typeof existingFieldRaw === 'object') {
+          existingField = stripDisallowedKeys({ [fieldKey]: existingFieldRaw })?.[fieldKey]
+        }
+        const existingFieldClean = existingField !== undefined ? removeNullValues(existingField) : undefined
+
+        const fieldValue = await generateFieldData({
+          plantName,
+          fieldKey,
+          fieldSchema,
+          existingField: existingFieldClean,
+        })
+
+        const cleanedValue = fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+        const sanitizedValue = cleanedValue !== undefined ? removeExternalIds(cleanedValue) : undefined
+
+        return { fieldKey, data: sanitizedValue ?? null }
+      })
+    )
+
+    // Aggregate results
+    const fieldsData = {}
+    const errors = {}
+    
+    for (let i = 0; i < fieldKeys.length; i++) {
+      const fieldKey = fieldKeys[i]
+      const result = results[i]
+      
+      if (result.status === 'fulfilled') {
+        fieldsData[fieldKey] = result.value.data
+      } else {
+        errors[fieldKey] = result.reason?.message || 'Unknown error'
+        console.error(`[server] AI batch fill failed for field "${fieldKey}":`, result.reason?.message || result.reason)
+      }
+    }
+
+    res.json({
+      success: true,
+      data: fieldsData,
+      errors: Object.keys(errors).length > 0 ? errors : undefined,
+    })
+  } catch (err) {
+    console.error('[server] AI plant batch fill failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fill fields' })
     }
   }
 })

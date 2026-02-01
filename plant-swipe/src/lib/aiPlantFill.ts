@@ -5,6 +5,10 @@ const MAX_RETRIES = 2 // Reduced from 3 since server already has 10min timeout
 const INITIAL_RETRY_DELAY = 2000 // 2 seconds
 const INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT = 3000 // 3 seconds for gateway timeouts
 
+// Parallel processing configuration
+// Number of fields to process simultaneously (balance between speed and API rate limits)
+const PARALLEL_BATCH_SIZE = 4
+
 // Helper to delay execution (abortable)
 const delay = (ms: number, signal?: AbortSignal | null) => new Promise<void>((resolve, reject) => {
   if (signal?.aborted) {
@@ -206,81 +210,170 @@ export async function fetchAiPlantFill({
   let completedFields = 0
   onProgress?.({ field: 'init', completed: completedFields, total: totalFields })
 
-  // Process fields one by one (sequential)
-  for (const fieldKey of fieldEntries) {
+  // Process fields in parallel batches for faster completion
+  // Split fields into batches of PARALLEL_BATCH_SIZE
+  const batches: string[][] = []
+  for (let i = 0; i < fieldEntries.length; i += PARALLEL_BATCH_SIZE) {
+    batches.push(fieldEntries.slice(i, i + PARALLEL_BATCH_SIZE))
+  }
+
+  // Process each batch using the batch endpoint for better performance
+  // This reduces HTTP round-trips by processing multiple fields per request
+  for (const batch of batches) {
     if (signal?.aborted) {
       throw new Error('AI fill was cancelled')
     }
 
-    onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
+    // Notify progress for each field in the batch that we're starting
+    for (const fieldKey of batch) {
+      onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
+    }
 
-    let fieldError: Error | null = null
-    try {
-      const response = await fetchWithRetry('/api/admin/ai/plant-fill/field', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          plantName,
-          schema,
-          fieldKey,
-          existingField:
-            existingData && typeof existingData === 'object' && !Array.isArray(existingData)
-              ? existingData[fieldKey]
-              : undefined,
-          language,
-        }),
-        signal,
-      })
-
-      let payload: any = null
+    // Use batch endpoint when available (>1 field), otherwise use single field endpoint
+    if (batch.length > 1) {
+      // Try batch endpoint first for better performance
       try {
-        payload = await response.json()
-      } catch {}
+        const response = await fetchWithRetry('/api/admin/ai/plant-fill/batch', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            plantName,
+            schema,
+            fieldKeys: batch,
+            existingData: existingData && typeof existingData === 'object' && !Array.isArray(existingData)
+              ? batch.reduce((acc, key) => {
+                  if (existingData[key] !== undefined) {
+                    acc[key] = existingData[key]
+                  }
+                  return acc
+                }, {} as Record<string, unknown>)
+              : undefined,
+            language,
+          }),
+          signal,
+        })
 
-      if (!response.ok) {
-        let message: string
-        if (response.status === 504) {
-          message = `Gateway timeout for "${fieldKey}" - AI backend took too long to respond`
-        } else if (response.status === 503) {
-          message = `Service unavailable for "${fieldKey}" - AI backend is temporarily down`
-        } else if (response.status === 502) {
-          message = `Bad gateway for "${fieldKey}" - proxy error communicating with AI backend`
-        } else if (response.status === 429) {
-          message = `Rate limited for "${fieldKey}" - too many AI requests`
-        } else {
-          message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+        let payload: any = null
+        try {
+          payload = await response.json()
+        } catch {}
+
+        if (response.ok && payload?.success) {
+          // Process successful batch response
+          const batchData = payload.data || {}
+          const batchErrors = payload.errors || {}
+
+          for (const fieldKey of batch) {
+            if (batchErrors[fieldKey]) {
+              // Handle field error
+              if (!continueOnFieldError) {
+                throw new Error(batchErrors[fieldKey])
+              }
+              onFieldError?.({ field: fieldKey, error: batchErrors[fieldKey] })
+            } else {
+              const data = batchData[fieldKey] ?? null
+              if (data !== undefined && data !== null) {
+                aggregated[fieldKey] = data
+              } else {
+                delete aggregated[fieldKey]
+              }
+              onFieldComplete?.({ field: fieldKey, data })
+            }
+            completedFields += 1
+            onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
+          }
+          continue // Move to next batch
         }
-        throw new Error(message)
+        // If batch endpoint failed, fall through to individual requests
+        console.warn('[AI Fill] Batch endpoint failed, falling back to individual requests')
+      } catch (batchErr) {
+        // Fall through to individual requests
+        console.warn('[AI Fill] Batch endpoint error, falling back to individual requests:', batchErr)
       }
+    }
 
-      if (!payload?.success) {
-        const message = payload?.error || `AI fill failed for "${fieldKey}" - no success response`
-        throw new Error(message)
-      }
+    // Fallback: Process fields individually in parallel
+    const batchResults = await Promise.allSettled(
+      batch.map(async (fieldKey) => {
+        if (signal?.aborted) {
+          throw new Error('AI fill was cancelled')
+        }
 
-      if (payload?.data !== undefined && payload?.data !== null) {
-        aggregated[fieldKey] = payload.data
+        const response = await fetchWithRetry('/api/admin/ai/plant-fill/field', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            plantName,
+            schema,
+            fieldKey,
+            existingField:
+              existingData && typeof existingData === 'object' && !Array.isArray(existingData)
+                ? existingData[fieldKey]
+                : undefined,
+            language,
+          }),
+          signal,
+        })
+
+        let payload: any = null
+        try {
+          payload = await response.json()
+        } catch {}
+
+        if (!response.ok) {
+          let message: string
+          if (response.status === 504) {
+            message = `Gateway timeout for "${fieldKey}" - AI backend took too long to respond`
+          } else if (response.status === 503) {
+            message = `Service unavailable for "${fieldKey}" - AI backend is temporarily down`
+          } else if (response.status === 502) {
+            message = `Bad gateway for "${fieldKey}" - proxy error communicating with AI backend`
+          } else if (response.status === 429) {
+            message = `Rate limited for "${fieldKey}" - too many AI requests`
+          } else {
+            message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+          }
+          throw new Error(message)
+        }
+
+        if (!payload?.success) {
+          const message = payload?.error || `AI fill failed for "${fieldKey}" - no success response`
+          throw new Error(message)
+        }
+
+        return { fieldKey, data: payload?.data ?? null }
+      })
+    )
+
+    // Process batch results
+    for (let i = 0; i < batch.length; i++) {
+      const fieldKey = batch[i]
+      const result = batchResults[i]
+
+      if (result.status === 'fulfilled') {
+        const { data } = result.value
+        if (data !== undefined && data !== null) {
+          aggregated[fieldKey] = data
+        } else {
+          delete aggregated[fieldKey]
+        }
+        onFieldComplete?.({ field: fieldKey, data })
       } else {
-        delete aggregated[fieldKey]
+        // Handle error
+        const fieldError = result.reason instanceof Error 
+          ? result.reason 
+          : new Error(String(result.reason || 'AI fill failed'))
+        
+        if (!continueOnFieldError) {
+          throw fieldError
+        }
+        onFieldError?.({ field: fieldKey, error: fieldError.message })
       }
 
-      onFieldComplete?.({ field: fieldKey, data: payload?.data ?? null })
-    } catch (err) {
-      fieldError = err instanceof Error ? err : new Error(String(err || 'AI fill failed'))
+      completedFields += 1
+      onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
     }
-
-    if (fieldError) {
-      if (!continueOnFieldError) {
-        throw fieldError
-      }
-      onFieldError?.({ field: fieldKey, error: fieldError.message })
-    }
-
-    completedFields += 1
-    onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
   }
-
-  onProgress?.({ field: 'complete', completed: completedFields, total: totalFields })
 
   onProgress?.({ field: 'complete', completed: completedFields, total: totalFields })
 
