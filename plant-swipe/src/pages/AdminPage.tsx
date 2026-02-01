@@ -140,6 +140,21 @@ const {
   PolarAngleAxis,
 } = LazyCharts;
 
+// Helper to check if an error is a cancellation/abort error (should not be logged to Sentry)
+function isCancellationError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true
+  if (typeof err === 'object' && err !== null && 'name' in err && (err as { name: string }).name === 'AbortError') return true
+  if (typeof err === 'string') {
+    const lower = err.toLowerCase()
+    return lower.includes('cancel') || lower.includes('abort')
+  }
+  if (err instanceof Error) {
+    const lower = err.message.toLowerCase()
+    return lower.includes('cancel') || lower.includes('abort')
+  }
+  return false
+}
+
 type AdminTab =
   | "overview"
   | "members"
@@ -2878,7 +2893,8 @@ export const AdminPage: React.FC = () => {
             if (success) {
               // Remove completed plant from the local list immediately for visual feedback
               setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
-            } else if (error) {
+            } else if (error && !isCancellationError(error)) {
+              // Only log real errors, not cancellations (which are intentional user actions)
               console.error(`Failed to process ${plantName}:`, error);
             }
           },
@@ -2894,7 +2910,8 @@ export const AdminPage: React.FC = () => {
       await loadPlantRequests({ initial: false });
       
     } catch (err) {
-      if (!abortController.signal.aborted) {
+      // Only set error for non-cancellation errors
+      if (!abortController.signal.aborted && !isCancellationError(err)) {
         const msg = err instanceof Error ? err.message : String(err);
         setAiPrefillError(msg);
       }
