@@ -4287,6 +4287,18 @@ export const AdminPage: React.FC = () => {
     plantDashboardLoading,
     loadPlantDashboard,
   ]);
+
+  // Auto-navigate to the new plant when duplication succeeds from the plant list (not via dialog)
+  React.useEffect(() => {
+    if (addFromDuplicateSuccess && !addFromDialogOpen) {
+      const { id, originalName } = addFromDuplicateSuccess;
+      // Clear the success state before navigating
+      setAddFromDuplicateSuccess(null);
+      // Navigate to the new plant's edit page
+      navigate(`/create/${id}?duplicatedFrom=${encodeURIComponent(originalName)}`);
+    }
+  }, [addFromDuplicateSuccess, addFromDialogOpen, navigate]);
+
   const membersView: "search" | "list" | "reports" = React.useMemo(() => {
     if (currentPath.includes("/admin/members/reports")) return "reports";
     if (currentPath.includes("/admin/members/list")) return "list";
@@ -8106,6 +8118,18 @@ export const AdminPage: React.FC = () => {
                                           />
                                           {PLANT_STATUS_LABELS[plant.status]}
                                         </span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSelectPlantForPrefill(plant.id, plant.name);
+                                          }}
+                                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
+                                          title="Duplicate plant (Add From)"
+                                          disabled={addFromDuplicating}
+                                        >
+                                          <Copy className="h-4 w-4" />
+                                        </button>
                                         <button
                                           type="button"
                                           onClick={(e) => {
