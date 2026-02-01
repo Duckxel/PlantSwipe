@@ -2438,14 +2438,19 @@ export const AdminPage: React.FC = () => {
           .select('mix_name, benefit')
           .eq('plant_id', plantId);
         
+        // Step 3b: Load pro advices for the source plant
+        const { data: proAdvices } = await supabase
+          .from('plant_pro_advices')
+          .select('author_id, author_display_name, author_username, author_avatar_url, author_roles, content, original_language, translations, image_url, reference_url, metadata')
+          .eq('plant_id', plantId);
+        
         // Step 4: Create the new plant record (copy all non-translatable fields)
         const timestamp = new Date().toISOString();
         const newPlantPayload = {
           ...sourcePlant,
           id: newId,
           name: newName,
-          // Clear scientific name to avoid unique constraint violation
-          scientific_name: null,
+          // Keep scientific_name - no unique constraint exists on this field
           // Update meta fields
           status: 'in progres',
           created_by: profile?.display_name || sourcePlant.created_by,
@@ -2464,14 +2469,18 @@ export const AdminPage: React.FC = () => {
         
         // Step 5: Copy all translations to the new plant
         if (sourceTranslations && sourceTranslations.length > 0) {
-          const newTranslations = sourceTranslations.map((t) => ({
-            ...t,
-            plant_id: newId,
-            // Update the name in each translation to the new name
-            name: newName,
-            created_at: timestamp,
-            updated_at: timestamp,
-          }));
+          const newTranslations = sourceTranslations.map((t) => {
+            // Destructure to remove id so Supabase auto-generates a new one
+            const { id: _oldId, ...translationData } = t;
+            return {
+              ...translationData,
+              plant_id: newId,
+              // Update the name in each translation to the new name
+              name: newName,
+              created_at: timestamp,
+              updated_at: timestamp,
+            };
+          });
           
           const { error: translationInsertError } = await supabase
             .from('plant_translations')
@@ -2540,6 +2549,31 @@ export const AdminPage: React.FC = () => {
           }));
           
           await supabase.from('plant_infusion_mixes').insert(newMixes);
+        }
+        
+        // Step 11: Copy pro advices (plant care tips from experts)
+        if (proAdvices && proAdvices.length > 0) {
+          const newProAdvices = proAdvices.map((advice) => ({
+            plant_id: newId,
+            author_id: advice.author_id,
+            author_display_name: advice.author_display_name,
+            author_username: advice.author_username,
+            author_avatar_url: advice.author_avatar_url,
+            author_roles: advice.author_roles,
+            content: advice.content,
+            original_language: advice.original_language,
+            translations: advice.translations,
+            image_url: advice.image_url,
+            reference_url: advice.reference_url,
+            metadata: advice.metadata,
+            created_at: timestamp,
+          }));
+          
+          const { error: proAdvicesInsertError } = await supabase.from('plant_pro_advices').insert(newProAdvices);
+          if (proAdvicesInsertError) {
+            console.error('Failed to copy pro advices:', proAdvicesInsertError);
+            // Continue even if pro advices fail
+          }
         }
         
         // Success! Show success message and navigate
