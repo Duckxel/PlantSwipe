@@ -45,6 +45,117 @@ function scrubPII(value) {
   return value;
 }
 
+// ========================================
+// MAINTENANCE MODE - Server-side tracking
+// ========================================
+// File-based maintenance mode state to coordinate with admin operations
+// When enabled, expected HTTP errors (502, 503, 504) during service restarts are suppressed
+import fsEarly from 'fs';
+
+const MAINTENANCE_MODE_FILE = '/tmp/plantswipe-maintenance.json';
+
+/**
+ * Check if maintenance mode is currently active
+ * Returns { active: boolean, expiresAt?: number, reason?: string }
+ */
+function getMaintenanceMode() {
+  try {
+    if (!fsEarly.existsSync(MAINTENANCE_MODE_FILE)) {
+      return { active: false };
+    }
+    const content = fsEarly.readFileSync(MAINTENANCE_MODE_FILE, 'utf8');
+    const data = JSON.parse(content);
+    // Check if maintenance mode has expired
+    if (data.expiresAt && Date.now() > data.expiresAt) {
+      // Expired - clean up the file
+      try { fsEarly.unlinkSync(MAINTENANCE_MODE_FILE); } catch {}
+      return { active: false };
+    }
+    return { active: true, ...data };
+  } catch {
+    return { active: false };
+  }
+}
+
+/**
+ * Enable maintenance mode for a specified duration
+ * @param durationMs - How long to stay in maintenance mode (default: 5 minutes)
+ * @param reason - Optional reason for maintenance mode
+ */
+function enableMaintenanceMode(durationMs = 300000, reason = 'pull-and-build') {
+  try {
+    const data = {
+      active: true,
+      enabledAt: Date.now(),
+      expiresAt: Date.now() + durationMs,
+      reason,
+    };
+    fsEarly.writeFileSync(MAINTENANCE_MODE_FILE, JSON.stringify(data, null, 2), 'utf8');
+    console.log(`[Sentry] Maintenance mode ENABLED - suppressing expected errors for ${durationMs / 1000}s (reason: ${reason})`);
+    return true;
+  } catch (err) {
+    console.error('[Sentry] Failed to enable maintenance mode:', err);
+    return false;
+  }
+}
+
+/**
+ * Disable maintenance mode
+ */
+function disableMaintenanceMode() {
+  try {
+    if (fsEarly.existsSync(MAINTENANCE_MODE_FILE)) {
+      fsEarly.unlinkSync(MAINTENANCE_MODE_FILE);
+    }
+    console.log('[Sentry] Maintenance mode DISABLED - normal error reporting resumed');
+    return true;
+  } catch (err) {
+    console.error('[Sentry] Failed to disable maintenance mode:', err);
+    return false;
+  }
+}
+
+/**
+ * Check if an error should be suppressed during maintenance mode
+ * Suppresses 502, 503, 504 errors which are expected during service restarts
+ */
+function shouldSuppressMaintenanceError(event, hint) {
+  const maintenance = getMaintenanceMode();
+  if (!maintenance.active) {
+    return false;
+  }
+  
+  const error = hint?.originalException;
+  
+  // Check for HTTP status codes in the error or event
+  const statusCodes = [400, 502, 503, 504];
+  
+  // Check error message for status codes
+  if (error instanceof Error) {
+    const msg = error.message || '';
+    for (const code of statusCodes) {
+      if (msg.includes(String(code)) || msg.includes('Bad Gateway') || msg.includes('Service Unavailable') || msg.includes('Gateway Timeout')) {
+        console.log(`[Sentry] Suppressing ${code}-related error during maintenance: ${msg.substring(0, 100)}`);
+        return true;
+      }
+    }
+    // Also suppress connection-related errors during maintenance
+    if (msg.includes('ECONNREFUSED') || msg.includes('ECONNRESET') || msg.includes('ETIMEDOUT') || msg.includes('socket hang up')) {
+      console.log(`[Sentry] Suppressing connection error during maintenance: ${msg.substring(0, 100)}`);
+      return true;
+    }
+  }
+  
+  // Check event tags for status code
+  const statusTag = event?.tags?.['http.status_code'] || event?.contexts?.response?.status_code;
+  if (statusTag && statusCodes.includes(Number(statusTag))) {
+    console.log(`[Sentry] Suppressing HTTP ${statusTag} error during maintenance`);
+    return true;
+  }
+  
+  return false;
+}
+
 Sentry.init({
   dsn: SENTRY_DSN,
   environment: process.env.NODE_ENV || 'production',
@@ -67,6 +178,11 @@ Sentry.init({
   },
   // Filter and scrub events before sending to Sentry
   beforeSend(event, hint) {
+    // MAINTENANCE MODE: Suppress expected errors during pull-and-build operations
+    if (shouldSuppressMaintenanceError(event, hint)) {
+      return null;
+    }
+    
     const error = hint.originalException;
     if (error instanceof Error) {
       // Ignore connection reset errors (common with load balancers)
@@ -3743,6 +3859,98 @@ app.get('/api/admin/system-health', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to get system health' })
   }
+})
+
+// =============================================================================
+// MAINTENANCE MODE API - Coordinate Sentry error suppression during restarts
+// =============================================================================
+
+// Admin: Get current maintenance mode status
+app.get('/api/admin/maintenance-mode', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const status = getMaintenanceMode()
+    res.json({
+      ok: true,
+      ...status,
+      remainingMs: status.active && status.expiresAt ? Math.max(0, status.expiresAt - Date.now()) : 0
+    })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to get maintenance mode status' })
+  }
+})
+
+// Admin: Enable maintenance mode (suppresses 502/503/504 errors in Sentry)
+app.post('/api/admin/maintenance-mode/enable', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    // Duration in milliseconds (default: 5 minutes, max: 30 minutes)
+    const durationMs = Math.min(
+      Math.max(Number(req.body?.durationMs) || 300000, 60000), // At least 1 minute
+      30 * 60 * 1000 // Max 30 minutes
+    )
+    const reason = String(req.body?.reason || 'admin-request').slice(0, 100)
+    
+    const success = enableMaintenanceMode(durationMs, reason)
+    if (success) {
+      res.json({
+        ok: true,
+        message: `Maintenance mode enabled for ${durationMs / 1000} seconds`,
+        expiresAt: Date.now() + durationMs,
+        reason
+      })
+    } else {
+      res.status(500).json({ error: 'Failed to enable maintenance mode' })
+    }
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to enable maintenance mode' })
+  }
+})
+
+// Admin: Disable maintenance mode
+app.post('/api/admin/maintenance-mode/disable', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    
+    const success = disableMaintenanceMode()
+    if (success) {
+      res.json({
+        ok: true,
+        message: 'Maintenance mode disabled'
+      })
+    } else {
+      res.status(500).json({ error: 'Failed to disable maintenance mode' })
+    }
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to disable maintenance mode' })
+  }
+})
+
+app.options('/api/admin/maintenance-mode', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.status(204).end()
+})
+
+app.options('/api/admin/maintenance-mode/enable', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.status(204).end()
+})
+
+app.options('/api/admin/maintenance-mode/disable', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.status(204).end()
 })
 
 // Admin: Get sitemap info (last update time, file size)

@@ -109,7 +109,72 @@ import {
   type CategoryProgress, 
   type PlantFormCategory 
 } from "@/lib/plantFormCategories";
-import { enableMaintenanceMode, disableMaintenanceMode } from "@/lib/sentry";
+import { enableMaintenanceMode as enableFrontendMaintenanceMode, disableMaintenanceMode as disableFrontendMaintenanceMode } from "@/lib/sentry";
+
+/**
+ * Enable maintenance mode on both frontend (browser Sentry) and backend (server Sentry)
+ * This ensures 502/503/504 errors during service restarts are suppressed everywhere
+ */
+async function enableMaintenanceMode(durationMs: number = 300000, reason: string = 'admin-operation'): Promise<void> {
+  // Enable frontend maintenance mode immediately (affects browser Sentry)
+  enableFrontendMaintenanceMode(durationMs);
+  
+  // Also enable backend maintenance mode via API (affects server Sentry)
+  try {
+    const adminToken = (globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } })?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (adminToken) {
+      headers['X-Admin-Token'] = String(adminToken);
+    }
+    
+    await fetch('/api/admin/maintenance-mode/enable', {
+      method: 'POST',
+      headers,
+      credentials: 'same-origin',
+      body: JSON.stringify({ durationMs, reason }),
+    }).catch(() => {
+      // Best effort - if server is down, that's expected during maintenance
+      console.log('[MaintenanceMode] Could not reach server to enable maintenance mode (expected during restart)');
+    });
+  } catch {
+    // Silently ignore - server might be down which is expected
+  }
+}
+
+/**
+ * Disable maintenance mode on both frontend and backend
+ */
+async function disableMaintenanceMode(): Promise<void> {
+  // Disable frontend maintenance mode
+  disableFrontendMaintenanceMode();
+  
+  // Also disable backend maintenance mode via API
+  try {
+    const adminToken = (globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } })?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (adminToken) {
+      headers['X-Admin-Token'] = String(adminToken);
+    }
+    
+    await fetch('/api/admin/maintenance-mode/disable', {
+      method: 'POST',
+      headers,
+      credentials: 'same-origin',
+      body: '{}',
+    }).catch(() => {
+      // Best effort - server might still be coming up
+      console.log('[MaintenanceMode] Could not reach server to disable maintenance mode');
+    });
+  } catch {
+    // Silently ignore
+  }
+}
 import {
   Dialog,
   DialogTrigger,
@@ -1151,7 +1216,7 @@ export const AdminPage: React.FC = () => {
     if (restarting) return;
     setRestarting(true);
     // Enable Sentry maintenance mode to suppress expected 502/400 errors during restart
-    enableMaintenanceMode(90000); // 90 seconds should be enough for restart + health checks
+    enableMaintenanceMode(90000, 'restart-services'); // 90 seconds should be enough for restart + health checks
     try {
       setConsoleOpen(true);
       appendConsole("[restart] Restart services requested?");
@@ -1285,7 +1350,7 @@ export const AdminPage: React.FC = () => {
     }
     setRestarting(true);
     // Enable Sentry maintenance mode to suppress expected 502/400 errors during restart
-    enableMaintenanceMode(120000); // 2 minutes for server restart operations
+    enableMaintenanceMode(120000, 'restart-server-with-password'); // 2 minutes for server restart operations
     try {
       setConsoleLines([]);
       setConsoleOpen(true);
@@ -3474,7 +3539,7 @@ export const AdminPage: React.FC = () => {
     if (pulling) return;
     setPulling(true);
     // Enable Sentry maintenance mode to suppress expected 502/400 errors during pull and restart
-    enableMaintenanceMode(300000); // 5 minutes for pull, build, and restart operations
+    enableMaintenanceMode(300000, 'pull-and-build'); // 5 minutes for pull, build, and restart operations
     try {
       // Use streaming endpoint for live logs
       setConsoleLines([]);
