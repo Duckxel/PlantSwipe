@@ -3,6 +3,7 @@ import { Plus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { SearchInput } from "@/components/ui/search-input"
 import { BlogCard } from "@/components/blog/BlogCard"
 import { useAuth } from "@/context/AuthContext"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
@@ -18,7 +19,19 @@ export default function BlogPage() {
   const [posts, setPosts] = React.useState<BlogPost[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = React.useState("")
   const isAdmin = checkEditorAccess(profile)
+
+  // Filter posts by title or tags based on search query
+  const filteredPosts = React.useMemo(() => {
+    if (!searchQuery.trim()) return posts
+    const query = searchQuery.toLowerCase().trim()
+    return posts.filter((post) => {
+      const titleMatch = post.title.toLowerCase().includes(query)
+      const tagMatch = post.tags?.some((tag) => tag.toLowerCase().includes(query))
+      return titleMatch || tagMatch
+    })
+  }, [posts, searchQuery])
 
   const seoTitle = t("seo.blog.listTitle", { defaultValue: "Aphylia Blog" })
   const seoDescription = t("seo.blog.listDescription", {
@@ -89,6 +102,15 @@ export default function BlogPage() {
             })}
           </p>
         )}
+        <div className="pt-2 max-w-md">
+          <SearchInput
+            variant="default"
+            placeholder={t("blogPage.search.placeholder", { defaultValue: "Search by title or tag..." })}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onClear={searchQuery ? () => setSearchQuery("") : undefined}
+          />
+        </div>
       </section>
 
       {loading && (
@@ -119,9 +141,15 @@ export default function BlogPage() {
         </div>
       )}
 
-      {!loading && !error && posts.length > 0 && (
+      {!loading && !error && posts.length > 0 && filteredPosts.length === 0 && (
+        <div className="rounded-3xl border border-dashed border-stone-300 dark:border-[#3e3e42] p-8 text-center text-sm text-stone-500 dark:text-stone-400">
+          {t("blogPage.state.noResults", { defaultValue: "No posts match your search. Try a different keyword." })}
+        </div>
+      )}
+
+      {!loading && !error && filteredPosts.length > 0 && (
         <div className="grid gap-6 md:grid-cols-2">
-          {posts.map((post) => (
+          {filteredPosts.map((post) => (
             <BlogCard key={post.id} post={post} isAdmin={isAdmin} onEdit={isAdmin ? handleEdit : undefined} />
           ))}
         </div>
