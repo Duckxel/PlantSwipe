@@ -8,6 +8,7 @@ import { useMotionValue, animate } from "framer-motion";
 import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useGlobalNavigationTracker } from "@/hooks/useNavigationHistory";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -138,6 +139,9 @@ export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
+  
+  // Track all navigation globally for back button functionality
+  useGlobalNavigationTracker()
   const routeLoadingFallback = (
     <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>
   )
