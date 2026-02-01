@@ -10,6 +10,7 @@ import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
+import { useNavigationHistory } from "@/hooks/useNavigationHistory"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
@@ -821,6 +822,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const initialNameFromUrl = searchParams.get('name')
   const effectiveInitialName = initialName || initialNameFromUrl || ""
   const languageNavigate = useLanguageNavigate()
+  const { navigateBack } = useNavigationHistory('/search')
   const { profile } = useAuth()
   // Get the language from the URL path (e.g., /fr/admin/plants/create -> 'fr')
   const urlLanguage = useLanguage()
@@ -1877,12 +1879,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const handleBackClick = React.useCallback(() => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      languageNavigate(-1)
-      return
-    }
-    onCancel()
-  }, [languageNavigate, onCancel])
+    // Use navigateBack to go to the last distinct page
+    // This fixes the issue where clicking back multiple times was needed
+    // when the user navigated to the same page multiple times
+    navigateBack()
+  }, [navigateBack])
 
   const handleViewPlantInfo = React.useCallback(() => {
     if (!id) return
