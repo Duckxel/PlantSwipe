@@ -54,29 +54,35 @@ function saveHistory(history: string[]): void {
 }
 
 /**
- * Hook that tracks navigation history and provides a function to navigate
- * back to the last page that was different from the current one.
+ * Hook that tracks ALL navigation globally.
  * 
- * This solves the issue where clicking "back" multiple times is needed when
- * the user has navigated to the same page multiple times (e.g., creating
- * multiple plants in a row).
+ * This should be used ONCE at the app level (e.g., in PlantSwipe.tsx or App.tsx)
+ * to ensure all page visits are recorded, regardless of which page the user is on.
  * 
- * @param fallbackPath - The path to navigate to if no distinct previous page exists
- * @returns Object with navigateBack function and hasHistory boolean
+ * The tracked history is stored in sessionStorage and can be consumed by
+ * useNavigationHistory for back navigation.
  */
-export function useNavigationHistory(fallbackPath: string = '/') {
+export function useGlobalNavigationTracker(): void {
   const location = useLocation()
-  const navigate = useNavigate()
   const historyRef = useRef<string[]>([])
-  const currentNormalizedPath = getNormalizedPath(location.pathname)
+  const initializedRef = useRef(false)
 
-  // Initialize history from storage on mount
+  // Initialize history from storage on mount (only once)
   useEffect(() => {
-    historyRef.current = loadHistory()
+    if (!initializedRef.current) {
+      historyRef.current = loadHistory()
+      initializedRef.current = true
+    }
   }, [])
 
   // Track page visits
   useEffect(() => {
+    // Ensure we've loaded from storage first
+    if (!initializedRef.current) {
+      historyRef.current = loadHistory()
+      initializedRef.current = true
+    }
+    
     const fullPath = location.pathname + location.search
     const history = historyRef.current
     
@@ -96,6 +102,25 @@ export function useNavigationHistory(fallbackPath: string = '/') {
     historyRef.current = history
     saveHistory(history)
   }, [location.pathname, location.search])
+}
+
+/**
+ * Hook that provides navigation back functionality.
+ * 
+ * This hook reads from the globally tracked navigation history (stored in sessionStorage)
+ * and provides a function to navigate back to the last page that was different
+ * from the current one.
+ * 
+ * IMPORTANT: This hook relies on useGlobalNavigationTracker being used at the app level
+ * to ensure all page visits are properly tracked.
+ * 
+ * @param fallbackPath - The path to navigate to if no distinct previous page exists
+ * @returns Object with navigateBack function and hasDistinctHistory boolean
+ */
+export function useNavigationHistory(fallbackPath: string = '/') {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const currentNormalizedPath = getNormalizedPath(location.pathname)
 
   /**
    * Navigate back to the last page that has a different normalized path
@@ -104,7 +129,8 @@ export function useNavigationHistory(fallbackPath: string = '/') {
    * @returns true if navigation was performed, false if falling back
    */
   const navigateBack = useCallback(() => {
-    const history = historyRef.current
+    // Always load fresh history from storage to get the latest state
+    const history = loadHistory()
     
     // Find the last entry with a different normalized path
     // Start from the second-to-last entry (skip current page)
@@ -117,8 +143,8 @@ export function useNavigationHistory(fallbackPath: string = '/') {
         const targetPath = history[i]
         
         // Remove all entries after this point (including current page)
-        historyRef.current = history.slice(0, i + 1)
-        saveHistory(historyRef.current)
+        const newHistory = history.slice(0, i + 1)
+        saveHistory(newHistory)
         
         // Navigate to the found page
         navigate(targetPath)
@@ -135,7 +161,7 @@ export function useNavigationHistory(fallbackPath: string = '/') {
    * Check if there's a distinct previous page in history
    */
   const hasDistinctHistory = useCallback(() => {
-    const history = historyRef.current
+    const history = loadHistory()
     
     for (let i = history.length - 2; i >= 0; i--) {
       const entryPath = history[i].split('?')[0]
