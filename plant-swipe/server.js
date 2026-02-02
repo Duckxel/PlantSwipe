@@ -12360,7 +12360,7 @@ app.get('/api/admin/role-stats', async (req, res) => {
 
       // Build role counts object
       const roleCounts = {}
-      const validRoles = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip', 'plus']
+      const validRoles = ['admin', 'editor', 'pro', 'merchant', 'creator', 'vip', 'plus', 'bug_catcher']
       validRoles.forEach(r => { roleCounts[r] = 0 })
 
       if (Array.isArray(roleCountsResult)) {
@@ -12396,6 +12396,7 @@ app.get('/api/admin/role-stats', async (req, res) => {
           creator: 0,
           vip: 0,
           plus: 0,
+          bug_catcher: 0,
         },
         via: 'supabase',
         note: 'Role stats require direct database access',
