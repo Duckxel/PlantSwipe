@@ -10911,15 +10911,15 @@ export const AdminPage: React.FC = () => {
                         {/* Role Stats Cards - Grid layout with equal-width cells */}
                         <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 pb-2">
                           {[
-                            { key: null, label: "All", count: roleStats?.totalMembers ?? "-", icon: Users, color: "stone" },
-                            { key: "admin", label: "Admin", count: roleStats?.roleCounts?.admin ?? 0, icon: Shield, color: "purple" },
-                            { key: "editor", label: "Editor", count: roleStats?.roleCounts?.editor ?? 0, icon: Pencil, color: "blue" },
-                            { key: "pro", label: "Pro", count: roleStats?.roleCounts?.pro ?? 0, icon: Check, color: "emerald" },
-                            { key: "vip", label: "VIP", count: roleStats?.roleCounts?.vip ?? 0, icon: Crown, color: "amber" },
-                            { key: "plus", label: "Plus", count: roleStats?.roleCounts?.plus ?? 0, icon: Plus, color: "slate" },
-                            { key: "creator", label: "Creator", count: roleStats?.roleCounts?.creator ?? 0, icon: Sparkles, color: "pink" },
-                            { key: "merchant", label: "Merch", count: roleStats?.roleCounts?.merchant ?? 0, icon: Store, color: "sky" },
-                            { key: "bug_catcher", label: "Bugs", count: roleStats?.roleCounts?.bug_catcher ?? 0, icon: Bug, color: "orange" },
+                            { key: null, label: "All", tooltip: "All Members", count: roleStats?.totalMembers ?? "-", icon: Users, color: "stone" },
+                            { key: "admin", label: "Admin", tooltip: "Administrators", count: roleStats?.roleCounts?.admin ?? 0, icon: Shield, color: "purple" },
+                            { key: "editor", label: "Editor", tooltip: "Editors", count: roleStats?.roleCounts?.editor ?? 0, icon: Pencil, color: "blue" },
+                            { key: "pro", label: "Pro", tooltip: "Pro Members", count: roleStats?.roleCounts?.pro ?? 0, icon: Check, color: "emerald" },
+                            { key: "vip", label: "VIP", tooltip: "VIP Members", count: roleStats?.roleCounts?.vip ?? 0, icon: Crown, color: "amber" },
+                            { key: "plus", label: "Plus", tooltip: "Plus Members", count: roleStats?.roleCounts?.plus ?? 0, icon: Plus, color: "slate" },
+                            { key: "creator", label: "Creator", tooltip: "Creators", count: roleStats?.roleCounts?.creator ?? 0, icon: Sparkles, color: "pink" },
+                            { key: "merchant", label: "Merch", tooltip: "Merchants", count: roleStats?.roleCounts?.merchant ?? 0, icon: Store, color: "sky" },
+                            { key: "bug_catcher", label: "Bugs", tooltip: "Bug Catchers", count: roleStats?.roleCounts?.bug_catcher ?? 0, icon: Bug, color: "orange" },
                           ].map((item) => {
                             const Icon = item.icon;
                             const isSelected = roleFilter === item.key;
@@ -10939,6 +10939,7 @@ export const AdminPage: React.FC = () => {
                               <button
                                 key={item.key ?? "all"}
                                 type="button"
+                                title={item.tooltip}
                                 onClick={() => handleRoleFilterChange(item.key)}
                                 className={`w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border transition-all ${
                                   isSelected
