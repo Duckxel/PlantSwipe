@@ -10908,17 +10908,18 @@ export const AdminPage: React.FC = () => {
 
                     {membersView === "list" && (
                       <div className="space-y-4">
-                        {/* Role Stats Cards - Compact horizontal scrollable on mobile */}
-                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-600">
+                        {/* Role Stats Cards - Grid layout with equal-width cells */}
+                        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 pb-2">
                           {[
-                            { key: null, label: "All", count: roleStats?.totalMembers ?? "-", icon: Users, color: "stone" },
-                            { key: "admin", label: "Admin", count: roleStats?.roleCounts?.admin ?? 0, icon: Shield, color: "purple" },
-                            { key: "editor", label: "Editor", count: roleStats?.roleCounts?.editor ?? 0, icon: Pencil, color: "blue" },
-                            { key: "pro", label: "Pro", count: roleStats?.roleCounts?.pro ?? 0, icon: Check, color: "emerald" },
-                            { key: "vip", label: "VIP", count: roleStats?.roleCounts?.vip ?? 0, icon: Crown, color: "amber" },
-                            { key: "plus", label: "Plus", count: roleStats?.roleCounts?.plus ?? 0, icon: Plus, color: "slate" },
-                            { key: "creator", label: "Creator", count: roleStats?.roleCounts?.creator ?? 0, icon: Sparkles, color: "pink" },
-                            { key: "merchant", label: "Merch", count: roleStats?.roleCounts?.merchant ?? 0, icon: Store, color: "sky" },
+                            { key: null, label: "All", tooltip: "All Members", count: roleStats?.totalMembers ?? "-", icon: Users, color: "stone" },
+                            { key: "admin", label: "Admin", tooltip: "Administrators", count: roleStats?.roleCounts?.admin ?? 0, icon: Shield, color: "purple" },
+                            { key: "editor", label: "Editor", tooltip: "Editors", count: roleStats?.roleCounts?.editor ?? 0, icon: Pencil, color: "blue" },
+                            { key: "pro", label: "Pro", tooltip: "Pro Members", count: roleStats?.roleCounts?.pro ?? 0, icon: Check, color: "emerald" },
+                            { key: "vip", label: "VIP", tooltip: "VIP Members", count: roleStats?.roleCounts?.vip ?? 0, icon: Crown, color: "amber" },
+                            { key: "plus", label: "Plus", tooltip: "Plus Members", count: roleStats?.roleCounts?.plus ?? 0, icon: Plus, color: "slate" },
+                            { key: "creator", label: "Creator", tooltip: "Creators", count: roleStats?.roleCounts?.creator ?? 0, icon: Sparkles, color: "pink" },
+                            { key: "merchant", label: "Merch", tooltip: "Merchants", count: roleStats?.roleCounts?.merchant ?? 0, icon: Store, color: "sky" },
+                            { key: "bug_catcher", label: "Bugs", tooltip: "Bug Catchers", count: roleStats?.roleCounts?.bug_catcher ?? 0, icon: Bug, color: "orange" },
                           ].map((item) => {
                             const Icon = item.icon;
                             const isSelected = roleFilter === item.key;
@@ -10931,25 +10932,27 @@ export const AdminPage: React.FC = () => {
                               slate: { bg: "bg-slate-100 dark:bg-slate-800", icon: "text-slate-600 dark:text-slate-400", border: "hover:border-slate-300 dark:hover:border-slate-600", selectedBg: "bg-slate-50 dark:bg-slate-800/50", selectedBorder: "border-slate-400 dark:border-slate-500 ring-2 ring-slate-400/30" },
                               pink: { bg: "bg-pink-100 dark:bg-pink-900/30", icon: "text-pink-600 dark:text-pink-400", border: "hover:border-pink-300 dark:hover:border-pink-700", selectedBg: "bg-pink-50 dark:bg-pink-900/30", selectedBorder: "border-pink-400 dark:border-pink-500 ring-2 ring-pink-400/30" },
                               sky: { bg: "bg-sky-100 dark:bg-sky-900/30", icon: "text-sky-600 dark:text-sky-400", border: "hover:border-sky-300 dark:hover:border-sky-700", selectedBg: "bg-sky-50 dark:bg-sky-900/30", selectedBorder: "border-sky-400 dark:border-sky-500 ring-2 ring-sky-400/30" },
+                              orange: { bg: "bg-orange-100 dark:bg-orange-900/30", icon: "text-orange-600 dark:text-orange-400", border: "hover:border-orange-300 dark:hover:border-orange-700", selectedBg: "bg-orange-50 dark:bg-orange-900/30", selectedBorder: "border-orange-400 dark:border-orange-500 ring-2 ring-orange-400/30" },
                             };
                             const colors = colorClasses[item.color];
                             return (
                               <button
                                 key={item.key ?? "all"}
                                 type="button"
+                                title={item.tooltip}
                                 onClick={() => handleRoleFilterChange(item.key)}
-                                className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
+                                className={`w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border transition-all ${
                                   isSelected
                                     ? `${colors.selectedBg} ${colors.selectedBorder}`
                                     : `bg-white dark:bg-[#1e1e20] border-stone-200 dark:border-[#3e3e42] ${colors.border}`
                                 }`}
                               >
-                                <div className={`w-7 h-7 rounded-lg ${colors.bg} flex items-center justify-center`}>
-                                  <Icon className={`h-3.5 w-3.5 ${colors.icon}`} />
+                                <div className={`w-6 h-6 rounded-lg ${colors.bg} flex items-center justify-center flex-shrink-0`}>
+                                  <Icon className={`h-3 w-3 ${colors.icon}`} />
                                 </div>
-                                <div className="text-left">
+                                <div className="text-left min-w-0">
                                   <div className="text-sm font-bold text-stone-900 dark:text-white leading-tight">{item.count}</div>
-                                  <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-tight">{item.label}</div>
+                                  <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-tight truncate">{item.label}</div>
                                 </div>
                               </button>
                             );
