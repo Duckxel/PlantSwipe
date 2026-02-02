@@ -11791,10 +11791,12 @@ function AddAdminNote({
   const [value, setValue] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [open, setOpen] = React.useState(false);
-  const disabled = !profileId || !value.trim() || submitting;
-  const submit = React.useCallback(async () => {
-    if (disabled) return;
+  const [error, setError] = React.useState<string | null>(null);
+
+  const submit = async () => {
+    if (!profileId || !value.trim() || submitting) return;
     setSubmitting(true);
+    setError(null);
     try {
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
@@ -11815,7 +11817,7 @@ function AddAdminNote({
         body: JSON.stringify({ profileId, message: value.trim() }),
       });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
       // Log note create (UI)
       try {
         const headers2: Record<string, string> = {
@@ -11842,12 +11844,15 @@ function AddAdminNote({
       setValue("");
       setOpen(false);
       onAdded();
-    } catch {
-      // noop
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save note");
     } finally {
       setSubmitting(false);
     }
-  }, [profileId, value, submitting, onAdded]);
+  };
+
+  const disabled = !profileId || !value.trim() || submitting;
+
   return (
     <div className="w-full">
       {!open ? (
@@ -11862,6 +11867,9 @@ function AddAdminNote({
             onChange={(e) => setValue(e.target.value)}
             className="min-h-[80px] w-full"
           />
+          {error && (
+            <div className="text-sm text-red-500">{error}</div>
+          )}
           <div className="flex gap-2">
             <Button
               onClick={submit}
@@ -11869,13 +11877,14 @@ function AddAdminNote({
               className="rounded-2xl"
               size="sm"
             >
-              Save
+              {submitting ? "Saving..." : "Save"}
             </Button>
             <Button
               variant="secondary"
               onClick={() => {
                 setOpen(false);
                 setValue("");
+                setError(null);
               }}
               className="rounded-2xl"
               size="sm"
