@@ -15700,9 +15700,12 @@ app.get('/api/broadcast/active', async (_req, res) => {
       res.setHeader('Pragma', 'no-cache')
     } catch { }
     const row = await getActiveBroadcastRow()
+    const serverTime = new Date().toISOString()
     if (row) {
       res.json({
-        ok: true, broadcast: {
+        ok: true,
+        serverTime,
+        broadcast: {
           id: String(row.id || ''),
           message: String(row.message || ''),
           severity: String(row.severity || 'info'),
@@ -15713,7 +15716,7 @@ app.get('/api/broadcast/active', async (_req, res) => {
         }
       })
     } else {
-      res.json({ ok: true, broadcast: null })
+      res.json({ ok: true, serverTime, broadcast: null })
     }
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message || 'Failed to load broadcast' })
@@ -20505,7 +20508,7 @@ app.post('/api/admin/broadcast', async (req, res) => {
     }
     const rows = await sql`
       insert into public.broadcast_messages (message, severity, created_by, expires_at)
-      values (${messageRaw}, ${severity}, ${typeof adminId === 'string' ? adminId : null}, ${expiresAt ? expiresAt : null})
+      values (${messageRaw}, ${severity}, ${toAdminUuid(adminId)}, ${expiresAt ? expiresAt : null})
       returning id::text as id, message, severity, created_at, expires_at, created_by::text as created_by
     `
     const row = Array.isArray(rows) && rows[0] ? rows[0] : null
