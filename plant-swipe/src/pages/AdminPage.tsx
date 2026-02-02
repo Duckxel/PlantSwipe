@@ -10635,17 +10635,15 @@ export const AdminPage: React.FC = () => {
 
                             {/* Admin Commentary - Last Element */}
                             <Card className="rounded-2xl">
-                              <CardContent className="p-4 space-y-2">
-                                <div className="flex items-start justify-between">
-                                  <div className="text-sm font-medium flex items-center gap-2">
-                                    <MessageSquareText className="h-4 w-4 text-stone-500" />
-                                    Admin Commentary
-                                  </div>
-                                  <AddAdminNote
-                                    profileId={memberData.user?.id || ""}
-                                    onAdded={() => lookupMember()}
-                                  />
+                              <CardContent className="p-4 space-y-3">
+                                <div className="text-sm font-medium flex items-center gap-2">
+                                  <MessageSquareText className="h-4 w-4 text-stone-500" />
+                                  Admin Commentary
                                 </div>
+                                <AddAdminNote
+                                  profileId={memberData.user?.id || ""}
+                                  onAdded={() => lookupMember()}
+                                />
                                 <div className="space-y-2">
                                   {(memberData.adminNotes || []).length ===
                                   0 ? (
@@ -11851,24 +11849,25 @@ function AddAdminNote({
     }
   }, [profileId, value, submitting, onAdded]);
   return (
-    <div>
+    <div className="w-full">
       {!open ? (
-        <Button onClick={() => setOpen(true)} className="rounded-2xl">
+        <Button onClick={() => setOpen(true)} className="rounded-2xl" size="sm">
           Add note
         </Button>
       ) : (
-        <div className="flex gap-2">
+        <div className="space-y-2">
           <Textarea
             placeholder="Add a note for other admins (visible only to admins)"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            className="min-h-[56px]"
+            className="min-h-[80px] w-full"
           />
-          <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
             <Button
               onClick={submit}
               disabled={disabled}
               className="rounded-2xl"
+              size="sm"
             >
               Save
             </Button>
@@ -11879,6 +11878,7 @@ function AddAdminNote({
                 setValue("");
               }}
               className="rounded-2xl"
+              size="sm"
             >
               Cancel
             </Button>
