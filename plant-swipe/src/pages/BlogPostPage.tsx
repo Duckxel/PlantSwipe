@@ -5,7 +5,7 @@ import { ArrowLeft, CalendarClock, CalendarDays, Clock, UserRound, X, ZoomIn } f
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Link } from '@/components/i18n/Link'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import type { BlogPost } from '@/types/blog'
@@ -268,6 +268,9 @@ export default function BlogPostPage() {
       {/* Fullscreen Image Viewer */}
       <Dialog open={!!fullscreenImage} onOpenChange={(open) => !open && setFullscreenImage(null)}>
         <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none rounded-2xl overflow-hidden">
+          <DialogTitle className="sr-only">
+            {t('blogPage.detail.fullscreenImageTitle', { defaultValue: 'Fullscreen image view' })}
+          </DialogTitle>
           <button
             onClick={() => setFullscreenImage(null)}
             className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
