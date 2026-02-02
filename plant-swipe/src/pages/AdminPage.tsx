@@ -10908,8 +10908,8 @@ export const AdminPage: React.FC = () => {
 
                     {membersView === "list" && (
                       <div className="space-y-4">
-                        {/* Role Stats Cards - Wrapping to 2 rows on smaller screens */}
-                        <div className="flex flex-wrap gap-2 pb-2">
+                        {/* Role Stats Cards - Grid layout with equal-width cells */}
+                        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 pb-2">
                           {[
                             { key: null, label: "All", count: roleStats?.totalMembers ?? "-", icon: Users, color: "stone" },
                             { key: "admin", label: "Admin", count: roleStats?.roleCounts?.admin ?? 0, icon: Shield, color: "purple" },
@@ -10919,7 +10919,7 @@ export const AdminPage: React.FC = () => {
                             { key: "plus", label: "Plus", count: roleStats?.roleCounts?.plus ?? 0, icon: Plus, color: "slate" },
                             { key: "creator", label: "Creator", count: roleStats?.roleCounts?.creator ?? 0, icon: Sparkles, color: "pink" },
                             { key: "merchant", label: "Merch", count: roleStats?.roleCounts?.merchant ?? 0, icon: Store, color: "sky" },
-                            { key: "bug_catcher", label: "Bug Catchers", count: roleStats?.roleCounts?.bug_catcher ?? 0, icon: Bug, color: "orange" },
+                            { key: "bug_catcher", label: "Bugs", count: roleStats?.roleCounts?.bug_catcher ?? 0, icon: Bug, color: "orange" },
                           ].map((item) => {
                             const Icon = item.icon;
                             const isSelected = roleFilter === item.key;
@@ -10940,18 +10940,18 @@ export const AdminPage: React.FC = () => {
                                 key={item.key ?? "all"}
                                 type="button"
                                 onClick={() => handleRoleFilterChange(item.key)}
-                                className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
+                                className={`w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border transition-all ${
                                   isSelected
                                     ? `${colors.selectedBg} ${colors.selectedBorder}`
                                     : `bg-white dark:bg-[#1e1e20] border-stone-200 dark:border-[#3e3e42] ${colors.border}`
                                 }`}
                               >
-                                <div className={`w-7 h-7 rounded-lg ${colors.bg} flex items-center justify-center`}>
-                                  <Icon className={`h-3.5 w-3.5 ${colors.icon}`} />
+                                <div className={`w-6 h-6 rounded-lg ${colors.bg} flex items-center justify-center flex-shrink-0`}>
+                                  <Icon className={`h-3 w-3 ${colors.icon}`} />
                                 </div>
-                                <div className="text-left">
+                                <div className="text-left min-w-0">
                                   <div className="text-sm font-bold text-stone-900 dark:text-white leading-tight">{item.count}</div>
-                                  <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-tight">{item.label}</div>
+                                  <div className="text-[10px] text-stone-500 dark:text-stone-400 leading-tight truncate">{item.label}</div>
                                 </div>
                               </button>
                             );
