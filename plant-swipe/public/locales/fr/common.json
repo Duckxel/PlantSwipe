@@ -783,6 +783,13 @@
       "activities": "Activités",
       "subActivities": "Sous-activité {{activity}}"
     },
+    "inConstruction": {
+      "title": "Plante en cours de construction",
+      "description": "Nous vérifions et complétons actuellement les informations sur cette plante. Revenez bientôt pour les détails complets !",
+      "adminTitle": "Plante en cours de construction",
+      "adminDescription": "Cette plante est encore en cours de vérification. Les utilisateurs réguliers ne peuvent pas encore voir cette page.",
+      "privilegedBadge": "Accès anticipé"
+    },
     "sunlightLabel": "Ensoleillement :",
     "waterLabel": "Eau :",
     "waterFrequency": "Fréquence d'arrosage :",
