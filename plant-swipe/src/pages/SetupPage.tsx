@@ -318,10 +318,24 @@ export function SetupPage() {
   const currentLang = useLanguage()
   const { user, profile, refreshProfile } = useAuth()
   
-  // Sync i18n with URL language on mount
+  // Track if translations are loaded for the current URL language
+  const [translationsReady, setTranslationsReady] = React.useState(() => {
+    // Check if i18n is already set to the correct language
+    return i18n.language === currentLang
+  })
+  
+  // Sync i18n with URL language on mount and wait for translations to load
   React.useEffect(() => {
     if (i18n.language !== currentLang) {
-      i18n.changeLanguage(currentLang)
+      setTranslationsReady(false)
+      i18n.changeLanguage(currentLang).then(() => {
+        setTranslationsReady(true)
+      }).catch(() => {
+        // Even on error, allow rendering to proceed
+        setTranslationsReady(true)
+      })
+    } else {
+      setTranslationsReady(true)
     }
   }, [currentLang])
   
@@ -1261,6 +1275,15 @@ export function SetupPage() {
 
   // Don't render anything while checking auth
   if (!user) return null
+
+  // Show loading indicator while translations are loading
+  if (!translationsReady) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-stone-900 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+      </div>
+    )
+  }
 
   const showContinueButton = currentStep !== 'notifications'
   const isCompleteStep = currentStep === 'complete'
