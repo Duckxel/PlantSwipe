@@ -2,7 +2,6 @@ import React from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useTranslation } from "react-i18next"
-import i18n from "@/lib/i18n"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
@@ -317,13 +316,6 @@ export function SetupPage() {
   const navigate = useLanguageNavigate()
   const currentLang = useLanguage()
   const { user, profile, refreshProfile } = useAuth()
-  
-  // Sync i18n with URL language on mount
-  React.useEffect(() => {
-    if (i18n.language !== currentLang) {
-      i18n.changeLanguage(currentLang)
-    }
-  }, [currentLang])
   
   const [currentStep, setCurrentStep] = React.useState<SetupStep>('welcome')
   const [setupData, setSetupData] = React.useState<SetupData>({

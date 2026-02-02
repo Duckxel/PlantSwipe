@@ -12,11 +12,25 @@ function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
   
+  // Track if the language from URL is synced with i18n
+  const [languageReady, setLanguageReady] = React.useState(() => {
+    const urlLang = getLanguageFromPath(location.pathname)
+    return i18n.language === urlLang
+  })
+  
   // Detect language from URL and set it
   React.useEffect(() => {
     const lang = getLanguageFromPath(location.pathname)
     if (i18n.language !== lang) {
-      i18n.changeLanguage(lang)
+      setLanguageReady(false)
+      i18n.changeLanguage(lang).then(() => {
+        setLanguageReady(true)
+      }).catch(() => {
+        // Even on error, allow rendering to proceed
+        setLanguageReady(true)
+      })
+    } else {
+      setLanguageReady(true)
     }
   }, [location.pathname])
   
@@ -44,6 +58,12 @@ function AppShell() {
   
   // Non-blocking rendering: PlantSwipe handles user=null (guest mode)
   // if (loading) { ... } removed to allow immediate LCP
+  
+  // Wait for language to be synced with URL before rendering
+  // This ensures pages like /fr/setup show French content immediately
+  if (!languageReady) {
+    return <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 md:p-8" />
+  }
   
   return (
     <React.Suspense fallback={<div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 md:p-8" />}>

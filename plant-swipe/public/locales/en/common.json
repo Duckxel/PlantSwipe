@@ -251,69 +251,34 @@
   },
   "contactUs": {
     "title": "Contact Us",
-      "heroHeading": "We'd love to hear from you",
+    "heroHeading": "We'd love to hear from you",
     "description": "We're here to help! Get in touch with our support team.",
     "supportEmail": "Support Email",
     "supportEmailDescription": "Send us an email and we'll get back to you as soon as possible.",
-      "recipientCardTitle": "Email our team",
-      "recipientCardDescription": "Choose who should receive your message and we'll route it right away.",
-      "channelSelector": {
-        "label": "Send to",
-        "helper": "Pick the inbox that fits your request best.",
-        "options": {
-          "support": {
-            "name": "Support",
-            "description": "Product help, bugs, or general support questions."
-          },
-          "business": {
-            "name": "Business",
-            "description": "Partnerships, press, or other business inquiries."
-          },
-          "bug": {
-            "name": "Bug Report",
-            "description": "Report a bug or issue with the app."
-          }
+    "recipientCardTitle": "Email our team",
+    "recipientCardDescription": "Choose who should receive your message and we'll route it right away.",
+    "channelSelector": {
+      "label": "Send to",
+      "helper": "Pick the inbox that fits your request best.",
+      "options": {
+        "support": {
+          "name": "Support",
+          "description": "Product help, bugs, or general support questions."
+        },
+        "business": {
+          "name": "Business",
+          "description": "Partnerships, press, or other business inquiries."
+        },
+        "bug": {
+          "name": "Bug Report",
+          "description": "Report a bug or issue with the app."
         }
-      },
-      "channelSelectedLabel": "Currently sending to {{channel}}",
+      }
+    },
+    "channelSelectedLabel": "Currently sending to {{channel}}",
     "emailLabel": "Email Address",
     "sendEmail": "Send Email",
     "copyEmail": "Copy",
-    "form": {
-      "title": "Send us a message",
-      "description": "Fill out the form and our team will respond as soon as possible.",
-      "nameLabel": "Full name",
-      "namePlaceholder": "Your name",
-      "emailLabel": "Email address",
-      "emailPlaceholder": "you@example.com",
-      "messageLabel": "How can we help?",
-      "messagePlaceholder": "Tell us about your question, request, or issue...",
-      "messageHelper": "Include as many details as you can.",
-      "submit": "Send message",
-      "submitting": "Sending...",
-      "successTitle": "Message sent",
-      "successDescription": "Thanks for reaching out! We'll get back to you shortly.",
-      "errorTitle": "We couldn't send your message",
-      "errorDescription": "Please try again or email support@aphylia.app directly.",
-      "validation": {
-        "name": "Please enter your name",
-        "nameMax": "Name must be 120 characters or fewer",
-        "email": "Please enter your email address",
-        "emailInvalid": "Please enter a valid email address",
-        "message": "Please enter a message",
-        "messageMin": "Message must be at least 10 characters",
-        "messageMax": "Message must be 4,000 characters or fewer"
-      }
-    },
-    "copySuccess": "Copied!",
-    "responseTime": {
-      "title": "Response Time",
-      "description": "We typically respond within 24-48 hours during business days."
-    },
-    "helpfulInfo": {
-      "title": "Helpful Information",
-      "description": "Please include details about your question or issue to help us assist you better."
-    },
     "form": {
       "title": "Send a message",
       "description": "Fill out the form and we'll reach out soon.",
@@ -335,6 +300,15 @@
       "successDescription": "Thanks for reaching out! We'll get back to you soon.",
       "errorMessage": "We couldn't send your message. Please try again in a moment.",
       "rateLimitedMessage": "Please wait a little before sending another message."
+    },
+    "copySuccess": "Copied!",
+    "responseTime": {
+      "title": "Response Time",
+      "description": "We typically respond within 24-48 hours during business days."
+    },
+    "helpfulInfo": {
+      "title": "Helpful Information",
+      "description": "Please include details about your question or issue to help us assist you better."
     }
   },
   "discoveryPage": {
@@ -354,16 +328,16 @@
       "new": "New",
       "popular": "Popular"
     },
-      "indicators": {
-        "sunLevel": "Sun level",
-        "waterLevel": "Water level",
-        "origin": "Origin",
-        "potFriendly": "Pot friendly",
-        "edible": "Edible",
-        "medicinal": "Medicinal",
-        "aromatic": "Aromatic",
-        "colors": "Colors"
-      },
+    "indicators": {
+      "sunLevel": "Sun level",
+      "waterLevel": "Water level",
+      "origin": "Origin",
+      "potFriendly": "Pot friendly",
+      "edible": "Edible",
+      "medicinal": "Medicinal",
+      "aromatic": "Aromatic",
+      "colors": "Colors"
+    },
     "infoCard": {
       "descriptionLabel": "Description",
       "descriptionFallback": "Description coming soon",
@@ -614,82 +588,82 @@
       "current": "Current:"
     }
   },
-    "plant": {
-      "searchPlaceholder": "Search by name or given names...",
-      "seedsOnly": "Seeds only",
-      "favoritesOnly": "Favorites only",
-      "favoritesFirst": "Favorites first",
-      "livingSpaceBothHint": "Showing plants suitable for both indoor AND outdoor",
-      "safetyFilters": "Safety",
-      "petSafe": "Pet-Safe",
-      "humanSafe": "Human-Safe",
-      "sortLabel": "Sort by",
-      "sortDefault": "Default order",
-      "sortNewest": "Newest",
-      "sortPopular": "Most liked",
-      "sortFavorites": "Favorites first",
-      "season": "Season",
-      "color": "Color",
-      "classification": "Classification",
-      "active": "Active",
-      "showFilters": "Show filters",
-      "hideFilters": "Hide filters",
-      "clearAllFilters": "Clear all filters",
-      "none": "None",
-      "spring": "Spring",
-      "summer": "Summer",
-      "autumn": "Autumn",
-      "winter": "Winter",
-      "red": "Red",
-      "pink": "Pink",
-      "yellow": "Yellow",
-      "white": "White",
-      "purple": "Purple",
-      "blue": "Blue",
-      "orange": "Orange",
-      "green": "Green",
-      "refineFilters": "Refine with filters above. Click a card for full details.",
-      "noResults": "No results",
-      "liked": "Liked",
-      "back": "Back",
-      "info": "Info",
-      "next": "Next",
-      "tryAnotherSearch": "Try another search or adjust your filters.",
-      "reset": "Reset",
-      "classificationType": {
-        "plant": "Plant",
-        "bambu": "Bamboo",
-        "shrub": "Shrub",
-        "tree": "Tree",
-        "cactus": "Cactus",
-        "succulent": "Succulent",
-        "other": "Other"
-      },
-      "utility": {
-        "ornemental": "Ornamental",
-        "comestible": "Edible",
-        "produce_fruit": "Fruit Producing",
-        "aromatic": "Aromatic",
-        "medicinal": "Medicinal",
-        "odorous": "Odorous",
-        "climbing": "Climbing",
-        "cereal": "Cereal",
-        "spice": "Spice"
-      }
+  "plant": {
+    "searchPlaceholder": "Search by name or given names...",
+    "seedsOnly": "Seeds only",
+    "favoritesOnly": "Favorites only",
+    "favoritesFirst": "Favorites first",
+    "livingSpaceBothHint": "Showing plants suitable for both indoor AND outdoor",
+    "safetyFilters": "Safety",
+    "petSafe": "Pet-Safe",
+    "humanSafe": "Human-Safe",
+    "sortLabel": "Sort by",
+    "sortDefault": "Default order",
+    "sortNewest": "Newest",
+    "sortPopular": "Most liked",
+    "sortFavorites": "Favorites first",
+    "season": "Season",
+    "color": "Color",
+    "classification": "Classification",
+    "active": "Active",
+    "showFilters": "Show filters",
+    "hideFilters": "Hide filters",
+    "clearAllFilters": "Clear all filters",
+    "none": "None",
+    "spring": "Spring",
+    "summer": "Summer",
+    "autumn": "Autumn",
+    "winter": "Winter",
+    "red": "Red",
+    "pink": "Pink",
+    "yellow": "Yellow",
+    "white": "White",
+    "purple": "Purple",
+    "blue": "Blue",
+    "orange": "Orange",
+    "green": "Green",
+    "refineFilters": "Refine with filters above. Click a card for full details.",
+    "noResults": "No results",
+    "liked": "Liked",
+    "back": "Back",
+    "info": "Info",
+    "next": "Next",
+    "tryAnotherSearch": "Try another search or adjust your filters.",
+    "reset": "Reset",
+    "classificationType": {
+      "plant": "Plant",
+      "bambu": "Bamboo",
+      "shrub": "Shrub",
+      "tree": "Tree",
+      "cactus": "Cactus",
+      "succulent": "Succulent",
+      "other": "Other"
     },
-    "requestPlant": {
-      "button": "Request Plant",
-      "title": "Request a Plant",
-      "description": "Let us know which plant you would like to see added to the encyclopedia.",
-      "plantName": "Plant name",
-      "placeholder": "Enter plant name...",
-      "nameRequired": "Plant name is required",
-      "mustBeLoggedIn": "You must be logged in to request a plant",
-      "submit": "Submit request",
-      "success": "Thank you! Your request has been submitted.",
-      "error": "Failed to submit request"
-    },
-    "garden": {
+    "utility": {
+      "ornemental": "Ornamental",
+      "comestible": "Edible",
+      "produce_fruit": "Fruit Producing",
+      "aromatic": "Aromatic",
+      "medicinal": "Medicinal",
+      "odorous": "Odorous",
+      "climbing": "Climbing",
+      "cereal": "Cereal",
+      "spice": "Spice"
+    }
+  },
+  "requestPlant": {
+    "button": "Request Plant",
+    "title": "Request a Plant",
+    "description": "Let us know which plant you would like to see added to the encyclopedia.",
+    "plantName": "Plant name",
+    "placeholder": "Enter plant name...",
+    "nameRequired": "Plant name is required",
+    "mustBeLoggedIn": "You must be logged in to request a plant",
+    "submit": "Submit request",
+    "success": "Thank you! Your request has been submitted.",
+    "error": "Failed to submit request"
+  },
+  "garden": {
     "title": "Gardens",
     "yourGardens": "Your Gardens",
     "addToGarden": "Add to Garden",
@@ -764,9 +738,9 @@
     "translateToAll": "Translate to all languages using DeepL",
     "translateToAllDescription": "Automatically translate name, meaning, overview, and care instructions to all supported languages when saving.",
     "rarity": "Rarity",
-      "meaning": "Symbolism across cultures",
-      "meaningPlaceholder": "Describe what this plant represents in rituals, folklore, or symbolism.",
-      "meaningHelper": "Focus on cultural stories, ceremonies, or regional symbolism.",
+    "meaning": "Symbolism across cultures",
+    "meaningPlaceholder": "Describe what this plant represents in rituals, folklore, or symbolism.",
+    "meaningHelper": "Focus on cultural stories, ceremonies, or regional symbolism.",
     "careSunlight": "Care: Sunlight",
     "careSoil": "Care: Soil",
     "careDifficulty": "Care: Difficulty",
@@ -790,70 +764,68 @@
     "saveChanges": "Save changes",
     "saving": "Saving..."
   },
-    "plantInfo": {
-      "plantNotFound": "Plant not found.",
-      "failedToLoad": "Failed to load plant",
-      "sunlight": "Sunlight",
-      "water": "Water",
-      "difficulty": "Difficulty",
-      "overview": "Overview",
-        "meaning": "Meaning",
-      "symbolism": "Symbolism across cultures",
-      "symbolismHelper": "Meaning of the flower in culture",
-      "careGuide": "Care Guide",
-      "classification": {
-        "title": "Classification",
-        "type": "Type",
-        "subclass": "Subclass",
-        "subSubclass": "Sub-subclass",
-        "activities": "Activities",
-        "subActivities": "{{activity}} focus"
-      },
-      "sunlightLabel": "Sunlight:",
-      "waterLabel": "Water:",
-      "waterFrequency": "Water frequency:",
-      "soilLabel": "Soil:",
-      "difficultyLabel": "Difficulty:",
-      "seedsAvailable": "Seeds available:",
-      "yes": "Yes",
-      "no": "No",
-      "time": "time",
-      "times": "times",
-      "per": "per",
-      "like": "Like",
-      "unlike": "Unlike",
-      "share": "Share",
-      "shareCopied": "Link copied to clipboard!",
-      "shareFailed": "Failed to copy link",
-      "viewFullScreen": "View image in full screen",
-        "viewPhoto": "View photo {{index}}",
-      "viewFullDetails": "View full details",
-      "viewPlant": "View Plant →",
-      "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
-      "day": "day",
-      "week": "week",
-      "month": "month",
-      "year": "year",
-      "values": {
-        "viewLink": "View",
-        "notAvailable": "N/A",
-        "spacing": "Row: {{row}} cm, Plant: {{plant}} cm",
-        "temperatureRange": "{{min}}{{dash}}{{max}}°C",
-        "germinationDays": "{{min}}{{dash}}{{max}}",
-        "stakingRequired": "Required",
-        "stakingNotRequired": "Not required",
-        "repottingInterval": "Every {{count}} years",
-        "indoor": "Indoor",
-        "outdoor": "Outdoor",
-        "both": "Indoor & Outdoor"
-      },
-      "meta": {
-        "auditTitle": "Record history",
-        "createdAt": "Created",
-        "updatedAt": "Last updated",
-        "createdBy": "Author",
-        "updatedBy": "Updated by"
-      },
+  "plantInfo": {
+    "plantNotFound": "Plant not found.",
+    "failedToLoad": "Failed to load plant",
+    "sunlight": "Sunlight",
+    "water": "Water",
+    "difficulty": "Difficulty",
+    "overview": "Overview",
+    "meaning": "Meaning",
+    "symbolism": "Symbolism across cultures",
+    "symbolismHelper": "Meaning of the flower in culture",
+    "careGuide": "Care Guide",
+    "classification": {
+      "title": "Classification",
+      "type": "Type",
+      "subclass": "Subclass",
+      "subSubclass": "Sub-subclass",
+      "activities": "Activities",
+      "subActivities": "{{activity}} focus"
+    },
+    "sunlightLabel": "Sunlight:",
+    "waterLabel": "Water:",
+    "waterFrequency": "Water frequency:",
+    "soilLabel": "Soil:",
+    "difficultyLabel": "Difficulty:",
+    "seedsAvailable": "Seeds available:",
+    "yes": "Yes",
+    "no": "No",
+    "time": "time",
+    "times": "times",
+    "per": "per",
+    "like": "Like",
+    "unlike": "Unlike",
+    "share": "Share",
+    "shareCopied": "Link copied to clipboard!",
+    "shareFailed": "Failed to copy link",
+    "viewFullScreen": "View image in full screen",
+    "viewPhoto": "View photo {{index}}",
+    "viewFullDetails": "View full details",
+    "viewPlant": "View Plant →",
+    "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
+    "day": "day",
+    "week": "week",
+    "month": "month",
+    "year": "year",
+    "values": {
+      "viewLink": "View",
+      "notAvailable": "N/A",
+      "spacing": "Row: {{row}} cm, Plant: {{plant}} cm",
+      "temperatureRange": "{{min}}{{dash}}{{max}}°C",
+      "germinationDays": "{{min}}{{dash}}{{max}}",
+      "stakingRequired": "Required",
+      "stakingNotRequired": "Not required",
+      "repottingInterval_one": "Every {{count}} year",
+      "repottingInterval_other": "Every {{count}} years"
+    },
+    "meta": {
+      "auditTitle": "Record history",
+      "createdAt": "Created",
+      "updatedAt": "Last updated",
+      "createdBy": "Author",
+      "updatedBy": "Updated by"
+    },
     "sections": {
       "identifiers": "Identifiers",
       "traits": "Traits",
@@ -952,17 +924,6 @@
       "funFact": "Fun Fact",
       "sourceReferences": "Source References",
       "authorNotes": "Author Notes"
-    },
-    "values": {
-      "viewLink": "View",
-      "notAvailable": "N/A",
-      "spacing": "Row: {{row}} cm, Plant: {{plant}} cm",
-      "temperatureRange": "{{min}}{{dash}}{{max}}°C",
-      "germinationDays": "{{min}}{{dash}}{{max}}",
-      "stakingRequired": "Required",
-      "stakingNotRequired": "Not required",
-      "repottingInterval_one": "Every {{count}} year",
-      "repottingInterval_other": "Every {{count}} years"
     },
     "monthsShort": {
       "jan": "Jan",
@@ -1456,9 +1417,9 @@
       "title": "Analytics & Insights",
       "subtitle": "Track your garden's progress and get personalized advice",
       "overview": "Overview",
-      "tasks": "Tasks",
+      "tasks": "tasks",
       "plants": "Plants",
-      "members": "Members",
+      "members": "members",
       "completionRate": "Completion Rate",
       "currentStreak": "Current Streak",
       "tasksThisWeek": "Tasks This Week",
@@ -1489,9 +1450,9 @@
       "weeklyAdvice": "Get personalized weekly advice from our expert gardening AI",
       "getAdvice": "Get This Week's Advice",
       "refreshAdvice": "Refresh Advice",
-      "loadingAdvice": "Analyzing your garden data...",
+      "loadingAdvice": "Preparing your weekly tips...",
       "adviceNotEligible": "Your garden needs to be at least 1 week old with at least 1 plant to receive personalized advice.",
-      "focusAreas": "Focus Areas This Week",
+      "focusAreas": "Action Items",
       "plantSpecificTips": "Plant-Specific Tips",
       "showFullAdvice": "Show full advice",
       "hideFullAdvice": "Hide full advice",
@@ -1504,7 +1465,6 @@
       "stableTrend": "same as last week",
       "weeklyFocus": "This Week's Focus",
       "weatherAdvice": "Weather-Based Tips",
-      "focusAreas": "Action Items",
       "export": "Export",
       "exportMarkdown": "Markdown (.md)",
       "exportText": "Plain Text (.txt)",
@@ -1542,7 +1502,6 @@
       "noWeatherData": "Weather Data Unavailable",
       "noWeatherDescription": "Set your garden's location in settings to see local weather forecasts and get weather-based gardening tips.",
       "setLocation": "Set Garden Location",
-      "loadingAdvice": "Preparing your weekly tips...",
       "loadingWeather": "Loading weather data...",
       "loading": "Loading analytics...",
       "activityHistory": "Activity History",
@@ -1552,11 +1511,9 @@
       "stable": "Stable",
       "bestStreak": "Best:",
       "of": "of",
-      "tasks": "tasks",
       "species": "species",
       "soloGardener": "You're the only gardener here. Invite friends to track contributions!",
       "member": "member",
-      "members": "members",
       "weeklyContributions": "Weekly task contributions by member",
       "inviteHint": "Tip: Invite friends to your garden to share the workload and track contributions together!",
       "noMembers": "No members found. This shouldn't happen - please refresh the page.",
@@ -1905,61 +1862,61 @@
         "nov": "Nov",
         "dec": "Dec"
       }
-      }
+    }
+  },
+  "friends": {
+    "title": "Friends",
+    "pleaseLogin": "Please log in to manage friends",
+    "pendingInvitations": "Received",
+    "sentRequests": "Sent",
+    "yourFriends": "Your Friends",
+    "addFriend": "Add Friend",
+    "noFriendsYet": "No friends yet. Add friends to get started!",
+    "noPendingRequests": "No pending requests",
+    "noSentRequests": "No sent requests",
+    "awaitingResponse": "Awaiting response",
+    "friendsSince": "Friends since",
+    "confirmRemove": "Remove this friend?",
+    "viewProfile": "View profile",
+    "friendOptions": "Friend options",
+    "removeFriend": "Remove friend",
+    "removeFriendConfirm": "Remove",
+    "pending": "Pending",
+    "friends": "friends",
+    "unknown": "Unknown",
+    "addFriendDialog": {
+      "title": "Add Friend",
+      "description": "Search for users by username or email",
+      "searchPlaceholder": "Search by username or email...",
+      "searching": "Searching...",
+      "noUsersFound": "No users found",
+      "addFriend": "Add"
     },
-    "friends": {
-      "title": "Friends",
-      "pleaseLogin": "Please log in to manage friends",
-      "pendingInvitations": "Received",
-      "sentRequests": "Sent",
-      "yourFriends": "Your Friends",
-      "addFriend": "Add Friend",
-      "noFriendsYet": "No friends yet. Add friends to get started!",
-      "noPendingRequests": "No pending requests",
-      "noSentRequests": "No sent requests",
-      "awaitingResponse": "Awaiting response",
-      "friendsSince": "Friends since",
-      "confirmRemove": "Remove this friend?",
-      "viewProfile": "View profile",
-      "friendOptions": "Friend options",
-      "removeFriend": "Remove friend",
-      "removeFriendConfirm": "Remove",
-      "pending": "Pending",
-      "friends": "friends",
-      "unknown": "Unknown",
-      "addFriendDialog": {
-        "title": "Add Friend",
-        "description": "Search for users by username or email",
-        "searchPlaceholder": "Search by username or email...",
-        "searching": "Searching...",
-        "noUsersFound": "No users found",
-        "addFriend": "Add"
-      },
-      "errors": {
-        "failedToLoad": "Failed to load friends",
-        "failedToLoadSentRequests": "Failed to load sent requests",
-        "failedToLoadRequests": "Failed to load friend requests",
-        "searchFailed": "Search failed",
-        "alreadyFriends": "Already friends with this user",
-        "requestAlreadySent": "Friend request already sent",
-        "failedToSend": "Failed to send friend request",
-        "failedToAccept": "Failed to accept friend request",
-        "failedToReject": "Failed to reject friend request",
-        "failedToRemove": "Failed to remove friend",
-        "failedToCancel": "Failed to cancel request",
-        "cannotSendRequest": "Cannot send friend request to this user"
-      }
-    },
-    "profile": {
-      "loading": "Loading profile…",
-      "userNotFound": "User not found",
-      "failedToLoad": "Failed to load profile",
-      "backHome": "Back home",
-      "member": "Member",
-      "admin": "Admin",
-      "heroBadge": "Community spotlight",
-      "title": "Profile overview",
-      "subtitle": "Search members, review stats, and manage privacy at a glance.",
+    "errors": {
+      "failedToLoad": "Failed to load friends",
+      "failedToLoadSentRequests": "Failed to load sent requests",
+      "failedToLoadRequests": "Failed to load friend requests",
+      "searchFailed": "Search failed",
+      "alreadyFriends": "Already friends with this user",
+      "requestAlreadySent": "Friend request already sent",
+      "failedToSend": "Failed to send friend request",
+      "failedToAccept": "Failed to accept friend request",
+      "failedToReject": "Failed to reject friend request",
+      "failedToRemove": "Failed to remove friend",
+      "failedToCancel": "Failed to cancel request",
+      "cannotSendRequest": "Cannot send friend request to this user"
+    }
+  },
+  "profile": {
+    "loading": "Loading profile…",
+    "userNotFound": "User not found",
+    "failedToLoad": "Failed to load profile",
+    "backHome": "Back home",
+    "member": "Member",
+    "admin": "Admin",
+    "heroBadge": "Community spotlight",
+    "title": "Profile overview",
+    "subtitle": "Search members, review stats, and manage privacy at a glance.",
     "currentlyOnline": "Currently online",
     "online": "Online",
     "aLongTimeAgo": "A long time ago",
@@ -1977,20 +1934,20 @@
     "deleteAccount": "Delete account",
     "friendRequest": "Friend Request",
     "requestSent": "Request Sent",
-      "acceptRequest": "Accept Request",
-      "since": "since",
-      "privateProfile": {
-        "title": "This profile is private",
-        "description": "Only friends can see this profile and activity."
-      },
-      "searchUsers": {
-        "label": "Search users",
-        "placeholder": "Search by display name or username...",
-        "noResults": "No users match your search yet.",
-        "error": "We couldn't load suggestions. Try again shortly.",
-        "privateTooltip": "Private profile — only friends can view",
-        "privateHint": "Private profile • only friends can view"
-      },
+    "acceptRequest": "Accept Request",
+    "since": "since",
+    "privateProfile": {
+      "title": "This profile is private",
+      "description": "Only friends can see this profile and activity."
+    },
+    "searchUsers": {
+      "label": "Search users",
+      "placeholder": "Search by display name or username...",
+      "noResults": "No users match your search yet.",
+      "error": "We couldn't load suggestions. Try again shortly.",
+      "privateTooltip": "Private profile — only friends can view",
+      "privateHint": "Private profile • only friends can view"
+    },
     "highlights": "Highlights",
     "plantsOwned": "Plants owned",
     "gardens": "Gardens",
@@ -2042,586 +1999,586 @@
     "createSubtitle": "Fill every field with the supplied descriptions or let AI help.",
     "editTitle": "Edit Plant",
     "editSubtitle": "Update the record to match the new database structure.",
-        "translationNoTargets": "No other languages configured for translation.",
-        "translationRequiresBase": "Save the English version before editing translations.",
-        "deeplTranslate": "DeepL Translation",
+    "translationNoTargets": "No other languages configured for translation.",
+    "translationRequiresBase": "Save the English version before editing translations.",
+    "deeplTranslate": "DeepL Translation",
     "aiFill": "AI fill all fields",
     "aiFilled": "AI Filled",
     "overviewLength": "Overview must be between 50 and 300 words.",
-      "aiNameRequired": "Please enter a name before using AI fill.",
-      "nameRequired": "Name is required",
-      "savePlant": "Save Plant",
+    "aiNameRequired": "Please enter a name before using AI fill.",
+    "nameRequired": "Name is required",
+    "savePlant": "Save Plant",
     "loadingPlant": "Loading plant...",
-        "categoryProgressTitle": "Category fill progress",
-        "categoryProgressSummary": "Latest AI fill summary",
-        "categoryMenuTitle": "Quick category menu",
-          "backToPrevious": "Back to previous page",
-          "viewPlantInfo": "Open plant page",
-        "sectionFilled": "Filled",
-        "sectionInProgress": "Filling",
-        "sectionLogTitle": "Sections completed",
-          "errors": {
-            "loadPlant": "Failed to load plant",
-            "savePlant": "Failed to save plant",
-            "aiFill": "AI fill failed",
-            "translation": "Translation failed"
-            },
-      "actions": {
-        "remove": "Remove"
+    "categoryProgressTitle": "Category fill progress",
+    "categoryProgressSummary": "Latest AI fill summary",
+    "categoryMenuTitle": "Quick category menu",
+    "backToPrevious": "Back to previous page",
+    "viewPlantInfo": "Open plant page",
+    "sectionFilled": "Filled",
+    "sectionInProgress": "Filling",
+    "sectionLogTitle": "Sections completed",
+    "errors": {
+      "loadPlant": "Failed to load plant",
+      "savePlant": "Failed to save plant",
+      "aiFill": "AI fill failed",
+      "translation": "Translation failed"
+    },
+    "actions": {
+      "remove": "Remove"
+    },
+    "hideCompanionSuggestions": "Hide AI suggestions",
+    "showCompanionSuggestions": "Show AI suggestions",
+    "companionSuggestionsReview": "Click Add to link suggested plants. Not all may exist in the database.",
+    "noCompanions": "No companion or related plants added yet.",
+    "addCompanionBtn": "Add Companion / Related Plants",
+    "selectCompanionTitle": "Select Companion & Related Plants",
+    "selectCompanionDesc": "Select multiple plants to add as companions or related varieties.",
+    "searchPlantsPlaceholder": "Search plants by name...",
+    "searchingBtn": "Searching...",
+    "searchBtn": "Search",
+    "noPlantsFound": "No plants found. Try a different search term.",
+    "hideColorSuggestions": "Hide AI color suggestions",
+    "showColorSuggestions": "Show AI color suggestions",
+    "colorSuggestionsReview": "Review and add the colors you like to your palette.",
+    "colorFallback": "Color",
+    "colorAdded": "Added",
+    "addColor": "Add",
+    "colorsLabel": "Colors",
+    "colorSuggestionPlaceholder": "AI recommendations will show up here when available.",
+    "colors": {
+      "addColorButton": "Add color",
+      "dialogTitle": "Select or add a color",
+      "searchPlaceholder": "Search colors by name",
+      "loading": "Loading colors...",
+      "noHex": "No hex",
+      "empty": "No colors found.",
+      "insertHeading": "Insert a new color",
+      "colorNamePlaceholder": "Color name",
+      "hexPlaceholder": "#hexcode",
+      "insertButton": "Insert",
+      "saving": "Saving...",
+      "paletteHelp": "Link existing palette colors or insert new ones for this plant.",
+      "multicolor": "Multicolor",
+      "bicolor": "Bicolor"
+    },
+    "watering": {
+      "seasonPlaceholder": "Season (optional)",
+      "quantityPlaceholder": "Quantity",
+      "timePeriodPlaceholder": "Time period",
+      "helper": "Season is optional. Add as many watering schedules as needed.",
+      "addSchedule": "Add schedule"
+    },
+    "selectOption": "Select option",
+    "selectStatus": "Select status",
+    "optionalLabel": "optional",
+    "temperature": {
+      "min": "Min (°C)",
+      "minShort": "Min",
+      "ideal": "Ideal (°C)",
+      "idealShort": "Ideal",
+      "max": "Max (°C)",
+      "maxShort": "Max"
+    },
+    "basics": {
+      "name": {
+        "label": "Name",
+        "placeholder": "Unique plant name",
+        "description": "Name of the plant (unique and mandatory)."
       },
-      "hideCompanionSuggestions": "Hide AI suggestions",
-      "showCompanionSuggestions": "Show AI suggestions",
-      "companionSuggestionsReview": "Click Add to link suggested plants. Not all may exist in the database.",
-      "noCompanions": "No companion or related plants added yet.",
-      "addCompanionBtn": "Add Companion / Related Plants",
-      "selectCompanionTitle": "Select Companion & Related Plants",
-      "selectCompanionDesc": "Select multiple plants to add as companions or related varieties.",
-      "searchPlantsPlaceholder": "Search plants by name...",
-      "searchingBtn": "Searching...",
-      "searchBtn": "Search",
-      "noPlantsFound": "No plants found. Try a different search term.",
-      "hideColorSuggestions": "Hide AI color suggestions",
-      "showColorSuggestions": "Show AI color suggestions",
-      "colorSuggestionsReview": "Review and add the colors you like to your palette.",
-      "colorFallback": "Color",
-      "colorAdded": "Added",
-      "addColor": "Add",
-      "colorsLabel": "Colors",
-      "colorSuggestionPlaceholder": "AI recommendations will show up here when available.",
-      "colors": {
-        "addColorButton": "Add color",
-        "dialogTitle": "Select or add a color",
-        "searchPlaceholder": "Search colors by name",
-        "loading": "Loading colors...",
-        "noHex": "No hex",
-        "empty": "No colors found.",
-        "insertHeading": "Insert a new color",
-        "colorNamePlaceholder": "Color name",
-        "hexPlaceholder": "#hexcode",
-        "insertButton": "Insert",
-        "saving": "Saving...",
-        "paletteHelp": "Link existing palette colors or insert new ones for this plant.",
-        "multicolor": "Multicolor",
-        "bicolor": "Bicolor"
+      "plantType": {
+        "label": "Plant Type",
+        "placeholder": "Select type",
+        "description": "Primary plant type"
       },
-      "watering": {
-        "seasonPlaceholder": "Season (optional)",
-        "quantityPlaceholder": "Quantity",
-        "timePeriodPlaceholder": "Time period",
-        "helper": "Season is optional. Add as many watering schedules as needed.",
-        "addSchedule": "Add schedule"
+      "utility": {
+        "label": "Utility",
+        "description": "Select every utility that applies"
       },
-      "selectOption": "Select option",
-      "selectStatus": "Select status",
-      "optionalLabel": "optional",
-      "temperature": {
-        "min": "Min (°C)",
-        "minShort": "Min",
-        "ideal": "Ideal (°C)",
-        "idealShort": "Ideal",
-        "max": "Max (°C)",
-        "maxShort": "Max"
+      "comestiblePart": {
+        "label": "Comestible Part",
+        "description": "Edible parts (only if utility includes edible)."
       },
-      "basics": {
-        "name": {
-          "label": "Name",
-          "placeholder": "Unique plant name",
-          "description": "Name of the plant (unique and mandatory)."
+      "fruitType": {
+        "label": "Fruit Type",
+        "description": "Fruit classification (if the plant produces fruit)."
+      }
+    },
+    "options": {
+      "plantType": {
+        "plant": "Plant",
+        "flower": "Flower",
+        "bamboo": "Bamboo",
+        "shrub": "Shrub",
+        "tree": "Tree",
+        "cactus": "Cactus",
+        "succulent": "Succulent"
+      },
+      "utility": {
+        "comestible": "Edible",
+        "ornemental": "Ornamental",
+        "produce_fruit": "Produces fruit",
+        "aromatic": "Aromatic",
+        "medicinal": "Medicinal",
+        "odorous": "Fragrant",
+        "climbing": "Climbing",
+        "cereal": "Cereal",
+        "spice": "Spice"
+      },
+      "comestible": {
+        "flower": "Flower",
+        "fruit": "Fruit",
+        "seed": "Seed",
+        "leaf": "Leaf",
+        "stem": "Stem",
+        "root": "Root",
+        "bulb": "Bulb",
+        "bark": "Bark",
+        "wood": "Wood"
+      },
+      "fruit": {
+        "nut": "Nut",
+        "seed": "Seed",
+        "stone": "Stone fruit"
+      }
+    },
+    "optionLabels": {
+      "january": "January",
+      "february": "February",
+      "march": "March",
+      "april": "April",
+      "may": "May",
+      "june": "June",
+      "july": "July",
+      "august": "August",
+      "september": "September",
+      "october": "October",
+      "november": "November",
+      "december": "December",
+      "annual": "Annual",
+      "biennials": "Biennials",
+      "perenials": "Perennials",
+      "ephemerals": "Ephemerals",
+      "monocarpic": "Monocarpic",
+      "polycarpic": "Polycarpic",
+      "spring": "Spring",
+      "summer": "Summer",
+      "autumn": "Autumn",
+      "winter": "Winter",
+      "deciduous": "Deciduous",
+      "evergreen": "Evergreen",
+      "semi_evergreen": "Semi-evergreen",
+      "marcescent": "Marcescent",
+      "non_toxic": "Non-toxic",
+      "midly_irritating": "Mildly irritating",
+      "highly_toxic": "Highly toxic",
+      "lethally_toxic": "Lethally toxic",
+      "indoor": "Indoor",
+      "outdoor": "Outdoor",
+      "both": "Indoor & outdoor",
+      "flowerbed": "Flowerbed",
+      "path": "Path",
+      "hedge": "Hedge",
+      "ground_cover": "Ground cover",
+      "pot": "Pot",
+      "none": "None",
+      "low": "Low",
+      "moderate": "Moderate",
+      "heavy": "Heavy",
+      "aquatic": "Aquatic",
+      "semi_aquatic": "Semi-aquatic",
+      "wetland": "Wetland",
+      "tropical": "Tropical",
+      "temperate": "Temperate",
+      "arid": "Arid",
+      "mediterranean": "Mediterranean",
+      "mountain": "Mountain",
+      "grassland": "Grassland",
+      "forest": "Forest",
+      "coastal": "Coastal",
+      "urban": "Urban",
+      "low_light": "Low light",
+      "shade": "Shade",
+      "partial_sun": "Partial sun",
+      "full_sun": "Full sun",
+      "surface": "Surface",
+      "buried": "Buried",
+      "hose": "Hose",
+      "drop": "Drip",
+      "drench": "Drench",
+      "seed": "Seed",
+      "cutting": "Cutting",
+      "division": "Division",
+      "layering": "Layering",
+      "grafting": "Grafting",
+      "tissue_separation": "Tissue separation",
+      "bulb_separation": "Bulb separation",
+      "vermiculite": "Vermiculite",
+      "perlite": "Perlite",
+      "sphagnum_moss": "Sphagnum moss",
+      "rock_wool": "Rock wool",
+      "sand": "Sand",
+      "gravel": "Gravel",
+      "potting_soil": "Potting soil",
+      "peat": "Peat",
+      "clay_pebbles": "Clay pebbles",
+      "coconut_fiber": "Coconut fiber",
+      "bark": "Bark",
+      "wood_chips": "Wood chips",
+      "green_manure": "Green manure",
+      "cocoa_bean_hulls": "Cocoa bean hulls",
+      "buckwheat_hulls": "Buckwheat hulls",
+      "cereal_straw": "Cereal straw",
+      "hemp_straw": "Hemp straw",
+      "woven_fabric": "Woven fabric",
+      "pozzolana": "Pozzolana",
+      "crushed_slate": "Crushed slate",
+      "clay_pellets": "Clay pellets",
+      "nitrogen": "Nitrogen",
+      "phosphorus": "Phosphorus",
+      "potassium": "Potassium",
+      "calcium": "Calcium",
+      "magnesium": "Magnesium",
+      "sulfur": "Sulfur",
+      "iron": "Iron",
+      "boron": "Boron",
+      "manganese": "Manganese",
+      "molybene": "Molybdenum",
+      "chlorine": "Chlorine",
+      "copper": "Copper",
+      "zinc": "Zinc",
+      "nitrate": "Nitrate",
+      "phosphate": "Phosphate",
+      "granular_fertilizer": "Granular fertilizer",
+      "liquid_fertilizer": "Liquid fertilizer",
+      "meat_flour": "Meat meal",
+      "fish_flour": "Fish meal",
+      "crushed_bones": "Crushed bones",
+      "crushed_horns": "Crushed horns",
+      "slurry": "Slurry",
+      "manure": "Manure",
+      "animal_excrement": "Animal excrement",
+      "sea_fertilizer": "Sea fertilizer",
+      "yurals": "Yurals",
+      "wine": "Wine",
+      "guano": "Guano",
+      "coffee_grounds": "Coffee grounds",
+      "banana_peel": "Banana peel",
+      "eggshell": "Eggshell",
+      "vegetable_cooking_water": "Vegetable cooking water",
+      "urine": "Urine",
+      "grass_clippings": "Grass clippings",
+      "vegetable_waste": "Vegetable waste",
+      "natural_mulch": "Natural mulch",
+      "direct": "Direct",
+      "row": "Row",
+      "hill": "Hill",
+      "broadcast": "Broadcast",
+      "seed_tray": "Seed tray",
+      "cell": "Cell",
+      "bee": "Bee",
+      "wasp": "Wasp",
+      "ant": "Ant",
+      "butterfly": "Butterfly",
+      "bird": "Bird",
+      "mosquito": "Mosquito",
+      "fly": "Fly",
+      "beetle": "Beetle",
+      "ladybug": "Ladybug",
+      "stagbeetle": "Stag beetle",
+      "cockchafer": "Cockchafer",
+      "dungbeetle": "Dung beetle",
+      "weevil": "Weevil",
+      "week": "Week",
+      "month": "Month",
+      "year": "Year",
+      "in_progres": "In progress",
+      "rework": "Rework",
+      "review": "Review",
+      "approved": "Approved",
+      "safe": "Safe",
+      "at_risk": "At Risk",
+      "vulnerable": "Vulnerable",
+      "endangered": "Endangered",
+      "critically_endangered": "Critically Endangered",
+      "extinct": "Extinct"
+    },
+    "fields": {
+      "identity": {
+        "givenNames": {
+          "label": "Given Names",
+          "description": "Common names given to the plant"
         },
-        "plantType": {
-          "label": "Plant Type",
-          "placeholder": "Select type",
-          "description": "Primary plant type"
+        "scientificName": {
+          "label": "Scientific Name",
+          "description": "Scientific name"
         },
-        "utility": {
-          "label": "Utility",
-          "description": "Select every utility that applies"
+        "family": {
+          "label": "Family",
+          "description": "Botanical family"
         },
-        "comestiblePart": {
-          "label": "Comestible Part",
-          "description": "Edible parts (only if utility includes edible)."
+        "overview": {
+          "label": "Overview",
+          "description": "Long presentation of the plant"
         },
-        "fruitType": {
-          "label": "Fruit Type",
-          "description": "Fruit classification (if the plant produces fruit)."
+        "promotionMonth": {
+          "label": "Promotion Month",
+          "description": "Month the plant should be promoted"
+        },
+        "lifeCycle": {
+          "label": "Life Cycle",
+          "description": "Lifecycle classification"
+        },
+        "season": {
+          "label": "Season",
+          "description": "Seasons where the plant is active"
+        },
+        "foliagePersistance": {
+          "label": "Foliage Persistence",
+          "description": "Leaf persistence type"
+        },
+        "spiked": {
+          "label": "Spiked",
+          "description": "Does the plant have spikes?"
+        },
+        "toxicityHuman": {
+          "label": "Toxicity (Human)",
+          "description": "Human toxicity level"
+        },
+        "toxicityPets": {
+          "label": "Toxicity (Pets)",
+          "description": "Pet toxicity level"
+        },
+        "allergens": {
+          "label": "Allergens",
+          "description": "List of possible allergens"
+        },
+        "scent": {
+          "label": "Scent",
+          "description": "Does the plant have a scent?"
+        },
+        "symbolism": {
+          "label": "Symbolism",
+          "description": "Symbolism and cultural meaning"
+        },
+        "livingSpace": {
+          "label": "Living Space",
+          "description": "Indoor / outdoor / both"
+        },
+        "composition": {
+          "label": "Composition",
+          "description": "Where to plant (flowerbed, pot, etc.)"
+        },
+        "maintenanceLevel": {
+          "label": "Maintenance Level",
+          "description": "Care effort"
         }
       },
-      "options": {
-        "plantType": {
-          "plant": "Plant",
-          "flower": "Flower",
-          "bamboo": "Bamboo",
-          "shrub": "Shrub",
-          "tree": "Tree",
-          "cactus": "Cactus",
-          "succulent": "Succulent"
+      "plantCare": {
+        "origin": {
+          "label": "Origin",
+          "description": "Where the plant originates from"
         },
-        "utility": {
-          "comestible": "Edible",
-          "ornemental": "Ornamental",
-          "produce_fruit": "Produces fruit",
-          "aromatic": "Aromatic",
-          "medicinal": "Medicinal",
-          "odorous": "Fragrant",
-          "climbing": "Climbing",
-          "cereal": "Cereal",
-          "spice": "Spice"
+        "habitat": {
+          "label": "Habitat",
+          "description": "Habitat types"
         },
-        "comestible": {
-          "flower": "Flower",
-          "fruit": "Fruit",
-          "seed": "Seed",
-          "leaf": "Leaf",
-          "stem": "Stem",
-          "root": "Root",
-          "bulb": "Bulb",
-          "bark": "Bark",
-          "wood": "Wood"
+        "temperature": {
+          "label": "Temperature",
+          "description": "Temperature range (°C)"
         },
-        "fruit": {
-          "nut": "Nut",
-          "seed": "Seed",
-          "stone": "Stone fruit"
-        }
+        "levelSun": {
+          "label": "Sun Exposure",
+          "description": "Sun exposure level"
         },
-        "optionLabels": {
-          "january": "January",
-          "february": "February",
-          "march": "March",
-          "april": "April",
-          "may": "May",
-          "june": "June",
-          "july": "July",
-          "august": "August",
-          "september": "September",
-          "october": "October",
-          "november": "November",
-          "december": "December",
-          "annual": "Annual",
-          "biennials": "Biennials",
-          "perenials": "Perennials",
-          "ephemerals": "Ephemerals",
-          "monocarpic": "Monocarpic",
-          "polycarpic": "Polycarpic",
-          "spring": "Spring",
-          "summer": "Summer",
-          "autumn": "Autumn",
-          "winter": "Winter",
-          "deciduous": "Deciduous",
-          "evergreen": "Evergreen",
-          "semi_evergreen": "Semi-evergreen",
-          "marcescent": "Marcescent",
-          "non_toxic": "Non-toxic",
-          "midly_irritating": "Mildly irritating",
-          "highly_toxic": "Highly toxic",
-          "lethally_toxic": "Lethally toxic",
-          "indoor": "Indoor",
-          "outdoor": "Outdoor",
-          "both": "Indoor & outdoor",
-          "flowerbed": "Flowerbed",
-          "path": "Path",
-          "hedge": "Hedge",
-          "ground_cover": "Ground cover",
-          "pot": "Pot",
-          "none": "None",
-          "low": "Low",
-          "moderate": "Moderate",
-          "heavy": "Heavy",
-          "aquatic": "Aquatic",
-          "semi_aquatic": "Semi-aquatic",
-          "wetland": "Wetland",
-          "tropical": "Tropical",
-          "temperate": "Temperate",
-          "arid": "Arid",
-          "mediterranean": "Mediterranean",
-          "mountain": "Mountain",
-          "grassland": "Grassland",
-          "forest": "Forest",
-          "coastal": "Coastal",
-          "urban": "Urban",
-          "low_light": "Low light",
-          "shade": "Shade",
-          "partial_sun": "Partial sun",
-          "full_sun": "Full sun",
-          "surface": "Surface",
-          "buried": "Buried",
-          "hose": "Hose",
-          "drop": "Drip",
-          "drench": "Drench",
-          "seed": "Seed",
-          "cutting": "Cutting",
-          "division": "Division",
-          "layering": "Layering",
-          "grafting": "Grafting",
-          "tissue_separation": "Tissue separation",
-          "bulb_separation": "Bulb separation",
-          "vermiculite": "Vermiculite",
-          "perlite": "Perlite",
-          "sphagnum_moss": "Sphagnum moss",
-          "rock_wool": "Rock wool",
-          "sand": "Sand",
-          "gravel": "Gravel",
-          "potting_soil": "Potting soil",
-          "peat": "Peat",
-          "clay_pebbles": "Clay pebbles",
-          "coconut_fiber": "Coconut fiber",
-          "bark": "Bark",
-          "wood_chips": "Wood chips",
-          "green_manure": "Green manure",
-          "cocoa_bean_hulls": "Cocoa bean hulls",
-          "buckwheat_hulls": "Buckwheat hulls",
-          "cereal_straw": "Cereal straw",
-          "hemp_straw": "Hemp straw",
-          "woven_fabric": "Woven fabric",
-          "pozzolana": "Pozzolana",
-          "crushed_slate": "Crushed slate",
-          "clay_pellets": "Clay pellets",
-          "nitrogen": "Nitrogen",
-          "phosphorus": "Phosphorus",
-          "potassium": "Potassium",
-          "calcium": "Calcium",
-          "magnesium": "Magnesium",
-          "sulfur": "Sulfur",
-          "iron": "Iron",
-          "boron": "Boron",
-          "manganese": "Manganese",
-          "molybene": "Molybdenum",
-          "chlorine": "Chlorine",
-          "copper": "Copper",
-          "zinc": "Zinc",
-          "nitrate": "Nitrate",
-          "phosphate": "Phosphate",
-          "granular_fertilizer": "Granular fertilizer",
-          "liquid_fertilizer": "Liquid fertilizer",
-          "meat_flour": "Meat meal",
-          "fish_flour": "Fish meal",
-          "crushed_bones": "Crushed bones",
-          "crushed_horns": "Crushed horns",
-          "slurry": "Slurry",
-          "manure": "Manure",
-          "animal_excrement": "Animal excrement",
-          "sea_fertilizer": "Sea fertilizer",
-          "yurals": "Yurals",
-          "wine": "Wine",
-          "guano": "Guano",
-          "coffee_grounds": "Coffee grounds",
-          "banana_peel": "Banana peel",
-          "eggshell": "Eggshell",
-          "vegetable_cooking_water": "Vegetable cooking water",
-          "urine": "Urine",
-          "grass_clippings": "Grass clippings",
-          "vegetable_waste": "Vegetable waste",
-          "natural_mulch": "Natural mulch",
-          "direct": "Direct",
-          "row": "Row",
-          "hill": "Hill",
-          "broadcast": "Broadcast",
-          "seed_tray": "Seed tray",
-          "cell": "Cell",
-          "bee": "Bee",
-          "wasp": "Wasp",
-          "ant": "Ant",
-          "butterfly": "Butterfly",
-          "bird": "Bird",
-          "mosquito": "Mosquito",
-          "fly": "Fly",
-          "beetle": "Beetle",
-          "ladybug": "Ladybug",
-          "stagbeetle": "Stag beetle",
-          "cockchafer": "Cockchafer",
-          "dungbeetle": "Dung beetle",
-          "weevil": "Weevil",
-          "week": "Week",
-          "month": "Month",
-          "year": "Year",
-          "in_progres": "In progress",
-          "rework": "Rework",
-          "review": "Review",
-          "approved": "Approved",
-          "safe": "Safe",
-          "at_risk": "At Risk",
-          "vulnerable": "Vulnerable",
-          "endangered": "Endangered",
-          "critically_endangered": "Critically Endangered",
-          "extinct": "Extinct"
-      },
-      "fields": {
-        "identity": {
-          "givenNames": {
-            "label": "Given Names",
-            "description": "Common names given to the plant"
-          },
-          "scientificName": {
-            "label": "Scientific Name",
-            "description": "Scientific name"
-          },
-          "family": {
-            "label": "Family",
-            "description": "Botanical family"
-          },
-          "overview": {
-            "label": "Overview",
-            "description": "Long presentation of the plant"
-          },
-          "promotionMonth": {
-            "label": "Promotion Month",
-            "description": "Month the plant should be promoted"
-          },
-          "lifeCycle": {
-            "label": "Life Cycle",
-            "description": "Lifecycle classification"
-          },
-          "season": {
-            "label": "Season",
-            "description": "Seasons where the plant is active"
-          },
-          "foliagePersistance": {
-            "label": "Foliage Persistence",
-            "description": "Leaf persistence type"
-          },
-          "spiked": {
-            "label": "Spiked",
-            "description": "Does the plant have spikes?"
-          },
-          "toxicityHuman": {
-            "label": "Toxicity (Human)",
-            "description": "Human toxicity level"
-          },
-          "toxicityPets": {
-            "label": "Toxicity (Pets)",
-            "description": "Pet toxicity level"
-          },
-          "allergens": {
-            "label": "Allergens",
-            "description": "List of possible allergens"
-          },
-          "scent": {
-            "label": "Scent",
-            "description": "Does the plant have a scent?"
-          },
-          "symbolism": {
-            "label": "Symbolism",
-            "description": "Symbolism and cultural meaning"
-          },
-          "livingSpace": {
-            "label": "Living Space",
-            "description": "Indoor / outdoor / both"
-          },
-          "composition": {
-            "label": "Composition",
-            "description": "Where to plant (flowerbed, pot, etc.)"
-          },
-          "maintenanceLevel": {
-            "label": "Maintenance Level",
-            "description": "Care effort"
+        "hygrometry": {
+          "label": "Hygrometry",
+          "description": "Ideal humidity percentage"
+        },
+        "watering": {
+          "schedules": {
+            "label": "Watering Schedule",
+            "description": "Seasonal watering (season + quantity + period)"
           }
         },
-        "plantCare": {
-          "origin": {
-            "label": "Origin",
-            "description": "Where the plant originates from"
-          },
-          "habitat": {
-            "label": "Habitat",
-            "description": "Habitat types"
-          },
-          "temperature": {
-            "label": "Temperature",
-            "description": "Temperature range (°C)"
-          },
-          "levelSun": {
-            "label": "Sun Exposure",
-            "description": "Sun exposure level"
-          },
-          "hygrometry": {
-            "label": "Hygrometry",
-            "description": "Ideal humidity percentage"
-          },
-          "watering": {
-            "schedules": {
-              "label": "Watering Schedule",
-              "description": "Seasonal watering (season + quantity + period)"
-            }
-          },
-          "wateringType": {
-            "label": "Watering Type",
-            "description": "Watering methods"
-          },
-          "division": {
-            "label": "Division",
-            "description": "Propagation techniques"
-          },
-          "soil": {
-            "label": "Soil",
-            "description": "Soil options"
-          },
-          "adviceSoil": {
-            "label": "Soil Advice",
-            "description": "Advice about soil"
-          },
-          "mulching": {
-            "label": "Mulching",
-            "description": "Mulching materials"
-          },
-          "adviceMulching": {
-            "label": "Mulching Advice",
-            "description": "Mulching notes"
-          },
-          "nutritionNeed": {
-            "label": "Nutrition Need",
-            "description": "Nutrient needs"
-          },
-          "fertilizer": {
-            "label": "Fertilizer",
-            "description": "Fertilizer choices"
-          },
-          "adviceFertilizer": {
-            "label": "Fertilizer Advice",
-            "description": "Fertilizer advice"
-          }
+        "wateringType": {
+          "label": "Watering Type",
+          "description": "Watering methods"
         },
-        "growth": {
-          "sowingMonth": {
-            "label": "Sowing Month",
-            "description": "Months to sow"
-          },
-          "floweringMonth": {
-            "label": "Flowering Month",
-            "description": "Months of flowering"
-          },
-          "fruitingMonth": {
-            "label": "Fruiting Month",
-            "description": "Months of fruiting"
-          },
-          "height": {
-            "label": "Height (cm)",
-            "description": "Average height"
-          },
-          "wingspan": {
-            "label": "Wingspan (cm)",
-            "description": "Average wingspan"
-          },
-          "tutoring": {
-            "label": "Tutoring",
-            "description": "Needs support"
-          },
-          "adviceTutoring": {
-            "label": "Tutoring Advice",
-            "description": "Support details"
-          },
-          "sowType": {
-            "label": "Sow Type",
-            "description": "Planting method"
-          },
-          "separation": {
-            "label": "Separation (cm)",
-            "description": "Spacing of sowing"
-          },
-          "transplanting": {
-            "label": "Transplanting",
-            "description": "Needs transplanting"
-          },
-          "adviceSowing": {
-            "label": "Sowing Advice",
-            "description": "Sowing notes"
-          },
-          "cut": {
-            "label": "Cut",
-            "description": "Type of cut"
-          }
+        "division": {
+          "label": "Division",
+          "description": "Propagation techniques"
         },
-        "usage": {
-          "adviceMedicinal": {
-            "label": "Medicinal Advice",
-            "description": "Medicinal usage details"
-          },
-          "nutritionalIntake": {
-            "label": "Nutritional Intake",
-            "description": "Nutritional tags"
-          },
-          "infusion": {
-            "label": "Infusion",
-            "description": "Can be used for infusion"
-          },
-          "adviceInfusion": {
-            "label": "Infusion Advice",
-            "description": "Infusion notes"
-          },
-          "infusionMix": {
-            "label": "Infusion Mix",
-            "description": "Mix name to benefit"
-          },
-          "recipesIdeas": {
-            "label": "Recipes Ideas",
-            "description": "Recipe names"
-          },
-          "aromatherapy": {
-            "label": "Aromatherapy",
-            "description": "Usable for essential oils"
-          },
-          "spiceMixes": {
-            "label": "Spice Mixes",
-            "description": "Spice mix names"
-          }
+        "soil": {
+          "label": "Soil",
+          "description": "Soil options"
         },
-        "ecology": {
-          "melliferous": {
-            "label": "Melliferous",
-            "description": "Good for pollinators"
-          },
-          "polenizer": {
-            "label": "Polenizer",
-            "description": "Pollinator species"
-          },
-          "beFertilizer": {
-            "label": "Be Fertilizer",
-            "description": "Acts as fertilizer for others"
-          },
-          "groundEffect": {
-            "label": "Ground Effect",
-            "description": "Effect on soil"
-          },
-          "conservationStatus": {
-            "label": "Conservation Status",
-            "description": "Status in the wild"
-          }
+        "adviceSoil": {
+          "label": "Soil Advice",
+          "description": "Advice about soil"
         },
-        "danger": {
-          "pests": {
-            "label": "Pests",
-            "description": "Pest list"
-          },
-          "diseases": {
-            "label": "Diseases",
-            "description": "Disease list"
-          }
+        "mulching": {
+          "label": "Mulching",
+          "description": "Mulching materials"
         },
-        "miscellaneous": {
-          "companions": {
-            "label": "Companions",
-            "description": "Companion plants"
-          },
-          "tags": {
-            "label": "Tags",
-            "description": "Search tags"
-          },
-          "sources": {
-            "label": "Sources",
-            "description": "Reference links"
-          }
+        "adviceMulching": {
+          "label": "Mulching Advice",
+          "description": "Mulching notes"
         },
-        "meta": {
-          "status": {
-            "label": "Status",
-            "description": "Editorial status"
-          },
-          "adminCommentary": {
-            "label": "Admin Commentary",
-            "description": "Moderator feedback"
-          }
+        "nutritionNeed": {
+          "label": "Nutrition Need",
+          "description": "Nutrient needs"
+        },
+        "fertilizer": {
+          "label": "Fertilizer",
+          "description": "Fertilizer choices"
+        },
+        "adviceFertilizer": {
+          "label": "Fertilizer Advice",
+          "description": "Fertilizer advice"
         }
       },
-        "categories": {
+      "growth": {
+        "sowingMonth": {
+          "label": "Sowing Month",
+          "description": "Months to sow"
+        },
+        "floweringMonth": {
+          "label": "Flowering Month",
+          "description": "Months of flowering"
+        },
+        "fruitingMonth": {
+          "label": "Fruiting Month",
+          "description": "Months of fruiting"
+        },
+        "height": {
+          "label": "Height (cm)",
+          "description": "Average height"
+        },
+        "wingspan": {
+          "label": "Wingspan (cm)",
+          "description": "Average wingspan"
+        },
+        "tutoring": {
+          "label": "Tutoring",
+          "description": "Needs support"
+        },
+        "adviceTutoring": {
+          "label": "Tutoring Advice",
+          "description": "Support details"
+        },
+        "sowType": {
+          "label": "Sow Type",
+          "description": "Planting method"
+        },
+        "separation": {
+          "label": "Separation (cm)",
+          "description": "Spacing of sowing"
+        },
+        "transplanting": {
+          "label": "Transplanting",
+          "description": "Needs transplanting"
+        },
+        "adviceSowing": {
+          "label": "Sowing Advice",
+          "description": "Sowing notes"
+        },
+        "cut": {
+          "label": "Cut",
+          "description": "Type of cut"
+        }
+      },
+      "usage": {
+        "adviceMedicinal": {
+          "label": "Medicinal Advice",
+          "description": "Medicinal usage details"
+        },
+        "nutritionalIntake": {
+          "label": "Nutritional Intake",
+          "description": "Nutritional tags"
+        },
+        "infusion": {
+          "label": "Infusion",
+          "description": "Can be used for infusion"
+        },
+        "adviceInfusion": {
+          "label": "Infusion Advice",
+          "description": "Infusion notes"
+        },
+        "infusionMix": {
+          "label": "Infusion Mix",
+          "description": "Mix name to benefit"
+        },
+        "recipesIdeas": {
+          "label": "Recipes Ideas",
+          "description": "Recipe names"
+        },
+        "aromatherapy": {
+          "label": "Aromatherapy",
+          "description": "Usable for essential oils"
+        },
+        "spiceMixes": {
+          "label": "Spice Mixes",
+          "description": "Spice mix names"
+        }
+      },
+      "ecology": {
+        "melliferous": {
+          "label": "Melliferous",
+          "description": "Good for pollinators"
+        },
+        "polenizer": {
+          "label": "Polenizer",
+          "description": "Pollinator species"
+        },
+        "beFertilizer": {
+          "label": "Be Fertilizer",
+          "description": "Acts as fertilizer for others"
+        },
+        "groundEffect": {
+          "label": "Ground Effect",
+          "description": "Effect on soil"
+        },
+        "conservationStatus": {
+          "label": "Conservation Status",
+          "description": "Status in the wild"
+        }
+      },
+      "danger": {
+        "pests": {
+          "label": "Pests",
+          "description": "Pest list"
+        },
+        "diseases": {
+          "label": "Diseases",
+          "description": "Disease list"
+        }
+      },
+      "miscellaneous": {
+        "companions": {
+          "label": "Companions",
+          "description": "Companion plants"
+        },
+        "tags": {
+          "label": "Tags",
+          "description": "Search tags"
+        },
+        "sources": {
+          "label": "Sources",
+          "description": "Reference links"
+        }
+      },
+      "meta": {
+        "status": {
+          "label": "Status",
+          "description": "Editorial status"
+        },
+        "adminCommentary": {
+          "label": "Admin Commentary",
+          "description": "Moderator feedback"
+        }
+      }
+    },
+    "categories": {
       "basics": "Basics",
       "identity": "Identity",
       "plantCare": "Plant Care",
@@ -3092,98 +3049,98 @@
       "termsVersion": "Version {{version}} - Updated {{date}}",
       "privacyVersion": "Version {{version}} - Updated {{date}}",
       "backToReview": "Back to Review"
+    }
+  },
+  "setup": {
+    "welcome": {
+      "title": "Welcome to Aphylia!",
+      "description": "I'm your garden assistant. I will accompany you through this journey to make your garden grow and bloom into the most beautiful one!",
+      "subtitle": "First, let's get to know each other and the environment where your garden will evolve.",
+      "getStarted": "Let's get started"
     },
-    "setup": {
-      "welcome": {
-        "title": "Welcome to Aphylia!",
-        "description": "I'm your garden assistant. I will accompany you through this journey to make your garden grow and bloom into the most beautiful one!",
-        "subtitle": "First, let's get to know each other and the environment where your garden will evolve.",
-        "getStarted": "Let's get started"
-      },
-      "accent": {
-        "title": "Choose your accent color",
-        "subtitle": "Personalize your Aphylia experience",
-        "selected": "Selected"
-      },
-      "location": {
-        "title": "Where are you located?",
-        "subtitle": "This helps us provide local gardening advice",
-        "searchLabel": "Search for your city",
-        "searchPlaceholder": "Type a city name...",
-        "detecting": "Detecting your location...",
-        "detected": "Location detected automatically!",
-        "timezoneSet": "Timezone:",
-        "noResults": "No cities found. Try a different search.",
-        "detectButton": "Use my current location",
-        "detectingGPS": "Detecting...",
-        "detectFailed": "Unable to detect location. Please search manually.",
-        "geoNotSupported": "Geolocation is not supported by your browser"
-      },
-      "gardenType": {
-        "title": "Where is your garden located?",
-        "subtitle": "This helps us recommend the right plants for you",
-        "outside": "Outside, in a yard",
-        "outsideDesc": "I have an outdoor garden or yard",
-        "inside": "Inside your home",
-        "insideDesc": "I grow plants indoors",
-        "both": "Both inside and outside",
-        "bothDesc": "I have plants everywhere!"
-      },
-      "experience": {
-        "title": "What's your gardening level?",
-        "subtitle": "We'll adapt our advice to your expertise",
-        "novice": "Novice",
-        "noviceDesc": "I'm just starting my gardening journey",
-        "intermediate": "Intermediate",
-        "intermediateDesc": "I have some experience with plants",
-        "expert": "Expert",
-        "expertDesc": "Gardening is my passion!"
-      },
-      "purpose": {
-        "title": "What is your purpose for your garden?",
-        "subtitle": "We'll personalize your plant recommendations",
-        "eat": "Grow food",
-        "eatDesc": "Vegetables and fruits for my own consumption",
-        "ornamental": "Ornamental garden",
-        "ornamentalDesc": "Beautiful flowers and decorative plants",
-        "various": "A bit of everything!",
-        "variousDesc": "As many various plants as possible"
-      },
-      "notificationTime": {
-        "title": "When should we remind you?",
-        "subtitle": "Choose your preferred notification time",
-        "early": "Early bird",
-        "earlyDesc": "6:00 AM - Start the day with your plants",
-        "morning": "Sleep in",
-        "morningDesc": "10:00 AM - After your morning coffee",
-        "midday": "Midday energy",
-        "middayDesc": "2:00 PM - A break in your afternoon",
-        "afternoon": "After work",
-        "afternoonDesc": "5:00 PM - Wind down with your garden"
-      },
-      "notifications": {
-        "title": "Stay on top of your garden",
-        "description": "Enable notifications to get reminders about watering, fertilizing, and caring for your plants at the perfect time.",
-        "enable": "Enable notifications",
-        "skip": "Maybe later"
-      },
-      "complete": {
-        "title": "You're all set!",
-        "description": "Your garden assistant is ready to help you grow the most beautiful plants. Let's start exploring!",
-        "button": "Start exploring"
-      },
-      "settings": {
-        "title": "Garden Preferences",
-        "description": "Update your gardening preferences and notification settings.",
-        "gardenType": "Garden Location",
-        "gardenTypeDescription": "Where do you grow your plants?",
-        "experienceLevel": "Experience Level",
-        "experienceLevelDescription": "Your gardening expertise level",
-        "lookingFor": "Garden Purpose",
-        "lookingForDescription": "What's your main gardening goal?",
-        "notificationTime": "Notification Time",
-        "notificationTimeDescription": "When should we send you reminders?"
-      }
+    "accent": {
+      "title": "Choose your accent color",
+      "subtitle": "Personalize your Aphylia experience",
+      "selected": "Selected"
+    },
+    "location": {
+      "title": "Where are you located?",
+      "subtitle": "This helps us provide local gardening advice",
+      "searchLabel": "Search for your city",
+      "searchPlaceholder": "Type a city name...",
+      "detecting": "Detecting your location...",
+      "detected": "Location detected automatically!",
+      "timezoneSet": "Timezone:",
+      "noResults": "No cities found. Try a different search.",
+      "detectButton": "Use my current location",
+      "detectingGPS": "Detecting...",
+      "detectFailed": "Unable to detect location. Please search manually.",
+      "geoNotSupported": "Geolocation is not supported by your browser"
+    },
+    "gardenType": {
+      "title": "Where is your garden located?",
+      "subtitle": "This helps us recommend the right plants for you",
+      "outside": "Outside, in a yard",
+      "outsideDesc": "I have an outdoor garden or yard",
+      "inside": "Inside your home",
+      "insideDesc": "I grow plants indoors",
+      "both": "Both inside and outside",
+      "bothDesc": "I have plants everywhere!"
+    },
+    "experience": {
+      "title": "What's your gardening level?",
+      "subtitle": "We'll adapt our advice to your expertise",
+      "novice": "Novice",
+      "noviceDesc": "I'm just starting my gardening journey",
+      "intermediate": "Intermediate",
+      "intermediateDesc": "I have some experience with plants",
+      "expert": "Expert",
+      "expertDesc": "Gardening is my passion!"
+    },
+    "purpose": {
+      "title": "What is your purpose for your garden?",
+      "subtitle": "We'll personalize your plant recommendations",
+      "eat": "Grow food",
+      "eatDesc": "Vegetables and fruits for my own consumption",
+      "ornamental": "Ornamental garden",
+      "ornamentalDesc": "Beautiful flowers and decorative plants",
+      "various": "A bit of everything!",
+      "variousDesc": "As many various plants as possible"
+    },
+    "notificationTime": {
+      "title": "When should we remind you?",
+      "subtitle": "Choose your preferred notification time",
+      "early": "Early bird",
+      "earlyDesc": "6:00 AM - Start the day with your plants",
+      "morning": "Sleep in",
+      "morningDesc": "10:00 AM - After your morning coffee",
+      "midday": "Midday energy",
+      "middayDesc": "2:00 PM - A break in your afternoon",
+      "afternoon": "After work",
+      "afternoonDesc": "5:00 PM - Wind down with your garden"
+    },
+    "notifications": {
+      "title": "Stay on top of your garden",
+      "description": "Enable notifications to get reminders about watering, fertilizing, and caring for your plants at the perfect time.",
+      "enable": "Enable notifications",
+      "skip": "Maybe later"
+    },
+    "complete": {
+      "title": "You're all set!",
+      "description": "Your garden assistant is ready to help you grow the most beautiful plants. Let's start exploring!",
+      "button": "Start exploring"
+    },
+    "settings": {
+      "title": "Garden Preferences",
+      "description": "Update your gardening preferences and notification settings.",
+      "gardenType": "Garden Location",
+      "gardenTypeDescription": "Where do you grow your plants?",
+      "experienceLevel": "Experience Level",
+      "experienceLevelDescription": "Your gardening expertise level",
+      "lookingFor": "Garden Purpose",
+      "lookingForDescription": "What's your main gardening goal?",
+      "notificationTime": "Notification Time",
+      "notificationTimeDescription": "When should we send you reminders?"
     }
   }
 }
