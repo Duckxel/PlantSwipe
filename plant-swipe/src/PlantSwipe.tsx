@@ -1,4 +1,4 @@
-import React, { useMemo, useState, lazy, Suspense } from "react";
+import React, { useMemo, useState, lazy, Suspense, useCallback } from "react";
 import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
@@ -1176,7 +1176,7 @@ export default function PlantSwipe() {
     }
   }, [currentView, heroImageCandidate, index, current])
 
-  const handlePass = () => {
+  const handlePass = useCallback(() => {
     if (swipeList.length === 0) return
     setIndex((i) => {
       const next = i + 1
@@ -1186,20 +1186,20 @@ export default function PlantSwipe() {
       }
       return next
     })
-  }
+  }, [swipeList.length])
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (swipeList.length === 0) return
     setIndex((i) => {
       const prev = i - 1
       // Wrap around to the end if going back from the start
       return prev < 0 ? swipeList.length - 1 : prev
     })
-  }
+  }, [swipeList.length])
 
-  const handleInfo = () => {
+  const handleInfo = useCallback(() => {
     if (current) navigate(`/plants/${current.id}`)
-  }
+  }, [current, navigate])
 
   // Swipe logic
   const x = useMotionValue(0)
@@ -1215,7 +1215,7 @@ export default function PlantSwipe() {
     animate(y, 0, { duration: 0.1 })
   }, [index, x, y])
   
-  const onDragEnd = (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
+  const onDragEnd = useCallback((_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
     const dx = info.offset.x
     const dy = info.offset.y
     
@@ -1263,19 +1263,19 @@ export default function PlantSwipe() {
       animate(x, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
       animate(y, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
     }
-  }
+  }, [handleInfo, handlePass, handlePrevious, x, y])
 
   // Favorites handling
-  const ensureLoggedIn = () => {
+  const ensureLoggedIn = useCallback(() => {
     if (!user) {
       setAuthMode('login')
       setAuthOpen(true)
       return false
     }
     return true
-  }
+  }, [user])
 
-  const toggleLiked = async (plantId: string) => {
+  const toggleLiked = useCallback(async (plantId: string) => {
     if (!ensureLoggedIn()) return
     setLikedIds((prev) => {
       const has = prev.includes(plantId)
@@ -1300,7 +1300,11 @@ export default function PlantSwipe() {
       })()
       return next
     })
-  }
+  }, [ensureLoggedIn, user, refreshProfile])
+
+  const handleToggleLike = useCallback(() => {
+    if (current) toggleLiked(current.id)
+  }, [current, toggleLiked])
 
   const openLogin = React.useCallback(() => { setAuthMode("login"); setAuthOpen(true) }, [])
   const openSignup = React.useCallback(() => { setAuthMode("signup"); setAuthOpen(true) }, [])
@@ -2116,9 +2120,7 @@ export default function PlantSwipe() {
                     handlePass={handlePass}
                     handlePrevious={handlePrevious}
                     liked={current ? likedIds.includes(current.id) : false}
-                    onToggleLike={() => {
-                      if (current) toggleLiked(current.id)
-                    }}
+                    onToggleLike={handleToggleLike}
                     boostImagePriority={boostImagePriority}
                   />
                 </Suspense>

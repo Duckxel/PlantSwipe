@@ -87,7 +87,10 @@ interface SwipePageProps {
   boostImagePriority?: boolean
 }
 
-export const SwipePage: React.FC<SwipePageProps> = ({
+// ⚡ Bolt: Memoize SwipePage to prevent re-renders when parent state (PlantSwipe) updates
+// but swipe props (current plant, index) haven't changed.
+// This is critical for preventing heavy re-renders during unrelated state updates (e.g. toasts, auth dialogs).
+export const SwipePage = React.memo(({
   current,
   index: _index,
   setIndex,
@@ -100,7 +103,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   liked = false,
   onToggleLike,
   boostImagePriority = false,
-}) => {
+}: SwipePageProps) => {
   void _index // Prop kept for interface compatibility
       const { t } = useTranslation("common")
     const seoTitle = t("seo.home.title", { defaultValue: "Aphylia" })
@@ -680,7 +683,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         </motion.section>
       </div>
     )
-}
+})
 
 const EmptyState = ({ onReset }: { onReset: () => void }) => {
   const { t } = useTranslation("common")
