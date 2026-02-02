@@ -52,7 +52,7 @@ export const SOCIAL_ICON_URLS = {
 
 // Logo URLs
 export const LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
-export const BANNER_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260-ae7e1e2d-ea1d-4944-be95-84cc4b8a29ed.png'
+export const BANNER_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png'
 
 // Localized strings for the email wrapper
 export const EMAIL_WRAPPER_I18N: Record<SupportedLanguage, {

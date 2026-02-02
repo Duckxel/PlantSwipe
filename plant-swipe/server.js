@@ -25123,7 +25123,7 @@ async function generateCrawlerHtml(req, pagePath) {
   let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
   
   // Banner image ONLY for landing page - other pages should use specific images or no image
-  const LANDING_BANNER_IMAGE = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260-ae7e1e2d-ea1d-4944-be95-84cc4b8a29ed.png'
+  const LANDING_BANNER_IMAGE = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png'
   
   // Image settings - null means no image (don't show logo as fallback)
   // Only landing page gets the banner, other pages get specific images or nothing
