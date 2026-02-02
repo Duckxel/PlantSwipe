@@ -42,6 +42,18 @@ import { monthNumberToSlug, monthNumbersToSlugs } from "@/lib/months"
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
 const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
 
+// Helper to check if an error is a cancellation/abort error
+function isCancellationError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true
+  if (err instanceof Error && err.name === 'AbortError') return true
+  if (err instanceof Error && (
+    err.message === 'Operation cancelled' ||
+    err.message === 'AI fill was cancelled' ||
+    err.message.includes('aborted')
+  )) return true
+  return false
+}
+
 // AI field order for consistent filling
 const aiFieldOrder = [
   'plantType',
@@ -302,7 +314,7 @@ export async function processPlantRequest(
   requestId: string,
   createdBy: string | undefined,
   callbacks?: AiPrefillCallbacks
-): Promise<{ success: boolean; plantId?: string; error?: string }> {
+): Promise<{ success: boolean; plantId?: string; error?: string; cancelled?: boolean }> {
   const { onProgress, onFieldComplete, onFieldStart, onError, signal } = callbacks || {}
   
   const totalFields = aiFieldOrder.length
@@ -314,7 +326,7 @@ export async function processPlantRequest(
   try {
     // Check if aborted
     if (signal?.aborted) {
-      throw new Error('Operation cancelled')
+      throw new DOMException('Operation cancelled', 'AbortError')
     }
     
     // Stage 0: Get English plant name
@@ -340,7 +352,7 @@ export async function processPlantRequest(
     }
     
     if (signal?.aborted) {
-      throw new Error('Operation cancelled')
+      throw new DOMException('Operation cancelled', 'AbortError')
     }
     
     // Check if a plant with this English name already exists in the database
@@ -465,7 +477,7 @@ export async function processPlantRequest(
     })
     
     if (signal?.aborted) {
-      throw new Error('Operation cancelled')
+      throw new DOMException('Operation cancelled', 'AbortError')
     }
     
     // Log any field errors that occurred during AI fill
@@ -514,7 +526,7 @@ export async function processPlantRequest(
     }
     
     if (signal?.aborted) {
-      throw new Error('Operation cancelled')
+      throw new DOMException('Operation cancelled', 'AbortError')
     }
     
     // Stage 2: Save Plant
@@ -612,7 +624,7 @@ export async function processPlantRequest(
     if (signal?.aborted) {
       // Clean up - delete the plant we just created
       await supabase.from('plants').delete().eq('id', plantId)
-      throw new Error('Operation cancelled')
+      throw new DOMException('Operation cancelled', 'AbortError')
     }
     
     // Save related data
@@ -668,7 +680,7 @@ export async function processPlantRequest(
       // Clean up - delete the plant and translation
       await supabase.from('plant_translations').delete().eq('plant_id', plantId)
       await supabase.from('plants').delete().eq('id', plantId)
-      throw new Error('Operation cancelled')
+      throw new DOMException('Operation cancelled', 'AbortError')
     }
     
     // Stage 3: Translate to other languages (in parallel)
@@ -680,7 +692,7 @@ export async function processPlantRequest(
     const translatedRows = await Promise.all(
       targetLanguages.map(async (target) => {
         if (signal?.aborted) {
-          throw new Error('Operation cancelled')
+          throw new DOMException('Operation cancelled', 'AbortError')
         }
         
         const translateArraySafe = (arr?: string[]) => translateArray((arr || []).map(s => String(s || '')), target, 'en')
@@ -772,7 +784,7 @@ export async function processPlantRequest(
       // Clean up
       await supabase.from('plant_translations').delete().eq('plant_id', plantId)
       await supabase.from('plants').delete().eq('id', plantId)
-      throw new Error('Operation cancelled')
+      throw new DOMException('Operation cancelled', 'AbortError')
     }
     
     if (translatedRows.length) {
@@ -790,7 +802,7 @@ export async function processPlantRequest(
       // Clean up everything
       await supabase.from('plant_translations').delete().eq('plant_id', plantId)
       await supabase.from('plants').delete().eq('id', plantId)
-      throw new Error('Operation cancelled')
+      throw new DOMException('Operation cancelled', 'AbortError')
     }
     
     // Mark the request as complete (delete it)
@@ -807,6 +819,10 @@ export async function processPlantRequest(
     return { success: true, plantId }
     
   } catch (error) {
+    // Don't report cancellation errors as failures - they're intentional
+    if (isCancellationError(error)) {
+      return { success: false, cancelled: true }
+    }
     const message = error instanceof Error ? error.message : String(error)
     onError?.(message)
     return { success: false, error: message }
@@ -846,12 +862,18 @@ export async function processAllPlantRequests(
       callbacks
     )
     
+    // If the operation was cancelled, stop processing and don't count as failure
+    if (result.cancelled) {
+      return { processed, failed, cancelled: true }
+    }
+    
     if (result.success) {
       processed++
     } else {
       failed++
     }
     
+    // Only call onPlantComplete if not cancelled (cancellation is handled by the caller)
     onPlantComplete?.({
       plantName: request.plant_name,
       requestId: request.id,

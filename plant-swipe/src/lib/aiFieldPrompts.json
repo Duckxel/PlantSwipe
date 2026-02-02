@@ -1,72 +1,160 @@
 {
   "plantType": [
     "Classify {{plantName}} by its dominant growth habit or planting form.",
-    "Return a single lowercase string chosen from: \"plant\", \"flower\", \"bamboo\", \"shrub\", \"tree\", \"cactus\", \"succulent\"."
+    "Return a single lowercase string chosen from: \"plant\", \"flower\", \"bamboo\", \"shrub\", \"tree\", \"cactus\", \"succulent\".",
+    "If the plant doesn't clearly fit one category, use \"plant\" as the default."
   ],
   "utility": [
     "List every practical or ornamental role {{plantName}} is commonly grown for.",
-    "Return an array of lowercase tags selected from: \"comestible\", \"ornemental\", \"produce_fruit\", \"aromatic\", \"medicinal\", \"odorous\", \"climbing\", \"cereal\", \"spice\"."
+    "Return an array of lowercase tags selected from: \"comestible\", \"ornemental\", \"produce_fruit\", \"aromatic\", \"medicinal\", \"odorous\", \"climbing\", \"cereal\", \"spice\".",
+    "Include all that genuinely apply based on documented uses."
   ],
   "comestiblePart": [
     "Identify which anatomical parts of {{plantName}} are safely edible.",
-    "Return an array whose values are limited to: \"flower\", \"fruit\", \"seed\", \"leaf\", \"stem\", \"root\", \"bulb\", \"bark\", \"wood\"."
+    "Return an array whose values are limited to: \"flower\", \"fruit\", \"seed\", \"leaf\", \"stem\", \"root\", \"bulb\", \"bark\", \"wood\".",
+    "Return an empty array if the plant is not edible."
   ],
   "fruitType": [
     "Describe the fruiting category for {{plantName}} if it produces harvestable fruit.",
-    "Return an array containing any applicable values from: \"nut\", \"seed\", \"stone\". Use an empty array when the plant does not fruit."
+    "Return an array containing any applicable values from: \"nut\", \"seed\", \"stone\".",
+    "Use an empty array when the plant does not produce fruit."
   ],
   "seasons": [
     "Indicate the seasons when {{plantName}} looks most attractive or is at peak performance.",
-    "Return an array of capitalized season names chosen from: \"Spring\", \"Summer\", \"Autumn\", \"Winter\"."
+    "Return an array of capitalized season names chosen from: \"Spring\", \"Summer\", \"Autumn\", \"Winter\".",
+    "Include all seasons where the plant provides visual interest or is actively growing."
   ],
   "description": [
     "Write a cohesive horticultural overview for {{plantName}} that highlights appearance, growth habit, bloom/fruit interest, and essential care.",
-    "Use 150-300 words of prose (no bullet lists or headings) and keep the tone factual and neutral."
+    "Use 150-300 words of prose (no bullet lists or headings) and keep the tone factual and neutral.",
+    "Focus on what makes this plant distinctive and its primary uses in gardens or homes."
   ],
   "identity": [
     "Populate the `identity` object for {{plantName}} with authoritative taxonomy and naming information.",
-    "Include: `givenNames` (array of common names), `scientificName` (binomial), `family`, `overview` (2-3 sentence summary distinct from the main description), `promotionMonth` (1-12 where relevant), `lifeCycle` (Annual, Biennials, Perenials, Ephemerals, Monocarpic, or Polycarpic), `season` (array of capitalized seasons), `foliagePersistance` (Deciduous, Evergreen, Semi-Evergreen, or Marcescent), `spiked` (boolean), `toxicityHuman` and `toxicityPets` (Non-Toxic, Midly Irritating, Highly Toxic, or Lethally Toxic), `allergens` (array), `colors` (array of objects like {\"name\":\"Deep Pink\",\"hexCode\":\"#d62d5b\"}), `multicolor` (boolean - REQUIRED: set to true if plant has multiple distinct colors, false otherwise), `bicolor` (boolean - REQUIRED: set to true if plant has exactly two colors, false otherwise), `scent` (boolean), `symbolism` (array of short themes), `livingSpace` (Indoor, Outdoor, or Both), `composition` (subset of Flowerbed, Path, Hedge, Ground Cover, Pot), and `maintenanceLevel` (None, Low, Moderate, or Heavy).",
-    "Use concise values grounded in reputable botanical sources and avoid copying the long-form description. Always explicitly set `multicolor` and `bicolor` boolean values based on the plant's actual color characteristics."
+    "REQUIRED fields with EXACT formats:",
+    "- `givenNames`: array of common names (e.g., [\"Snake Plant\", \"Mother-in-law's Tongue\"])",
+    "- `scientificName`: botanical binomial (e.g., \"Sansevieria trifasciata\")",
+    "- `family`: plant family (e.g., \"Asparagaceae\")",
+    "- `overview`: 2-3 sentence summary distinct from the main description",
+    "- `promotionMonth`: integer 1-12 for when the plant should be featured, or null",
+    "- `lifeCycle`: EXACTLY one of: \"Annual\", \"Biennials\", \"Perenials\", \"Ephemerals\", \"Monocarpic\", \"Polycarpic\"",
+    "- `season`: array from [\"Spring\", \"Summer\", \"Autumn\", \"Winter\"]",
+    "- `foliagePersistance`: EXACTLY one of: \"Deciduous\", \"Evergreen\", \"Semi-Evergreen\", \"Marcescent\"",
+    "- `spiked`: boolean (true if plant has spikes/thorns)",
+    "- `toxicityHuman`: EXACTLY one of: \"Non-Toxic\", \"Midly Irritating\", \"Highly Toxic\", \"Lethally Toxic\"",
+    "- `toxicityPets`: EXACTLY one of: \"Non-Toxic\", \"Midly Irritating\", \"Highly Toxic\", \"Lethally Toxic\"",
+    "- `allergens`: array of allergen names or empty array",
+    "- `colors`: array of objects like [{\"name\":\"Deep Pink\",\"hexCode\":\"#d62d5b\"}]",
+    "- `multicolor`: boolean - REQUIRED, set true if plant has 3+ distinct colors, false otherwise",
+    "- `bicolor`: boolean - REQUIRED, set true if plant has exactly 2 colors, false otherwise",
+    "- `scent`: boolean (true if plant has notable fragrance)",
+    "- `symbolism`: array of cultural meanings (e.g., [\"love\", \"purity\", \"friendship\"])",
+    "- `livingSpace`: EXACTLY one of: \"Indoor\", \"Outdoor\", \"Both\"",
+    "- `composition`: array from [\"Flowerbed\", \"Path\", \"Hedge\", \"Ground Cover\", \"Pot\"]",
+    "- `maintenanceLevel`: EXACTLY one of: \"None\", \"Low\", \"Moderate\", \"Heavy\"",
+    "Use concise values grounded in reputable botanical sources. Do NOT use values outside the specified options."
   ],
   "plantCare": [
     "Outline how to cultivate {{plantName}} successfully.",
-    "IMPORTANT: You MUST populate ALL of these fields: `origin` (array of regions/countries where the plant originates - REQUIRED), `habitat` (array - choose from: Aquatic, Semi-Aquatic, Wetland, Tropical, Temperate, Arid, Mediterranean, Mountain, Grassland, Forest, Coastal, Urban - REQUIRED), `temperatureMax` (integer °C - REQUIRED), `temperatureMin` (integer °C - REQUIRED), `temperatureIdeal` (integer °C - REQUIRED), `levelSun` (exactly one of: Low Light, Shade, Partial Sun, Full Sun - REQUIRED), `hygrometry` (0-100 scale describing ambient humidity), `wateringType`, `division`, `soil`, `adviceSoil`, `mulching`, `adviceMulching`, `nutritionNeed`, `fertilizer`, and `adviceFertilizer`.",
-    "For watering, include both summary guidance and an explicit `schedules` array under `watering`, where every schedule entry is `{ \"season\": \"Spring\", \"quantity\": 2, \"timePeriod\": \"week\" }` describing how often to water.",
-    "Keep recommendations practical, specific, and consistent with the plant’s native environment."
+    "CRITICAL: You MUST populate ALL of these fields with the EXACT value formats specified:",
+    "",
+    "- `origin`: array of regions/countries (e.g., [\"South Africa\", \"Madagascar\"]) - REQUIRED",
+    "- `habitat`: array from ONLY these values: [\"Aquatic\", \"Semi-Aquatic\", \"Wetland\", \"Tropical\", \"Temperate\", \"Arid\", \"Mediterranean\", \"Mountain\", \"Grassland\", \"Forest\", \"Coastal\", \"Urban\"] - REQUIRED",
+    "- `temperatureMax`: integer in Celsius (e.g., 35) - REQUIRED",
+    "- `temperatureMin`: integer in Celsius (e.g., 5) - REQUIRED",
+    "- `temperatureIdeal`: integer in Celsius (e.g., 20) - REQUIRED",
+    "- `levelSun`: EXACTLY one of: \"Low Light\", \"Shade\", \"Partial Sun\", \"Full Sun\" - REQUIRED",
+    "- `hygrometry`: integer 0-100 representing humidity percentage",
+    "",
+    "- `watering`: object containing a `schedules` array where EACH entry is shaped EXACTLY like:",
+    "  {\"season\": \"Spring\", \"quantity\": 2, \"timePeriod\": \"week\"}",
+    "  - `season` must be one of: \"Spring\", \"Summer\", \"Autumn\", \"Winter\"",
+    "  - `quantity` must be an integer (number of times to water)",
+    "  - `timePeriod` must be EXACTLY one of: \"week\", \"month\", \"year\" (lowercase)",
+    "  Example: {\"watering\": {\"schedules\": [{\"season\": \"Summer\", \"quantity\": 2, \"timePeriod\": \"week\"}, {\"season\": \"Winter\", \"quantity\": 1, \"timePeriod\": \"week\"}]}}",
+    "",
+    "- `wateringType`: array from ONLY: [\"surface\", \"buried\", \"hose\", \"drop\", \"drench\"] (all lowercase)",
+    "- `division`: array from ONLY: [\"Seed\", \"Cutting\", \"Division\", \"Layering\", \"Grafting\", \"Tissue Separation\", \"Bulb separation\"]",
+    "- `soil`: array from ONLY: [\"Vermiculite\", \"Perlite\", \"Sphagnum moss\", \"rock wool\", \"Sand\", \"Gravel\", \"Potting Soil\", \"Peat\", \"Clay pebbles\", \"coconut fiber\", \"Bark\", \"Wood Chips\"]",
+    "- `adviceSoil`: string with soil preparation advice",
+    "- `mulching`: array from ONLY: [\"Wood Chips\", \"Bark\", \"Green Manure\", \"Cocoa Bean Hulls\", \"Buckwheat Hulls\", \"Cereal Straw\", \"Hemp Straw\", \"Woven Fabric\", \"Pozzolana\", \"Crushed Slate\", \"Clay Pellets\"]",
+    "- `adviceMulching`: string with mulching advice",
+    "- `nutritionNeed`: array from ONLY: [\"Nitrogen\", \"Phosphorus\", \"Potassium\", \"Calcium\", \"Magnesium\", \"Sulfur\", \"Iron\", \"Boron\", \"Manganese\", \"Molybene\", \"Chlorine\", \"Copper\", \"Zinc\", \"Nitrate\", \"Phosphate\"]",
+    "- `fertilizer`: array from ONLY: [\"Granular fertilizer\", \"Liquid Fertilizer\", \"Meat Flour\", \"Fish flour\", \"Crushed bones\", \"Crushed Horns\", \"Slurry\", \"Manure\", \"Animal excrement\", \"Sea Fertilizer\", \"Yurals\", \"Wine\", \"guano\", \"Coffee Grounds\", \"Banana peel\", \"Eggshell\", \"Vegetable cooking water\", \"Urine\", \"Grass Clippings\", \"Vegetable Waste\", \"Natural Mulch\"]",
+    "- `adviceFertilizer`: string with fertilizing advice",
+    "",
+    "Keep recommendations practical and consistent with the plant's native environment. Do NOT invent values outside the specified options."
   ],
   "growth": [
     "Detail the growth and propagation profile for {{plantName}}.",
-    "Fill: `sowingMonth`, `floweringMonth`, and `fruitingMonth` as arrays of integers (1-12); `height` and `wingspan` in centimeters; `tutoring` (boolean) with `adviceTutoring`; `sowType` (array of techniques such as direct_sow or trays); `separation` (centimeters between plants); `transplanting` (boolean); `adviceSowing`; and `cut` (short note on pruning or cutting style).",
-    "Use realistic numbers pulled from horticultural references."
+    "REQUIRED fields with EXACT formats:",
+    "- `sowingMonth`: array of integers 1-12 (e.g., [3, 4, 5] for March-May)",
+    "- `floweringMonth`: array of integers 1-12",
+    "- `fruitingMonth`: array of integers 1-12 (empty array if no fruit)",
+    "- `height`: integer in centimeters (mature height)",
+    "- `wingspan`: integer in centimeters (mature spread)",
+    "- `tutoring`: boolean (true if staking/support needed)",
+    "- `adviceTutoring`: string with staking advice",
+    "- `sowType`: array from ONLY: [\"Direct\", \"Indoor\", \"Row\", \"Hill\", \"Broadcast\", \"Seed Tray\", \"Cell\", \"Pot\"]",
+    "- `separation`: integer in centimeters (spacing between plants)",
+    "- `transplanting`: boolean (true if can be transplanted)",
+    "- `adviceSowing`: string with sowing/planting advice",
+    "- `cut`: string with pruning notes",
+    "Use realistic numbers based on horticultural references."
   ],
   "usage": [
     "Summarize how people cook with, medicate with, or otherwise use {{plantName}}.",
-    "Populate: `adviceMedicinal` (concise paragraph on traditional medicinal uses if applicable), `nutritionalIntake` (array mentioning vitamins or benefits), `infusion` (boolean) with `adviceInfusion`, `infusionMix` (array of objects like {\"mix_name\":\"Chamomile blend\",\"benefit\":\"Calming digestive tea\"}), `recipesIdeas` (array of short dish ideas), `aromatherapy` (boolean), and `spiceMixes` (array of blends).",
-    "If certain uses are not documented, leave their arrays empty instead of inventing data."
+    "REQUIRED fields:",
+    "- `adviceMedicinal`: string describing traditional medicinal uses (or empty string if none)",
+    "- `nutritionalIntake`: array of nutritional benefits (e.g., [\"Vitamin C\", \"Iron\", \"Antioxidants\"])",
+    "- `infusion`: boolean (true if used for tea/infusions)",
+    "- `adviceInfusion`: string with infusion preparation advice",
+    "- `infusionMix`: Record<string, string> where keys are mix names and values are benefits",
+    "  Example: {\"Chamomile blend\": \"Calming digestive tea\", \"Mint refresh\": \"Cooling effect\"}",
+    "- `recipesIdeas`: array of dish ideas (e.g., [\"Pesto\", \"Salad garnish\", \"Herbal butter\"])",
+    "- `aromatherapy`: boolean (true if used in aromatherapy)",
+    "- `spiceMixes`: array of spice blend uses",
+    "If certain uses are not documented, use empty arrays/strings instead of inventing data."
   ],
   "ecology": [
-    "Capture {{plantName}}’s ecological value and environmental needs.",
-    "Set `melliferous` (boolean for nectar value), list `polenizer` helpers (Bee, Wasp, Ant, Butterfly, Bird, Mosquito, Fly, Beetle, ladybug, Stagbeetle, Cockchafer, dungbeetle, weevil), `beFertilizer` (boolean), `groundEffect` (erosion control, nitrogen fixing, etc.), and `conservationStatus` (Safe, At Risk, Vulnerable, Endangered, Critically Endangered, or Extinct).",
-    "Note wildlife relationships or restoration roles when credible data exists."
+    "Capture {{plantName}}'s ecological value and environmental needs.",
+    "REQUIRED fields with EXACT formats:",
+    "- `melliferous`: boolean (true if provides nectar for pollinators)",
+    "- `polenizer`: array from ONLY: [\"Bee\", \"Wasp\", \"Ant\", \"Butterfly\", \"Bird\", \"Mosquito\", \"Fly\", \"Beetle\", \"ladybug\", \"Stagbeetle\", \"Cockchafer\", \"dungbeetle\", \"weevil\"]",
+    "- `beFertilizer`: boolean (true if can be used as compost/fertilizer)",
+    "- `groundEffect`: string describing environmental benefits (erosion control, nitrogen fixing, etc.)",
+    "- `conservationStatus`: EXACTLY one of: \"Safe\", \"At Risk\", \"Vulnerable\", \"Endangered\", \"Critically Endangered\", \"Extinct\"",
+    "Note wildlife relationships when credible data exists."
   ],
   "danger": [
     "List the main pests and diseases that threaten {{plantName}}.",
-    "Return two arrays: `pests` (common or scientific names) and `diseases` (named issues such as powdery mildew).",
-    "Only include issues that are well-documented for this species."
+    "Return two arrays:",
+    "- `pests`: array of pest names (common or scientific, e.g., [\"Aphids\", \"Spider mites\", \"Mealybugs\"])",
+    "- `diseases`: array of disease names (e.g., [\"Powdery mildew\", \"Root rot\", \"Leaf spot\"])",
+    "Only include issues that are well-documented for this species. Use empty arrays if none are documented."
   ],
   "miscellaneous": [
     "Provide supporting relational data for {{plantName}}.",
-    "Fill `companions` with an array of COMMON NAMES of plants that are either: (1) companion plants that grow well alongside it, or (2) related varieties/cultivars of the same species (e.g., for 'Rose', include 'Rose Iceberg', 'Rose Peace'). These will be shown as suggestions for the user to select from - e.g. [\"Basil\", \"Marigold\", \"Tomato\", \"Rose Iceberg\"].",
-    "For companions, include both companion planting relationships AND related plant varieties. Use standard common names so they can be matched to plant entries in the database.",
-    "Fill `tags` with short categorical labels users might search for, and `sources` with an array of citation objects shaped like {\"name\":\"Royal Horticultural Society\",\"url\":\"https://www.rhs.org.uk/\"}.",
+    "REQUIRED fields:",
+    "- `companions`: array of COMMON NAMES of plants that either:",
+    "  (1) grow well alongside this plant (companion planting), or",
+    "  (2) are related varieties/cultivars (e.g., for 'Rose', include 'Rose Iceberg', 'Rose Peace')",
+    "  Example: [\"Basil\", \"Marigold\", \"Tomato\", \"Rose Iceberg\"]",
+    "- `tags`: array of searchable keywords (e.g., [\"drought-tolerant\", \"bee-friendly\", \"edible\"])",
+    "- `sources`: array of citation objects shaped like {\"name\":\"Royal Horticultural Society\",\"url\":\"https://www.rhs.org.uk/\"}",
+    "Use standard common names for companions so they can be matched to database entries.",
     "Prefer high-quality references and avoid duplicates."
   ],
   "meta": [
     "When meta data is requested for {{plantName}}, only populate editorial helper fields.",
-    "Return an object that may include `funFact` (<=40 words of trivia), `adminCommentary`, `createdBy`, `updatedBy`, and timestamps if they are already known; leave review status untouched unless explicitly provided."
+    "Return an object that may include:",
+    "- `funFact`: string with interesting trivia (max 40 words)",
+    "- `adminCommentary`: string for internal editor notes",
+    "Leave other fields (status, timestamps, createdBy, updatedBy) untouched unless explicitly provided."
   ],
   "meaning": [
     "Summarize the symbolic meaning of {{plantName}} in under 50 words.",
-    "Focus on emotions, ceremonies, or cultural themes backed by botanical folklore. Do not include care advice or lists."
+    "Focus on emotions, ceremonies, or cultural themes backed by botanical folklore.",
+    "Do not include care advice or lists."
   ]
 }

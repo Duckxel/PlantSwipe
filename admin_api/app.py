@@ -72,6 +72,66 @@ def _scrub_pii_from_string(value: str) -> str:
     return value
 
 
+# ========================================
+# MAINTENANCE MODE - Shared with Node server
+# ========================================
+import json
+import time
+
+MAINTENANCE_MODE_FILE = "/tmp/plantswipe-maintenance.json"
+
+
+def _get_maintenance_mode() -> dict:
+    """Check if maintenance mode is currently active.
+    Returns { active: bool, expiresAt?: int, reason?: str }
+    """
+    try:
+        if not os.path.exists(MAINTENANCE_MODE_FILE):
+            return {"active": False}
+        with open(MAINTENANCE_MODE_FILE, "r") as f:
+            data = json.load(f)
+        # Check if maintenance mode has expired
+        expires_at = data.get("expiresAt", 0)
+        if expires_at and time.time() * 1000 > expires_at:
+            # Expired - clean up the file
+            try:
+                os.unlink(MAINTENANCE_MODE_FILE)
+            except Exception:
+                pass
+            return {"active": False}
+        return {"active": True, **data}
+    except Exception:
+        return {"active": False}
+
+
+def _should_suppress_maintenance_error(event, hint) -> bool:
+    """Check if an error should be suppressed during maintenance mode.
+    Suppresses 502, 503, 504 errors which are expected during service restarts.
+    """
+    maintenance = _get_maintenance_mode()
+    if not maintenance.get("active"):
+        return False
+    
+    error = hint.get("exc_info", [None, None, None])[1] if hint else None
+    
+    # Check for HTTP status codes in the error
+    status_codes = [400, 502, 503, 504]
+    
+    # Check error message for status codes
+    if error:
+        msg = str(error)
+        for code in status_codes:
+            if str(code) in msg or "Bad Gateway" in msg or "Service Unavailable" in msg or "Gateway Timeout" in msg:
+                print(f"[Sentry] Suppressing {code}-related error during maintenance: {msg[:100]}")
+                return True
+        # Also suppress connection-related errors during maintenance
+        if any(term in msg for term in ["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "socket hang up", "Connection refused"]):
+            print(f"[Sentry] Suppressing connection error during maintenance: {msg[:100]}")
+            return True
+    
+    return False
+
+
 def _sentry_before_send(event, hint):
     """Filter out non-actionable errors and scrub PII before sending to Sentry.
     
@@ -79,7 +139,14 @@ def _sentry_before_send(event, hint):
     - Scrubs email addresses from error messages
     - Scrubs passwords and tokens
     - Filters out expected client errors
+    
+    Maintenance Mode:
+    - Suppresses 502/503/504 errors during service restarts
     """
+    # MAINTENANCE MODE: Suppress expected errors during pull-and-build operations
+    if _should_suppress_maintenance_error(event, hint):
+        return None
+    
     if "exc_info" in hint:
         exc_type, exc_value, _ = hint["exc_info"]
         # Don't report 401 Unauthorized errors (expected for auth failures)
@@ -637,6 +704,81 @@ def admin_deploy_edge_functions():
 @app.get("/health")
 def health():
     return jsonify({"ok": True})
+
+
+# =============================================================================
+# MAINTENANCE MODE API - Coordinate Sentry error suppression during restarts
+# =============================================================================
+
+@app.get("/admin/maintenance-mode")
+def get_maintenance_mode():
+    """Get current maintenance mode status."""
+    _verify_request()
+    status = _get_maintenance_mode()
+    remaining_ms = 0
+    if status.get("active") and status.get("expiresAt"):
+        remaining_ms = max(0, int(status["expiresAt"] - time.time() * 1000))
+    return jsonify({
+        "ok": True,
+        **status,
+        "remainingMs": remaining_ms
+    })
+
+
+@app.post("/admin/maintenance-mode/enable")
+def enable_maintenance_mode():
+    """Enable maintenance mode (suppresses 502/503/504 errors in Sentry)."""
+    _verify_request()
+    payload = request.get_json(silent=True) or {}
+    # Duration in milliseconds (default: 5 minutes, max: 30 minutes)
+    duration_ms = min(
+        max(int(payload.get("durationMs", 300000)), 60000),  # At least 1 minute
+        30 * 60 * 1000  # Max 30 minutes
+    )
+    reason = str(payload.get("reason", "admin-request"))[:100]
+    
+    try:
+        data = {
+            "active": True,
+            "enabledAt": int(time.time() * 1000),
+            "expiresAt": int(time.time() * 1000 + duration_ms),
+            "reason": reason,
+        }
+        with open(MAINTENANCE_MODE_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"[Sentry] Maintenance mode ENABLED - suppressing expected errors for {duration_ms / 1000}s (reason: {reason})")
+        try:
+            _log_admin_action("maintenance_mode_enable", reason, detail={"durationMs": duration_ms})
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "message": f"Maintenance mode enabled for {duration_ms / 1000} seconds",
+            "expiresAt": data["expiresAt"],
+            "reason": reason
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e) or "Failed to enable maintenance mode"}), 500
+
+
+@app.post("/admin/maintenance-mode/disable")
+def disable_maintenance_mode():
+    """Disable maintenance mode."""
+    _verify_request()
+    try:
+        if os.path.exists(MAINTENANCE_MODE_FILE):
+            os.unlink(MAINTENANCE_MODE_FILE)
+        print("[Sentry] Maintenance mode DISABLED - normal error reporting resumed")
+        try:
+            _log_admin_action("maintenance_mode_disable")
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "message": "Maintenance mode disabled"
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e) or "Failed to disable maintenance mode"}), 500
 
 
 @app.post("/admin/restart-app")

@@ -32,6 +32,7 @@ import {
   ShieldX,
   UserSearch,
   AlertTriangle,
+  AlertCircle,
   Gavel,
   Search,
   ChevronDown,
@@ -98,7 +99,6 @@ import {
   savePersistedBroadcast,
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
-import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { processAllPlantRequests } from "@/lib/aiPrefillService";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
 import { Languages } from "lucide-react";
@@ -110,7 +110,72 @@ import {
   type CategoryProgress, 
   type PlantFormCategory 
 } from "@/lib/plantFormCategories";
-import { enableMaintenanceMode, disableMaintenanceMode } from "@/lib/sentry";
+import { enableMaintenanceMode as enableFrontendMaintenanceMode, disableMaintenanceMode as disableFrontendMaintenanceMode } from "@/lib/sentry";
+
+/**
+ * Enable maintenance mode on both frontend (browser Sentry) and backend (server Sentry)
+ * This ensures 502/503/504 errors during service restarts are suppressed everywhere
+ */
+async function enableMaintenanceMode(durationMs: number = 300000, reason: string = 'admin-operation'): Promise<void> {
+  // Enable frontend maintenance mode immediately (affects browser Sentry)
+  enableFrontendMaintenanceMode(durationMs);
+  
+  // Also enable backend maintenance mode via API (affects server Sentry)
+  try {
+    const adminToken = (globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } })?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (adminToken) {
+      headers['X-Admin-Token'] = String(adminToken);
+    }
+    
+    await fetch('/api/admin/maintenance-mode/enable', {
+      method: 'POST',
+      headers,
+      credentials: 'same-origin',
+      body: JSON.stringify({ durationMs, reason }),
+    }).catch(() => {
+      // Best effort - if server is down, that's expected during maintenance
+      console.log('[MaintenanceMode] Could not reach server to enable maintenance mode (expected during restart)');
+    });
+  } catch {
+    // Silently ignore - server might be down which is expected
+  }
+}
+
+/**
+ * Disable maintenance mode on both frontend and backend
+ */
+async function disableMaintenanceMode(): Promise<void> {
+  // Disable frontend maintenance mode
+  disableFrontendMaintenanceMode();
+  
+  // Also disable backend maintenance mode via API
+  try {
+    const adminToken = (globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } })?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (adminToken) {
+      headers['X-Admin-Token'] = String(adminToken);
+    }
+    
+    await fetch('/api/admin/maintenance-mode/disable', {
+      method: 'POST',
+      headers,
+      credentials: 'same-origin',
+      body: '{}',
+    }).catch(() => {
+      // Best effort - server might still be coming up
+      console.log('[MaintenanceMode] Could not reach server to disable maintenance mode');
+    });
+  } catch {
+    // Silently ignore
+  }
+}
 import {
   Dialog,
   DialogTrigger,
@@ -140,6 +205,21 @@ const {
   RadialBar,
   PolarAngleAxis,
 } = LazyCharts;
+
+// Helper to check if an error is a cancellation/abort error (should not be logged to Sentry)
+function isCancellationError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true
+  if (typeof err === 'object' && err !== null && 'name' in err && (err as { name: string }).name === 'AbortError') return true
+  if (typeof err === 'string') {
+    const lower = err.toLowerCase()
+    return lower.includes('cancel') || lower.includes('abort')
+  }
+  if (err instanceof Error) {
+    const lower = err.message.toLowerCase()
+    return lower.includes('cancel') || lower.includes('abort')
+  }
+  return false
+}
 
 type AdminTab =
   | "overview"
@@ -1152,7 +1232,7 @@ export const AdminPage: React.FC = () => {
     if (restarting) return;
     setRestarting(true);
     // Enable Sentry maintenance mode to suppress expected 502/400 errors during restart
-    enableMaintenanceMode(90000); // 90 seconds should be enough for restart + health checks
+    enableMaintenanceMode(90000, 'restart-services'); // 90 seconds should be enough for restart + health checks
     try {
       setConsoleOpen(true);
       appendConsole("[restart] Restart services requested?");
@@ -1286,7 +1366,7 @@ export const AdminPage: React.FC = () => {
     }
     setRestarting(true);
     // Enable Sentry maintenance mode to suppress expected 502/400 errors during restart
-    enableMaintenanceMode(120000); // 2 minutes for server restart operations
+    enableMaintenanceMode(120000, 'restart-server-with-password'); // 2 minutes for server restart operations
     try {
       setConsoleLines([]);
       setConsoleOpen(true);
@@ -1766,12 +1846,6 @@ export const AdminPage: React.FC = () => {
   const [requestUsers, setRequestUsers] = React.useState<
     Array<{ id: string; display_name: string | null; email: string | null }>
   >([]);
-  const [createPlantDialogOpen, setCreatePlantDialogOpen] =
-    React.useState<boolean>(false);
-  const [createPlantRequestId, setCreatePlantRequestId] = React.useState<
-    string | null
-  >(null);
-  const [createPlantName, setCreatePlantName] = React.useState<string>("");
   
   // Plant request editing state
   const [editingRequestId, setEditingRequestId] = React.useState<string | null>(null);
@@ -2100,11 +2174,11 @@ export const AdminPage: React.FC = () => {
 
   const handleOpenCreatePlantDialog = React.useCallback(
     (req: PlantRequestRow) => {
-      setCreatePlantRequestId(req.id);
-      setCreatePlantName(req.plant_name);
-      setCreatePlantDialogOpen(true);
+      // Navigate to the create plant page with the requested plant name as a query parameter
+      const encodedName = encodeURIComponent(req.plant_name);
+      navigate(`/create?name=${encodedName}`);
     },
-    [],
+    [navigate],
   );
 
   // Start editing a plant request name
@@ -2338,25 +2412,36 @@ export const AdminPage: React.FC = () => {
           // Continue without translations if they fail to load
         }
         
-        // Step 3: Load related data (colors, images, etc.)
+        // Step 3: Load related data (colors, images, watering schedules, sources, infusion mixes)
         const { data: colorLinks } = await supabase
           .from('plant_colors')
           .select('color_id')
           .eq('plant_id', plantId);
         
+        const { data: plantImages } = await supabase
+          .from('plant_images')
+          .select('link, use')
+          .eq('plant_id', plantId);
+        
         const { data: wateringSchedules } = await supabase
-          .from('watering_schedules')
-          .select('*')
+          .from('plant_watering_schedules')
+          .select('season, quantity, time_period')
           .eq('plant_id', plantId);
         
         const { data: plantSources } = await supabase
           .from('plant_sources')
-          .select('*')
+          .select('name, url')
           .eq('plant_id', plantId);
         
         const { data: infusionMixes } = await supabase
-          .from('infusion_mixes')
-          .select('*')
+          .from('plant_infusion_mixes')
+          .select('mix_name, benefit')
+          .eq('plant_id', plantId);
+        
+        // Step 3b: Load pro advices for the source plant
+        const { data: proAdvices } = await supabase
+          .from('plant_pro_advices')
+          .select('author_id, author_display_name, author_username, author_avatar_url, author_roles, content, original_language, translations, image_url, reference_url, metadata')
           .eq('plant_id', plantId);
         
         // Step 4: Create the new plant record (copy all non-translatable fields)
@@ -2365,8 +2450,7 @@ export const AdminPage: React.FC = () => {
           ...sourcePlant,
           id: newId,
           name: newName,
-          // Clear scientific name to avoid unique constraint violation
-          scientific_name: null,
+          // Keep scientific_name - no unique constraint exists on this field
           // Update meta fields
           status: 'in progres',
           created_by: profile?.display_name || sourcePlant.created_by,
@@ -2385,14 +2469,18 @@ export const AdminPage: React.FC = () => {
         
         // Step 5: Copy all translations to the new plant
         if (sourceTranslations && sourceTranslations.length > 0) {
-          const newTranslations = sourceTranslations.map((t) => ({
-            ...t,
-            plant_id: newId,
-            // Update the name in each translation to the new name
-            name: newName,
-            created_at: timestamp,
-            updated_at: timestamp,
-          }));
+          const newTranslations = sourceTranslations.map((t) => {
+            // Destructure to remove id so Supabase auto-generates a new one
+            const { id: _oldId, ...translationData } = t;
+            return {
+              ...translationData,
+              plant_id: newId,
+              // Update the name in each translation to the new name
+              name: newName,
+              created_at: timestamp,
+              updated_at: timestamp,
+            };
+          });
           
           const { error: translationInsertError } = await supabase
             .from('plant_translations')
@@ -2414,19 +2502,34 @@ export const AdminPage: React.FC = () => {
           await supabase.from('plant_colors').insert(newColorLinks);
         }
         
-        // Step 7: Copy watering schedules
+        // Step 7: Copy plant images
+        if (plantImages && plantImages.length > 0) {
+          const newImages = plantImages.map((img) => ({
+            plant_id: newId,
+            link: img.link,
+            use: img.use,
+          }));
+          
+          const { error: imagesInsertError } = await supabase.from('plant_images').insert(newImages);
+          if (imagesInsertError) {
+            console.error('Failed to copy plant images:', imagesInsertError);
+            // Continue even if images fail
+          }
+        }
+        
+        // Step 8: Copy watering schedules
         if (wateringSchedules && wateringSchedules.length > 0) {
           const newSchedules = wateringSchedules.map((s) => ({
             plant_id: newId,
             season: s.season,
-            frequency: s.frequency,
-            amount: s.amount,
+            quantity: s.quantity,
+            time_period: s.time_period,
           }));
           
-          await supabase.from('watering_schedules').insert(newSchedules);
+          await supabase.from('plant_watering_schedules').insert(newSchedules);
         }
         
-        // Step 8: Copy plant sources
+        // Step 9: Copy plant sources
         if (plantSources && plantSources.length > 0) {
           const newSources = plantSources.map((s) => ({
             plant_id: newId,
@@ -2437,14 +2540,40 @@ export const AdminPage: React.FC = () => {
           await supabase.from('plant_sources').insert(newSources);
         }
         
-        // Step 9: Copy infusion mixes
+        // Step 10: Copy infusion mixes
         if (infusionMixes && infusionMixes.length > 0) {
           const newMixes = infusionMixes.map((m) => ({
             plant_id: newId,
-            plant_name: m.plant_name,
+            mix_name: m.mix_name,
+            benefit: m.benefit,
           }));
           
-          await supabase.from('infusion_mixes').insert(newMixes);
+          await supabase.from('plant_infusion_mixes').insert(newMixes);
+        }
+        
+        // Step 11: Copy pro advices (plant care tips from experts)
+        if (proAdvices && proAdvices.length > 0) {
+          const newProAdvices = proAdvices.map((advice) => ({
+            plant_id: newId,
+            author_id: advice.author_id,
+            author_display_name: advice.author_display_name,
+            author_username: advice.author_username,
+            author_avatar_url: advice.author_avatar_url,
+            author_roles: advice.author_roles,
+            content: advice.content,
+            original_language: advice.original_language,
+            translations: advice.translations,
+            image_url: advice.image_url,
+            reference_url: advice.reference_url,
+            metadata: advice.metadata,
+            created_at: timestamp,
+          }));
+          
+          const { error: proAdvicesInsertError } = await supabase.from('plant_pro_advices').insert(newProAdvices);
+          if (proAdvicesInsertError) {
+            console.error('Failed to copy pro advices:', proAdvicesInsertError);
+            // Continue even if pro advices fail
+          }
         }
         
         // Success! Show success message and navigate
@@ -2590,13 +2719,13 @@ export const AdminPage: React.FC = () => {
       await supabase.from('plant_images').delete().eq('plant_id', plantId);
       
       // Delete watering schedules
-      await supabase.from('watering_schedules').delete().eq('plant_id', plantId);
+      await supabase.from('plant_watering_schedules').delete().eq('plant_id', plantId);
       
       // Delete plant sources
       await supabase.from('plant_sources').delete().eq('plant_id', plantId);
       
       // Delete infusion mixes
-      await supabase.from('infusion_mixes').delete().eq('plant_id', plantId);
+      await supabase.from('plant_infusion_mixes').delete().eq('plant_id', plantId);
       
       // Finally delete the plant itself
       const { error } = await supabase.from('plants').delete().eq('id', plantId);
@@ -2781,21 +2910,6 @@ export const AdminPage: React.FC = () => {
   );
   const noPlantStatusesSelected = visiblePlantStatusesSet.size === 0;
 
-  const handlePlantCreated = React.useCallback(async () => {
-    // Optionally complete the request after plant is created
-    if (createPlantRequestId) {
-      try {
-        await completePlantRequest(createPlantRequestId);
-      } catch (err) {
-        console.error("Failed to complete request after creating plant:", err);
-      }
-    }
-    setCreatePlantDialogOpen(false);
-    setCreatePlantRequestId(null);
-    setCreatePlantName("");
-    // Refresh the requests list
-    await loadPlantRequests({ initial: false });
-  }, [createPlantRequestId, completePlantRequest, loadPlantRequests]);
 
   // AI Prefill All functionality
   const aiFieldOrder = React.useMemo(() => [
@@ -2875,11 +2989,12 @@ export const AdminPage: React.FC = () => {
           },
           onPlantComplete: ({ plantName, requestId, success, error }) => {
             const durationMs = Date.now() - plantStartTime;
-            setAiPrefillCompletedPlants((prev) => [...prev.slice(-4), { name: plantName, success, error, durationMs }]);
+            setAiPrefillCompletedPlants((prev) => [...prev, { name: plantName, success, error, durationMs }]);
             if (success) {
               // Remove completed plant from the local list immediately for visual feedback
               setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
-            } else if (error) {
+            } else if (error && !isCancellationError(error)) {
+              // Only log real errors, not cancellations (which are intentional user actions)
               console.error(`Failed to process ${plantName}:`, error);
             }
           },
@@ -2895,7 +3010,8 @@ export const AdminPage: React.FC = () => {
       await loadPlantRequests({ initial: false });
       
     } catch (err) {
-      if (!abortController.signal.aborted) {
+      // Only set error for non-cancellation errors
+      if (!abortController.signal.aborted && !isCancellationError(err)) {
         const msg = err instanceof Error ? err.message : String(err);
         setAiPrefillError(msg);
       }
@@ -3475,7 +3591,7 @@ export const AdminPage: React.FC = () => {
     if (pulling) return;
     setPulling(true);
     // Enable Sentry maintenance mode to suppress expected 502/400 errors during pull and restart
-    enableMaintenanceMode(300000); // 5 minutes for pull, build, and restart operations
+    enableMaintenanceMode(300000, 'pull-and-build'); // 5 minutes for pull, build, and restart operations
     try {
       // Use streaming endpoint for live logs
       setConsoleLines([]);
@@ -4171,6 +4287,18 @@ export const AdminPage: React.FC = () => {
     plantDashboardLoading,
     loadPlantDashboard,
   ]);
+
+  // Auto-navigate to the new plant when duplication succeeds from the plant list (not via dialog)
+  React.useEffect(() => {
+    if (addFromDuplicateSuccess && !addFromDialogOpen) {
+      const { id, originalName } = addFromDuplicateSuccess;
+      // Clear the success state before navigating
+      setAddFromDuplicateSuccess(null);
+      // Navigate to the new plant's edit page
+      navigate(`/create/${id}?duplicatedFrom=${encodeURIComponent(originalName)}`);
+    }
+  }, [addFromDuplicateSuccess, addFromDialogOpen, navigate]);
+
   const membersView: "search" | "list" | "reports" = React.useMemo(() => {
     if (currentPath.includes("/admin/members/reports")) return "reports";
     if (currentPath.includes("/admin/members/list")) return "list";
@@ -7994,6 +8122,18 @@ export const AdminPage: React.FC = () => {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
+                                            handleSelectPlantForPrefill(plant.id, plant.name);
+                                          }}
+                                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
+                                          title="Duplicate plant (Add From)"
+                                          disabled={addFromDuplicating}
+                                        >
+                                          <Copy className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
                                             setPlantToDelete({ id: plant.id, name: plant.name });
                                             setDeletePlantDialogOpen(true);
                                           }}
@@ -8039,11 +8179,11 @@ export const AdminPage: React.FC = () => {
                               <span className="hidden sm:inline">Refresh</span>
                               <span className="sm:hidden inline">Reload</span>
                             </Button>
-                            {/* AI Prefill Button */}
+                            {/* AI Prefill Button - Neomorphic */}
                             {aiPrefillRunning ? (
                               <Button
-                                variant="destructive"
-                                className="rounded-xl"
+                                variant="outline"
+                                className="rounded-xl border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 shadow-sm"
                                 onClick={stopAiPrefill}
                               >
                                 <Square className="h-4 w-4 mr-2" />
@@ -8053,7 +8193,7 @@ export const AdminPage: React.FC = () => {
                             ) : (
                               <Button
                                 variant="outline"
-                                className="rounded-xl border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-300 dark:hover:bg-purple-950/30"
+                                className="rounded-xl border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 text-emerald-700 dark:text-emerald-300 hover:from-emerald-100 hover:to-teal-100 dark:hover:from-emerald-900/30 dark:hover:to-teal-900/30 shadow-sm hover:shadow-md transition-all"
                                 onClick={runAiPrefillAll}
                                 disabled={
                                   plantRequestsLoading || plantRequests.length === 0
@@ -8124,34 +8264,44 @@ export const AdminPage: React.FC = () => {
                           </div>
                         )}
 
-                        {/* AI Prefill Progress */}
+                        {/* AI Prefill Progress - Neomorphic Design */}
                         {aiPrefillRunning && (
-                          <div className="rounded-xl border border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30 p-4 space-y-4">
+                          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 space-y-5 shadow-lg shadow-stone-200/50 dark:shadow-black/20">
                             {/* Header with overall progress */}
                             <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                                  <Sparkles className="h-5 w-5 text-white animate-pulse" />
+                                </div>
+                                <div>
+                                  <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-100">
+                                    AI Prefill Running
+                                  </h3>
+                                  <p className="text-xs text-stone-500 dark:text-stone-400">
+                                    Processing plant requests automatically
+                                  </p>
+                                </div>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <Loader2 className="h-4 w-4 animate-spin text-purple-600 dark:text-purple-400" />
-                                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
-                                  AI Prefill in Progress
-                                </span>
-                                <span className="text-xs bg-purple-200 dark:bg-purple-800 px-2 py-0.5 rounded-full text-purple-700 dark:text-purple-300 font-mono">
+                                <span className="text-xs font-mono bg-stone-100 dark:bg-[#2a2a2d] px-2.5 py-1 rounded-lg text-stone-600 dark:text-stone-300">
                                   {formatDuration(aiPrefillElapsedTime)}
                                 </span>
                               </div>
-                              <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
-                                Plant {aiPrefillProgress.current + 1} of {aiPrefillProgress.total}
-                              </span>
                             </div>
 
                             {/* Overall progress bar */}
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-xs text-purple-600 dark:text-purple-400">
-                                <span>Overall Progress</span>
-                                <span>{aiPrefillProgress.total > 0 ? Math.round((aiPrefillProgress.current / aiPrefillProgress.total) * 100) : 0}%</span>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-medium text-stone-600 dark:text-stone-300">
+                                  Overall Progress
+                                </span>
+                                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                  {aiPrefillProgress.current} / {aiPrefillProgress.total} plants
+                                </span>
                               </div>
-                              <div className="h-2 w-full rounded-full bg-purple-200 dark:bg-purple-900/50 overflow-hidden">
+                              <div className="h-2.5 w-full rounded-full bg-stone-100 dark:bg-[#2a2a2d] overflow-hidden">
                                 <div
-                                  className="h-full bg-purple-500 transition-all duration-300"
+                                  className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 transition-all duration-500 ease-out rounded-full"
                                   style={{
                                     width: aiPrefillProgress.total > 0
                                       ? `${Math.round((aiPrefillProgress.current / aiPrefillProgress.total) * 100)}%`
@@ -8161,64 +8311,98 @@ export const AdminPage: React.FC = () => {
                               </div>
                             </div>
 
-                            {/* Current plant info */}
+                            {/* Current plant card */}
                             {aiPrefillCurrentPlant && (
-                              <div className="rounded-lg bg-white/50 dark:bg-black/20 p-3 space-y-3">
+                              <div className="rounded-xl border border-stone-100 dark:border-[#2a2a2d] bg-stone-50/50 dark:bg-[#252528] p-4 space-y-4">
                                 <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                                    <span className="font-medium text-sm">{aiPrefillCurrentPlant}</span>
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                                      <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-sm text-stone-800 dark:text-stone-100">{aiPrefillCurrentPlant}</span>
+                                      <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                                        Plant {aiPrefillProgress.current + 1} of {aiPrefillProgress.total}
+                                      </p>
+                                    </div>
                                   </div>
-                                  <Badge variant="outline" className="text-xs">
-                                    {aiPrefillStatus === 'translating_name' ? 'Getting English Name...' : 
-                                     aiPrefillStatus === 'filling' ? 'AI Filling...' : 
-                                     aiPrefillStatus === 'saving' ? 'Saving...' : 
-                                     aiPrefillStatus === 'translating' ? 'Translating...' : 'Processing...'}
-                                  </Badge>
+                                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${
+                                    aiPrefillStatus === 'filling' 
+                                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' 
+                                      : aiPrefillStatus === 'saving'
+                                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                        : aiPrefillStatus === 'translating' || aiPrefillStatus === 'translating_name'
+                                          ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                                          : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300'
+                                  }`}>
+                                    {aiPrefillStatus === 'filling' && <Loader2 className="h-3 w-3 animate-spin" />}
+                                    {aiPrefillStatus === 'translating_name' ? 'Getting Name' : 
+                                     aiPrefillStatus === 'filling' ? 'AI Filling' : 
+                                     aiPrefillStatus === 'saving' ? 'Saving' : 
+                                     aiPrefillStatus === 'translating' ? 'Translating' : 'Processing'}
+                                  </div>
                                 </div>
 
-                                {/* Current field being filled */}
-                                {aiPrefillStatus === 'filling' && aiPrefillCurrentField && (
-                                  <div className="text-xs text-muted-foreground">
-                                    <span>Filling: </span>
-                                    <span className="font-medium text-purple-700 dark:text-purple-300">{aiPrefillCurrentField}</span>
-                                    <span className="ml-2 opacity-70">
-                                      ({aiPrefillFieldProgress.completed}/{aiPrefillFieldProgress.total} fields)
-                                    </span>
-                                  </div>
-                                )}
-
-                                {/* Field progress bar */}
-                                {aiPrefillStatus === 'filling' && aiPrefillFieldProgress.total > 0 && (
-                                  <div className="h-1.5 w-full rounded-full bg-emerald-200 dark:bg-emerald-900/50 overflow-hidden">
-                                    <div
-                                      className="h-full bg-emerald-500 transition-all duration-300"
-                                      style={{
-                                        width: `${Math.round((aiPrefillFieldProgress.completed / aiPrefillFieldProgress.total) * 100)}%`
-                                      }}
-                                    />
-                                  </div>
-                                )}
-
-                                {/* Category progress */}
+                                {/* Field progress */}
                                 {aiPrefillStatus === 'filling' && (
-                                  <div className="grid grid-cols-3 gap-2 mt-2">
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-stone-500 dark:text-stone-400">
+                                        {aiPrefillCurrentField && (
+                                          <>Filling <span className="font-medium text-stone-700 dark:text-stone-200">{aiPrefillCurrentField}</span></>
+                                        )}
+                                      </span>
+                                      <span className="text-stone-600 dark:text-stone-300 font-medium">
+                                        {aiPrefillFieldProgress.completed}/{aiPrefillFieldProgress.total} fields
+                                      </span>
+                                    </div>
+                                    <div className="h-1.5 w-full rounded-full bg-stone-200 dark:bg-[#1a1a1d] overflow-hidden">
+                                      <div
+                                        className="h-full bg-blue-500 transition-all duration-300 rounded-full"
+                                        style={{
+                                          width: `${Math.round((aiPrefillFieldProgress.completed / aiPrefillFieldProgress.total) * 100)}%`
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Category progress grid */}
+                                {aiPrefillStatus === 'filling' && (
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                     {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
                                       const info = aiPrefillCategoryProgress[cat];
                                       if (!info?.total) return null;
                                       const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0;
                                       const isDone = info.status === 'done';
+                                      const isFilling = info.status === 'filling';
                                       return (
-                                        <div key={cat} className="text-xs">
-                                          <div className="flex items-center justify-between mb-0.5">
-                                            <span className={`truncate ${isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                                        <div 
+                                          key={cat} 
+                                          className={`rounded-lg p-2 transition-all ${
+                                            isDone 
+                                              ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50' 
+                                              : isFilling
+                                                ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
+                                                : 'bg-white dark:bg-[#1e1e20] border border-stone-100 dark:border-[#2a2a2d]'
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className={`text-[10px] font-medium truncate ${
+                                              isDone ? 'text-emerald-700 dark:text-emerald-300' : 
+                                              isFilling ? 'text-blue-700 dark:text-blue-300' : 
+                                              'text-stone-500 dark:text-stone-400'
+                                            }`}>
                                               {aiPrefillCategoryLabels[cat]}
                                             </span>
-                                            {isDone && <Check className="h-3 w-3 text-emerald-500" />}
+                                            {isDone && <Check className="h-3 w-3 text-emerald-500 flex-shrink-0" />}
+                                            {isFilling && <Loader2 className="h-3 w-3 animate-spin text-blue-500 flex-shrink-0" />}
                                           </div>
-                                          <div className="h-1 w-full rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">
+                                          <div className="h-1 w-full rounded-full bg-stone-200 dark:bg-stone-700/50 overflow-hidden">
                                             <div
-                                              className={`h-full transition-all ${isDone ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                                              className={`h-full transition-all duration-300 rounded-full ${
+                                                isDone ? 'bg-emerald-500' : isFilling ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'
+                                              }`}
                                               style={{ width: `${percent}%` }}
                                             />
                                           </div>
@@ -8230,35 +8414,45 @@ export const AdminPage: React.FC = () => {
                               </div>
                             )}
 
-                            {/* Recently completed plants */}
+                            {/* Recently completed plants - shown during running */}
                             {aiPrefillCompletedPlants.length > 0 && (
-                              <div className="border-t border-purple-200 dark:border-purple-800 pt-3 space-y-1.5">
-                                <div className="text-xs uppercase tracking-wide text-purple-600 dark:text-purple-400 opacity-70">
-                                  Recently Completed
+                              <div className="space-y-2">
+                                <div className="text-[11px] uppercase tracking-wider font-medium text-stone-400 dark:text-stone-500">
+                                  Completed ({aiPrefillCompletedPlants.length})
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-1.5 max-h-48 overflow-y-auto">
                                   {aiPrefillCompletedPlants.slice().reverse().map((plant, idx) => (
                                     <div
                                       key={`${plant.name}-${idx}`}
-                                      className={`flex items-center gap-2 text-xs rounded px-2 py-1 ${
+                                      className={`flex items-center gap-2.5 text-xs rounded-lg px-3 py-2 transition-all ${
                                         plant.success 
-                                          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                          ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30'
+                                          : 'bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30'
                                       }`}
                                     >
-                                      {plant.success ? (
-                                        <Check className="h-3 w-3 flex-shrink-0" />
-                                      ) : (
-                                        <X className="h-3 w-3 flex-shrink-0" />
-                                      )}
-                                      <span className="truncate">{plant.name}</span>
+                                      <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${
+                                        plant.success 
+                                          ? 'bg-emerald-500/20 dark:bg-emerald-500/30' 
+                                          : 'bg-red-500/20 dark:bg-red-500/30'
+                                      }`}>
+                                        {plant.success ? (
+                                          <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                        ) : (
+                                          <X className="h-3 w-3 text-red-600 dark:text-red-400" />
+                                        )}
+                                      </div>
+                                      <span className={`truncate font-medium ${
+                                        plant.success 
+                                          ? 'text-emerald-800 dark:text-emerald-200' 
+                                          : 'text-red-800 dark:text-red-200'
+                                      }`}>{plant.name}</span>
                                       {plant.durationMs && (
-                                        <span className="ml-auto text-[10px] font-mono opacity-70">
+                                        <span className="ml-auto text-[10px] font-mono text-stone-500 dark:text-stone-400 bg-white dark:bg-[#1e1e20] px-1.5 py-0.5 rounded">
                                           {formatDuration(plant.durationMs)}
                                         </span>
                                       )}
                                       {!plant.success && plant.error && (
-                                        <span className="truncate opacity-70 text-[10px]">{plant.error}</span>
+                                        <span className="truncate text-[10px] text-red-500 dark:text-red-400 ml-2" title={plant.error}>{plant.error}</span>
                                       )}
                                     </div>
                                   ))}
@@ -8268,17 +8462,80 @@ export const AdminPage: React.FC = () => {
                           </div>
                         )}
 
-                        {/* AI Prefill Error */}
+                        {/* AI Prefill Error - Neomorphic */}
                         {aiPrefillError && !aiPrefillRunning && (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/30 dark:text-amber-200 flex items-center justify-between">
-                            <span>{aiPrefillError}</span>
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] px-4 py-3 shadow-sm flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            </div>
+                            <span className="text-sm text-stone-700 dark:text-stone-300 flex-1">{aiPrefillError}</span>
                             <button
                               type="button"
-                              className="ml-2 opacity-60 hover:opacity-100"
+                              className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-[#2a2a2d] flex items-center justify-center text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d] transition-colors"
                               onClick={() => setAiPrefillError(null)}
                             >
-                              <X className="h-4 w-4" />
+                              <X className="h-3.5 w-3.5" />
                             </button>
+                          </div>
+                        )}
+
+                        {/* AI Prefill Completed Plants - Shown after completion/cancellation */}
+                        {aiPrefillCompletedPlants.length > 0 && !aiPrefillRunning && (
+                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 shadow-sm space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs font-medium text-stone-600 dark:text-stone-300">
+                                  Processed Plants
+                                </div>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 dark:bg-[#2a2a2d] text-stone-500 dark:text-stone-400">
+                                  {aiPrefillCompletedPlants.filter(p => p.success).length} success / {aiPrefillCompletedPlants.filter(p => !p.success).length} failed
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="text-[10px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                                onClick={() => setAiPrefillCompletedPlants([])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                              {aiPrefillCompletedPlants.slice().reverse().map((plant, idx) => (
+                                <div
+                                  key={`${plant.name}-${idx}`}
+                                  className={`flex items-center gap-2.5 text-xs rounded-lg px-3 py-2 transition-all ${
+                                    plant.success 
+                                      ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30'
+                                      : 'bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30'
+                                  }`}
+                                >
+                                  <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${
+                                    plant.success 
+                                      ? 'bg-emerald-500/20 dark:bg-emerald-500/30' 
+                                      : 'bg-red-500/20 dark:bg-red-500/30'
+                                  }`}>
+                                    {plant.success ? (
+                                      <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                    ) : (
+                                      <X className="h-3 w-3 text-red-600 dark:text-red-400" />
+                                    )}
+                                  </div>
+                                  <span className={`truncate font-medium ${
+                                    plant.success 
+                                      ? 'text-emerald-800 dark:text-emerald-200' 
+                                      : 'text-red-800 dark:text-red-200'
+                                  }`}>{plant.name}</span>
+                                  {plant.durationMs && (
+                                    <span className="ml-auto text-[10px] font-mono text-stone-500 dark:text-stone-400 bg-white dark:bg-[#1e1e20] px-1.5 py-0.5 rounded">
+                                      {formatDuration(plant.durationMs)}
+                                    </span>
+                                  )}
+                                  {!plant.success && plant.error && (
+                                    <span className="truncate text-[10px] text-red-500 dark:text-red-400 ml-2" title={plant.error}>{plant.error}</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
 
@@ -8544,32 +8801,6 @@ export const AdminPage: React.FC = () => {
                       </DialogContent>
                     </Dialog>
 
-                    {/* Create Plant Dialog */}
-                    <Dialog
-                      open={createPlantDialogOpen}
-                      onOpenChange={setCreatePlantDialogOpen}
-                    >
-                      <DialogContent className="rounded-2xl max-w-4xl max-h-[90vh] overflow-y-auto p-0">
-                        <DialogHeader className="px-6 pt-6 pb-4">
-                          <DialogTitle>Add Plant from Request</DialogTitle>
-                          <DialogDescription>
-                            Create a new plant entry for "{createPlantName}".
-                            The plant name will be pre-filled.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="px-6 pb-6 overflow-y-auto">
-                          <CreatePlantPage
-                            onCancel={() => {
-                              setCreatePlantDialogOpen(false);
-                              setCreatePlantRequestId(null);
-                              setCreatePlantName("");
-                            }}
-                            onSaved={handlePlantCreated}
-                            initialName={createPlantName}
-                          />
-                        </div>
-                      </DialogContent>
-                    </Dialog>
                     </div>
                   )}
 

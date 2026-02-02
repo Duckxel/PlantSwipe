@@ -45,6 +45,117 @@ function scrubPII(value) {
   return value;
 }
 
+// ========================================
+// MAINTENANCE MODE - Server-side tracking
+// ========================================
+// File-based maintenance mode state to coordinate with admin operations
+// When enabled, expected HTTP errors (502, 503, 504) during service restarts are suppressed
+import fsEarly from 'fs';
+
+const MAINTENANCE_MODE_FILE = '/tmp/plantswipe-maintenance.json';
+
+/**
+ * Check if maintenance mode is currently active
+ * Returns { active: boolean, expiresAt?: number, reason?: string }
+ */
+function getMaintenanceMode() {
+  try {
+    if (!fsEarly.existsSync(MAINTENANCE_MODE_FILE)) {
+      return { active: false };
+    }
+    const content = fsEarly.readFileSync(MAINTENANCE_MODE_FILE, 'utf8');
+    const data = JSON.parse(content);
+    // Check if maintenance mode has expired
+    if (data.expiresAt && Date.now() > data.expiresAt) {
+      // Expired - clean up the file
+      try { fsEarly.unlinkSync(MAINTENANCE_MODE_FILE); } catch {}
+      return { active: false };
+    }
+    return { active: true, ...data };
+  } catch {
+    return { active: false };
+  }
+}
+
+/**
+ * Enable maintenance mode for a specified duration
+ * @param durationMs - How long to stay in maintenance mode (default: 5 minutes)
+ * @param reason - Optional reason for maintenance mode
+ */
+function enableMaintenanceMode(durationMs = 300000, reason = 'pull-and-build') {
+  try {
+    const data = {
+      active: true,
+      enabledAt: Date.now(),
+      expiresAt: Date.now() + durationMs,
+      reason,
+    };
+    fsEarly.writeFileSync(MAINTENANCE_MODE_FILE, JSON.stringify(data, null, 2), 'utf8');
+    console.log(`[Sentry] Maintenance mode ENABLED - suppressing expected errors for ${durationMs / 1000}s (reason: ${reason})`);
+    return true;
+  } catch (err) {
+    console.error('[Sentry] Failed to enable maintenance mode:', err);
+    return false;
+  }
+}
+
+/**
+ * Disable maintenance mode
+ */
+function disableMaintenanceMode() {
+  try {
+    if (fsEarly.existsSync(MAINTENANCE_MODE_FILE)) {
+      fsEarly.unlinkSync(MAINTENANCE_MODE_FILE);
+    }
+    console.log('[Sentry] Maintenance mode DISABLED - normal error reporting resumed');
+    return true;
+  } catch (err) {
+    console.error('[Sentry] Failed to disable maintenance mode:', err);
+    return false;
+  }
+}
+
+/**
+ * Check if an error should be suppressed during maintenance mode
+ * Suppresses 502, 503, 504 errors which are expected during service restarts
+ */
+function shouldSuppressMaintenanceError(event, hint) {
+  const maintenance = getMaintenanceMode();
+  if (!maintenance.active) {
+    return false;
+  }
+  
+  const error = hint?.originalException;
+  
+  // Check for HTTP status codes in the error or event
+  const statusCodes = [400, 502, 503, 504];
+  
+  // Check error message for status codes
+  if (error instanceof Error) {
+    const msg = error.message || '';
+    for (const code of statusCodes) {
+      if (msg.includes(String(code)) || msg.includes('Bad Gateway') || msg.includes('Service Unavailable') || msg.includes('Gateway Timeout')) {
+        console.log(`[Sentry] Suppressing ${code}-related error during maintenance: ${msg.substring(0, 100)}`);
+        return true;
+      }
+    }
+    // Also suppress connection-related errors during maintenance
+    if (msg.includes('ECONNREFUSED') || msg.includes('ECONNRESET') || msg.includes('ETIMEDOUT') || msg.includes('socket hang up')) {
+      console.log(`[Sentry] Suppressing connection error during maintenance: ${msg.substring(0, 100)}`);
+      return true;
+    }
+  }
+  
+  // Check event tags for status code
+  const statusTag = event?.tags?.['http.status_code'] || event?.contexts?.response?.status_code;
+  if (statusTag && statusCodes.includes(Number(statusTag))) {
+    console.log(`[Sentry] Suppressing HTTP ${statusTag} error during maintenance`);
+    return true;
+  }
+  
+  return false;
+}
+
 Sentry.init({
   dsn: SENTRY_DSN,
   environment: process.env.NODE_ENV || 'production',
@@ -67,6 +178,11 @@ Sentry.init({
   },
   // Filter and scrub events before sending to Sentry
   beforeSend(event, hint) {
+    // MAINTENANCE MODE: Suppress expected errors during pull-and-build operations
+    if (shouldSuppressMaintenanceError(event, hint)) {
+      return null;
+    }
+    
     const error = hint.originalException;
     if (error instanceof Error) {
       // Ignore connection reset errors (common with load balancers)
@@ -2597,11 +2713,36 @@ function coerceValueForSchema(schemaNode, value, existingValue) {
   return value
 }
 
+// Fields that are simple enum selections - use lower reasoning effort for faster processing
+const SIMPLE_ENUM_FIELDS = new Set([
+  'plantType',    // Single enum selection
+  'utility',      // Array of enum values
+  'comestiblePart', // Array of enum values  
+  'fruitType',    // Array of enum values
+  'seasons',      // Array of enum values
+])
+
+// Fields that require more complex analysis - use medium reasoning effort
+const COMPLEX_FIELDS = new Set([
+  'description',
+  'identity',
+  'plantCare',
+  'growth',
+  'usage',
+  'ecology',
+  'danger',
+  'miscellaneous',
+])
+
 async function generateFieldData(options) {
   const { plantName, fieldKey, fieldSchema, existingField } = options || {}
   if (!openaiClient) {
     throw new Error('OpenAI client not configured')
   }
+
+  // Determine reasoning effort based on field complexity
+  // Simple enum fields use 'low' effort (faster), complex fields use 'medium' effort (more accurate)
+  const reasoningEffort = SIMPLE_ENUM_FIELDS.has(fieldKey) ? 'low' : 'medium'
 
   const hintList = Array.from(collectFieldHints(fieldSchema, fieldKey)).slice(0, 50)
   const commonInstructions = [
@@ -2635,14 +2776,18 @@ async function generateFieldData(options) {
     `Respond with JSON shaped exactly like:\n{"${fieldKey}": ...}\nDo not include any other keys or commentary.`
   )
 
+  // Use shorter timeout for simple fields (2 min) vs complex fields (10 min)
+  const defaultTimeout = SIMPLE_ENUM_FIELDS.has(fieldKey) ? 120000 : 600000
+  const timeout = Number(process.env.OPENAI_TIMEOUT_MS) || defaultTimeout
+
   const response = await openaiClient.responses.create(
     {
       model: openaiModel,
-      reasoning: { effort: 'medium' },
+      reasoning: { effort: reasoningEffort },
       instructions: commonInstructions,
       input: promptSections.join('\n\n'),
     },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) }
+    { timeout }
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -3716,6 +3861,98 @@ app.get('/api/admin/system-health', async (req, res) => {
   }
 })
 
+// =============================================================================
+// MAINTENANCE MODE API - Coordinate Sentry error suppression during restarts
+// =============================================================================
+
+// Admin: Get current maintenance mode status
+app.get('/api/admin/maintenance-mode', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const status = getMaintenanceMode()
+    res.json({
+      ok: true,
+      ...status,
+      remainingMs: status.active && status.expiresAt ? Math.max(0, status.expiresAt - Date.now()) : 0
+    })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to get maintenance mode status' })
+  }
+})
+
+// Admin: Enable maintenance mode (suppresses 502/503/504 errors in Sentry)
+app.post('/api/admin/maintenance-mode/enable', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    // Duration in milliseconds (default: 5 minutes, max: 30 minutes)
+    const durationMs = Math.min(
+      Math.max(Number(req.body?.durationMs) || 300000, 60000), // At least 1 minute
+      30 * 60 * 1000 // Max 30 minutes
+    )
+    const reason = String(req.body?.reason || 'admin-request').slice(0, 100)
+    
+    const success = enableMaintenanceMode(durationMs, reason)
+    if (success) {
+      res.json({
+        ok: true,
+        message: `Maintenance mode enabled for ${durationMs / 1000} seconds`,
+        expiresAt: Date.now() + durationMs,
+        reason
+      })
+    } else {
+      res.status(500).json({ error: 'Failed to enable maintenance mode' })
+    }
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to enable maintenance mode' })
+  }
+})
+
+// Admin: Disable maintenance mode
+app.post('/api/admin/maintenance-mode/disable', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    
+    const success = disableMaintenanceMode()
+    if (success) {
+      res.json({
+        ok: true,
+        message: 'Maintenance mode disabled'
+      })
+    } else {
+      res.status(500).json({ error: 'Failed to disable maintenance mode' })
+    }
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to disable maintenance mode' })
+  }
+})
+
+app.options('/api/admin/maintenance-mode', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.status(204).end()
+})
+
+app.options('/api/admin/maintenance-mode/enable', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.status(204).end()
+})
+
+app.options('/api/admin/maintenance-mode/disable', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.status(204).end()
+})
+
 // Admin: Get sitemap info (last update time, file size)
 app.get('/api/admin/sitemap-info', async (req, res) => {
   try {
@@ -4113,6 +4350,114 @@ app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
     console.error('[server] AI plant field fill failed:', err)
     if (!res.headersSent) {
       res.status(500).json({ error: err?.message || 'Failed to fill field' })
+    }
+  }
+})
+
+// Admin/Editor: Batch AI plant field fill - process multiple fields in parallel
+app.options('/api/admin/ai/plant-fill/batch', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/admin/ai/plant-fill/batch', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const fieldKeys = Array.isArray(body.fieldKeys) ? body.fieldKeys.filter(k => typeof k === 'string' && k.trim()) : []
+    
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    if (!fieldKeys.length) {
+      res.status(400).json({ error: 'At least one field key is required' })
+      return
+    }
+    if (fieldKeys.length > 6) {
+      res.status(400).json({ error: 'Maximum 6 fields per batch request' })
+      return
+    }
+
+    const schema = body.schema
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      res.status(400).json({ error: 'Valid schema object is required' })
+      return
+    }
+
+    const sanitizedSchemaRaw = sanitizeTemplate(schema)
+    if (!sanitizedSchemaRaw || Array.isArray(sanitizedSchemaRaw) || typeof sanitizedSchemaRaw !== 'object') {
+      res.status(400).json({ error: 'Invalid schema provided' })
+      return
+    }
+
+    const sanitizedSchema = sanitizedSchemaRaw
+    const existingDataRaw = body.existingData && typeof body.existingData === 'object' && !Array.isArray(body.existingData)
+      ? stripDisallowedKeys(body.existingData) || {}
+      : {}
+
+    // Process all fields in parallel
+    const results = await Promise.allSettled(
+      fieldKeys.map(async (fieldKey) => {
+        const fieldSchema = sanitizedSchema[fieldKey]
+        if (!fieldSchema) {
+          throw new Error(`Schema for field "${fieldKey}" not found`)
+        }
+
+        const existingFieldRaw = existingDataRaw[fieldKey]
+        let existingField = existingFieldRaw
+        if (existingFieldRaw && typeof existingFieldRaw === 'object') {
+          existingField = stripDisallowedKeys({ [fieldKey]: existingFieldRaw })?.[fieldKey]
+        }
+        const existingFieldClean = existingField !== undefined ? removeNullValues(existingField) : undefined
+
+        const fieldValue = await generateFieldData({
+          plantName,
+          fieldKey,
+          fieldSchema,
+          existingField: existingFieldClean,
+        })
+
+        const cleanedValue = fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+        const sanitizedValue = cleanedValue !== undefined ? removeExternalIds(cleanedValue) : undefined
+
+        return { fieldKey, data: sanitizedValue ?? null }
+      })
+    )
+
+    // Aggregate results
+    const fieldsData = {}
+    const errors = {}
+    
+    for (let i = 0; i < fieldKeys.length; i++) {
+      const fieldKey = fieldKeys[i]
+      const result = results[i]
+      
+      if (result.status === 'fulfilled') {
+        fieldsData[fieldKey] = result.value.data
+      } else {
+        errors[fieldKey] = result.reason?.message || 'Unknown error'
+        console.error(`[server] AI batch fill failed for field "${fieldKey}":`, result.reason?.message || result.reason)
+      }
+    }
+
+    res.json({
+      success: true,
+      data: fieldsData,
+      errors: Object.keys(errors).length > 0 ? errors : undefined,
+    })
+  } catch (err) {
+    console.error('[server] AI plant batch fill failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fill fields' })
     }
   }
 })
