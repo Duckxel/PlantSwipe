@@ -922,6 +922,9 @@ export const ScanPage: React.FC = () => {
       {/* Fullscreen Image Viewer */}
       <Dialog open={!!fullscreenImage} onOpenChange={(open) => !open && setFullscreenImage(null)}>
         <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none rounded-2xl overflow-hidden">
+          <DialogTitle className="sr-only">
+            {t('scan.fullscreenImageTitle', { defaultValue: 'Fullscreen image view' })}
+          </DialogTitle>
           <button
             onClick={() => setFullscreenImage(null)}
             className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
