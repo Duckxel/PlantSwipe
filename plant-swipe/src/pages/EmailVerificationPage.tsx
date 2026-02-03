@@ -3,8 +3,33 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
+import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Mail, Loader2, Check, RefreshCw, ArrowLeft } from "lucide-react"
+
+/**
+ * Get CSRF token from backend (SECURITY: Required for state-changing operations)
+ */
+async function getCsrfToken(): Promise<string> {
+  const session = (await supabase.auth.getSession()).data.session
+  const headers: Record<string, string> = {}
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  
+  const response = await fetch('/api/csrf-token', {
+    method: 'GET',
+    headers,
+    credentials: 'same-origin',
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to get CSRF token')
+  }
+  
+  const data = await response.json()
+  return data.token
+}
 
 // OTP Input component for 6-digit code entry
 const OTPInput: React.FC<{
@@ -145,9 +170,23 @@ export function EmailVerificationPage() {
     setError(null)
     
     try {
+      // Get CSRF token and auth session for security-sensitive operation
+      const [csrfToken, sessionResult] = await Promise.all([
+        getCsrfToken(),
+        supabase.auth.getSession()
+      ])
+      
+      const secureHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      }
+      if (sessionResult.data.session?.access_token) {
+        secureHeaders['Authorization'] = `Bearer ${sessionResult.data.session.access_token}`
+      }
+      
       const response = await fetch('/api/email-verification/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: secureHeaders,
         body: JSON.stringify({ language: currentLang }),
         credentials: 'same-origin'
       })
@@ -186,9 +225,23 @@ export function EmailVerificationPage() {
     setError(null)
     
     try {
+      // Get CSRF token and auth session for security-sensitive operation
+      const [csrfToken, sessionResult] = await Promise.all([
+        getCsrfToken(),
+        supabase.auth.getSession()
+      ])
+      
+      const secureHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      }
+      if (sessionResult.data.session?.access_token) {
+        secureHeaders['Authorization'] = `Bearer ${sessionResult.data.session.access_token}`
+      }
+      
       const response = await fetch('/api/email-verification/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: secureHeaders,
         body: JSON.stringify({ code }),
         credentials: 'same-origin'
       })

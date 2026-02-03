@@ -1433,7 +1433,8 @@ export default function PlantSwipe() {
 
     // Check if user needs to verify email (setup complete but email not verified)
     // Only check if setup is completed to avoid conflicting with setup flow
-    const needsEmailVerification = user && profile && profile.setup_completed === true && profile.email_verified === false
+    // SECURITY: Use !== true to catch both false AND null/undefined values
+    const needsEmailVerification = user && profile && profile.setup_completed === true && profile.email_verified !== true
     // Exclude: verify-email page itself, admin panel, and landing page
     const emailVerifyExcludedPaths = ['/verify-email', '/admin']
     const isExcludedFromEmailVerify = pathWithoutLang === '/' || emailVerifyExcludedPaths.some(p => pathWithoutLang.startsWith(p))

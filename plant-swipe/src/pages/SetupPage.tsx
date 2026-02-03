@@ -394,7 +394,8 @@ export function SetupPage() {
     }
     if (profile?.setup_completed) {
       // If setup is complete but email not verified, redirect to email verification
-      if (profile?.email_verified === false) {
+      // SECURITY: Use !== true to catch both false AND null/undefined values
+      if (profile?.email_verified !== true) {
         navigate('/verify-email')
       } else {
         navigate('/discovery')

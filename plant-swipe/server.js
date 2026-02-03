@@ -1096,6 +1096,8 @@ const rateLimitStores = {
   translate: new Map(),      // Translation API
   imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
   bugReport: new Map(),      // Bug report submissions
+  emailVerifySend: new Map(),   // Email verification code sending
+  emailVerifyAttempt: new Map(), // Email verification code attempts (brute force protection)
   gardenActivity: new Map(), // Garden activity logging
   gardenJournal: new Map(),  // Journal entries
   pushNotify: new Map(),     // Push notification sending
@@ -1163,6 +1165,19 @@ const rateLimitConfig = {
     windowMs: 15 * 60 * 1000,  // 15 minutes
     maxAttempts: 10,
     perUser: false,  // Per IP to catch credential stuffing
+  },
+  // Email verification code sending: 5 per 15 minutes per user (prevent email spam)
+  emailVerifySend: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 5,
+    perUser: true,
+  },
+  // Email verification attempts: 10 per 15 minutes per user (brute force protection)
+  // With 6-char code (32^6 = 1B combinations), 10 attempts is negligible
+  emailVerifyAttempt: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 10,
+    perUser: true,
   },
 }
 
@@ -9747,12 +9762,19 @@ function generateVerificationCode() {
 /**
  * Send email verification code to user
  * Creates a new code in the database and sends it via email
+ * SECURITY: Rate limited to 5 requests per 15 minutes per user
+ * SECURITY: CSRF protected
  */
-app.post('/api/email-verification/send', async (req, res) => {
+app.post('/api/email-verification/send', requireCsrfToken, async (req, res) => {
   // Require authentication
   const authUser = await getUserFromRequest(req)
   if (!authUser?.id) {
     return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  // Rate limiting: prevent email spam
+  if (await checkAndRecordRateLimit(req, res, 'emailVerifySend', authUser)) {
+    return // Response already sent by rate limiter
   }
 
   if (!sql) {
@@ -9802,7 +9824,8 @@ app.post('/api/email-verification/send', async (req, res) => {
       values (${authUser.id}, ${code}, ${expiresAt.toISOString()})
     `
 
-    console.log(`[email-verification] Generated code for user ${authUser.id}: ${code} (expires ${expiresAt.toISOString()})`)
+    // SECURITY: Do not log the actual code - only log that a code was generated
+    console.log(`[email-verification] Generated verification code for user ${authUser.id.slice(0, 8)}... (expires ${expiresAt.toISOString()})`)
 
     // Send the verification email using the EMAIL_VERIFICATION trigger
     const result = await sendSecurityEmail('EMAIL_VERIFICATION', {
@@ -9828,20 +9851,27 @@ app.post('/api/email-verification/send', async (req, res) => {
       res.status(500).json({ sent: false, reason: result.reason || 'Failed to send verification email' })
     }
   } catch (err) {
-    console.error('[email-verification/send] Error:', err)
-    res.status(500).json({ error: err?.message || 'Failed to send verification code' })
+    console.error('[email-verification/send] Error:', err?.message)
+    res.status(500).json({ error: 'Failed to send verification code' })
   }
 })
 
 /**
  * Verify email verification code
  * Checks if the code is valid, not expired, and not already used
+ * SECURITY: Rate limited to 10 attempts per 15 minutes per user (brute force protection)
+ * SECURITY: CSRF protected
  */
-app.post('/api/email-verification/verify', async (req, res) => {
+app.post('/api/email-verification/verify', requireCsrfToken, async (req, res) => {
   // Require authentication
   const authUser = await getUserFromRequest(req)
   if (!authUser?.id) {
     return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  // Rate limiting: prevent brute force attacks
+  if (await checkAndRecordRateLimit(req, res, 'emailVerifyAttempt', authUser)) {
+    return // Response already sent by rate limiter
   }
 
   const { code } = req.body || {}
@@ -9849,8 +9879,11 @@ app.post('/api/email-verification/verify', async (req, res) => {
     return res.status(400).json({ error: 'Verification code is required' })
   }
 
-  // Normalize code (uppercase, trim whitespace)
+  // Validate code format: must be exactly 6 alphanumeric characters
   const normalizedCode = code.toUpperCase().trim()
+  if (!/^[A-Z0-9]{6}$/.test(normalizedCode)) {
+    return res.status(400).json({ verified: false, error: 'Invalid verification code format' })
+  }
 
   if (!sql) {
     return res.status(500).json({ error: 'Database not configured' })
@@ -9876,7 +9909,8 @@ app.post('/api/email-verification/verify', async (req, res) => {
     `
 
     if (!codeRows || !codeRows.length) {
-      console.log(`[email-verification/verify] Invalid code for user ${authUser.id}: ${normalizedCode}`)
+      // SECURITY: Do not log the attempted code to prevent log injection
+      console.log(`[email-verification/verify] Invalid code attempt for user ${authUser.id.slice(0, 8)}...`)
       return res.status(400).json({ verified: false, error: 'Invalid verification code' })
     }
 
@@ -9890,7 +9924,7 @@ app.post('/api/email-verification/verify', async (req, res) => {
     // Check if expired
     const expiresAt = new Date(codeRecord.expires_at)
     if (expiresAt < new Date()) {
-      console.log(`[email-verification/verify] Expired code for user ${authUser.id}: ${normalizedCode}`)
+      console.log(`[email-verification/verify] Expired code attempt for user ${authUser.id.slice(0, 8)}...`)
       return res.status(400).json({ verified: false, error: 'Verification code has expired' })
     }
 
@@ -9908,17 +9942,18 @@ app.post('/api/email-verification/verify', async (req, res) => {
       where id = ${authUser.id}
     `
 
-    console.log(`[email-verification/verify] Email verified for user ${authUser.id}`)
+    console.log(`[email-verification/verify] Email verified for user ${authUser.id.slice(0, 8)}...`)
 
     res.json({ verified: true })
   } catch (err) {
-    console.error('[email-verification/verify] Error:', err)
-    res.status(500).json({ error: err?.message || 'Failed to verify code' })
+    console.error('[email-verification/verify] Error:', err?.message)
+    res.status(500).json({ error: 'Failed to verify code' })
   }
 })
 
 /**
  * Check email verification status
+ * SECURITY: Requires authentication (no CSRF needed for GET)
  */
 app.get('/api/email-verification/status', async (req, res) => {
   // Require authentication
@@ -9938,7 +9973,7 @@ app.get('/api/email-verification/status', async (req, res) => {
 
     const verified = profileRows?.[0]?.email_verified === true
 
-    // Also check if there's a pending code
+    // Also check if there's a pending code (only return expiry time, not the code itself)
     const pendingCodeRows = await sql`
       select expires_at from email_verification_codes
       where user_id = ${authUser.id}
@@ -9957,8 +9992,8 @@ app.get('/api/email-verification/status', async (req, res) => {
       pendingCodeExpiresAt 
     })
   } catch (err) {
-    console.error('[email-verification/status] Error:', err)
-    res.status(500).json({ error: err?.message || 'Failed to check verification status' })
+    console.error('[email-verification/status] Error:', err?.message)
+    res.status(500).json({ error: 'Failed to check verification status' })
   }
 })
 
