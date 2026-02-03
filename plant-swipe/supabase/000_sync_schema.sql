@@ -10779,6 +10779,64 @@ COMMENT ON COLUMN public.profiles.experience_level IS 'User gardening experience
 COMMENT ON COLUMN public.profiles.looking_for IS 'User gardening goal: eat (vegetables/fruits), ornamental (flowers), or various (diverse plants)';
 COMMENT ON COLUMN public.profiles.notification_time IS 'Preferred notification time: 6h, 10h, 14h, or 17h';
 
+-- Email Verification
+-- Add email_verified column to profiles table
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_profiles_email_verified ON public.profiles(email_verified);
+COMMENT ON COLUMN public.profiles.email_verified IS 'Whether the user has verified their email address via OTP code';
+
+-- Email verification codes table for OTP-based email verification
+CREATE TABLE IF NOT EXISTS public.email_verification_codes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  code VARCHAR(8) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ DEFAULT NULL,
+  CONSTRAINT unique_active_code_per_user UNIQUE (user_id, code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_verification_codes_expires_at ON public.email_verification_codes(expires_at);
+CREATE INDEX IF NOT EXISTS idx_verification_codes_user_id ON public.email_verification_codes(user_id);
+
+COMMENT ON TABLE public.email_verification_codes IS 'Stores temporary verification codes for email verification. Codes expire after 5 minutes.';
+COMMENT ON COLUMN public.email_verification_codes.user_id IS 'The user who requested the verification code';
+COMMENT ON COLUMN public.email_verification_codes.code IS 'The 6-character alphanumeric verification code';
+COMMENT ON COLUMN public.email_verification_codes.created_at IS 'When the code was generated';
+COMMENT ON COLUMN public.email_verification_codes.expires_at IS 'When the code expires (5 minutes after creation)';
+COMMENT ON COLUMN public.email_verification_codes.used_at IS 'When the code was successfully used (null if not used yet)';
+
+-- Function to clean up expired verification codes (to be called by daily job)
+CREATE OR REPLACE FUNCTION cleanup_expired_verification_codes()
+RETURNS INTEGER AS $$
+DECLARE
+  deleted_count INTEGER;
+BEGIN
+  DELETE FROM public.email_verification_codes
+  WHERE expires_at < NOW()
+  OR used_at IS NOT NULL;
+  
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION cleanup_expired_verification_codes() IS 'Removes expired or already-used verification codes. Should be called periodically by a daily cleanup job.';
+
+-- Enable RLS on the verification codes table
+ALTER TABLE public.email_verification_codes ENABLE ROW LEVEL SECURITY;
+
+-- RLS policy: Users can only see their own verification codes
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'email_verification_codes' AND policyname = 'Users can view their own verification codes') THEN
+    CREATE POLICY "Users can view their own verification codes"
+      ON public.email_verification_codes
+      FOR SELECT
+      USING (auth.uid() = user_id);
+  END IF;
+END $$;
+
 -- GDPR Audit Log Table
 CREATE TABLE IF NOT EXISTS public.gdpr_audit_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
