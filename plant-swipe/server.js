@@ -12343,12 +12343,15 @@ app.get('/api/admin/role-stats', async (req, res) => {
       const totalMembers = totalResult?.[0]?.count || 0
 
       // Count users by each role (users can have multiple roles)
+      // Use explicit CROSS JOIN LATERAL with proper column naming to ensure
+      // the column is correctly named 'role' in the result
       const roleCountsResult = await sql`
         select
-          role,
+          r as role,
           count(*)::int as count
-        from public.profiles, unnest(coalesce(roles, '{}')) as role
-        group by role
+        from public.profiles
+        cross join lateral unnest(coalesce(roles, '{}')) as r
+        group by r
         order by count desc
       `
 
