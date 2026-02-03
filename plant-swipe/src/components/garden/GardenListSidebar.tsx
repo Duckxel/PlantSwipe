@@ -1,7 +1,7 @@
 import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, Sprout, Check, X } from "lucide-react";
+import { Loader2, RefreshCw, Sprout, Check, X, Coffee } from "lucide-react";
 import type { GardenInvite } from "@/types/notification";
 import type { TFunction } from "i18next";
 import type { User } from "@supabase/supabase-js";
@@ -201,8 +201,16 @@ const GardenListSidebarComponent: React.FC<GardenListSidebarProps> = ({
         {!loadingTasks &&
           gardensWithTasks.length === 0 &&
           todayTaskOccurrences.length === 0 && (
-            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm">
-              <div className="text-sm opacity-70 mb-2">
+            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-8 shadow-sm text-center">
+              <div className="flex justify-center mb-3">
+                <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                  <Coffee className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                </div>
+              </div>
+              <div className="font-medium mb-1">
+                {t("garden.allCaughtUp", "All caught up!")}
+              </div>
+              <div className="text-sm opacity-60 mb-2">
                 {t("garden.noTasksToday")}
               </div>
               {/* Show reload button if progress indicates tasks exist */}
