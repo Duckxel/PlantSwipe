@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts"
-import { wrapEmailHtmlShared } from "../_shared/emailTemplateShared.ts"
+import { wrapAdminEmailHtmlShared } from "../_shared/emailTemplateShared.ts"
 
 const DEFAULT_SUPPORT_EMAIL = "support@aphylia.app"
 const DEFAULT_BUSINESS_EMAIL = "contact@aphylia.app"
@@ -59,6 +59,19 @@ const contactSchema = z.object({
       }),
     )
     .optional(),
+  // Additional user info (when user is logged in)
+  userInfo: z.object({
+    userId: z.string().optional(),
+    username: z.string().optional(),
+    displayName: z.string().optional(),
+    roles: z.array(z.string()).optional(),
+    isAdmin: z.boolean().optional(),
+    country: z.string().optional(),
+    timezone: z.string().optional(),
+    language: z.string().optional(),
+    experienceYears: z.number().optional(),
+    setupCompleted: z.boolean().optional(),
+  }).optional(),
 })
 
 const corsHeaders: Record<string, string> = {
@@ -135,9 +148,10 @@ serve(async (req) => {
     })
   }
 
-    const { name, email, subject, message, submittedAt, audience: parsedAudience, attachments, screenshotUrl } =
+    const { name, email, subject, message, submittedAt, audience: parsedAudience, attachments, screenshotUrl, userInfo } =
       parsed.data
     const audience: Audience = parsedAudience ?? "support"
+    const isLoggedIn = !!userInfo?.userId
     const recipientEmails = RECIPIENT_EMAILS[audience]
 
     if (!recipientEmails || recipientEmails.length === 0) {
@@ -182,28 +196,10 @@ serve(async (req) => {
   ].filter(Boolean).join("\n")
 
   // Audience-specific configuration
-  const audienceConfig: Record<Audience, { icon: string; label: string; color: string; bgColor: string; borderColor: string }> = {
-    support: { 
-      icon: "💬", 
-      label: "Support Request", 
-      color: "#059669", 
-      bgColor: "#ecfdf5", 
-      borderColor: "#a7f3d0" 
-    },
-    business: { 
-      icon: "💼", 
-      label: "Business Inquiry", 
-      color: "#7c3aed", 
-      bgColor: "#f5f3ff", 
-      borderColor: "#c4b5fd" 
-    },
-    bug: { 
-      icon: "🐛", 
-      label: "Bug Report", 
-      color: "#dc2626", 
-      bgColor: "#fef2f2", 
-      borderColor: "#fecaca" 
-    },
+  const audienceConfig: Record<Audience, { icon: string; label: string; color: string; bgColor: string }> = {
+    support: { icon: "💬", label: "Support Request", color: "#059669", bgColor: "#ecfdf5" },
+    business: { icon: "💼", label: "Business Inquiry", color: "#7c3aed", bgColor: "#f5f3ff" },
+    bug: { icon: "🐛", label: "Bug Report", color: "#dc2626", bgColor: "#fef2f2" },
   }
 
   const config = audienceConfig[audience]
@@ -211,126 +207,129 @@ serve(async (req) => {
   // Format the timestamp nicely
   const formattedDate = submittedAt 
     ? new Date(submittedAt).toLocaleString("en-US", {
-        weekday: "long",
+        weekday: "short",
         year: "numeric",
-        month: "long",
+        month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-        timeZoneName: "short",
       })
     : new Date().toLocaleString("en-US", {
-        weekday: "long",
+        weekday: "short",
         year: "numeric",
-        month: "long",
+        month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-        timeZoneName: "short",
       })
 
-  // Build the beautiful body HTML
+  // Build user info section if logged in
+  const userInfoSection = isLoggedIn ? `
+    <!-- User Account Info -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border-radius:8px;margin-bottom:20px;border:1px solid #bbf7d0;">
+      <tr>
+        <td style="padding:16px;">
+          <div style="font-size:11px;font-weight:600;color:#166534;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">✓ Logged-in User</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#374151;">
+            ${userInfo?.userId ? `<tr><td style="padding:4px 0;color:#6b7280;width:100px;">User ID</td><td style="padding:4px 0;font-family:monospace;font-size:12px;">${escapeHtml(userInfo.userId)}</td></tr>` : ''}
+            ${userInfo?.username ? `<tr><td style="padding:4px 0;color:#6b7280;">Username</td><td style="padding:4px 0;font-weight:500;">@${escapeHtml(userInfo.username)}</td></tr>` : ''}
+            ${userInfo?.displayName ? `<tr><td style="padding:4px 0;color:#6b7280;">Display Name</td><td style="padding:4px 0;">${escapeHtml(userInfo.displayName)}</td></tr>` : ''}
+            ${userInfo?.roles && userInfo.roles.length > 0 ? `<tr><td style="padding:4px 0;color:#6b7280;">Roles</td><td style="padding:4px 0;">${userInfo.roles.map(r => `<span style="display:inline-block;background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:10px;font-size:11px;margin-right:4px;">${escapeHtml(r)}</span>`).join('')}</td></tr>` : ''}
+            ${userInfo?.isAdmin ? `<tr><td style="padding:4px 0;color:#6b7280;">Admin</td><td style="padding:4px 0;"><span style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;">✓ Admin</span></td></tr>` : ''}
+            ${userInfo?.country ? `<tr><td style="padding:4px 0;color:#6b7280;">Country</td><td style="padding:4px 0;">${escapeHtml(userInfo.country)}</td></tr>` : ''}
+            ${userInfo?.timezone ? `<tr><td style="padding:4px 0;color:#6b7280;">Timezone</td><td style="padding:4px 0;">${escapeHtml(userInfo.timezone)}</td></tr>` : ''}
+            ${userInfo?.language ? `<tr><td style="padding:4px 0;color:#6b7280;">Language</td><td style="padding:4px 0;">${escapeHtml(userInfo.language.toUpperCase())}</td></tr>` : ''}
+            ${typeof userInfo?.experienceYears === 'number' ? `<tr><td style="padding:4px 0;color:#6b7280;">Experience</td><td style="padding:4px 0;">${userInfo.experienceYears} years</td></tr>` : ''}
+            ${typeof userInfo?.setupCompleted === 'boolean' ? `<tr><td style="padding:4px 0;color:#6b7280;">Setup</td><td style="padding:4px 0;">${userInfo.setupCompleted ? '✓ Completed' : '✗ Not completed'}</td></tr>` : ''}
+          </table>
+        </td>
+      </tr>
+    </table>
+  ` : `
+    <!-- Guest User Notice -->
+    <div style="background:#fef3c7;border-radius:8px;padding:12px 16px;margin-bottom:20px;border:1px solid #fde68a;">
+      <span style="font-size:13px;color:#92400e;">⚠️ Guest user (not logged in)</span>
+    </div>
+  `
+
+  // Build the clean body HTML
   const bodyHtml = `
-    <!-- Audience Badge -->
-    <div style="text-align:center;margin-bottom:32px;">
-      <div style="display:inline-block;background:${config.bgColor};border:2px solid ${config.borderColor};border-radius:50px;padding:12px 24px;">
-        <span style="font-size:24px;vertical-align:middle;margin-right:8px;">${config.icon}</span>
-        <span style="font-size:16px;font-weight:700;color:${config.color};vertical-align:middle;">${config.label}</span>
+    <!-- Header -->
+    <div style="margin-bottom:24px;">
+      <div style="display:inline-block;background:${config.bgColor};padding:6px 14px;border-radius:20px;margin-bottom:12px;">
+        <span style="font-size:14px;">${config.icon}</span>
+        <span style="font-size:13px;font-weight:600;color:${config.color};margin-left:6px;">${config.label}</span>
       </div>
+      <h1 style="font-size:20px;font-weight:600;color:#18181b;margin:0 0 8px 0;line-height:1.3;">
+        ${escapeHtml(finalSubject)}
+      </h1>
+      <p style="font-size:13px;color:#71717a;margin:0;">${formattedDate}</p>
     </div>
 
-    <!-- Subject Header -->
-    <h1 style="font-size:24px;font-weight:700;color:#111827;margin:0 0 24px 0;text-align:center;line-height:1.3;">
-      ${escapeHtml(finalSubject)}
-    </h1>
-
-    <!-- Contact Info Card -->
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, ${config.bgColor} 0%, #ffffff 100%);border-radius:16px;border:1px solid ${config.borderColor};margin-bottom:24px;overflow:hidden;">
+    <!-- Contact Info -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-radius:8px;margin-bottom:20px;">
       <tr>
-        <td style="padding:24px;">
-          <!-- From Row -->
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
-            <tr>
-              <td width="100" style="color:#6b7280;font-size:14px;font-weight:500;vertical-align:top;padding-top:2px;">From</td>
-              <td>
-                <div style="font-size:16px;font-weight:600;color:#111827;margin-bottom:4px;">${escapeHtml(name)}</div>
-                <a href="mailto:${escapeHtml(email)}" style="font-size:14px;color:${config.color};text-decoration:none;">${escapeHtml(email)}</a>
-              </td>
-            </tr>
-          </table>
-          
-          <!-- Divider -->
-          <div style="height:1px;background:${config.borderColor};margin:16px 0;"></div>
-          
-          <!-- Details Grid -->
+        <td style="padding:16px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
             <tr>
-              <td width="50%" style="vertical-align:top;padding-right:12px;">
-                <div style="color:#6b7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Category</div>
-                <div style="font-size:14px;font-weight:600;color:#374151;">${audience.charAt(0).toUpperCase() + audience.slice(1)}</div>
+              <td style="padding-bottom:8px;">
+                <span style="font-size:13px;color:#71717a;">From:</span>
+                <span style="font-size:14px;font-weight:500;color:#18181b;margin-left:8px;">${escapeHtml(name)}</span>
               </td>
-              <td width="50%" style="vertical-align:top;padding-left:12px;">
-                <div style="color:#6b7280;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Received</div>
-                <div style="font-size:14px;font-weight:600;color:#374151;">${formattedDate}</div>
+            </tr>
+            <tr>
+              <td>
+                <span style="font-size:13px;color:#71717a;">Email:</span>
+                <a href="mailto:${escapeHtml(email)}" style="font-size:14px;color:${config.color};margin-left:8px;">${escapeHtml(email)}</a>
               </td>
             </tr>
           </table>
-          
-          <!-- Delivered To (smaller, secondary info) -->
-          <div style="margin-top:16px;padding-top:16px;border-top:1px solid ${config.borderColor};">
-            <div style="color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Delivered to</div>
-            <div style="font-size:13px;color:#6b7280;">${escapeHtml(recipientEmails.join(", "))}</div>
-          </div>
         </td>
       </tr>
     </table>
 
-    <!-- Quick Reply Button -->
-    <div style="text-align:center;margin-bottom:32px;">
-      <a href="mailto:${escapeHtml(email)}?subject=Re: ${encodeURIComponent(finalSubject)}" style="display:inline-block;background:linear-gradient(135deg, ${config.color} 0%, ${config.color}dd 100%);color:#ffffff;font-weight:600;font-size:14px;padding:14px 32px;border-radius:50px;text-decoration:none;box-shadow:0 8px 24px -6px ${config.color}66;">
-        ✉️ Reply to ${escapeHtml(name.split(' ')[0])}
-      </a>
-    </div>
+    ${userInfoSection}
 
-    <!-- Message Section -->
-    <div style="margin-bottom:24px;">
-      <div style="display:flex;align-items:center;margin-bottom:16px;">
-        <div style="font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Message</div>
-        <div style="flex:1;height:1px;background:#e5e7eb;margin-left:12px;"></div>
-      </div>
-      <div style="background:#f9fafb;border-radius:16px;padding:24px;border:1px solid #e5e7eb;">
-        <p style="margin:0;font-size:15px;line-height:1.8;color:#374151;white-space:pre-wrap;">${escapeHtml(message)}</p>
+    <!-- Message -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Message</div>
+      <div style="background:#ffffff;border:1px solid #e4e4e7;border-radius:8px;padding:16px;">
+        <p style="margin:0;font-size:14px;line-height:1.7;color:#3f3f46;white-space:pre-wrap;">${escapeHtml(message)}</p>
       </div>
     </div>
 
     ${screenshotUrl ? `
-    <!-- Screenshot Section (Bug Reports) -->
-    <div style="margin-bottom:24px;">
-      <div style="display:flex;align-items:center;margin-bottom:16px;">
-        <div style="font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">📸 Screenshot Attached</div>
-        <div style="flex:1;height:1px;background:#e5e7eb;margin-left:12px;"></div>
-      </div>
-      <div style="background:#fef2f2;border-radius:16px;padding:16px;border:2px dashed #fecaca;text-align:center;">
+    <!-- Screenshot -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">📸 Screenshot</div>
+      <div style="background:#fef2f2;border:1px dashed #fecaca;border-radius:8px;padding:12px;text-align:center;">
         <a href="${escapeHtml(screenshotUrl)}" target="_blank" style="display:block;text-decoration:none;">
-          <img src="${escapeHtml(screenshotUrl)}" alt="Bug report screenshot" style="max-width:100%;max-height:400px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.1);margin-bottom:12px;" />
-          <div style="color:#dc2626;font-size:13px;font-weight:500;">Click to view full size →</div>
+          <img src="${escapeHtml(screenshotUrl)}" alt="Screenshot" style="max-width:100%;max-height:300px;border-radius:6px;margin-bottom:8px;" />
+          <span style="font-size:12px;color:#dc2626;">View full size →</span>
         </a>
       </div>
     </div>
     ` : ""}
 
-    <!-- Internal Note -->
-    <div style="background:#fffbeb;border-radius:12px;padding:16px;border:1px solid #fde68a;text-align:center;">
-      <p style="margin:0;font-size:13px;color:#92400e;">
-        💡 <strong>Tip:</strong> Click the reply button above or reply directly to this email to respond to the user.
+    <!-- Quick Actions -->
+    <div style="text-align:center;padding-top:16px;border-top:1px solid #e4e4e7;">
+      <a href="mailto:${escapeHtml(email)}?subject=Re: ${encodeURIComponent(finalSubject)}" style="display:inline-block;background:${config.color};color:#ffffff;font-weight:500;font-size:13px;padding:10px 24px;border-radius:6px;text-decoration:none;">
+        Reply to ${escapeHtml(name.split(' ')[0])}
+      </a>
+    </div>
+
+    <!-- Meta Info -->
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e4e4e7;">
+      <p style="font-size:11px;color:#a1a1aa;margin:0;">
+        Category: ${audience} · Delivered to: ${escapeHtml(recipientEmails.join(", "))}
       </p>
     </div>
   `
 
-  // Wrap with the beautiful email template
-  const htmlBody = wrapEmailHtmlShared(bodyHtml, {
+  // Wrap with the simple admin email template
+  const htmlBody = wrapAdminEmailHtmlShared(bodyHtml, {
     subject: finalSubject,
-    previewText: `${config.label} from ${name}: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`,
+    previewText: `${config.label} from ${name}: ${message.substring(0, 80)}${message.length > 80 ? '...' : ''}`,
   })
 
     try {
