@@ -10635,17 +10635,15 @@ export const AdminPage: React.FC = () => {
 
                             {/* Admin Commentary - Last Element */}
                             <Card className="rounded-2xl">
-                              <CardContent className="p-4 space-y-2">
-                                <div className="flex items-start justify-between">
-                                  <div className="text-sm font-medium flex items-center gap-2">
-                                    <MessageSquareText className="h-4 w-4 text-stone-500" />
-                                    Admin Commentary
-                                  </div>
-                                  <AddAdminNote
-                                    profileId={memberData.user?.id || ""}
-                                    onAdded={() => lookupMember()}
-                                  />
+                              <CardContent className="p-4 space-y-3">
+                                <div className="text-sm font-medium flex items-center gap-2">
+                                  <MessageSquareText className="h-4 w-4 text-stone-500" />
+                                  Admin Commentary
                                 </div>
+                                <AddAdminNote
+                                  profileId={memberData.user?.id || ""}
+                                  onAdded={() => lookupMember()}
+                                />
                                 <div className="space-y-2">
                                   {(memberData.adminNotes || []).length ===
                                   0 ? (
@@ -11796,10 +11794,12 @@ function AddAdminNote({
   const [value, setValue] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [open, setOpen] = React.useState(false);
-  const disabled = !profileId || !value.trim() || submitting;
-  const submit = React.useCallback(async () => {
-    if (disabled) return;
+  const [error, setError] = React.useState<string | null>(null);
+
+  const submit = async () => {
+    if (!profileId || !value.trim() || submitting) return;
     setSubmitting(true);
+    setError(null);
     try {
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
@@ -11820,7 +11820,7 @@ function AddAdminNote({
         body: JSON.stringify({ profileId, message: value.trim() }),
       });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
       // Log note create (UI)
       try {
         const headers2: Record<string, string> = {
@@ -11847,41 +11847,50 @@ function AddAdminNote({
       setValue("");
       setOpen(false);
       onAdded();
-    } catch {
-      // noop
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save note");
     } finally {
       setSubmitting(false);
     }
-  }, [profileId, value, submitting, onAdded]);
+  };
+
+  const disabled = !profileId || !value.trim() || submitting;
+
   return (
-    <div>
+    <div className="w-full">
       {!open ? (
-        <Button onClick={() => setOpen(true)} className="rounded-2xl">
+        <Button onClick={() => setOpen(true)} className="rounded-2xl" size="sm">
           Add note
         </Button>
       ) : (
-        <div className="flex gap-2">
+        <div className="space-y-2">
           <Textarea
             placeholder="Add a note for other admins (visible only to admins)"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            className="min-h-[56px]"
+            className="min-h-[80px] w-full"
           />
-          <div className="flex flex-col gap-2">
+          {error && (
+            <div className="text-sm text-red-500">{error}</div>
+          )}
+          <div className="flex gap-2">
             <Button
               onClick={submit}
               disabled={disabled}
               className="rounded-2xl"
+              size="sm"
             >
-              Save
+              {submitting ? "Saving..." : "Save"}
             </Button>
             <Button
               variant="secondary"
               onClick={() => {
                 setOpen(false);
                 setValue("");
+                setError(null);
               }}
               className="rounded-2xl"
+              size="sm"
             >
               Cancel
             </Button>

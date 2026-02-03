@@ -783,6 +783,13 @@
       "activities": "Activities",
       "subActivities": "{{activity}} focus"
     },
+    "inConstruction": {
+      "title": "Plant in Construction",
+      "description": "We are currently verifying and completing the information for this plant. Check back soon for the full details!",
+      "adminTitle": "Plant in Construction",
+      "adminDescription": "This plant is still being verified. Regular users cannot see this page yet.",
+      "privilegedBadge": "Early Access"
+    },
     "sunlightLabel": "Sunlight:",
     "waterLabel": "Water:",
     "waterFrequency": "Water frequency:",
