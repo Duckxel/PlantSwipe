@@ -2,6 +2,8 @@ import hmac
 import hashlib
 import os
 import subprocess
+import sys
+import re
 from typing import Set, Optional
 
 from flask import Flask, request, abort, jsonify, Response
@@ -259,12 +261,28 @@ _load_repo_env()
 
 # Now read config variables AFTER env files are loaded
 APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
+# Warn about default secret
+if APP_SECRET == "change-me":
+    print("[SECURITY WARNING] ADMIN_BUTTON_SECRET is set to default 'change-me'. Please update it in .env!", file=sys.stderr)
+
 ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
 # Allow nginx, node app, and admin api by default; can be overridden via env
 ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
 DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
 
 ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
+
+def _validate_branch_name(name: Optional[str]) -> bool:
+    """Validate that branch name contains only safe characters."""
+    if not name:
+        return True
+    # Reject flags starting with dash
+    if name.startswith("-"):
+        return False
+    # Whitelist safe characters: alphanumeric, underscore, dot, slash, hyphen
+    if not re.match(r"^[a-zA-Z0-9_./-]+$", name):
+        return False
+    return True
 
 app = Flask(__name__)
 
@@ -603,6 +621,8 @@ def _run_refresh(branch: Optional[str], stream: bool):
 def admin_refresh_stream():
     _verify_request()
     branch = (request.args.get("branch") or "").strip() or None
+    if branch and not _validate_branch_name(branch):
+        abort(400, description="Invalid branch name")
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
@@ -616,6 +636,8 @@ def admin_refresh():
     _verify_request()
     body = request.get_json(silent=True) or {}
     branch = (request.args.get("branch") or body.get("branch") or "").strip() or None
+    if branch and not _validate_branch_name(branch):
+        abort(400, description="Invalid branch name")
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
