@@ -65,12 +65,10 @@ const contactSchema = z.object({
     username: z.string().optional(),
     displayName: z.string().optional(),
     roles: z.array(z.string()).optional(),
-    isAdmin: z.boolean().optional(),
     country: z.string().optional(),
     timezone: z.string().optional(),
     language: z.string().optional(),
     experienceYears: z.number().optional(),
-    setupCompleted: z.boolean().optional(),
   }).optional(),
 })
 
@@ -235,12 +233,10 @@ serve(async (req) => {
             ${userInfo?.username ? `<tr><td style="padding:4px 0;color:#6b7280;">Username</td><td style="padding:4px 0;font-weight:500;">@${escapeHtml(userInfo.username)}</td></tr>` : ''}
             ${userInfo?.displayName ? `<tr><td style="padding:4px 0;color:#6b7280;">Display Name</td><td style="padding:4px 0;">${escapeHtml(userInfo.displayName)}</td></tr>` : ''}
             ${userInfo?.roles && userInfo.roles.length > 0 ? `<tr><td style="padding:4px 0;color:#6b7280;">Roles</td><td style="padding:4px 0;">${userInfo.roles.map(r => `<span style="display:inline-block;background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:10px;font-size:11px;margin-right:4px;">${escapeHtml(r)}</span>`).join('')}</td></tr>` : ''}
-            ${userInfo?.isAdmin ? `<tr><td style="padding:4px 0;color:#6b7280;">Admin</td><td style="padding:4px 0;"><span style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;">✓ Admin</span></td></tr>` : ''}
             ${userInfo?.country ? `<tr><td style="padding:4px 0;color:#6b7280;">Country</td><td style="padding:4px 0;">${escapeHtml(userInfo.country)}</td></tr>` : ''}
             ${userInfo?.timezone ? `<tr><td style="padding:4px 0;color:#6b7280;">Timezone</td><td style="padding:4px 0;">${escapeHtml(userInfo.timezone)}</td></tr>` : ''}
             ${userInfo?.language ? `<tr><td style="padding:4px 0;color:#6b7280;">Language</td><td style="padding:4px 0;">${escapeHtml(userInfo.language.toUpperCase())}</td></tr>` : ''}
             ${typeof userInfo?.experienceYears === 'number' ? `<tr><td style="padding:4px 0;color:#6b7280;">Experience</td><td style="padding:4px 0;">${userInfo.experienceYears} years</td></tr>` : ''}
-            ${typeof userInfo?.setupCompleted === 'boolean' ? `<tr><td style="padding:4px 0;color:#6b7280;">Setup</td><td style="padding:4px 0;">${userInfo.setupCompleted ? '✓ Completed' : '✗ Not completed'}</td></tr>` : ''}
           </table>
         </td>
       </tr>

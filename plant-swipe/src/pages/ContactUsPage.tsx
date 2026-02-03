@@ -307,12 +307,10 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
           username: profile.username || undefined,
           displayName: profile.display_name || undefined,
           roles: profile.roles || undefined,
-          isAdmin: profile.is_admin || undefined,
           country: profile.country || undefined,
           timezone: profile.timezone || undefined,
           language: profile.language || undefined,
           experienceYears: profile.experience_years || undefined,
-          setupCompleted: profile.setup_completed || undefined,
         } : undefined
 
         const { data, error } = await supabase.functions.invoke(SUPPORT_FUNCTION, {
