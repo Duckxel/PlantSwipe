@@ -11686,21 +11686,27 @@ app.post('/api/admin/member-note', async (req, res) => {
       return
     }
 
+    // Convert admin ID to valid UUID (null for static-admin)
+    const adminUuid = toAdminUuid(adminUserId)
+
     // Get admin display name
     let adminName = null
     try {
-      if (sql) {
-        const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminUserId} limit 1`
+      if (adminUuid && sql) {
+        const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminUuid} limit 1`
         adminName = rows?.[0]?.name || null
-      } else if (supabaseUrlEnv && supabaseAnonKey) {
+      } else if (adminUuid && supabaseUrlEnv && supabaseAnonKey) {
         const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
         const token = getBearerTokenFromRequest(req)
         if (token) headers['Authorization'] = `Bearer ${token}`
-        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminUserId)}&select=display_name&limit=1`, { headers })
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminUuid)}&select=display_name&limit=1`, { headers })
         if (resp.ok) {
           const arr = await resp.json().catch(() => [])
           adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
         }
+      } else if (!adminUuid) {
+        // For static-admin, use a placeholder name
+        adminName = 'System Admin'
       }
     } catch { }
 
@@ -11709,7 +11715,7 @@ app.post('/api/admin/member-note', async (req, res) => {
     if (sql) {
       const rows = await sql`
         insert into public.profile_admin_notes (profile_id, admin_id, admin_name, message)
-        values (${pid}, ${adminUserId}, ${adminName}, ${msg})
+        values (${pid}, ${adminUuid}, ${adminName}, ${msg})
         returning id, created_at
       `
       created = rows?.[0]?.created_at || null
@@ -11718,7 +11724,7 @@ app.post('/api/admin/member-note', async (req, res) => {
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes`, {
-        method: 'POST', headers, body: JSON.stringify({ profile_id: pid, admin_id: adminUserId, admin_name: adminName, message: msg }),
+        method: 'POST', headers, body: JSON.stringify({ profile_id: pid, admin_id: adminUuid, admin_name: adminName, message: msg }),
       })
       if (!resp.ok) {
         const body = await resp.text().catch(() => '')
@@ -11731,14 +11737,8 @@ app.post('/api/admin/member-note', async (req, res) => {
     }
     // Log admin action
     try {
-      const aid = adminUserId
-      let aname = adminName
-      if (!aname && sql) {
-        const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${aid} limit 1`
-        aname = rows?.[0]?.name || null
-      }
       if (sql) {
-        await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${aid}, ${aname}, 'add_note', ${profileId}, ${sql.json({ message: msg })})`
+        await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminUuid}, ${adminName}, 'add_note', ${pid}, ${sql.json({ message: msg })})`
       }
     } catch { }
     res.json({ ok: true, created_at: created })
@@ -11752,6 +11752,7 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
   try {
     const adminUserId = await ensureAdmin(req, res)
     if (!adminUserId) return
+    const adminUuid = toAdminUuid(adminUserId)
     const noteId = (req.params.id || '').toString().trim()
     if (!noteId) {
       res.status(400).json({ error: 'Missing note id' })
@@ -11765,7 +11766,7 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
         pid = rows?.[0]?.profile_id || null
       } catch { }
       await sql`delete from public.profile_admin_notes where id = ${noteId}::uuid`
-      try { await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUserId}, 'delete_note', ${pid}, ${sql.json({ noteId })})` } catch { }
+      try { await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUuid}, 'delete_note', ${pid}, ${sql.json({ noteId })})` } catch { }
       res.json({ ok: true })
       return
     }
