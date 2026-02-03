@@ -71,3 +71,40 @@ CREATE POLICY "Service role can manage verification codes"
   ON email_verification_codes
   FOR ALL
   USING (auth.role() = 'service_role');
+
+-- Schedule daily cleanup of expired verification codes (runs at 2:30 AM UTC)
+DO $$
+BEGIN
+  -- Remove existing schedule if it exists (to allow updates)
+  PERFORM cron.unschedule('cleanup_expired_verification_codes');
+EXCEPTION
+  WHEN OTHERS THEN NULL; -- Ignore if job doesn't exist
+END $$;
+
+DO $$
+BEGIN
+  PERFORM cron.schedule(
+    'cleanup_expired_verification_codes',
+    '30 2 * * *',
+    $$SELECT cleanup_expired_verification_codes();$$
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Failed to schedule cleanup_expired_verification_codes cron job: %', SQLERRM;
+END $$;
+
+-- Function to reset email_verified when user's email changes
+-- This is called from the frontend when email is updated
+CREATE OR REPLACE FUNCTION reset_email_verification_on_email_change(p_user_id uuid)
+RETURNS void AS $$
+BEGIN
+  UPDATE profiles
+  SET email_verified = false
+  WHERE id = p_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION reset_email_verification_on_email_change(uuid) IS 'Resets email_verified to false when a user changes their email address. Called from the application when email is updated.';
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION reset_email_verification_on_email_change(uuid) TO authenticated;

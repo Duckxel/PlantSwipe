@@ -359,6 +359,19 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError
 
+      // Reset email_verified to false since user is changing their email
+      // They will need to verify the new email address
+      if (user?.id) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ email_verified: false })
+          .eq('id', user.id)
+        
+        if (profileError) {
+          console.warn('[email-change] Failed to reset email_verified:', profileError)
+        }
+      }
+
       // Send notification to OLD email about the change (CSRF + Auth protected, non-blocking)
       // Need a fresh CSRF token since the previous one was used
       if (user?.id && oldEmailAddress) {
