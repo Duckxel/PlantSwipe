@@ -3149,5 +3149,21 @@
       "notificationTime": "Notification Time",
       "notificationTimeDescription": "When should we send you reminders?"
     }
+  },
+  "emailVerification": {
+    "title": "Verify Your Email",
+    "description": "We've sent a verification code to:",
+    "codeExpires": "Code expires in",
+    "codeExpired": "Code has expired. Please request a new one.",
+    "sending": "Sending...",
+    "verifying": "Verifying...",
+    "resendCode": "Didn't receive the code? Resend",
+    "resendIn": "Resend in",
+    "verifyButton": "Verify Email",
+    "checkSpam": "Check your spam folder if you don't see the email. The code is valid for 5 minutes.",
+    "successTitle": "Email Verified!",
+    "successDescription": "Redirecting you to your garden...",
+    "invalidCode": "Invalid verification code. Please check and try again.",
+    "expiredCode": "This code has expired. Please request a new one."
   }
 }

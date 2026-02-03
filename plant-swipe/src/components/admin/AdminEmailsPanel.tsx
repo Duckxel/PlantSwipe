@@ -125,6 +125,16 @@ const TRIGGER_VARIABLES: Record<string, {
       { token: '{{url}}', description: 'Website URL' },
     ]
   },
+  // Email Verification
+  EMAIL_VERIFICATION: {
+    category: 'security',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{code}}', description: '6-character verification code (expires in 5 minutes)', required: true },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
 }
 
 // Get category badge color

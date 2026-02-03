@@ -71,6 +71,7 @@ const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
 const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module => ({ default: module.BookmarkPage })))
 const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
 const SetupPageLazy = lazy(() => import("@/pages/SetupPage").then(module => ({ default: module.SetupPage })))
+const EmailVerificationPageLazy = lazy(() => import("@/pages/EmailVerificationPage").then(module => ({ default: module.EmailVerificationPage })))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -1430,6 +1431,17 @@ export default function PlantSwipe() {
     const isExcludedFromSetup = pathWithoutLang === '/' || setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !isExcludedFromSetup
 
+    // Check if user needs to verify email (setup complete but email not verified)
+    // Only check if setup is completed to avoid conflicting with setup flow
+    const needsEmailVerification = user && profile && profile.setup_completed === true && profile.email_verified === false
+    // Exclude: verify-email page itself, admin panel, and landing page
+    const emailVerifyExcludedPaths = ['/verify-email', '/admin']
+    const isExcludedFromEmailVerify = pathWithoutLang === '/' || emailVerifyExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    const shouldRedirectToEmailVerify = needsEmailVerification && !needsLegalUpdate && !shouldRedirectToSetup && !isExcludedFromEmailVerify
+    
+    // Email verification page - full screen experience
+    const isEmailVerificationPage = pathWithoutLang === "/verify-email"
+
     // Setup page - full screen wizard experience
     // Render directly without nested Routes since we've already determined the path
     if (isSetupPage && user) {
@@ -1470,6 +1482,49 @@ export default function PlantSwipe() {
       return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
           <Navigate to="/setup" replace />
+        </AuthActionsProvider>
+      )
+    }
+
+    // Email verification page - full screen experience
+    if (isEmailVerificationPage && user) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <ErrorBoundary fallback={routeErrorFallback}>
+            <Suspense fallback={routeLoadingFallback}>
+              <EmailVerificationPageLazy />
+            </Suspense>
+          </ErrorBoundary>
+          <CookieConsent />
+          
+          {/* Legal Document Update Modal - show even on verification page if terms need updating */}
+          {showLegalUpdateModal && profile && (
+            <LegalUpdateModal
+              open={showLegalUpdateModal}
+              userId={user.id}
+              userTermsVersion={profile.terms_version_accepted ?? null}
+              userPrivacyVersion={profile.privacy_version_accepted ?? null}
+              userTermsAcceptedDate={profile.terms_accepted_date ?? null}
+              userPrivacyAcceptedDate={profile.privacy_policy_accepted_date ?? null}
+              onAccepted={() => {
+                setLegalUpdateDismissed(true)
+                refreshProfile().catch(() => {})
+              }}
+              onDeclined={async () => {
+                await signOut()
+                alert(t('legal.declinedMessage', 'Your account has been blocked because you declined the updated terms. Contact support if you wish to reactivate your account.'))
+              }}
+            />
+          )}
+        </AuthActionsProvider>
+      )
+    }
+
+    // Redirect to email verification if user needs to verify their email
+    if (shouldRedirectToEmailVerify) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <Navigate to="/verify-email" replace />
         </AuthActionsProvider>
       )
     }

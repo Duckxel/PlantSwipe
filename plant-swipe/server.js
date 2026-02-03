@@ -9187,6 +9187,12 @@ const DEFAULT_EMAIL_TRIGGERS = [
     displayName: 'New Device Login',
     description: 'Sent when user logs in from a new device. Variables: {{device}}, {{location}}, {{ip_address}}, {{time}}',
   },
+  // Email Verification
+  {
+    triggerType: 'EMAIL_VERIFICATION',
+    displayName: 'Email Verification Code',
+    description: 'Sent when user needs to verify their email address (after setup). Contains a 6-character verification code. Variables: {{code}}, {{user}}, {{email}}',
+  },
 ]
 
 async function ensureDefaultEmailTriggers() {
@@ -9692,7 +9698,8 @@ app.post('/api/send-security-email', async (req, res) => {
     'PASSWORD_RESET_REQUEST',
     'PASSWORD_CHANGE_CONFIRMATION',
     'SUSPICIOUS_LOGIN_ALERT',
-    'NEW_DEVICE_LOGIN'
+    'NEW_DEVICE_LOGIN',
+    'EMAIL_VERIFICATION'
   ]
 
   if (!securityTriggers.includes(triggerType)) {
@@ -9718,6 +9725,267 @@ app.post('/api/send-security-email', async (req, res) => {
     : 200
   res.status(status).json(result)
 })
+
+// =============================================================================
+// EMAIL VERIFICATION - OTP-based email verification system
+// Codes are 6 alphanumeric characters and expire after 5 minutes
+// =============================================================================
+
+/**
+ * Generate a 6-character alphanumeric verification code
+ * Uses uppercase letters and numbers for better readability
+ */
+function generateVerificationCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Exclude confusing chars: I, O, 0, 1
+  let code = ''
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
+
+/**
+ * Send email verification code to user
+ * Creates a new code in the database and sends it via email
+ */
+app.post('/api/email-verification/send', async (req, res) => {
+  // Require authentication
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+
+  try {
+    // Get user profile
+    const profileRows = await sql`
+      select id, display_name, email_verified 
+      from profiles 
+      where id = ${authUser.id}
+      limit 1
+    `
+
+    if (!profileRows || !profileRows.length) {
+      return res.status(404).json({ error: 'User profile not found' })
+    }
+
+    const profile = profileRows[0]
+
+    // Check if already verified
+    if (profile.email_verified) {
+      return res.json({ sent: false, reason: 'Email already verified', alreadyVerified: true })
+    }
+
+    // Get user's email from auth
+    const userEmail = authUser.email
+    if (!userEmail) {
+      return res.status(400).json({ error: 'User has no email address' })
+    }
+
+    // Delete any existing unused codes for this user
+    await sql`
+      delete from email_verification_codes
+      where user_id = ${authUser.id}
+      and used_at is null
+    `
+
+    // Generate new code
+    const code = generateVerificationCode()
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes from now
+
+    // Insert the new code
+    await sql`
+      insert into email_verification_codes (user_id, code, expires_at)
+      values (${authUser.id}, ${code}, ${expiresAt.toISOString()})
+    `
+
+    console.log(`[email-verification] Generated code for user ${authUser.id}: ${code} (expires ${expiresAt.toISOString()})`)
+
+    // Send the verification email using the EMAIL_VERIFICATION trigger
+    const result = await sendSecurityEmail('EMAIL_VERIFICATION', {
+      recipientEmail: userEmail,
+      userId: authUser.id,
+      userDisplayName: profile.display_name || 'User',
+      userLanguage: req.body?.language || 'en',
+      extraContext: {
+        code: code,
+        email: userEmail
+      }
+    })
+
+    if (result.sent) {
+      res.json({ sent: true, expiresAt: expiresAt.toISOString() })
+    } else {
+      // If email failed to send, delete the code
+      await sql`
+        delete from email_verification_codes
+        where user_id = ${authUser.id}
+        and code = ${code}
+      `
+      res.status(500).json({ sent: false, reason: result.reason || 'Failed to send verification email' })
+    }
+  } catch (err) {
+    console.error('[email-verification/send] Error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to send verification code' })
+  }
+})
+
+/**
+ * Verify email verification code
+ * Checks if the code is valid, not expired, and not already used
+ */
+app.post('/api/email-verification/verify', async (req, res) => {
+  // Require authentication
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  const { code } = req.body || {}
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({ error: 'Verification code is required' })
+  }
+
+  // Normalize code (uppercase, trim whitespace)
+  const normalizedCode = code.toUpperCase().trim()
+
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+
+  try {
+    // Check if user is already verified
+    const profileRows = await sql`
+      select email_verified from profiles where id = ${authUser.id} limit 1
+    `
+
+    if (profileRows?.[0]?.email_verified) {
+      return res.json({ verified: true, alreadyVerified: true })
+    }
+
+    // Look up the code
+    const codeRows = await sql`
+      select id, code, expires_at, used_at
+      from email_verification_codes
+      where user_id = ${authUser.id}
+      and code = ${normalizedCode}
+      limit 1
+    `
+
+    if (!codeRows || !codeRows.length) {
+      console.log(`[email-verification/verify] Invalid code for user ${authUser.id}: ${normalizedCode}`)
+      return res.status(400).json({ verified: false, error: 'Invalid verification code' })
+    }
+
+    const codeRecord = codeRows[0]
+
+    // Check if already used
+    if (codeRecord.used_at) {
+      return res.status(400).json({ verified: false, error: 'Code has already been used' })
+    }
+
+    // Check if expired
+    const expiresAt = new Date(codeRecord.expires_at)
+    if (expiresAt < new Date()) {
+      console.log(`[email-verification/verify] Expired code for user ${authUser.id}: ${normalizedCode}`)
+      return res.status(400).json({ verified: false, error: 'Verification code has expired' })
+    }
+
+    // Mark code as used
+    await sql`
+      update email_verification_codes
+      set used_at = now()
+      where id = ${codeRecord.id}
+    `
+
+    // Mark user's email as verified
+    await sql`
+      update profiles
+      set email_verified = true
+      where id = ${authUser.id}
+    `
+
+    console.log(`[email-verification/verify] Email verified for user ${authUser.id}`)
+
+    res.json({ verified: true })
+  } catch (err) {
+    console.error('[email-verification/verify] Error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to verify code' })
+  }
+})
+
+/**
+ * Check email verification status
+ */
+app.get('/api/email-verification/status', async (req, res) => {
+  // Require authentication
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+
+  try {
+    const profileRows = await sql`
+      select email_verified from profiles where id = ${authUser.id} limit 1
+    `
+
+    const verified = profileRows?.[0]?.email_verified === true
+
+    // Also check if there's a pending code
+    const pendingCodeRows = await sql`
+      select expires_at from email_verification_codes
+      where user_id = ${authUser.id}
+      and used_at is null
+      and expires_at > now()
+      order by created_at desc
+      limit 1
+    `
+
+    const hasPendingCode = pendingCodeRows && pendingCodeRows.length > 0
+    const pendingCodeExpiresAt = hasPendingCode ? pendingCodeRows[0].expires_at : null
+
+    res.json({ 
+      verified, 
+      hasPendingCode,
+      pendingCodeExpiresAt 
+    })
+  } catch (err) {
+    console.error('[email-verification/status] Error:', err)
+    res.status(500).json({ error: err?.message || 'Failed to check verification status' })
+  }
+})
+
+/**
+ * Clean up expired verification codes (called by daily job)
+ */
+async function cleanupExpiredVerificationCodes() {
+  if (!sql) {
+    console.log('[cleanup] Database not configured, skipping verification code cleanup')
+    return 0
+  }
+
+  try {
+    const result = await sql`
+      delete from email_verification_codes
+      where expires_at < now()
+      or used_at is not null
+    `
+
+    const deletedCount = result?.count || 0
+    console.log(`[cleanup] Deleted ${deletedCount} expired/used verification codes`)
+    return deletedCount
+  } catch (err) {
+    console.error('[cleanup] Failed to clean up verification codes:', err)
+    return 0
+  }
+}
 
 // Convenience endpoint: Send password change confirmation email
 // CSRF protected - requires X-CSRF-Token header
@@ -15244,6 +15512,16 @@ cron.schedule('0 3 * * *', async () => {
     }
   } catch (err) {
     console.error('[gdpr] Audit log cleanup failed:', err?.message)
+  }
+
+  try {
+    // 6. Clean up expired email verification codes
+    const deletedCount = await cleanupExpiredVerificationCodes()
+    if (deletedCount > 0) {
+      console.log(`[gdpr] Deleted ${deletedCount} expired verification codes`)
+    }
+  } catch (err) {
+    console.error('[gdpr] Verification codes cleanup failed:', err?.message)
   }
 
   console.log('[gdpr] Data retention cleanup completed')

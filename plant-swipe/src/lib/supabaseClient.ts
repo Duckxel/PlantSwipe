@@ -100,6 +100,8 @@ export type ProfileRow = {
   experience_level?: 'novice' | 'intermediate' | 'expert' | null
   looking_for?: 'eat' | 'ornamental' | 'various' | null
   notification_time?: '6h' | '10h' | '14h' | '17h' | null
+  // Email verification status
+  email_verified?: boolean | null
 }
 
 export type BlogPostRow = {
