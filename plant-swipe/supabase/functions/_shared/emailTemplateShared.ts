@@ -355,3 +355,101 @@ export function wrapEmailHtmlShared(bodyHtml: string, options: EmailWrapperOptio
 </body>
 </html>`
 }
+
+// =============================================================================
+// SIMPLE ADMIN EMAIL WRAPPER - For internal team emails (contact forms, etc.)
+// =============================================================================
+
+export interface AdminEmailWrapperOptions {
+  subject?: string
+  previewText?: string
+}
+
+/**
+ * Wraps email body content with a simple, clean template for internal team emails
+ * No logo, no CTA buttons, no social media links - just clean, readable content
+ * Used for contact form submissions and other internal notifications
+ */
+export function wrapAdminEmailHtmlShared(bodyHtml: string, options: AdminEmailWrapperOptions = {}): string {
+  const currentYear = new Date().getFullYear()
+  
+  // Preview text (hidden text that shows in email inbox previews)
+  const previewTextHtml = options.previewText 
+    ? `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${options.previewText}</div>`
+    : ''
+
+  return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>${options.subject || 'Aphylia Admin'}</title>
+  <!--[if mso]>
+  <style>
+    table, td, div, p, a { font-family: Arial, sans-serif; }
+  </style>
+  <![endif]-->
+  <style>
+    /* Reset */
+    body, table, td, p, a, li { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    
+    /* Base */
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f4f4f5; }
+    
+    /* Typography */
+    h1, h2, h3, h4 { margin: 0; font-weight: 600; color: #18181b; }
+    p { margin: 0 0 16px 0; line-height: 1.6; color: #3f3f46; }
+    a { color: #059669; text-decoration: underline; }
+    
+    /* Responsive */
+    @media screen and (max-width: 600px) {
+      .email-container { width: 100% !important; margin: 0 !important; }
+      .email-body { padding: 24px 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  ${previewTextHtml}
+  
+  <!-- Email Wrapper -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;margin:0;padding:0;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        
+        <!-- Main Container -->
+        <table role="presentation" class="email-container" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background-color:#ffffff;border-radius:16px;border:1px solid #e4e4e7;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+          
+          <!-- Body Content -->
+          <tr>
+            <td class="email-body" style="padding:32px 40px;color:#3f3f46;font-size:15px;line-height:1.6;">
+              ${bodyHtml}
+            </td>
+          </tr>
+          
+          <!-- Simple Footer -->
+          <tr>
+            <td style="padding:20px 40px;border-top:1px solid #e4e4e7;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#a1a1aa;">
+                Aphylia Internal · ${currentYear}
+              </p>
+            </td>
+          </tr>
+          
+        </table>
+        <!-- End Main Container -->
+        
+      </td>
+    </tr>
+  </table>
+  <!-- End Email Wrapper -->
+  
+</body>
+</html>`
+}

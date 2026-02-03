@@ -41,7 +41,7 @@ type ContactUsPageProps = {
 
 export default function ContactUsPage({ defaultChannel = "support" }: ContactUsPageProps) {
   const { t } = useTranslation('common')
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const seoKey = defaultChannel === "business" ? "contactBusiness" : "contactSupport"
   const seoTitle = t(`seo.${seoKey}.title`, {
     defaultValue: defaultChannel === "business" ? "Contact Aphylia business team" : "Contact Aphylia support",
@@ -191,6 +191,16 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         subject: "",
         message: "",
       })
+    } else {
+      // Prefill with user data if logged in
+      if (user && profile) {
+        setFormValues({
+          name: profile.display_name || "",
+          email: user.email || "",
+          subject: "",
+          message: "",
+        })
+      }
     }
     setFormOpen(open)
   }
@@ -291,12 +301,25 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
     }
 
     try {
+        // Build user info if logged in
+        const userInfo = user && profile ? {
+          userId: user.id,
+          username: profile.username || undefined,
+          displayName: profile.display_name || undefined,
+          roles: profile.roles || undefined,
+          country: profile.country || undefined,
+          timezone: profile.timezone || undefined,
+          language: profile.language || undefined,
+          experienceYears: profile.experience_years || undefined,
+        } : undefined
+
         const { data, error } = await supabase.functions.invoke(SUPPORT_FUNCTION, {
           body: {
             ...trimmedData,
             submittedAt: new Date().toISOString(),
             audience: selectedChannel,
-            screenshotUrl: screenshotUrl || undefined
+            screenshotUrl: screenshotUrl || undefined,
+            userInfo,
           },
         })
 

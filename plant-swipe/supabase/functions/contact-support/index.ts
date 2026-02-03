@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts"
+import { wrapAdminEmailHtmlShared } from "../_shared/emailTemplateShared.ts"
 
 const DEFAULT_SUPPORT_EMAIL = "support@aphylia.app"
 const DEFAULT_BUSINESS_EMAIL = "contact@aphylia.app"
@@ -58,6 +59,17 @@ const contactSchema = z.object({
       }),
     )
     .optional(),
+  // Additional user info (when user is logged in)
+  userInfo: z.object({
+    userId: z.string().optional(),
+    username: z.string().optional(),
+    displayName: z.string().optional(),
+    roles: z.array(z.string()).optional(),
+    country: z.string().optional(),
+    timezone: z.string().optional(),
+    language: z.string().optional(),
+    experienceYears: z.number().optional(),
+  }).optional(),
 })
 
 const corsHeaders: Record<string, string> = {
@@ -134,9 +146,10 @@ serve(async (req) => {
     })
   }
 
-    const { name, email, subject, message, submittedAt, audience: parsedAudience, attachments, screenshotUrl } =
+    const { name, email, subject, message, submittedAt, audience: parsedAudience, attachments, screenshotUrl, userInfo } =
       parsed.data
     const audience: Audience = parsedAudience ?? "support"
+    const isLoggedIn = !!userInfo?.userId
     const recipientEmails = RECIPIENT_EMAILS[audience]
 
     if (!recipientEmails || recipientEmails.length === 0) {
@@ -180,19 +193,140 @@ serve(async (req) => {
     message,
   ].filter(Boolean).join("\n")
 
-  const htmlBody = `
-    <h2 style="margin-bottom:12px;">New contact form submission</h2>
-    <p><strong>Subject:</strong> ${escapeHtml(finalSubject)}</p>
-      <p><strong>Name:</strong> ${escapeHtml(name)}</p>
-    <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
-      <p><strong>Audience:</strong> ${escapeHtml(audience)}</p>
-      <p><strong>Delivered to:</strong> ${escapeHtml(recipientEmails.join(", "))}</p>
-    ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
-    ${screenshotUrl ? `<p><strong>Screenshot:</strong> <a href="${escapeHtml(screenshotUrl)}" target="_blank">View Screenshot</a></p>` : ""}
-    ${screenshotUrl ? `<div style="margin:12px 0;"><img src="${escapeHtml(screenshotUrl)}" style="max-width:100%;border:1px solid #ddd;border-radius:8px;" alt="Bug report screenshot" /></div>` : ""}
-    <hr style="margin:16px 0;" />
-    <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
+  // Audience-specific configuration
+  const audienceConfig: Record<Audience, { icon: string; label: string; color: string; bgColor: string }> = {
+    support: { icon: "💬", label: "Support Request", color: "#059669", bgColor: "#ecfdf5" },
+    business: { icon: "💼", label: "Business Inquiry", color: "#7c3aed", bgColor: "#f5f3ff" },
+    bug: { icon: "🐛", label: "Bug Report", color: "#dc2626", bgColor: "#fef2f2" },
+  }
+
+  const config = audienceConfig[audience]
+  
+  // Format the timestamp nicely
+  const formattedDate = submittedAt 
+    ? new Date(submittedAt).toLocaleString("en-US", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : new Date().toLocaleString("en-US", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+
+  // Build user info section if logged in
+  const userInfoSection = isLoggedIn ? `
+    <!-- User Account Info -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border-radius:8px;margin-bottom:20px;border:1px solid #bbf7d0;">
+      <tr>
+        <td style="padding:16px;">
+          <div style="font-size:11px;font-weight:600;color:#166534;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">✓ Logged-in User</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;color:#374151;">
+            ${userInfo?.userId ? `<tr><td style="padding:4px 0;color:#6b7280;width:100px;">User ID</td><td style="padding:4px 0;font-family:monospace;font-size:12px;">${escapeHtml(userInfo.userId)}</td></tr>` : ''}
+            ${userInfo?.username ? `<tr><td style="padding:4px 0;color:#6b7280;">Username</td><td style="padding:4px 0;font-weight:500;">@${escapeHtml(userInfo.username)}</td></tr>` : ''}
+            ${userInfo?.displayName ? `<tr><td style="padding:4px 0;color:#6b7280;">Display Name</td><td style="padding:4px 0;">${escapeHtml(userInfo.displayName)}</td></tr>` : ''}
+            ${userInfo?.roles && userInfo.roles.length > 0 ? `<tr><td style="padding:4px 0;color:#6b7280;">Roles</td><td style="padding:4px 0;">${userInfo.roles.map(r => `<span style="display:inline-block;background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:10px;font-size:11px;margin-right:4px;">${escapeHtml(r)}</span>`).join('')}</td></tr>` : ''}
+            ${userInfo?.country ? `<tr><td style="padding:4px 0;color:#6b7280;">Country</td><td style="padding:4px 0;">${escapeHtml(userInfo.country)}</td></tr>` : ''}
+            ${userInfo?.timezone ? `<tr><td style="padding:4px 0;color:#6b7280;">Timezone</td><td style="padding:4px 0;">${escapeHtml(userInfo.timezone)}</td></tr>` : ''}
+            ${userInfo?.language ? `<tr><td style="padding:4px 0;color:#6b7280;">Language</td><td style="padding:4px 0;">${escapeHtml(userInfo.language.toUpperCase())}</td></tr>` : ''}
+            ${typeof userInfo?.experienceYears === 'number' ? `<tr><td style="padding:4px 0;color:#6b7280;">Experience</td><td style="padding:4px 0;">${userInfo.experienceYears} years</td></tr>` : ''}
+          </table>
+        </td>
+      </tr>
+    </table>
+  ` : `
+    <!-- Guest User Notice -->
+    <div style="background:#fef3c7;border-radius:8px;padding:12px 16px;margin-bottom:20px;border:1px solid #fde68a;">
+      <span style="font-size:13px;color:#92400e;">⚠️ Guest user (not logged in)</span>
+    </div>
   `
+
+  // Build the clean body HTML
+  const bodyHtml = `
+    <!-- Header -->
+    <div style="margin-bottom:24px;">
+      <div style="display:inline-block;background:${config.bgColor};padding:6px 14px;border-radius:20px;margin-bottom:12px;">
+        <span style="font-size:14px;">${config.icon}</span>
+        <span style="font-size:13px;font-weight:600;color:${config.color};margin-left:6px;">${config.label}</span>
+      </div>
+      <h1 style="font-size:20px;font-weight:600;color:#18181b;margin:0 0 8px 0;line-height:1.3;">
+        ${escapeHtml(finalSubject)}
+      </h1>
+      <p style="font-size:13px;color:#71717a;margin:0;">${formattedDate}</p>
+    </div>
+
+    <!-- Contact Info -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border-radius:8px;margin-bottom:20px;">
+      <tr>
+        <td style="padding:16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding-bottom:8px;">
+                <span style="font-size:13px;color:#71717a;">From:</span>
+                <span style="font-size:14px;font-weight:500;color:#18181b;margin-left:8px;">${escapeHtml(name)}</span>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <span style="font-size:13px;color:#71717a;">Email:</span>
+                <a href="mailto:${escapeHtml(email)}" style="font-size:14px;color:${config.color};margin-left:8px;">${escapeHtml(email)}</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    ${userInfoSection}
+
+    <!-- Message -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Message</div>
+      <div style="background:#ffffff;border:1px solid #e4e4e7;border-radius:8px;padding:16px;">
+        <p style="margin:0;font-size:14px;line-height:1.7;color:#3f3f46;white-space:pre-wrap;">${escapeHtml(message)}</p>
+      </div>
+    </div>
+
+    ${screenshotUrl ? `
+    <!-- Screenshot -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">📸 Screenshot</div>
+      <div style="background:#fef2f2;border:1px dashed #fecaca;border-radius:8px;padding:12px;text-align:center;">
+        <a href="${escapeHtml(screenshotUrl)}" target="_blank" style="display:block;text-decoration:none;">
+          <img src="${escapeHtml(screenshotUrl)}" alt="Screenshot" style="max-width:100%;max-height:300px;border-radius:6px;margin-bottom:8px;" />
+          <span style="font-size:12px;color:#dc2626;">View full size →</span>
+        </a>
+      </div>
+    </div>
+    ` : ""}
+
+    <!-- Quick Actions -->
+    <div style="text-align:center;padding-top:16px;border-top:1px solid #e4e4e7;">
+      <a href="mailto:${escapeHtml(email)}?subject=Re: ${encodeURIComponent(finalSubject)}" style="display:inline-block;background:${config.color};color:#ffffff;font-weight:500;font-size:13px;padding:10px 24px;border-radius:6px;text-decoration:none;">
+        Reply to ${escapeHtml(name.split(' ')[0])}
+      </a>
+    </div>
+
+    <!-- Meta Info -->
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e4e4e7;">
+      <p style="font-size:11px;color:#a1a1aa;margin:0;">
+        Category: ${audience} · Delivered to: ${escapeHtml(recipientEmails.join(", "))}
+      </p>
+    </div>
+  `
+
+  // Wrap with the simple admin email template
+  const htmlBody = wrapAdminEmailHtmlShared(bodyHtml, {
+    subject: finalSubject,
+    previewText: `${config.label} from ${name}: ${message.substring(0, 80)}${message.length > 80 ? '...' : ''}`,
+  })
 
     try {
       const response = await fetch(RESEND_ENDPOINT, {
