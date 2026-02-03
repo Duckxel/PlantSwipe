@@ -1,4 +1,4 @@
-import React, { useMemo, useState, lazy, Suspense } from "react";
+import React, { useMemo, useState, lazy, Suspense, useCallback, useRef } from "react";
 import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
@@ -1104,6 +1104,11 @@ export default function PlantSwipe() {
   }, [filtered, searchSort, likedSet])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
+
+  // ⚡ Bolt: Keep a ref to current plant to avoid recreating handlers on every index change
+  const currentRef = useRef(current)
+  React.useEffect(() => { currentRef.current = current }, [current])
+
   const heroImageCandidate = current ? getDiscoveryPageImageUrl(current) : ""
   const boostImagePriority = initialCardBoostRef.current && index === 0 && Boolean(heroImageCandidate)
 
@@ -1176,7 +1181,7 @@ export default function PlantSwipe() {
     }
   }, [currentView, heroImageCandidate, index, current])
 
-  const handlePass = () => {
+  const handlePass = useCallback(() => {
     if (swipeList.length === 0) return
     setIndex((i) => {
       const next = i + 1
@@ -1186,20 +1191,20 @@ export default function PlantSwipe() {
       }
       return next
     })
-  }
+  }, [swipeList])
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (swipeList.length === 0) return
     setIndex((i) => {
       const prev = i - 1
       // Wrap around to the end if going back from the start
       return prev < 0 ? swipeList.length - 1 : prev
     })
-  }
+  }, [swipeList])
 
-  const handleInfo = () => {
-    if (current) navigate(`/plants/${current.id}`)
-  }
+  const handleInfo = useCallback(() => {
+    if (currentRef.current) navigate(`/plants/${currentRef.current.id}`)
+  }, [navigate])
 
   // Swipe logic
   const x = useMotionValue(0)
@@ -1215,7 +1220,7 @@ export default function PlantSwipe() {
     animate(y, 0, { duration: 0.1 })
   }, [index, x, y])
   
-  const onDragEnd = (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
+  const onDragEnd = useCallback((_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
     const dx = info.offset.x
     const dy = info.offset.y
     
@@ -1263,20 +1268,17 @@ export default function PlantSwipe() {
       animate(x, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
       animate(y, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
     }
-  }
+  }, [handleInfo, handlePass, handlePrevious, x, y])
 
   // Favorites handling
-  const ensureLoggedIn = () => {
+  // ⚡ Bolt: Stabilize toggleLiked to prevent SwipePage re-renders
+  const toggleLiked = useCallback(async (plantId: string) => {
     if (!user) {
       setAuthMode('login')
       setAuthOpen(true)
-      return false
+      return
     }
-    return true
-  }
 
-  const toggleLiked = async (plantId: string) => {
-    if (!ensureLoggedIn()) return
     setLikedIds((prev) => {
       const has = prev.includes(plantId)
       const next = has ? prev.filter((id) => id !== plantId) : [...prev, plantId]
@@ -1300,7 +1302,7 @@ export default function PlantSwipe() {
       })()
       return next
     })
-  }
+  }, [user, refreshProfile])
 
   const openLogin = React.useCallback(() => { setAuthMode("login"); setAuthOpen(true) }, [])
   const openSignup = React.useCallback(() => { setAuthMode("signup"); setAuthOpen(true) }, [])
@@ -2116,9 +2118,9 @@ export default function PlantSwipe() {
                     handlePass={handlePass}
                     handlePrevious={handlePrevious}
                     liked={current ? likedIds.includes(current.id) : false}
-                    onToggleLike={() => {
-                      if (current) toggleLiked(current.id)
-                    }}
+                    onToggleLike={useCallback(() => {
+                      if (currentRef.current) toggleLiked(currentRef.current.id)
+                    }, [toggleLiked])}
                     boostImagePriority={boostImagePriority}
                   />
                 </Suspense>
