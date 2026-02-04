@@ -69,7 +69,7 @@ import { Link } from "@/components/i18n/Link"
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
 import { getDiscoveryPageImageUrl } from "@/lib/photos"
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils"
-import { resolveColorValue, DEFAULT_PLANT_COLOR } from "@/lib/colors"
+import { resolveColorValue } from "@/lib/colors"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 interface SwipePageProps {
@@ -994,12 +994,8 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({
             isColorVariant && "p-0",
           )}
         >
-          {isColorVariant ? (
-            <span
-              className="flex h-5 w-5 items-center justify-center rounded-full border border-white/35"
-              style={{ backgroundColor: item.colors?.[0]?.tone ?? DEFAULT_PLANT_COLOR }}
-              aria-hidden="true"
-            />
+          {isColorVariant && item.colors?.length ? (
+            <MultiColorFlowerIcon colors={item.colors} size={20} />
           ) : (
             item.icon
           )}
@@ -1286,6 +1282,76 @@ const BrightnessLowIcon = () => (
     <circle cx="12" cy="12" r="2" fill="currentColor" opacity={0.35} />
   </svg>
 )
+
+/**
+ * Multi-color flower icon that displays up to 5 colors as overlapping petals
+ * Each petal is a large circle positioned around a center point
+ */
+interface MultiColorFlowerIconProps {
+  colors: ColorSwatchDescriptor[]
+  size?: number
+}
+
+const MultiColorFlowerIcon: React.FC<MultiColorFlowerIconProps> = ({ colors, size = 20 }) => {
+  const displayColors = colors.slice(0, 5)
+  const count = displayColors.length
+  
+  // For a single color, just show a circle
+  if (count === 1) {
+    return (
+      <span
+        className="flex items-center justify-center rounded-full border border-white/35"
+        style={{ 
+          backgroundColor: displayColors[0].tone,
+          width: size,
+          height: size,
+        }}
+        aria-hidden="true"
+      />
+    )
+  }
+  
+  // Large overlapping circles arranged like flower petals
+  // No center - just petals overlapping
+  const viewBox = 24
+  const center = viewBox / 2
+  const petalRadius = 8 // Bigger petals for better visibility
+  const petalDistance = 4 // Distance from center to petal center
+  
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${viewBox} ${viewBox}`}
+      aria-hidden="true"
+      className="drop-shadow-sm"
+    >
+      {/* Petals - large overlapping circles, no center */}
+      {displayColors.map((color, index) => {
+        // Calculate position for this petal
+        // Start from top (-90 degrees) and distribute evenly
+        const angle = -90 + (360 / count) * index
+        const radians = (angle * Math.PI) / 180
+        
+        // Petal center position (offset from center)
+        const petalCenterX = center + Math.cos(radians) * petalDistance
+        const petalCenterY = center + Math.sin(radians) * petalDistance
+        
+        return (
+          <circle
+            key={color.id}
+            cx={petalCenterX}
+            cy={petalCenterY}
+            r={petalRadius}
+            fill={color.tone}
+            stroke="rgba(255,255,255,0.5)"
+            strokeWidth={0.5}
+          />
+        )
+      })}
+    </svg>
+  )
+}
 
 const formatIndicatorValue = (value?: string | null): string => {
   if (!value) return ""
