@@ -19288,59 +19288,48 @@ Guidelines:
 - Prioritize urgent issues but also include maintenance and optimization tips`
 
         let aiResponse
+        
+        // Build input content for Responses API
+        const inputContent = []
+        
         if (useVision) {
-          // Vision requires Chat Completions API with image_url content
+          // Add text with vision-specific instructions
           const imageUrls = journalPhotoUrls.slice(0, 4)
-          const content = [
-            {
-              type: 'text', text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
+          inputContent.push({
+            type: 'input_text',
+            text: prompt + `\n\nIMPORTANT: I have attached ${imageUrls.length} recent photo(s) from the garden journal. Please analyze these images carefully and include your observations in the "plantTips" section. Look for:
 - Overall plant health and vigor
 - Signs of disease, pests, or stress
 - Watering issues (overwatering/underwatering)
 - Nutrient deficiencies
 - Growth progress
-Include specific observations from the photos in your advice.` }
-          ]
-
-          for (const url of imageUrls) {
-            content.push({
-              type: 'image_url',
-              image_url: {
-                url: url,
-                detail: 'high'
-              }
-            })
-          }
-
-          const messages = [
-            { role: 'system', content: gardenAdviceInstructions },
-            { role: 'user', content }
-          ]
-
-          const completion = await openai.chat.completions.create({
-            model: openaiModel,
-            messages,
-            temperature: 0.7,
-            max_completion_tokens: 3500,
+Include specific observations from the photos in your advice.`
           })
 
-          aiResponse = completion.choices[0]?.message?.content
-          tokensUsed = completion.usage?.total_tokens || 0
+          // Add images using Responses API format
+          for (const url of imageUrls) {
+            inputContent.push({
+              type: 'input_image',
+              image_url: url
+            })
+          }
         } else {
-          // Text-only uses the Responses API (known to work workflow)
-          const response = await openaiClient.responses.create(
-            {
-              model: openaiModel,
-              reasoning: { effort: 'medium' },
-              instructions: gardenAdviceInstructions + '\n\nYou MUST respond with valid JSON only, no markdown or prose.',
-              input: prompt,
-            },
-            { timeout: 300000 }
-          )
-
-          aiResponse = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
-          tokensUsed = response.usage?.total_tokens || 0
+          inputContent.push({ type: 'input_text', text: prompt })
         }
+
+        // Use Responses API for both text and vision
+        const response = await openaiClient.responses.create(
+          {
+            model: openaiModel,
+            reasoning: { effort: 'medium' },
+            instructions: gardenAdviceInstructions + '\n\nYou MUST respond with valid JSON only, no markdown or prose.',
+            input: [{ role: 'user', content: inputContent }],
+          },
+          { timeout: 300000 }
+        )
+
+        aiResponse = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+        tokensUsed = response.usage?.total_tokens || 0
 
         try {
           parsed = JSON.parse(aiResponse || '{}')
@@ -20615,53 +20604,33 @@ Be specific and reference what you actually see in the images. If you notice any
     let feedback
     let tokensUsed = 0
 
-    // If we have photos, use Chat Completions API with vision
-    if (photos.length > 0) {
-      const content = [
-        { type: 'text', text: textPrompt }
-      ]
+    // Build input content for Responses API
+    const inputContent = [{ type: 'input_text', text: textPrompt }]
 
-      // Add images - transform URLs to media proxy format for optimization
+    // Add images using Responses API format
+    if (photos.length > 0) {
       for (const photo of photos) {
         const imageUrl = supabaseStorageToMediaProxy(photo.image_url) || photo.image_url
-        content.push({
-          type: 'image_url',
-          image_url: {
-            url: imageUrl,
-            detail: 'high' // Use high detail for plant analysis
-          }
+        inputContent.push({
+          type: 'input_image',
+          image_url: imageUrl
         })
       }
-
-      const messages = [
-        { role: 'system', content: journalInstructions },
-        { role: 'user', content }
-      ]
-
-      const completion = await openai.chat.completions.create({
-        model: openaiModel, // Use larger model for vision
-        messages,
-        temperature: 0.7,
-        max_completion_tokens: 800,
-      })
-
-      feedback = completion.choices[0]?.message?.content
-      tokensUsed = completion.usage?.total_tokens || 0
-    } else {
-      // Text-only uses the Responses API (known to work workflow)
-      const response = await openaiClient.responses.create(
-        {
-          model: openaiModelNano,
-          reasoning: { effort: 'low' },
-          instructions: journalInstructions,
-          input: textPrompt,
-        },
-        { timeout: 60000 }
-      )
-
-      feedback = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
-      tokensUsed = response.usage?.total_tokens || 0
     }
+
+    // Use Responses API for both text and vision
+    const response = await openaiClient.responses.create(
+      {
+        model: photos.length > 0 ? openaiModel : openaiModelNano, // Use larger model for vision
+        reasoning: { effort: photos.length > 0 ? 'medium' : 'low' },
+        instructions: journalInstructions,
+        input: [{ role: 'user', content: inputContent }],
+      },
+      { timeout: photos.length > 0 ? 120000 : 60000 }
+    )
+
+    feedback = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+    tokensUsed = response.usage?.total_tokens || 0
 
     await sql`
       update public.garden_journal_entries
