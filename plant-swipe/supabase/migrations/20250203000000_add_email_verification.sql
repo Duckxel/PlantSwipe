@@ -61,12 +61,14 @@ GRANT EXECUTE ON FUNCTION cleanup_expired_verification_codes() TO service_role;
 ALTER TABLE email_verification_codes ENABLE ROW LEVEL SECURITY;
 
 -- RLS policy: Users can only see their own verification codes
+DROP POLICY IF EXISTS "Users can view their own verification codes" ON email_verification_codes;
 CREATE POLICY "Users can view their own verification codes"
   ON email_verification_codes
   FOR SELECT
   USING (auth.uid() = user_id);
 
 -- RLS policy: Only service role can insert/update/delete (server-side operations)
+DROP POLICY IF EXISTS "Service role can manage verification codes" ON email_verification_codes;
 CREATE POLICY "Service role can manage verification codes"
   ON email_verification_codes
   FOR ALL
