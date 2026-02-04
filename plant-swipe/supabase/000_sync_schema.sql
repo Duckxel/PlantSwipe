@@ -10739,41 +10739,44 @@ CREATE INDEX IF NOT EXISTS idx_message_reactions_user_created
 -- Added for GDPR compliance requirements including consent tracking and audit logging
 
 -- Add consent tracking columns to profiles
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS marketing_consent boolean DEFAULT false;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS marketing_consent_date timestamptz;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS terms_accepted_date timestamptz;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS privacy_policy_accepted_date timestamptz;
-
--- Track which version of legal documents user accepted
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS terms_version_accepted text DEFAULT '1.0.0';
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS privacy_version_accepted text DEFAULT '1.0.0';
-
--- User Setup/Onboarding Preferences
--- Stores user preferences from the initial setup wizard after signup
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS setup_completed boolean DEFAULT false;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS garden_type text CHECK (garden_type IS NULL OR garden_type IN ('inside', 'outside', 'both'));
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS experience_level text CHECK (experience_level IS NULL OR experience_level IN ('novice', 'intermediate', 'expert'));
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS looking_for text CHECK (looking_for IS NULL OR looking_for IN ('eat', 'ornamental', 'various'));
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS notification_time text DEFAULT '10h' CHECK (notification_time IS NULL OR notification_time IN ('6h', '10h', '14h', '17h'));
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='marketing_consent') THEN
+    ALTER TABLE public.profiles ADD COLUMN marketing_consent boolean DEFAULT false;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='marketing_consent_date') THEN
+    ALTER TABLE public.profiles ADD COLUMN marketing_consent_date timestamptz;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='terms_accepted_date') THEN
+    ALTER TABLE public.profiles ADD COLUMN terms_accepted_date timestamptz;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='privacy_policy_accepted_date') THEN
+    ALTER TABLE public.profiles ADD COLUMN privacy_policy_accepted_date timestamptz;
+  END IF;
+  -- Track which version of legal documents user accepted
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='terms_version_accepted') THEN
+    ALTER TABLE public.profiles ADD COLUMN terms_version_accepted text DEFAULT '1.0.0';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='privacy_version_accepted') THEN
+    ALTER TABLE public.profiles ADD COLUMN privacy_version_accepted text DEFAULT '1.0.0';
+  END IF;
+  -- User Setup/Onboarding Preferences
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='setup_completed') THEN
+    ALTER TABLE public.profiles ADD COLUMN setup_completed boolean DEFAULT false;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='garden_type') THEN
+    ALTER TABLE public.profiles ADD COLUMN garden_type text CHECK (garden_type IS NULL OR garden_type IN ('inside', 'outside', 'both'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='experience_level') THEN
+    ALTER TABLE public.profiles ADD COLUMN experience_level text CHECK (experience_level IS NULL OR experience_level IN ('novice', 'intermediate', 'expert'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='looking_for') THEN
+    ALTER TABLE public.profiles ADD COLUMN looking_for text CHECK (looking_for IS NULL OR looking_for IN ('eat', 'ornamental', 'various'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='notification_time') THEN
+    ALTER TABLE public.profiles ADD COLUMN notification_time text DEFAULT '10h' CHECK (notification_time IS NULL OR notification_time IN ('6h', '10h', '14h', '17h'));
+  END IF;
+END $$;
 
 -- Create index for quick lookups on setup_completed
 CREATE INDEX IF NOT EXISTS idx_profiles_setup_completed ON public.profiles(setup_completed);
@@ -10972,35 +10975,39 @@ GRANT SELECT, INSERT, UPDATE ON public.user_cookie_consent TO authenticated;
 GRANT INSERT ON public.user_cookie_consent TO anon;
 
 -- ========== Granular Communication Preferences ==========
--- Email notification preferences
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS email_product_updates boolean DEFAULT true;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS email_tips_advice boolean DEFAULT true;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS email_community_highlights boolean DEFAULT true;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS email_promotions boolean DEFAULT false;
-
--- Push notification preferences
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS push_task_reminders boolean DEFAULT true;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS push_friend_activity boolean DEFAULT true;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS push_messages boolean DEFAULT true;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS push_garden_updates boolean DEFAULT true;
-
--- Personalization preferences
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS personalized_recommendations boolean DEFAULT true;
-
-ALTER TABLE IF EXISTS public.profiles
-ADD COLUMN IF NOT EXISTS analytics_improvement boolean DEFAULT true;
+DO $$
+BEGIN
+  -- Email notification preferences
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='email_product_updates') THEN
+    ALTER TABLE public.profiles ADD COLUMN email_product_updates boolean DEFAULT true;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='email_tips_advice') THEN
+    ALTER TABLE public.profiles ADD COLUMN email_tips_advice boolean DEFAULT true;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='email_community_highlights') THEN
+    ALTER TABLE public.profiles ADD COLUMN email_community_highlights boolean DEFAULT true;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='email_promotions') THEN
+    ALTER TABLE public.profiles ADD COLUMN email_promotions boolean DEFAULT false;
+  END IF;
+  -- Push notification preferences
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='push_task_reminders') THEN
+    ALTER TABLE public.profiles ADD COLUMN push_task_reminders boolean DEFAULT true;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='push_friend_activity') THEN
+    ALTER TABLE public.profiles ADD COLUMN push_friend_activity boolean DEFAULT true;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='push_messages') THEN
+    ALTER TABLE public.profiles ADD COLUMN push_messages boolean DEFAULT true;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='push_garden_updates') THEN
+    ALTER TABLE public.profiles ADD COLUMN push_garden_updates boolean DEFAULT true;
+  END IF;
+  -- Personalization preferences
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='personalized_recommendations') THEN
+    ALTER TABLE public.profiles ADD COLUMN personalized_recommendations boolean DEFAULT true;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='analytics_improvement') THEN
+    ALTER TABLE public.profiles ADD COLUMN analytics_improvement boolean DEFAULT true;
+  END IF;
+END $$;
