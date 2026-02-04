@@ -34,6 +34,7 @@ import type {
 } from '@/types/aphyliaChat'
 import { QUICK_ACTIONS, SLASH_COMMANDS } from '@/types/aphyliaChat'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { AphyliaThinkingIndicator } from './AphyliaTypingAnimation'
 
 interface AphyliaChatPanelProps {
@@ -461,6 +462,21 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
           
           {!isMinimized && (
             <>
+              <div className="flex-shrink-0 px-4 py-2 border-b border-amber-200/70 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-900/20">
+                <div className="flex items-start gap-2 text-xs text-amber-900 dark:text-amber-200 leading-snug">
+                  <AlertCircle className="w-4 h-4 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <p>
+                    Image analysis is not properly trained on plants and may make mistakes. Prefer the{' '}
+                    <Link
+                      to="/scan"
+                      className="font-semibold text-emerald-700 dark:text-emerald-300 underline decoration-emerald-400/70 hover:decoration-emerald-500"
+                    >
+                      Scan
+                    </Link>{' '}
+                    feature for best results.
+                  </p>
+                </div>
+              </div>
               {/* Messages area */}
               <div className="flex-1 overflow-y-auto">
                 {messages.length === 0 ? (
