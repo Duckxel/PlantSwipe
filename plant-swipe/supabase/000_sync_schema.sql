@@ -175,7 +175,12 @@ do $$ declare
     'bug_actions',
     'bug_action_responses',
     'bug_reports',
-    'bug_points_history'
+    'bug_points_history',
+    -- Email Verification
+    'email_verification_codes',
+    -- GDPR Compliance
+    'gdpr_audit_log',
+    'user_cookie_consent'
   ];
   rec record;
 begin
