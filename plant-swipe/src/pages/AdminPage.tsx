@@ -8431,7 +8431,7 @@ export const AdminPage: React.FC = () => {
                         ) : (
                       <Card className="rounded-2xl">
                       <CardContent className="p-4 space-y-4">
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-col gap-3">
                           <div>
                             <div className="text-sm font-medium">
                               Pending plant requests
@@ -8440,7 +8440,7 @@ export const AdminPage: React.FC = () => {
                               Sorted by request count and most recent updates.
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <Button
                               variant="outline"
                               className="rounded-xl"
