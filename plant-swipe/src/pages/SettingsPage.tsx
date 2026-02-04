@@ -9,13 +9,25 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette, Loader2 } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette, Loader2, X } from "lucide-react"
 import { Link } from "@/components/i18n/Link"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
+import { SearchInput } from "@/components/ui/search-input"
+import { useDebounce } from "@/hooks/useDebounce"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
+
+interface LocationSuggestion {
+  id: number
+  name: string
+  country: string
+  admin1?: string
+  latitude: number
+  longitude: number
+  timezone?: string
+}
 
 /**
  * Fetch a CSRF token for security-sensitive operations
@@ -84,6 +96,13 @@ export default function SettingsPage() {
   const [city, setCity] = React.useState("")
   const [notificationHour, setNotificationHour] = React.useState<number>(10)
   const [detectingLocation, setDetectingLocation] = React.useState(false)
+  const [locationSearch, setLocationSearch] = React.useState("")
+  const debouncedLocationSearch = useDebounce(locationSearch, 350)
+  const [locationSuggestions, setLocationSuggestions] = React.useState<LocationSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = React.useState(false)
+  const [searchingLocation, setSearchingLocation] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
+  const suggestionsRef = React.useRef<HTMLDivElement>(null)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -318,6 +337,72 @@ export default function SettingsPage() {
     }
     loadData()
   }, [user?.id, profile, navigate])
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  React.useEffect(() => {
+    if (debouncedLocationSearch.length < 2) {
+      setLocationSuggestions([])
+      setHasSearched(false)
+      return
+    }
+
+    let cancelled = false
+    const searchLocations = async () => {
+      setSearchingLocation(true)
+      try {
+        const resp = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(debouncedLocationSearch)}&count=8&language=${currentLang}&format=json`
+        )
+        if (cancelled) return
+
+        if (resp.ok) {
+          const data = await resp.json()
+          if (cancelled) return
+
+          if (data.results && Array.isArray(data.results)) {
+            setLocationSuggestions(
+              data.results.map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                country: r.country || '',
+                admin1: r.admin1 || '',
+                latitude: r.latitude,
+                longitude: r.longitude,
+                timezone: r.timezone,
+              }))
+            )
+          } else {
+            setLocationSuggestions([])
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[settings] Location search failed:', err)
+          setLocationSuggestions([])
+        }
+      } finally {
+        if (!cancelled) {
+          setSearchingLocation(false)
+          setHasSearched(true)
+        }
+      }
+    }
+
+    searchLocations()
+
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedLocationSearch, currentLang])
 
   const handleUpdateEmail = async () => {
     if (!newEmail || newEmail === email) {
@@ -792,6 +877,10 @@ export default function SettingsPage() {
       if (nextTimezone) {
         setTimezone(nextTimezone)
       }
+      setLocationSearch('')
+      setLocationSuggestions([])
+      setShowSuggestions(false)
+      setHasSearched(false)
 
       await handleUpdateLocation({
         country: nextCountry,
@@ -803,6 +892,45 @@ export default function SettingsPage() {
     } finally {
       setDetectingLocation(false)
     }
+  }
+
+  const handleLocationSearchChange = (value: string) => {
+    setLocationSearch(value)
+    setShowSuggestions(true)
+    if (value !== debouncedLocationSearch) {
+      setHasSearched(false)
+    }
+  }
+
+  const handleSelectLocation = (suggestion: LocationSuggestion) => {
+    const nextCity = suggestion.name || ''
+    const nextCountry = suggestion.country || ''
+    const nextTimezone = suggestion.timezone || ''
+
+    setCity(nextCity)
+    setCountry(nextCountry)
+    if (nextTimezone) {
+      setTimezone(nextTimezone)
+    }
+    setLocationSearch('')
+    setLocationSuggestions([])
+    setShowSuggestions(false)
+    setHasSearched(false)
+    void handleUpdateLocation({
+      city: nextCity,
+      country: nextCountry,
+      timezone: nextTimezone || undefined,
+    })
+  }
+
+  const handleClearLocation = () => {
+    setCity('')
+    setCountry('')
+    setLocationSearch('')
+    setLocationSuggestions([])
+    setShowSuggestions(false)
+    setHasSearched(false)
+    void handleUpdateLocation({ city: '', country: '' })
   }
 
   const handleUpdateTimezone = async () => {
@@ -1051,10 +1179,6 @@ export default function SettingsPage() {
       </div>
     )
   }
-
-  const profileCountry = ((profile as any)?.country || '').trim()
-  const profileCity = ((profile as any)?.city || '').trim()
-  const locationChanged = country.trim() !== profileCountry || city.trim() !== profileCity
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
@@ -2132,37 +2256,86 @@ export default function SettingsPage() {
                 {t('setup.location.subtitle', { defaultValue: 'This helps us provide local gardening advice' })}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="settings-city">{t('gardenDashboard.settingsSection.city', { defaultValue: 'City' })}</Label>
-                  <Input
-                    id="settings-city"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
+            <CardContent className="space-y-5">
+              {(city || country) && (
+                <div className="flex items-center gap-3 p-4 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/10">
+                  <MapPin className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-stone-800 dark:text-stone-100 truncate">
+                      {[city, country].filter(Boolean).join(', ')}
+                    </div>
+                    {timezone && (
+                      <div className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400 mt-1">
+                        <Clock className="w-3 h-3" />
+                        {timezone}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearLocation}
                     disabled={saving}
-                    placeholder={t('gardenDashboard.settingsSection.cityPlaceholder', { defaultValue: 'e.g., Paris' })}
-                  />
+                    className="p-2 rounded-full hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50"
+                    aria-label={t('setup.location.clear', { defaultValue: 'Clear location' })}
+                  >
+                    <X className="w-4 h-4 text-emerald-700 dark:text-emerald-300" />
+                  </button>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="settings-country">{t('gardenDashboard.settingsSection.country', { defaultValue: 'Country' })}</Label>
-                  <Input
-                    id="settings-country"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
+              )}
+
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
+                  {t('setup.location.searchLabel', { defaultValue: 'Search for your city' })}
+                </Label>
+                <div className="relative" ref={suggestionsRef}>
+                  <SearchInput
+                    variant="lg"
+                    value={locationSearch}
+                    onChange={(e) => handleLocationSearchChange(e.target.value)}
+                    onFocus={() => locationSearch.length >= 2 && setShowSuggestions(true)}
+                    onClear={locationSearch ? () => {
+                      setLocationSearch('')
+                      setLocationSuggestions([])
+                      setShowSuggestions(false)
+                    } : undefined}
+                    placeholder={t('setup.location.searchPlaceholder', { defaultValue: 'Type a city name...' })}
+                    loading={searchingLocation}
                     disabled={saving}
-                    placeholder={t('gardenDashboard.settingsSection.countryPlaceholder', { defaultValue: 'e.g., France' })}
+                    className="bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
                   />
+
+                  {showSuggestions && locationSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-2 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl overflow-hidden">
+                      {locationSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors text-left"
+                          onClick={() => handleSelectLocation(suggestion)}
+                        >
+                          <MapPin className="w-5 h-5 text-stone-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-stone-800 dark:text-stone-100 truncate">
+                              {suggestion.name}
+                            </div>
+                            <div className="text-sm text-stone-500 dark:text-stone-400 truncate">
+                              {suggestion.admin1 ? `${suggestion.admin1}, ` : ''}{suggestion.country}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {showSuggestions && hasSearched && !searchingLocation && locationSuggestions.length === 0 && debouncedLocationSearch.length >= 2 && (
+                    <div className="absolute z-50 w-full mt-2 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl p-4 text-center text-sm text-stone-500">
+                      {t('setup.location.noResults', { defaultValue: 'No cities found. Try a different search.' })}
+                    </div>
+                  )}
                 </div>
               </div>
+
               <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={() => handleUpdateLocation()}
-                  disabled={saving || !locationChanged}
-                  className="rounded-2xl"
-                >
-                  {saving ? t('common.saving', { defaultValue: 'Saving...' }) : t('common.save', { defaultValue: 'Save' })}
-                </Button>
                 <Button
                   onClick={handleDetectLocation}
                   disabled={saving || detectingLocation}

@@ -3078,6 +3078,7 @@
       "detecting": "Detecting your location...",
       "detected": "Location detected automatically!",
       "timezoneSet": "Timezone:",
+      "clear": "Clear location",
       "noResults": "No cities found. Try a different search.",
       "detectButton": "Use my current location",
       "detectingGPS": "Detecting...",

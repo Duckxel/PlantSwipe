@@ -3078,6 +3078,7 @@
       "detecting": "Détection de votre position...",
       "detected": "Position détectée automatiquement !",
       "timezoneSet": "Fuseau horaire :",
+      "clear": "Effacer la localisation",
       "noResults": "Aucune ville trouvée. Essayez une autre recherche.",
       "detectButton": "Utiliser ma position actuelle",
       "detectingGPS": "Détection...",
