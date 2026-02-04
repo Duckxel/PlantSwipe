@@ -263,7 +263,7 @@ setup_completed             BOOLEAN DEFAULT false
 garden_type                 TEXT ('inside'|'outside'|'both')
 experience_level            TEXT ('novice'|'intermediate'|'expert')
 looking_for                 TEXT ('eat'|'ornamental'|'various')
-notification_time           TEXT DEFAULT '10h' ('6h'|'10h'|'14h'|'17h')
+notification_time           TEXT DEFAULT '10h' (0-23h)
 email_verified              BOOLEAN DEFAULT false
 -- Communication preferences
 email_product_updates       BOOLEAN DEFAULT true

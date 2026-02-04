@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette, Loader2 } from "lucide-react"
 import { Link } from "@/components/i18n/Link"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
@@ -80,6 +80,10 @@ export default function SettingsPage() {
   const [notifyPush, setNotifyPush] = React.useState(true)
   const [notifyEmail, setNotifyEmail] = React.useState(true)
   const [timezone, setTimezone] = React.useState<string>("")
+  const [country, setCountry] = React.useState("")
+  const [city, setCity] = React.useState("")
+  const [notificationHour, setNotificationHour] = React.useState<number>(10)
+  const [detectingLocation, setDetectingLocation] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -176,6 +180,23 @@ export default function SettingsPage() {
     ]
   }, [])
 
+  const parseNotificationHour = (value?: string | null) => {
+    if (!value) return 10
+    const digits = value.replace(/[^\d]/g, '')
+    const parsed = digits ? Number.parseInt(digits, 10) : 10
+    if (Number.isNaN(parsed)) return 10
+    return Math.min(23, Math.max(0, parsed))
+  }
+
+  const notificationHourOptions = React.useMemo(
+    () =>
+      Array.from({ length: 24 }, (_, hour) => ({
+        value: String(hour),
+        label: `${String(hour).padStart(2, '0')}:00`,
+      })),
+    []
+  )
+
   const heroCardClass =
     "relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b1b1f] dark:via-[#121214] dark:to-[#050506] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)]"
   const glassCard =
@@ -218,11 +239,14 @@ export default function SettingsPage() {
           setGardenInvitePrivacy((profile as any).garden_invite_privacy || 'anyone')
           const savedTimezone = (profile as any).timezone
           setTimezone(savedTimezone || detectedTimezone)
+          setCountry((profile as any).country || '')
+          setCity((profile as any).city || '')
+          setNotificationHour(parseNotificationHour((profile as any).notification_time))
         } else {
           // Fetch profile if not loaded
           const { data } = await supabase
             .from('profiles')
-            .select('is_private, disable_friend_requests, garden_invite_privacy, timezone')
+            .select('is_private, disable_friend_requests, garden_invite_privacy, timezone, country, city, notification_time')
             .eq('id', user.id)
             .maybeSingle()
           if (data) {
@@ -230,6 +254,9 @@ export default function SettingsPage() {
             setDisableFriendRequests(Boolean(data.disable_friend_requests || false))
             setGardenInvitePrivacy((data as any).garden_invite_privacy || 'anyone')
             setTimezone(data.timezone || detectedTimezone)
+            setCountry((data as any).country || '')
+            setCity((data as any).city || '')
+            setNotificationHour(parseNotificationHour((data as any).notification_time))
           } else {
             setTimezone(detectedTimezone)
           }
@@ -674,6 +701,110 @@ export default function SettingsPage() {
     }
   }
 
+  const handleUpdateNotificationHour = async (nextHour: number) => {
+    if (!user?.id) return
+
+    const previousHour = notificationHour
+    setNotificationHour(nextHour)
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ notification_time: `${nextHour}h` })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      await refreshProfile()
+      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+    } catch (e: any) {
+      setNotificationHour(previousHour)
+      setError(e?.message || t('common.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateLocation = async (overrides?: { country?: string; city?: string; timezone?: string }) => {
+    if (!user?.id) return
+
+    const nextCountry = (overrides?.country ?? country).trim()
+    const nextCity = (overrides?.city ?? city).trim()
+    const nextTimezone = overrides?.timezone
+
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const updates: { country?: string | null; city?: string | null; timezone?: string | null } = {
+        country: nextCountry || null,
+        city: nextCity || null,
+      }
+      if (nextTimezone) {
+        updates.timezone = nextTimezone
+      }
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      if (nextTimezone) {
+        setTimezone(nextTimezone)
+      }
+      await refreshProfile()
+      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+    } catch (e: any) {
+      setError(e?.message || t('common.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDetectLocation = async () => {
+    setDetectingLocation(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await fetch('https://ipapi.co/json/')
+      if (!response.ok) {
+        throw new Error(t('setup.location.detectFailed', { defaultValue: 'Unable to detect location. Please enter it manually.' }))
+      }
+
+      const data = await response.json()
+      const nextCountry = data.country_name || ''
+      const nextCity = data.city || ''
+      const nextTimezone = data.timezone || ''
+
+      if (!nextCountry && !nextCity) {
+        throw new Error(t('setup.location.detectFailed', { defaultValue: 'Unable to detect location. Please enter it manually.' }))
+      }
+
+      setCountry(nextCountry)
+      setCity(nextCity)
+      if (nextTimezone) {
+        setTimezone(nextTimezone)
+      }
+
+      await handleUpdateLocation({
+        country: nextCountry,
+        city: nextCity,
+        timezone: nextTimezone || undefined,
+      })
+    } catch (e: any) {
+      setError(e?.message || t('setup.location.detectFailed', { defaultValue: 'Unable to detect location. Please enter it manually.' }))
+    } finally {
+      setDetectingLocation(false)
+    }
+  }
+
   const handleUpdateTimezone = async () => {
     if (!user?.id) return
 
@@ -920,6 +1051,10 @@ export default function SettingsPage() {
       </div>
     )
   }
+
+  const profileCountry = ((profile as any)?.country || '').trim()
+  const profileCity = ((profile as any)?.city || '').trim()
+  const locationChanged = country.trim() !== profileCountry || city.trim() !== profileCity
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
@@ -1986,6 +2121,73 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* Location */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-emerald-600" />
+                <CardTitle>{t('setup.location.title', { defaultValue: 'Where are you located?' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('setup.location.subtitle', { defaultValue: 'This helps us provide local gardening advice' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="settings-city">{t('gardenDashboard.settingsSection.city', { defaultValue: 'City' })}</Label>
+                  <Input
+                    id="settings-city"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    disabled={saving}
+                    placeholder={t('gardenDashboard.settingsSection.cityPlaceholder', { defaultValue: 'e.g., Paris' })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="settings-country">{t('gardenDashboard.settingsSection.country', { defaultValue: 'Country' })}</Label>
+                  <Input
+                    id="settings-country"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    disabled={saving}
+                    placeholder={t('gardenDashboard.settingsSection.countryPlaceholder', { defaultValue: 'e.g., France' })}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={() => handleUpdateLocation()}
+                  disabled={saving || !locationChanged}
+                  className="rounded-2xl"
+                >
+                  {saving ? t('common.saving', { defaultValue: 'Saving...' }) : t('common.save', { defaultValue: 'Save' })}
+                </Button>
+                <Button
+                  onClick={handleDetectLocation}
+                  disabled={saving || detectingLocation}
+                  variant="outline"
+                  className="rounded-2xl"
+                >
+                  {detectingLocation ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {t('setup.location.detectingGPS', { defaultValue: 'Detecting...' })}
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="h-4 w-4 mr-2" />
+                      {t('setup.location.detectButton', { defaultValue: 'Use my current location' })}
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs opacity-70">
+                {t('gardenDashboard.settingsSection.locationSet', { defaultValue: 'Weather-based advice will use this location for forecasts.' })}
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Timezone */}
           <Card className={glassCard}>
             <CardHeader>
@@ -2150,32 +2352,27 @@ export default function SettingsPage() {
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.notificationTimeDescription', { defaultValue: 'When should we send you reminders?' })}</p>
                 <select
                   id="notification-time-select"
-                  value={(profile as any)?.notification_time || '10h'}
-                  onChange={async (e) => {
-                    if (!user?.id) return
-                    setSaving(true)
-                    try {
-                      const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({ notification_time: e.target.value })
-                        .eq('id', user.id)
-                      if (updateError) throw updateError
-                      await refreshProfile()
-                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
-                    } catch (e: any) {
-                      setError(e?.message || t('common.error'))
-                    } finally {
-                      setSaving(false)
-                    }
+                  value={String(notificationHour)}
+                  onChange={(e) => {
+                    const nextHour = Number.parseInt(e.target.value, 10)
+                    if (Number.isNaN(nextHour)) return
+                    handleUpdateNotificationHour(nextHour)
                   }}
                   disabled={saving}
                   className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
-                  <option value="6h">{t('setup.notificationTime.early', { defaultValue: 'Early bird' })} - 6:00 AM</option>
-                  <option value="10h">{t('setup.notificationTime.morning', { defaultValue: 'Sleep in' })} - 10:00 AM</option>
-                  <option value="14h">{t('setup.notificationTime.midday', { defaultValue: 'Midday energy' })} - 2:00 PM</option>
-                  <option value="17h">{t('setup.notificationTime.afternoon', { defaultValue: 'After work' })} - 5:00 PM</option>
+                  {notificationHourOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
+                <p className="text-xs opacity-70 mt-1">
+                  {t('setup.settings.notificationTimeHelper', {
+                    defaultValue: 'Scheduled notifications will be sent at the same local time in your timezone ({{timezone}}).',
+                    timezone: timezone || detectedTimezone,
+                  })}
+                </p>
               </div>
             </CardContent>
           </Card>

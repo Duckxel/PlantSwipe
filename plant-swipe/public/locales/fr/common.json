@@ -3147,7 +3147,8 @@
       "lookingFor": "Objectif du Jardin",
       "lookingForDescription": "Quel est votre principal objectif de jardinage ?",
       "notificationTime": "Heure de Notification",
-      "notificationTimeDescription": "Quand devons-nous vous envoyer des rappels ?"
+      "notificationTimeDescription": "Quand devons-nous vous envoyer des rappels ?",
+      "notificationTimeHelper": "Les notifications planifiées seront envoyées à la même heure locale dans votre fuseau horaire ({{timezone}})."
     }
   },
   "emailVerification": {

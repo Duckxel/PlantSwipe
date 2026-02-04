@@ -3147,7 +3147,8 @@
       "lookingFor": "Garden Purpose",
       "lookingForDescription": "What's your main gardening goal?",
       "notificationTime": "Notification Time",
-      "notificationTimeDescription": "When should we send you reminders?"
+      "notificationTimeDescription": "When should we send you reminders?",
+      "notificationTimeHelper": "Scheduled notifications will be sent at the same local time in your timezone ({{timezone}})."
     }
   },
   "emailVerification": {
