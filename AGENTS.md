@@ -8,12 +8,15 @@
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Dependency Management](#dependency-management)
-3. [Database Guidelines](#database-guidelines)
-4. [Privacy & Compliance (GDPR/CNIL)](#privacy--compliance-gdprcnil)
-5. [Code Quality Standards](#code-quality-standards)
-6. [Security Requirements](#security-requirements)
-7. [Testing & Validation](#testing--validation)
+2. [Repository Layout](#repository-layout)
+3. [Dependency Management](#dependency-management)
+4. [Database Guidelines](#database-guidelines)
+5. [Privacy & Compliance (GDPR/CNIL)](#privacy--compliance-gdprcnil)
+6. [Code Quality Standards](#code-quality-standards)
+7. [Security Requirements](#security-requirements)
+8. [Testing & Validation](#testing--validation)
+9. [Quick Reference](#quick-reference)
+10. [Summary](#summary)
 
 ---
 
@@ -23,9 +26,20 @@ Aphylia is a plant care application serving users in the European Union. All con
 
 **Before you begin:**
 - Read relevant documentation files
+- Start with `plant-swipe/README.md` for setup and commands
 - Understand the existing architecture
 - Follow the guidelines in this document
 - Ask questions if anything is unclear
+
+---
+
+## Repository Layout
+
+- `plant-swipe/` - main web app (React/Vite) and Express API server (`server.js`)
+- `plant-swipe/src/` - frontend UI and client logic
+- `plant-swipe/supabase/` - database schema, migrations, and Edge Functions
+- `admin_api/` - Flask admin API and service config
+- `scripts/` - operational scripts for deployment and maintenance
 
 ---
 
@@ -37,29 +51,27 @@ When adding, removing, or updating any dependency:
 
 #### 1. Update the Lockfile
 
-**Always** regenerate the lockfile after modifying `package.json`:
+**Always** regenerate the lockfile after modifying `plant-swipe/package.json`:
 
 ```bash
-# Using npm
-npm install
-
-# Using pnpm
-pnpm install
-
-# Using yarn
-yarn install
+cd plant-swipe
+bun install
 ```
 
-**Never** manually edit lockfiles (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`).
+**Never** manually edit `bun.lock`.
 
 #### 2. Restart the Development Server
 
-After any dependency change:
+After any dependency change, restart the dev servers if they are running:
 
 ```bash
-# Stop the current server (Ctrl+C)
-# Then restart
-npm run dev
+cd plant-swipe
+
+# Terminal A (API server)
+bun run serve
+
+# Terminal B (frontend dev server)
+bun run dev
 ```
 
 The development server **must be restarted** to pick up new dependencies. Hot-reload does not detect `node_modules` changes.
@@ -67,8 +79,9 @@ The development server **must be restarted** to pick up new dependencies. Hot-re
 #### 3. Verify Compatibility
 
 Before committing:
-- Ensure the application builds: `npm run build`
-- Run type checking: `npx tsc --noEmit`
+- Ensure the application builds (includes type checking): `cd plant-swipe && bun run build`
+- Run linting: `cd plant-swipe && bun run lint`
+- If translations were touched: `cd plant-swipe && bun run check-translations`
 - Test core functionality manually
 
 #### 4. Document Major Dependencies
@@ -87,7 +100,7 @@ When adding a significant new dependency, add a comment explaining:
 **Before making ANY database changes, you MUST read:**
 
 ```
-supabase/DATABASE_SCHEMA.md
+plant-swipe/supabase/DATABASE_SCHEMA.md
 ```
 
 This document contains:
@@ -108,7 +121,7 @@ This document contains:
 The database schema is split into 15 files in:
 
 ```
-supabase/sync_parts/
+plant-swipe/supabase/sync_parts/
 ├── 01_extensions_and_setup.sql
 ├── 02_profiles_and_purge.sql
 ├── 03_plants_and_colors.sql
@@ -137,7 +150,7 @@ Follow these rules:
 
 #### Step 3: Update Documentation (MANDATORY)
 
-**After ANY schema change, you MUST update `supabase/DATABASE_SCHEMA.md`:**
+**After ANY schema change, you MUST update `plant-swipe/supabase/DATABASE_SCHEMA.md`:**
 
 - Add new tables to the appropriate section
 - Document all columns with types and purposes
@@ -148,7 +161,7 @@ Follow these rules:
 
 #### Step 4: Add to Allowed Tables
 
-If creating a new table, add it to `allowed_tables` in `01_extensions_and_setup.sql`:
+If creating a new table, add it to `allowed_tables` in `plant-swipe/supabase/sync_parts/01_extensions_and_setup.sql`:
 
 ```sql
 allowed_tables constant text[] := array[
@@ -392,19 +405,21 @@ await sendEmail(email);
 
 | Command | Purpose |
 |---------|---------|
-| `npm run dev` | Start development server |
-| `npm run build` | Production build |
-| `npx tsc --noEmit` | Type check |
-| `npm run lint` | Lint check |
+| `bun run dev` | Start frontend dev server (plant-swipe) |
+| `bun run serve` | Start API server (plant-swipe) |
+| `bun run build` | Production build (includes type check) |
+| `bun run lint` | Lint check |
+| `bun run check-translations` | Validate locale files |
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `supabase/DATABASE_SCHEMA.md` | Database documentation |
-| `supabase/sync_parts/*.sql` | Schema definition files |
-| `server.js` | Backend API |
-| `src/PlantSwipe.tsx` | Main app component |
+| `plant-swipe/supabase/DATABASE_SCHEMA.md` | Database documentation |
+| `plant-swipe/supabase/sync_parts/*.sql` | Schema definition files |
+| `plant-swipe/server.js` | Backend API |
+| `plant-swipe/src/PlantSwipe.tsx` | Main app component |
+| `admin_api/app.py` | Admin API entrypoint |
 
 ### Contacts
 
