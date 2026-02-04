@@ -154,12 +154,50 @@ export function EmailVerificationPage() {
     }
   }, [user, profile?.email_verified, navigate])
   
-  // Auto-send verification code on mount if not already sent
+  // Check for existing verification code before sending a new one
   React.useEffect(() => {
-    if (!user || codeSent) return
-    
-    // Send code automatically when page loads
-    sendVerificationCode()
+    if (!user) return
+
+    const loadVerificationState = async () => {
+      try {
+        const sessionResult = await supabase.auth.getSession()
+        const headers: Record<string, string> = {}
+        if (sessionResult.data.session?.access_token) {
+          headers['Authorization'] = `Bearer ${sessionResult.data.session.access_token}`
+        }
+
+        const response = await fetch('/api/email-verification/status', {
+          method: 'GET',
+          headers,
+          credentials: 'same-origin'
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to check verification status')
+        }
+
+        if (data.verified) {
+          await refreshProfile()
+          navigate('/discovery')
+          return
+        }
+
+        if (data.hasPendingCode && data.pendingCodeExpiresAt) {
+          setCodeSent(true)
+          setExpiresAt(new Date(data.pendingCodeExpiresAt))
+          return
+        }
+
+        sendVerificationCode()
+      } catch (err) {
+        console.error('[email-verification] Status error:', err)
+        setError(err instanceof Error ? err.message : 'Failed to check verification status')
+      }
+    }
+
+    loadVerificationState()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
   
