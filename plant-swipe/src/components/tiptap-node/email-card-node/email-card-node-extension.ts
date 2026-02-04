@@ -15,6 +15,12 @@ export interface EmailCardAttributes {
   icon: string
 }
 
+const shouldStopEvent = (event: Event) => {
+  const target = event.target
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest("input, textarea, select"))
+}
+
 declare module "@tiptap/react" {
   interface Commands<ReturnType> {
     emailCard: {
@@ -126,7 +132,9 @@ export const EmailCardNode = Node.create<EmailCardNodeOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(EmailCardNodeComponent)
+    return ReactNodeViewRenderer(EmailCardNodeComponent, {
+      stopEvent: ({ event }) => shouldStopEvent(event),
+    })
   },
 
   addCommands() {

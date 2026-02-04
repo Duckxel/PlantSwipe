@@ -15,6 +15,12 @@ export interface SensitiveCodeAttributes {
   expiryText: string
 }
 
+const shouldStopEvent = (event: Event) => {
+  const target = event.target
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest("input, textarea, select"))
+}
+
 declare module "@tiptap/react" {
   interface Commands<ReturnType> {
     sensitiveCode: {
@@ -152,7 +158,9 @@ export const SensitiveCodeNode = Node.create<SensitiveCodeNodeOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(SensitiveCodeNodeComponent)
+    return ReactNodeViewRenderer(SensitiveCodeNodeComponent, {
+      stopEvent: ({ event }) => shouldStopEvent(event),
+    })
   },
 
   addCommands() {

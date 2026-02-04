@@ -17,6 +17,12 @@ export interface EmailButtonAttributes {
   align: "left" | "center" | "right"
 }
 
+const shouldStopEvent = (event: Event) => {
+  const target = event.target
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest("input, textarea, select"))
+}
+
 declare module "@tiptap/react" {
   interface Commands<ReturnType> {
     emailButton: {
@@ -117,7 +123,9 @@ export const EmailButtonNode = Node.create<EmailButtonNodeOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(EmailButtonNodeComponent)
+    return ReactNodeViewRenderer(EmailButtonNodeComponent, {
+      stopEvent: ({ event }) => shouldStopEvent(event),
+    })
   },
 
   addCommands() {
