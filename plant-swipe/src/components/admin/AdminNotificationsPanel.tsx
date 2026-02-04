@@ -2211,46 +2211,38 @@ export function AdminNotificationsPanel() {
               </div>
 
               {/* Add New Variant - Fixed at Bottom */}
-              <div className="flex-shrink-0 border-t border-stone-200 dark:border-[#2a2a2d] bg-white dark:bg-[#1e1e20] p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex-shrink-0">
-                    <Plus className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div className="flex-1">
-                    <Textarea
-                      value={newVariantValue}
-                      onChange={(e) => {
-                        if (selectedTranslationLang) {
-                          setNewTranslationVariantText(e.target.value)
-                        } else {
-                          setNewVariantText(e.target.value)
-                        }
-                      }}
-                      placeholder={selectedTranslationLang
-                        ? `Add a new ${activeLanguageLabel} variant...`
-                        : 'Add a new message variant...'}
-                      className="w-full min-h-[50px] resize-none rounded-lg border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#151517] text-sm"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey && newVariantValue.trim()) {
-                          e.preventDefault()
-                          addActiveVariant()
-                        }
-                      }}
-                    />
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-xs text-stone-400">Press Enter to add, Shift+Enter for new line</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="rounded-lg h-8 px-4 bg-amber-600 hover:bg-amber-700"
-                        onClick={addActiveVariant}
-                        disabled={!newVariantValue.trim()}
-                      >
-                        <Plus className="h-4 w-4 mr-1.5" />
-                        Add Variant
-                      </Button>
-                    </div>
-                  </div>
+              <div className="flex-shrink-0 border-t border-stone-200 dark:border-[#2a2a2d] bg-white dark:bg-[#1e1e20] px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={newVariantValue}
+                    onChange={(e) => {
+                      if (selectedTranslationLang) {
+                        setNewTranslationVariantText(e.target.value)
+                      } else {
+                        setNewVariantText(e.target.value)
+                      }
+                    }}
+                    placeholder={selectedTranslationLang
+                      ? `Add ${activeLanguageLabel} variant...`
+                      : 'Add new variant...'}
+                    className="flex-1 h-10 rounded-lg border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#151517] text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newVariantValue.trim()) {
+                        e.preventDefault()
+                        addActiveVariant()
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-lg h-10 px-4 bg-amber-600 hover:bg-amber-700"
+                    onClick={addActiveVariant}
+                    disabled={!newVariantValue.trim()}
+                  >
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Add
+                  </Button>
                 </div>
               </div>
             </div>
