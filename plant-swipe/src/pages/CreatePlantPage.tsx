@@ -279,7 +279,7 @@ const emptyPlant: Plant = {
   ecology: {},
   danger: {},
   miscellaneous: { sources: [] },
-  meta: {},
+  meta: { contributors: [] },
   seasons: [],
   colors: [],
 }
@@ -313,6 +313,26 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
+}
+
+const mergeContributors = (
+  existing: unknown,
+  extras: Array<string | null | undefined> = [],
+): string[] => {
+  const base = Array.isArray(existing) ? existing : []
+  const combined = [...base, ...extras]
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const entry of combined) {
+    if (typeof entry !== "string") continue
+    const trimmed = entry.trim()
+    if (!trimmed) continue
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(trimmed)
+  }
+  return result
 }
 
 function coerceBoolean(value: unknown, fallback: boolean | null = false): boolean | null {
@@ -796,6 +816,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     meta: {
       status: formatStatusForUi(data.status),
       adminCommentary: data.admin_commentary || undefined,
+      contributors: Array.isArray(data.contributors) ? data.contributors : [],
       createdBy: data.created_by || undefined,
       createdAt: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,
@@ -818,6 +839,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [searchParams] = useSearchParams()
   const prefillFromId = searchParams.get('prefillFrom')
   const duplicatedFromName = searchParams.get('duplicatedFrom')
+  const requestId = searchParams.get('requestId')
   // Support initial name from query parameter (e.g., /create?name=Rose) or from prop
   const initialNameFromUrl = searchParams.get('name')
   const effectiveInitialName = initialName || initialNameFromUrl || ""
@@ -901,6 +923,48 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         setLanguage(urlLanguage)
       }
     }, [urlLanguage])
+
+    React.useEffect(() => {
+      if (!requestId || id) return
+      let cancelled = false
+      const loadRequestContributors = async () => {
+        try {
+          const { data: requestUsersData, error } = await supabase
+            .from('plant_request_users')
+            .select('user_id')
+            .eq('requested_plant_id', requestId)
+            .order('created_at', { ascending: false })
+          if (error) throw new Error(error.message)
+          const userIds = [
+            ...new Set((requestUsersData || []).map((row: any) => String(row.user_id))),
+          ].filter(Boolean)
+          if (!userIds.length) return
+          const { data: profilesData, error: profilesError } = await supabase
+            .from('profiles')
+            .select('id, display_name')
+            .in('id', userIds)
+          if (profilesError) throw new Error(profilesError.message)
+          const names = (profilesData || [])
+            .map((profile: any) => profile?.display_name)
+            .filter((name: any) => typeof name === 'string' && name.trim())
+            .map((name: string) => name.trim())
+          if (!names.length || cancelled) return
+          setPlant((prev) => ({
+            ...prev,
+            meta: {
+              ...(prev.meta || {}),
+              contributors: mergeContributors(prev.meta?.contributors, names),
+            },
+          }))
+        } catch (err) {
+          console.warn('[createPlant] Failed to load request contributors', err)
+        }
+      }
+      loadRequestContributors()
+      return () => {
+        cancelled = true
+      }
+    }, [requestId, id, supabase])
 
     // Track if initial load is complete
     const initialLoadCompleteRef = React.useRef(false)
@@ -1216,6 +1280,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           ? (plantToSave.meta?.createdAt || null)
           : (plantToSave.meta?.createdAt || new Date().toISOString())
         const updatedByValue = profile?.display_name || plantToSave.meta?.updatedBy || null
+        const contributorList = mergeContributors(plantToSave.meta?.contributors, [profile?.display_name])
         const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
@@ -1311,6 +1376,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             companions: plantToSave.miscellaneous?.companions || [],
             status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
+            contributors: contributorList,
             created_by: createdByValue,
             created_time: createdTimeValue,
             updated_by: updatedByValue,
@@ -1334,6 +1400,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             // Meta fields
             status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
+            contributors: contributorList,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
             // Non-translatable identity fields
@@ -1490,6 +1557,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             id: savedId,
             meta: {
               ...plantToSave.meta,
+              contributors: contributorList,
               createdBy: createdByValue || undefined,
               createdAt: createdTimeValue || undefined,
                 updatedBy: payloadUpdatedTime

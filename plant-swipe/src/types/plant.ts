@@ -296,6 +296,7 @@ export interface PlantSource {
 export interface PlantMeta {
   status?: "In Progres" | "Rework" | "Review" | "Approved"
   adminCommentary?: string
+  contributors?: string[]
   createdBy?: string
   createdTime?: string
   updatedBy?: string

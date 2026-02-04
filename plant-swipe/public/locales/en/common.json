@@ -1202,6 +1202,10 @@
       "unknown": "Unknown",
       "sources": "Sources"
     },
+    "contributors": {
+      "title": "Contributors",
+      "thanks": "Thank you to all plant lovers that participated:"
+    },
     "enums": {
       "habitat": {
         "aquatic": "Aquatic",
@@ -2582,6 +2586,11 @@
         "adminCommentary": {
           "label": "Admin Commentary",
           "description": "Moderator feedback"
+        },
+        "contributors": {
+          "label": "Contributors",
+          "description": "People who requested or edited this plant",
+          "placeholder": "Add a name"
         }
       }
     },

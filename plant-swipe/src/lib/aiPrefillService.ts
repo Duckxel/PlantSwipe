@@ -148,6 +148,62 @@ const normalizeTimePeriodSlug = (value?: string | null): string | null => {
   return slug || null
 }
 
+const mergeContributorNames = (
+  existing: Array<string | null | undefined>,
+  extras: Array<string | null | undefined>,
+): string[] => {
+  const combined = [...existing, ...extras]
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const entry of combined) {
+    if (typeof entry !== 'string') continue
+    const trimmed = entry.trim()
+    if (!trimmed) continue
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(trimmed)
+  }
+  return result
+}
+
+async function fetchRequestContributors(requestId: string): Promise<string[]> {
+  if (!requestId) return []
+  try {
+    const { data: requestUsersData, error: usersError } = await supabase
+      .from('plant_request_users')
+      .select('user_id')
+      .eq('requested_plant_id', requestId)
+    if (usersError) throw new Error(usersError.message)
+    const userIds = new Set(
+      (requestUsersData || []).map((row: any) => String(row.user_id)).filter(Boolean),
+    )
+    if (userIds.size === 0) {
+      const { data: requestRow, error: requestError } = await supabase
+        .from('requested_plants')
+        .select('requested_by')
+        .eq('id', requestId)
+        .maybeSingle()
+      if (requestError) throw new Error(requestError.message)
+      if (requestRow?.requested_by) userIds.add(String(requestRow.requested_by))
+    }
+    if (userIds.size === 0) return []
+    const { data: profilesData, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', Array.from(userIds))
+    if (profilesError) throw new Error(profilesError.message)
+    const names = (profilesData || [])
+      .map((profile: any) => profile?.display_name)
+      .filter((name: any) => typeof name === 'string' && name.trim())
+      .map((name: string) => name.trim())
+    return mergeContributorNames(names, [])
+  } catch (err) {
+    console.warn('[aiPrefillService] Failed to load request contributors', err)
+    return []
+  }
+}
+
 async function upsertColors(colors: PlantColor[]) {
   if (!colors?.length) return [] as string[]
   const normalized = colors
@@ -551,6 +607,8 @@ export async function processPlantRequest(
     
     const normalizedStatus = String(plant.meta?.status || IN_PROGRESS_STATUS).toLowerCase()
     const createdTimeValue = new Date().toISOString()
+    const requestContributors = await fetchRequestContributors(requestId)
+    const contributors = mergeContributorNames(requestContributors, [createdBy])
     
     // Save base plant record
     const basePayload = {
@@ -607,6 +665,7 @@ export async function processPlantRequest(
       companions: plant.miscellaneous?.companions || [],
       status: normalizedStatus,
       admin_commentary: plant.meta?.adminCommentary || null,
+      contributors,
       created_by: createdBy || null,
       created_time: createdTimeValue,
       updated_by: createdBy || null,

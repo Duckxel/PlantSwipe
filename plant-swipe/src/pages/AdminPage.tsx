@@ -2304,7 +2304,8 @@ export const AdminPage: React.FC = () => {
     (req: PlantRequestRow) => {
       // Navigate to the create plant page with the requested plant name as a query parameter
       const encodedName = encodeURIComponent(req.plant_name);
-      navigate(`/create?name=${encodedName}`);
+      const encodedRequestId = encodeURIComponent(req.id);
+      navigate(`/create?name=${encodedName}&requestId=${encodedRequestId}`);
     },
     [navigate],
   );

@@ -59,6 +59,11 @@ interface FieldConfig {
   description: string
   type: FieldType
   options?: ReadonlyArray<FieldOption>
+  tagConfig?: {
+    unique?: boolean
+    caseInsensitive?: boolean
+    placeholder?: string
+  }
 }
 
 const sanitizeOptionKey = (value: unknown) => {
@@ -114,11 +119,28 @@ const normalizeMonthArray = (value: unknown): number[] => {
   return result
 }
 
-const TagInput: React.FC<{ value: string[]; onChange: (v: string[]) => void; placeholder?: string }> = ({ value, onChange, placeholder }) => {
+const TagInput: React.FC<{
+  value: string[]
+  onChange: (v: string[]) => void
+  placeholder?: string
+  unique?: boolean
+  caseInsensitive?: boolean
+}> = ({ value, onChange, placeholder, unique, caseInsensitive }) => {
   const [input, setInput] = React.useState("")
   const commit = () => {
     const v = input.trim()
     if (!v) return
+    if (unique) {
+      const normalizedValue = caseInsensitive ? v.toLowerCase() : v
+      const exists = value.some((entry) => {
+        const normalizedEntry = caseInsensitive ? entry.toLowerCase() : entry
+        return normalizedEntry === normalizedValue
+      })
+      if (exists) {
+        setInput("")
+        return
+      }
+    }
     onChange([...value, v])
     setInput("")
   }
@@ -959,6 +981,7 @@ const miscFields: FieldConfig[] = [
 const metaFields: FieldConfig[] = [
   { key: "meta.status", label: "Status", description: "Editorial status", type: "select", options: ["Approved","Rework","Review","In Progres"] },
   { key: "meta.adminCommentary", label: "Admin Commentary", description: "Moderator feedback", type: "textarea" },
+  { key: "meta.contributors", label: "Contributors", description: "People who requested or edited this plant", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
 
 const utilityOptions = ["comestible","ornemental","produce_fruit","aromatic","medicinal","odorous","climbing","cereal","spice"] as const
@@ -1136,7 +1159,20 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         return (
           <div className="grid gap-2">
               <Label>{label}</Label>
-            <TagInput value={Array.isArray(value) ? value : []} onChange={(v) => onChange(field.key, v)} />
+            {(() => {
+              const tagPlaceholder = field.tagConfig
+                ? t(`${translationBase}.placeholder`, { defaultValue: field.tagConfig.placeholder || "" })
+                : ""
+              return (
+            <TagInput
+              value={Array.isArray(value) ? value : []}
+              onChange={(v) => onChange(field.key, v)}
+              placeholder={tagPlaceholder || undefined}
+              unique={field.tagConfig?.unique}
+              caseInsensitive={field.tagConfig?.caseInsensitive}
+            />
+              )
+            })()}
               <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
