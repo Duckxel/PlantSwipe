@@ -1047,21 +1047,6 @@ if (openaiApiKey) {
   console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')
 }
 
-// Helper to determine if a model requires max_completion_tokens instead of max_tokens
-// Newer models (gpt-5, o1, o3, etc.) use max_completion_tokens; older models use max_tokens
-function usesMaxCompletionTokens(model) {
-  const m = String(model || '').toLowerCase()
-  return m.startsWith('gpt-5') || m.startsWith('o1') || m.startsWith('o3') || m.includes('-5-') || m.includes('-5.')
-}
-
-// Helper to build the correct token limit parameter for a given model
-function getTokenLimitParam(model, tokens) {
-  if (usesMaxCompletionTokens(model)) {
-    return { max_completion_tokens: tokens }
-  }
-  return { max_tokens: tokens }
-}
-
 // Some deployments might lag behind on the latest schema additions for the
 // garden_ai_advice table. Track whether advanced context columns (weather,
 // journal, avg_completion_time, etc.) are available so queries can gracefully
@@ -19274,12 +19259,10 @@ Provide your response as JSON with this COMPREHENSIVE structure:
     let tokensUsed = 0
     let modelUsed = openaiModel // Use the same model as AI Plant Fill
 
-    if (openai) {
+    if (openaiClient) {
       try {
-        // Build messages with optional images for vision analysis
         const useVision = journalPhotoUrls.length > 0
-        let messages = [
-          { role: 'system', content: `You are an expert horticulturist and plant care specialist with decades of experience. You provide detailed, scientifically-informed yet accessible gardening advice.
+        const gardenAdviceInstructions = `You are an expert horticulturist and plant care specialist with decades of experience. You provide detailed, scientifically-informed yet accessible gardening advice.
 
 Your personality:
 - Warm, encouraging, and genuinely invested in the gardener's success
@@ -19302,11 +19285,11 @@ Guidelines:
 - Acknowledge their progress and build on previous advice
 - Provide ACTIONABLE tips with clear timing (e.g., "water deeply Tuesday before the heat wave")
 - When analyzing photos, look for: leaf color/texture, stem health, soil moisture, pest damage, nutrient deficiencies
-- Prioritize urgent issues but also include maintenance and optimization tips` },
-        ]
+- Prioritize urgent issues but also include maintenance and optimization tips`
 
+        let aiResponse
         if (useVision) {
-          // Include up to 4 most recent journal photos for analysis
+          // Vision requires Chat Completions API with image_url content
           const imageUrls = journalPhotoUrls.slice(0, 4)
           const content = [
             {
@@ -19329,30 +19312,50 @@ Include specific observations from the photos in your advice.` }
             })
           }
 
-          messages.push({ role: 'user', content })
+          const messages = [
+            { role: 'system', content: gardenAdviceInstructions },
+            { role: 'user', content }
+          ]
+
+          const completion = await openai.chat.completions.create({
+            model: openaiModel,
+            messages,
+            temperature: 0.7,
+            max_completion_tokens: 3500,
+          })
+
+          aiResponse = completion.choices[0]?.message?.content
+          tokensUsed = completion.usage?.total_tokens || 0
         } else {
-          messages.push({ role: 'user', content: prompt })
-        }
+          // Text-only uses the Responses API (known to work workflow)
+          const response = await openaiClient.responses.create(
+            {
+              model: openaiModel,
+              reasoning: { effort: 'medium' },
+              instructions: gardenAdviceInstructions + '\n\nYou MUST respond with valid JSON only, no markdown or prose.',
+              input: prompt,
+            },
+            { timeout: 300000 }
+          )
 
-        const completionOptions = {
-          model: openaiModel, // Use the bigger model (same as AI Plant Fill)
-          messages,
-          temperature: 0.7,
-          ...getTokenLimitParam(openaiModel, useVision ? 3500 : 3000), // Increased for more comprehensive advice
+          aiResponse = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+          tokensUsed = response.usage?.total_tokens || 0
         }
-        // Only use json_object response format when not using vision (compatibility)
-        if (!useVision) {
-          completionOptions.response_format = { type: 'json_object' }
-        }
-        const completion = await openai.chat.completions.create(completionOptions)
-
-        const aiResponse = completion.choices[0]?.message?.content
-        tokensUsed = completion.usage?.total_tokens || 0
 
         try {
           parsed = JSON.parse(aiResponse || '{}')
         } catch {
-          parsed = { summary: 'Unable to parse advice', focusAreas: [], plantTips: [], improvementScore: null, fullAdvice: aiResponse }
+          // Try to extract JSON from the response
+          const jsonMatch = (aiResponse || '').match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            try {
+              parsed = JSON.parse(jsonMatch[0])
+            } catch {
+              parsed = { summary: 'Unable to parse advice', focusAreas: [], plantTips: [], improvementScore: null, fullAdvice: aiResponse }
+            }
+          } else {
+            parsed = { summary: 'Unable to parse advice', focusAreas: [], plantTips: [], improvementScore: null, fullAdvice: aiResponse }
+          }
         }
       } catch (aiErr) {
         console.error('[garden-advice] AI generation failed:', aiErr)
@@ -20607,12 +20610,12 @@ Please provide detailed, warm, helpful feedback that:
 
 Be specific and reference what you actually see in the images. If you notice any concerning signs, explain what they might be and how to address them.`
 
-    // Build messages array with images for OpenAI Vision
-    const messages = [
-      { role: 'system', content: 'You are a friendly, expert gardener who can analyze plant photos and provide detailed, helpful feedback. When analyzing images, be specific about what you observe.' },
-    ]
+    const journalInstructions = 'You are a friendly, expert gardener who can analyze plant photos and provide detailed, helpful feedback. When analyzing images, be specific about what you observe.'
+    
+    let feedback
+    let tokensUsed = 0
 
-    // If we have photos, use vision model with images
+    // If we have photos, use Chat Completions API with vision
     if (photos.length > 0) {
       const content = [
         { type: 'text', text: textPrompt }
@@ -20630,21 +20633,35 @@ Be specific and reference what you actually see in the images. If you notice any
         })
       }
 
-      messages.push({ role: 'user', content })
+      const messages = [
+        { role: 'system', content: journalInstructions },
+        { role: 'user', content }
+      ]
+
+      const completion = await openai.chat.completions.create({
+        model: openaiModel, // Use larger model for vision
+        messages,
+        temperature: 0.7,
+        max_completion_tokens: 800,
+      })
+
+      feedback = completion.choices[0]?.message?.content
+      tokensUsed = completion.usage?.total_tokens || 0
     } else {
-      messages.push({ role: 'user', content: textPrompt })
+      // Text-only uses the Responses API (known to work workflow)
+      const response = await openaiClient.responses.create(
+        {
+          model: openaiModelNano,
+          reasoning: { effort: 'low' },
+          instructions: journalInstructions,
+          input: textPrompt,
+        },
+        { timeout: 60000 }
+      )
+
+      feedback = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+      tokensUsed = response.usage?.total_tokens || 0
     }
-
-    const journalModel = photos.length > 0 ? openaiModel : openaiModelNano // Use larger model for vision, nano for text-only
-    const completion = await openai.chat.completions.create({
-      model: journalModel,
-      messages,
-      temperature: 0.7,
-      ...getTokenLimitParam(journalModel, photos.length > 0 ? 800 : 400),
-    })
-
-    const feedback = completion.choices[0]?.message?.content
-    const tokensUsed = completion.usage?.total_tokens || 0
 
     await sql`
       update public.garden_journal_entries
@@ -23756,6 +23773,49 @@ app.post('/api/ai/garden-chat', async (req, res) => {
     // Get garden ID for tool execution
     const gardenIdForTools = gardenContext?.gardenId || context.garden?.gardenId
     
+    // Format conversation history for the Responses API
+    const formatConversationForInput = (msgs) => {
+      return msgs.slice(1).map(msg => { // Skip system message (handled via instructions)
+        const role = msg.role === 'assistant' ? 'Assistant' : 'User'
+        const content = typeof msg.content === 'string' 
+          ? msg.content 
+          : msg.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || ''
+        return `${role}: ${content}`
+      }).join('\n\n')
+    }
+    
+    // Helper to execute tools and build context
+    const executeToolsIfNeeded = async (toolCalls) => {
+      const toolCallsExecuted = []
+      const toolResultsContext = []
+      
+      for (const toolCall of toolCalls) {
+        const toolName = toolCall.name || toolCall.function?.name
+        let toolArgs = {}
+        try {
+          toolArgs = typeof toolCall.arguments === 'string' 
+            ? JSON.parse(toolCall.arguments || '{}')
+            : toolCall.arguments || {}
+        } catch (e) {
+          console.warn('[aphylia-chat] Failed to parse tool arguments:', e)
+        }
+        
+        console.log(`[aphylia-chat] Executing tool: ${toolName}`, toolArgs)
+        
+        const result = await executeAphyliaTool(toolName, toolArgs, gardenIdForTools, user.id)
+        
+        toolCallsExecuted.push({
+          tool: toolName,
+          args: toolArgs,
+          result: result
+        })
+        
+        toolResultsContext.push(`Tool ${toolName} result: ${JSON.stringify(result)}`)
+      }
+      
+      return { toolCallsExecuted, toolResultsContext }
+    }
+    
     if (stream) {
       // Streaming response using SSE
       res.setHeader('Content-Type', 'text/event-stream')
@@ -23767,93 +23827,66 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`)
       
       try {
-        // First, make a non-streaming call with tools to check if AI wants to use any
-        let messagesWithTools = [...openaiMessages]
-        let toolResults = []
         let toolCallsExecuted = []
+        let conversationInput = formatConversationForInput(openaiMessages)
         
+        // First, check if AI wants to use tools (non-streaming call)
         if (gardenIdForTools) {
-          // Only enable tools if we have a garden context
-          const initialResponse = await openai.chat.completions.create({
-            model: openaiModelNano, // Use fast model for chat
-            messages: messagesWithTools,
-            tools: APHYLIA_TOOLS,
-            tool_choice: 'auto',
-            ...getTokenLimitParam(openaiModelNano, 2048),
-            temperature: 0.7
-          })
+          const toolCheckResponse = await openaiClient.responses.create(
+            {
+              model: openaiModelNano,
+              reasoning: { effort: 'low' },
+              instructions: systemPrompt + '\n\nIf you need to perform actions like updating plant health, creating tasks, or recording watering, respond with a JSON object containing "tool_calls" array. Otherwise respond normally.',
+              input: conversationInput,
+              tools: APHYLIA_TOOLS,
+            },
+            { timeout: 60000 }
+          )
           
-          const initialMessage = initialResponse.choices?.[0]?.message
-          
-          // Check if AI wants to use tools
-          if (initialMessage?.tool_calls && initialMessage.tool_calls.length > 0) {
-            // Notify client that tools are being executed
-            res.write(`data: ${JSON.stringify({ type: 'tool_start', tools: initialMessage.tool_calls.map(t => t.function.name) })}\n\n`)
-            
-            // Add assistant message with tool calls to conversation
-            messagesWithTools.push({
-              role: 'assistant',
-              content: initialMessage.content || null,
-              tool_calls: initialMessage.tool_calls
-            })
-            
-            // Execute each tool call
-            for (const toolCall of initialMessage.tool_calls) {
-              const toolName = toolCall.function.name
-              let toolArgs = {}
-              try {
-                toolArgs = JSON.parse(toolCall.function.arguments || '{}')
-              } catch (e) {
-                console.warn('[aphylia-chat] Failed to parse tool arguments:', e)
-              }
+          // Check if response contains tool calls
+          if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
+            const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
+            if (toolUseOutputs.length > 0) {
+              res.write(`data: ${JSON.stringify({ type: 'tool_start', tools: toolUseOutputs.map(t => t.name) })}\n\n`)
               
-              console.log(`[aphylia-chat] Executing tool: ${toolName}`, toolArgs)
+              const { toolCallsExecuted: executed, toolResultsContext } = await executeToolsIfNeeded(toolUseOutputs)
+              toolCallsExecuted = executed
               
-              const result = await executeAphyliaTool(toolName, toolArgs, gardenIdForTools, user.id)
+              // Add tool results to conversation context
+              conversationInput += '\n\n[Tool execution results]\n' + toolResultsContext.join('\n')
               
-              toolCallsExecuted.push({
-                tool: toolName,
-                args: toolArgs,
-                result: result
-              })
-              
-              // Add tool result to conversation
-              messagesWithTools.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(result)
-              })
-              
-              toolResults.push(result)
+              res.write(`data: ${JSON.stringify({ type: 'tool_end', results: toolCallsExecuted })}\n\n`)
             }
-            
-            // Notify client that tools are done
-            res.write(`data: ${JSON.stringify({ type: 'tool_end', results: toolCallsExecuted })}\n\n`)
           }
         }
         
-        // Now stream the final response (with tool results if any)
-        const streamResponse = await openai.chat.completions.create({
-          model: openaiModelNano, // Use fast model for chat
-          messages: messagesWithTools,
-          stream: true,
-          ...getTokenLimitParam(openaiModelNano, 2048),
-          temperature: 0.7
-        })
+        // Stream the final response using Responses API
+        const streamResponse = await openaiClient.responses.create(
+          {
+            model: openaiModelNano,
+            reasoning: { effort: 'low' },
+            instructions: systemPrompt,
+            input: conversationInput,
+            stream: true,
+          },
+          { timeout: 120000 }
+        )
         
         let fullContent = ''
         let totalTokens = 0
         
-        for await (const chunk of streamResponse) {
-          const delta = chunk.choices?.[0]?.delta
-          if (delta?.content) {
-            fullContent += delta.content
-            res.write(`data: ${JSON.stringify({ type: 'token', token: delta.content })}\n\n`)
-          }
-          
-          // Track usage if available
-          if (chunk.usage) {
-            totalTokens = chunk.usage.total_tokens || 0
+        for await (const event of streamResponse) {
+          // Handle different event types from the Responses API stream
+          if (event.type === 'response.output_text.delta') {
+            const delta = event.delta || ''
+            if (delta) {
+              fullContent += delta
+              res.write(`data: ${JSON.stringify({ type: 'token', token: delta })}\n\n`)
+            }
+          } else if (event.type === 'response.completed' || event.type === 'response.done') {
+            if (event.response?.usage) {
+              totalTokens = event.response.usage.total_tokens || 0
+            }
           }
         }
         
@@ -23880,75 +23913,61 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       
       res.end()
     } else {
-      // Non-streaming response with tools
-      let messagesWithTools = [...openaiMessages]
+      // Non-streaming response using Responses API
       let toolCallsExecuted = []
+      let conversationInput = formatConversationForInput(openaiMessages)
       
+      // First, check if AI wants to use tools
       if (gardenIdForTools) {
-        const initialResponse = await openai.chat.completions.create({
-          model: openaiModel, // Use the same powerful model as Gardener Advice
-          messages: messagesWithTools,
-          tools: APHYLIA_TOOLS,
-          tool_choice: 'auto',
-          ...getTokenLimitParam(openaiModel, 2048),
-          temperature: 0.7
-        })
+        const toolCheckResponse = await openaiClient.responses.create(
+          {
+            model: openaiModelNano,
+            reasoning: { effort: 'low' },
+            instructions: systemPrompt + '\n\nIf you need to perform actions like updating plant health, creating tasks, or recording watering, respond with a JSON object containing "tool_calls" array. Otherwise respond normally.',
+            input: conversationInput,
+            tools: APHYLIA_TOOLS,
+          },
+          { timeout: 60000 }
+        )
         
-        const initialMessage = initialResponse.choices?.[0]?.message
-        
-        if (initialMessage?.tool_calls && initialMessage.tool_calls.length > 0) {
-          messagesWithTools.push({
-            role: 'assistant',
-            content: initialMessage.content || null,
-            tool_calls: initialMessage.tool_calls
-          })
-          
-          for (const toolCall of initialMessage.tool_calls) {
-            const toolName = toolCall.function.name
-            let toolArgs = {}
-            try {
-              toolArgs = JSON.parse(toolCall.function.arguments || '{}')
-            } catch (e) { }
+        // Check if response contains tool calls
+        if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
+          const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
+          if (toolUseOutputs.length > 0) {
+            const { toolCallsExecuted: executed, toolResultsContext } = await executeToolsIfNeeded(toolUseOutputs)
+            toolCallsExecuted = executed
             
-            const result = await executeAphyliaTool(toolName, toolArgs, gardenIdForTools, user.id)
-            
-            toolCallsExecuted.push({
-              tool: toolName,
-              args: toolArgs,
-              result: result
-            })
-            
-            messagesWithTools.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(result)
-            })
+            // Add tool results to conversation context
+            conversationInput += '\n\n[Tool execution results]\n' + toolResultsContext.join('\n')
           }
         }
       }
       
-      // Final response
-      const response = await openai.chat.completions.create({
-        model: openaiModelNano, // Use fast model for chat
-        messages: messagesWithTools,
-        ...getTokenLimitParam(openaiModelNano, 2048),
-        temperature: 0.7
-      })
+      // Final response using Responses API
+      const response = await openaiClient.responses.create(
+        {
+          model: openaiModelNano,
+          reasoning: { effort: 'low' },
+          instructions: systemPrompt,
+          input: conversationInput,
+        },
+        { timeout: 120000 }
+      )
       
-      const assistantMessage = response.choices?.[0]?.message
+      const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
       const messageId = crypto.randomUUID()
       
       res.json({
         message: {
           id: messageId,
           role: 'assistant',
-          content: assistantMessage?.content || '',
+          content: outputText,
           createdAt: new Date().toISOString(),
           toolCalls: toolCallsExecuted.length > 0 ? toolCallsExecuted : undefined
         },
         usage: {
-          promptTokens: response.usage?.prompt_tokens || 0,
-          completionTokens: response.usage?.completion_tokens || 0,
+          promptTokens: response.usage?.input_tokens || 0,
+          completionTokens: response.usage?.output_tokens || 0,
           totalTokens: response.usage?.total_tokens || 0
         }
       })
