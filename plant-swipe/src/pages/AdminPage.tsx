@@ -1003,13 +1003,42 @@ export const AdminPage: React.FC = () => {
       }
       const body = await safeJson(resp);
       if (!resp.ok) {
+        // Display file-by-file results if available (new format)
+        if (body?.results && Array.isArray(body.results)) {
+          appendConsole(`[sync] Executing ${body.totalFiles || body.results.length} SQL files...`);
+          appendConsole("[sync] ─────────────────────────────────────");
+          
+          body.results.forEach((result: { file: string; status: string; duration: string; error?: string; detail?: string; hint?: string }) => {
+            if (result.status === 'success') {
+              appendConsole(`[sync] ✓ ${result.file} (${result.duration})`);
+            } else {
+              appendConsole(`[sync] ✗ ${result.file} FAILED (${result.duration})`);
+              if (result.error) {
+                appendConsole(`[sync]   Error: ${result.error}`);
+              }
+              if (result.detail) {
+                appendConsole(`[sync]   Detail: ${result.detail}`);
+              }
+              if (result.hint) {
+                appendConsole(`[sync]   Hint: ${result.hint}`);
+              }
+            }
+          });
+          
+          appendConsole("[sync] ─────────────────────────────────────");
+          const successCount = body.successCount ?? 0;
+          const errorCount = body.errorCount ?? 0;
+          appendConsole(`[sync] ✗ Sync failed: ${successCount}/${body.totalFiles || body.results.length} files succeeded, ${errorCount} errors`);
+        }
+        
+        // Legacy format handling
         if (body?.stdoutTail) {
           const lines = String(body.stdoutTail).split("\n").filter(Boolean);
           if (lines.length) {
             appendConsole("[sync] SQL stdout (tail):");
             lines
               .slice(-25)
-              .forEach((line) => appendConsole(`[sync]   ${line}`));
+              .forEach((line: string) => appendConsole(`[sync]   ${line}`));
           }
         }
         if (body?.stderr) {
@@ -1018,15 +1047,18 @@ export const AdminPage: React.FC = () => {
             appendConsole("[sync] SQL stderr:");
             lines
               .slice(-25)
-              .forEach((line) => appendConsole(`[sync] ✗ ${line}`));
+              .forEach((line: string) => appendConsole(`[sync] ✗ ${line}`));
           }
         }
-        if (body?.detail) {
+        if (body?.detail && !body?.results) {
           appendConsole(`[sync] Detail: ${String(body.detail)}`);
+        }
+        if (body?.path) {
+          appendConsole(`[sync] Path: ${String(body.path)}`);
         }
         const parts: string[] = [];
         if (body?.error) parts.push(String(body.error));
-        if (body?.detail) parts.push(String(body.detail));
+        if (body?.detail && !body?.results) parts.push(String(body.detail));
         if (body?.stderr) parts.push(String(body.stderr));
         const msg =
           parts.length > 0
@@ -1034,17 +1066,51 @@ export const AdminPage: React.FC = () => {
             : `Request failed (${resp.status})`;
         throw new Error(msg);
       }
-      appendConsole("[sync] Schema synchronized successfully");
+      // Display results from individual file execution
+      if (body?.results && Array.isArray(body.results)) {
+        appendConsole(`[sync] Executing ${body.totalFiles || body.results.length} SQL files...`);
+        appendConsole("[sync] ─────────────────────────────────────");
+        
+        body.results.forEach((result: { file: string; status: string; duration: string; error?: string; detail?: string; hint?: string }) => {
+          if (result.status === 'success') {
+            appendConsole(`[sync] ✓ ${result.file} (${result.duration})`);
+          } else {
+            appendConsole(`[sync] ✗ ${result.file} FAILED (${result.duration})`);
+            if (result.error) {
+              appendConsole(`[sync]   Error: ${result.error}`);
+            }
+            if (result.detail) {
+              appendConsole(`[sync]   Detail: ${result.detail}`);
+            }
+            if (result.hint) {
+              appendConsole(`[sync]   Hint: ${result.hint}`);
+            }
+          }
+        });
+        
+        appendConsole("[sync] ─────────────────────────────────────");
+        
+        const successCount = body.successCount ?? body.results.filter((r: { status: string }) => r.status === 'success').length;
+        const errorCount = body.errorCount ?? body.results.filter((r: { status: string }) => r.status === 'error').length;
+        
+        if (errorCount > 0) {
+          appendConsole(`[sync] ⚠ Completed with errors: ${successCount}/${body.totalFiles || body.results.length} files succeeded`);
+        } else {
+          appendConsole(`[sync] ✓ All ${successCount} files executed successfully`);
+        }
+      } else {
+        // Fallback for old response format
+        appendConsole("[sync] Schema synchronized successfully");
+      }
 
-      // Show SQL execution output if available
+      // Show SQL execution output if available (legacy format)
       if (body?.stdoutTail) {
         appendConsole("[sync] SQL execution output:");
         const outputLines = String(body.stdoutTail)
           .split("\n")
-          .filter((l) => l.trim());
+          .filter((l: string) => l.trim());
         let hasErrors = false;
-        outputLines.forEach((line) => {
-          // Check for error patterns in SQL output
+        outputLines.forEach((line: string) => {
           const isError =
             /ERROR:|error:|failed|FAILED/i.test(line) && !/⚠/.test(line);
           if (isError) {
@@ -1053,7 +1119,6 @@ export const AdminPage: React.FC = () => {
           } else if (/WARNING:|NOTICE:/i.test(line)) {
             appendConsole(`[sync] ⚠ ${line}`);
           } else {
-            // Only show non-error lines if they're relevant (CREATE, ALTER, etc.)
             if (
               /CREATE|ALTER|DROP|SELECT|INSERT|UPDATE|DELETE|GRANT|REVOKE/i.test(
                 line,
@@ -1086,10 +1151,10 @@ export const AdminPage: React.FC = () => {
       if (body?.stderr) {
         const stderrLines = String(body.stderr)
           .split("\n")
-          .filter((l) => l.trim());
+          .filter((l: string) => l.trim());
         if (stderrLines.length > 0) {
           appendConsole("[sync] SQL execution stderr output:");
-          stderrLines.forEach((line) => {
+          stderrLines.forEach((line: string) => {
             if (/ERROR:|error:/i.test(line)) {
               appendConsole(`[sync] ✗ ${line}`);
             } else {

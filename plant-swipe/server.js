@@ -6163,27 +6163,34 @@ async function handleSyncSchema(req, res) {
     const syncPartsDir = path.resolve(__dirname, 'supabase', 'sync_parts')
     let sqlFiles = []
     
+    console.log(`[sync-schema] Looking for SQL files in: ${syncPartsDir}`)
+    
     try {
       const files = await fs.readdir(syncPartsDir)
       sqlFiles = files
         .filter(f => f.endsWith('.sql'))
         .sort() // Sort alphabetically to ensure correct order (01_, 02_, etc.)
+      console.log(`[sync-schema] Found ${sqlFiles.length} SQL files: ${sqlFiles.join(', ')}`)
     } catch (dirErr) {
-      // Fallback to single file if sync_parts doesn't exist
-      console.log('[sync-schema] sync_parts folder not found, falling back to 000_sync_schema.sql')
-      const sqlPath = path.resolve(__dirname, 'supabase', '000_sync_schema.sql')
-      const sqlText = await fs.readFile(sqlPath, 'utf8')
-      await sql.unsafe(sqlText, [], { simple: true })
-      await ensureRequestedPlantsSchema()
-      await ensurePlantTranslationsSchema()
-      let summary = null
-      try { summary = await verifySchemaAfterSync() } catch { }
-      res.json({ ok: true, message: 'Schema synchronized successfully (single file)', summary })
+      console.error(`[sync-schema] ERROR: sync_parts folder not found at ${syncPartsDir}`)
+      console.error(`[sync-schema] Directory error: ${dirErr?.message}`)
+      res.status(500).json({ 
+        ok: false,
+        error: `sync_parts folder not found at ${syncPartsDir}`,
+        detail: 'The schema sync files are missing. Please ensure the supabase/sync_parts/ folder exists with SQL files.',
+        path: syncPartsDir
+      })
       return
     }
 
     if (sqlFiles.length === 0) {
-      res.status(500).json({ error: 'No SQL files found in sync_parts folder' })
+      console.error(`[sync-schema] ERROR: No SQL files found in ${syncPartsDir}`)
+      res.status(500).json({ 
+        ok: false,
+        error: 'No SQL files found in sync_parts folder',
+        detail: 'The sync_parts folder exists but contains no .sql files.',
+        path: syncPartsDir
+      })
       return
     }
 
