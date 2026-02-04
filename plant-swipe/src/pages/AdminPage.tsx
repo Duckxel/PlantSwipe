@@ -8485,7 +8485,7 @@ export const AdminPage: React.FC = () => {
                             )}
                             <Button
                               variant="outline"
-                              className="rounded-xl border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/60 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 shadow-sm"
+                              className="rounded-xl border-sky-200 dark:border-sky-800/50 bg-sky-50/70 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/30 shadow-sm"
                               onClick={() => setBulkRequestDialogOpen(true)}
                               disabled={bulkRequestSubmitting}
                               title="Bulk add plant requests"
