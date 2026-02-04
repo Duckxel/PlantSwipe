@@ -88,6 +88,7 @@ do $$ declare
     'plant_watering_schedules',
     'plant_sources',
     'plant_infusion_mixes',
+    'plant_contributors',
     'plant_pro_advices',
     'plant_images',
     'colors',

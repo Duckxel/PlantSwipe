@@ -279,7 +279,7 @@ const emptyPlant: Plant = {
   ecology: {},
   danger: {},
   miscellaneous: { sources: [] },
-  meta: {},
+  meta: { contributors: [] },
   seasons: [],
   colors: [],
 }
@@ -313,6 +313,26 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
+}
+
+const mergeContributors = (
+  existing: unknown,
+  extras: Array<string | null | undefined> = [],
+): string[] => {
+  const base = Array.isArray(existing) ? existing : []
+  const combined = [...base, ...extras]
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const entry of combined) {
+    if (typeof entry !== "string") continue
+    const trimmed = entry.trim()
+    if (!trimmed) continue
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(trimmed)
+  }
+  return result
 }
 
 function coerceBoolean(value: unknown, fallback: boolean | null = false): boolean | null {
@@ -527,6 +547,20 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   if (error) throw new Error(error.message)
 }
 
+async function upsertContributors(plantId: string, contributors: string[]) {
+  await supabase.from('plant_contributors').delete().eq('plant_id', plantId)
+  if (!contributors.length) return
+  const rows = contributors
+    .filter((name) => typeof name === 'string' && name.trim())
+    .map((name) => ({
+      plant_id: plantId,
+      contributor_name: name.trim(),
+    }))
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_contributors').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
 function mapInfusionMixRows(rows?: Array<{ mix_name?: string | null; benefit?: string | null }> | null) {
   const result: Record<string, string> = {}
   if (!rows) return result
@@ -651,6 +685,10 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
   const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
+  const { data: contributorRows } = await supabase
+    .from('plant_contributors')
+    .select('contributor_name')
+    .eq('plant_id', id)
   const infusionMix = await fetchInfusionMixes(id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
   const sourceList = (sources || []).map((s) => ({ id: s.id, name: s.name, url: s.url }))
@@ -796,6 +834,9 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     meta: {
       status: formatStatusForUi(data.status),
       adminCommentary: data.admin_commentary || undefined,
+      contributors: (contributorRows || [])
+        .map((row: any) => row?.contributor_name)
+        .filter((name: any) => typeof name === 'string' && name.trim()),
       createdBy: data.created_by || undefined,
       createdAt: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,
@@ -818,6 +859,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [searchParams] = useSearchParams()
   const prefillFromId = searchParams.get('prefillFrom')
   const duplicatedFromName = searchParams.get('duplicatedFrom')
+  const requestId = searchParams.get('requestId')
   // Support initial name from query parameter (e.g., /create?name=Rose) or from prop
   const initialNameFromUrl = searchParams.get('name')
   const effectiveInitialName = initialName || initialNameFromUrl || ""
@@ -901,6 +943,48 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         setLanguage(urlLanguage)
       }
     }, [urlLanguage])
+
+    React.useEffect(() => {
+      if (!requestId || id) return
+      let cancelled = false
+      const loadRequestContributors = async () => {
+        try {
+          const { data: requestUsersData, error } = await supabase
+            .from('plant_request_users')
+            .select('user_id')
+            .eq('requested_plant_id', requestId)
+            .order('created_at', { ascending: false })
+          if (error) throw new Error(error.message)
+          const userIds = [
+            ...new Set((requestUsersData || []).map((row: any) => String(row.user_id))),
+          ].filter(Boolean)
+          if (!userIds.length) return
+          const { data: profilesData, error: profilesError } = await supabase
+            .from('profiles')
+            .select('id, display_name')
+            .in('id', userIds)
+          if (profilesError) throw new Error(profilesError.message)
+          const names = (profilesData || [])
+            .map((profile: any) => profile?.display_name)
+            .filter((name: any) => typeof name === 'string' && name.trim())
+            .map((name: string) => name.trim())
+          if (!names.length || cancelled) return
+          setPlant((prev) => ({
+            ...prev,
+            meta: {
+              ...(prev.meta || {}),
+              contributors: mergeContributors(prev.meta?.contributors, names),
+            },
+          }))
+        } catch (err) {
+          console.warn('[createPlant] Failed to load request contributors', err)
+        }
+      }
+      loadRequestContributors()
+      return () => {
+        cancelled = true
+      }
+    }, [requestId, id, supabase])
 
     // Track if initial load is complete
     const initialLoadCompleteRef = React.useRef(false)
@@ -1216,6 +1300,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           ? (plantToSave.meta?.createdAt || null)
           : (plantToSave.meta?.createdAt || new Date().toISOString())
         const updatedByValue = profile?.display_name || plantToSave.meta?.updatedBy || null
+        const contributorList = mergeContributors(plantToSave.meta?.contributors, [profile?.display_name])
         const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
@@ -1412,6 +1497,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules },
         })
         await upsertSources(savedId, sources)
+        await upsertContributors(savedId, contributorList)
         await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
         
         // Sync bidirectional companion relationships
@@ -1490,6 +1576,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             id: savedId,
             meta: {
               ...plantToSave.meta,
+              contributors: contributorList,
               createdBy: createdByValue || undefined,
               createdAt: createdTimeValue || undefined,
                 updatedBy: payloadUpdatedTime

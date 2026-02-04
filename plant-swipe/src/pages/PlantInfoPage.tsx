@@ -216,7 +216,8 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     imagesResult,
     schedulesResult,
     sourcesResult,
-    infusionMixResult
+    infusionMixResult,
+    contributorsResult,
   ] = await Promise.all([
     supabase
       .from('plant_translations')
@@ -228,7 +229,8 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     supabase.from('plant_images').select('id,link,use').eq('plant_id', id),
     supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id),
     supabase.from('plant_sources').select('id,name,url').eq('plant_id', id),
-    supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id)
+    supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id),
+    supabase.from('plant_contributors').select('contributor_name').eq('plant_id', id),
   ])
   
   const translation = translationResult.data || null
@@ -237,6 +239,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
   const schedules = schedulesResult.data
   const sources = sourcesResult.data
   const infusionMixRows = infusionMixResult.data
+  const contributorRows = contributorsResult.data
   
   // Fetch color translations for the target language (depends on colorLinks result)
   const colorIds = (colorLinks || []).map((c: any) => c.colors?.id).filter(Boolean)
@@ -392,6 +395,9 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     meta: {
       status: data.status || undefined,
       adminCommentary: data.admin_commentary || undefined,
+      contributors: (contributorRows || [])
+        .map((row: any) => row?.contributor_name)
+        .filter((name: any) => typeof name === 'string' && name.trim()),
       createdBy: data.created_by || undefined,
       createdTime: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,
@@ -1305,6 +1311,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const updatedTimestamp = formatTimestampDetailed(meta.updatedAt ?? meta.updatedTime)
       const createdByLabel = formatTextValue(meta.createdBy)
       const updatedByLabel = formatTextValue(meta.updatedBy)
+      const contributorsList = Array.from(
+        new Map(
+          compactStrings(meta.contributors).map((name) => [name.toLowerCase(), name]),
+        ).values(),
+      )
       const aromaDescriptor = formatBooleanDescriptor(usage.aromatherapy, t('moreInfo.values.essentialOils'), t('moreInfo.values.notForOils'))
       const infusionDescriptor = formatBooleanDescriptor(usage.infusion, t('moreInfo.values.infusionReady'), t('moreInfo.values.notForInfusions'))
       const melliferousDescriptor = formatBooleanDescriptor(
@@ -1760,7 +1771,25 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </div>
             </section>
           )}
-          
+
+          {contributorsList.length > 0 && (
+            <details className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
+              <summary className="cursor-pointer text-xs sm:text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
+                {t('moreInfo.contributors.title', 'Contributors')}
+              </summary>
+              <div className="mt-3 space-y-2 text-xs sm:text-sm text-stone-600 dark:text-stone-400">
+                <p>{t('moreInfo.contributors.thanks', 'Thank you to all plant lovers that participated:')}</p>
+                <div className="flex flex-wrap gap-2">
+                  {contributorsList.map((name) => (
+                    <Badge key={name} className="rounded-xl sm:rounded-2xl border-none bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                      {name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </details>
+          )}
+
           {(createdTimestamp || updatedTimestamp || sourcesValue) && (
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 py-3">
               {(createdTimestamp || createdByLabel) && (
