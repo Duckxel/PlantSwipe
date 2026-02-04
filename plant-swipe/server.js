@@ -6159,42 +6159,145 @@ async function handleSyncSchema(req, res) {
       return
     }
 
-    const sqlPath = path.resolve(__dirname, 'supabase', '000_sync_schema.sql')
-    const sqlText = await fs.readFile(sqlPath, 'utf8')
+    // Read all SQL files from sync_parts folder and execute them in order
+    const syncPartsDir = path.resolve(__dirname, 'supabase', 'sync_parts')
+    let sqlFiles = []
+    
+    try {
+      const files = await fs.readdir(syncPartsDir)
+      sqlFiles = files
+        .filter(f => f.endsWith('.sql'))
+        .sort() // Sort alphabetically to ensure correct order (01_, 02_, etc.)
+    } catch (dirErr) {
+      // Fallback to single file if sync_parts doesn't exist
+      console.log('[sync-schema] sync_parts folder not found, falling back to 000_sync_schema.sql')
+      const sqlPath = path.resolve(__dirname, 'supabase', '000_sync_schema.sql')
+      const sqlText = await fs.readFile(sqlPath, 'utf8')
+      await sql.unsafe(sqlText, [], { simple: true })
+      await ensureRequestedPlantsSchema()
+      await ensurePlantTranslationsSchema()
+      let summary = null
+      try { summary = await verifySchemaAfterSync() } catch { }
+      res.json({ ok: true, message: 'Schema synchronized successfully (single file)', summary })
+      return
+    }
 
-    // Execute allowing multiple statements
-    await sql.unsafe(sqlText, [], { simple: true })
+    if (sqlFiles.length === 0) {
+      res.status(500).json({ error: 'No SQL files found in sync_parts folder' })
+      return
+    }
 
-    // Ensure critical tables that power new features exist even if the SQL script was partially applied.
-    await ensureRequestedPlantsSchema()
-    await ensurePlantTranslationsSchema()
+    // Execute each file and track results
+    const results = []
+    let hasError = false
+    let failedFile = null
+    let failedError = null
+
+    console.log(`[sync-schema] Starting schema sync with ${sqlFiles.length} files...`)
+
+    for (const file of sqlFiles) {
+      const filePath = path.join(syncPartsDir, file)
+      const startTime = Date.now()
+      
+      try {
+        console.log(`[sync-schema] Executing: ${file}`)
+        const sqlText = await fs.readFile(filePath, 'utf8')
+        await sql.unsafe(sqlText, [], { simple: true })
+        const duration = Date.now() - startTime
+        results.push({ file, status: 'success', duration: `${duration}ms` })
+        console.log(`[sync-schema] ✓ ${file} completed in ${duration}ms`)
+      } catch (fileErr) {
+        const duration = Date.now() - startTime
+        const errorMessage = fileErr?.message || String(fileErr)
+        // Extract PostgreSQL error details if available
+        const errorDetail = fileErr?.detail || null
+        const errorHint = fileErr?.hint || null
+        const errorPosition = fileErr?.position || null
+        
+        results.push({ 
+          file, 
+          status: 'error', 
+          duration: `${duration}ms`,
+          error: errorMessage,
+          detail: errorDetail,
+          hint: errorHint,
+          position: errorPosition
+        })
+        
+        console.error(`[sync-schema] ✗ ${file} FAILED after ${duration}ms:`)
+        console.error(`[sync-schema]   Error: ${errorMessage}`)
+        if (errorDetail) console.error(`[sync-schema]   Detail: ${errorDetail}`)
+        if (errorHint) console.error(`[sync-schema]   Hint: ${errorHint}`)
+        if (errorPosition) console.error(`[sync-schema]   Position: ${errorPosition}`)
+        
+        hasError = true
+        failedFile = file
+        failedError = errorMessage
+        // Continue with remaining files to see if they have errors too
+      }
+    }
+
+    // Ensure critical tables exist even if some scripts failed
+    try {
+      await ensureRequestedPlantsSchema()
+      await ensurePlantTranslationsSchema()
+    } catch (ensureErr) {
+      console.error('[sync-schema] Failed to ensure critical schemas:', ensureErr?.message)
+    }
 
     // Verify important objects exist after sync
     let summary = null
     try { summary = await verifySchemaAfterSync() } catch { }
 
-    // Log admin action (success)
+    // Log admin action
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
-      const detail = { summary }
-      let logged = false
+      const detail = { 
+        results, 
+        summary, 
+        hasError, 
+        failedFile,
+        totalFiles: sqlFiles.length,
+        successCount: results.filter(r => r.status === 'success').length,
+        errorCount: results.filter(r => r.status === 'error').length
+      }
+      const action = hasError ? 'sync_schema_partial' : 'sync_schema'
       if (sql) {
         try {
-          await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'sync_schema', null, ${sql.json(detail)})`
-          logged = true
-        } catch { }
-      }
-      if (!logged) {
-        try {
-          await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: null, action: 'sync_schema', target: null, detail })
+          await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, ${action}, null, ${sql.json(detail)})`
         } catch { }
       }
     } catch { }
 
-    res.json({ ok: true, message: 'Schema synchronized successfully', summary })
+    // Return detailed results
+    if (hasError) {
+      console.log(`[sync-schema] Completed with errors. ${results.filter(r => r.status === 'success').length}/${sqlFiles.length} files succeeded.`)
+      res.status(500).json({ 
+        ok: false, 
+        message: `Schema sync failed at: ${failedFile}`,
+        error: failedError,
+        results,
+        summary,
+        totalFiles: sqlFiles.length,
+        successCount: results.filter(r => r.status === 'success').length,
+        errorCount: results.filter(r => r.status === 'error').length
+      })
+    } else {
+      console.log(`[sync-schema] All ${sqlFiles.length} files executed successfully.`)
+      res.json({ 
+        ok: true, 
+        message: `Schema synchronized successfully (${sqlFiles.length} files)`,
+        results,
+        summary,
+        totalFiles: sqlFiles.length,
+        successCount: sqlFiles.length,
+        errorCount: 0
+      })
+    }
   } catch (e) {
     // Log failure
+    console.error('[sync-schema] Critical error:', e?.message || e)
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
