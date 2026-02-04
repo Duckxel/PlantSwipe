@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** February 2026  
+> **Last Updated:** February 3, 2026  
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -44,8 +44,8 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 |------|-------------|
 | `01_extensions_and_setup.sql` | Extensions, secrets, edge function helpers, scheduled tasks |
 | `02_profiles_and_purge.sql` | User profiles table, data retention jobs |
-| `03_plants_and_colors.sql` | Plants catalog, watering schedules, colors |
-| `04_translations_and_requests.sql` | Multi-language translations, plant requests |
+| `03_plants_and_colors.sql` | Plants catalog, watering schedules, colors (uses dynamic SQL for column additions) |
+| `04_translations_and_requests.sql` | Multi-language translations, plant requests (defensive migration checks) |
 | `05_admin_media_and_team.sql` | Admin media uploads, team members |
 | `06_core_tables_and_rls.sql` | Gardens, garden members, plants, events, inventory |
 | `07_ownership_and_rpcs.sql` | Ownership rules, helper RPCs |
@@ -496,6 +496,72 @@ Ensure indexes exist for:
 - Frequently filtered columns (`created_at`, `status`)
 - Unique constraints
 
+### 6. Avoid Many Consecutive ALTER TABLE Statements
+
+PostgreSQL has a parsing bug where many consecutive `ALTER TABLE ADD COLUMN` statements 
+in a single batch can trigger a "tables can have at most 1600 columns" error, even when 
+the table has far fewer columns.
+
+**Solution:** Use dynamic SQL inside a DO block:
+
+```sql
+do $$ 
+declare
+  col_defs text[][] := array[
+    array['column_name', 'column_type_and_constraints'],
+    array['another_col', 'text not null default ''value''']
+  ];
+begin
+  for i in 1..array_length(col_defs, 1) loop
+    begin
+      if not exists (
+        select 1 from information_schema.columns 
+        where table_schema = 'public' 
+        and table_name = 'your_table' 
+        and column_name = col_defs[i][1]
+      ) then
+        execute format('alter table public.your_table add column %I %s', 
+                       col_defs[i][1], col_defs[i][2]);
+      end if;
+    exception when others then
+      null; -- Skip if column exists with different constraints
+    end;
+  end loop;
+end $$;
+```
+
+This pattern is used in `03_plants_and_colors.sql` for the plants table.
+
+### 7. Make Migrations Defensive
+
+Migration scripts that reference columns from other tables should verify those columns 
+exist before running. This allows schema files to be run independently or in case of 
+partial failures.
+
+```sql
+do $$
+declare
+  has_required_cols boolean;
+begin
+  -- Check if source columns exist
+  select exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'source_table' 
+    and column_name = 'required_column'
+  ) into has_required_cols;
+  
+  if not has_required_cols then
+    raise notice 'Skipping migration - required columns not present';
+    return;
+  end if;
+  
+  -- Run migration...
+end $$;
+```
+
+This pattern is used in `04_translations_and_requests.sql` for data migrations.
+
 ---
 
 ## Common Pitfalls
@@ -536,6 +602,17 @@ allowed_tables constant text[] := array[
   'new_table_name',  -- ADD HERE
   ...
 ];
+```
+
+#### 6. Many Consecutive ALTER TABLE Statements
+```sql
+-- Don't do this - causes "1600 columns" parsing error:
+ALTER TABLE t ADD COLUMN a TEXT;
+ALTER TABLE t ADD COLUMN b TEXT;
+ALTER TABLE t ADD COLUMN c TEXT;
+-- ... 50+ more statements
+
+-- Use dynamic SQL in DO block instead (see Best Practices #6)
 ```
 
 ### ✓ Do This Instead
