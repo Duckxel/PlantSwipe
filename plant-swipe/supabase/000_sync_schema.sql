@@ -10823,6 +10823,10 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION cleanup_expired_verification_codes() IS 'Removes expired or already-used verification codes. Should be called periodically by a daily cleanup job.';
 
+-- Grant necessary permissions for the cleanup function
+GRANT EXECUTE ON FUNCTION cleanup_expired_verification_codes() TO authenticated;
+GRANT EXECUTE ON FUNCTION cleanup_expired_verification_codes() TO service_role;
+
 -- Enable RLS on the verification codes table
 ALTER TABLE public.email_verification_codes ENABLE ROW LEVEL SECURITY;
 
@@ -10834,6 +10838,17 @@ BEGIN
       ON public.email_verification_codes
       FOR SELECT
       USING (auth.uid() = user_id);
+  END IF;
+END $$;
+
+-- RLS policy: Only service role can insert/update/delete (server-side operations)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'email_verification_codes' AND policyname = 'Service role can manage verification codes') THEN
+    CREATE POLICY "Service role can manage verification codes"
+      ON public.email_verification_codes
+      FOR ALL
+      USING (auth.role() = 'service_role');
   END IF;
 END $$;
 
