@@ -96,6 +96,9 @@ export default function SettingsPage() {
   const [city, setCity] = React.useState("")
   const [notificationHour, setNotificationHour] = React.useState<number>(10)
   const [detectingLocation, setDetectingLocation] = React.useState(false)
+  const [gardenType, setGardenType] = React.useState("")
+  const [experienceLevel, setExperienceLevel] = React.useState("")
+  const [lookingFor, setLookingFor] = React.useState("")
   const [locationSearch, setLocationSearch] = React.useState("")
   const debouncedLocationSearch = useDebounce(locationSearch, 350)
   const [locationSuggestions, setLocationSuggestions] = React.useState<LocationSuggestion[]>([])
@@ -261,11 +264,14 @@ export default function SettingsPage() {
           setCountry((profile as any).country || '')
           setCity((profile as any).city || '')
           setNotificationHour(parseNotificationHour((profile as any).notification_time))
+          setGardenType((profile as any).garden_type || '')
+          setExperienceLevel((profile as any).experience_level || '')
+          setLookingFor((profile as any).looking_for || '')
         } else {
           // Fetch profile if not loaded
           const { data } = await supabase
             .from('profiles')
-            .select('is_private, disable_friend_requests, garden_invite_privacy, timezone, country, city, notification_time')
+            .select('is_private, disable_friend_requests, garden_invite_privacy, timezone, country, city, notification_time, garden_type, experience_level, looking_for')
             .eq('id', user.id)
             .maybeSingle()
           if (data) {
@@ -276,6 +282,9 @@ export default function SettingsPage() {
             setCountry((data as any).country || '')
             setCity((data as any).city || '')
             setNotificationHour(parseNotificationHour((data as any).notification_time))
+            setGardenType((data as any).garden_type || '')
+            setExperienceLevel((data as any).experience_level || '')
+            setLookingFor((data as any).looking_for || '')
           } else {
             setTimezone(detectedTimezone)
           }
@@ -846,6 +855,37 @@ export default function SettingsPage() {
       await refreshProfile()
       setSuccess(t('common.saved', { defaultValue: 'Saved' }))
     } catch (e: any) {
+      setError(e?.message || t('common.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateSetupField = async (
+    field: 'garden_type' | 'experience_level' | 'looking_for',
+    nextValue: string,
+    previousValue: string,
+    setValue: React.Dispatch<React.SetStateAction<string>>
+  ) => {
+    if (!user?.id) return
+
+    setValue(nextValue)
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ [field]: nextValue || null })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      await refreshProfile()
+      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+    } catch (e: any) {
+      setValue(previousValue)
       setError(e?.message || t('common.error'))
     } finally {
       setSaving(false)
@@ -2423,24 +2463,8 @@ export default function SettingsPage() {
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.gardenTypeDescription', { defaultValue: 'Where do you grow your plants?' })}</p>
                 <select
                   id="garden-type-select"
-                  value={(profile as any)?.garden_type || ''}
-                  onChange={async (e) => {
-                    if (!user?.id) return
-                    setSaving(true)
-                    try {
-                      const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({ garden_type: e.target.value || null })
-                        .eq('id', user.id)
-                      if (updateError) throw updateError
-                      await refreshProfile()
-                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
-                    } catch (e: any) {
-                      setError(e?.message || t('common.error'))
-                    } finally {
-                      setSaving(false)
-                    }
-                  }}
+                  value={gardenType}
+                  onChange={(e) => handleUpdateSetupField('garden_type', e.target.value || '', gardenType, setGardenType)}
                   disabled={saving}
                   className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
@@ -2457,24 +2481,8 @@ export default function SettingsPage() {
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.experienceLevelDescription', { defaultValue: 'Your gardening expertise level' })}</p>
                 <select
                   id="experience-level-select"
-                  value={(profile as any)?.experience_level || ''}
-                  onChange={async (e) => {
-                    if (!user?.id) return
-                    setSaving(true)
-                    try {
-                      const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({ experience_level: e.target.value || null })
-                        .eq('id', user.id)
-                      if (updateError) throw updateError
-                      await refreshProfile()
-                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
-                    } catch (e: any) {
-                      setError(e?.message || t('common.error'))
-                    } finally {
-                      setSaving(false)
-                    }
-                  }}
+                  value={experienceLevel}
+                  onChange={(e) => handleUpdateSetupField('experience_level', e.target.value || '', experienceLevel, setExperienceLevel)}
                   disabled={saving}
                   className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
@@ -2491,24 +2499,8 @@ export default function SettingsPage() {
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.lookingForDescription', { defaultValue: "What's your main gardening goal?" })}</p>
                 <select
                   id="looking-for-select"
-                  value={(profile as any)?.looking_for || ''}
-                  onChange={async (e) => {
-                    if (!user?.id) return
-                    setSaving(true)
-                    try {
-                      const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({ looking_for: e.target.value || null })
-                        .eq('id', user.id)
-                      if (updateError) throw updateError
-                      await refreshProfile()
-                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
-                    } catch (e: any) {
-                      setError(e?.message || t('common.error'))
-                    } finally {
-                      setSaving(false)
-                    }
-                  }}
+                  value={lookingFor}
+                  onChange={(e) => handleUpdateSetupField('looking_for', e.target.value || '', lookingFor, setLookingFor)}
                   disabled={saving}
                   className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
