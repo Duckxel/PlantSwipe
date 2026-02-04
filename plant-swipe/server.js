@@ -8284,8 +8284,9 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_plant_tasks t on t.garden_id = gm.garden_id
               join public.garden_plant_task_occurrences occ on occ.task_id = t.id
               where (p.notify_push is null or p.notify_push = true)
+                and (p.push_task_reminders is null or p.push_task_reminders = true)
                 and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
-                and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+                and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
                 and not exists (
                   select 1 from public.user_notifications un
                   where un.automation_id = ${row.id}
@@ -8489,6 +8490,7 @@ async function runAutomation(automation) {
       console.error('[automation] failed to load translations', err)
     }
   }
+  const normalizedTranslations = normalizeTranslationMap(translations)
 
   const triggerType = automation.trigger_type
   let recipientQuery
@@ -8503,17 +8505,18 @@ async function runAutomation(automation) {
       limit 5000
     `
   } else if (triggerType === 'daily_task_reminder') {
-    // Find users with incomplete tasks for today
+    // Find users with incomplete tasks for today (in their local timezone)
     // Join through garden_plant_tasks to get the correct garden association
     recipientQuery = sql`
-      select distinct p.id as user_id, p.display_name, p.language
+      select distinct p.id as user_id, p.display_name, p.language, p.timezone
       from public.profiles p
       join public.garden_members gm on gm.user_id = p.id
       join public.garden_plant_tasks t on t.garden_id = gm.garden_id
       join public.garden_plant_task_occurrences occ on occ.task_id = t.id
       where (p.notify_push is null or p.notify_push = true)
-        and occ.due_at::date = current_date
-        and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+        and (p.push_task_reminders is null or p.push_task_reminders = true)
+        and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+        and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
       limit 5000
     `
   } else if (triggerType === 'journal_continue_reminder') {
@@ -8540,13 +8543,9 @@ async function runAutomation(automation) {
   let insertedCount = 0
   for (const recipient of recipients) {
     // Get message variants for user's language (with fallback to default)
-    const userLang = (recipient.language || 'en').toLowerCase()
-    let messageVariants = defaultVariants
-    if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
-      messageVariants = translations[userLang]
-    }
-
-    const messageIndex = automation.randomize
+    const messageVariants = resolveMessageVariants(defaultVariants, normalizedTranslations, recipient.language)
+    const shouldRandomize = automation.randomize !== false
+    const messageIndex = shouldRandomize
       ? Math.floor(Math.random() * messageVariants.length)
       : 0
     const message = messageVariants[messageIndex]
@@ -23825,6 +23824,7 @@ const getServerTimezone = () => {
   }
 }
 const DEFAULT_USER_TIMEZONE = process.env.DEFAULT_USER_TIMEZONE || getServerTimezone()
+const DEFAULT_NOTIFICATION_HOUR = 10
 console.log(`[notifications] Default user timezone: ${DEFAULT_USER_TIMEZONE}`)
 
 let notificationWorkerTimer = null
@@ -23857,6 +23857,34 @@ function toStringArray(value) {
 
 function toUuidArray(value) {
   return toStringArray(value)
+}
+
+function normalizeLanguageCode(value) {
+  if (!value) return ''
+  return String(value).trim().toLowerCase().replace('_', '-')
+}
+
+function normalizeTranslationMap(translations) {
+  if (!translations || typeof translations !== 'object') return {}
+  const normalized = {}
+  for (const [lang, variants] of Object.entries(translations)) {
+    const normalizedLang = normalizeLanguageCode(lang)
+    if (!normalizedLang) continue
+    const list = toStringArray(variants)
+    if (list.length > 0) {
+      normalized[normalizedLang] = list
+    }
+  }
+  return normalized
+}
+
+function resolveMessageVariants(defaultVariants, translations, userLanguage) {
+  const normalizedLang = normalizeLanguageCode(userLanguage)
+  if (!normalizedLang || normalizedLang === 'en') return defaultVariants
+  if (translations[normalizedLang]?.length) return translations[normalizedLang]
+  const baseLang = normalizedLang.split('-')[0]
+  if (baseLang && translations[baseLang]?.length) return translations[baseLang]
+  return defaultVariants
 }
 
 function normalizeNotificationCampaign(row) {
@@ -23933,16 +23961,8 @@ function normalizeNotificationTemplate(row, translations = null) {
 // Get message variants for a specific language (with fallback to default)
 function getMessageVariantsForLanguage(template, userLanguage) {
   const defaultVariants = toStringArray(template.message_variants)
-  if (!userLanguage || userLanguage === 'en') return defaultVariants
-
-  // Check if translations exist for this language
-  const translations = template.translations || {}
-  if (translations[userLanguage] && translations[userLanguage].length > 0) {
-    return translations[userLanguage]
-  }
-
-  // Fallback to default (English)
-  return defaultVariants
+  const translations = normalizeTranslationMap(template.translations)
+  return resolveMessageVariants(defaultVariants, translations, userLanguage)
 }
 
 function normalizeNotificationAutomation(row) {
@@ -24872,7 +24892,7 @@ async function processDueAutomations() {
   try {
     // Get all enabled automations with their templates and translations
     const automations = await sql`
-      select a.*, t.message_variants, t.randomize, t.id as template_id,
+      select a.*, t.message_variants, t.randomize, t.title as template_title, t.id as template_id,
              trans.translations
       from public.notification_automations a
       left join public.notification_templates t on t.id = a.template_id
@@ -24902,10 +24922,11 @@ async function processDueAutomations() {
         // Check if this automation should run based on current UTC hour
         // We check if any timezone would currently be at the target send_hour
         // This runs every hour, and we check all timezones where current local time = send_hour
-        const sendHour = automation.send_hour || 9
+        const sendHour = typeof automation.send_hour === 'number' ? automation.send_hour : 9
+        const usesUserNotificationTime = automation.trigger_type === 'daily_task_reminder'
 
         // Parse translations from JSONB
-        const translations = automation.translations || {}
+        const translations = normalizeTranslationMap(automation.translations || {})
 
         // Get users eligible for this automation whose local time is at send_hour
         let recipientQuery
@@ -24934,9 +24955,11 @@ async function processDueAutomations() {
             join public.garden_plant_tasks t on t.garden_id = gm.garden_id
             join public.garden_plant_task_occurrences occ on occ.task_id = t.id
             where (p.notify_push is null or p.notify_push = true)
+              and (p.push_task_reminders is null or p.push_task_reminders = true)
               and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
-              and (occ.completed_count < occ.required_count or occ.completed_count = 0)
-              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour}
+              and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) =
+                coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
@@ -24976,25 +24999,33 @@ async function processDueAutomations() {
           const nowTs = Date.now()
           if (!global[lastLogKey] || nowTs - global[lastLogKey] > 3600000) {
             // Log debug info about why there might be no recipients
-            console.log(`[automations] ${automation.trigger_type}: No eligible recipients at send_hour=${sendHour}`)
+            const logDetail = usesUserNotificationTime
+              ? 'No eligible recipients at preferred notification times'
+              : `No eligible recipients at send_hour=${sendHour}`
+            console.log(`[automations] ${automation.trigger_type}: ${logDetail}`)
             
             // For daily_task_reminder, log how many users have incomplete tasks (without hour filter)
             if (automation.trigger_type === 'daily_task_reminder') {
               try {
                 const debugCount = await sql`
                   select count(distinct p.id)::bigint as total_with_tasks,
-                         count(distinct case when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour} then p.id end)::bigint as at_send_hour
+                         count(distinct case
+                           when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) =
+                                coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+                           then p.id
+                         end)::bigint as at_preferred_hour
                   from public.profiles p
                   join public.garden_members gm on gm.user_id = p.id
                   join public.garden_plant_tasks t on t.garden_id = gm.garden_id
                   join public.garden_plant_task_occurrences occ on occ.task_id = t.id
                   where (p.notify_push is null or p.notify_push = true)
+                    and (p.push_task_reminders is null or p.push_task_reminders = true)
                     and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
-                    and (occ.completed_count < occ.required_count or occ.completed_count = 0)
+                    and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
                 `
                 const totalWithTasks = Number(debugCount?.[0]?.total_with_tasks || 0)
-                const atSendHour = Number(debugCount?.[0]?.at_send_hour || 0)
-                console.log(`[automations] ${automation.trigger_type} debug: ${totalWithTasks} users with tasks, ${atSendHour} at send_hour=${sendHour}`)
+                const atPreferredHour = Number(debugCount?.[0]?.at_preferred_hour || 0)
+                console.log(`[automations] ${automation.trigger_type} debug: ${totalWithTasks} users with tasks, ${atPreferredHour} at preferred hour`)
               } catch (debugErr) {
                 // Ignore debug query errors
               }
@@ -25010,6 +25041,7 @@ async function processDueAutomations() {
           console.warn(`[automations] ${automation.trigger_type}: No message template configured, skipping`)
           continue
         }
+        const notificationTitle = automation.template_title || automation.display_name || 'Reminder'
 
         console.log(`[automations] Processing ${automation.trigger_type}: ${recipients.length} recipients`)
 
@@ -25032,13 +25064,9 @@ async function processDueAutomations() {
         let skippedCount = 0
         for (const recipient of recipients) {
           // Get message variants for user's language (with fallback to default)
-          const userLang = (recipient.language || 'en').toLowerCase()
-          let messageVariants = defaultVariants
-          if (userLang !== 'en' && translations[userLang] && Array.isArray(translations[userLang]) && translations[userLang].length > 0) {
-            messageVariants = translations[userLang]
-          }
-
-          const messageIndex = automation.randomize
+          const messageVariants = resolveMessageVariants(defaultVariants, translations, recipient.language)
+          const shouldRandomize = automation.randomize !== false
+          const messageIndex = shouldRandomize
             ? Math.floor(Math.random() * messageVariants.length)
             : 0
           const message = messageVariants[messageIndex]
@@ -25054,7 +25082,7 @@ async function processDueAutomations() {
               values (
                 ${automation.id},
                 ${recipient.user_id},
-                ${automation.display_name || 'Reminder'},
+                ${notificationTitle},
                 ${message},
                 ${targetUrl},
                 now(),

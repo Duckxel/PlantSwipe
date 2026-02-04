@@ -1035,22 +1035,26 @@ export function AdminNotificationsPanel() {
             <div className="space-y-4">
               <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4">
                 <p className="text-sm text-amber-800 dark:text-amber-200">
-                  <strong>💡 How it works:</strong> Automations run every hour and send notifications to users whose local time matches the configured send hour.
-                  Configure a template and enable the trigger to start sending.
+                  <strong>💡 How it works:</strong> Automations run every hour. Daily task reminders respect each user's
+                  notification time preference, while other automations use the configured send hour. Configure a template
+                  and enable the trigger to start sending.
                 </p>
               </div>
 
               <div className="grid gap-4">
-                {automations.map((automation) => (
-                  <div
-                    key={automation.id}
-                    className={cn(
-                      "rounded-xl sm:rounded-2xl border p-5 sm:p-6 transition-all",
-                      automation.sentTodayCount > 0
-                        ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
-                        : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
-                    )}
-                  >
+                {automations.map((automation) => {
+                  const isDailyTaskReminder = automation.triggerType === 'daily_task_reminder'
+
+                  return (
+                    <div
+                      key={automation.id}
+                      className={cn(
+                        "rounded-xl sm:rounded-2xl border p-5 sm:p-6 transition-all",
+                        automation.sentTodayCount > 0
+                          ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
+                          : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
+                      )}
+                    >
                     <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                       {/* Icon and Info */}
                       <div className="flex items-start gap-4 flex-1">
@@ -1104,7 +1108,9 @@ export function AdminNotificationsPanel() {
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5" />
-                              Sends at {automation.sendHour}:00 (user's local time)
+                              {isDailyTaskReminder
+                                ? "Uses each user's preferred notification time"
+                                : `Sends at ${automation.sendHour}:00 (user's local time)`}
                             </span>
                           </div>
                         </div>
@@ -1155,7 +1161,7 @@ export function AdminNotificationsPanel() {
                             onChange={(e) => {
                               handleUpdateAutomation(automation, { sendHour: parseInt(e.target.value) })
                             }}
-                            disabled={savingAutomation === automation.id}
+                            disabled={savingAutomation === automation.id || isDailyTaskReminder}
                             className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
                           >
                             {Array.from({ length: 24 }, (_, i) => (
@@ -1164,6 +1170,11 @@ export function AdminNotificationsPanel() {
                               </option>
                             ))}
                           </Select>
+                          {isDailyTaskReminder && (
+                            <p className="text-xs text-stone-500">
+                              Uses each user's notification time preference.
+                            </p>
+                          )}
                         </div>
 
                         {/* Enable/Disable Toggle + Trigger */}
@@ -1208,7 +1219,8 @@ export function AdminNotificationsPanel() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
