@@ -5,6 +5,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { supabase } from '@/lib/supabaseClient'
 import {
   BellRing,
@@ -29,6 +35,11 @@ import {
   Globe,
   Languages,
   Sparkles,
+  Eye,
+  EyeOff,
+  Shuffle,
+  PenLine,
+  Type,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
@@ -305,7 +316,6 @@ export function AdminNotificationsPanel() {
   })
   const [templateSaving, setTemplateSaving] = React.useState(false)
   const [newVariantText, setNewVariantText] = React.useState('')
-  const [showTemplateInfo, setShowTemplateInfo] = React.useState(false)
 
   // State: Translations
   const [languages, setLanguages] = React.useState<TranslationLanguage[]>([])
@@ -1807,289 +1817,446 @@ export function AdminNotificationsPanel() {
         </SheetContent>
       </Sheet>
 
-      {/* ============= TEMPLATE SHEET ============= */}
-      <Sheet open={templateSheetOpen} onOpenChange={setTemplateSheetOpen}>
-        <SheetContent className="w-full sm:max-w-lg border-l border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] overflow-y-auto">
-          <SheetHeader className="pb-4 sm:pb-6 border-b border-stone-100 dark:border-[#2a2a2d]">
-            <SheetTitle className="text-lg sm:text-xl font-bold">
-              {templateEditId ? 'Edit Template' : 'Create Template'}
-            </SheetTitle>
-            <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
-              Define message variations for your campaigns and automations
-            </p>
-          </SheetHeader>
-
-          <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-5">
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="template-title" className="text-xs sm:text-sm font-medium">Template Name</Label>
-              <Input
-                id="template-title"
-                value={templateForm.title}
-                onChange={(e) => setTemplateForm(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="e.g., Daily Reminder"
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              />
-            </div>
-
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="template-description" className="text-xs sm:text-sm font-medium">
-                Description <span className="text-stone-400 font-normal">(optional)</span>
-              </Label>
-              <Textarea
-                id="template-description"
-                value={templateForm.description}
-                onChange={(e) => setTemplateForm(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Internal note about this template"
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] min-h-[60px] text-sm"
-              />
-            </div>
-
-            {/* Message Variants */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs sm:text-sm font-medium flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  Message Variants ({activeVariants.length})
-                  <span className="inline-flex items-center gap-1 rounded-full bg-stone-100 dark:bg-[#2a2a2d] px-2 py-0.5 text-[10px] font-medium text-stone-600 dark:text-stone-300">
-                    <Languages className="h-3 w-3" />
-                    {selectedTranslationLang ? `${activeLanguageLabel} translation` : activeLanguageLabel}
-                  </span>
-                </Label>
-                <div className="relative">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-lg h-8 px-2"
-                    onMouseEnter={() => setShowTemplateInfo(true)}
-                    onMouseLeave={() => setShowTemplateInfo(false)}
-                  >
-                    <Info className="h-4 w-4" />
-                  </Button>
-                  {showTemplateInfo && (
-                    <div className="absolute right-0 top-full mt-2 z-50 w-64 bg-white dark:bg-[#1e1e20] border border-stone-200 dark:border-[#3e3e42] rounded-xl shadow-lg p-4">
-                      <div className="text-sm font-semibold mb-2">Variables</div>
-                      {TEMPLATE_VARIABLES.map((item) => (
-                        <div key={item.variable} className="flex items-center gap-2 text-xs mb-1">
-                          <code className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded">
-                            {item.variable}
-                          </code>
-                          <span className="text-stone-500">{item.description}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+      {/* ============= TEMPLATE EDITOR MODAL ============= */}
+      <Dialog open={templateSheetOpen} onOpenChange={setTemplateSheetOpen}>
+        <DialogContent 
+          className="w-[95vw] max-w-5xl h-[90vh] max-h-[900px] p-0 gap-0 rounded-2xl overflow-hidden bg-white dark:bg-[#1a1a1d] border border-stone-200 dark:border-[#3e3e42]"
+          hideCloseButton
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 dark:border-[#2a2a2d] bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                <FileText className="h-6 w-6 text-white" />
               </div>
-
-              {selectedTranslationLang && (
-                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                  <Languages className="h-4 w-4 mt-0.5 text-amber-600 dark:text-amber-400" />
-                  <div>
-                    <div className="font-semibold">
-                      Editing {activeLanguageLabel} translation
-                    </div>
-                    <div className="text-[11px] text-amber-700 dark:text-amber-300">
-                      English variants are hidden in this view.
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {activeVariants.length === 0 ? (
-                  <div className="text-sm text-stone-500 text-center py-4 border border-dashed rounded-xl">
-                    {selectedTranslationLang
-                      ? 'No translations yet. Add one below.'
-                      : 'No messages yet. Add one below.'}
-                  </div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-stone-900 dark:text-white">
+                  {templateEditId ? 'Edit Template' : 'Create Template'}
+                </DialogTitle>
+                <DialogDescription className="text-sm text-stone-500 dark:text-stone-400">
+                  Design message variations for your notifications
+                </DialogDescription>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTemplateSheetOpen(false)}
+                className="rounded-lg h-9 px-3"
+              >
+                <X className="h-4 w-4 mr-1.5" />
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveTemplate}
+                disabled={templateSaving}
+                className="rounded-lg h-9 px-4 bg-amber-600 hover:bg-amber-700 shadow-lg shadow-amber-500/20"
+              >
+                {templateSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  activeVariants.map((variant, index) => (
-                    <div
-                      key={index}
-                      className="flex items-start gap-2 p-3 border border-stone-200 dark:border-[#3e3e42] rounded-xl bg-stone-50 dark:bg-[#1a1a1d]"
-                    >
-                      <Textarea
-                        value={variant}
-                        onChange={(e) => updateActiveVariant(index, e.target.value)}
-                        rows={2}
-                        className="flex-1 min-h-[44px] resize-none rounded-lg border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#111113] text-sm text-stone-700 dark:text-stone-300"
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="rounded-lg h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                        onClick={() => removeActiveVariant(index)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
                 )}
-              </div>
+                {templateEditId ? 'Save Changes' : 'Create Template'}
+              </Button>
+            </div>
+          </div>
 
-              <div className="flex items-center gap-2">
-                <Input
-                  value={newVariantValue}
-                  onChange={(e) => {
-                    if (selectedTranslationLang) {
-                      setNewTranslationVariantText(e.target.value)
-                    } else {
-                      setNewVariantText(e.target.value)
-                    }
-                  }}
-                  placeholder={selectedTranslationLang
-                    ? `Enter ${activeLanguageLabel} message...`
-                    : 'Enter message variant...'}
-                  className="rounded-xl flex-1"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      addActiveVariant()
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  className="rounded-xl bg-amber-600 hover:bg-amber-700"
-                  onClick={addActiveVariant}
-                  disabled={!newVariantValue.trim()}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
+          {/* Main Content */}
+          <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+            {/* Left Panel - Template Info */}
+            <div className="w-full lg:w-80 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-stone-200 dark:border-[#2a2a2d] bg-stone-50/50 dark:bg-[#151517] overflow-y-auto">
+              <div className="p-5 space-y-5">
+                {/* Template Name */}
+                <div className="space-y-2">
+                  <Label htmlFor="template-title" className="text-sm font-semibold text-stone-700 dark:text-stone-300 flex items-center gap-2">
+                    <PenLine className="h-4 w-4 text-amber-500" />
+                    Template Name
+                  </Label>
+                  <Input
+                    id="template-title"
+                    value={templateForm.title}
+                    onChange={(e) => setTemplateForm(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="e.g., Daily Reminder"
+                    className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-11 bg-white dark:bg-[#1e1e20]"
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="space-y-2">
+                  <Label htmlFor="template-description" className="text-sm font-semibold text-stone-700 dark:text-stone-300 flex items-center gap-2">
+                    <Type className="h-4 w-4 text-amber-500" />
+                    Description
+                    <span className="text-stone-400 font-normal text-xs">(optional)</span>
+                  </Label>
+                  <Textarea
+                    id="template-description"
+                    value={templateForm.description}
+                    onChange={(e) => setTemplateForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Internal note about this template"
+                    className="rounded-xl border-stone-200 dark:border-[#3e3e42] min-h-[80px] bg-white dark:bg-[#1e1e20] resize-none"
+                  />
+                </div>
+
+                {/* Variables Info */}
+                <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-900/20 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">Available Variables</span>
+                  </div>
+                  <div className="space-y-2">
+                    {TEMPLATE_VARIABLES.map((item) => (
+                      <div key={item.variable} className="flex items-center gap-2">
+                        <code
+                          className="px-2 py-1 rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-xs font-mono cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
+                          onClick={() => navigator.clipboard?.writeText(item.variable)}
+                          title="Click to copy"
+                        >
+                          {item.variable}
+                        </code>
+                        <span className="text-xs text-amber-700/70 dark:text-amber-300/70">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Settings */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-stone-700 dark:text-stone-300">Settings</Label>
+                  
+                  {/* Randomize Toggle */}
+                  <div className="flex items-center justify-between p-4 bg-white dark:bg-[#1e1e20] rounded-xl border border-stone-200 dark:border-[#3e3e42]">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                        <Shuffle className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-stone-800 dark:text-stone-200">Randomize</span>
+                        <p className="text-xs text-stone-500 dark:text-stone-400">Random variant per user</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTemplateForm(prev => ({ ...prev, randomize: !prev.randomize }))}
+                      className={cn(
+                        "relative h-7 w-12 rounded-full transition-colors",
+                        templateForm.randomize ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+                          templateForm.randomize ? "left-6" : "left-1"
+                        )}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Active Toggle */}
+                  <div className="flex items-center justify-between p-4 bg-white dark:bg-[#1e1e20] rounded-xl border border-stone-200 dark:border-[#3e3e42]">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                        {templateForm.isActive ? (
+                          <Eye className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        ) : (
+                          <EyeOff className="h-4 w-4 text-stone-400" />
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-stone-800 dark:text-stone-200">Active</span>
+                        <p className="text-xs text-stone-500 dark:text-stone-400">Available for campaigns</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTemplateForm(prev => ({ ...prev, isActive: !prev.isActive }))}
+                      className={cn(
+                        "relative h-7 w-12 rounded-full transition-colors",
+                        templateForm.isActive ? "bg-emerald-500" : "bg-stone-300 dark:bg-stone-600"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+                          templateForm.isActive ? "left-6" : "left-1"
+                        )}
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Translations Section */}
-            {languageOptions.length > 1 && (
-              <div className="space-y-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-amber-600" />
-                    <Label className="text-sm font-medium">Editing Language</Label>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {selectedTranslationLang && (
+            {/* Right Panel - Message Variants */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Language Tabs Header */}
+              <div className="flex-shrink-0 border-b border-stone-200 dark:border-[#2a2a2d] bg-white dark:bg-[#1e1e20]">
+                <div className="px-5 py-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-5 w-5 text-amber-500" />
+                      <span className="text-sm font-semibold text-stone-800 dark:text-stone-200">Message Variants</span>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium">
+                        {activeVariants.length} variant{activeVariants.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {selectedTranslationLang && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={copyDefaultToTranslation}
+                          className="text-xs h-8 rounded-lg"
+                          disabled={!templateForm.messageVariants.length}
+                        >
+                          <Copy className="h-3 w-3 mr-1.5" />
+                          Copy from English
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={copyDefaultToTranslation}
-                        className="text-xs h-8 rounded-lg"
-                        disabled={!templateForm.messageVariants.length}
+                        onClick={handleAutoTranslate}
+                        disabled={isAutoTranslating || !templateForm.messageVariants.length}
+                        className="rounded-lg h-8 text-xs border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
                       >
-                        <Copy className="h-3 w-3 mr-1" />
-                        Copy English
+                        {isAutoTranslating ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                            Translating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-3 w-3 mr-1.5" />
+                            Auto-translate All
+                          </>
+                        )}
                       </Button>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAutoTranslate}
-                      disabled={isAutoTranslating || !templateForm.messageVariants.length}
-                      className="rounded-lg h-8 text-xs border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
-                    >
-                      {isAutoTranslating ? (
-                        <>
-                          <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                          Translating...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="h-3 w-3 mr-1.5" />
-                          Auto-translate (DeepL)
-                        </>
-                      )}
-                    </Button>
+                    </div>
+                  </div>
+
+                  {/* Language Tabs */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 -mb-1 scrollbar-hide">
+                    {languageOptions.map((lang) => {
+                      const variantCount = lang.code === DEFAULT_LANGUAGE
+                        ? templateForm.messageVariants.length
+                        : (templateTranslations[lang.code]?.length || 0)
+                      const hasTranslation = lang.code !== DEFAULT_LANGUAGE && variantCount > 0
+                      const isSelected = (selectedTranslationLang || DEFAULT_LANGUAGE) === lang.code
+                      return (
+                        <button
+                          key={lang.code}
+                          type="button"
+                          onClick={() => setSelectedTranslationLang(lang.code === DEFAULT_LANGUAGE ? null : lang.code)}
+                          className={cn(
+                            "relative px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 whitespace-nowrap",
+                            isSelected
+                              ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
+                              : hasTranslation
+                                ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50"
+                                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+                          )}
+                        >
+                          <Languages className="h-4 w-4" />
+                          {lang.label}
+                          {variantCount > 0 && (
+                            <span className={cn(
+                              "px-1.5 py-0.5 rounded-md text-[10px] font-bold",
+                              isSelected
+                                ? "bg-white/20 text-white"
+                                : hasTranslation
+                                  ? "bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200"
+                                  : "bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300"
+                            )}>
+                              {variantCount}
+                            </span>
+                          )}
+                          {hasTranslation && !isSelected && (
+                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
-                <p className="text-xs text-stone-500">
-                  Select a language to edit its variants. The list above updates to the chosen language.
-                </p>
-
-                {/* Language Tabs */}
-                <div className="flex flex-wrap gap-2">
-                  {languageOptions.map((lang) => {
-                    const variantCount = lang.code === DEFAULT_LANGUAGE
-                      ? templateForm.messageVariants.length
-                      : (templateTranslations[lang.code]?.length || 0)
-                    const hasTranslation = lang.code !== DEFAULT_LANGUAGE && variantCount > 0
-                    const isSelected = (selectedTranslationLang || DEFAULT_LANGUAGE) === lang.code
-                    return (
-                      <button
-                        key={lang.code}
-                        type="button"
-                        onClick={() => setSelectedTranslationLang(lang.code === DEFAULT_LANGUAGE ? null : lang.code)}
-                        className={cn(
-                          "px-3 py-1.5 text-sm rounded-lg border transition-all flex items-center gap-1.5",
-                          isSelected
-                            ? "bg-amber-100 dark:bg-amber-900/30 border-amber-500 text-amber-700 dark:text-amber-400"
-                            : hasTranslation
-                              ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400"
-                              : "bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-400"
-                        )}
-                      >
-                        <Languages className="h-3.5 w-3.5" />
-                        {lang.label}
-                        {variantCount > 0 && (
-                          <span className="ml-1 text-xs opacity-75">({variantCount})</span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
               </div>
-            )}
 
-            {/* Randomize Toggle */}
-            <div className="flex items-center justify-between p-3 bg-stone-50 dark:bg-[#1a1a1d] rounded-xl border border-stone-200 dark:border-[#3e3e42]">
-              <div>
-                <Label className="text-sm font-medium">Randomize Variants</Label>
-                <p className="text-xs text-stone-500">Each user receives a random variant</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTemplateForm(prev => ({ ...prev, randomize: !prev.randomize }))}
-                className={cn(
-                  "relative h-7 w-12 rounded-full transition-colors",
-                  templateForm.randomize ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
+              {/* Variants List */}
+              <div className="flex-1 overflow-y-auto p-5 bg-stone-50/50 dark:bg-[#151517]">
+                {selectedTranslationLang && (
+                  <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-900/20 px-4 py-3">
+                    <Languages className="h-5 w-5 mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                    <div>
+                      <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        Editing {activeLanguageLabel} translation
+                      </div>
+                      <div className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                        These variants will be shown to users with {activeLanguageLabel} language preference. 
+                        English variants serve as the default.
+                      </div>
+                    </div>
+                  </div>
                 )}
-              >
-                <span
-                  className={cn(
-                    "absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
-                    templateForm.randomize ? "left-6" : "left-1"
+
+                <div className="space-y-3">
+                  {activeVariants.length === 0 ? (
+                    <div className="text-center py-12 border-2 border-dashed border-stone-200 dark:border-[#3e3e42] rounded-2xl bg-white dark:bg-[#1e1e20]">
+                      <div className="mx-auto w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-4">
+                        <MessageSquare className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <h3 className="text-base font-semibold text-stone-900 dark:text-white mb-1">
+                        {selectedTranslationLang ? 'No translations yet' : 'No message variants'}
+                      </h3>
+                      <p className="text-sm text-stone-500 dark:text-stone-400 mb-4 max-w-sm mx-auto">
+                        {selectedTranslationLang 
+                          ? `Add ${activeLanguageLabel} translations below or copy from English.`
+                          : 'Add your first message variant to get started.'}
+                      </p>
+                    </div>
+                  ) : (
+                    activeVariants.map((variant, index) => (
+                      <div
+                        key={index}
+                        className="group relative rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] overflow-hidden transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-md"
+                      >
+                        {/* Variant Header */}
+                        <div className="flex items-center justify-between px-4 py-2 bg-stone-50 dark:bg-[#252528] border-b border-stone-100 dark:border-[#2a2a2d]">
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-xs font-bold">
+                              {index + 1}
+                            </div>
+                            <span className="text-xs font-medium text-stone-500 dark:text-stone-400">
+                              Variant {index + 1}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-lg h-7 w-7 p-0 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+                              onClick={() => navigator.clipboard?.writeText(variant)}
+                              title="Copy variant"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-lg h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              onClick={() => removeActiveVariant(index)}
+                              title="Delete variant"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        
+                        {/* Variant Content */}
+                        <div className="p-4">
+                          <Textarea
+                            value={variant}
+                            onChange={(e) => updateActiveVariant(index, e.target.value)}
+                            rows={3}
+                            className="w-full min-h-[80px] resize-none rounded-lg border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#151517] focus:bg-white dark:focus:bg-[#1e1e20] text-sm text-stone-700 dark:text-stone-300 transition-colors"
+                            placeholder="Enter your notification message..."
+                          />
+                          <div className="mt-2 flex items-center justify-between text-xs text-stone-400">
+                            <span>{variant.length} characters</span>
+                            {variant.includes('{{') && (
+                              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                <Info className="h-3 w-3" />
+                                Contains variables
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
                   )}
-                />
-              </button>
+                </div>
+
+                {/* Add New Variant */}
+                <div className="mt-4 rounded-xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 transition-colors hover:border-amber-300 dark:hover:border-amber-700">
+                  <div className="flex items-start gap-3">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex-shrink-0">
+                      <Plus className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <Textarea
+                        value={newVariantValue}
+                        onChange={(e) => {
+                          if (selectedTranslationLang) {
+                            setNewTranslationVariantText(e.target.value)
+                          } else {
+                            setNewVariantText(e.target.value)
+                          }
+                        }}
+                        placeholder={selectedTranslationLang
+                          ? `Add a new ${activeLanguageLabel} variant...`
+                          : 'Add a new message variant...'}
+                        className="w-full min-h-[60px] resize-none rounded-lg border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#151517] text-sm"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey && newVariantValue.trim()) {
+                            e.preventDefault()
+                            addActiveVariant()
+                          }
+                        }}
+                      />
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="text-xs text-stone-400">Press Enter to add, Shift+Enter for new line</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="rounded-lg h-8 px-4 bg-amber-600 hover:bg-amber-700"
+                          onClick={addActiveVariant}
+                          disabled={!newVariantValue.trim()}
+                        >
+                          <Plus className="h-4 w-4 mr-1.5" />
+                          Add Variant
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview Card */}
+                {activeVariants.length > 0 && (
+                  <div className="mt-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Eye className="h-4 w-4 text-stone-400" />
+                      <span className="text-sm font-medium text-stone-600 dark:text-stone-400">Preview</span>
+                      <span className="text-xs text-stone-400">(random variant)</span>
+                    </div>
+                    <div className="rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200/50 dark:border-amber-800/50 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-amber-500/20">
+                          <BellRing className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold text-stone-900 dark:text-white">Aphylia</span>
+                            <span className="text-xs text-stone-400">now</span>
+                          </div>
+                          <p className="text-sm text-stone-700 dark:text-stone-300 break-words">
+                            {activeVariants[Math.floor(Math.random() * activeVariants.length)]
+                              .replace(/\{\{user\}\}/g, 'John')
+                              .replace(/\{\{email\}\}/g, 'john@example.com')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-          <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-stone-100 dark:border-[#2a2a2d] flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setTemplateSheetOpen(false)}
-              className="w-full sm:flex-1 rounded-xl h-10 text-sm order-2 sm:order-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveTemplate}
-              disabled={templateSaving}
-              className="w-full sm:flex-1 rounded-xl bg-amber-600 hover:bg-amber-700 h-10 text-sm order-1 sm:order-2"
-            >
-              {templateSaving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-              )}
-              {templateEditId ? 'Save Changes' : 'Create Template'}
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
