@@ -87,7 +87,7 @@ interface SwipePageProps {
   boostImagePriority?: boolean
 }
 
-export const SwipePage: React.FC<SwipePageProps> = ({
+const SwipePageComponent: React.FC<SwipePageProps> = ({
   current,
   index: _index,
   setIndex,
@@ -681,6 +681,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       </div>
     )
 }
+
+// ⚡ Bolt: Memoize SwipePage to prevent re-renders on every parent state change (e.g. auth dialog toggles)
+// The handlers (handlePass, onDragEnd, etc.) are stable in PlantSwipe thanks to currentRef optimization.
+export const SwipePage = React.memo(SwipePageComponent)
 
 const EmptyState = ({ onReset }: { onReset: () => void }) => {
   const { t } = useTranslation("common")
