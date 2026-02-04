@@ -8411,9 +8411,29 @@ app.get('/api/admin/notification-automations/monitoring', async (req, res) => {
     `
 
     const totalsRow = totalsRows?.[0] || {}
+    const recentRows = await sql`
+      select
+        un.id::text as id,
+        un.user_id::text as user_id,
+        un.automation_id::text as automation_id,
+        un.delivery_status,
+        un.delivery_error,
+        un.scheduled_for,
+        un.delivered_at,
+        a.display_name as automation_name
+      from public.user_notifications un
+      left join public.notification_automations a on a.id = un.automation_id
+      where un.automation_id is not null
+      order by un.scheduled_for desc nulls last
+      limit 60
+    `
+
     const monitoring = {
       windowHours,
       pushConfigured: pushNotificationsEnabled,
+      serverTime: new Date().toISOString(),
+      workerIntervalMs: notificationWorkerIntervalMs,
+      defaultTimezone: DEFAULT_USER_TIMEZONE,
       totals: {
         queued: Number(totalsRow.total || 0),
         sent: Number(totalsRow.sent || 0),
@@ -8435,6 +8455,16 @@ app.get('/api/admin/notification-automations/monitoring', async (req, res) => {
         pending: Number(row.pending || 0),
         noSubscription: Number(row.no_subscription || 0),
         lastQueuedAt: isoOrNull(row.last_queued_at),
+      })),
+      recentNotifications: (recentRows || []).map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        automationId: row.automation_id,
+        automationName: row.automation_name || null,
+        status: row.delivery_status || 'pending',
+        error: row.delivery_error || null,
+        scheduledFor: isoOrNull(row.scheduled_for),
+        deliveredAt: isoOrNull(row.delivered_at),
       })),
     }
 

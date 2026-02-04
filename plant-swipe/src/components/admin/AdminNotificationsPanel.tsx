@@ -102,6 +102,9 @@ type NotificationAutomation = {
 type AutomationMonitoring = {
   windowHours: number
   pushConfigured: boolean
+  serverTime: string
+  workerIntervalMs: number
+  defaultTimezone: string
   totals: {
     queued: number
     sent: number
@@ -123,6 +126,16 @@ type AutomationMonitoring = {
     pending: number
     noSubscription: number
     lastQueuedAt: string | null
+  }>
+  recentNotifications: Array<{
+    id: string
+    userId: string
+    automationId: string
+    automationName: string | null
+    status: string
+    error: string | null
+    scheduledFor: string | null
+    deliveredAt: string | null
   }>
 }
 
@@ -1141,6 +1154,15 @@ export function AdminNotificationsPanel() {
                       <span>
                         Last queued: <span className="font-medium text-stone-700 dark:text-stone-200">{formatDateTime(monitoringData.lastQueuedAt)}</span>
                       </span>
+                      <span>
+                        Server time: <span className="font-medium text-stone-700 dark:text-stone-200">{formatDateTime(monitoringData.serverTime)}</span>
+                      </span>
+                      <span>
+                        Worker interval: <span className="font-medium text-stone-700 dark:text-stone-200">{Math.round(monitoringData.workerIntervalMs / 1000)}s</span>
+                      </span>
+                      <span>
+                        Default TZ: <span className="font-medium text-stone-700 dark:text-stone-200">{monitoringData.defaultTimezone}</span>
+                      </span>
                     </div>
 
                     {monitoringData.failureReasons.length > 0 && (
@@ -1180,6 +1202,47 @@ export function AdminNotificationsPanel() {
                           </div>
                         ))}
                       </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-stone-600 dark:text-stone-300 mb-2">Recent deliveries</p>
+                      {monitoringData.recentNotifications.length === 0 ? (
+                        <p className="text-xs text-stone-500">No deliveries logged yet.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {monitoringData.recentNotifications.map((entry) => {
+                            const statusColor =
+                              entry.status === 'sent'
+                                ? 'text-emerald-600 dark:text-emerald-300'
+                                : entry.status === 'failed'
+                                  ? 'text-red-600 dark:text-red-300'
+                                  : 'text-amber-600 dark:text-amber-300'
+                            return (
+                              <div
+                                key={entry.id}
+                                className="rounded-xl border border-stone-200/70 bg-white/70 px-3 py-2 text-xs text-stone-600 dark:border-[#2a2a2d] dark:bg-[#151517] dark:text-stone-300"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={cn("font-semibold", statusColor)}>{entry.status}</span>
+                                  <span className="text-stone-400">•</span>
+                                  <span className="font-medium text-stone-800 dark:text-stone-100">
+                                    {entry.automationName || 'Automation'}
+                                  </span>
+                                  <span className="text-stone-400">•</span>
+                                  <span className="font-mono text-[11px]">
+                                    {entry.userId?.slice(0, 8)}…
+                                  </span>
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-stone-500">
+                                  <span>Scheduled: {formatDateTime(entry.scheduledFor)}</span>
+                                  <span>Delivered: {formatDateTime(entry.deliveredAt)}</span>
+                                  {entry.error && <span className="text-red-500">Error: {entry.error}</span>}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
