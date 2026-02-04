@@ -1,6 +1,7 @@
 import { mergeAttributes, Node } from "@tiptap/react"
 import { ReactNodeViewRenderer } from "@tiptap/react"
 import { ResizableImageNode as ResizableImageNodeComponent } from "./resizable-image-node"
+import { shouldStopNodeViewEvent } from "@/lib/tiptap-utils"
 
 export type ImageAlign = "left" | "center" | "right"
 
@@ -140,7 +141,9 @@ export const ResizableImageNode = Node.create<ResizableImageNodeOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(ResizableImageNodeComponent)
+    return ReactNodeViewRenderer(ResizableImageNodeComponent, {
+      stopEvent: ({ event }) => shouldStopNodeViewEvent(event),
+    })
   },
 
   addCommands() {

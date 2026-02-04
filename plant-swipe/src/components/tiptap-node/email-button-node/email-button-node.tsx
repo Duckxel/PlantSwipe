@@ -55,7 +55,10 @@ export function EmailButtonNode({ node, updateAttributes, selected }: NodeViewPr
     >
       <div className={`flex ${align === "center" ? "justify-center" : align === "right" ? "justify-end" : "justify-start"}`}>
         {isEditing ? (
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-lg dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
+          <div
+            className="w-full max-w-md space-y-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-lg dark:border-[#3e3e42] dark:bg-[#1a1a1d]"
+            contentEditable={false}
+          >
             <div className="space-y-2">
               <label className="text-xs font-medium text-stone-600 dark:text-stone-400">Button Text</label>
               <input

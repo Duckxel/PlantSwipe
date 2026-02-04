@@ -557,6 +557,7 @@ export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
     >
       <div
         className="tiptap-image-upload-mode-switch"
+        contentEditable={false}
         onClick={(event) => event.stopPropagation()}
       >
         <button
@@ -584,6 +585,7 @@ export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
       {mode === "link" && (
         <div
           className="tiptap-image-upload-link-panel"
+          contentEditable={false}
           onClick={(event) => event.stopPropagation()}
         >
           <div className="tiptap-image-upload-link-field">

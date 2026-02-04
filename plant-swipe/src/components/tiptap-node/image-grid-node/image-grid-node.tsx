@@ -522,7 +522,10 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
             )}
 
             {/* Controls toolbar */}
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 p-2 dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
+            <div
+              className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 p-2 dark:border-[#3e3e42] dark:bg-[#1a1a1d]"
+              contentEditable={false}
+            >
               {/* Left section: Add & Columns & Aspect Ratio */}
               <div className="flex items-center gap-2">
                 {/* Add more images */}

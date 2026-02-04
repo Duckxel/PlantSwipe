@@ -1,6 +1,7 @@
 import { mergeAttributes, Node } from "@tiptap/react"
 import { ReactNodeViewRenderer } from "@tiptap/react"
 import { EmailButtonNode as EmailButtonNodeComponent } from "./email-button-node"
+import { shouldStopNodeViewEvent } from "@/lib/tiptap-utils"
 
 export type ButtonStyle = "primary" | "secondary" | "outline" | "ghost"
 export type ButtonSize = "sm" | "md" | "lg"
@@ -117,7 +118,9 @@ export const EmailButtonNode = Node.create<EmailButtonNodeOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(EmailButtonNodeComponent)
+    return ReactNodeViewRenderer(EmailButtonNodeComponent, {
+      stopEvent: ({ event }) => shouldStopNodeViewEvent(event),
+    })
   },
 
   addCommands() {
