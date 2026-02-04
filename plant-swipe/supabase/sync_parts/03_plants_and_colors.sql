@@ -20,7 +20,7 @@
 --   infusion, aromatherapy
 --   melliferous, polenizer, be_fertilizer, conservation_status
 --   companions
---   status, admin_commentary, contributors, created_by, created_time, updated_by, updated_time
+--   status, admin_commentary, created_by, created_time, updated_by, updated_time
 --
 -- TRANSLATABLE FIELDS (stored ONLY in plant_translations):
 --   spice_mixes, pests, diseases (also kept in plants table for backward compatibility)
@@ -89,7 +89,6 @@ create table if not exists public.plants (
   -- Meta (non-translatable)
   status text check (status in ('in progres','rework','review','approved')),
   admin_commentary text,
-  contributors text[] not null default '{}'::text[],
   created_by text,
   created_time timestamptz not null default now(),
   updated_by text,
@@ -113,7 +112,6 @@ declare
     -- Meta columns
     array['status', 'text check (status in (''in progres'',''rework'',''review'',''approved''))'],
     array['admin_commentary', 'text'],
-    array['contributors', 'text[] not null default ''{}''::text[]'],
     array['given_names', 'text[] not null default ''{}'''],
     array['created_by', 'text'],
     array['created_time', 'timestamptz not null default now()'],
@@ -479,6 +477,29 @@ do $$ begin
     drop policy plant_watering_schedules_all on public.plant_watering_schedules;
   end if;
   create policy plant_watering_schedules_all on public.plant_watering_schedules for all to authenticated using (true) with check (true);
+end $$;
+
+-- ========== Plant contributors ==========
+create table if not exists public.plant_contributors (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  contributor_name text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists plant_contributors_plant_id_idx on public.plant_contributors(plant_id);
+create unique index if not exists plant_contributors_unique_name_idx on public.plant_contributors(plant_id, lower(contributor_name));
+alter table public.plant_contributors enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_contributors' and policyname='plant_contributors_select_all') then
+    drop policy plant_contributors_select_all on public.plant_contributors;
+  end if;
+  create policy plant_contributors_select_all on public.plant_contributors for select to authenticated, anon using (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_contributors' and policyname='plant_contributors_all') then
+    drop policy plant_contributors_all on public.plant_contributors;
+  end if;
+  create policy plant_contributors_all on public.plant_contributors for all to authenticated using (true) with check (true);
 end $$;
 
 -- ========== Plant infusion mixes ==========

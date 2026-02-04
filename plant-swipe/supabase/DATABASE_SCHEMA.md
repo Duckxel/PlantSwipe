@@ -28,7 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates
-- **Feb 4, 2026:** Added `plants.contributors` (text[]) to store contributor names.
+- **Feb 4, 2026:** Added `plant_contributors` table to store contributor names per plant.
 
 ### Required Extensions
 ```sql

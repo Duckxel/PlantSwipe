@@ -216,7 +216,8 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     imagesResult,
     schedulesResult,
     sourcesResult,
-    infusionMixResult
+    infusionMixResult,
+    contributorsResult,
   ] = await Promise.all([
     supabase
       .from('plant_translations')
@@ -228,7 +229,8 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     supabase.from('plant_images').select('id,link,use').eq('plant_id', id),
     supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id),
     supabase.from('plant_sources').select('id,name,url').eq('plant_id', id),
-    supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id)
+    supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id),
+    supabase.from('plant_contributors').select('contributor_name').eq('plant_id', id),
   ])
   
   const translation = translationResult.data || null
@@ -237,6 +239,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
   const schedules = schedulesResult.data
   const sources = sourcesResult.data
   const infusionMixRows = infusionMixResult.data
+  const contributorRows = contributorsResult.data
   
   // Fetch color translations for the target language (depends on colorLinks result)
   const colorIds = (colorLinks || []).map((c: any) => c.colors?.id).filter(Boolean)
@@ -392,7 +395,9 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     meta: {
       status: data.status || undefined,
       adminCommentary: data.admin_commentary || undefined,
-      contributors: Array.isArray(data.contributors) ? data.contributors : [],
+      contributors: (contributorRows || [])
+        .map((row: any) => row?.contributor_name)
+        .filter((name: any) => typeof name === 'string' && name.trim()),
       createdBy: data.created_by || undefined,
       createdTime: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,

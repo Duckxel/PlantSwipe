@@ -334,6 +334,20 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   if (error) throw new Error(error.message)
 }
 
+async function upsertContributors(plantId: string, contributors: string[]) {
+  await supabase.from('plant_contributors').delete().eq('plant_id', plantId)
+  if (!contributors.length) return
+  const rows = contributors
+    .filter((name) => typeof name === 'string' && name.trim())
+    .map((name) => ({
+      plant_id: plantId,
+      contributor_name: name.trim(),
+    }))
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_contributors').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
 async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string, string | undefined>) {
   await supabase.from('plant_infusion_mixes').delete().eq('plant_id', plantId)
   if (!infusionMix) return
@@ -665,7 +679,6 @@ export async function processPlantRequest(
       companions: plant.miscellaneous?.companions || [],
       status: normalizedStatus,
       admin_commentary: plant.meta?.adminCommentary || null,
-      contributors,
       created_by: createdBy || null,
       created_time: createdTimeValue,
       updated_by: createdBy || null,
@@ -695,6 +708,7 @@ export async function processPlantRequest(
       watering: { ...(plant.plantCare?.watering || {}), schedules: normalizedSchedules },
     })
     await upsertSources(plantId, sources)
+    await upsertContributors(plantId, contributors)
     await upsertInfusionMixes(plantId, plant.usage?.infusionMix)
     
     // Save English translation

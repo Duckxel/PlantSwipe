@@ -547,6 +547,20 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   if (error) throw new Error(error.message)
 }
 
+async function upsertContributors(plantId: string, contributors: string[]) {
+  await supabase.from('plant_contributors').delete().eq('plant_id', plantId)
+  if (!contributors.length) return
+  const rows = contributors
+    .filter((name) => typeof name === 'string' && name.trim())
+    .map((name) => ({
+      plant_id: plantId,
+      contributor_name: name.trim(),
+    }))
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_contributors').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
 function mapInfusionMixRows(rows?: Array<{ mix_name?: string | null; benefit?: string | null }> | null) {
   const result: Record<string, string> = {}
   if (!rows) return result
@@ -671,6 +685,10 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
   const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
+  const { data: contributorRows } = await supabase
+    .from('plant_contributors')
+    .select('contributor_name')
+    .eq('plant_id', id)
   const infusionMix = await fetchInfusionMixes(id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
   const sourceList = (sources || []).map((s) => ({ id: s.id, name: s.name, url: s.url }))
@@ -816,7 +834,9 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     meta: {
       status: formatStatusForUi(data.status),
       adminCommentary: data.admin_commentary || undefined,
-      contributors: Array.isArray(data.contributors) ? data.contributors : [],
+      contributors: (contributorRows || [])
+        .map((row: any) => row?.contributor_name)
+        .filter((name: any) => typeof name === 'string' && name.trim()),
       createdBy: data.created_by || undefined,
       createdAt: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,
@@ -1376,7 +1396,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             companions: plantToSave.miscellaneous?.companions || [],
             status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
-            contributors: contributorList,
             created_by: createdByValue,
             created_time: createdTimeValue,
             updated_by: updatedByValue,
@@ -1400,7 +1419,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             // Meta fields
             status: normalizedStatus,
             admin_commentary: plantToSave.meta?.adminCommentary || null,
-            contributors: contributorList,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
             // Non-translatable identity fields
@@ -1479,6 +1497,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules },
         })
         await upsertSources(savedId, sources)
+        await upsertContributors(savedId, contributorList)
         await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
         
         // Sync bidirectional companion relationships
