@@ -46,6 +46,16 @@ export function cn(
 }
 
 /**
+ * Prevent ProseMirror from hijacking form field events in NodeViews.
+ * This keeps inputs/selects editable in browsers like Firefox.
+ */
+export const shouldStopNodeViewEvent = (event: Event) => {
+  const target = event.target
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest("input, textarea, select"))
+}
+
+/**
  * Determines if the current platform is macOS
  * @returns boolean indicating if the current platform is Mac
  */

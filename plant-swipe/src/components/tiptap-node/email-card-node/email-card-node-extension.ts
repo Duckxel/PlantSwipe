@@ -1,6 +1,7 @@
 import { mergeAttributes, Node } from "@tiptap/react"
 import { ReactNodeViewRenderer } from "@tiptap/react"
 import { EmailCardNode as EmailCardNodeComponent } from "./email-card-node"
+import { shouldStopNodeViewEvent } from "@/lib/tiptap-utils"
 
 export type CardStyle = "default" | "highlight" | "code" | "warning" | "success" | "info"
 
@@ -13,12 +14,6 @@ export interface EmailCardAttributes {
   content: string
   style: CardStyle
   icon: string
-}
-
-const shouldStopEvent = (event: Event) => {
-  const target = event.target
-  if (!(target instanceof Element)) return false
-  return Boolean(target.closest("input, textarea, select"))
 }
 
 declare module "@tiptap/react" {
@@ -133,7 +128,7 @@ export const EmailCardNode = Node.create<EmailCardNodeOptions>({
 
   addNodeView() {
     return ReactNodeViewRenderer(EmailCardNodeComponent, {
-      stopEvent: ({ event }) => shouldStopEvent(event),
+      stopEvent: ({ event }) => shouldStopNodeViewEvent(event),
     })
   },
 

@@ -1,6 +1,7 @@
 import { mergeAttributes, Node } from "@tiptap/react"
 import { ReactNodeViewRenderer } from "@tiptap/react"
 import { CollapsibleNode as CollapsibleNodeComponent } from "./collapsible-node"
+import { shouldStopNodeViewEvent } from "@/lib/tiptap-utils"
 
 export type CollapsibleStyle = "default" | "info" | "tip" | "warning" | "note"
 
@@ -128,7 +129,9 @@ export const CollapsibleNode = Node.create<CollapsibleNodeOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(CollapsibleNodeComponent)
+    return ReactNodeViewRenderer(CollapsibleNodeComponent, {
+      stopEvent: ({ event }) => shouldStopNodeViewEvent(event),
+    })
   },
 
   addCommands() {

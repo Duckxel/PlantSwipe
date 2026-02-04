@@ -1,6 +1,7 @@
 import { mergeAttributes, Node } from "@tiptap/react"
 import { ReactNodeViewRenderer } from "@tiptap/react"
 import { ImageGridNode as ImageGridNodeComponent } from "./image-grid-node"
+import { shouldStopNodeViewEvent } from "@/lib/tiptap-utils"
 
 export type GridColumns = 2 | 3 | 4
 export type GridGap = "none" | "sm" | "md" | "lg"
@@ -293,7 +294,9 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(ImageGridNodeComponent)
+    return ReactNodeViewRenderer(ImageGridNodeComponent, {
+      stopEvent: ({ event }) => shouldStopNodeViewEvent(event),
+    })
   },
 
   addCommands() {

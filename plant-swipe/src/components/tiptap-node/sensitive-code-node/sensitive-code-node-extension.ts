@@ -1,6 +1,7 @@
 import { mergeAttributes, Node } from "@tiptap/react"
 import { ReactNodeViewRenderer } from "@tiptap/react"
 import { SensitiveCodeNode as SensitiveCodeNodeComponent } from "./sensitive-code-node"
+import { shouldStopNodeViewEvent } from "@/lib/tiptap-utils"
 
 export type CodeType = "otp" | "verification" | "password" | "link" | "email" | "code"
 
@@ -13,12 +14,6 @@ export interface SensitiveCodeAttributes {
   code: string
   type: CodeType
   expiryText: string
-}
-
-const shouldStopEvent = (event: Event) => {
-  const target = event.target
-  if (!(target instanceof Element)) return false
-  return Boolean(target.closest("input, textarea, select"))
 }
 
 declare module "@tiptap/react" {
@@ -159,7 +154,7 @@ export const SensitiveCodeNode = Node.create<SensitiveCodeNodeOptions>({
 
   addNodeView() {
     return ReactNodeViewRenderer(SensitiveCodeNodeComponent, {
-      stopEvent: ({ event }) => shouldStopEvent(event),
+      stopEvent: ({ event }) => shouldStopNodeViewEvent(event),
     })
   },
 

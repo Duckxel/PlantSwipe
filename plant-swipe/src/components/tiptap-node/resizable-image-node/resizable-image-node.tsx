@@ -169,9 +169,10 @@ export function ResizableImageNode({ node, updateAttributes, selected }: NodeVie
               </div>
 
               {/* Floating toolbar */}
-              <div 
+              <div
                 className="absolute left-1/2 -translate-x-1/2 z-20 animate-in fade-in slide-in-from-bottom-2 duration-200"
                 style={{ bottom: "-60px" }}
+                contentEditable={false}
               >
                 <div className="flex items-center gap-2 rounded-2xl border border-stone-200/80 bg-white/95 backdrop-blur-sm px-3 py-2 shadow-xl dark:border-[#3e3e42] dark:bg-[#1a1a1d]/95">
                   
