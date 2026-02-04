@@ -69,7 +69,7 @@ import { Link } from "@/components/i18n/Link"
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
 import { getDiscoveryPageImageUrl } from "@/lib/photos"
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils"
-import { resolveColorValue, DEFAULT_PLANT_COLOR } from "@/lib/colors"
+import { resolveColorValue } from "@/lib/colors"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 interface SwipePageProps {
