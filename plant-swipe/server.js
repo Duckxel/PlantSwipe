@@ -20635,7 +20635,7 @@ Be specific and reference what you actually see in the images. If you notice any
       messages.push({ role: 'user', content: textPrompt })
     }
 
-    const journalModel = photos.length > 0 ? 'gpt-4o' : 'gpt-4o-mini' // Use vision-capable model when we have images
+    const journalModel = photos.length > 0 ? openaiModel : openaiModelNano // Use larger model for vision, nano for text-only
     const completion = await openai.chat.completions.create({
       model: journalModel,
       messages,
