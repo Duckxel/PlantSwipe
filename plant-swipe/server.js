@@ -1252,6 +1252,46 @@ function checkRateLimit(action, req, res, user = null) {
 }
 
 /**
+ * Check rate limit AND record the attempt
+ * Returns true if request should be blocked, false if allowed
+ * Unlike checkRateLimit, this also records the current request for future checks
+ * @param {object} req - Express request object
+ * @param {object} res - Express response object
+ * @param {string} action - The action type
+ * @param {object|null} user - User object (if authenticated)
+ * @returns {boolean} - True if blocked (429 sent), false if allowed
+ */
+function checkAndRecordRateLimit(req, res, action, user = null) {
+  const store = rateLimitStores[action]
+  const config = rateLimitConfig[action]
+  
+  if (!store || !config) {
+    console.warn(`[rate-limit] Unknown action type: ${action}`)
+    return false
+  }
+  
+  const identifier = getRateLimitIdentifier(action, req, user)
+  const now = Date.now()
+  
+  // Get existing history and filter to window
+  const history = store.get(identifier) || []
+  const recent = history.filter((ts) => now - ts < config.windowMs)
+  
+  // Check if already rate limited
+  if (recent.length >= config.maxAttempts) {
+    console.log(`[rate-limit] ${action} rate limit exceeded for ${identifier} (${recent.length}/${config.maxAttempts})`)
+    res.status(429).json({ error: 'Too many requests. Please try again later.' })
+    return true
+  }
+  
+  // Record this attempt
+  recent.push(now)
+  store.set(identifier, recent)
+  
+  return false
+}
+
+/**
  * Periodically clean up old entries from rate limit stores
  * Runs every 10 minutes to prevent memory bloat
  */
