@@ -20,7 +20,7 @@
 --   infusion, aromatherapy
 --   melliferous, polenizer, be_fertilizer, conservation_status
 --   companions
---   status, admin_commentary, created_by, created_time, updated_by, updated_time
+--   status, admin_commentary, contributors, created_by, created_time, updated_by, updated_time
 --
 -- TRANSLATABLE FIELDS (stored ONLY in plant_translations):
 --   spice_mixes, pests, diseases (also kept in plants table for backward compatibility)
@@ -89,6 +89,7 @@ create table if not exists public.plants (
   -- Meta (non-translatable)
   status text check (status in ('in progres','rework','review','approved')),
   admin_commentary text,
+  contributors text[] not null default '{}'::text[],
   created_by text,
   created_time timestamptz not null default now(),
   updated_by text,
@@ -112,6 +113,7 @@ declare
     -- Meta columns
     array['status', 'text check (status in (''in progres'',''rework'',''review'',''approved''))'],
     array['admin_commentary', 'text'],
+    array['contributors', 'text[] not null default ''{}''::text[]'],
     array['given_names', 'text[] not null default ''{}'''],
     array['created_by', 'text'],
     array['created_time', 'timestamptz not null default now()'],

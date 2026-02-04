@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** February 3, 2026  
+> **Last Updated:** February 4, 2026  
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -26,6 +26,9 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Scheduled cron jobs** for maintenance tasks
 - **Custom functions/RPCs** for complex operations
 - **Real-time subscriptions** for live updates
+
+### Recent Updates
+- **Feb 4, 2026:** Added `plants.contributors` (text[]) to store contributor names.
 
 ### Required Extensions
 ```sql
