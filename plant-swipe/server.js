@@ -1047,6 +1047,21 @@ if (openaiApiKey) {
   console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')
 }
 
+// Helper to determine if a model requires max_completion_tokens instead of max_tokens
+// Newer models (gpt-5, o1, o3, etc.) use max_completion_tokens; older models use max_tokens
+function usesMaxCompletionTokens(model) {
+  const m = String(model || '').toLowerCase()
+  return m.startsWith('gpt-5') || m.startsWith('o1') || m.startsWith('o3') || m.includes('-5-') || m.includes('-5.')
+}
+
+// Helper to build the correct token limit parameter for a given model
+function getTokenLimitParam(model, tokens) {
+  if (usesMaxCompletionTokens(model)) {
+    return { max_completion_tokens: tokens }
+  }
+  return { max_tokens: tokens }
+}
+
 // Some deployments might lag behind on the latest schema additions for the
 // garden_ai_advice table. Track whether advanced context columns (weather,
 // journal, avg_completion_time, etc.) are available so queries can gracefully
@@ -19323,7 +19338,7 @@ Include specific observations from the photos in your advice.` }
           model: openaiModel, // Use the bigger model (same as AI Plant Fill)
           messages,
           temperature: 0.7,
-          max_tokens: useVision ? 3500 : 3000, // Increased for more comprehensive advice
+          ...getTokenLimitParam(openaiModel, useVision ? 3500 : 3000), // Increased for more comprehensive advice
         }
         // Only use json_object response format when not using vision (compatibility)
         if (!useVision) {
@@ -20620,11 +20635,12 @@ Be specific and reference what you actually see in the images. If you notice any
       messages.push({ role: 'user', content: textPrompt })
     }
 
+    const journalModel = photos.length > 0 ? 'gpt-4o' : 'gpt-4o-mini' // Use vision-capable model when we have images
     const completion = await openai.chat.completions.create({
-      model: photos.length > 0 ? 'gpt-4o' : 'gpt-4o-mini', // Use vision-capable model when we have images
+      model: journalModel,
       messages,
       temperature: 0.7,
-      max_tokens: photos.length > 0 ? 800 : 400,
+      ...getTokenLimitParam(journalModel, photos.length > 0 ? 800 : 400),
     })
 
     const feedback = completion.choices[0]?.message?.content
@@ -23763,7 +23779,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
             messages: messagesWithTools,
             tools: APHYLIA_TOOLS,
             tool_choice: 'auto',
-            max_tokens: 2048,
+            ...getTokenLimitParam(openaiModelNano, 2048),
             temperature: 0.7
           })
           
@@ -23821,7 +23837,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           model: openaiModelNano, // Use fast model for chat
           messages: messagesWithTools,
           stream: true,
-          max_tokens: 2048,
+          ...getTokenLimitParam(openaiModelNano, 2048),
           temperature: 0.7
         })
         
@@ -23874,7 +23890,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           messages: messagesWithTools,
           tools: APHYLIA_TOOLS,
           tool_choice: 'auto',
-          max_tokens: 2048,
+          ...getTokenLimitParam(openaiModel, 2048),
           temperature: 0.7
         })
         
@@ -23915,7 +23931,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       const response = await openai.chat.completions.create({
         model: openaiModelNano, // Use fast model for chat
         messages: messagesWithTools,
-        max_tokens: 2048,
+        ...getTokenLimitParam(openaiModelNano, 2048),
         temperature: 0.7
       })
       
