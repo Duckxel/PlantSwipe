@@ -1878,6 +1878,17 @@ export const AdminPage: React.FC = () => {
     requester_name: string | null;
     requester_email: string | null;
   };
+  type BulkPlantRequestSummary = {
+    totalInput: number;
+    uniqueCount: number;
+    duplicateCount: number;
+    addedCount: number;
+    skippedExistingCount: number;
+    errorCount: number;
+    addedSamples: string[];
+    skippedExistingSamples: string[];
+    errorSamples: Array<{ name: string; error: string }>;
+  };
   const [plantRequests, setPlantRequests] = React.useState<PlantRequestRow[]>(
     [],
   );
@@ -1911,6 +1922,29 @@ export const AdminPage: React.FC = () => {
   const [requestUsers, setRequestUsers] = React.useState<
     Array<{ id: string; display_name: string | null; email: string | null }>
   >([]);
+
+  // Bulk request state
+  const [bulkRequestDialogOpen, setBulkRequestDialogOpen] = React.useState(false);
+  const [bulkRequestInput, setBulkRequestInput] = React.useState("");
+  const [bulkRequestSubmitting, setBulkRequestSubmitting] = React.useState(false);
+  const [bulkRequestError, setBulkRequestError] = React.useState<string | null>(null);
+  const [bulkRequestSummary, setBulkRequestSummary] =
+    React.useState<BulkPlantRequestSummary | null>(null);
+  const [bulkRequestProgress, setBulkRequestProgress] = React.useState<{
+    current: number;
+    total: number;
+  }>({ current: 0, total: 0 });
+  const [bulkRequestStep, setBulkRequestStep] = React.useState<
+    "edit" | "review"
+  >("edit");
+  const [bulkRequestLiveResults, setBulkRequestLiveResults] = React.useState<
+    Array<{ name: string; status: "added" | "skipped" | "error"; error?: string }>
+  >([]);
+  const [bulkRequestLiveCounts, setBulkRequestLiveCounts] = React.useState({
+    added: 0,
+    skipped: 0,
+    error: 0,
+  });
   
   // Plant request editing state
   const [editingRequestId, setEditingRequestId] = React.useState<string | null>(null);
@@ -1921,6 +1955,35 @@ export const AdminPage: React.FC = () => {
     if (currentPath.includes("/admin/plants/requests")) return "requests";
     return "plants";
   }, [currentPath]);
+  const bulkRequestParsed = React.useMemo(() => {
+    const rawEntries = bulkRequestInput
+      .split(/[\n,]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    const seen = new Map<string, string>();
+    const duplicates: string[] = [];
+    rawEntries.forEach((name) => {
+      const normalized = name.toLowerCase().trim();
+      if (!normalized) return;
+      if (seen.has(normalized)) {
+        duplicates.push(name);
+      } else {
+        seen.set(normalized, name);
+      }
+    });
+    const items = Array.from(seen.entries()).map(([normalized, displayName]) => ({
+      displayName,
+      normalized,
+    }));
+    return {
+      rawCount: rawEntries.length,
+      uniqueCount: items.length,
+      duplicateCount: duplicates.length,
+      duplicateSamples: duplicates.slice(0, 6),
+      previewSamples: items.slice(0, 8).map((item) => item.displayName),
+      items,
+    };
+  }, [bulkRequestInput]);
   const [plantDashboardRows, setPlantDashboardRows] = React.useState<
     PlantDashboardRow[]
   >([]);
@@ -2332,6 +2395,156 @@ export const AdminPage: React.FC = () => {
       setTranslatingRequestId(null);
     }
   }, [supabase]);
+
+  const handleBulkRequestOpenChange = React.useCallback(
+    (open: boolean) => {
+      if (!open) {
+        if (bulkRequestSubmitting) return;
+        setBulkRequestError(null);
+        setBulkRequestSummary(null);
+        setBulkRequestProgress({ current: 0, total: 0 });
+        setBulkRequestInput("");
+        setBulkRequestStep("edit");
+        setBulkRequestLiveResults([]);
+        setBulkRequestLiveCounts({ added: 0, skipped: 0, error: 0 });
+        setBulkRequestDialogOpen(false);
+        return;
+      }
+      setBulkRequestStep("edit");
+      setBulkRequestDialogOpen(true);
+    },
+    [bulkRequestSubmitting],
+  );
+
+  const handleBulkRequestSubmit = React.useCallback(async () => {
+    if (!user?.id) {
+      setBulkRequestError("You must be signed in to add requests.");
+      return;
+    }
+    if (bulkRequestParsed.items.length === 0) {
+      setBulkRequestError("Add at least one plant name to continue.");
+      return;
+    }
+
+    setBulkRequestSubmitting(true);
+    setBulkRequestError(null);
+    setBulkRequestSummary(null);
+    setBulkRequestProgress({ current: 0, total: bulkRequestParsed.items.length });
+    setBulkRequestLiveResults([]);
+    setBulkRequestLiveCounts({ added: 0, skipped: 0, error: 0 });
+
+    try {
+      const existingNormalized = new Set<string>();
+      const chunkSize = 150;
+      for (let i = 0; i < bulkRequestParsed.items.length; i += chunkSize) {
+        const chunk = bulkRequestParsed.items
+          .slice(i, i + chunkSize)
+          .map((item) => item.normalized);
+        const { data, error } = await supabase
+          .from("requested_plants")
+          .select("plant_name_normalized")
+          .is("completed_at", null)
+          .in("plant_name_normalized", chunk);
+        if (error) throw new Error(error.message);
+        (data ?? []).forEach((row: any) => {
+          if (row?.plant_name_normalized) {
+            existingNormalized.add(String(row.plant_name_normalized));
+          }
+        });
+      }
+
+      const skippedExisting = new Set<string>();
+      const added: string[] = [];
+      const errors: Array<{ name: string; error: string }> = [];
+      let current = 0;
+      const recordStatus = (
+        name: string,
+        status: "added" | "skipped" | "error",
+        error?: string,
+      ) => {
+        setBulkRequestLiveResults((prev) => {
+          const next = [...prev, { name, status, error }];
+          if (next.length > 40) next.shift();
+          return next;
+        });
+        setBulkRequestLiveCounts((prev) => ({
+          added: prev.added + (status === "added" ? 1 : 0),
+          skipped: prev.skipped + (status === "skipped" ? 1 : 0),
+          error: prev.error + (status === "error" ? 1 : 0),
+        }));
+      };
+
+      for (const item of bulkRequestParsed.items) {
+        if (existingNormalized.has(item.normalized)) {
+          skippedExisting.add(item.displayName);
+          recordStatus(item.displayName, "skipped");
+          current += 1;
+          setBulkRequestProgress({
+            current,
+            total: bulkRequestParsed.items.length,
+          });
+          continue;
+        }
+
+        try {
+          // Insert directly to avoid rate-limited plant_request_users trigger.
+          const { error } = await supabase.from("requested_plants").insert({
+            plant_name: item.displayName,
+            plant_name_normalized: item.normalized,
+            requested_by: user.id,
+            request_count: 1,
+          });
+          if (error) {
+            const message = error.message || "Failed to add request";
+            if (
+              error.code === "23505" ||
+              message.includes("requested_plants_active_name_unique_idx")
+            ) {
+              skippedExisting.add(item.displayName);
+              recordStatus(item.displayName, "skipped");
+            } else {
+              errors.push({ name: item.displayName, error: message });
+              recordStatus(item.displayName, "error", message);
+            }
+          } else {
+            added.push(item.displayName);
+            recordStatus(item.displayName, "added");
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push({ name: item.displayName, error: msg });
+          recordStatus(item.displayName, "error", msg);
+        } finally {
+          current += 1;
+          setBulkRequestProgress({
+            current,
+            total: bulkRequestParsed.items.length,
+          });
+        }
+      }
+
+      setBulkRequestSummary({
+        totalInput: bulkRequestParsed.rawCount,
+        uniqueCount: bulkRequestParsed.uniqueCount,
+        duplicateCount: bulkRequestParsed.duplicateCount,
+        addedCount: added.length,
+        skippedExistingCount: skippedExisting.size,
+        errorCount: errors.length,
+        addedSamples: added.slice(0, 8),
+        skippedExistingSamples: Array.from(skippedExisting).slice(0, 8),
+        errorSamples: errors.slice(0, 5),
+      });
+
+      if (added.length > 0) {
+        await loadPlantRequests({ initial: false });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setBulkRequestError(msg);
+    } finally {
+      setBulkRequestSubmitting(false);
+    }
+  }, [bulkRequestParsed, loadPlantRequests, supabase, user?.id]);
 
   const handleOpenPlantEditor = React.useCallback(
     (plantId: string) => {
@@ -8218,7 +8431,7 @@ export const AdminPage: React.FC = () => {
                         ) : (
                       <Card className="rounded-2xl">
                       <CardContent className="p-4 space-y-4">
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-col gap-3">
                           <div>
                             <div className="text-sm font-medium">
                               Pending plant requests
@@ -8227,7 +8440,7 @@ export const AdminPage: React.FC = () => {
                               Sorted by request count and most recent updates.
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
                             <Button
                               variant="outline"
                               className="rounded-xl"
@@ -8270,6 +8483,17 @@ export const AdminPage: React.FC = () => {
                                 <span className="sm:hidden inline">AI Fill</span>
                               </Button>
                             )}
+                            <Button
+                              variant="outline"
+                              className="rounded-xl border-sky-200 dark:border-sky-800/50 bg-sky-50/70 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/30 shadow-sm"
+                              onClick={() => setBulkRequestDialogOpen(true)}
+                              disabled={bulkRequestSubmitting}
+                              title="Bulk add plant requests"
+                            >
+                              <ScrollText className="h-4 w-4 mr-2" />
+                              <span className="hidden sm:inline">Bulk Requests</span>
+                              <span className="sm:hidden inline">Bulk</span>
+                            </Button>
                             <div className="relative">
                               <div className="flex">
                                 <Button
@@ -8795,6 +9019,441 @@ export const AdminPage: React.FC = () => {
                       </CardContent>
                     </Card>
                         )}
+
+                    {/* Bulk Request Dialog */}
+                    <Dialog
+                      open={bulkRequestDialogOpen}
+                      onOpenChange={handleBulkRequestOpenChange}
+                    >
+                      <DialogContent className="rounded-2xl max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>Bulk Plant Requests</DialogTitle>
+                          <DialogDescription>
+                            Paste a list of plant names separated by commas or
+                            new lines. Each unique name will be added one by
+                            one without hitting request limits.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          {bulkRequestStep === "edit" ? (
+                            <>
+                              <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50/70 dark:bg-[#1e1e20] p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] uppercase tracking-wider font-medium text-stone-500 dark:text-stone-400">
+                                    Plant list
+                                  </span>
+                                  {bulkRequestParsed.rawCount > 0 && (
+                                    <span className="text-[11px] text-stone-400 dark:text-stone-500">
+                                      {bulkRequestParsed.rawCount} entries
+                                    </span>
+                                  )}
+                                </div>
+                                <Textarea
+                                  className="min-h-[220px] resize-y rounded-xl bg-white dark:bg-[#252528]"
+                                  placeholder={`Monstera deliciosa, Snake plant\nFiddle leaf fig`}
+                                  value={bulkRequestInput}
+                                  onChange={(e) => {
+                                    setBulkRequestInput(e.target.value);
+                                    if (bulkRequestError) setBulkRequestError(null);
+                                    if (bulkRequestSummary) setBulkRequestSummary(null);
+                                  }}
+                                  disabled={bulkRequestSubmitting}
+                                />
+                                <div className="text-xs text-stone-500 dark:text-stone-400">
+                                  Tip: One plant per line works best for long lists.
+                                </div>
+                              </div>
+
+                              <div className="grid gap-3 sm:grid-cols-3">
+                                <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252528] p-3">
+                                  <div className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500">
+                                    Unique
+                                  </div>
+                                  <div className="text-lg font-semibold text-stone-800 dark:text-stone-100">
+                                    {bulkRequestParsed.uniqueCount}
+                                  </div>
+                                </div>
+                                <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252528] p-3">
+                                  <div className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500">
+                                    Duplicates
+                                  </div>
+                                  <div className="text-lg font-semibold text-stone-800 dark:text-stone-100">
+                                    {bulkRequestParsed.duplicateCount}
+                                  </div>
+                                </div>
+                                <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252528] p-3">
+                                  <div className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500">
+                                    Ready
+                                  </div>
+                                  <div className="text-lg font-semibold text-stone-800 dark:text-stone-100">
+                                    {bulkRequestParsed.uniqueCount}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {bulkRequestParsed.previewSamples.length > 0 && (
+                                <div className="space-y-2">
+                                  <div className="text-xs font-medium text-stone-500 dark:text-stone-400">
+                                    Preview
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {bulkRequestParsed.previewSamples.map((name) => (
+                                      <span
+                                        key={name}
+                                        className="rounded-full bg-stone-100 dark:bg-[#2a2a2d] px-2.5 py-1 text-xs text-stone-600 dark:text-stone-300"
+                                      >
+                                        {name}
+                                      </span>
+                                    ))}
+                                    {bulkRequestParsed.uniqueCount > bulkRequestParsed.previewSamples.length && (
+                                      <span className="rounded-full bg-stone-100 dark:bg-[#2a2a2d] px-2.5 py-1 text-xs text-stone-500 dark:text-stone-400">
+                                        +{bulkRequestParsed.uniqueCount - bulkRequestParsed.previewSamples.length} more
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {bulkRequestParsed.duplicateCount > 0 && (
+                                <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/70 dark:bg-amber-900/20 p-3 space-y-2">
+                                  <div className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                    Duplicates will be skipped
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {bulkRequestParsed.duplicateSamples.map((name, idx) => (
+                                      <span
+                                        key={`${name}-${idx}`}
+                                        className="rounded-full bg-amber-100/80 dark:bg-amber-900/30 px-2.5 py-1 text-xs text-amber-700 dark:text-amber-200"
+                                      >
+                                        {name}
+                                      </span>
+                                    ))}
+                                    {bulkRequestParsed.duplicateCount > bulkRequestParsed.duplicateSamples.length && (
+                                      <span className="rounded-full bg-amber-100/80 dark:bg-amber-900/30 px-2.5 py-1 text-xs text-amber-600 dark:text-amber-200">
+                                        +{bulkRequestParsed.duplicateCount - bulkRequestParsed.duplicateSamples.length} more
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252528] p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] uppercase tracking-wider font-medium text-stone-500 dark:text-stone-400">
+                                    Separated plants
+                                  </span>
+                                  <span className="text-[11px] text-stone-400 dark:text-stone-500">
+                                    {bulkRequestParsed.uniqueCount} requests
+                                  </span>
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                  <div className="rounded-lg bg-stone-50 dark:bg-[#1e1e20] px-3 py-2">
+                                    <div className="text-[11px] text-stone-400 dark:text-stone-500">
+                                      Entries
+                                    </div>
+                                    <div className="font-semibold text-stone-700 dark:text-stone-200">
+                                      {bulkRequestParsed.rawCount}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg bg-stone-50 dark:bg-[#1e1e20] px-3 py-2">
+                                    <div className="text-[11px] text-stone-400 dark:text-stone-500">
+                                      Unique requests
+                                    </div>
+                                    <div className="font-semibold text-stone-700 dark:text-stone-200">
+                                      {bulkRequestParsed.uniqueCount}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg bg-stone-50 dark:bg-[#1e1e20] px-3 py-2">
+                                    <div className="text-[11px] text-stone-400 dark:text-stone-500">
+                                      Duplicates
+                                    </div>
+                                    <div className="font-semibold text-stone-700 dark:text-stone-200">
+                                      {bulkRequestParsed.duplicateCount}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="rounded-xl border border-stone-100 dark:border-[#2a2a2d] bg-stone-50/60 dark:bg-[#1e1e20] p-3">
+                                  <div className="text-xs text-stone-500 dark:text-stone-400 mb-2">
+                                    These are the requests that will be created:
+                                  </div>
+                                  <div className="max-h-64 overflow-y-auto divide-y divide-stone-100 dark:divide-[#2a2a2d]">
+                                    {bulkRequestParsed.items.map((item, idx) => (
+                                      <div
+                                        key={item.normalized}
+                                        className="flex items-center gap-3 py-2 text-sm"
+                                      >
+                                        <span className="w-6 text-right text-[11px] text-stone-400 dark:text-stone-500">
+                                          {idx + 1}
+                                        </span>
+                                        <span className="font-medium text-stone-700 dark:text-stone-200">
+                                          {item.displayName}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {bulkRequestParsed.duplicateCount > 0 && (
+                                <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/70 dark:bg-amber-900/20 p-3 space-y-2">
+                                  <div className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                    Duplicate entries will be ignored
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {bulkRequestParsed.duplicateSamples.map((name, idx) => (
+                                      <span
+                                        key={`${name}-${idx}`}
+                                        className="rounded-full bg-amber-100/80 dark:bg-amber-900/30 px-2.5 py-1 text-xs text-amber-700 dark:text-amber-200"
+                                      >
+                                        {name}
+                                      </span>
+                                    ))}
+                                    {bulkRequestParsed.duplicateCount > bulkRequestParsed.duplicateSamples.length && (
+                                      <span className="rounded-full bg-amber-100/80 dark:bg-amber-900/30 px-2.5 py-1 text-xs text-amber-600 dark:text-amber-200">
+                                        +{bulkRequestParsed.duplicateCount - bulkRequestParsed.duplicateSamples.length} more
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {bulkRequestSubmitting && bulkRequestProgress.total > 0 && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
+                                    <span>Creating requests...</span>
+                                    <span>
+                                      {bulkRequestProgress.current} / {bulkRequestProgress.total}
+                                    </span>
+                                  </div>
+                                  <div className="h-2 w-full rounded-full bg-stone-100 dark:bg-[#2a2a2d] overflow-hidden">
+                                    <div
+                                      className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 transition-all duration-300"
+                                      style={{
+                                        width: bulkRequestProgress.total > 0
+                                          ? `${Math.round(
+                                              (bulkRequestProgress.current / bulkRequestProgress.total) * 100,
+                                            )}%`
+                                          : "0%",
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {(bulkRequestSubmitting || bulkRequestLiveResults.length > 0) && (
+                                <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252528] p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
+                                    <span className="font-medium">Live results</span>
+                                    <span>
+                                      Added {bulkRequestLiveCounts.added} · Skipped{" "}
+                                      {bulkRequestLiveCounts.skipped} · Errors{" "}
+                                      {bulkRequestLiveCounts.error}
+                                    </span>
+                                  </div>
+                                  <div className="max-h-40 overflow-y-auto space-y-1 text-xs">
+                                    {bulkRequestLiveResults
+                                      .slice()
+                                      .reverse()
+                                      .map((entry, idx) => (
+                                        <div
+                                          key={`${entry.name}-${idx}`}
+                                          className="flex items-center justify-between rounded-lg bg-stone-50 dark:bg-[#1e1e20] px-2.5 py-1.5"
+                                        >
+                                          <span className="truncate text-stone-600 dark:text-stone-300">
+                                            {entry.name}
+                                          </span>
+                                          <span
+                                            className={`ml-3 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                              entry.status === "added"
+                                                ? "bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
+                                                : entry.status === "skipped"
+                                                  ? "bg-amber-100/80 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+                                                  : "bg-red-100/80 text-red-700 dark:bg-red-900/30 dark:text-red-200"
+                                            }`}
+                                            title={entry.error}
+                                          >
+                                            {entry.status === "added"
+                                              ? "Added"
+                                              : entry.status === "skipped"
+                                                ? "Skipped"
+                                                : "Error"}
+                                          </span>
+                                        </div>
+                                      ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {bulkRequestError && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
+                                  {bulkRequestError}
+                                </div>
+                              )}
+
+                              {bulkRequestSummary && (
+                                <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252528] p-4 space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+                                      Bulk request summary
+                                    </div>
+                                    <Badge variant="secondary" className="rounded-full text-xs">
+                                      {bulkRequestSummary.addedCount} added
+                                    </Badge>
+                                  </div>
+                                  <div className="grid gap-3 sm:grid-cols-3 text-sm">
+                                    <div className="rounded-lg bg-stone-50 dark:bg-[#1e1e20] px-3 py-2">
+                                      <div className="text-[11px] text-stone-400 dark:text-stone-500">
+                                        Added
+                                      </div>
+                                      <div className="font-semibold text-stone-700 dark:text-stone-200">
+                                        {bulkRequestSummary.addedCount}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-stone-50 dark:bg-[#1e1e20] px-3 py-2">
+                                      <div className="text-[11px] text-stone-400 dark:text-stone-500">
+                                        Already requested
+                                      </div>
+                                      <div className="font-semibold text-stone-700 dark:text-stone-200">
+                                        {bulkRequestSummary.skippedExistingCount}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-stone-50 dark:bg-[#1e1e20] px-3 py-2">
+                                      <div className="text-[11px] text-stone-400 dark:text-stone-500">
+                                        Errors
+                                      </div>
+                                      <div className="font-semibold text-stone-700 dark:text-stone-200">
+                                        {bulkRequestSummary.errorCount}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {bulkRequestSummary.addedSamples.length > 0 && (
+                                    <div className="space-y-2">
+                                      <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                        Added
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        {bulkRequestSummary.addedSamples.map((name) => (
+                                          <span
+                                            key={name}
+                                            className="rounded-full bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 text-xs text-emerald-700 dark:text-emerald-200"
+                                          >
+                                            {name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {bulkRequestSummary.skippedExistingSamples.length > 0 && (
+                                    <div className="space-y-2">
+                                      <div className="text-xs font-medium text-stone-500 dark:text-stone-400">
+                                        Already requested
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        {bulkRequestSummary.skippedExistingSamples.map((name) => (
+                                          <span
+                                            key={name}
+                                            className="rounded-full bg-stone-100 dark:bg-[#2a2a2d] px-2.5 py-1 text-xs text-stone-600 dark:text-stone-300"
+                                          >
+                                            {name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {bulkRequestSummary.errorSamples.length > 0 && (
+                                    <div className="space-y-2">
+                                      <div className="text-xs font-medium text-red-600 dark:text-red-300">
+                                        Errors
+                                      </div>
+                                      <div className="space-y-1 text-xs text-red-600 dark:text-red-300">
+                                        {bulkRequestSummary.errorSamples.map((entry, idx) => (
+                                          <div key={`${entry.name}-${idx}`}>
+                                            {entry.name}: {entry.error}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <DialogFooter>
+                          {bulkRequestStep === "edit" ? (
+                            <>
+                              <Button
+                                variant="secondary"
+                                onClick={() => handleBulkRequestOpenChange(false)}
+                                disabled={bulkRequestSubmitting}
+                                className="rounded-xl"
+                              >
+                                Close
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  setBulkRequestStep("review");
+                                  setBulkRequestError(null);
+                                  setBulkRequestSummary(null);
+                                  setBulkRequestProgress({ current: 0, total: 0 });
+                                  setBulkRequestLiveResults([]);
+                                  setBulkRequestLiveCounts({
+                                    added: 0,
+                                    skipped: 0,
+                                    error: 0,
+                                  });
+                                }}
+                                disabled={
+                                  bulkRequestSubmitting ||
+                                  bulkRequestParsed.uniqueCount === 0
+                                }
+                                className="rounded-xl"
+                              >
+                                Review
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                variant="secondary"
+                                onClick={() => {
+                                  if (bulkRequestSubmitting) return;
+                                  setBulkRequestStep("edit");
+                                  setBulkRequestError(null);
+                                  setBulkRequestSummary(null);
+                                  setBulkRequestProgress({ current: 0, total: 0 });
+                                  setBulkRequestLiveResults([]);
+                                  setBulkRequestLiveCounts({
+                                    added: 0,
+                                    skipped: 0,
+                                    error: 0,
+                                  });
+                                }}
+                                disabled={bulkRequestSubmitting}
+                                className="rounded-xl"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                onClick={handleBulkRequestSubmit}
+                                disabled={
+                                  bulkRequestSubmitting ||
+                                  bulkRequestParsed.uniqueCount === 0
+                                }
+                                className="rounded-xl"
+                              >
+                                {bulkRequestSubmitting ? "Adding..." : "Confirm & Add"}
+                              </Button>
+                            </>
+                          )}
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
 
                     {/* Info Dialog */}
                     <Dialog
