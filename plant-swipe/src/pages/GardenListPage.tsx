@@ -3,6 +3,7 @@ import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sprout } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -2282,9 +2283,26 @@ export const GardenListPage: React.FC = () => {
                   </div>
                 </Card>
               ) : (
-                <div className="opacity-60 text-sm">
-                  {t("garden.noGardens")}. {t("garden.createFirst")}
-                </div>
+                <Card className="rounded-[28px] border border-stone-200/80 dark:border-[#3e3e42]/80 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-8 max-w-md mx-auto shadow-[0_25px_70px_-40px_rgba(15,23,42,0.65)]">
+                  <div className="flex flex-col items-center text-center space-y-4">
+                    <div className="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-2">
+                      <Sprout className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-semibold">{t("garden.noGardens")}</h3>
+                      <p className="text-sm text-stone-600 dark:text-stone-400 max-w-[280px] mx-auto leading-relaxed">
+                        {t("garden.createFirst")}
+                      </p>
+                    </div>
+                    <Button
+                      className="rounded-2xl w-full max-w-xs mt-4 shadow-lg shadow-emerald-500/20"
+                      onClick={() => setOpen(true)}
+                      size="lg"
+                    >
+                      {t("garden.create")}
+                    </Button>
+                  </div>
+                </Card>
               )}
             </div>
           )}
