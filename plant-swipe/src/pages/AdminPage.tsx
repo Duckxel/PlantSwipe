@@ -8440,7 +8440,7 @@ export const AdminPage: React.FC = () => {
                               Sorted by request count and most recent updates.
                             </div>
                           </div>
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
                             <Button
                               variant="outline"
                               className="rounded-xl"
