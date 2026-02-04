@@ -81,17 +81,17 @@ EXCEPTION
   WHEN OTHERS THEN NULL; -- Ignore if job doesn't exist
 END $$;
 
-DO $$
+DO $outer$
 BEGIN
   PERFORM cron.schedule(
     'cleanup_expired_verification_codes',
     '30 2 * * *',
-    $$SELECT cleanup_expired_verification_codes();$$
+    'SELECT cleanup_expired_verification_codes();'
   );
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Failed to schedule cleanup_expired_verification_codes cron job: %', SQLERRM;
-END $$;
+END $outer$;
 
 -- Function to reset email_verified when user's email changes
 -- This is called from the frontend when email is updated
