@@ -24958,7 +24958,7 @@ async function processDueAutomations() {
               and (p.push_task_reminders is null or p.push_task_reminders = true)
               and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
-              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) =
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) >=
                 coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
               and not exists (
                 select 1 from public.user_notifications un
@@ -25000,7 +25000,7 @@ async function processDueAutomations() {
           if (!global[lastLogKey] || nowTs - global[lastLogKey] > 3600000) {
             // Log debug info about why there might be no recipients
             const logDetail = usesUserNotificationTime
-              ? 'No eligible recipients at preferred notification times'
+              ? 'No eligible recipients at/after preferred notification times'
               : `No eligible recipients at send_hour=${sendHour}`
             console.log(`[automations] ${automation.trigger_type}: ${logDetail}`)
             
@@ -25010,8 +25010,8 @@ async function processDueAutomations() {
                 const debugCount = await sql`
                   select count(distinct p.id)::bigint as total_with_tasks,
                          count(distinct case
-                           when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) =
-                                coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+                          when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) >=
+                               coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
                            then p.id
                          end)::bigint as at_preferred_hour
                   from public.profiles p
