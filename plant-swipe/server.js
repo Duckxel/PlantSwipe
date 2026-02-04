@@ -9315,21 +9315,35 @@ const DEFAULT_EMAIL_TRIGGERS = [
   },
 ]
 
+// Cache to prevent running ensureDefaultEmailTriggers on every request
+let defaultTriggersEnsured = false
+
 async function ensureDefaultEmailTriggers() {
+  // Only run once per server lifetime - triggers are seeded, not dynamic
+  if (defaultTriggersEnsured) return
   if (!sql) return
-  for (const trigger of DEFAULT_EMAIL_TRIGGERS) {
-    try {
-      await sql`
-        insert into public.admin_email_triggers (trigger_type, display_name, description)
-        values (${trigger.triggerType}, ${trigger.displayName}, ${trigger.description})
-        on conflict (trigger_type) do update
-          set display_name = excluded.display_name,
-              description = excluded.description,
-              updated_at = now()
-      `
-    } catch (err) {
-      console.error('[email-triggers] failed to upsert default trigger', trigger.triggerType, err)
-    }
+  
+  try {
+    // Use a single batch insert for better performance
+    const values = DEFAULT_EMAIL_TRIGGERS.map(t => 
+      `('${t.triggerType}', '${t.displayName.replace(/'/g, "''")}', '${(t.description || '').replace(/'/g, "''")}')`
+    ).join(',\n')
+    
+    await sql.unsafe(`
+      INSERT INTO public.admin_email_triggers (trigger_type, display_name, description)
+      VALUES ${values}
+      ON CONFLICT (trigger_type) DO UPDATE
+        SET display_name = EXCLUDED.display_name,
+            description = EXCLUDED.description,
+            updated_at = now()
+    `)
+    
+    defaultTriggersEnsured = true
+    console.log('[email-triggers] Default triggers ensured')
+  } catch (err) {
+    console.error('[email-triggers] Failed to ensure default triggers:', err?.message)
+    // Still mark as ensured to prevent retry loops - triggers likely already exist
+    defaultTriggersEnsured = true
   }
 }
 
@@ -9651,6 +9665,7 @@ app.post('/api/send-automatic-email', async (req, res) => {
  * @param options.extraContext - Additional variables: verification_link, reset_link, old_email, new_email, location, device, ip_address, timestamp
  */
 async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisplayName, userLanguage, extraContext = {} }) {
+  const startTime = Date.now()
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
   if (!apiKey) {
     console.error('[sendSecurityEmail] No Resend API key configured')
@@ -9665,7 +9680,11 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
   const lang = userLanguage || 'en'
 
   try {
+    console.log(`[sendSecurityEmail] Starting ${triggerType} for user ${userId?.slice(0, 8)}...`)
+    
     await ensureDefaultEmailTriggers()
+    console.log(`[sendSecurityEmail] Triggers ensured in ${Date.now() - startTime}ms`)
+    
     const triggerRows = await sql`
       select t.*, tpl.title as template_title, tpl.subject, tpl.body_html
       from public.admin_email_triggers t
@@ -9674,12 +9693,15 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
       limit 1
     `
 
+    console.log(`[sendSecurityEmail] Trigger lookup completed in ${Date.now() - startTime}ms`)
+
     if (!triggerRows || !triggerRows.length) {
       console.log(`[sendSecurityEmail] Trigger type "${triggerType}" not found`)
       return { sent: false, reason: 'Trigger not configured' }
     }
 
     const trigger = triggerRows[0]
+    console.log(`[sendSecurityEmail] Trigger "${triggerType}": enabled=${trigger.is_enabled}, template_id=${trigger.template_id}`)
 
     if (!trigger.is_enabled) {
       console.log(`[sendSecurityEmail] Trigger "${triggerType}" is disabled`)
@@ -9749,25 +9771,45 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
 
     const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
 
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: recipientEmail,
-        subject: subject,
-        html: html,
-        text: text,
-        headers: { 'X-Trigger-Type': triggerType, 'X-Security-Email': 'true' },
-        tags: [
-          { name: 'trigger_type', value: triggerType },
-          { name: 'category', value: 'security' }
-        ]
+    console.log(`[sendSecurityEmail] Prepared email in ${Date.now() - startTime}ms, sending via Resend...`)
+
+    // Add timeout to prevent hanging on slow Resend API
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+
+    let resendResponse
+    try {
+      resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: recipientEmail,
+          subject: subject,
+          html: html,
+          text: text,
+          headers: { 'X-Trigger-Type': triggerType, 'X-Security-Email': 'true' },
+          tags: [
+            { name: 'trigger_type', value: triggerType },
+            { name: 'category', value: 'security' }
+          ]
+        }),
+        signal: controller.signal
       })
-    })
+    } catch (fetchErr) {
+      clearTimeout(timeoutId)
+      if (fetchErr.name === 'AbortError') {
+        console.error(`[sendSecurityEmail] Resend API timeout after 15s`)
+        return { sent: false, reason: 'Email service timeout' }
+      }
+      throw fetchErr
+    }
+    clearTimeout(timeoutId)
+
+    console.log(`[sendSecurityEmail] Resend API responded in ${Date.now() - startTime}ms`)
 
     if (!resendResponse.ok) {
       const errorText = await resendResponse.text().catch(() => '')
@@ -9776,7 +9818,7 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
     }
 
     const resendData = await resendResponse.json().catch(() => ({}))
-    console.log(`[sendSecurityEmail] Sent "${triggerType}" to ${recipientEmail}, Resend ID: ${resendData.id || 'unknown'}`)
+    console.log(`[sendSecurityEmail] Sent "${triggerType}" to ${recipientEmail}, Resend ID: ${resendData.id || 'unknown'}, total time: ${Date.now() - startTime}ms`)
 
     // Log security email send (don't prevent duplicates, but do track)
     try {
