@@ -8424,6 +8424,7 @@ app.get('/api/admin/notification-automations/monitoring', async (req, res) => {
       from public.user_notifications un
       left join public.notification_automations a on a.id = un.automation_id
       where un.automation_id is not null
+        and un.scheduled_for >= now() - interval '3 days'
       order by un.scheduled_for desc nulls last
       limit 60
     `
@@ -15824,7 +15825,23 @@ cron.schedule('0 3 * * *', async () => {
   }
 
   try {
-    // 4. Delete old delivered notifications (older than 90 days)
+    // 4. Delete automation notification deliveries older than 3 days (monitoring only)
+    if (sql) {
+      const automationNotifResult = await sql`
+        DELETE FROM public.user_notifications
+        WHERE automation_id is not null
+          AND scheduled_for < NOW() - INTERVAL '3 days'
+      `
+      if (automationNotifResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${automationNotifResult.count} old automation notifications`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Automation notifications cleanup failed:', err?.message)
+  }
+
+  try {
+    // 5. Delete old delivered notifications (older than 90 days)
     if (sql) {
       const notifResult = await sql`
         DELETE FROM public.user_notifications
@@ -15840,7 +15857,7 @@ cron.schedule('0 3 * * *', async () => {
   }
 
   try {
-    // 5. Clean old GDPR audit logs (keep for 3 years as required by GDPR)
+    // 6. Clean old GDPR audit logs (keep for 3 years as required by GDPR)
     if (sql) {
       const auditResult = await sql`
         DELETE FROM public.gdpr_audit_log
@@ -15855,7 +15872,7 @@ cron.schedule('0 3 * * *', async () => {
   }
 
   try {
-    // 6. Clean up expired email verification codes
+    // 7. Clean up expired email verification codes
     const deletedCount = await cleanupExpiredVerificationCodes()
     if (deletedCount > 0) {
       console.log(`[gdpr] Deleted ${deletedCount} expired verification codes`)
