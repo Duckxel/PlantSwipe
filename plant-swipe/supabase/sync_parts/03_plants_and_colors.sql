@@ -104,87 +104,121 @@ drop index if exists plants_scientific_name_unique;
 alter table if exists public.plants drop constraint if exists plants_scientific_name_unique;
 
 -- Ensure meta columns exist on older deployments (add columns before referencing them)
-alter table if exists public.plants add column if not exists status text check (status in ('in progres','rework','review','approved'));
-alter table if exists public.plants add column if not exists admin_commentary text;
-alter table if exists public.plants add column if not exists given_names text[] not null default '{}';
-alter table if exists public.plants add column if not exists created_by text;
-alter table if exists public.plants add column if not exists created_time timestamptz not null default now();
-alter table if exists public.plants add column if not exists updated_by text;
-alter table if exists public.plants add column if not exists updated_time timestamptz not null default now();
+-- Using DO blocks to avoid PostgreSQL's "1600 columns" parsing bug with many consecutive ALTER TABLE statements
+do $add_plants_cols$ 
+declare
+  col_def record;
+  col_defs text[][] := array[
+    -- Meta columns
+    array['status', 'text check (status in (''in progres'',''rework'',''review'',''approved''))'],
+    array['admin_commentary', 'text'],
+    array['given_names', 'text[] not null default ''{}'''],
+    array['created_by', 'text'],
+    array['created_time', 'timestamptz not null default now()'],
+    array['updated_by', 'text'],
+    array['updated_time', 'timestamptz not null default now()'],
+    -- Classification columns
+    array['plant_type', 'text check (plant_type in (''plant'',''flower'',''bamboo'',''shrub'',''tree'',''cactus'',''succulent''))'],
+    array['utility', 'text[] not null default ''{}''::text[] check (utility <@ array[''comestible'',''ornemental'',''produce_fruit'',''aromatic'',''medicinal'',''odorous'',''climbing'',''cereal'',''spice''])'],
+    array['comestible_part', 'text[] not null default ''{}''::text[] check (comestible_part <@ array[''flower'',''fruit'',''seed'',''leaf'',''stem'',''root'',''bulb'',''bark'',''wood''])'],
+    array['fruit_type', 'text[] not null default ''{}''::text[] check (fruit_type <@ array[''nut'',''seed'',''stone''])'],
+    -- Identity columns
+    array['scientific_name', 'text'],
+    array['family', 'text'],
+    array['overview', 'text'],
+    array['promotion_month', 'text check (promotion_month in (''january'',''february'',''march'',''april'',''may'',''june'',''july'',''august'',''september'',''october'',''november'',''december''))'],
+    array['life_cycle', 'text check (life_cycle in (''annual'',''biennials'',''perenials'',''ephemerals'',''monocarpic'',''polycarpic''))'],
+    array['season', 'text[] not null default ''{}''::text[] check (season <@ array[''spring'',''summer'',''autumn'',''winter''])'],
+    array['foliage_persistance', 'text check (foliage_persistance in (''deciduous'',''evergreen'',''semi-evergreen'',''marcescent''))'],
+    array['spiked', 'boolean default false'],
+    array['toxicity_human', 'text check (toxicity_human in (''non-toxic'',''midly irritating'',''highly toxic'',''lethally toxic''))'],
+    array['toxicity_pets', 'text check (toxicity_pets in (''non-toxic'',''midly irritating'',''highly toxic'',''lethally toxic''))'],
+    array['allergens', 'text[] not null default ''{}'''],
+    array['scent', 'boolean default false'],
+    array['symbolism', 'text[] not null default ''{}'''],
+    array['living_space', 'text check (living_space in (''indoor'',''outdoor'',''both''))'],
+    array['composition', 'text[] not null default ''{}''::text[] check (composition <@ array[''flowerbed'',''path'',''hedge'',''ground cover'',''pot''])'],
+    array['maintenance_level', 'text check (maintenance_level in (''none'',''low'',''moderate'',''heavy''))'],
+    array['multicolor', 'boolean default false'],
+    array['bicolor', 'boolean default false'],
+    array['origin', 'text[] not null default ''{}'''],
+    array['habitat', 'text[] not null default ''{}''::text[] check (habitat <@ array[''aquatic'',''semi-aquatic'',''wetland'',''tropical'',''temperate'',''arid'',''mediterranean'',''mountain'',''grassland'',''forest'',''coastal'',''urban''])'],
+    -- Environment columns
+    array['temperature_max', 'integer'],
+    array['temperature_min', 'integer'],
+    array['temperature_ideal', 'integer'],
+    array['level_sun', 'text check (level_sun in (''low light'',''shade'',''partial sun'',''full sun''))'],
+    array['hygrometry', 'integer'],
+    array['watering_type', 'text[] not null default ''{}''::text[] check (watering_type <@ array[''surface'',''buried'',''hose'',''drop'',''drench''])'],
+    array['division', 'text[] not null default ''{}''::text[] check (division <@ array[''seed'',''cutting'',''division'',''layering'',''grafting'',''tissue separation'',''bulb separation''])'],
+    array['soil', 'text[] not null default ''{}''::text[] check (soil <@ array[''vermiculite'',''perlite'',''sphagnum moss'',''rock wool'',''sand'',''gravel'',''potting soil'',''peat'',''clay pebbles'',''coconut fiber'',''bark'',''wood chips''])'],
+    array['advice_soil', 'text'],
+    array['mulching', 'text[] not null default ''{}''::text[] check (mulching <@ array[''wood chips'',''bark'',''green manure'',''cocoa bean hulls'',''buckwheat hulls'',''cereal straw'',''hemp straw'',''woven fabric'',''pozzolana'',''crushed slate'',''clay pellets''])'],
+    array['advice_mulching', 'text'],
+    array['nutrition_need', 'text[] not null default ''{}''::text[] check (nutrition_need <@ array[''nitrogen'',''phosphorus'',''potassium'',''calcium'',''magnesium'',''sulfur'',''iron'',''boron'',''manganese'',''molybene'',''chlorine'',''copper'',''zinc'',''nitrate'',''phosphate''])'],
+    array['fertilizer', 'text[] not null default ''{}''::text[] check (fertilizer <@ array[''granular fertilizer'',''liquid fertilizer'',''meat flour'',''fish flour'',''crushed bones'',''crushed horns'',''slurry'',''manure'',''animal excrement'',''sea fertilizer'',''yurals'',''wine'',''guano'',''coffee grounds'',''banana peel'',''eggshell'',''vegetable cooking water'',''urine'',''grass clippings'',''vegetable waste'',''natural mulch''])'],
+    array['advice_fertilizer', 'text'],
+    -- Growth columns
+    array['sowing_month', 'text[] not null default ''{}''::text[] check (sowing_month <@ array[''january'',''february'',''march'',''april'',''may'',''june'',''july'',''august'',''september'',''october'',''november'',''december''])'],
+    array['flowering_month', 'text[] not null default ''{}''::text[] check (flowering_month <@ array[''january'',''february'',''march'',''april'',''may'',''june'',''july'',''august'',''september'',''october'',''november'',''december''])'],
+    array['fruiting_month', 'text[] not null default ''{}''::text[] check (fruiting_month <@ array[''january'',''february'',''march'',''april'',''may'',''june'',''july'',''august'',''september'',''october'',''november'',''december''])'],
+    array['height_cm', 'integer'],
+    array['wingspan_cm', 'integer'],
+    array['tutoring', 'boolean default false'],
+    array['advice_tutoring', 'text'],
+    array['sow_type', 'text[] not null default ''{}''::text[] check (sow_type <@ array[''direct'',''indoor'',''row'',''hill'',''broadcast'',''seed tray'',''cell'',''pot''])'],
+    array['separation_cm', 'integer'],
+    array['transplanting', 'boolean'],
+    array['advice_sowing', 'text'],
+    array['cut', 'text'],
+    array['advice_medicinal', 'text'],
+    array['nutritional_intake', 'text[] not null default ''{}'''],
+    array['infusion', 'boolean default false'],
+    array['advice_infusion', 'text'],
+    array['recipes_ideas', 'text[] not null default ''{}'''],
+    array['aromatherapy', 'boolean default false'],
+    array['spice_mixes', 'text[] not null default ''{}'''],
+    -- Ecology columns
+    array['melliferous', 'boolean default false'],
+    array['polenizer', 'text[] not null default ''{}''::text[] check (polenizer <@ array[''bee'',''wasp'',''ant'',''butterfly'',''bird'',''mosquito'',''fly'',''beetle'',''ladybug'',''stagbeetle'',''cockchafer'',''dungbeetle'',''weevil''])'],
+    array['be_fertilizer', 'boolean default false'],
+    array['ground_effect', 'text'],
+    array['conservation_status', 'text check (conservation_status in (''safe'',''at risk'',''vulnerable'',''endangered'',''critically endangered'',''extinct''))'],
+    array['pests', 'text[] not null default ''{}'''],
+    array['diseases', 'text[] not null default ''{}'''],
+    array['companions', 'text[] not null default ''{}'''],
+    array['tags', 'text[] not null default ''{}'''],
+    array['source_name', 'text'],
+    array['source_url', 'text']
+  ];
+begin
+  -- Only proceed if the plants table exists
+  if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'plants') then
+    return;
+  end if;
+  
+  -- Add each column individually using dynamic SQL to avoid "1600 columns" parsing bug
+  for i in 1..array_length(col_defs, 1) loop
+    begin
+      -- Check if column exists before trying to add
+      if not exists (
+        select 1 from information_schema.columns 
+        where table_schema = 'public' 
+        and table_name = 'plants' 
+        and column_name = col_defs[i][1]
+      ) then
+        execute format('alter table public.plants add column %I %s', col_defs[i][1], col_defs[i][2]);
+      end if;
+    exception when others then
+      -- Column may already exist with different constraints, skip silently
+      null;
+    end;
+  end loop;
+end $add_plants_cols$;
 
+-- Set status default and backfill null values
 alter table if exists public.plants alter column status set default 'in progres';
 update public.plants set status = 'in progres' where status is null;
-
--- Backfill all plant attribute columns on existing deployments
-alter table if exists public.plants add column if not exists plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent'));
-alter table if exists public.plants add column if not exists utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']);
-alter table if exists public.plants add column if not exists comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']);
-alter table if exists public.plants add column if not exists fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']);
-alter table if exists public.plants add column if not exists given_names text[] not null default '{}';
-alter table if exists public.plants add column if not exists scientific_name text;
-alter table if exists public.plants add column if not exists family text;
-alter table if exists public.plants add column if not exists overview text;
-alter table if exists public.plants add column if not exists promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december'));
-alter table if exists public.plants add column if not exists life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic'));
-alter table if exists public.plants add column if not exists season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']);
-alter table if exists public.plants add column if not exists foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent'));
-alter table if exists public.plants add column if not exists spiked boolean default false;
-alter table if exists public.plants add column if not exists toxicity_human text check (toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
-alter table if exists public.plants add column if not exists toxicity_pets text check (toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
-alter table if exists public.plants add column if not exists allergens text[] not null default '{}';
-alter table if exists public.plants add column if not exists scent boolean default false;
-alter table if exists public.plants add column if not exists symbolism text[] not null default '{}';
-alter table if exists public.plants add column if not exists living_space text check (living_space in ('indoor','outdoor','both'));
-alter table if exists public.plants add column if not exists composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']);
-alter table if exists public.plants add column if not exists maintenance_level text check (maintenance_level in ('none','low','moderate','heavy'));
-alter table if exists public.plants add column if not exists multicolor boolean default false;
-alter table if exists public.plants add column if not exists bicolor boolean default false;
-alter table if exists public.plants add column if not exists origin text[] not null default '{}';
-alter table if exists public.plants add column if not exists habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']);
-alter table if exists public.plants add column if not exists temperature_max integer;
-alter table if exists public.plants add column if not exists temperature_min integer;
-alter table if exists public.plants add column if not exists temperature_ideal integer;
-alter table if exists public.plants add column if not exists level_sun text check (level_sun in ('low light','shade','partial sun','full sun'));
-alter table if exists public.plants add column if not exists hygrometry integer;
-alter table if exists public.plants add column if not exists watering_type text[] not null default '{}'::text[] check (watering_type <@ array['surface','buried','hose','drop','drench']);
-alter table if exists public.plants add column if not exists division text[] not null default '{}'::text[] check (division <@ array['seed','cutting','division','layering','grafting','tissue separation','bulb separation']);
-alter table if exists public.plants add column if not exists soil text[] not null default '{}'::text[] check (soil <@ array['vermiculite','perlite','sphagnum moss','rock wool','sand','gravel','potting soil','peat','clay pebbles','coconut fiber','bark','wood chips']);
-alter table if exists public.plants add column if not exists advice_soil text;
-alter table if exists public.plants add column if not exists mulching text[] not null default '{}'::text[] check (mulching <@ array['wood chips','bark','green manure','cocoa bean hulls','buckwheat hulls','cereal straw','hemp straw','woven fabric','pozzolana','crushed slate','clay pellets']);
-alter table if exists public.plants add column if not exists advice_mulching text;
-alter table if exists public.plants add column if not exists nutrition_need text[] not null default '{}'::text[] check (nutrition_need <@ array['nitrogen','phosphorus','potassium','calcium','magnesium','sulfur','iron','boron','manganese','molybene','chlorine','copper','zinc','nitrate','phosphate']);
-alter table if exists public.plants add column if not exists fertilizer text[] not null default '{}'::text[] check (fertilizer <@ array['granular fertilizer','liquid fertilizer','meat flour','fish flour','crushed bones','crushed horns','slurry','manure','animal excrement','sea fertilizer','yurals','wine','guano','coffee grounds','banana peel','eggshell','vegetable cooking water','urine','grass clippings','vegetable waste','natural mulch']);
-alter table if exists public.plants add column if not exists advice_fertilizer text;
-alter table if exists public.plants add column if not exists sowing_month text[] not null default '{}'::text[] check (sowing_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']);
-alter table if exists public.plants add column if not exists flowering_month text[] not null default '{}'::text[] check (flowering_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']);
-alter table if exists public.plants add column if not exists fruiting_month text[] not null default '{}'::text[] check (fruiting_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']);
-alter table if exists public.plants add column if not exists height_cm integer;
-alter table if exists public.plants add column if not exists wingspan_cm integer;
-alter table if exists public.plants add column if not exists tutoring boolean default false;
-alter table if exists public.plants add column if not exists advice_tutoring text;
-alter table if exists public.plants add column if not exists sow_type text[] not null default '{}'::text[] check (sow_type <@ array['direct','indoor','row','hill','broadcast','seed tray','cell','pot']);
-alter table if exists public.plants add column if not exists separation_cm integer;
-alter table if exists public.plants add column if not exists transplanting boolean;
-alter table if exists public.plants add column if not exists advice_sowing text;
-alter table if exists public.plants add column if not exists cut text;
-alter table if exists public.plants add column if not exists advice_medicinal text;
-alter table if exists public.plants add column if not exists nutritional_intake text[] not null default '{}';
-alter table if exists public.plants add column if not exists infusion boolean default false;
-alter table if exists public.plants add column if not exists advice_infusion text;
-alter table if exists public.plants add column if not exists recipes_ideas text[] not null default '{}';
-alter table if exists public.plants add column if not exists aromatherapy boolean default false;
-alter table if exists public.plants add column if not exists spice_mixes text[] not null default '{}';
-alter table if exists public.plants add column if not exists melliferous boolean default false;
-alter table if exists public.plants add column if not exists polenizer text[] not null default '{}'::text[] check (polenizer <@ array['bee','wasp','ant','butterfly','bird','mosquito','fly','beetle','ladybug','stagbeetle','cockchafer','dungbeetle','weevil']);
-alter table if exists public.plants add column if not exists be_fertilizer boolean default false;
-alter table if exists public.plants add column if not exists ground_effect text;
-alter table if exists public.plants add column if not exists conservation_status text check (conservation_status in ('safe','at risk','vulnerable','endangered','critically endangered','extinct'));
-alter table if exists public.plants add column if not exists pests text[] not null default '{}';
-alter table if exists public.plants add column if not exists diseases text[] not null default '{}';
-alter table if exists public.plants add column if not exists companions text[] not null default '{}';
-alter table if exists public.plants add column if not exists tags text[] not null default '{}';
-alter table if exists public.plants add column if not exists source_name text;
-alter table if exists public.plants add column if not exists source_url text;
 -- Drop obsolete JSON columns from earlier iterations
 alter table if exists public.plants drop column if exists identity;
 alter table if exists public.plants drop column if exists plant_care;

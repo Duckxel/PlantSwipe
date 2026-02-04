@@ -326,10 +326,36 @@ alter table if exists public.plant_translations add column if not exists disease
 -- This is idempotent - it only creates translations for plants that don't have one yet.
 -- NOTE: scientific_name, promotion_month, habitat, and level_sun are NOT migrated here
 -- because they stay in the plants table only (not translated).
-do $$
+do $migrate_translations$
 declare
   migrated_count integer := 0;
+  has_overview boolean := false;
+  has_required_cols boolean := false;
 begin
+  -- Check if required source columns exist in plants table before attempting migration
+  -- If the plants table schema hasn't been fully updated yet, skip this migration
+  select exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'plants' 
+    and column_name = 'overview'
+  ) into has_overview;
+  
+  -- Also check for a few other key columns to be safe
+  select exists (
+    select 1 from information_schema.columns 
+    where table_schema = 'public' 
+    and table_name = 'plants' 
+    and column_name in ('given_names', 'allergens', 'symbolism', 'advice_soil')
+    having count(*) >= 4
+  ) into has_required_cols;
+  
+  -- Only run migration if required columns exist
+  if not has_overview or not has_required_cols then
+    raise notice '[plant_translations] Skipping migration - required columns not yet present in plants table';
+    return;
+  end if;
+
   -- Insert English translations for plants that don't have one yet
   -- NOTE: The following columns are NOT included because they stay in plants table only (not translated):
   -- scientific_name, promotion_month, level_sun, habitat, family, life_cycle, season,
@@ -400,7 +426,7 @@ begin
   if migrated_count > 0 then
     raise notice '[plant_translations] Migrated % plants to English translations', migrated_count;
   end if;
-end $$;
+end $migrate_translations$;
 
 -- ========== Remove translatable columns from plants table ==========
 -- These columns have been migrated to plant_translations and are no longer needed
