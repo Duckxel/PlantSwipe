@@ -393,9 +393,15 @@ export function SetupPage() {
       return
     }
     if (profile?.setup_completed) {
-      navigate('/discovery')
+      // If setup is complete but email not verified, redirect to email verification
+      // SECURITY: Use !== true to catch both false AND null/undefined values
+      if (profile?.email_verified !== true) {
+        navigate('/verify-email')
+      } else {
+        navigate('/discovery')
+      }
     }
-  }, [user, profile?.setup_completed, navigate])
+  }, [user, profile?.setup_completed, profile?.email_verified, navigate])
 
   // Close suggestions when clicking outside
   React.useEffect(() => {
@@ -628,7 +634,8 @@ export function SetupPage() {
       }
 
       await refreshProfile()
-      navigate('/discovery')
+      // Redirect to email verification as the final step
+      navigate('/verify-email')
     } catch (err) {
       console.error('[setup] Error completing setup:', err)
     } finally {

@@ -404,14 +404,24 @@ def _ensure_executable(path: str) -> None:
         pass
 
 
-def _sql_schema_path(repo_root: str) -> str:
-    # Monorepo layout: SQL lives under plant-swipe/supabase/000_sync_schema.sql
-    p1 = Path(repo_root) / "plant-swipe" / "supabase" / "000_sync_schema.sql"
-    if p1.is_file():
+def _sql_sync_parts_dir(repo_root: str) -> str:
+    """Get the path to the sync_parts directory containing split SQL files."""
+    # Monorepo layout: SQL lives under plant-swipe/supabase/sync_parts/
+    p1 = Path(repo_root) / "plant-swipe" / "supabase" / "sync_parts"
+    if p1.is_dir():
         return str(p1)
     # Fallback: try directly under repo_root/supabase
-    p2 = Path(repo_root) / "supabase" / "000_sync_schema.sql"
+    p2 = Path(repo_root) / "supabase" / "sync_parts"
     return str(p2)
+
+
+def _get_sql_files_in_order(sync_parts_dir: str) -> list:
+    """Get all SQL files from sync_parts directory, sorted by name."""
+    dir_path = Path(sync_parts_dir)
+    if not dir_path.is_dir():
+        return []
+    sql_files = sorted([f.name for f in dir_path.iterdir() if f.suffix == '.sql'])
+    return sql_files
 
 
 def _ensure_sslmode_in_url(db_url: str) -> str:
@@ -824,13 +834,20 @@ def reboot():
 def sync_schema():
     _verify_request()
     repo_root = _get_repo_root()
-    sql_path = _sql_schema_path(repo_root)
-    if not os.path.isfile(sql_path):
+    sync_parts_dir = _sql_sync_parts_dir(repo_root)
+    sql_files = _get_sql_files_in_order(sync_parts_dir)
+    
+    if not sql_files:
         try:
-            _log_admin_action("sync_schema_failed", detail={"error": "sync SQL not found", "path": sql_path})
+            _log_admin_action("sync_schema_failed", detail={"error": "sync_parts folder not found or empty", "path": sync_parts_dir})
         except Exception:
             pass
-        return jsonify({"ok": False, "error": f"sync SQL not found at {sql_path}"}), 500
+        return jsonify({
+            "ok": False, 
+            "error": f"sync_parts folder not found or empty at {sync_parts_dir}",
+            "detail": "The schema sync files are missing. Ensure supabase/sync_parts/ folder exists with SQL files.",
+            "path": sync_parts_dir
+        }), 500
 
     db_url = _build_database_url()
     if not db_url:
@@ -956,62 +973,128 @@ def sync_schema():
         return res
     
     try:
-        # Run psql with ON_ERROR_STOP for atomic failure
-        # Use -a (echo all commands) and -e (echo errors) for better debugging
-        # Remove -q to see all output
-        cmd = [
-            "psql",
-            db_url,
-            "-v", "ON_ERROR_STOP=1",
-            "-X",
-            "-a",  # Echo all commands
-            "-e",  # Echo errors
-            "-f", sql_path,
-        ]
+        import time
         
-        res = _run_psql_with_ssl_fallback(cmd, db_url, timeout_secs=180)
-        
-        # Prepare environment for potential follow-up psql calls (admin_secrets update)
-        # Use the same SSL settings as the main call to avoid certificate verification
+        # Prepare environment for psql calls
         psql_env = os.environ.copy()
         for key in list(psql_env.keys()):
             if key.startswith("PGSSL"):
                 del psql_env[key]
         psql_env["PGSSLMODE"] = "require"
         psql_env["PGSSLROOTCERT"] = "/nonexistent/.postgresql/root.crt"
-        out = (res.stdout or "")
-        err = (res.stderr or "")
         
-        # Check for errors even if returncode is 0 (some errors might not set it)
-        has_errors = res.returncode != 0 or "ERROR:" in out.upper() or "ERROR:" in err.upper()
+        # Execute each SQL file and track results
+        results = []
+        has_any_error = False
+        failed_file = None
+        failed_error = None
+        all_warnings = []
         
-        if has_errors or res.returncode != 0:
-            # Return more context for errors
-            full_output = out + "\n" + err if err else out
-            # Show last 100 lines for errors
-            tail = "\n".join(full_output.splitlines()[-100:])
+        for sql_file in sql_files:
+            sql_path = os.path.join(sync_parts_dir, sql_file)
+            start_time = time.time()
+            
+            # Run psql for this file
+            cmd = [
+                "psql",
+                db_url,
+                "-v", "ON_ERROR_STOP=1",
+                "-X",
+                "-q",  # Quiet mode for cleaner output
+                "-f", sql_path,
+            ]
+            
             try:
-                _log_admin_action("sync_schema_failed", detail={"error": "psql failed", "detail": tail, "returncode": res.returncode})
+                res = _run_psql_with_ssl_fallback(cmd, db_url, timeout_secs=60)
+                duration_ms = int((time.time() - start_time) * 1000)
+                
+                out = (res.stdout or "")
+                err = (res.stderr or "")
+                
+                # Check for errors
+                file_has_error = res.returncode != 0 or "ERROR:" in out.upper() or "ERROR:" in err.upper()
+                
+                if file_has_error:
+                    error_msg = err.strip() if err.strip() else out.strip()
+                    # Extract just the error line
+                    error_lines = [l for l in (out + "\n" + err).splitlines() if "ERROR:" in l.upper()]
+                    error_summary = error_lines[0] if error_lines else error_msg[:200]
+                    
+                    results.append({
+                        "file": sql_file,
+                        "status": "error",
+                        "duration": f"{duration_ms}ms",
+                        "error": error_summary,
+                        "detail": error_msg[:500] if len(error_msg) > 500 else error_msg
+                    })
+                    has_any_error = True
+                    if not failed_file:
+                        failed_file = sql_file
+                        failed_error = error_summary
+                else:
+                    results.append({
+                        "file": sql_file,
+                        "status": "success",
+                        "duration": f"{duration_ms}ms"
+                    })
+                    
+                    # Collect warnings
+                    for line in (out + "\n" + err).splitlines():
+                        if "WARNING:" in line.upper() or "NOTICE:" in line.upper():
+                            all_warnings.append(f"[{sql_file}] {line}")
+                            
+            except subprocess.TimeoutExpired:
+                duration_ms = int((time.time() - start_time) * 1000)
+                results.append({
+                    "file": sql_file,
+                    "status": "error",
+                    "duration": f"{duration_ms}ms",
+                    "error": "Timeout after 60 seconds"
+                })
+                has_any_error = True
+                if not failed_file:
+                    failed_file = sql_file
+                    failed_error = "Timeout"
+            except Exception as ex:
+                duration_ms = int((time.time() - start_time) * 1000)
+                results.append({
+                    "file": sql_file,
+                    "status": "error",
+                    "duration": f"{duration_ms}ms",
+                    "error": str(ex)
+                })
+                has_any_error = True
+                if not failed_file:
+                    failed_file = sql_file
+                    failed_error = str(ex)
+        
+        # Calculate summary
+        success_count = len([r for r in results if r["status"] == "success"])
+        error_count = len([r for r in results if r["status"] == "error"])
+        
+        if has_any_error:
+            try:
+                _log_admin_action("sync_schema_partial", detail={
+                    "results": results,
+                    "successCount": success_count,
+                    "errorCount": error_count,
+                    "failedFile": failed_file
+                })
             except Exception:
                 pass
             return jsonify({
-                "ok": False, 
-                "error": "psql failed", 
-                "detail": tail, 
-                "stdout": out, 
-                "stderr": err,
-                "returncode": res.returncode
+                "ok": False,
+                "error": f"Schema sync failed at: {failed_file}",
+                "message": f"{success_count}/{len(sql_files)} files succeeded",
+                "results": results,
+                "totalFiles": len(sql_files),
+                "successCount": success_count,
+                "errorCount": error_count,
+                "warnings": all_warnings[:20]  # Limit warnings
             }), 500
         
-        # Success - show more output for debugging
-        tail = "\n".join((out or "").splitlines()[-100:])  # Show more lines
-        stderr_tail = "\n".join((err or "").splitlines()[-50:]) if err else None
-        
-        # Check for warnings in output
-        warnings = []
-        for line in (out + "\n" + (err or "")).splitlines():
-            if "WARNING:" in line.upper() or "NOTICE:" in line.upper():
-                warnings.append(line)
+        # All files succeeded
+        warnings = all_warnings
 
         # --- POST-SYNC: Populate Admin Secrets ---
         try:
@@ -1042,15 +1125,22 @@ def sync_schema():
         # -----------------------------------------
         
         try:
-            _log_admin_action("sync_schema", detail={"stdoutTail": tail, "stderrTail": stderr_tail, "warnings": warnings})
+            _log_admin_action("sync_schema", detail={
+                "results": results,
+                "successCount": success_count,
+                "totalFiles": len(sql_files),
+                "warnings": warnings
+            })
         except Exception:
             pass
         return jsonify({
             "ok": True, 
-            "message": "Schema synchronized successfully", 
-            "stdoutTail": tail,
-            "stderr": stderr_tail,
-            "warnings": warnings
+            "message": f"Schema synchronized successfully ({len(sql_files)} files)",
+            "results": results,
+            "totalFiles": len(sql_files),
+            "successCount": success_count,
+            "errorCount": 0,
+            "warnings": warnings[:20]  # Limit warnings
         })
     except Exception as e:
         try:

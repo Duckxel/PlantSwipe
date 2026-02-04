@@ -1096,6 +1096,8 @@ const rateLimitStores = {
   translate: new Map(),      // Translation API
   imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
   bugReport: new Map(),      // Bug report submissions
+  emailVerifySend: new Map(),   // Email verification code sending
+  emailVerifyAttempt: new Map(), // Email verification code attempts (brute force protection)
   gardenActivity: new Map(), // Garden activity logging
   gardenJournal: new Map(),  // Journal entries
   pushNotify: new Map(),     // Push notification sending
@@ -1163,6 +1165,19 @@ const rateLimitConfig = {
     windowMs: 15 * 60 * 1000,  // 15 minutes
     maxAttempts: 10,
     perUser: false,  // Per IP to catch credential stuffing
+  },
+  // Email verification code sending: 5 per 15 minutes per user (prevent email spam)
+  emailVerifySend: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 5,
+    perUser: true,
+  },
+  // Email verification attempts: 10 per 15 minutes per user (brute force protection)
+  // With 6-char code (32^6 = 1B combinations), 10 attempts is negligible
+  emailVerifyAttempt: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 10,
+    perUser: true,
   },
 }
 
@@ -1233,6 +1248,46 @@ function checkRateLimit(action, req, res, user = null) {
     res.status(429).json({ error: 'Too many requests. Please try again later.' })
     return true
   }
+  return false
+}
+
+/**
+ * Check rate limit AND record the attempt
+ * Returns true if request should be blocked, false if allowed
+ * Unlike checkRateLimit, this also records the current request for future checks
+ * @param {object} req - Express request object
+ * @param {object} res - Express response object
+ * @param {string} action - The action type
+ * @param {object|null} user - User object (if authenticated)
+ * @returns {boolean} - True if blocked (429 sent), false if allowed
+ */
+function checkAndRecordRateLimit(req, res, action, user = null) {
+  const store = rateLimitStores[action]
+  const config = rateLimitConfig[action]
+  
+  if (!store || !config) {
+    console.warn(`[rate-limit] Unknown action type: ${action}`)
+    return false
+  }
+  
+  const identifier = getRateLimitIdentifier(action, req, user)
+  const now = Date.now()
+  
+  // Get existing history and filter to window
+  const history = store.get(identifier) || []
+  const recent = history.filter((ts) => now - ts < config.windowMs)
+  
+  // Check if already rate limited
+  if (recent.length >= config.maxAttempts) {
+    console.log(`[rate-limit] ${action} rate limit exceeded for ${identifier} (${recent.length}/${config.maxAttempts})`)
+    res.status(429).json({ error: 'Too many requests. Please try again later.' })
+    return true
+  }
+  
+  // Record this attempt
+  recent.push(now)
+  store.set(identifier, recent)
+  
   return false
 }
 
@@ -6144,42 +6199,152 @@ async function handleSyncSchema(req, res) {
       return
     }
 
-    const sqlPath = path.resolve(__dirname, 'supabase', '000_sync_schema.sql')
-    const sqlText = await fs.readFile(sqlPath, 'utf8')
+    // Read all SQL files from sync_parts folder and execute them in order
+    const syncPartsDir = path.resolve(__dirname, 'supabase', 'sync_parts')
+    let sqlFiles = []
+    
+    console.log(`[sync-schema] Looking for SQL files in: ${syncPartsDir}`)
+    
+    try {
+      const files = await fs.readdir(syncPartsDir)
+      sqlFiles = files
+        .filter(f => f.endsWith('.sql'))
+        .sort() // Sort alphabetically to ensure correct order (01_, 02_, etc.)
+      console.log(`[sync-schema] Found ${sqlFiles.length} SQL files: ${sqlFiles.join(', ')}`)
+    } catch (dirErr) {
+      console.error(`[sync-schema] ERROR: sync_parts folder not found at ${syncPartsDir}`)
+      console.error(`[sync-schema] Directory error: ${dirErr?.message}`)
+      res.status(500).json({ 
+        ok: false,
+        error: `sync_parts folder not found at ${syncPartsDir}`,
+        detail: 'The schema sync files are missing. Please ensure the supabase/sync_parts/ folder exists with SQL files.',
+        path: syncPartsDir
+      })
+      return
+    }
 
-    // Execute allowing multiple statements
-    await sql.unsafe(sqlText, [], { simple: true })
+    if (sqlFiles.length === 0) {
+      console.error(`[sync-schema] ERROR: No SQL files found in ${syncPartsDir}`)
+      res.status(500).json({ 
+        ok: false,
+        error: 'No SQL files found in sync_parts folder',
+        detail: 'The sync_parts folder exists but contains no .sql files.',
+        path: syncPartsDir
+      })
+      return
+    }
 
-    // Ensure critical tables that power new features exist even if the SQL script was partially applied.
-    await ensureRequestedPlantsSchema()
-    await ensurePlantTranslationsSchema()
+    // Execute each file and track results
+    const results = []
+    let hasError = false
+    let failedFile = null
+    let failedError = null
+
+    console.log(`[sync-schema] Starting schema sync with ${sqlFiles.length} files...`)
+
+    for (const file of sqlFiles) {
+      const filePath = path.join(syncPartsDir, file)
+      const startTime = Date.now()
+      
+      try {
+        console.log(`[sync-schema] Executing: ${file}`)
+        const sqlText = await fs.readFile(filePath, 'utf8')
+        await sql.unsafe(sqlText, [], { simple: true })
+        const duration = Date.now() - startTime
+        results.push({ file, status: 'success', duration: `${duration}ms` })
+        console.log(`[sync-schema] ✓ ${file} completed in ${duration}ms`)
+      } catch (fileErr) {
+        const duration = Date.now() - startTime
+        const errorMessage = fileErr?.message || String(fileErr)
+        // Extract PostgreSQL error details if available
+        const errorDetail = fileErr?.detail || null
+        const errorHint = fileErr?.hint || null
+        const errorPosition = fileErr?.position || null
+        
+        results.push({ 
+          file, 
+          status: 'error', 
+          duration: `${duration}ms`,
+          error: errorMessage,
+          detail: errorDetail,
+          hint: errorHint,
+          position: errorPosition
+        })
+        
+        console.error(`[sync-schema] ✗ ${file} FAILED after ${duration}ms:`)
+        console.error(`[sync-schema]   Error: ${errorMessage}`)
+        if (errorDetail) console.error(`[sync-schema]   Detail: ${errorDetail}`)
+        if (errorHint) console.error(`[sync-schema]   Hint: ${errorHint}`)
+        if (errorPosition) console.error(`[sync-schema]   Position: ${errorPosition}`)
+        
+        hasError = true
+        failedFile = file
+        failedError = errorMessage
+        // Continue with remaining files to see if they have errors too
+      }
+    }
+
+    // Ensure critical tables exist even if some scripts failed
+    try {
+      await ensureRequestedPlantsSchema()
+      await ensurePlantTranslationsSchema()
+    } catch (ensureErr) {
+      console.error('[sync-schema] Failed to ensure critical schemas:', ensureErr?.message)
+    }
 
     // Verify important objects exist after sync
     let summary = null
     try { summary = await verifySchemaAfterSync() } catch { }
 
-    // Log admin action (success)
+    // Log admin action
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
-      const detail = { summary }
-      let logged = false
+      const detail = { 
+        results, 
+        summary, 
+        hasError, 
+        failedFile,
+        totalFiles: sqlFiles.length,
+        successCount: results.filter(r => r.status === 'success').length,
+        errorCount: results.filter(r => r.status === 'error').length
+      }
+      const action = hasError ? 'sync_schema_partial' : 'sync_schema'
       if (sql) {
         try {
-          await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'sync_schema', null, ${sql.json(detail)})`
-          logged = true
-        } catch { }
-      }
-      if (!logged) {
-        try {
-          await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: null, action: 'sync_schema', target: null, detail })
+          await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, ${action}, null, ${sql.json(detail)})`
         } catch { }
       }
     } catch { }
 
-    res.json({ ok: true, message: 'Schema synchronized successfully', summary })
+    // Return detailed results
+    if (hasError) {
+      console.log(`[sync-schema] Completed with errors. ${results.filter(r => r.status === 'success').length}/${sqlFiles.length} files succeeded.`)
+      res.status(500).json({ 
+        ok: false, 
+        message: `Schema sync failed at: ${failedFile}`,
+        error: failedError,
+        results,
+        summary,
+        totalFiles: sqlFiles.length,
+        successCount: results.filter(r => r.status === 'success').length,
+        errorCount: results.filter(r => r.status === 'error').length
+      })
+    } else {
+      console.log(`[sync-schema] All ${sqlFiles.length} files executed successfully.`)
+      res.json({ 
+        ok: true, 
+        message: `Schema synchronized successfully (${sqlFiles.length} files)`,
+        results,
+        summary,
+        totalFiles: sqlFiles.length,
+        successCount: sqlFiles.length,
+        errorCount: 0
+      })
+    }
   } catch (e) {
     // Log failure
+    console.error('[sync-schema] Critical error:', e?.message || e)
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
@@ -9156,11 +9321,6 @@ const DEFAULT_EMAIL_TRIGGERS = [
   },
   // Security Emails - Email Change
   {
-    triggerType: 'EMAIL_CHANGE_VERIFICATION',
-    displayName: 'Email Change Verification',
-    description: 'Sent to the NEW email address with a verification link when user requests to change their email. Variables: {{url}}, {{new_email}}, {{old_email}}',
-  },
-  {
     triggerType: 'EMAIL_CHANGE_NOTIFICATION',
     displayName: 'Email Changed Notification',
     description: 'Sent to the OLD email address to inform that the email has been changed. Variables: {{new_email}}, {{old_email}}, {{time}}',
@@ -9187,23 +9347,43 @@ const DEFAULT_EMAIL_TRIGGERS = [
     displayName: 'New Device Login',
     description: 'Sent when user logs in from a new device. Variables: {{device}}, {{location}}, {{ip_address}}, {{time}}',
   },
+  // Email Verification
+  {
+    triggerType: 'EMAIL_VERIFICATION',
+    displayName: 'Email Verification Code',
+    description: 'Sent when user needs to verify their email address (after setup). Contains a 6-character verification code. Variables: {{code}}, {{user}}, {{email}}',
+  },
 ]
 
+// Cache to prevent running ensureDefaultEmailTriggers on every request
+let defaultTriggersEnsured = false
+
 async function ensureDefaultEmailTriggers() {
+  // Only run once per server lifetime - triggers are seeded, not dynamic
+  if (defaultTriggersEnsured) return
   if (!sql) return
-  for (const trigger of DEFAULT_EMAIL_TRIGGERS) {
-    try {
-      await sql`
-        insert into public.admin_email_triggers (trigger_type, display_name, description)
-        values (${trigger.triggerType}, ${trigger.displayName}, ${trigger.description})
-        on conflict (trigger_type) do update
-          set display_name = excluded.display_name,
-              description = excluded.description,
-              updated_at = now()
-      `
-    } catch (err) {
-      console.error('[email-triggers] failed to upsert default trigger', trigger.triggerType, err)
-    }
+  
+  try {
+    // Use a single batch insert for better performance
+    const values = DEFAULT_EMAIL_TRIGGERS.map(t => 
+      `('${t.triggerType}', '${t.displayName.replace(/'/g, "''")}', '${(t.description || '').replace(/'/g, "''")}')`
+    ).join(',\n')
+    
+    await sql.unsafe(`
+      INSERT INTO public.admin_email_triggers (trigger_type, display_name, description)
+      VALUES ${values}
+      ON CONFLICT (trigger_type) DO UPDATE
+        SET display_name = EXCLUDED.display_name,
+            description = EXCLUDED.description,
+            updated_at = now()
+    `)
+    
+    defaultTriggersEnsured = true
+    console.log('[email-triggers] Default triggers ensured')
+  } catch (err) {
+    console.error('[email-triggers] Failed to ensure default triggers:', err?.message)
+    // Still mark as ensured to prevent retry loops - triggers likely already exist
+    defaultTriggersEnsured = true
   }
 }
 
@@ -9517,7 +9697,7 @@ app.post('/api/send-automatic-email', async (req, res) => {
  * - Supports extra context variables for security info
  * - Can send to any email address (important for email change notifications)
  * 
- * @param triggerType - The trigger type (e.g., 'PASSWORD_RESET_REQUEST', 'EMAIL_CHANGE_VERIFICATION')
+ * @param triggerType - The trigger type (e.g., 'PASSWORD_RESET_REQUEST', 'EMAIL_VERIFICATION')
  * @param options.recipientEmail - Email address to send to (may differ from user's current email)
  * @param options.userId - User ID for logging
  * @param options.userDisplayName - User's display name for {{user}} variable
@@ -9525,6 +9705,7 @@ app.post('/api/send-automatic-email', async (req, res) => {
  * @param options.extraContext - Additional variables: verification_link, reset_link, old_email, new_email, location, device, ip_address, timestamp
  */
 async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisplayName, userLanguage, extraContext = {} }) {
+  const startTime = Date.now()
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
   if (!apiKey) {
     console.error('[sendSecurityEmail] No Resend API key configured')
@@ -9539,7 +9720,11 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
   const lang = userLanguage || 'en'
 
   try {
+    console.log(`[sendSecurityEmail] Starting ${triggerType} for user ${userId?.slice(0, 8)}...`)
+    
     await ensureDefaultEmailTriggers()
+    console.log(`[sendSecurityEmail] Triggers ensured in ${Date.now() - startTime}ms`)
+    
     const triggerRows = await sql`
       select t.*, tpl.title as template_title, tpl.subject, tpl.body_html
       from public.admin_email_triggers t
@@ -9548,12 +9733,15 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
       limit 1
     `
 
+    console.log(`[sendSecurityEmail] Trigger lookup completed in ${Date.now() - startTime}ms`)
+
     if (!triggerRows || !triggerRows.length) {
       console.log(`[sendSecurityEmail] Trigger type "${triggerType}" not found`)
       return { sent: false, reason: 'Trigger not configured' }
     }
 
     const trigger = triggerRows[0]
+    console.log(`[sendSecurityEmail] Trigger "${triggerType}": enabled=${trigger.is_enabled}, template_id=${trigger.template_id}`)
 
     if (!trigger.is_enabled) {
       console.log(`[sendSecurityEmail] Trigger "${triggerType}" is disabled`)
@@ -9623,25 +9811,45 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
 
     const fromEmail = process.env.EMAIL_CAMPAIGN_FROM || process.env.RESEND_FROM || 'Aphylia <info@aphylia.app>'
 
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: recipientEmail,
-        subject: subject,
-        html: html,
-        text: text,
-        headers: { 'X-Trigger-Type': triggerType, 'X-Security-Email': 'true' },
-        tags: [
-          { name: 'trigger_type', value: triggerType },
-          { name: 'category', value: 'security' }
-        ]
+    console.log(`[sendSecurityEmail] Prepared email in ${Date.now() - startTime}ms, sending via Resend...`)
+
+    // Add timeout to prevent hanging on slow Resend API
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+
+    let resendResponse
+    try {
+      resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: recipientEmail,
+          subject: subject,
+          html: html,
+          text: text,
+          headers: { 'X-Trigger-Type': triggerType, 'X-Security-Email': 'true' },
+          tags: [
+            { name: 'trigger_type', value: triggerType },
+            { name: 'category', value: 'security' }
+          ]
+        }),
+        signal: controller.signal
       })
-    })
+    } catch (fetchErr) {
+      clearTimeout(timeoutId)
+      if (fetchErr.name === 'AbortError') {
+        console.error(`[sendSecurityEmail] Resend API timeout after 15s`)
+        return { sent: false, reason: 'Email service timeout' }
+      }
+      throw fetchErr
+    }
+    clearTimeout(timeoutId)
+
+    console.log(`[sendSecurityEmail] Resend API responded in ${Date.now() - startTime}ms`)
 
     if (!resendResponse.ok) {
       const errorText = await resendResponse.text().catch(() => '')
@@ -9650,7 +9858,7 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
     }
 
     const resendData = await resendResponse.json().catch(() => ({}))
-    console.log(`[sendSecurityEmail] Sent "${triggerType}" to ${recipientEmail}, Resend ID: ${resendData.id || 'unknown'}`)
+    console.log(`[sendSecurityEmail] Sent "${triggerType}" to ${recipientEmail}, Resend ID: ${resendData.id || 'unknown'}, total time: ${Date.now() - startTime}ms`)
 
     // Log security email send (don't prevent duplicates, but do track)
     try {
@@ -9687,12 +9895,12 @@ app.post('/api/send-security-email', async (req, res) => {
 
   // Validate trigger type is a security-related trigger
   const securityTriggers = [
-    'EMAIL_CHANGE_VERIFICATION',
     'EMAIL_CHANGE_NOTIFICATION', 
     'PASSWORD_RESET_REQUEST',
     'PASSWORD_CHANGE_CONFIRMATION',
     'SUSPICIOUS_LOGIN_ALERT',
-    'NEW_DEVICE_LOGIN'
+    'NEW_DEVICE_LOGIN',
+    'EMAIL_VERIFICATION'
   ]
 
   if (!securityTriggers.includes(triggerType)) {
@@ -9718,6 +9926,287 @@ app.post('/api/send-security-email', async (req, res) => {
     : 200
   res.status(status).json(result)
 })
+
+// =============================================================================
+// EMAIL VERIFICATION - OTP-based email verification system
+// Codes are 6 alphanumeric characters and expire after 5 minutes
+// =============================================================================
+
+/**
+ * Generate a 6-character alphanumeric verification code
+ * Uses uppercase letters and numbers for better readability
+ */
+function generateVerificationCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Exclude confusing chars: I, O, 0, 1
+  let code = ''
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
+
+/**
+ * Send email verification code to user
+ * Creates a new code in the database and sends it via email
+ * SECURITY: Rate limited to 5 requests per 15 minutes per user
+ * SECURITY: CSRF protected
+ */
+app.post('/api/email-verification/send', requireCsrfToken, async (req, res) => {
+  // Require authentication
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  // Rate limiting: prevent email spam
+  if (await checkAndRecordRateLimit(req, res, 'emailVerifySend', authUser)) {
+    return // Response already sent by rate limiter
+  }
+
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+
+  try {
+    // Get user profile
+    const profileRows = await sql`
+      select id, display_name, email_verified 
+      from profiles 
+      where id = ${authUser.id}
+      limit 1
+    `
+
+    if (!profileRows || !profileRows.length) {
+      return res.status(404).json({ error: 'User profile not found' })
+    }
+
+    const profile = profileRows[0]
+
+    // Check if already verified
+    if (profile.email_verified) {
+      return res.json({ sent: false, reason: 'Email already verified', alreadyVerified: true })
+    }
+
+    // Get user's email from auth
+    const userEmail = authUser.email
+    if (!userEmail) {
+      return res.status(400).json({ error: 'User has no email address' })
+    }
+
+    // Delete any existing unused codes for this user
+    await sql`
+      delete from email_verification_codes
+      where user_id = ${authUser.id}
+      and used_at is null
+    `
+
+    // Generate new code
+    const code = generateVerificationCode()
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes from now
+
+    // Insert the new code
+    await sql`
+      insert into email_verification_codes (user_id, code, expires_at)
+      values (${authUser.id}, ${code}, ${expiresAt.toISOString()})
+    `
+
+    // SECURITY: Do not log the actual code - only log that a code was generated
+    console.log(`[email-verification] Generated verification code for user ${authUser.id.slice(0, 8)}... (expires ${expiresAt.toISOString()})`)
+
+    // Send the verification email using the EMAIL_VERIFICATION trigger
+    const result = await sendSecurityEmail('EMAIL_VERIFICATION', {
+      recipientEmail: userEmail,
+      userId: authUser.id,
+      userDisplayName: profile.display_name || 'User',
+      userLanguage: req.body?.language || 'en',
+      extraContext: {
+        code: code,
+        email: userEmail
+      }
+    })
+
+    if (result.sent) {
+      res.json({ sent: true, expiresAt: expiresAt.toISOString() })
+    } else {
+      // If email failed to send, delete the code
+      await sql`
+        delete from email_verification_codes
+        where user_id = ${authUser.id}
+        and code = ${code}
+      `
+      res.status(500).json({ sent: false, reason: result.reason || 'Failed to send verification email' })
+    }
+  } catch (err) {
+    console.error('[email-verification/send] Error:', err?.message)
+    res.status(500).json({ error: 'Failed to send verification code' })
+  }
+})
+
+/**
+ * Verify email verification code
+ * Checks if the code is valid, not expired, and not already used
+ * SECURITY: Rate limited to 10 attempts per 15 minutes per user (brute force protection)
+ * SECURITY: CSRF protected
+ */
+app.post('/api/email-verification/verify', requireCsrfToken, async (req, res) => {
+  // Require authentication
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  // Rate limiting: prevent brute force attacks
+  if (await checkAndRecordRateLimit(req, res, 'emailVerifyAttempt', authUser)) {
+    return // Response already sent by rate limiter
+  }
+
+  const { code } = req.body || {}
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({ error: 'Verification code is required' })
+  }
+
+  // Validate code format: must be exactly 6 alphanumeric characters
+  const normalizedCode = code.toUpperCase().trim()
+  if (!/^[A-Z0-9]{6}$/.test(normalizedCode)) {
+    return res.status(400).json({ verified: false, error: 'Invalid verification code format' })
+  }
+
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+
+  try {
+    // Check if user is already verified
+    const profileRows = await sql`
+      select email_verified from profiles where id = ${authUser.id} limit 1
+    `
+
+    if (profileRows?.[0]?.email_verified) {
+      return res.json({ verified: true, alreadyVerified: true })
+    }
+
+    // Look up the code
+    const codeRows = await sql`
+      select id, code, expires_at, used_at
+      from email_verification_codes
+      where user_id = ${authUser.id}
+      and code = ${normalizedCode}
+      limit 1
+    `
+
+    if (!codeRows || !codeRows.length) {
+      // SECURITY: Do not log the attempted code to prevent log injection
+      console.log(`[email-verification/verify] Invalid code attempt for user ${authUser.id.slice(0, 8)}...`)
+      return res.status(400).json({ verified: false, error: 'Invalid verification code' })
+    }
+
+    const codeRecord = codeRows[0]
+
+    // Check if already used
+    if (codeRecord.used_at) {
+      return res.status(400).json({ verified: false, error: 'Code has already been used' })
+    }
+
+    // Check if expired
+    const expiresAt = new Date(codeRecord.expires_at)
+    if (expiresAt < new Date()) {
+      console.log(`[email-verification/verify] Expired code attempt for user ${authUser.id.slice(0, 8)}...`)
+      return res.status(400).json({ verified: false, error: 'Verification code has expired' })
+    }
+
+    // Mark code as used
+    await sql`
+      update email_verification_codes
+      set used_at = now()
+      where id = ${codeRecord.id}
+    `
+
+    // Mark user's email as verified
+    await sql`
+      update profiles
+      set email_verified = true
+      where id = ${authUser.id}
+    `
+
+    console.log(`[email-verification/verify] Email verified for user ${authUser.id.slice(0, 8)}...`)
+
+    res.json({ verified: true })
+  } catch (err) {
+    console.error('[email-verification/verify] Error:', err?.message)
+    res.status(500).json({ error: 'Failed to verify code' })
+  }
+})
+
+/**
+ * Check email verification status
+ * SECURITY: Requires authentication (no CSRF needed for GET)
+ */
+app.get('/api/email-verification/status', async (req, res) => {
+  // Require authentication
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+
+  try {
+    const profileRows = await sql`
+      select email_verified from profiles where id = ${authUser.id} limit 1
+    `
+
+    const verified = profileRows?.[0]?.email_verified === true
+
+    // Also check if there's a pending code (only return expiry time, not the code itself)
+    const pendingCodeRows = await sql`
+      select expires_at from email_verification_codes
+      where user_id = ${authUser.id}
+      and used_at is null
+      and expires_at > now()
+      order by created_at desc
+      limit 1
+    `
+
+    const hasPendingCode = pendingCodeRows && pendingCodeRows.length > 0
+    const pendingCodeExpiresAt = hasPendingCode ? pendingCodeRows[0].expires_at : null
+
+    res.json({ 
+      verified, 
+      hasPendingCode,
+      pendingCodeExpiresAt 
+    })
+  } catch (err) {
+    console.error('[email-verification/status] Error:', err?.message)
+    res.status(500).json({ error: 'Failed to check verification status' })
+  }
+})
+
+/**
+ * Clean up expired verification codes (called by daily job)
+ */
+async function cleanupExpiredVerificationCodes() {
+  if (!sql) {
+    console.log('[cleanup] Database not configured, skipping verification code cleanup')
+    return 0
+  }
+
+  try {
+    const result = await sql`
+      delete from email_verification_codes
+      where expires_at < now()
+      or used_at is not null
+    `
+
+    const deletedCount = result?.count || 0
+    console.log(`[cleanup] Deleted ${deletedCount} expired/used verification codes`)
+    return deletedCount
+  } catch (err) {
+    console.error('[cleanup] Failed to clean up verification codes:', err)
+    return 0
+  }
+}
 
 // Convenience endpoint: Send password change confirmation email
 // CSRF protected - requires X-CSRF-Token header
@@ -15244,6 +15733,16 @@ cron.schedule('0 3 * * *', async () => {
     }
   } catch (err) {
     console.error('[gdpr] Audit log cleanup failed:', err?.message)
+  }
+
+  try {
+    // 6. Clean up expired email verification codes
+    const deletedCount = await cleanupExpiredVerificationCodes()
+    if (deletedCount > 0) {
+      console.log(`[gdpr] Deleted ${deletedCount} expired verification codes`)
+    }
+  } catch (err) {
+    console.error('[gdpr] Verification codes cleanup failed:', err?.message)
   }
 
   console.log('[gdpr] Data retention cleanup completed')
