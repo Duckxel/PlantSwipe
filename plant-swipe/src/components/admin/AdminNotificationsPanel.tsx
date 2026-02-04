@@ -1329,24 +1329,25 @@ export function AdminNotificationsPanel() {
                           <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
                             Send Hour (User's Local Time)
                           </Label>
-                          <Select
-                            value={String(automation.sendHour)}
-                            onChange={(e) => {
-                              handleUpdateAutomation(automation, { sendHour: parseInt(e.target.value) })
-                            }}
-                            disabled={savingAutomation === automation.id || isDailyTaskReminder}
-                            className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-                          >
-                            {Array.from({ length: 24 }, (_, i) => (
-                              <option key={i} value={i}>
-                                {i.toString().padStart(2, '0')}:00
-                              </option>
-                            ))}
-                          </Select>
-                          {isDailyTaskReminder && (
-                            <p className="text-xs text-stone-500">
+                          {isDailyTaskReminder ? (
+                            <div className="rounded-lg border border-dashed border-stone-200 dark:border-[#3e3e42] px-3 py-2 text-xs text-stone-500 dark:text-stone-400">
                               Uses each user's notification time preference.
-                            </p>
+                            </div>
+                          ) : (
+                            <Select
+                              value={String(automation.sendHour)}
+                              onChange={(e) => {
+                                handleUpdateAutomation(automation, { sendHour: parseInt(e.target.value) })
+                              }}
+                              disabled={savingAutomation === automation.id}
+                              className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                            >
+                              {Array.from({ length: 24 }, (_, i) => (
+                                <option key={i} value={i}>
+                                  {i.toString().padStart(2, '0')}:00
+                                </option>
+                              ))}
+                            </Select>
                           )}
                         </div>
 
