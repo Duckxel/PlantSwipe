@@ -13,6 +13,28 @@ const resyncAttempted = new Set<string>()
 // Track if we've attempted re-subscribe after a SW update for this session
 const swUpdateAttempted = new Set<string>()
 
+const getOptOutKey = (userId: string) => `plantswipe.push_opt_out.${userId}`
+
+const hasOptedOut = (userId: string) => {
+  if (typeof window === 'undefined') return false
+  try {
+    return localStorage.getItem(getOptOutKey(userId)) === 'true'
+  } catch {
+    return false
+  }
+}
+
+const setOptOut = (userId: string, value: boolean) => {
+  if (typeof window === 'undefined') return
+  try {
+    if (value) {
+      localStorage.setItem(getOptOutKey(userId), 'true')
+    } else {
+      localStorage.removeItem(getOptOutKey(userId))
+    }
+  } catch {}
+}
+
 export function usePushSubscription(userId: string | null) {
   const supported = React.useMemo(() => {
     if (typeof window === 'undefined') return false
@@ -44,6 +66,10 @@ export function usePushSubscription(userId: string | null) {
 
   const attemptResubscribe = React.useCallback(async (force: boolean, reason: string) => {
     if (!supported || !userId) return
+    if (hasOptedOut(userId)) {
+      console.log('[push] Skipping resubscribe (user opted out on this device)')
+      return
+    }
     if (resubscribeInFlight.current) return
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
     resubscribeInFlight.current = true
@@ -79,6 +105,11 @@ export function usePushSubscription(userId: string | null) {
           userId: userId.slice(0, 8) + '...'
         })
         
+        if (hasOptedOut(userId)) {
+          resyncAttempted.add(userId)
+          setSynced(true)
+          return
+        }
         if (existing && permissionStatus === 'granted') {
           // Browser has a subscription and permission is granted
           // Try to re-sync with server (this will update/insert the subscription)
@@ -129,6 +160,7 @@ export function usePushSubscription(userId: string | null) {
     const handleControllerChange = () => {
       if (!active) return
       if (swUpdateAttempted.has(userId)) return
+      if (hasOptedOut(userId)) return
       swUpdateAttempted.add(userId)
       attemptResubscribe(true, 'service-worker-activated')
     }
@@ -217,6 +249,7 @@ export function usePushSubscription(userId: string | null) {
     setLoading(true)
     setError(null)
     try {
+      setOptOut(userId, false)
       await requestNotificationPermission()
       await registerPushSubscription()
       setSubscribed(true)
@@ -237,12 +270,15 @@ export function usePushSubscription(userId: string | null) {
     try {
       await removePushSubscription()
       setSubscribed(false)
+      if (userId) {
+        setOptOut(userId, true)
+      }
     } catch (err) {
       setError((err as Error)?.message || 'Failed to disable notifications')
     } finally {
       setLoading(false)
     }
-  }, [supported])
+  }, [supported, userId])
 
   return { supported, permission, subscribed, loading, error, enable, disable, refresh }
 }
