@@ -1284,8 +1284,8 @@ const BrightnessLowIcon = () => (
 )
 
 /**
- * Multi-color flower icon that displays up to 5 colors as petals
- * Each petal is positioned around a center point
+ * Multi-color flower icon that displays up to 5 colors as overlapping petals
+ * Each petal is a large circle positioned around a center point
  */
 interface MultiColorFlowerIconProps {
   colors: ColorSwatchDescriptor[]
@@ -1311,12 +1311,11 @@ const MultiColorFlowerIcon: React.FC<MultiColorFlowerIconProps> = ({ colors, siz
     )
   }
   
-  // Calculate petal positions for multi-color display
-  // Petals are arranged in a circle, each rotated by (360/count) degrees
+  // Large overlapping circles arranged like flower petals
   const viewBox = 24
   const center = viewBox / 2
-  const petalLength = 7 // Length of each petal from center
-  const petalWidth = 5 // Width of each petal
+  const petalRadius = 6 // Large circles that overlap
+  const petalDistance = 5 // Distance from center to petal center
   
   return (
     <svg
@@ -1326,41 +1325,39 @@ const MultiColorFlowerIcon: React.FC<MultiColorFlowerIconProps> = ({ colors, siz
       aria-hidden="true"
       className="drop-shadow-sm"
     >
-      {/* Small center circle */}
-      <circle
-        cx={center}
-        cy={center}
-        r={2.5}
-        fill="white"
-        stroke="rgba(255,255,255,0.5)"
-        strokeWidth={0.5}
-      />
-      
-      {/* Petals */}
+      {/* Petals - large overlapping circles */}
       {displayColors.map((color, index) => {
-        // Calculate rotation angle for this petal
+        // Calculate position for this petal
         // Start from top (-90 degrees) and distribute evenly
         const angle = -90 + (360 / count) * index
         const radians = (angle * Math.PI) / 180
         
         // Petal center position (offset from center)
-        const petalCenterX = center + Math.cos(radians) * (petalLength / 2 + 1)
-        const petalCenterY = center + Math.sin(radians) * (petalLength / 2 + 1)
+        const petalCenterX = center + Math.cos(radians) * petalDistance
+        const petalCenterY = center + Math.sin(radians) * petalDistance
         
         return (
-          <ellipse
+          <circle
             key={color.id}
             cx={petalCenterX}
             cy={petalCenterY}
-            rx={petalWidth / 2}
-            ry={petalLength / 2}
+            r={petalRadius}
             fill={color.tone}
-            stroke="rgba(255,255,255,0.4)"
+            stroke="rgba(255,255,255,0.5)"
             strokeWidth={0.5}
-            transform={`rotate(${angle + 90}, ${petalCenterX}, ${petalCenterY})`}
           />
         )
       })}
+      
+      {/* White center circle on top */}
+      <circle
+        cx={center}
+        cy={center}
+        r={3.5}
+        fill="white"
+        stroke="rgba(255,255,255,0.8)"
+        strokeWidth={0.5}
+      />
     </svg>
   )
 }
