@@ -881,6 +881,23 @@ else
   render_service_env
 fi
 
+# Sync admin_api code to /opt/admin (the admin-api service runs from there)
+ADMIN_DIR="/opt/admin"
+if [[ -d "$ADMIN_DIR" ]]; then
+  log "Syncing admin_api code to $ADMIN_DIR…"
+  ADMIN_SRC="$WORK_DIR/admin_api"
+  if [[ -d "$ADMIN_SRC" ]]; then
+    $SUDO install -m 0644 "$ADMIN_SRC/app.py" "$ADMIN_DIR/app.py"
+    $SUDO install -m 0644 "$ADMIN_SRC/requirements.txt" "$ADMIN_DIR/requirements.txt"
+    $SUDO chown -R www-data:www-data "$ADMIN_DIR"
+    log "Admin API code synced successfully."
+  else
+    log "[WARN] admin_api source not found at $ADMIN_SRC"
+  fi
+else
+  log "[WARN] Admin dir $ADMIN_DIR not found; skipping admin_api sync"
+fi
+
 # Restart services unless explicitly skipped
 if [[ "$SKIP_RESTARTS" == "true" ]]; then
   log "Skipping service restarts (requested)"
