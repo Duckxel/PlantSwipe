@@ -8356,6 +8356,126 @@ app.get('/api/admin/notification-automations', async (req, res) => {
   }
 })
 
+app.get('/api/admin/notification-automations/monitoring', async (req, res) => {
+  const adminId = await ensureEditor(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const windowHours = 24
+  try {
+    const totalsRows = await sql`
+      select
+        count(un.id)::bigint as total,
+        count(un.id) filter (where un.delivery_status = 'sent')::bigint as sent,
+        count(un.id) filter (where un.delivery_status = 'failed')::bigint as failed,
+        count(un.id) filter (where un.delivery_status = 'pending')::bigint as pending,
+        count(un.id) filter (where un.delivery_error = 'NO_PUSH_SUBSCRIPTION')::bigint as no_subscription,
+        max(un.scheduled_for) as last_queued_at
+      from public.user_notifications un
+      where un.automation_id is not null
+        and un.scheduled_for >= now() - interval '24 hours'
+    `
+
+    const failureRows = await sql`
+      select
+        coalesce(un.delivery_error, 'UNKNOWN') as reason,
+        count(un.id)::bigint as count
+      from public.user_notifications un
+      where un.automation_id is not null
+        and un.scheduled_for >= now() - interval '24 hours'
+        and un.delivery_status = 'failed'
+      group by reason
+      order by count desc
+      limit 6
+    `
+
+    const automationRows = await sql`
+      select
+        a.id::text as id,
+        a.display_name,
+        count(un.id)::bigint as total,
+        count(un.id) filter (where un.delivery_status = 'sent')::bigint as sent,
+        count(un.id) filter (where un.delivery_status = 'failed')::bigint as failed,
+        count(un.id) filter (where un.delivery_status = 'pending')::bigint as pending,
+        count(un.id) filter (where un.delivery_error = 'NO_PUSH_SUBSCRIPTION')::bigint as no_subscription,
+        max(un.scheduled_for) as last_queued_at
+      from public.notification_automations a
+      left join public.user_notifications un
+        on un.automation_id = a.id
+        and un.scheduled_for >= now() - interval '24 hours'
+      group by a.id, a.display_name
+      order by total desc nulls last, a.display_name
+    `
+
+    const totalsRow = totalsRows?.[0] || {}
+    const recentRows = await sql`
+      select
+        un.id::text as id,
+        un.user_id::text as user_id,
+        un.automation_id::text as automation_id,
+        un.delivery_status,
+        un.delivery_error,
+        un.scheduled_for,
+        un.delivered_at,
+        a.display_name as automation_name
+      from public.user_notifications un
+      left join public.notification_automations a on a.id = un.automation_id
+      where un.automation_id is not null
+        and un.scheduled_for >= now() - interval '3 days'
+      order by un.scheduled_for desc nulls last
+      limit 60
+    `
+
+    const monitoring = {
+      windowHours,
+      pushConfigured: pushNotificationsEnabled,
+      serverTime: new Date().toISOString(),
+      workerIntervalMs: notificationWorkerIntervalMs,
+      defaultTimezone: DEFAULT_USER_TIMEZONE,
+      totals: {
+        queued: Number(totalsRow.total || 0),
+        sent: Number(totalsRow.sent || 0),
+        failed: Number(totalsRow.failed || 0),
+        pending: Number(totalsRow.pending || 0),
+        noSubscription: Number(totalsRow.no_subscription || 0),
+      },
+      lastQueuedAt: isoOrNull(totalsRow.last_queued_at),
+      failureReasons: (failureRows || []).map((row) => ({
+        reason: row.reason || 'UNKNOWN',
+        count: Number(row.count || 0),
+      })),
+      automations: (automationRows || []).map((row) => ({
+        id: row.id,
+        displayName: row.display_name || null,
+        total: Number(row.total || 0),
+        sent: Number(row.sent || 0),
+        failed: Number(row.failed || 0),
+        pending: Number(row.pending || 0),
+        noSubscription: Number(row.no_subscription || 0),
+        lastQueuedAt: isoOrNull(row.last_queued_at),
+      })),
+      recentNotifications: (recentRows || []).map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        automationId: row.automation_id,
+        automationName: row.automation_name || null,
+        status: row.delivery_status || 'pending',
+        error: row.delivery_error || null,
+        scheduledFor: isoOrNull(row.scheduled_for),
+        deliveredAt: isoOrNull(row.delivered_at),
+      })),
+    }
+
+    res.json({ monitoring })
+  } catch (err) {
+    console.error('[notification-automations] failed to load monitoring summary', err)
+    res.status(500).json({ error: err?.message || 'Failed to load monitoring summary' })
+  }
+})
+
 app.put('/api/admin/notification-automations/:id', async (req, res) => {
   const adminId = await ensureEditor(req, res)
   if (!adminId) return
@@ -8550,6 +8670,7 @@ async function runAutomation(automation) {
       : 0
     const message = messageVariants[messageIndex]
       .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+    const personalizedTitle = notificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
     try {
       // Check if notification already exists for this automation + user today
@@ -8571,7 +8692,7 @@ async function runAutomation(automation) {
         values (
           ${automation.id},
           ${recipient.user_id},
-          ${notificationTitle},
+          ${personalizedTitle},
           ${message},
           ${automation.cta_url || null},
           now(),
@@ -15704,7 +15825,23 @@ cron.schedule('0 3 * * *', async () => {
   }
 
   try {
-    // 4. Delete old delivered notifications (older than 90 days)
+    // 4. Delete automation notification deliveries older than 3 days (monitoring only)
+    if (sql) {
+      const automationNotifResult = await sql`
+        DELETE FROM public.user_notifications
+        WHERE automation_id is not null
+          AND scheduled_for < NOW() - INTERVAL '3 days'
+      `
+      if (automationNotifResult?.count > 0) {
+        console.log(`[gdpr] Deleted ${automationNotifResult.count} old automation notifications`)
+      }
+    }
+  } catch (err) {
+    console.error('[gdpr] Automation notifications cleanup failed:', err?.message)
+  }
+
+  try {
+    // 5. Delete old delivered notifications (older than 90 days)
     if (sql) {
       const notifResult = await sql`
         DELETE FROM public.user_notifications
@@ -15720,7 +15857,7 @@ cron.schedule('0 3 * * *', async () => {
   }
 
   try {
-    // 5. Clean old GDPR audit logs (keep for 3 years as required by GDPR)
+    // 6. Clean old GDPR audit logs (keep for 3 years as required by GDPR)
     if (sql) {
       const auditResult = await sql`
         DELETE FROM public.gdpr_audit_log
@@ -15735,7 +15872,7 @@ cron.schedule('0 3 * * *', async () => {
   }
 
   try {
-    // 6. Clean up expired email verification codes
+    // 7. Clean up expired email verification codes
     const deletedCount = await cleanupExpiredVerificationCodes()
     if (deletedCount > 0) {
       console.log(`[gdpr] Deleted ${deletedCount} expired verification codes`)
@@ -24449,6 +24586,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
       const userDisplayName = userDisplayNames.get(String(userId)) || 'User'
       // Replace {{user}} with the actual user display name
       let personalizedMessage = baseMessage.replace(/\{\{user\}\}/g, userDisplayName)
+      let personalizedTitle = (campaign.title || 'Aphylia').replace(/\{\{user\}\}/g, userDisplayName)
 
       // Translate message based on user's language preference
       const userLang = userLanguages.get(String(userId)) || 'en'
@@ -24459,7 +24597,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
       }
 
       // Translate title if needed
-      let translatedTitle = campaign.title
+      let translatedTitle = personalizedTitle
       if (targetLang !== sourceLang) {
         translatedTitle = await translateNotificationText(campaign.title, targetLang, sourceLang)
       }
@@ -24958,7 +25096,7 @@ async function processDueAutomations() {
               and (p.push_task_reminders is null or p.push_task_reminders = true)
               and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
-              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) =
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) >=
                 coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
               and not exists (
                 select 1 from public.user_notifications un
@@ -25000,7 +25138,7 @@ async function processDueAutomations() {
           if (!global[lastLogKey] || nowTs - global[lastLogKey] > 3600000) {
             // Log debug info about why there might be no recipients
             const logDetail = usesUserNotificationTime
-              ? 'No eligible recipients at preferred notification times'
+              ? 'No eligible recipients at/after preferred notification times'
               : `No eligible recipients at send_hour=${sendHour}`
             console.log(`[automations] ${automation.trigger_type}: ${logDetail}`)
             
@@ -25010,8 +25148,8 @@ async function processDueAutomations() {
                 const debugCount = await sql`
                   select count(distinct p.id)::bigint as total_with_tasks,
                          count(distinct case
-                           when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) =
-                                coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+                          when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) >=
+                               coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
                            then p.id
                          end)::bigint as at_preferred_hour
                   from public.profiles p
@@ -25071,6 +25209,7 @@ async function processDueAutomations() {
             : 0
           const message = messageVariants[messageIndex]
             .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+          const personalizedTitle = notificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
           try {
             // Insert notification with conflict handling for the unique automation constraint
@@ -25082,7 +25221,7 @@ async function processDueAutomations() {
               values (
                 ${automation.id},
                 ${recipient.user_id},
-                ${notificationTitle},
+                ${personalizedTitle},
                 ${message},
                 ${targetUrl},
                 now(),

@@ -99,6 +99,46 @@ type NotificationAutomation = {
   updatedAt: string
 }
 
+type AutomationMonitoring = {
+  windowHours: number
+  pushConfigured: boolean
+  serverTime: string
+  workerIntervalMs: number
+  defaultTimezone: string
+  totals: {
+    queued: number
+    sent: number
+    failed: number
+    pending: number
+    noSubscription: number
+  }
+  lastQueuedAt: string | null
+  failureReasons: Array<{
+    reason: string
+    count: number
+  }>
+  automations: Array<{
+    id: string
+    displayName: string | null
+    total: number
+    sent: number
+    failed: number
+    pending: number
+    noSubscription: number
+    lastQueuedAt: string | null
+  }>
+  recentNotifications: Array<{
+    id: string
+    userId: string
+    automationId: string
+    automationName: string | null
+    status: string
+    error: string | null
+    scheduledFor: string | null
+    deliveredAt: string | null
+  }>
+}
+
 // Constants
 const deliveryModeOptions = [
   { value: 'send_now', label: 'Send Instantly', description: 'All users receive immediately', icon: Zap, color: 'purple' },
@@ -230,6 +270,10 @@ export function AdminNotificationsPanel() {
   const [automations, setAutomations] = React.useState<NotificationAutomation[]>([])
   const [loadingAutomations, setLoadingAutomations] = React.useState(false)
   const [savingAutomation, setSavingAutomation] = React.useState<string | null>(null)
+  const [monitoringOpen, setMonitoringOpen] = React.useState(false)
+  const [monitoringLoading, setMonitoringLoading] = React.useState(false)
+  const [monitoringError, setMonitoringError] = React.useState<string | null>(null)
+  const [monitoringData, setMonitoringData] = React.useState<AutomationMonitoring | null>(null)
 
   // State: Push Config
   const [pushConfigured, setPushConfigured] = React.useState(true)
@@ -346,6 +390,24 @@ export function AdminNotificationsPanel() {
     }
   }, [])
 
+  const loadMonitoring = React.useCallback(async () => {
+    setMonitoringLoading(true)
+    setMonitoringError(null)
+    try {
+      const headers = await buildAdminHeaders()
+      const resp = await fetch('/api/admin/notification-automations/monitoring', { headers, credentials: 'same-origin' })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        throw new Error(data?.error || 'Failed to load monitoring summary')
+      }
+      setMonitoringData(data?.monitoring || null)
+    } catch (err) {
+      setMonitoringError((err as Error).message)
+    } finally {
+      setMonitoringLoading(false)
+    }
+  }, [])
+
   const loadLanguages = React.useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -372,8 +434,9 @@ export function AdminNotificationsPanel() {
     if (activeView === 'automations') {
       loadAutomations().catch(() => {})
       loadTemplates().catch(() => {}) // For template dropdown
+      loadMonitoring().catch(() => {})
     }
-  }, [activeView, loadCampaigns, loadTemplates, loadAutomations])
+  }, [activeView, loadCampaigns, loadTemplates, loadAutomations, loadMonitoring])
 
   // =========================================================================
   // Campaign Actions
@@ -1014,6 +1077,179 @@ export function AdminNotificationsPanel() {
       {/* ============= AUTOMATIONS VIEW ============= */}
       {activeView === 'automations' && (
         <div className="space-y-4">
+          <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]">
+            <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="button"
+                onClick={() => setMonitoringOpen((prev) => !prev)}
+                className="flex items-center gap-3 text-left"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 text-stone-500 transition-transform",
+                    monitoringOpen ? "rotate-90" : ""
+                  )}
+                />
+                <div>
+                  <p className="text-sm font-semibold text-stone-900 dark:text-white">Automation monitoring</p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400">
+                    Delivery health for the last {monitoringData?.windowHours || 24} hours
+                  </p>
+                </div>
+              </button>
+              <div className="flex items-center gap-2">
+                {monitoringLoading && <Loader2 className="h-4 w-4 animate-spin text-stone-400" />}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => loadMonitoring()}
+                  disabled={monitoringLoading}
+                >
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
+            {monitoringOpen && (
+              <div className="border-t border-stone-100 dark:border-[#2a2a2d] p-4 space-y-4">
+                {monitoringError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-200">
+                    {monitoringError}
+                  </div>
+                )}
+
+                {!monitoringError && !monitoringData && (
+                  <p className="text-sm text-stone-500">No monitoring data available yet.</p>
+                )}
+
+                {monitoringData && (
+                  <>
+                    {!monitoringData.pushConfigured && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+                        Push delivery is disabled on the server (missing VAPID keys). Automations can queue, but pushes will fail.
+                      </div>
+                    )}
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                      {[
+                        { label: 'Queued', value: monitoringData.totals.queued, accent: 'text-stone-900 dark:text-white' },
+                        { label: 'Sent', value: monitoringData.totals.sent, accent: 'text-emerald-600 dark:text-emerald-300' },
+                        { label: 'Failed', value: monitoringData.totals.failed, accent: 'text-red-600 dark:text-red-300' },
+                        { label: 'Pending', value: monitoringData.totals.pending, accent: 'text-amber-600 dark:text-amber-300' },
+                        { label: 'No subscription', value: monitoringData.totals.noSubscription, accent: 'text-stone-500 dark:text-stone-300' },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className="rounded-xl border border-stone-200/70 bg-stone-50/80 px-4 py-3 dark:border-[#2a2a2d] dark:bg-[#151517]"
+                        >
+                          <p className="text-xs text-stone-500">{item.label}</p>
+                          <p className={cn("text-lg font-semibold", item.accent)}>
+                            {item.value.toLocaleString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-stone-500">
+                      <span>
+                        Last queued: <span className="font-medium text-stone-700 dark:text-stone-200">{formatDateTime(monitoringData.lastQueuedAt)}</span>
+                      </span>
+                      <span>
+                        Server time: <span className="font-medium text-stone-700 dark:text-stone-200">{formatDateTime(monitoringData.serverTime)}</span>
+                      </span>
+                      <span>
+                        Worker interval: <span className="font-medium text-stone-700 dark:text-stone-200">{Math.round(monitoringData.workerIntervalMs / 1000)}s</span>
+                      </span>
+                      <span>
+                        Default TZ: <span className="font-medium text-stone-700 dark:text-stone-200">{monitoringData.defaultTimezone}</span>
+                      </span>
+                    </div>
+
+                    {monitoringData.failureReasons.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-stone-600 dark:text-stone-300 mb-2">Top failure reasons</p>
+                        <div className="flex flex-wrap gap-2">
+                          {monitoringData.failureReasons.map((reason) => (
+                            <span
+                              key={reason.reason}
+                              className="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs text-stone-600 dark:border-[#2a2a2d] dark:bg-[#1c1c1f] dark:text-stone-300"
+                            >
+                              {reason.reason}: {reason.count}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <p className="text-xs font-semibold text-stone-600 dark:text-stone-300 mb-2">Automations (last 24h)</p>
+                      <div className="space-y-2">
+                        {monitoringData.automations.slice(0, 6).map((automation) => (
+                          <div
+                            key={automation.id}
+                            className="flex flex-col gap-2 rounded-xl border border-stone-200/70 bg-white/70 px-3 py-2 text-xs text-stone-600 dark:border-[#2a2a2d] dark:bg-[#151517] dark:text-stone-300 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="font-semibold text-stone-800 dark:text-stone-100">
+                              {automation.displayName || 'Automation'}
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs">
+                              <span>Total: {automation.total}</span>
+                              <span className="text-emerald-600 dark:text-emerald-300">Sent: {automation.sent}</span>
+                              <span className="text-red-600 dark:text-red-300">Failed: {automation.failed}</span>
+                              <span className="text-amber-600 dark:text-amber-300">Pending: {automation.pending}</span>
+                              <span>No sub: {automation.noSubscription}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-stone-600 dark:text-stone-300 mb-2">Recent deliveries</p>
+                      {monitoringData.recentNotifications.length === 0 ? (
+                        <p className="text-xs text-stone-500">No deliveries logged yet.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {monitoringData.recentNotifications.map((entry) => {
+                            const statusColor =
+                              entry.status === 'sent'
+                                ? 'text-emerald-600 dark:text-emerald-300'
+                                : entry.status === 'failed'
+                                  ? 'text-red-600 dark:text-red-300'
+                                  : 'text-amber-600 dark:text-amber-300'
+                            return (
+                              <div
+                                key={entry.id}
+                                className="rounded-xl border border-stone-200/70 bg-white/70 px-3 py-2 text-xs text-stone-600 dark:border-[#2a2a2d] dark:bg-[#151517] dark:text-stone-300"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={cn("font-semibold", statusColor)}>{entry.status}</span>
+                                  <span className="text-stone-400">•</span>
+                                  <span className="font-medium text-stone-800 dark:text-stone-100">
+                                    {entry.automationName || 'Automation'}
+                                  </span>
+                                  <span className="text-stone-400">•</span>
+                                  <span className="font-mono text-[11px]">
+                                    {entry.userId?.slice(0, 8)}…
+                                  </span>
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-stone-500">
+                                  <span>Scheduled: {formatDateTime(entry.scheduledFor)}</span>
+                                  <span>Delivered: {formatDateTime(entry.deliveredAt)}</span>
+                                  {entry.error && <span className="text-red-500">Error: {entry.error}</span>}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           {loadingAutomations ? (
             <div className="flex items-center justify-center py-16">
               <div className="flex items-center gap-3 text-stone-500 dark:text-stone-400">
@@ -1156,24 +1392,25 @@ export function AdminNotificationsPanel() {
                           <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
                             Send Hour (User's Local Time)
                           </Label>
-                          <Select
-                            value={String(automation.sendHour)}
-                            onChange={(e) => {
-                              handleUpdateAutomation(automation, { sendHour: parseInt(e.target.value) })
-                            }}
-                            disabled={savingAutomation === automation.id || isDailyTaskReminder}
-                            className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-                          >
-                            {Array.from({ length: 24 }, (_, i) => (
-                              <option key={i} value={i}>
-                                {i.toString().padStart(2, '0')}:00
-                              </option>
-                            ))}
-                          </Select>
-                          {isDailyTaskReminder && (
-                            <p className="text-xs text-stone-500">
+                          {isDailyTaskReminder ? (
+                            <div className="rounded-lg border border-dashed border-stone-200 dark:border-[#3e3e42] px-3 py-2 text-xs text-stone-500 dark:text-stone-400">
                               Uses each user's notification time preference.
-                            </p>
+                            </div>
+                          ) : (
+                            <Select
+                              value={String(automation.sendHour)}
+                              onChange={(e) => {
+                                handleUpdateAutomation(automation, { sendHour: parseInt(e.target.value) })
+                              }}
+                              disabled={savingAutomation === automation.id}
+                              className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                            >
+                              {Array.from({ length: 24 }, (_, i) => (
+                                <option key={i} value={i}>
+                                  {i.toString().padStart(2, '0')}:00
+                                </option>
+                              ))}
+                            </Select>
                           )}
                         </div>
 

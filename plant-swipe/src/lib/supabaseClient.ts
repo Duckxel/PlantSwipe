@@ -99,7 +99,7 @@ export type ProfileRow = {
   garden_type?: 'inside' | 'outside' | 'both' | null
   experience_level?: 'novice' | 'intermediate' | 'expert' | null
   looking_for?: 'eat' | 'ornamental' | 'various' | null
-  notification_time?: '6h' | '10h' | '14h' | '17h' | null
+  notification_time?: string | null
   // Email verification status
   email_verified?: boolean | null
 }

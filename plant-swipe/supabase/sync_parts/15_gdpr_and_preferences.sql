@@ -38,7 +38,14 @@ BEGIN
     ALTER TABLE public.profiles ADD COLUMN looking_for text CHECK (looking_for IS NULL OR looking_for IN ('eat', 'ornamental', 'various'));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='notification_time') THEN
-    ALTER TABLE public.profiles ADD COLUMN notification_time text DEFAULT '10h' CHECK (notification_time IS NULL OR notification_time IN ('6h', '10h', '14h', '17h'));
+    ALTER TABLE public.profiles ADD COLUMN notification_time text DEFAULT '10h'
+      CHECK (
+        notification_time IS NULL
+        OR (
+          notification_time ~ '^[0-9]{1,2}h?$'
+          AND regexp_replace(notification_time, '[^0-9]', '', 'g')::int BETWEEN 0 AND 23
+        )
+      );
   END IF;
 END $$;
 
@@ -49,7 +56,7 @@ COMMENT ON COLUMN public.profiles.setup_completed IS 'Whether the user has compl
 COMMENT ON COLUMN public.profiles.garden_type IS 'Garden location preference: inside, outside, or both';
 COMMENT ON COLUMN public.profiles.experience_level IS 'User gardening experience: novice, intermediate, or expert';
 COMMENT ON COLUMN public.profiles.looking_for IS 'User gardening goal: eat (vegetables/fruits), ornamental (flowers), or various (diverse plants)';
-COMMENT ON COLUMN public.profiles.notification_time IS 'Preferred notification time: 6h, 10h, 14h, or 17h';
+COMMENT ON COLUMN public.profiles.notification_time IS 'Preferred notification hour in local time (0-23), stored as text like "6h" or "18h"';
 
 -- Email Verification
 -- Add email_verified column to profiles table

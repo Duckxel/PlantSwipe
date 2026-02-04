@@ -3078,6 +3078,7 @@
       "detecting": "Détection de votre position...",
       "detected": "Position détectée automatiquement !",
       "timezoneSet": "Fuseau horaire :",
+      "clear": "Effacer la localisation",
       "noResults": "Aucune ville trouvée. Essayez une autre recherche.",
       "detectButton": "Utiliser ma position actuelle",
       "detectingGPS": "Détection...",
@@ -3147,7 +3148,8 @@
       "lookingFor": "Objectif du Jardin",
       "lookingForDescription": "Quel est votre principal objectif de jardinage ?",
       "notificationTime": "Heure de Notification",
-      "notificationTimeDescription": "Quand devons-nous vous envoyer des rappels ?"
+      "notificationTimeDescription": "Quand devons-nous vous envoyer des rappels ?",
+      "notificationTimeHelper": "Les notifications planifiées seront envoyées à la même heure locale dans votre fuseau horaire ({{timezone}})."
     }
   },
   "emailVerification": {

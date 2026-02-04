@@ -1102,25 +1102,25 @@ export function SetupPage() {
               <PillOption
                 selected={setupData.notification_time === '6h'}
                 onClick={() => handleNotificationTimeSelect('6h')}
-                label={t('setup.notificationTime.early', 'Early bird - 6:00 AM')}
+                label={t('setup.notificationTime.early', 'Early bird')}
                 index={0}
               />
               <PillOption
                 selected={setupData.notification_time === '10h'}
                 onClick={() => handleNotificationTimeSelect('10h')}
-                label={t('setup.notificationTime.morning', 'Sleep in - 10:00 AM')}
+                label={t('setup.notificationTime.morning', 'Sleep in')}
                 index={1}
               />
               <PillOption
                 selected={setupData.notification_time === '14h'}
                 onClick={() => handleNotificationTimeSelect('14h')}
-                label={t('setup.notificationTime.midday', 'Midday energy - 2:00 PM')}
+                label={t('setup.notificationTime.midday', 'Midday energy')}
                 index={2}
               />
               <PillOption
                 selected={setupData.notification_time === '17h'}
                 onClick={() => handleNotificationTimeSelect('17h')}
-                label={t('setup.notificationTime.afternoon', 'After work - 5:00 PM')}
+                label={t('setup.notificationTime.afternoon', 'After work')}
                 index={3}
               />
             </div>

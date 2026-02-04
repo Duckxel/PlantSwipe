@@ -3078,6 +3078,7 @@
       "detecting": "Detecting your location...",
       "detected": "Location detected automatically!",
       "timezoneSet": "Timezone:",
+      "clear": "Clear location",
       "noResults": "No cities found. Try a different search.",
       "detectButton": "Use my current location",
       "detectingGPS": "Detecting...",
@@ -3147,7 +3148,8 @@
       "lookingFor": "Garden Purpose",
       "lookingForDescription": "What's your main gardening goal?",
       "notificationTime": "Notification Time",
-      "notificationTimeDescription": "When should we send you reminders?"
+      "notificationTimeDescription": "When should we send you reminders?",
+      "notificationTimeHelper": "Scheduled notifications will be sent at the same local time in your timezone ({{timezone}})."
     }
   },
   "emailVerification": {

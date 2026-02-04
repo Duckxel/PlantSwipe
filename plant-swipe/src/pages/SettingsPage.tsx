@@ -9,13 +9,25 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette, Loader2, X } from "lucide-react"
 import { Link } from "@/components/i18n/Link"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
+import { SearchInput } from "@/components/ui/search-input"
+import { useDebounce } from "@/hooks/useDebounce"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
+
+interface LocationSuggestion {
+  id: number
+  name: string
+  country: string
+  admin1?: string
+  latitude: number
+  longitude: number
+  timezone?: string
+}
 
 /**
  * Fetch a CSRF token for security-sensitive operations
@@ -80,6 +92,20 @@ export default function SettingsPage() {
   const [notifyPush, setNotifyPush] = React.useState(true)
   const [notifyEmail, setNotifyEmail] = React.useState(true)
   const [timezone, setTimezone] = React.useState<string>("")
+  const [country, setCountry] = React.useState("")
+  const [city, setCity] = React.useState("")
+  const [notificationHour, setNotificationHour] = React.useState<number>(10)
+  const [detectingLocation, setDetectingLocation] = React.useState(false)
+  const [gardenType, setGardenType] = React.useState("")
+  const [experienceLevel, setExperienceLevel] = React.useState("")
+  const [lookingFor, setLookingFor] = React.useState("")
+  const [locationSearch, setLocationSearch] = React.useState("")
+  const debouncedLocationSearch = useDebounce(locationSearch, 350)
+  const [locationSuggestions, setLocationSuggestions] = React.useState<LocationSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = React.useState(false)
+  const [searchingLocation, setSearchingLocation] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
+  const suggestionsRef = React.useRef<HTMLDivElement>(null)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -176,6 +202,23 @@ export default function SettingsPage() {
     ]
   }, [])
 
+  const parseNotificationHour = (value?: string | null) => {
+    if (!value) return 10
+    const digits = value.replace(/[^\d]/g, '')
+    const parsed = digits ? Number.parseInt(digits, 10) : 10
+    if (Number.isNaN(parsed)) return 10
+    return Math.min(23, Math.max(0, parsed))
+  }
+
+  const notificationHourOptions = React.useMemo(
+    () =>
+      Array.from({ length: 24 }, (_, hour) => ({
+        value: String(hour),
+        label: `${String(hour).padStart(2, '0')}:00`,
+      })),
+    []
+  )
+
   const heroCardClass =
     "relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b1b1f] dark:via-[#121214] dark:to-[#050506] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)]"
   const glassCard =
@@ -218,11 +261,17 @@ export default function SettingsPage() {
           setGardenInvitePrivacy((profile as any).garden_invite_privacy || 'anyone')
           const savedTimezone = (profile as any).timezone
           setTimezone(savedTimezone || detectedTimezone)
+          setCountry((profile as any).country || '')
+          setCity((profile as any).city || '')
+          setNotificationHour(parseNotificationHour((profile as any).notification_time))
+          setGardenType((profile as any).garden_type || '')
+          setExperienceLevel((profile as any).experience_level || '')
+          setLookingFor((profile as any).looking_for || '')
         } else {
           // Fetch profile if not loaded
           const { data } = await supabase
             .from('profiles')
-            .select('is_private, disable_friend_requests, garden_invite_privacy, timezone')
+            .select('is_private, disable_friend_requests, garden_invite_privacy, timezone, country, city, notification_time, garden_type, experience_level, looking_for')
             .eq('id', user.id)
             .maybeSingle()
           if (data) {
@@ -230,6 +279,12 @@ export default function SettingsPage() {
             setDisableFriendRequests(Boolean(data.disable_friend_requests || false))
             setGardenInvitePrivacy((data as any).garden_invite_privacy || 'anyone')
             setTimezone(data.timezone || detectedTimezone)
+            setCountry((data as any).country || '')
+            setCity((data as any).city || '')
+            setNotificationHour(parseNotificationHour((data as any).notification_time))
+            setGardenType((data as any).garden_type || '')
+            setExperienceLevel((data as any).experience_level || '')
+            setLookingFor((data as any).looking_for || '')
           } else {
             setTimezone(detectedTimezone)
           }
@@ -291,6 +346,72 @@ export default function SettingsPage() {
     }
     loadData()
   }, [user?.id, profile, navigate])
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  React.useEffect(() => {
+    if (debouncedLocationSearch.length < 2) {
+      setLocationSuggestions([])
+      setHasSearched(false)
+      return
+    }
+
+    let cancelled = false
+    const searchLocations = async () => {
+      setSearchingLocation(true)
+      try {
+        const resp = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(debouncedLocationSearch)}&count=8&language=${currentLang}&format=json`
+        )
+        if (cancelled) return
+
+        if (resp.ok) {
+          const data = await resp.json()
+          if (cancelled) return
+
+          if (data.results && Array.isArray(data.results)) {
+            setLocationSuggestions(
+              data.results.map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                country: r.country || '',
+                admin1: r.admin1 || '',
+                latitude: r.latitude,
+                longitude: r.longitude,
+                timezone: r.timezone,
+              }))
+            )
+          } else {
+            setLocationSuggestions([])
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[settings] Location search failed:', err)
+          setLocationSuggestions([])
+        }
+      } finally {
+        if (!cancelled) {
+          setSearchingLocation(false)
+          setHasSearched(true)
+        }
+      }
+    }
+
+    searchLocations()
+
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedLocationSearch, currentLang])
 
   const handleUpdateEmail = async () => {
     if (!newEmail || newEmail === email) {
@@ -672,6 +793,184 @@ export default function SettingsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleUpdateNotificationHour = async (nextHour: number) => {
+    if (!user?.id) return
+
+    const previousHour = notificationHour
+    setNotificationHour(nextHour)
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ notification_time: `${nextHour}h` })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      await refreshProfile()
+      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+    } catch (e: any) {
+      setNotificationHour(previousHour)
+      setError(e?.message || t('common.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateLocation = async (overrides?: { country?: string; city?: string; timezone?: string }) => {
+    if (!user?.id) return
+
+    const nextCountry = (overrides?.country ?? country).trim()
+    const nextCity = (overrides?.city ?? city).trim()
+    const nextTimezone = overrides?.timezone
+
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const updates: { country?: string | null; city?: string | null; timezone?: string | null } = {
+        country: nextCountry || null,
+        city: nextCity || null,
+      }
+      if (nextTimezone) {
+        updates.timezone = nextTimezone
+      }
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      if (nextTimezone) {
+        setTimezone(nextTimezone)
+      }
+      await refreshProfile()
+      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+    } catch (e: any) {
+      setError(e?.message || t('common.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateSetupField = async (
+    field: 'garden_type' | 'experience_level' | 'looking_for',
+    nextValue: string,
+    previousValue: string,
+    setValue: React.Dispatch<React.SetStateAction<string>>
+  ) => {
+    if (!user?.id) return
+
+    setValue(nextValue)
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ [field]: nextValue || null })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      await refreshProfile()
+      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+    } catch (e: any) {
+      setValue(previousValue)
+      setError(e?.message || t('common.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDetectLocation = async () => {
+    setDetectingLocation(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await fetch('https://ipapi.co/json/')
+      if (!response.ok) {
+        throw new Error(t('setup.location.detectFailed', { defaultValue: 'Unable to detect location. Please enter it manually.' }))
+      }
+
+      const data = await response.json()
+      const nextCountry = data.country_name || ''
+      const nextCity = data.city || ''
+      const nextTimezone = data.timezone || ''
+
+      if (!nextCountry && !nextCity) {
+        throw new Error(t('setup.location.detectFailed', { defaultValue: 'Unable to detect location. Please enter it manually.' }))
+      }
+
+      setCountry(nextCountry)
+      setCity(nextCity)
+      if (nextTimezone) {
+        setTimezone(nextTimezone)
+      }
+      setLocationSearch('')
+      setLocationSuggestions([])
+      setShowSuggestions(false)
+      setHasSearched(false)
+
+      await handleUpdateLocation({
+        country: nextCountry,
+        city: nextCity,
+        timezone: nextTimezone || undefined,
+      })
+    } catch (e: any) {
+      setError(e?.message || t('setup.location.detectFailed', { defaultValue: 'Unable to detect location. Please enter it manually.' }))
+    } finally {
+      setDetectingLocation(false)
+    }
+  }
+
+  const handleLocationSearchChange = (value: string) => {
+    setLocationSearch(value)
+    setShowSuggestions(true)
+    if (value !== debouncedLocationSearch) {
+      setHasSearched(false)
+    }
+  }
+
+  const handleSelectLocation = (suggestion: LocationSuggestion) => {
+    const nextCity = suggestion.name || ''
+    const nextCountry = suggestion.country || ''
+    const nextTimezone = suggestion.timezone || ''
+
+    setCity(nextCity)
+    setCountry(nextCountry)
+    if (nextTimezone) {
+      setTimezone(nextTimezone)
+    }
+    setLocationSearch('')
+    setLocationSuggestions([])
+    setShowSuggestions(false)
+    setHasSearched(false)
+    void handleUpdateLocation({
+      city: nextCity,
+      country: nextCountry,
+      timezone: nextTimezone || undefined,
+    })
+  }
+
+  const handleClearLocation = () => {
+    setCity('')
+    setCountry('')
+    setLocationSearch('')
+    setLocationSuggestions([])
+    setShowSuggestions(false)
+    setHasSearched(false)
+    void handleUpdateLocation({ city: '', country: '' })
   }
 
   const handleUpdateTimezone = async () => {
@@ -1986,6 +2285,122 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* Location */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-emerald-600" />
+                <CardTitle>{t('setup.location.title', { defaultValue: 'Where are you located?' })}</CardTitle>
+              </div>
+              <CardDescription>
+                {t('setup.location.subtitle', { defaultValue: 'This helps us provide local gardening advice' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {(city || country) && (
+                <div className="flex items-center gap-3 p-4 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/10">
+                  <MapPin className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-stone-800 dark:text-stone-100 truncate">
+                      {[city, country].filter(Boolean).join(', ')}
+                    </div>
+                    {timezone && (
+                      <div className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400 mt-1">
+                        <Clock className="w-3 h-3" />
+                        {timezone}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearLocation}
+                    disabled={saving}
+                    className="p-2 rounded-full hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50"
+                    aria-label={t('setup.location.clear', { defaultValue: 'Clear location' })}
+                  >
+                    <X className="w-4 h-4 text-emerald-700 dark:text-emerald-300" />
+                  </button>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
+                  {t('setup.location.searchLabel', { defaultValue: 'Search for your city' })}
+                </Label>
+                <div className="relative" ref={suggestionsRef}>
+                  <SearchInput
+                    variant="lg"
+                    value={locationSearch}
+                    onChange={(e) => handleLocationSearchChange(e.target.value)}
+                    onFocus={() => locationSearch.length >= 2 && setShowSuggestions(true)}
+                    onClear={locationSearch ? () => {
+                      setLocationSearch('')
+                      setLocationSuggestions([])
+                      setShowSuggestions(false)
+                    } : undefined}
+                    placeholder={t('setup.location.searchPlaceholder', { defaultValue: 'Type a city name...' })}
+                    loading={searchingLocation}
+                    disabled={saving}
+                    className="bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
+                  />
+
+                  {showSuggestions && locationSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-2 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl overflow-hidden">
+                      {locationSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors text-left"
+                          onClick={() => handleSelectLocation(suggestion)}
+                        >
+                          <MapPin className="w-5 h-5 text-stone-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-stone-800 dark:text-stone-100 truncate">
+                              {suggestion.name}
+                            </div>
+                            <div className="text-sm text-stone-500 dark:text-stone-400 truncate">
+                              {suggestion.admin1 ? `${suggestion.admin1}, ` : ''}{suggestion.country}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {showSuggestions && hasSearched && !searchingLocation && locationSuggestions.length === 0 && debouncedLocationSearch.length >= 2 && (
+                    <div className="absolute z-50 w-full mt-2 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl p-4 text-center text-sm text-stone-500">
+                      {t('setup.location.noResults', { defaultValue: 'No cities found. Try a different search.' })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={handleDetectLocation}
+                  disabled={saving || detectingLocation}
+                  variant="outline"
+                  className="rounded-2xl"
+                >
+                  {detectingLocation ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {t('setup.location.detectingGPS', { defaultValue: 'Detecting...' })}
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="h-4 w-4 mr-2" />
+                      {t('setup.location.detectButton', { defaultValue: 'Use my current location' })}
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs opacity-70">
+                {t('gardenDashboard.settingsSection.locationSet', { defaultValue: 'Weather-based advice will use this location for forecasts.' })}
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Timezone */}
           <Card className={glassCard}>
             <CardHeader>
@@ -2048,24 +2463,8 @@ export default function SettingsPage() {
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.gardenTypeDescription', { defaultValue: 'Where do you grow your plants?' })}</p>
                 <select
                   id="garden-type-select"
-                  value={(profile as any)?.garden_type || ''}
-                  onChange={async (e) => {
-                    if (!user?.id) return
-                    setSaving(true)
-                    try {
-                      const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({ garden_type: e.target.value || null })
-                        .eq('id', user.id)
-                      if (updateError) throw updateError
-                      await refreshProfile()
-                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
-                    } catch (e: any) {
-                      setError(e?.message || t('common.error'))
-                    } finally {
-                      setSaving(false)
-                    }
-                  }}
+                  value={gardenType}
+                  onChange={(e) => handleUpdateSetupField('garden_type', e.target.value || '', gardenType, setGardenType)}
                   disabled={saving}
                   className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
@@ -2082,24 +2481,8 @@ export default function SettingsPage() {
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.experienceLevelDescription', { defaultValue: 'Your gardening expertise level' })}</p>
                 <select
                   id="experience-level-select"
-                  value={(profile as any)?.experience_level || ''}
-                  onChange={async (e) => {
-                    if (!user?.id) return
-                    setSaving(true)
-                    try {
-                      const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({ experience_level: e.target.value || null })
-                        .eq('id', user.id)
-                      if (updateError) throw updateError
-                      await refreshProfile()
-                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
-                    } catch (e: any) {
-                      setError(e?.message || t('common.error'))
-                    } finally {
-                      setSaving(false)
-                    }
-                  }}
+                  value={experienceLevel}
+                  onChange={(e) => handleUpdateSetupField('experience_level', e.target.value || '', experienceLevel, setExperienceLevel)}
                   disabled={saving}
                   className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
@@ -2116,24 +2499,8 @@ export default function SettingsPage() {
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.lookingForDescription', { defaultValue: "What's your main gardening goal?" })}</p>
                 <select
                   id="looking-for-select"
-                  value={(profile as any)?.looking_for || ''}
-                  onChange={async (e) => {
-                    if (!user?.id) return
-                    setSaving(true)
-                    try {
-                      const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({ looking_for: e.target.value || null })
-                        .eq('id', user.id)
-                      if (updateError) throw updateError
-                      await refreshProfile()
-                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
-                    } catch (e: any) {
-                      setError(e?.message || t('common.error'))
-                    } finally {
-                      setSaving(false)
-                    }
-                  }}
+                  value={lookingFor}
+                  onChange={(e) => handleUpdateSetupField('looking_for', e.target.value || '', lookingFor, setLookingFor)}
                   disabled={saving}
                   className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
@@ -2150,32 +2517,27 @@ export default function SettingsPage() {
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.notificationTimeDescription', { defaultValue: 'When should we send you reminders?' })}</p>
                 <select
                   id="notification-time-select"
-                  value={(profile as any)?.notification_time || '10h'}
-                  onChange={async (e) => {
-                    if (!user?.id) return
-                    setSaving(true)
-                    try {
-                      const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({ notification_time: e.target.value })
-                        .eq('id', user.id)
-                      if (updateError) throw updateError
-                      await refreshProfile()
-                      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
-                    } catch (e: any) {
-                      setError(e?.message || t('common.error'))
-                    } finally {
-                      setSaving(false)
-                    }
+                  value={String(notificationHour)}
+                  onChange={(e) => {
+                    const nextHour = Number.parseInt(e.target.value, 10)
+                    if (Number.isNaN(nextHour)) return
+                    handleUpdateNotificationHour(nextHour)
                   }}
                   disabled={saving}
                   className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
-                  <option value="6h">{t('setup.notificationTime.early', { defaultValue: 'Early bird' })} - 6:00 AM</option>
-                  <option value="10h">{t('setup.notificationTime.morning', { defaultValue: 'Sleep in' })} - 10:00 AM</option>
-                  <option value="14h">{t('setup.notificationTime.midday', { defaultValue: 'Midday energy' })} - 2:00 PM</option>
-                  <option value="17h">{t('setup.notificationTime.afternoon', { defaultValue: 'After work' })} - 5:00 PM</option>
+                  {notificationHourOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
+                <p className="text-xs opacity-70 mt-1">
+                  {t('setup.settings.notificationTimeHelper', {
+                    defaultValue: 'Scheduled notifications will be sent at the same local time in your timezone ({{timezone}}).',
+                    timezone: timezone || detectedTimezone,
+                  })}
+                </p>
               </div>
             </CardContent>
           </Card>
