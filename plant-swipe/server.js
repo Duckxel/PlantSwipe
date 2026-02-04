@@ -8356,6 +8356,95 @@ app.get('/api/admin/notification-automations', async (req, res) => {
   }
 })
 
+app.get('/api/admin/notification-automations/monitoring', async (req, res) => {
+  const adminId = await ensureEditor(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const windowHours = 24
+  try {
+    const totalsRows = await sql`
+      select
+        count(un.id)::bigint as total,
+        count(un.id) filter (where un.delivery_status = 'sent')::bigint as sent,
+        count(un.id) filter (where un.delivery_status = 'failed')::bigint as failed,
+        count(un.id) filter (where un.delivery_status = 'pending')::bigint as pending,
+        count(un.id) filter (where un.delivery_error = 'NO_PUSH_SUBSCRIPTION')::bigint as no_subscription,
+        max(un.scheduled_for) as last_queued_at
+      from public.user_notifications un
+      where un.automation_id is not null
+        and un.scheduled_for >= now() - interval '24 hours'
+    `
+
+    const failureRows = await sql`
+      select
+        coalesce(un.delivery_error, 'UNKNOWN') as reason,
+        count(un.id)::bigint as count
+      from public.user_notifications un
+      where un.automation_id is not null
+        and un.scheduled_for >= now() - interval '24 hours'
+        and un.delivery_status = 'failed'
+      group by reason
+      order by count desc
+      limit 6
+    `
+
+    const automationRows = await sql`
+      select
+        a.id::text as id,
+        a.display_name,
+        count(un.id)::bigint as total,
+        count(un.id) filter (where un.delivery_status = 'sent')::bigint as sent,
+        count(un.id) filter (where un.delivery_status = 'failed')::bigint as failed,
+        count(un.id) filter (where un.delivery_status = 'pending')::bigint as pending,
+        count(un.id) filter (where un.delivery_error = 'NO_PUSH_SUBSCRIPTION')::bigint as no_subscription,
+        max(un.scheduled_for) as last_queued_at
+      from public.notification_automations a
+      left join public.user_notifications un
+        on un.automation_id = a.id
+        and un.scheduled_for >= now() - interval '24 hours'
+      group by a.id, a.display_name
+      order by total desc nulls last, a.display_name
+    `
+
+    const totalsRow = totalsRows?.[0] || {}
+    const monitoring = {
+      windowHours,
+      pushConfigured: pushNotificationsEnabled,
+      totals: {
+        queued: Number(totalsRow.total || 0),
+        sent: Number(totalsRow.sent || 0),
+        failed: Number(totalsRow.failed || 0),
+        pending: Number(totalsRow.pending || 0),
+        noSubscription: Number(totalsRow.no_subscription || 0),
+      },
+      lastQueuedAt: isoOrNull(totalsRow.last_queued_at),
+      failureReasons: (failureRows || []).map((row) => ({
+        reason: row.reason || 'UNKNOWN',
+        count: Number(row.count || 0),
+      })),
+      automations: (automationRows || []).map((row) => ({
+        id: row.id,
+        displayName: row.display_name || null,
+        total: Number(row.total || 0),
+        sent: Number(row.sent || 0),
+        failed: Number(row.failed || 0),
+        pending: Number(row.pending || 0),
+        noSubscription: Number(row.no_subscription || 0),
+        lastQueuedAt: isoOrNull(row.last_queued_at),
+      })),
+    }
+
+    res.json({ monitoring })
+  } catch (err) {
+    console.error('[notification-automations] failed to load monitoring summary', err)
+    res.status(500).json({ error: err?.message || 'Failed to load monitoring summary' })
+  }
+})
+
 app.put('/api/admin/notification-automations/:id', async (req, res) => {
   const adminId = await ensureEditor(req, res)
   if (!adminId) return
