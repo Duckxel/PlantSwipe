@@ -994,12 +994,8 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({
             isColorVariant && "p-0",
           )}
         >
-          {isColorVariant ? (
-            <span
-              className="flex h-5 w-5 items-center justify-center rounded-full border border-white/35"
-              style={{ backgroundColor: item.colors?.[0]?.tone ?? DEFAULT_PLANT_COLOR }}
-              aria-hidden="true"
-            />
+          {isColorVariant && item.colors?.length ? (
+            <MultiColorFlowerIcon colors={item.colors} size={20} />
           ) : (
             item.icon
           )}
@@ -1286,6 +1282,88 @@ const BrightnessLowIcon = () => (
     <circle cx="12" cy="12" r="2" fill="currentColor" opacity={0.35} />
   </svg>
 )
+
+/**
+ * Multi-color flower icon that displays up to 5 colors as petals
+ * Each petal is positioned around a center point
+ */
+interface MultiColorFlowerIconProps {
+  colors: ColorSwatchDescriptor[]
+  size?: number
+}
+
+const MultiColorFlowerIcon: React.FC<MultiColorFlowerIconProps> = ({ colors, size = 20 }) => {
+  const displayColors = colors.slice(0, 5)
+  const count = displayColors.length
+  
+  // For a single color, just show a circle
+  if (count === 1) {
+    return (
+      <span
+        className="flex items-center justify-center rounded-full border border-white/35"
+        style={{ 
+          backgroundColor: displayColors[0].tone,
+          width: size,
+          height: size,
+        }}
+        aria-hidden="true"
+      />
+    )
+  }
+  
+  // Calculate petal positions for multi-color display
+  // Petals are arranged in a circle, each rotated by (360/count) degrees
+  const viewBox = 24
+  const center = viewBox / 2
+  const petalLength = 7 // Length of each petal from center
+  const petalWidth = 5 // Width of each petal
+  
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${viewBox} ${viewBox}`}
+      aria-hidden="true"
+      className="drop-shadow-sm"
+    >
+      {/* Small center circle */}
+      <circle
+        cx={center}
+        cy={center}
+        r={2.5}
+        fill="white"
+        stroke="rgba(255,255,255,0.5)"
+        strokeWidth={0.5}
+      />
+      
+      {/* Petals */}
+      {displayColors.map((color, index) => {
+        // Calculate rotation angle for this petal
+        // Start from top (-90 degrees) and distribute evenly
+        const angle = -90 + (360 / count) * index
+        const radians = (angle * Math.PI) / 180
+        
+        // Petal center position (offset from center)
+        const petalCenterX = center + Math.cos(radians) * (petalLength / 2 + 1)
+        const petalCenterY = center + Math.sin(radians) * (petalLength / 2 + 1)
+        
+        return (
+          <ellipse
+            key={color.id}
+            cx={petalCenterX}
+            cy={petalCenterY}
+            rx={petalWidth / 2}
+            ry={petalLength / 2}
+            fill={color.tone}
+            stroke="rgba(255,255,255,0.4)"
+            strokeWidth={0.5}
+            transform={`rotate(${angle + 90}, ${petalCenterX}, ${petalCenterY})`}
+          />
+        )
+      })}
+    </svg>
+  )
+}
 
 const formatIndicatorValue = (value?: string | null): string => {
   if (!value) return ""
