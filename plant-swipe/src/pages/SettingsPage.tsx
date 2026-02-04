@@ -351,6 +351,8 @@ export default function SettingsPage() {
         throw new Error(t('settings.email.emailAlreadyInUse', { defaultValue: 'This email is already in use by another account.' }))
       }
 
+      const oldEmailAddress = email // Store old email before change
+      
       const { error: updateError } = await supabase.auth.updateUser({
         email: newEmail
       })
@@ -358,7 +360,7 @@ export default function SettingsPage() {
       if (updateError) throw updateError
 
       // Reset email_verified to false since user is changing their email
-      // They will need to verify the new email address
+      // They will need to verify the new email address via OTP
       if (user?.id) {
         const { error: profileError } = await supabase
           .from('profiles')
@@ -370,38 +372,57 @@ export default function SettingsPage() {
         }
       }
 
-      // Send verification code to the NEW email address
+      // Get fresh CSRF token and session for subsequent requests
+      const [freshCsrfToken, sessionRes] = await Promise.all([
+        getCsrfToken(), 
+        supabase.auth.getSession()
+      ])
+      
+      const secureApiHeaders: Record<string, string> = { 
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': freshCsrfToken,
+      }
+      if (sessionRes.data.session?.access_token) {
+        secureApiHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
+      }
+
+      // Send notification to OLD email about the change (security alert)
+      if (user?.id && oldEmailAddress) {
+        fetch('/api/security/email-changed-notification', {
+          method: 'POST',
+          headers: secureApiHeaders,
+          body: JSON.stringify({
+            userId: user.id,
+            oldEmail: oldEmailAddress,
+            newEmail: newEmail,
+            userDisplayName: profile?.display_name || 'User',
+            userLanguage: (profile as any)?.language || currentLang || 'en',
+          }),
+          credentials: 'same-origin',
+        }).catch((err) => {
+          console.warn('[email-change] Failed to send notification to old email:', err)
+        })
+      }
+
+      // Send OTP verification code to the NEW email address
       // User will need to verify their new email before continuing
       try {
-        const [verifyCsrfToken, sessionRes] = await Promise.all([
-          getCsrfToken(), 
-          supabase.auth.getSession()
-        ])
-        
-        const verifyHeaders: Record<string, string> = { 
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': verifyCsrfToken,
-        }
-        if (sessionRes.data.session?.access_token) {
-          verifyHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
-        }
-        
         await fetch('/api/email-verification/send', {
           method: 'POST',
-          headers: verifyHeaders,
+          headers: secureApiHeaders,
           body: JSON.stringify({
             language: (profile as any)?.language || currentLang || 'en',
           }),
           credentials: 'same-origin',
         })
       } catch (err) {
-        console.warn('[email-change] Failed to send verification email:', err)
+        console.warn('[email-change] Failed to send verification code to new email:', err)
       }
 
       // Refresh profile to get the updated email_verified status
       await refreshProfile()
       
-      // Redirect to email verification page
+      // Redirect to email verification page for OTP verification
       navigate('/verify-email')
     } catch (e: any) {
       setError(e?.message || t('settings.email.failedToUpdate'))
