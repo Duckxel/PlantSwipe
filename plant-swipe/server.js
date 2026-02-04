@@ -21884,149 +21884,140 @@ IMPORTANT: When you recommend changes (like updating health status or creating t
 Always aim to help the user become a more confident and successful gardener!`
 
 // Define tools that the AI can use to modify garden data
+// Note: Using OpenAI Responses API format (name/description/parameters at top level, not nested in function)
 const APHYLIA_TOOLS = [
   {
     type: 'function',
-    function: {
-      name: 'update_plant_health',
-      description: 'Update the health status of a plant in the garden. Use this after diagnosing plant issues or when the user reports changes in plant health.',
-      parameters: {
-        type: 'object',
-        properties: {
-          garden_plant_id: {
-            type: 'string',
-            description: 'The ID of the garden plant to update (from the context provided)'
-          },
-          health_status: {
-            type: 'string',
-            enum: ['thriving', 'healthy', 'okay', 'struggling', 'critical'],
-            description: 'The new health status for the plant'
-          },
-          reason: {
-            type: 'string',
-            description: 'Brief explanation for the health status change'
-          }
+    name: 'update_plant_health',
+    description: 'Update the health status of a plant in the garden. Use this after diagnosing plant issues or when the user reports changes in plant health.',
+    parameters: {
+      type: 'object',
+      properties: {
+        garden_plant_id: {
+          type: 'string',
+          description: 'The ID of the garden plant to update (from the context provided)'
         },
-        required: ['garden_plant_id', 'health_status']
-      }
+        health_status: {
+          type: 'string',
+          enum: ['thriving', 'healthy', 'okay', 'struggling', 'critical'],
+          description: 'The new health status for the plant'
+        },
+        reason: {
+          type: 'string',
+          description: 'Brief explanation for the health status change'
+        }
+      },
+      required: ['garden_plant_id', 'health_status']
     }
   },
   {
     type: 'function',
-    function: {
-      name: 'update_plant_notes',
-      description: 'Update or append notes for a plant. Use this to record observations, care instructions, or diagnoses.',
-      parameters: {
-        type: 'object',
-        properties: {
-          garden_plant_id: {
-            type: 'string',
-            description: 'The ID of the garden plant to update'
-          },
-          notes: {
-            type: 'string',
-            description: 'The notes to add or update for this plant'
-          },
-          append: {
-            type: 'boolean',
-            description: 'If true, append to existing notes. If false, replace notes.',
-            default: true
-          }
+    name: 'update_plant_notes',
+    description: 'Update or append notes for a plant. Use this to record observations, care instructions, or diagnoses.',
+    parameters: {
+      type: 'object',
+      properties: {
+        garden_plant_id: {
+          type: 'string',
+          description: 'The ID of the garden plant to update'
         },
-        required: ['garden_plant_id', 'notes']
-      }
+        notes: {
+          type: 'string',
+          description: 'The notes to add or update for this plant'
+        },
+        append: {
+          type: 'boolean',
+          description: 'If true, append to existing notes. If false, replace notes.',
+          default: true
+        }
+      },
+      required: ['garden_plant_id', 'notes']
     }
   },
   {
     type: 'function',
-    function: {
-      name: 'create_task',
-      description: 'Create a new care task for a plant. Use this to set up watering schedules, fertilizing reminders, pruning tasks, etc.',
-      parameters: {
-        type: 'object',
-        properties: {
-          garden_plant_id: {
-            type: 'string',
-            description: 'The ID of the garden plant this task is for'
-          },
-          task_type: {
-            type: 'string',
-            enum: ['water', 'fertilize', 'harvest', 'cut', 'custom'],
-            description: 'The type of task'
-          },
-          custom_name: {
-            type: 'string',
-            description: 'Custom name for the task (required if task_type is custom)'
-          },
-          schedule_type: {
-            type: 'string',
-            enum: ['once', 'daily', 'weekly', 'biweekly', 'monthly'],
-            description: 'How often this task should repeat'
-          },
-          due_date: {
-            type: 'string',
-            description: 'When the task is first due (ISO date string)'
-          }
+    name: 'create_task',
+    description: 'Create a new care task for a plant. Use this to set up watering schedules, fertilizing reminders, pruning tasks, etc.',
+    parameters: {
+      type: 'object',
+      properties: {
+        garden_plant_id: {
+          type: 'string',
+          description: 'The ID of the garden plant this task is for'
         },
-        required: ['garden_plant_id', 'task_type', 'schedule_type']
-      }
+        task_type: {
+          type: 'string',
+          enum: ['water', 'fertilize', 'harvest', 'cut', 'custom'],
+          description: 'The type of task'
+        },
+        custom_name: {
+          type: 'string',
+          description: 'Custom name for the task (required if task_type is custom)'
+        },
+        schedule_type: {
+          type: 'string',
+          enum: ['once', 'daily', 'weekly', 'biweekly', 'monthly'],
+          description: 'How often this task should repeat'
+        },
+        due_date: {
+          type: 'string',
+          description: 'When the task is first due (ISO date string)'
+        }
+      },
+      required: ['garden_plant_id', 'task_type', 'schedule_type']
     }
   },
   {
     type: 'function',
-    function: {
-      name: 'complete_task',
-      description: 'Mark a task occurrence as complete. Use when user confirms they have completed a task.',
-      parameters: {
-        type: 'object',
-        properties: {
-          task_id: {
-            type: 'string',
-            description: 'The ID of the task to complete'
-          },
-          notes: {
-            type: 'string',
-            description: 'Optional notes about completing this task'
-          }
+    name: 'complete_task',
+    description: 'Mark a task occurrence as complete. Use when user confirms they have completed a task.',
+    parameters: {
+      type: 'object',
+      properties: {
+        task_id: {
+          type: 'string',
+          description: 'The ID of the task to complete'
         },
-        required: ['task_id']
-      }
+        notes: {
+          type: 'string',
+          description: 'Optional notes about completing this task'
+        }
+      },
+      required: ['task_id']
     }
   },
   {
     type: 'function',
-    function: {
-      name: 'add_journal_entry',
-      description: 'Add a journal entry to the garden. Use to record significant observations, diagnoses, milestones, or summaries.',
-      parameters: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Title for the journal entry'
-          },
-          content: {
-            type: 'string',
-            description: 'The content/body of the journal entry'
-          },
-          mood: {
-            type: 'string',
-            enum: ['blooming', 'thriving', 'sprouting', 'resting', 'wilting'],
-            description: 'The mood/sentiment for this entry'
-          },
-          plants_mentioned: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Array of garden_plant_ids mentioned in this entry'
-          },
-          tags: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Tags for this journal entry (e.g., diagnosis, milestone, observation)'
-          }
+    name: 'add_journal_entry',
+    description: 'Add a journal entry to the garden. Use to record significant observations, diagnoses, milestones, or summaries.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Title for the journal entry'
         },
-        required: ['title', 'content']
-      }
+        content: {
+          type: 'string',
+          description: 'The content/body of the journal entry'
+        },
+        mood: {
+          type: 'string',
+          enum: ['blooming', 'thriving', 'sprouting', 'resting', 'wilting'],
+          description: 'The mood/sentiment for this entry'
+        },
+        plants_mentioned: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of garden_plant_ids mentioned in this entry'
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Tags for this journal entry (e.g., diagnosis, milestone, observation)'
+        }
+      },
+      required: ['title', 'content']
     }
   }
 ]
