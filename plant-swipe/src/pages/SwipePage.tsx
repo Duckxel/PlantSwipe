@@ -1311,11 +1311,17 @@ const MultiColorFlowerIcon: React.FC<MultiColorFlowerIconProps> = ({ colors, siz
     )
   }
   
+  // For 2 colors: one center, one petal
+  // For 3+ colors: first color is center, rest are petals
+  const centerColor = displayColors[0]
+  const petalColors = displayColors.slice(1)
+  
   // Large overlapping circles arranged like flower petals
   const viewBox = 24
   const center = viewBox / 2
   const petalRadius = 6 // Large circles that overlap
   const petalDistance = 5 // Distance from center to petal center
+  const petalCount = petalColors.length
   
   return (
     <svg
@@ -1326,10 +1332,10 @@ const MultiColorFlowerIcon: React.FC<MultiColorFlowerIconProps> = ({ colors, siz
       className="drop-shadow-sm"
     >
       {/* Petals - large overlapping circles */}
-      {displayColors.map((color, index) => {
+      {petalColors.map((color, index) => {
         // Calculate position for this petal
         // Start from top (-90 degrees) and distribute evenly
-        const angle = -90 + (360 / count) * index
+        const angle = -90 + (360 / petalCount) * index
         const radians = (angle * Math.PI) / 180
         
         // Petal center position (offset from center)
@@ -1349,12 +1355,12 @@ const MultiColorFlowerIcon: React.FC<MultiColorFlowerIconProps> = ({ colors, siz
         )
       })}
       
-      {/* White center circle on top */}
+      {/* Center circle - uses first color */}
       <circle
         cx={center}
         cy={center}
         r={3.5}
-        fill="white"
+        fill={centerColor.tone}
         stroke="rgba(255,255,255,0.8)"
         strokeWidth={0.5}
       />
