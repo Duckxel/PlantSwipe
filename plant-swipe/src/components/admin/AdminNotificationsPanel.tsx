@@ -580,6 +580,14 @@ export function AdminNotificationsPanel() {
     }))
   }, [])
 
+  const updateMessageVariant = React.useCallback((index: number, value: string) => {
+    setTemplateForm(prev => {
+      const nextVariants = [...prev.messageVariants]
+      nextVariants[index] = value
+      return { ...prev, messageVariants: nextVariants }
+    })
+  }, [])
+
   // Translation variant helpers
   const addTranslationVariant = React.useCallback(() => {
     const text = newTranslationVariantText.trim()
@@ -598,6 +606,14 @@ export function AdminNotificationsPanel() {
     }))
   }, [])
 
+  const updateTranslationVariant = React.useCallback((lang: string, index: number, value: string) => {
+    setTemplateTranslations(prev => {
+      const nextVariants = [...(prev[lang] || [])]
+      nextVariants[index] = value
+      return { ...prev, [lang]: nextVariants }
+    })
+  }, [])
+
   const copyDefaultToTranslation = React.useCallback(() => {
     if (!selectedTranslationLang) return
     setTemplateTranslations(prev => ({
@@ -605,6 +621,30 @@ export function AdminNotificationsPanel() {
       [selectedTranslationLang]: [...templateForm.messageVariants],
     }))
   }, [selectedTranslationLang, templateForm.messageVariants])
+
+  const updateActiveVariant = React.useCallback((index: number, value: string) => {
+    if (selectedTranslationLang) {
+      updateTranslationVariant(selectedTranslationLang, index, value)
+    } else {
+      updateMessageVariant(index, value)
+    }
+  }, [selectedTranslationLang, updateTranslationVariant, updateMessageVariant])
+
+  const removeActiveVariant = React.useCallback((index: number) => {
+    if (selectedTranslationLang) {
+      removeTranslationVariant(selectedTranslationLang, index)
+    } else {
+      removeMessageVariant(index)
+    }
+  }, [selectedTranslationLang, removeTranslationVariant, removeMessageVariant])
+
+  const addActiveVariant = React.useCallback(() => {
+    if (selectedTranslationLang) {
+      addTranslationVariant()
+    } else {
+      addMessageVariant()
+    }
+  }, [selectedTranslationLang, addTranslationVariant, addMessageVariant])
 
   // Auto-translate all variants to all languages using DeepL
   const handleAutoTranslate = React.useCallback(async () => {
@@ -638,9 +678,17 @@ export function AdminNotificationsPanel() {
   }, [templateForm.messageVariants, isAutoTranslating])
 
   // Get non-English languages for translations
-  const translationLanguages = React.useMemo(() => {
-    return languages.filter(lang => lang.code !== 'en')
+  const defaultLanguageLabel = React.useMemo(() => {
+    return languages.find(lang => lang.code === DEFAULT_LANGUAGE)?.label || 'English'
   }, [languages])
+
+  const translationLanguages = React.useMemo(() => {
+    return languages.filter(lang => lang.code !== DEFAULT_LANGUAGE)
+  }, [languages])
+
+  const languageOptions = React.useMemo(() => {
+    return [{ code: DEFAULT_LANGUAGE, label: defaultLanguageLabel }, ...translationLanguages]
+  }, [defaultLanguageLabel, translationLanguages])
 
   const handleSaveTemplate = React.useCallback(async () => {
     if (!templateForm.title.trim()) {
@@ -805,6 +853,12 @@ export function AdminNotificationsPanel() {
   // =========================================================================
   // Render
   // =========================================================================
+  const activeLanguageCode = selectedTranslationLang || DEFAULT_LANGUAGE
+  const activeLanguageLabel = languageOptions.find(lang => lang.code === activeLanguageCode)?.label || activeLanguageCode
+  const activeVariants = activeLanguageCode === DEFAULT_LANGUAGE
+    ? templateForm.messageVariants
+    : (templateTranslations[activeLanguageCode] || [])
+  const newVariantValue = selectedTranslationLang ? newTranslationVariantText : newVariantText
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* Header */}
@@ -1795,7 +1849,11 @@ export function AdminNotificationsPanel() {
               <div className="flex items-center justify-between">
                 <Label className="text-xs sm:text-sm font-medium flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
-                  Message Variants ({templateForm.messageVariants.length})
+                  Message Variants ({activeVariants.length})
+                  <span className="inline-flex items-center gap-1 rounded-full bg-stone-100 dark:bg-[#2a2a2d] px-2 py-0.5 text-[10px] font-medium text-stone-600 dark:text-stone-300">
+                    <Languages className="h-3 w-3" />
+                    {selectedTranslationLang ? `${activeLanguageLabel} translation` : activeLanguageLabel}
+                  </span>
                 </Label>
                 <div className="relative">
                   <Button
@@ -1824,26 +1882,45 @@ export function AdminNotificationsPanel() {
                 </div>
               </div>
 
+              {selectedTranslationLang && (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                  <Languages className="h-4 w-4 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <div>
+                    <div className="font-semibold">
+                      Editing {activeLanguageLabel} translation
+                    </div>
+                    <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                      English variants are hidden in this view.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {templateForm.messageVariants.length === 0 ? (
+                {activeVariants.length === 0 ? (
                   <div className="text-sm text-stone-500 text-center py-4 border border-dashed rounded-xl">
-                    No messages yet. Add one below.
+                    {selectedTranslationLang
+                      ? 'No translations yet. Add one below.'
+                      : 'No messages yet. Add one below.'}
                   </div>
                 ) : (
-                  templateForm.messageVariants.map((variant, index) => (
+                  activeVariants.map((variant, index) => (
                     <div
                       key={index}
                       className="flex items-start gap-2 p-3 border border-stone-200 dark:border-[#3e3e42] rounded-xl bg-stone-50 dark:bg-[#1a1a1d]"
                     >
-                      <div className="flex-1 text-sm text-stone-700 dark:text-stone-300">
-                        {variant}
-                      </div>
+                      <Textarea
+                        value={variant}
+                        onChange={(e) => updateActiveVariant(index, e.target.value)}
+                        rows={2}
+                        className="flex-1 min-h-[44px] resize-none rounded-lg border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#111113] text-sm text-stone-700 dark:text-stone-300"
+                      />
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
                         className="rounded-lg h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                        onClick={() => removeMessageVariant(index)}
+                        onClick={() => removeActiveVariant(index)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -1854,22 +1931,30 @@ export function AdminNotificationsPanel() {
 
               <div className="flex items-center gap-2">
                 <Input
-                  value={newVariantText}
-                  onChange={(e) => setNewVariantText(e.target.value)}
-                  placeholder="Enter message variant..."
+                  value={newVariantValue}
+                  onChange={(e) => {
+                    if (selectedTranslationLang) {
+                      setNewTranslationVariantText(e.target.value)
+                    } else {
+                      setNewVariantText(e.target.value)
+                    }
+                  }}
+                  placeholder={selectedTranslationLang
+                    ? `Enter ${activeLanguageLabel} message...`
+                    : 'Enter message variant...'}
                   className="rounded-xl flex-1"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
-                      addMessageVariant()
+                      addActiveVariant()
                     }
                   }}
                 />
                 <Button
                   type="button"
                   className="rounded-xl bg-amber-600 hover:bg-amber-700"
-                  onClick={addMessageVariant}
-                  disabled={!newVariantText.trim()}
+                  onClick={addActiveVariant}
+                  disabled={!newVariantValue.trim()}
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
@@ -1877,50 +1962,69 @@ export function AdminNotificationsPanel() {
             </div>
 
             {/* Translations Section */}
-            {translationLanguages.length > 0 && (
+            {languageOptions.length > 1 && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <Globe className="h-4 w-4 text-amber-600" />
-                    <Label className="text-sm font-medium">Translations</Label>
+                    <Label className="text-sm font-medium">Editing Language</Label>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAutoTranslate}
-                    disabled={isAutoTranslating || !templateForm.messageVariants.length}
-                    className="rounded-lg h-8 text-xs border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
-                  >
-                    {isAutoTranslating ? (
-                      <>
-                        <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                        Translating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-3 w-3 mr-1.5" />
-                        Auto-translate (DeepL)
-                      </>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedTranslationLang && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={copyDefaultToTranslation}
+                        className="text-xs h-8 rounded-lg"
+                        disabled={!templateForm.messageVariants.length}
+                      >
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copy English
+                      </Button>
                     )}
-                  </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAutoTranslate}
+                      disabled={isAutoTranslating || !templateForm.messageVariants.length}
+                      className="rounded-lg h-8 text-xs border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                    >
+                      {isAutoTranslating ? (
+                        <>
+                          <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                          Translating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3 w-3 mr-1.5" />
+                          Auto-translate (DeepL)
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 <p className="text-xs text-stone-500">
-                  Provide translated message variants for each language. Users will receive notifications in their preferred language.
+                  Select a language to edit its variants. The list above updates to the chosen language.
                 </p>
 
                 {/* Language Tabs */}
                 <div className="flex flex-wrap gap-2">
-                  {translationLanguages.map((lang) => {
-                    const hasTranslation = (templateTranslations[lang.code]?.length || 0) > 0
+                  {languageOptions.map((lang) => {
+                    const variantCount = lang.code === DEFAULT_LANGUAGE
+                      ? templateForm.messageVariants.length
+                      : (templateTranslations[lang.code]?.length || 0)
+                    const hasTranslation = lang.code !== DEFAULT_LANGUAGE && variantCount > 0
+                    const isSelected = (selectedTranslationLang || DEFAULT_LANGUAGE) === lang.code
                     return (
                       <button
                         key={lang.code}
                         type="button"
-                        onClick={() => setSelectedTranslationLang(selectedTranslationLang === lang.code ? null : lang.code)}
+                        onClick={() => setSelectedTranslationLang(lang.code === DEFAULT_LANGUAGE ? null : lang.code)}
                         className={cn(
                           "px-3 py-1.5 text-sm rounded-lg border transition-all flex items-center gap-1.5",
-                          selectedTranslationLang === lang.code
+                          isSelected
                             ? "bg-amber-100 dark:bg-amber-900/30 border-amber-500 text-amber-700 dark:text-amber-400"
                             : hasTranslation
                               ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400"
@@ -1929,81 +2033,13 @@ export function AdminNotificationsPanel() {
                       >
                         <Languages className="h-3.5 w-3.5" />
                         {lang.label}
-                        {hasTranslation && (
-                          <span className="ml-1 text-xs opacity-75">({templateTranslations[lang.code]?.length})</span>
+                        {variantCount > 0 && (
+                          <span className="ml-1 text-xs opacity-75">({variantCount})</span>
                         )}
                       </button>
                     )
                   })}
                 </div>
-
-                {/* Selected Language Translation Editor */}
-                {selectedTranslationLang && (
-                  <div className="p-4 bg-amber-50/50 dark:bg-amber-900/10 rounded-xl border border-amber-200 dark:border-amber-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-sm flex items-center gap-2">
-                        <Languages className="h-4 w-4 text-amber-600" />
-                        {languages.find(l => l.code === selectedTranslationLang)?.label || selectedTranslationLang} Translation
-                      </h4>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={copyDefaultToTranslation}
-                        className="text-xs h-7 rounded-lg"
-                        disabled={!templateForm.messageVariants.length}
-                      >
-                        <Copy className="h-3 w-3 mr-1" />
-                        Copy English
-                      </Button>
-                    </div>
-
-                    {/* Translation Variants List */}
-                    {(templateTranslations[selectedTranslationLang] || []).length > 0 && (
-                      <div className="space-y-2 max-h-40 overflow-y-auto">
-                        {(templateTranslations[selectedTranslationLang] || []).map((variant, index) => (
-                          <div key={index} className="flex items-start gap-2 group">
-                            <div className="flex-1 p-2 bg-white dark:bg-stone-800 rounded-lg border border-stone-200 dark:border-stone-600 text-sm">
-                              {variant}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => removeTranslationVariant(selectedTranslationLang, index)}
-                              className="p-1 text-stone-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Add Translation Variant */}
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={newTranslationVariantText}
-                        onChange={(e) => setNewTranslationVariantText(e.target.value)}
-                        placeholder={`Enter ${languages.find(l => l.code === selectedTranslationLang)?.label || selectedTranslationLang} message...`}
-                        className="rounded-lg flex-1 text-sm"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault()
-                            addTranslationVariant()
-                          }
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="rounded-lg bg-amber-600 hover:bg-amber-700"
-                        onClick={addTranslationVariant}
-                        disabled={!newTranslationVariantText.trim()}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
