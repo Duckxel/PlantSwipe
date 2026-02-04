@@ -8639,6 +8639,7 @@ async function runAutomation(automation) {
       : 0
     const message = messageVariants[messageIndex]
       .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+    const personalizedTitle = notificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
     try {
       // Check if notification already exists for this automation + user today
@@ -8660,7 +8661,7 @@ async function runAutomation(automation) {
         values (
           ${automation.id},
           ${recipient.user_id},
-          ${notificationTitle},
+          ${personalizedTitle},
           ${message},
           ${automation.cta_url || null},
           now(),
@@ -24538,6 +24539,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
       const userDisplayName = userDisplayNames.get(String(userId)) || 'User'
       // Replace {{user}} with the actual user display name
       let personalizedMessage = baseMessage.replace(/\{\{user\}\}/g, userDisplayName)
+      let personalizedTitle = (campaign.title || 'Aphylia').replace(/\{\{user\}\}/g, userDisplayName)
 
       // Translate message based on user's language preference
       const userLang = userLanguages.get(String(userId)) || 'en'
@@ -24548,7 +24550,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
       }
 
       // Translate title if needed
-      let translatedTitle = campaign.title
+      let translatedTitle = personalizedTitle
       if (targetLang !== sourceLang) {
         translatedTitle = await translateNotificationText(campaign.title, targetLang, sourceLang)
       }
@@ -25160,6 +25162,7 @@ async function processDueAutomations() {
             : 0
           const message = messageVariants[messageIndex]
             .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+          const personalizedTitle = notificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
           try {
             // Insert notification with conflict handling for the unique automation constraint
@@ -25171,7 +25174,7 @@ async function processDueAutomations() {
               values (
                 ${automation.id},
                 ${recipient.user_id},
-                ${notificationTitle},
+                ${personalizedTitle},
                 ${message},
                 ${targetUrl},
                 now(),
