@@ -59,15 +59,6 @@ const TRIGGER_VARIABLES: Record<string, {
     ]
   },
   // Security triggers - Email Change
-  EMAIL_CHANGE_VERIFICATION: {
-    category: 'security',
-    variables: [
-      { token: '{{user}}', description: "User's display name", required: true },
-      { token: '{{url}}', description: 'Secure link to verify new email (verification URL)', required: true },
-      { token: '{{new_email}}', description: 'The new email address being verified' },
-      { token: '{{old_email}}', description: 'The previous email address' },
-    ]
-  },
   EMAIL_CHANGE_NOTIFICATION: {
     category: 'security',
     variables: [

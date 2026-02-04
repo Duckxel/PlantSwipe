@@ -9171,11 +9171,6 @@ const DEFAULT_EMAIL_TRIGGERS = [
   },
   // Security Emails - Email Change
   {
-    triggerType: 'EMAIL_CHANGE_VERIFICATION',
-    displayName: 'Email Change Verification',
-    description: 'Sent to the NEW email address with a verification link when user requests to change their email. Variables: {{url}}, {{new_email}}, {{old_email}}',
-  },
-  {
     triggerType: 'EMAIL_CHANGE_NOTIFICATION',
     displayName: 'Email Changed Notification',
     description: 'Sent to the OLD email address to inform that the email has been changed. Variables: {{new_email}}, {{old_email}}, {{time}}',
@@ -9538,7 +9533,7 @@ app.post('/api/send-automatic-email', async (req, res) => {
  * - Supports extra context variables for security info
  * - Can send to any email address (important for email change notifications)
  * 
- * @param triggerType - The trigger type (e.g., 'PASSWORD_RESET_REQUEST', 'EMAIL_CHANGE_VERIFICATION')
+ * @param triggerType - The trigger type (e.g., 'PASSWORD_RESET_REQUEST', 'EMAIL_VERIFICATION')
  * @param options.recipientEmail - Email address to send to (may differ from user's current email)
  * @param options.userId - User ID for logging
  * @param options.userDisplayName - User's display name for {{user}} variable
@@ -9708,7 +9703,6 @@ app.post('/api/send-security-email', async (req, res) => {
 
   // Validate trigger type is a security-related trigger
   const securityTriggers = [
-    'EMAIL_CHANGE_VERIFICATION',
     'EMAIL_CHANGE_NOTIFICATION', 
     'PASSWORD_RESET_REQUEST',
     'PASSWORD_CHANGE_CONFIRMATION',
