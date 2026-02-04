@@ -10,6 +10,8 @@ import {
 const autoEnableAttempted = new Set<string>()
 // Track if we've attempted re-sync for this session
 const resyncAttempted = new Set<string>()
+// Track if we've attempted re-subscribe after a SW update for this session
+const swUpdateAttempted = new Set<string>()
 
 export function usePushSubscription(userId: string | null) {
   const supported = React.useMemo(() => {
@@ -25,6 +27,7 @@ export function usePushSubscription(userId: string | null) {
   const [error, setError] = React.useState<string | null>(null)
   const [autoEnableTried, setAutoEnableTried] = React.useState(false)
   const [synced, setSynced] = React.useState(false)
+  const resubscribeInFlight = React.useRef(false)
 
   const refresh = React.useCallback(async () => {
     if (!supported) return
@@ -38,6 +41,23 @@ export function usePushSubscription(userId: string | null) {
       setError((err as Error)?.message || 'Failed to inspect subscription')
     }
   }, [supported])
+
+  const attemptResubscribe = React.useCallback(async (force: boolean, reason: string) => {
+    if (!supported || !userId) return
+    if (resubscribeInFlight.current) return
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    resubscribeInFlight.current = true
+    try {
+      await registerPushSubscription(force)
+      setSubscribed(true)
+      setPermission(Notification.permission)
+      console.log(`[push] Resubscribe success (${reason})`)
+    } catch (err) {
+      console.warn(`[push] Resubscribe failed (${reason}):`, (err as Error)?.message)
+    } finally {
+      resubscribeInFlight.current = false
+    }
+  }, [supported, userId])
   
   // Try to re-sync existing browser subscription to server
   // This handles cases where browser has subscription but it wasn't synced properly
@@ -64,7 +84,7 @@ export function usePushSubscription(userId: string | null) {
           // Try to re-sync with server (this will update/insert the subscription)
           resyncAttempted.add(userId)
           console.log('[push] Re-syncing existing subscription with server...')
-          await registerPushSubscription(false) // Don't force, just sync existing
+          await attemptResubscribe(false, 'resync-existing') // Don't force, just sync existing
           console.log('[push] Successfully re-synced subscription with server')
           setSynced(true)
           setSubscribed(true)
@@ -73,7 +93,7 @@ export function usePushSubscription(userId: string | null) {
           console.log('[push] Permission granted but no subscription, attempting to create one...')
           resyncAttempted.add(userId)
           try {
-            await registerPushSubscription(true) // Force create new subscription
+            await attemptResubscribe(true, 'resync-missing') // Force create new subscription
             console.log('[push] Successfully created new subscription')
             setSynced(true)
             setSubscribed(true)
@@ -99,6 +119,49 @@ export function usePushSubscription(userId: string | null) {
   React.useEffect(() => {
     refresh().catch(() => {})
   }, [refresh, userId])
+
+  // Re-subscribe after a service worker update becomes active
+  React.useEffect(() => {
+    if (!supported || !userId || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    let active = true
+    let registration: ServiceWorkerRegistration | null = null
+
+    const handleControllerChange = () => {
+      if (!active) return
+      if (swUpdateAttempted.has(userId)) return
+      swUpdateAttempted.add(userId)
+      attemptResubscribe(true, 'service-worker-activated')
+    }
+
+    const handleUpdateFound = () => {
+      const installing = registration?.installing
+      if (!installing) return
+      const onStateChange = () => {
+        if (installing.state === 'activated') {
+          handleControllerChange()
+        }
+      }
+      installing.addEventListener('statechange', onStateChange)
+    }
+
+    const setup = async () => {
+      try {
+        registration = await navigator.serviceWorker.ready
+        registration.addEventListener('updatefound', handleUpdateFound)
+      } catch {
+        // ignore setup failures
+      }
+    }
+
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange)
+    setup()
+
+    return () => {
+      active = false
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
+      registration?.removeEventListener('updatefound', handleUpdateFound)
+    }
+  }, [supported, userId, attemptResubscribe])
 
   // Auto-enable push notifications for new users (default behavior)
   // This runs once per user session when they first log in
