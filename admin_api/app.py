@@ -1,6 +1,7 @@
 import hmac
 import hashlib
 import os
+import re
 import subprocess
 from typing import Set, Optional
 
@@ -342,6 +343,20 @@ def _verify_request() -> None:
     abort(401)
 
 
+def validate_branch_name(branch_name: Optional[str]) -> None:
+    """Validate branch name to prevent shell argument injection."""
+    if not branch_name:
+        return
+
+    # Must not start with '-' to prevent argument injection
+    if branch_name.startswith("-"):
+        raise ValueError("Branch name cannot start with '-'")
+
+    # Allow alphanumeric, underscore, dot, slash, hyphen
+    if not re.match(r"^[a-zA-Z0-9_./-]+$", branch_name):
+        raise ValueError("Invalid branch name format")
+
+
 def _is_service_allowed(service_name: str) -> bool:
     if service_name.endswith(".service"):
         return service_name in ALLOWED_SERVICES
@@ -613,6 +628,12 @@ def _run_refresh(branch: Optional[str], stream: bool):
 def admin_refresh_stream():
     _verify_request()
     branch = (request.args.get("branch") or "").strip() or None
+
+    try:
+        validate_branch_name(branch)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
@@ -626,6 +647,12 @@ def admin_refresh():
     _verify_request()
     body = request.get_json(silent=True) or {}
     branch = (request.args.get("branch") or body.get("branch") or "").strip() or None
+
+    try:
+        validate_branch_name(branch)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
