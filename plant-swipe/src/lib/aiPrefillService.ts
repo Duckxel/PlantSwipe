@@ -83,17 +83,24 @@ function generateUUIDv4(): string {
 }
 
 /**
- * Format plant name to Title Case
+ * Format plant name to Title Case, stripping non-alphanumeric characters.
+ * Only A-Z, a-z, 0-9, and spaces are kept.
  * Examples:
  *   "basil" -> "Basil"
  *   "ARROWHEAD PLANT" -> "Arrowhead Plant"
  *   "spider plant" -> "Spider Plant"
+ *   "Begonia 'Silver Maples'" -> "Begonia Silver Maples"
+ *   "Rose-of-Sharon" -> "Rose Of Sharon"
  */
 function formatPlantName(name: string): string {
   if (!name) return name
   return name
+    .replace(/[^a-zA-Z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
     .toLowerCase()
     .split(' ')
+    .filter(word => word.length > 0)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
     .trim()
