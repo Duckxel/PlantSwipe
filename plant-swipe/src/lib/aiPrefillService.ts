@@ -7,7 +7,7 @@
 
 import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, getEnglishPlantName } from "@/lib/aiPlantFill"
-import { translateText, translateArray, translateBatch } from "@/lib/deepl"
+import { translateBatch } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
@@ -838,7 +838,7 @@ export async function processPlantRequest(
         }
         
         // Translate all array items in one batch call (or split into chunks of 50)
-        let translatedArrayItems: string[] = []
+        const translatedArrayItems: string[] = []
         if (allArrayItems.length > 0) {
           const BATCH_SIZE = 50
           for (let i = 0; i < allArrayItems.length; i += BATCH_SIZE) {
