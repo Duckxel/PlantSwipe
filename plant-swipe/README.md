@@ -1146,7 +1146,7 @@ Example: `3.2.7` → `3002007`
 <details>
 <summary><strong>🚀 Building for Release</strong></summary>
 
-### iOS Release Build
+### iOS Release Build (Manual)
 
 ```bash
 # Build web app
@@ -1164,7 +1164,19 @@ npx cap open ios
 # 3. Distribute App → App Store Connect
 ```
 
-### Android Release Build
+### iOS Release Build (Fastlane)
+
+```bash
+cd ios
+
+# Build and upload to TestFlight
+bundle exec fastlane beta
+
+# Build and upload to App Store
+bundle exec fastlane release
+```
+
+### Android Release Build (Manual)
 
 ```bash
 # Build web app
@@ -1182,16 +1194,38 @@ npx cap open android
 # 3. Sign with release key
 ```
 
+### Android Release Build (Fastlane)
+
+```bash
+cd android
+
+# Build and upload to Internal Testing
+bundle exec fastlane internal
+
+# Build and upload to Production (10% rollout)
+bundle exec fastlane release
+```
+
 ### CI/CD (GitHub Actions)
 
 Mobile app builds are automated via GitHub Actions:
 
 - **Trigger**: After version bump on main branch
-- **iOS**: Builds on macOS runner, archives for App Store
-- **Android**: Builds on Ubuntu runner, creates signed AAB
+- **iOS**: Builds on macOS runner, optionally uploads to TestFlight
+- **Android**: Builds on Ubuntu runner, optionally uploads to Play Store
 - **Version**: Automatically synced from `package.json`
+- **Signing**: Uses Fastlane with Match (iOS) and keystore (Android)
 
 See `.github/workflows/build-mobile-apps.yml` for the complete workflow.
+
+### Fastlane Setup
+
+For automated signing and publishing, see [FASTLANE_SETUP.md](./FASTLANE_SETUP.md) for:
+
+- iOS code signing with Match
+- Android keystore setup
+- Google Play service account configuration
+- Required GitHub secrets
 
 </details>
 

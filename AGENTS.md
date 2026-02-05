@@ -379,6 +379,9 @@ Aphylia uses Capacitor to build native iOS and Android apps from the existing PW
 | `plant-swipe/capacitor.config.ts` | Capacitor configuration |
 | `plant-swipe/ios/` | iOS native project (generated) |
 | `plant-swipe/android/` | Android native project (generated) |
+| `plant-swipe/ios/fastlane/` | iOS Fastlane configuration |
+| `plant-swipe/android/fastlane/` | Android Fastlane configuration |
+| `plant-swipe/FASTLANE_SETUP.md` | Fastlane setup guide |
 | `.github/workflows/build-mobile-apps.yml` | CI/CD for mobile builds |
 
 ### Development Guidelines
@@ -439,11 +442,29 @@ npx cap open ios        # Open Xcode
 npx cap open android    # Open Android Studio
 ```
 
+**Using Fastlane (Recommended for Release):**
+```bash
+# iOS: Build and upload to TestFlight
+cd plant-swipe/ios
+bundle exec fastlane beta
+
+# Android: Build and upload to Play Store
+cd plant-swipe/android
+bundle exec fastlane internal  # or alpha/beta/release
+```
+
 **CI/CD (GitHub Actions):**
 - Mobile builds are triggered after version bumps on main
 - iOS builds require macOS runner with Xcode
 - Android builds require JDK and Android SDK
+- Fastlane handles signing and publishing
 - Artifacts are uploaded as release assets
+
+**Fastlane Setup:**
+- See `plant-swipe/FASTLANE_SETUP.md` for complete setup guide
+- iOS uses Match for code signing (certificates stored in private Git repo)
+- Android uses keystore for signing
+- Both require GitHub secrets for CI/CD automation
 
 #### 5. Testing Checklist
 

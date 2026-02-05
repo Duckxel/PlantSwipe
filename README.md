@@ -150,11 +150,12 @@ Made with care by **Neolite** & **Five**
 - **Push Notifications**: Native push notification support
 - **Auto-Versioning**: Version synced with web app via CI/CD
 - **Automated Builds**: GitHub Actions for building and releasing
+- **Fastlane Integration**: Automated signing, TestFlight, and Play Store publishing
 
 | Platform | Technology | Requirements |
 |----------|------------|--------------|
-| **iOS** | Capacitor + Xcode | macOS, Xcode 15+, Apple Developer Account |
-| **Android** | Capacitor + Gradle | Android Studio, Android SDK, Google Play Account |
+| **iOS** | Capacitor + Xcode + Fastlane | macOS, Xcode 15+, Apple Developer Account |
+| **Android** | Capacitor + Gradle + Fastlane | Android Studio, Android SDK, Google Play Account |
 
 </details>
 
@@ -583,6 +584,7 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 |----------|-------------|
 | [**Technical README**](./plant-swipe/README.md) | Deep dive for engineers |
 | [**Bun Migration Guide**](./plant-swipe/BUN_MIGRATION.md) | npm to Bun transition & performance comparison |
+| [**Fastlane Setup**](./plant-swipe/FASTLANE_SETUP.md) | Mobile app signing & publishing automation |
 | [**DeepL Setup Guide**](./plant-swipe/DEEPL_API_SETUP.md) | Translation API configuration |
 | [**Cache Implementation**](./plant-swipe/CACHE_IMPLEMENTATION.md) | Database caching system details |
 | [**Garden Task Cache**](./plant-swipe/GARDEN_TASK_CACHE.md) | Task caching documentation |

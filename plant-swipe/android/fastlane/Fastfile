@@ -1,0 +1,346 @@
+# Android Fastlane configuration
+# For more information: https://docs.fastlane.tools
+
+default_platform(:android)
+
+# Read version from package.json
+def get_version_from_package_json
+  require 'json'
+  package_json_path = File.join(Dir.pwd, '..', '..', 'package.json')
+  if File.exist?(package_json_path)
+    package = JSON.parse(File.read(package_json_path))
+    package['version']
+  else
+    '1.0.0'
+  end
+end
+
+# Calculate version code from semver
+# Format: MAJOR * 1000000 + MINOR * 1000 + PATCH
+def get_version_code(version = nil)
+  version ||= get_version_from_package_json
+  parts = version.split('.').map(&:to_i)
+  major = parts[0] || 0
+  minor = parts[1] || 0
+  patch = parts[2] || 0
+  major * 1000000 + minor * 1000 + patch
+end
+
+platform :android do
+  # ================================
+  # Build Lanes
+  # ================================
+
+  desc "Build debug APK for testing"
+  lane :build_debug do
+    version = get_version_from_package_json
+    version_code = get_version_code(version)
+    
+    UI.message("Building debug APK - version #{version} (#{version_code})")
+    
+    gradle(
+      task: "assembleDebug",
+      project_dir: "./",
+      properties: {
+        "versionName" => version,
+        "versionCode" => version_code
+      }
+    )
+    
+    # Copy APK to build directory
+    FileUtils.mkdir_p("./build")
+    apk_path = lane_context[SharedValues::GRADLE_APK_OUTPUT_PATH]
+    if apk_path && File.exist?(apk_path)
+      FileUtils.cp(apk_path, "./build/Aphylia-#{version}-debug.apk")
+      UI.success("Debug APK: ./build/Aphylia-#{version}-debug.apk")
+    end
+  end
+
+  desc "Build release APK (unsigned)"
+  lane :build_release_apk do
+    version = get_version_from_package_json
+    version_code = get_version_code(version)
+    
+    UI.message("Building release APK - version #{version} (#{version_code})")
+    
+    gradle(
+      task: "assembleRelease",
+      project_dir: "./",
+      properties: {
+        "versionName" => version,
+        "versionCode" => version_code
+      }
+    )
+    
+    # Copy APK to build directory
+    FileUtils.mkdir_p("./build")
+    apk_path = lane_context[SharedValues::GRADLE_APK_OUTPUT_PATH]
+    if apk_path && File.exist?(apk_path)
+      FileUtils.cp(apk_path, "./build/Aphylia-#{version}-release.apk")
+      UI.success("Release APK: ./build/Aphylia-#{version}-release.apk")
+    end
+  end
+
+  desc "Build release AAB (Android App Bundle) for Play Store"
+  lane :build_release do |options|
+    version = options[:version] || get_version_from_package_json
+    version_code = options[:version_code] || get_version_code(version)
+    
+    UI.message("Building release AAB - version #{version} (#{version_code})")
+    
+    gradle(
+      task: "bundleRelease",
+      project_dir: "./",
+      properties: {
+        "versionName" => version,
+        "versionCode" => version_code
+      }
+    )
+    
+    # Copy AAB to build directory
+    FileUtils.mkdir_p("./build")
+    aab_path = lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH]
+    if aab_path && File.exist?(aab_path)
+      FileUtils.cp(aab_path, "./build/Aphylia-#{version}-release.aab")
+      UI.success("Release AAB: ./build/Aphylia-#{version}-release.aab")
+    end
+  end
+
+  desc "Build signed release AAB"
+  lane :build_signed do |options|
+    version = options[:version] || get_version_from_package_json
+    version_code = options[:version_code] || get_version_code(version)
+    
+    # Check for signing configuration
+    keystore_path = ENV['ANDROID_KEYSTORE_PATH']
+    keystore_password = ENV['ANDROID_KEYSTORE_PASSWORD']
+    key_alias = ENV['ANDROID_KEY_ALIAS']
+    key_password = ENV['ANDROID_KEY_PASSWORD']
+    
+    unless keystore_path && File.exist?(keystore_path)
+      UI.user_error!("Keystore not found. Set ANDROID_KEYSTORE_PATH environment variable.")
+    end
+    
+    UI.message("Building signed release AAB - version #{version} (#{version_code})")
+    
+    gradle(
+      task: "bundleRelease",
+      project_dir: "./",
+      properties: {
+        "versionName" => version,
+        "versionCode" => version_code,
+        "android.injected.signing.store.file" => keystore_path,
+        "android.injected.signing.store.password" => keystore_password,
+        "android.injected.signing.key.alias" => key_alias,
+        "android.injected.signing.key.password" => key_password
+      }
+    )
+    
+    # Copy AAB to build directory
+    FileUtils.mkdir_p("./build")
+    aab_path = lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH]
+    if aab_path && File.exist?(aab_path)
+      FileUtils.cp(aab_path, "./build/Aphylia-#{version}-release-signed.aab")
+      UI.success("Signed release AAB: ./build/Aphylia-#{version}-release-signed.aab")
+    end
+  end
+
+  # ================================
+  # Distribution Lanes
+  # ================================
+
+  desc "Upload to Google Play Internal Testing track"
+  lane :internal do |options|
+    version = options[:version] || get_version_from_package_json
+    
+    # Build if no AAB exists
+    aab_path = "./build/Aphylia-#{version}-release-signed.aab"
+    unless File.exist?(aab_path)
+      build_signed(version: version)
+      aab_path = lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH]
+    end
+    
+    upload_to_play_store(
+      track: "internal",
+      aab: aab_path,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      release_status: "completed"
+    )
+    
+    UI.success("Successfully uploaded to Internal Testing track!")
+  end
+
+  desc "Upload to Google Play Alpha (Closed Testing) track"
+  lane :alpha do |options|
+    version = options[:version] || get_version_from_package_json
+    
+    # Build if no AAB exists
+    aab_path = "./build/Aphylia-#{version}-release-signed.aab"
+    unless File.exist?(aab_path)
+      build_signed(version: version)
+      aab_path = lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH]
+    end
+    
+    upload_to_play_store(
+      track: "alpha",
+      aab: aab_path,
+      skip_upload_apk: true,
+      skip_upload_metadata: options[:skip_metadata] != false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      release_status: "completed"
+    )
+    
+    UI.success("Successfully uploaded to Alpha (Closed Testing) track!")
+  end
+
+  desc "Upload to Google Play Beta (Open Testing) track"
+  lane :beta do |options|
+    version = options[:version] || get_version_from_package_json
+    
+    # Build if no AAB exists
+    aab_path = "./build/Aphylia-#{version}-release-signed.aab"
+    unless File.exist?(aab_path)
+      build_signed(version: version)
+      aab_path = lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH]
+    end
+    
+    upload_to_play_store(
+      track: "beta",
+      aab: aab_path,
+      skip_upload_apk: true,
+      skip_upload_metadata: options[:skip_metadata] != false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      release_status: "completed"
+    )
+    
+    UI.success("Successfully uploaded to Beta (Open Testing) track!")
+  end
+
+  desc "Upload to Google Play Production track"
+  lane :release do |options|
+    version = options[:version] || get_version_from_package_json
+    
+    # Build if no AAB exists
+    aab_path = "./build/Aphylia-#{version}-release-signed.aab"
+    unless File.exist?(aab_path)
+      build_signed(version: version)
+      aab_path = lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH]
+    end
+    
+    # Determine rollout percentage (default to staged rollout starting at 10%)
+    rollout = options[:rollout] || 0.1
+    
+    upload_to_play_store(
+      track: "production",
+      aab: aab_path,
+      skip_upload_apk: true,
+      skip_upload_metadata: options[:skip_metadata] != false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      release_status: rollout < 1.0 ? "inProgress" : "completed",
+      rollout: rollout < 1.0 ? rollout.to_s : nil
+    )
+    
+    if rollout < 1.0
+      UI.success("Successfully uploaded to Production with #{(rollout * 100).to_i}% rollout!")
+    else
+      UI.success("Successfully uploaded to Production (full rollout)!")
+    end
+  end
+
+  desc "Promote from one track to another"
+  lane :promote do |options|
+    from_track = options[:from] || "beta"
+    to_track = options[:to] || "production"
+    rollout = options[:rollout] || 1.0
+    
+    upload_to_play_store(
+      track: from_track,
+      track_promote_to: to_track,
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      release_status: rollout < 1.0 ? "inProgress" : "completed",
+      rollout: rollout < 1.0 ? rollout.to_s : nil
+    )
+    
+    UI.success("Promoted from #{from_track} to #{to_track}!")
+  end
+
+  # ================================
+  # Utility Lanes
+  # ================================
+
+  desc "Validate Google Play service account credentials"
+  lane :validate_credentials do
+    validate_play_store_json_key(
+      json_key: ENV["GOOGLE_PLAY_JSON_KEY_PATH"] || "google-play-key.json"
+    )
+    UI.success("Google Play credentials are valid!")
+  end
+
+  desc "Fetch version codes currently live on Play Store"
+  lane :fetch_version_codes do
+    version_codes = google_play_track_version_codes(
+      track: "production"
+    )
+    UI.message("Production version codes: #{version_codes}")
+    
+    beta_codes = google_play_track_version_codes(
+      track: "beta"
+    )
+    UI.message("Beta version codes: #{beta_codes}")
+    
+    internal_codes = google_play_track_version_codes(
+      track: "internal"
+    )
+    UI.message("Internal version codes: #{internal_codes}")
+  end
+
+  desc "Clean build artifacts"
+  lane :clean do
+    gradle(task: "clean", project_dir: "./")
+    FileUtils.rm_rf("./build") if Dir.exist?("./build")
+    UI.success("Cleaned build artifacts")
+  end
+
+  # ================================
+  # CI/CD Lanes
+  # ================================
+
+  desc "CI: Build and upload to Internal Testing"
+  lane :ci_internal do
+    build_signed
+    internal
+  end
+
+  desc "CI: Build and upload to Beta"
+  lane :ci_beta do
+    build_signed
+    beta
+  end
+
+  desc "CI: Build and upload to Production"
+  lane :ci_release do |options|
+    build_signed
+    release(
+      rollout: options[:rollout] || 0.1, # Start with 10% rollout by default
+      skip_metadata: true
+    )
+  end
+
+  # ================================
+  # Error Handling
+  # ================================
+
+  error do |lane, exception|
+    UI.error("Error in lane #{lane}: #{exception.message}")
+  end
+end

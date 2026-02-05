@@ -21,6 +21,26 @@ on:
         required: false
         default: 'false'
         type: boolean
+      publish_ios:
+        description: 'Publish iOS to TestFlight'
+        required: false
+        default: 'false'
+        type: boolean
+      publish_android:
+        description: 'Publish Android to Play Store (internal track)'
+        required: false
+        default: 'false'
+        type: boolean
+      android_track:
+        description: 'Android release track (internal/alpha/beta/production)'
+        required: false
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
       create_release:
         description: 'Create GitHub release'
         required: false
@@ -33,6 +53,7 @@ permissions:
 env:
   NODE_VERSION: '20'
   BUN_VERSION: '1.1.0'
+  RUBY_VERSION: '3.2'
 
 jobs:
   # Get version from package.json
@@ -114,7 +135,7 @@ jobs:
           path: plant-swipe/dist
           retention-days: 1
 
-  # Build iOS app
+  # Build and optionally publish iOS app
   build-ios:
     needs: [get-version, build-web]
     if: |
@@ -136,6 +157,13 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+          bundler-cache: true
+          working-directory: plant-swipe/ios
+      
       - name: Download web build
         uses: actions/download-artifact@v4
         with:
@@ -153,32 +181,24 @@ jobs:
             npx cap add ios
           fi
       
-      - name: Update iOS version
-        working-directory: plant-swipe
-        run: |
-          # Update Info.plist with version
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ needs.get-version.outputs.version }}" ios/App/App/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ needs.get-version.outputs.version_code }}" ios/App/App/Info.plist
-      
       - name: Sync Capacitor
         working-directory: plant-swipe
         run: npx cap sync ios
       
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
-      
       - name: Install CocoaPods
-        run: |
-          sudo gem install cocoapods
-          cd plant-swipe/ios/App && pod install --repo-update
+        working-directory: plant-swipe/ios/App
+        run: pod install --repo-update
+      
+      - name: Install Fastlane
+        working-directory: plant-swipe/ios
+        run: bundle install
       
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode_15.2.app
       
-      - name: Build iOS app (unsigned)
+      # Build unsigned IPA (when not publishing)
+      - name: Build unsigned IPA
+        if: github.event.inputs.publish_ios != 'true'
         working-directory: plant-swipe/ios/App
         run: |
           xcodebuild -workspace App.xcworkspace \
@@ -193,23 +213,49 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             MARKETING_VERSION=${{ needs.get-version.outputs.version }} \
             CURRENT_PROJECT_VERSION=${{ needs.get-version.outputs.version_code }}
-      
-      - name: Create unsigned IPA
-        working-directory: plant-swipe/ios/App
-        run: |
+          
           mkdir -p build/Payload
           cp -r build/App.xcarchive/Products/Applications/App.app build/Payload/
           cd build
           zip -r ../Aphylia-${{ needs.get-version.outputs.version }}-unsigned.ipa Payload
       
+      # Build and publish signed IPA using Fastlane (when publishing)
+      - name: Build and upload to TestFlight
+        if: github.event.inputs.publish_ios == 'true'
+        working-directory: plant-swipe/ios
+        run: bundle exec fastlane ci_beta
+        env:
+          APP_IDENTIFIER: ${{ secrets.IOS_APP_IDENTIFIER || 'app.aphylia.mobile' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          ITC_TEAM_ID: ${{ secrets.ITC_TEAM_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_BASIC_AUTH: ${{ secrets.MATCH_GIT_BASIC_AUTH }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_KEYCHAIN_NAME: fastlane_keychain
+          MATCH_KEYCHAIN_PASSWORD: ${{ secrets.MATCH_KEYCHAIN_PASSWORD || 'fastlane_ci' }}
+          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          CHANGELOG: "Automated build from CI - version ${{ needs.get-version.outputs.version }}"
+      
+      - name: Rename unsigned IPA artifact
+        if: github.event.inputs.publish_ios != 'true'
+        working-directory: plant-swipe/ios/App
+        run: |
+          mkdir -p ../build
+          if [ -f "Aphylia-${{ needs.get-version.outputs.version }}-unsigned.ipa" ]; then
+            mv "Aphylia-${{ needs.get-version.outputs.version }}-unsigned.ipa" ../build/
+          fi
+      
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-app
-          path: plant-swipe/ios/App/Aphylia-${{ needs.get-version.outputs.version }}-unsigned.ipa
+          path: |
+            plant-swipe/ios/App/Aphylia-*.ipa
+            plant-swipe/ios/build/*.ipa
           retention-days: 30
 
-  # Build Android app
+  # Build and optionally publish Android app
   build-android:
     needs: [get-version, build-web]
     if: |
@@ -240,6 +286,13 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
       
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+          bundler-cache: true
+          working-directory: plant-swipe/android
+      
       - name: Download web build
         uses: actions/download-artifact@v4
         with:
@@ -257,43 +310,71 @@ jobs:
             npx cap add android
           fi
       
-      - name: Update Android version
-        working-directory: plant-swipe/android
-        run: |
-          # Update version in build.gradle
-          sed -i "s/versionCode [0-9]*/versionCode ${{ needs.get-version.outputs.version_code }}/" app/build.gradle
-          sed -i "s/versionName \"[^\"]*\"/versionName \"${{ needs.get-version.outputs.version }}\"/" app/build.gradle
-      
       - name: Sync Capacitor
         working-directory: plant-swipe
         run: npx cap sync android
       
-      - name: Build Android APK (debug)
+      - name: Install Fastlane
         working-directory: plant-swipe/android
-        run: ./gradlew assembleDebug
+        run: bundle install
       
-      - name: Build Android Bundle (release unsigned)
+      # Decode and setup signing key (only when publishing)
+      - name: Decode Android signing key
+        if: github.event.inputs.publish_android == 'true'
         working-directory: plant-swipe/android
-        run: ./gradlew bundleRelease
-      
-      - name: Rename artifacts
-        working-directory: plant-swipe/android/app/build/outputs
         run: |
-          mv apk/debug/app-debug.apk apk/debug/Aphylia-${{ needs.get-version.outputs.version }}-debug.apk
-          mv bundle/release/app-release.aab bundle/release/Aphylia-${{ needs.get-version.outputs.version }}-release.aab
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > release-key.jks
+          echo "${{ secrets.GOOGLE_PLAY_JSON_KEY_BASE64 }}" | base64 --decode > google-play-key.json
       
-      - name: Upload Android APK
+      # Build unsigned APK and AAB (when not publishing)
+      - name: Build unsigned artifacts
+        if: github.event.inputs.publish_android != 'true'
+        working-directory: plant-swipe/android
+        run: |
+          bundle exec fastlane build_debug
+          bundle exec fastlane build_release
+      
+      # Build signed and publish to Play Store (when publishing)
+      - name: Build and upload to Play Store
+        if: github.event.inputs.publish_android == 'true'
+        working-directory: plant-swipe/android
+        run: |
+          TRACK="${{ github.event.inputs.android_track || 'internal' }}"
+          case "$TRACK" in
+            internal) bundle exec fastlane ci_internal ;;
+            alpha) bundle exec fastlane alpha ;;
+            beta) bundle exec fastlane ci_beta ;;
+            production) bundle exec fastlane ci_release rollout:0.1 ;;
+          esac
+        env:
+          ANDROID_PACKAGE_NAME: ${{ secrets.ANDROID_PACKAGE_NAME || 'app.aphylia.mobile' }}
+          GOOGLE_PLAY_JSON_KEY_PATH: google-play-key.json
+          ANDROID_KEYSTORE_PATH: release-key.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      
+      - name: Collect build artifacts
+        working-directory: plant-swipe/android
+        run: |
+          mkdir -p artifacts
+          find . -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find . -name "*.aab" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find build -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find build -name "*.aab" -exec cp {} artifacts/ \; 2>/dev/null || true
+          ls -la artifacts/ || echo "No artifacts found"
+      
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: plant-swipe/android/app/build/outputs/apk/debug/Aphylia-${{ needs.get-version.outputs.version }}-debug.apk
-          retention-days: 30
-      
-      - name: Upload Android Bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-bundle
-          path: plant-swipe/android/app/build/outputs/bundle/release/Aphylia-${{ needs.get-version.outputs.version }}-release.aab
+          name: android-app
+          path: |
+            plant-swipe/android/artifacts/*.apk
+            plant-swipe/android/artifacts/*.aab
+            plant-swipe/android/build/*.apk
+            plant-swipe/android/build/*.aab
+            plant-swipe/android/app/build/outputs/apk/**/*.apk
+            plant-swipe/android/app/build/outputs/bundle/**/*.aab
           retention-days: 30
 
   # Create GitHub Release
@@ -315,8 +396,11 @@ jobs:
         with:
           path: artifacts
       
-      - name: List artifacts
-        run: find artifacts -type f -name "*.apk" -o -name "*.aab" -o -name "*.ipa" | head -20
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( -name "*.apk" -o -name "*.aab" -o -name "*.ipa" \) -exec cp {} release-files/ \; 2>/dev/null || true
+          ls -la release-files/ || echo "No release files found"
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -329,12 +413,14 @@ jobs:
             ### Mobile App Downloads
             
             #### iOS
-            - **Unsigned IPA**: For development/enterprise deployment
+            - **IPA**: For development/enterprise deployment
             - To install, use Apple Configurator, Xcode, or sign with your developer certificate
+            ${{ github.event.inputs.publish_ios == 'true' && '- **TestFlight**: Build has been uploaded to TestFlight for beta testing' || '' }}
             
             #### Android
             - **Debug APK**: Install directly on Android devices (developer mode required)
-            - **Release AAB**: Upload to Google Play Console for distribution
+            - **Release AAB**: For Google Play distribution
+            ${{ github.event.inputs.publish_android == 'true' && format('- **Play Store**: Build has been uploaded to {0} track', github.event.inputs.android_track || 'internal') || '' }}
             
             ### Web App
             The web app at [aphylia.app](https://aphylia.app) has been updated to this version.
@@ -351,10 +437,7 @@ jobs:
             - Commit: ${{ github.sha }}
           draft: false
           prerelease: false
-          files: |
-            artifacts/ios-app/*.ipa
-            artifacts/android-apk/*.apk
-            artifacts/android-bundle/*.aab
+          files: release-files/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -379,7 +462,18 @@ jobs:
           echo "| Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
+          if [[ "${{ github.event.inputs.publish_ios }}" == "true" ]]; then
+            echo "### iOS Publishing" >> $GITHUB_STEP_SUMMARY
+            echo "- Uploaded to TestFlight" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ github.event.inputs.publish_android }}" == "true" ]]; then
+            echo "### Android Publishing" >> $GITHUB_STEP_SUMMARY
+            echo "- Uploaded to Play Store (${{ github.event.inputs.android_track || 'internal' }} track)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           if [[ "${{ needs.create-release.result }}" == "success" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Release Created" >> $GITHUB_STEP_SUMMARY
             echo "Download the mobile apps from the [Releases page](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.get-version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
           fi

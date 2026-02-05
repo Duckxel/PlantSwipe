@@ -1,0 +1,17 @@
+# iOS App Store Connect configuration
+# For more information: https://docs.fastlane.tools/actions/appfile/
+
+# The bundle identifier of your app
+app_identifier ENV["APP_IDENTIFIER"] || "app.aphylia.mobile"
+
+# Your Apple Developer Portal username (email)
+apple_id ENV["APPLE_ID"]
+
+# Your App Store Connect Team ID (if you're in multiple teams)
+itc_team_id ENV["ITC_TEAM_ID"]
+
+# Your Apple Developer Portal Team ID (if you're in multiple teams)
+team_id ENV["TEAM_ID"]
+
+# For more information about the Appfile, see:
+# https://docs.fastlane.tools/advanced/#appfile

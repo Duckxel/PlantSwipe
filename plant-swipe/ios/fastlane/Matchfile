@@ -1,0 +1,29 @@
+# Match configuration for code signing
+# For more information: https://docs.fastlane.tools/actions/match/
+
+# Git repository to store certificates and profiles
+git_url ENV["MATCH_GIT_URL"]
+
+# Define the default type (appstore, adhoc, development, enterprise)
+type "appstore"
+
+# The bundle identifier(s) of your app
+app_identifier ENV["APP_IDENTIFIER"] || "app.aphylia.mobile"
+
+# Your Apple Developer Portal username
+username ENV["APPLE_ID"]
+
+# Team ID from Apple Developer Portal
+team_id ENV["TEAM_ID"]
+
+# Keychain name to use (defaults to login.keychain)
+keychain_name ENV["MATCH_KEYCHAIN_NAME"] || "login.keychain"
+
+# Skip confirmation prompts during match run
+readonly true
+
+# Clone using HTTPS instead of SSH (better for CI)
+git_basic_authorization ENV["MATCH_GIT_BASIC_AUTH"]
+
+# For more information about Match, see:
+# https://docs.fastlane.tools/actions/match/

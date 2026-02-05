@@ -1,0 +1,12 @@
+# Gemfile for Android Fastlane
+# Run `bundle install` to install dependencies
+# Run `bundle exec fastlane <lane>` to execute lanes
+
+source "https://rubygems.org"
+
+# Fastlane for automation
+gem "fastlane", "~> 2.220"
+
+# Plugins
+plugins_path = File.join(File.dirname(__FILE__), 'fastlane', 'Pluginfile')
+eval_gemfile(plugins_path) if File.exist?(plugins_path)

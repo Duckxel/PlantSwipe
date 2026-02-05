@@ -1,0 +1,251 @@
+# iOS Fastlane configuration
+# For more information: https://docs.fastlane.tools
+
+default_platform(:ios)
+
+# Read version from package.json
+def get_version_from_package_json
+  require 'json'
+  package_json_path = File.join(Dir.pwd, '..', '..', 'package.json')
+  if File.exist?(package_json_path)
+    package = JSON.parse(File.read(package_json_path))
+    package['version']
+  else
+    '1.0.0'
+  end
+end
+
+# Calculate build number from version (for unique build identification)
+def get_build_number
+  # Use timestamp for unique build numbers in CI
+  if ENV['CI']
+    Time.now.strftime('%Y%m%d%H%M')
+  else
+    # For local builds, use a simple increment or manual value
+    ENV['BUILD_NUMBER'] || '1'
+  end
+end
+
+platform :ios do
+  # ================================
+  # Pre-build Setup
+  # ================================
+
+  desc "Install CocoaPods dependencies"
+  lane :install_pods do
+    cocoapods(
+      podfile: "./App/Podfile",
+      use_bundle_exec: true
+    )
+  end
+
+  desc "Setup code signing using Match"
+  lane :setup_signing do
+    # Create a temporary keychain for CI
+    if ENV['CI']
+      create_keychain(
+        name: ENV['MATCH_KEYCHAIN_NAME'] || 'fastlane_keychain',
+        password: ENV['MATCH_KEYCHAIN_PASSWORD'] || 'fastlane_password',
+        default_keychain: true,
+        unlock: true,
+        timeout: 3600,
+        lock_when_sleeps: false
+      )
+    end
+
+    # Fetch certificates and profiles from Match repository
+    match(
+      type: "appstore",
+      readonly: is_ci,
+      keychain_name: ENV['MATCH_KEYCHAIN_NAME'] || 'fastlane_keychain',
+      keychain_password: ENV['MATCH_KEYCHAIN_PASSWORD'] || 'fastlane_password'
+    )
+  end
+
+  # ================================
+  # Build Lanes
+  # ================================
+
+  desc "Build the iOS app for testing (development)"
+  lane :build_development do
+    setup_signing if ENV['MATCH_GIT_URL']
+    
+    version = get_version_from_package_json
+    build_number = get_build_number
+    
+    # Update version in Xcode project
+    increment_version_number(
+      version_number: version,
+      xcodeproj: "./App/App.xcodeproj"
+    )
+    
+    increment_build_number(
+      build_number: build_number,
+      xcodeproj: "./App/App.xcodeproj"
+    )
+    
+    build_app(
+      workspace: "./App/App.xcworkspace",
+      scheme: "App",
+      configuration: "Debug",
+      export_method: "development",
+      output_directory: "./build",
+      output_name: "Aphylia-#{version}-development.ipa"
+    )
+  end
+
+  desc "Build the iOS app for App Store distribution"
+  lane :build_release do |options|
+    setup_signing if ENV['MATCH_GIT_URL']
+    
+    version = options[:version] || get_version_from_package_json
+    build_number = options[:build_number] || get_build_number
+    
+    UI.message("Building version #{version} (#{build_number})")
+    
+    # Update version in Xcode project
+    increment_version_number(
+      version_number: version,
+      xcodeproj: "./App/App.xcodeproj"
+    )
+    
+    increment_build_number(
+      build_number: build_number,
+      xcodeproj: "./App/App.xcodeproj"
+    )
+    
+    build_app(
+      workspace: "./App/App.xcworkspace",
+      scheme: "App",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "./build",
+      output_name: "Aphylia-#{version}.ipa",
+      include_bitcode: false,
+      include_symbols: true
+    )
+  end
+
+  # ================================
+  # Distribution Lanes
+  # ================================
+
+  desc "Upload to TestFlight for beta testing"
+  lane :beta do |options|
+    # Build first if no IPA exists
+    unless File.exist?("./build/Aphylia-*.ipa")
+      build_release(options)
+    end
+    
+    # Upload to TestFlight
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+      distribute_external: false,
+      notify_external_testers: false,
+      changelog: options[:changelog] || "New beta build"
+    )
+    
+    UI.success("Successfully uploaded to TestFlight!")
+  end
+
+  desc "Upload to App Store for production release"
+  lane :release do |options|
+    version = options[:version] || get_version_from_package_json
+    
+    # Build release version
+    build_release(version: version, build_number: options[:build_number])
+    
+    # Upload to App Store Connect
+    upload_to_app_store(
+      skip_screenshots: options[:skip_screenshots] != false,
+      skip_metadata: options[:skip_metadata] != false,
+      precheck_include_in_app_purchases: false,
+      submit_for_review: options[:submit_for_review] || false,
+      automatic_release: options[:automatic_release] || false,
+      force: true, # Skip HTML report verification
+      
+      # Submission options (if submit_for_review is true)
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: false,
+        export_compliance_is_exempt: true
+      }
+    )
+    
+    UI.success("Successfully uploaded version #{version} to App Store!")
+  end
+
+  # ================================
+  # Utility Lanes
+  # ================================
+
+  desc "Sync certificates and profiles"
+  lane :sync_certificates do
+    match(type: "development", readonly: false)
+    match(type: "appstore", readonly: false)
+  end
+
+  desc "Register new devices"
+  lane :register_device do |options|
+    device_name = options[:name] || UI.input("Device name: ")
+    device_udid = options[:udid] || UI.input("Device UDID: ")
+    
+    register_devices(
+      devices: {
+        device_name => device_udid
+      }
+    )
+    
+    # Refresh development profiles with new device
+    match(type: "development", force_for_new_devices: true)
+  end
+
+  desc "Take screenshots for App Store"
+  lane :screenshots do
+    capture_screenshots(
+      workspace: "./App/App.xcworkspace",
+      scheme: "App"
+    )
+  end
+
+  desc "Clean build artifacts"
+  lane :clean do
+    clear_derived_data
+    FileUtils.rm_rf("./build") if Dir.exist?("./build")
+    UI.success("Cleaned build artifacts")
+  end
+
+  # ================================
+  # CI/CD Lanes
+  # ================================
+
+  desc "CI: Build and upload to TestFlight"
+  lane :ci_beta do
+    setup_signing
+    build_release
+    beta(changelog: ENV['CHANGELOG'] || "Automated CI build")
+  end
+
+  desc "CI: Build and upload to App Store"
+  lane :ci_release do |options|
+    setup_signing
+    release(
+      submit_for_review: options[:submit_for_review] || false,
+      automatic_release: options[:automatic_release] || false
+    )
+  end
+
+  # ================================
+  # Error Handling
+  # ================================
+
+  error do |lane, exception|
+    UI.error("Error in lane #{lane}: #{exception.message}")
+    
+    # Clean up keychain on CI
+    if ENV['CI']
+      delete_keychain(name: ENV['MATCH_KEYCHAIN_NAME'] || 'fastlane_keychain') rescue nil
+    end
+  end
+end

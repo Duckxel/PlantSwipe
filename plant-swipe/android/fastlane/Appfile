@@ -1,0 +1,12 @@
+# Android Play Store configuration
+# For more information: https://docs.fastlane.tools/actions/appfile/
+
+# The package name of your app (same as applicationId in build.gradle)
+package_name ENV["ANDROID_PACKAGE_NAME"] || "app.aphylia.mobile"
+
+# Path to the JSON key file for service account authentication
+# This file is generated in Google Play Console > Setup > API access
+json_key_file ENV["GOOGLE_PLAY_JSON_KEY_PATH"] || "google-play-key.json"
+
+# For more information about the Appfile, see:
+# https://docs.fastlane.tools/advanced/#appfile
