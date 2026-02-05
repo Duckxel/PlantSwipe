@@ -107,7 +107,10 @@ export function ServiceWorkerToast() {
   const autoHideTimer = React.useRef<number | null>(null)
   const wbRef = React.useRef<Workbox | null>(null)
   const pendingReloadRef = React.useRef(false)
-  const updateShownRef = React.useRef(false) // Track if update notification was already shown
+  // Guard: once set to true, prevents any further update popups for this
+  // service-worker lifecycle.  Only reset when a new SW actually activates
+  // (i.e. the version changes), so that a *future* update can still be surfaced.
+  const updateShownRef = React.useRef(false)
 
   const requestRegistrationUpdate = React.useCallback(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
@@ -161,6 +164,9 @@ export function ServiceWorkerToast() {
           setActiveVersion(nextVersion)
           persistVersion(nextVersion)
           setAvailableVersion((current) => (current === nextVersion ? null : current))
+          // The current update cycle is complete — reset the guard so that
+          // a *future* service-worker update can surface a new popup.
+          updateShownRef.current = false
         }
       }
     },
@@ -241,12 +247,10 @@ export function ServiceWorkerToast() {
     }
   }, [offlineReadyFlag, readyAcknowledged, isOffline])
 
-  React.useEffect(() => {
-    if (needRefreshFlag && !isOffline) {
-      setMode('update')
-      setVisible(true)
-    }
-  }, [needRefreshFlag, isOffline])
+  // Note: no separate effect for needRefreshFlag — surfaceWaitingUpdate()
+  // already sets mode='update' and visible=true directly.  A duplicate
+  // effect here was causing the popup to re-appear after dismiss because
+  // needRefreshFlag could still be true from a prior trigger.
 
   React.useEffect(() => {
     if (!visible || mode !== 'ready') return
@@ -382,8 +386,11 @@ export function ServiceWorkerToast() {
     } else if (mode === 'update') {
       setRefreshDismissed(true)
       setNeedRefreshFlag(false)
-      // Reset the update shown flag so it can show again on next update
-      updateShownRef.current = false
+      // Do NOT reset updateShownRef here — the same waiting SW is still
+      // present and other triggers (Workbox 'waiting', SW_UPDATE_FOUND
+      // message, registration.waiting check) could fire again and re-show
+      // the popup.  The ref is only reset when SW_ACTIVATED arrives with
+      // a new version, so a genuinely new update can still be surfaced.
     }
     setVisible(false)
   }
@@ -392,8 +399,8 @@ export function ServiceWorkerToast() {
     setNeedRefreshFlag(false)
     setRefreshDismissed(false)
     setAvailableVersion(null)
-    // Reset the update shown flag
-    updateShownRef.current = false
+    // Do NOT reset updateShownRef — a reload is pending; no reason to
+    // allow the popup to re-appear if the reload takes a moment.
     pendingReloadRef.current = true
     const wb = wbRef.current
     const postSkipWaiting = () => {
