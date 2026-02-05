@@ -241,7 +241,7 @@ export function SchedulePickerDialog(props: {
           <div className="text-sm opacity-70">Selected: {countSelected} / {amount}</div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-1 py-1 text-base shadow-sm md:text-sm">
+            <div className="flex h-9 w-full items-center rounded-md border border-input dark:border-stone-600 bg-transparent px-1 py-1 text-base shadow-sm md:text-sm">
               <div className="flex gap-1 w-full">
                 {(['week','month','year'] as Period[]).map((p) => {
                   const isAllowed = periodOptions.includes(p)
@@ -252,7 +252,7 @@ export function SchedulePickerDialog(props: {
                       type="button"
                       disabled={!isAllowed}
                       onClick={() => isAllowed && handlePeriodChange(p)}
-                      className={`flex-1 rounded-md border text-xs capitalize h-7 px-2 ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isAllowed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`flex-1 rounded-md border text-xs capitalize h-7 px-2 ${isActive ? 'bg-black text-white dark:bg-emerald-600 dark:border-emerald-600' : 'bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600'} ${!isAllowed ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {p}
                     </button>
@@ -330,7 +330,7 @@ function WeekPicker({ selectedNumbers, onToggleNumber, disabledMore }: { selecte
             key={uiIndex}
             type="button"
             onClick={() => onToggleNumber(uiIndex)}
-            className={`h-12 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+            className={`h-12 rounded-xl border text-sm ${isOn ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
             disabled={!isOn && disabledMore}
           >
             {label}
@@ -352,7 +352,7 @@ function _MonthPicker({ selected, onToggle, disabledMore }: { selected: number[]
             key={d}
             type="button"
             onClick={() => onToggle(d)}
-            className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+            className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
             disabled={!isOn && disabledMore}
           >
             {d}
@@ -376,7 +376,7 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
             key={l}
             type="button"
             onClick={() => onToggleHeader(uiIndex)}
-            className={`h-8 rounded-lg border text-[11px] ${'bg-white hover:bg-stone-50'}`}
+            className="h-8 rounded-lg border text-[11px] bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600"
           >
             {l}
           </button>
@@ -394,7 +394,7 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
                 key={uiIndex}
                 type="button"
                 onClick={() => onToggle(rowIdx + 1, uiIndex)}
-                className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
                 disabled={!isOn && disabledMore}
                 aria-label={`${wn} ${labels[uiIndex]}`}
               />
@@ -416,7 +416,7 @@ function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disable
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[60vh] overflow-auto pr-1">
       {months.map((label, monthIdx) => (
-        <div key={label} className="rounded-xl border p-2">
+        <div key={label} className="rounded-xl border dark:border-stone-700 p-2">
           <div className="text-xs opacity-70 mb-2">{label}</div>
           <div className="space-y-2">
             <div className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
@@ -426,7 +426,7 @@ function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disable
                   key={l}
                   type="button"
                   onClick={() => onToggleHeader(monthIdx, uiIndex)}
-                  className={`h-8 rounded-lg border text-[11px] ${'bg-white hover:bg-stone-50'}`}
+                  className="h-8 rounded-lg border text-[11px] bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600"
                 >
                   {l}
                 </button>
@@ -445,7 +445,7 @@ function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disable
                       key={uiIndex}
                       type="button"
                       onClick={() => onToggle(monthIdx, rowIdx + 1, uiIndex)}
-                      className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
                       disabled={!isOn && disabledMore}
                       aria-label={`${label} ${wn} ${labels[uiIndex]}`}
                     />
