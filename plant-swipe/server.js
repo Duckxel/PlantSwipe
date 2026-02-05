@@ -1094,6 +1094,7 @@ const rateLimitStores = {
   scan: new Map(),           // Plant identification scans
   aiChat: new Map(),         // AI garden chat
   translate: new Map(),      // Translation API
+  adminTranslate: new Map(), // Admin translation API (higher limit)
   imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
   bugReport: new Map(),      // Bug report submissions
   emailVerifySend: new Map(),   // Email verification code sending
@@ -1127,6 +1128,12 @@ const rateLimitConfig = {
   translate: {
     windowMs: 60 * 60 * 1000,  // 1 hour
     maxAttempts: 500,
+    perUser: true,
+  },
+  // Admin translation: 10000 requests per hour (AI Fill ALL generates many translation calls)
+  adminTranslate: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 10000,
     perUser: true,
   },
   // Image uploads: 100 per hour per user (storage costs)
@@ -14035,10 +14042,13 @@ app.post('/api/contact', async (req, res) => {
 // DeepL Translation API endpoint
 app.post('/api/translate', async (req, res) => {
   try {
-    // Rate limit: 200 translations per hour (per user or IP)
+    // Rate limit: check admin status for higher limit
     let user = null
     try { user = await getUserFromRequest(req) } catch { }
-    if (checkRateLimit('translate', req, res, user)) {
+    const isAdmin = user?.id ? await isAdminUserId(user.id) : false
+    // Admins get a much higher rate limit (10000/hr vs 500/hr) for bulk operations like AI Fill
+    const rateLimitAction = isAdmin ? 'adminTranslate' : 'translate'
+    if (checkRateLimit(rateLimitAction, req, res, user)) {
       return
     }
 
@@ -14093,6 +14103,93 @@ app.post('/api/translate', async (req, res) => {
   } catch (error) {
     console.error('[translate] Translation error:', error)
     res.status(500).json({ error: 'Translation service error: ' + (error?.message || 'Unknown error') })
+  }
+})
+
+// DeepL Batch Translation API endpoint
+// Accepts multiple texts and translates them in a single DeepL API call
+// This dramatically reduces the number of HTTP round-trips for bulk operations
+app.post('/api/translate-batch', async (req, res) => {
+  try {
+    // Check if user is admin - batch endpoint is admin-only with higher rate limits
+    let user = null
+    try { user = await getUserFromRequest(req) } catch { }
+    
+    const admin = user?.id ? await isAdminUserId(user.id) : false
+    
+    if (!admin) {
+      return res.status(403).json({ error: 'Admin privileges required for batch translation' })
+    }
+    
+    // Use the higher admin rate limit
+    if (checkRateLimit('adminTranslate', req, res, user)) {
+      return
+    }
+
+    const { texts, source_lang, target_lang } = req.body
+
+    if (!Array.isArray(texts) || texts.length === 0) {
+      return res.status(400).json({ error: 'Missing or invalid texts array' })
+    }
+
+    if (texts.length > 50) {
+      return res.status(400).json({ error: 'Maximum 50 texts per batch request' })
+    }
+
+    if (!source_lang || !target_lang) {
+      return res.status(400).json({ error: 'Missing source_lang or target_lang' })
+    }
+
+    // Skip translation if source and target are the same
+    if (source_lang.toUpperCase() === target_lang.toUpperCase()) {
+      return res.json({ translations: texts })
+    }
+
+    // Get DeepL API key from environment
+    const deeplApiKey = process.env.DEEPL_API_KEY
+    if (!deeplApiKey) {
+      console.error('[translate-batch] DeepL API key not configured')
+      return res.status(500).json({ error: 'Translation service not configured' })
+    }
+
+    // Use DeepL API with multiple text parameters
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+
+    // Build URL-encoded body with multiple text parameters
+    const params = new URLSearchParams()
+    for (const text of texts) {
+      params.append('text', typeof text === 'string' ? text : String(text || ''))
+    }
+    params.append('source_lang', source_lang.toUpperCase())
+    params.append('target_lang', target_lang.toUpperCase())
+
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[translate-batch] DeepL API error:', response.status, errorText)
+      return res.status(response.status).json({ error: 'Batch translation failed: ' + (errorText || response.statusText) })
+    }
+
+    const data = await response.json()
+    const translations = (data.translations || []).map((t) => t?.text || '')
+
+    // Ensure we return same number of results as inputs
+    while (translations.length < texts.length) {
+      translations.push(texts[translations.length] || '')
+    }
+
+    res.json({ translations })
+  } catch (error) {
+    console.error('[translate-batch] Translation error:', error)
+    res.status(500).json({ error: 'Batch translation service error: ' + (error?.message || 'Unknown error') })
   }
 })
 
