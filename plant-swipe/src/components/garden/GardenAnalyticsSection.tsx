@@ -614,20 +614,111 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     }
   }, [activeTab, garden?.locationCity, garden?.locationLat, garden?.locationLon, fetchWeather]);
 
-  // Merge server analytics with computed analytics to ensure all fields are present
+  // Merge server analytics with computed analytics to ensure all fields are present.
+  // The server provides dailyStats with accurate due/completed counts for every
+  // day, while the client-side prop only has real data for today (the rest are
+  // template zeros).  Derived metrics like allTimeStats and streakInfo must be
+  // (re)computed from the best available dailyStats to show correct numbers.
   const analytics = React.useMemo(() => {
     if (!computedAnalytics) return analyticsData;
     if (!analyticsData) return computedAnalytics;
-    // Merge: prefer server data but fall back to computed for missing fields
+
+    // Pick the richest dailyStats source for aggregate computations.
+    const bestDailyStats =
+      analyticsData.dailyStats?.length
+        ? analyticsData.dailyStats
+        : computedAnalytics.dailyStats;
+
+    // --- Recompute allTimeStats from bestDailyStats ----------------------
+    const todayIso = serverToday || new Date().toISOString().slice(0, 10);
+
+    const totalTasksCompleted = bestDailyStats.reduce(
+      (sum, d) => sum + (d.completed || 0), 0,
+    );
+    const totalDaysActive = bestDailyStats.filter(
+      (d) => (d.completed || 0) > 0,
+    ).length;
+    const perfectDays = bestDailyStats.filter(
+      (d) => d.success && (d.due || 0) > 0,
+    ).length;
+    const averageTasksPerDay =
+      totalDaysActive > 0
+        ? Math.round((totalTasksCompleted / totalDaysActive) * 10) / 10
+        : 0;
+
+    // Most active day of week
+    const dowCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    bestDailyStats.forEach((d) => {
+      dowCounts[new Date(d.date).getDay()] += d.completed || 0;
+    });
+    const mostActiveDay = parseInt(
+      Object.entries(dowCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "0",
+    );
+
+    // Streak calculation
+    let bestStreak = 0;
+    let runStreak = 0;
+    const sorted = [...bestDailyStats].sort((a, b) => a.date.localeCompare(b.date));
+    for (const stat of sorted) {
+      if (stat.success) {
+        runStreak++;
+        bestStreak = Math.max(bestStreak, runStreak);
+      } else {
+        runStreak = 0;
+      }
+    }
+    const lastMissed =
+      sorted.filter((d) => !d.success && (d.due || 0) > 0).pop()?.date || null;
+
+    // Monthly comparison
+    const thisMonthStart = new Date(todayIso);
+    thisMonthStart.setDate(1);
+    const lastMonthStart = new Date(thisMonthStart);
+    lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+
+    const thisMonthTasks = bestDailyStats
+      .filter((d) => new Date(d.date) >= thisMonthStart)
+      .reduce((sum, d) => sum + (d.completed || 0), 0);
+    const lastMonthTasks = bestDailyStats
+      .filter((d) => {
+        const dt = new Date(d.date);
+        return dt >= lastMonthStart && dt < thisMonthStart;
+      })
+      .reduce((sum, d) => sum + (d.completed || 0), 0);
+    const monthlyChange =
+      lastMonthTasks > 0
+        ? Math.round(((thisMonthTasks - lastMonthTasks) / lastMonthTasks) * 100)
+        : 0;
+
+    const recomputedAllTimeStats = {
+      totalTasksCompleted,
+      totalDaysActive,
+      perfectDays,
+      mostActiveDay,
+      averageTasksPerDay,
+      longestStreak: Math.max(bestStreak, streak),
+      monthlyComparison: {
+        thisMonth: thisMonthTasks,
+        lastMonth: lastMonthTasks,
+        change: monthlyChange,
+      },
+    };
+
+    const recomputedStreakInfo = {
+      current: streak,
+      best: Math.max(bestStreak, streak),
+      lastMissed,
+    };
+
     return {
       ...computedAnalytics,
       ...analyticsData,
-      // Ensure streakInfo is always present (server might not send it)
-      streakInfo: analyticsData.streakInfo || computedAnalytics.streakInfo,
+      streakInfo: analyticsData.streakInfo || recomputedStreakInfo,
       weeklyStats: analyticsData.weeklyStats || computedAnalytics.weeklyStats,
       plantStats: analyticsData.plantStats || computedAnalytics.plantStats,
+      allTimeStats: analyticsData.allTimeStats || recomputedAllTimeStats,
     };
-  }, [analyticsData, computedAnalytics]);
+  }, [analyticsData, computedAnalytics, serverToday, streak]);
 
   if (!analytics) {
     return (
