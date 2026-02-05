@@ -445,7 +445,11 @@
     "termsLinkLabel": "Terms of Service",
     "privacyLinkLabel": "Privacy Policy",
     "andText": "and",
-    "mustAcceptTerms": "Please accept the Terms of Service and Privacy Policy to continue"
+    "mustAcceptTerms": "Please accept the Terms of Service and Privacy Policy to continue",
+    "cookiesRequired": "Please accept cookies to enable security verification (reCAPTCHA).",
+    "cookiesRequiredTitle": "Cookies Required",
+    "cookiesRequiredDescription": "To protect your account, we use reCAPTCHA which requires cookies. Please accept cookies to continue.",
+    "acceptCookiesButton": "Accept Essential Cookies"
   },
   "settings": {
     "title": "Account Settings",

@@ -445,7 +445,11 @@
     "termsLinkLabel": "Conditions d'utilisation",
     "privacyLinkLabel": "Politique de confidentialité",
     "andText": "et la",
-    "mustAcceptTerms": "Veuillez accepter les conditions d'utilisation et la politique de confidentialité pour continuer"
+    "mustAcceptTerms": "Veuillez accepter les conditions d'utilisation et la politique de confidentialité pour continuer",
+    "cookiesRequired": "Veuillez accepter les cookies pour activer la vérification de sécurité (reCAPTCHA).",
+    "cookiesRequiredTitle": "Cookies requis",
+    "cookiesRequiredDescription": "Pour protéger votre compte, nous utilisons reCAPTCHA qui nécessite des cookies. Veuillez accepter les cookies pour continuer.",
+    "acceptCookiesButton": "Accepter les cookies essentiels"
   },
   "settings": {
     "title": "Paramètres du compte",
