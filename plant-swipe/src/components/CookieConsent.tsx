@@ -295,7 +295,7 @@ export function CookieConsent() {
             </button>
             <div className="flex gap-3">
               <Link
-                to="/terms"
+                to="/privacy"
                 className="underline hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
               >
                 {t('cookieConsent.privacyPolicy', 'Privacy Policy')}
