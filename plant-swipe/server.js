@@ -21964,9 +21964,12 @@ Your role is to provide expert, personalized gardening advice based on the user'
 - Plant identification from photos
 - Growing tips based on local climate
 - **UPDATE plant health status** when you diagnose issues or improvements
-- **CREATE and MODIFY tasks** for plant care routines
+- **CREATE, COMPLETE, and DELETE tasks** for plant care routines
+- **RECORD care events** (watering, fertilizing, pruning, harvesting)
+- **SET watering schedules** for plants
 - **ADD journal entries** to record observations
 - **UPDATE plant notes** with care instructions or observations
+- **REMOVE plants** from the garden when needed
 
 ## ACTION CAPABILITIES - You Can Modify Garden Data!
 You have the ability to take actions in the user's garden. When appropriate, USE THESE TOOLS:
@@ -21987,7 +21990,25 @@ You have the ability to take actions in the user's garden. When appropriate, USE
 5. **add_journal_entry** - Add a journal entry to the garden
    - Use to record significant observations, diagnoses, or milestones
 
+6. **record_event** - Record a care event (water, fertilize, prune, harvest)
+   - Use when the user says they watered/fed/pruned/harvested a plant
+   - Use to log actions that just happened
+
+7. **delete_task** - Delete a care task entirely
+   - Use when the user wants to cancel or remove a task
+   - Use when a recurring task is no longer needed
+
+8. **update_watering_schedule** - Set or change a plant's watering schedule
+   - Use to configure how often a plant should be watered (e.g., 3 times per week)
+   - Use when recommending a new watering routine
+
+9. **remove_plant** - Remove a plant from the garden
+   - Use when a plant has died, been given away, or is no longer in the garden
+   - This is irreversible — confirm with the user before using this tool
+
 IMPORTANT: When you recommend changes (like updating health status or creating tasks), ACTUALLY DO IT using the tools. Don't just suggest - take action!
+
+IMPORTANT: When removing a plant, ALWAYS confirm with the user first. This action deletes all tasks, events, and schedules associated with the plant.
 
 ## Communication Style:
 - Warm, encouraging, and supportive
@@ -22009,6 +22030,24 @@ IMPORTANT: When you recommend changes (like updating health status or creating t
 - Consider the user's existing task load
 - Prioritize based on plant health needs
 - CREATE the tasks directly, don't just suggest them
+- COMPLETE tasks when the user says they've done them
+- DELETE tasks when the user wants to cancel them
+- Task IDs are shown in the context as [task_id: ...] — use those IDs
+
+## When Recording Events:
+- If the user says "I just watered my basil", use record_event to log it
+- Always record the event type accurately (water, fertilize, prune, harvest)
+- Include helpful notes when relevant (amount, method, etc.)
+
+## When Managing Watering Schedules:
+- Use update_watering_schedule to set how often a plant should be watered
+- Consider the plant species' needs, climate, and season when recommending
+- Explain why you're recommending a specific schedule
+
+## When Removing Plants:
+- ALWAYS ask for confirmation before using remove_plant — this action is irreversible
+- Log the reason for removal in the tool call
+- Be empathetic if a plant died — it's a learning opportunity
 
 Always aim to help the user become a more confident and successful gardener!`
 
@@ -22147,6 +22186,93 @@ const APHYLIA_TOOLS = [
         }
       },
       required: ['title', 'content']
+    }
+  },
+  {
+    type: 'function',
+    name: 'record_event',
+    description: 'Record a plant care event (watering, fertilizing, pruning, or harvesting). Use this when the user says they watered, fed, pruned, or harvested a plant, or when you want to log an action that just happened.',
+    parameters: {
+      type: 'object',
+      properties: {
+        garden_plant_id: {
+          type: 'string',
+          description: 'The ID of the garden plant this event is for'
+        },
+        event_type: {
+          type: 'string',
+          enum: ['water', 'fertilize', 'prune', 'harvest', 'note'],
+          description: 'The type of care event'
+        },
+        notes: {
+          type: 'string',
+          description: 'Optional notes about the event (e.g., amount of water, fertilizer type, what was harvested)'
+        }
+      },
+      required: ['garden_plant_id', 'event_type']
+    }
+  },
+  {
+    type: 'function',
+    name: 'delete_task',
+    description: 'Delete a care task entirely. Use when the user wants to cancel or remove a recurring task or a one-time task they no longer need.',
+    parameters: {
+      type: 'object',
+      properties: {
+        task_id: {
+          type: 'string',
+          description: 'The ID of the task to delete (from the context provided)'
+        }
+      },
+      required: ['task_id']
+    }
+  },
+  {
+    type: 'function',
+    name: 'update_watering_schedule',
+    description: 'Set or update the custom watering schedule for a plant. Use when the user wants to change how often a plant is watered.',
+    parameters: {
+      type: 'object',
+      properties: {
+        garden_plant_id: {
+          type: 'string',
+          description: 'The ID of the garden plant to update the schedule for'
+        },
+        period: {
+          type: 'string',
+          enum: ['week', 'month', 'year'],
+          description: 'The time period for the schedule'
+        },
+        amount: {
+          type: 'integer',
+          description: 'How many times per period to water (e.g., 3 times per week)'
+        },
+        weekly_days: {
+          type: 'array',
+          items: { type: 'integer' },
+          description: 'Optional: specific days of the week (0=Sunday, 1=Monday, ..., 6=Saturday)'
+        }
+      },
+      required: ['garden_plant_id', 'period', 'amount']
+    }
+  },
+  {
+    type: 'function',
+    name: 'remove_plant',
+    description: 'Remove a plant from the garden. Use when the user says a plant died, they gave it away, or want to remove it from their garden. This action is irreversible and also removes all associated tasks, events, and schedules for this plant.',
+    parameters: {
+      type: 'object',
+      properties: {
+        garden_plant_id: {
+          type: 'string',
+          description: 'The ID of the garden plant to remove'
+        },
+        reason: {
+          type: 'string',
+          description: 'Reason for removal (e.g., died, gave away, harvested, moved)'
+        }
+      },
+      required: ['garden_plant_id']
     }
   }
 ]
@@ -22332,6 +22458,142 @@ async function executeAphyliaTool(toolName, args, gardenId, userId) {
         `
         
         return { success: true, message: 'Journal entry added' }
+      }
+      
+      case 'record_event': {
+        const { garden_plant_id, event_type, notes: eventNotes } = args
+        
+        // Validate event_type
+        const validEventTypes = ['water', 'fertilize', 'prune', 'harvest', 'note']
+        if (!validEventTypes.includes(event_type)) {
+          return { success: false, error: 'Invalid event type. Must be one of: ' + validEventTypes.join(', ') }
+        }
+        
+        // Verify access
+        const checkRows = await sql`
+          select gp.id from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        // Insert the event
+        await sql`
+          insert into public.garden_plant_events (garden_plant_id, event_type, occurred_at, notes)
+          values (${garden_plant_id}, ${event_type}, now(), ${eventNotes || null})
+        `
+        
+        // Log the activity
+        const eventLabel = event_type === 'water' ? 'Watered' : event_type === 'fertilize' ? 'Fertilized' : event_type === 'prune' ? 'Pruned' : event_type === 'harvest' ? 'Harvested' : 'Note added'
+        const logMsg = eventLabel + (eventNotes ? ': ' + eventNotes : '')
+        await sql`
+          insert into public.garden_activity_logs (garden_id, actor_id, kind, message, plant_name)
+          select ${gardenId}, ${userId}, 'plant_event', 
+                 ${logMsg},
+                 coalesce(gp.nickname, p.name)
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.id = ${garden_plant_id}
+        `
+        
+        return { success: true, message: eventLabel + ' event recorded' }
+      }
+      
+      case 'delete_task': {
+        const { task_id } = args
+        
+        // Verify the task belongs to this garden and user has access
+        const checkRows = await sql`
+          select t.id, t.type, t.custom_name from public.garden_plant_tasks t
+          join public.garden_members gm on gm.garden_id = t.garden_id
+          where t.id = ${task_id}
+            and t.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Task not found or access denied' }
+        }
+        
+        const taskName = checkRows[0].custom_name || checkRows[0].type
+        
+        // Delete the task (cascade deletes occurrences and completions)
+        await sql`
+          delete from public.garden_plant_tasks where id = ${task_id}
+        `
+        
+        return { success: true, message: 'Deleted task: ' + taskName }
+      }
+      
+      case 'update_watering_schedule': {
+        const { garden_plant_id, period, amount, weekly_days } = args
+        
+        // Validate period
+        const validPeriods = ['week', 'month', 'year']
+        if (!validPeriods.includes(period)) {
+          return { success: false, error: 'Invalid period. Must be one of: ' + validPeriods.join(', ') }
+        }
+        if (!amount || amount < 1) {
+          return { success: false, error: 'Amount must be at least 1' }
+        }
+        
+        // Verify access
+        const checkRows = await sql`
+          select gp.id from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        // Upsert the schedule (garden_plant_id is the primary key)
+        await sql`
+          insert into public.garden_plant_schedule (garden_plant_id, period, amount, weekly_days)
+          values (${garden_plant_id}, ${period}, ${amount}, ${weekly_days || null})
+          on conflict (garden_plant_id) do update
+          set period = ${period}, amount = ${amount}, weekly_days = ${weekly_days || null}
+        `
+        
+        return { success: true, message: 'Watering schedule set to ' + amount + ' time(s) per ' + period }
+      }
+      
+      case 'remove_plant': {
+        const { garden_plant_id, reason } = args
+        
+        // Verify access and get plant info for logging
+        const checkRows = await sql`
+          select gp.id, gp.nickname, p.name as plant_name from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          left join public.plants p on p.id = gp.plant_id
+          where gp.id = ${garden_plant_id}
+            and gp.garden_id = ${gardenId}
+            and gm.user_id = ${userId}
+        `
+        if (checkRows.length === 0) {
+          return { success: false, error: 'Plant not found or access denied' }
+        }
+        
+        const plantName = checkRows[0].nickname || checkRows[0].plant_name || 'Unknown plant'
+        
+        // Log the removal before deleting (so we capture the plant_name)
+        const logMsg = 'Plant removed' + (reason ? ': ' + reason : '')
+        await sql`
+          insert into public.garden_activity_logs (garden_id, actor_id, kind, message, plant_name)
+          values (${gardenId}, ${userId}, 'plant_removed', ${logMsg}, ${plantName})
+        `
+        
+        // Delete the garden plant (cascades to events, tasks, schedules, etc.)
+        await sql`
+          delete from public.garden_plants where id = ${garden_plant_id}
+        `
+        
+        return { success: true, message: 'Removed "' + plantName + '" from the garden' }
       }
       
       default:
@@ -22659,10 +22921,11 @@ async function buildGardenContextString(context) {
     if (overdueTasks.length > 0) {
       parts.push(`\n### ⚠️ Overdue Tasks (${overdueTasks.length})`)
       for (const task of overdueTasks.slice(0, 10)) {
-        let taskInfo = `- ${task.customName || task.taskType}`
+        let taskInfo = `- [task_id: ${task.taskId}] ${task.customName || task.taskType}`
         if (task.plantName) taskInfo += ` for "${task.plantName}"`
         const dueDate = new Date(task.dueAt)
         taskInfo += ` (was due: ${dueDate.toLocaleDateString()})`
+        if (task.frequency) taskInfo += ` — schedule: ${task.frequency}`
         parts.push(taskInfo)
       }
     }
@@ -22670,7 +22933,7 @@ async function buildGardenContextString(context) {
     if (dueTodayTasks.length > 0) {
       parts.push(`\n### 📅 Due Today (${dueTodayTasks.length})`)
       for (const task of dueTodayTasks) {
-        let taskInfo = `- ${task.customName || task.taskType}`
+        let taskInfo = `- [task_id: ${task.taskId}] ${task.customName || task.taskType}`
         if (task.plantName) taskInfo += ` for "${task.plantName}"`
         if (task.requiredCount > 1) {
           taskInfo += ` (${task.completedCount || 0}/${task.requiredCount} done)`
@@ -22682,10 +22945,11 @@ async function buildGardenContextString(context) {
     if (upcomingTasks.length > 0) {
       parts.push(`\n### 🗓️ Upcoming Tasks (${upcomingTasks.length})`)
       for (const task of upcomingTasks.slice(0, 15)) {
-        let taskInfo = `- ${task.customName || task.taskType}`
+        let taskInfo = `- [task_id: ${task.taskId}] ${task.customName || task.taskType}`
         if (task.plantName) taskInfo += ` for "${task.plantName}"`
         const dueDate = new Date(task.dueAt)
         taskInfo += ` (due: ${dueDate.toLocaleDateString()})`
+        if (task.frequency) taskInfo += ` — schedule: ${task.frequency}`
         parts.push(taskInfo)
       }
     }
@@ -23272,15 +23536,19 @@ async function fetchTasksContext(gardenId) {
   
   try {
     // Fetch all tasks with their occurrences
+    // NOTE: Uses actual column names from garden_plant_tasks table:
+    //   interval_amount, interval_unit, schedule_kind (not freq_amount/freq_period/enabled)
     const rows = await sql`
       select 
         t.id, 
         t.type, 
         t.custom_name, 
         t.garden_plant_id,
-        t.freq_amount,
-        t.freq_period,
-        t.enabled,
+        t.schedule_kind,
+        t.interval_amount,
+        t.interval_unit,
+        t.due_at as task_due_at,
+        t.required_count as task_required_count,
         t.created_at,
         gp.nickname as plant_nickname,
         p.name as plant_name,
@@ -23308,9 +23576,11 @@ async function fetchTasksContext(gardenId) {
       taskId: row.id,
       taskType: row.type,
       customName: row.custom_name,
+      gardenPlantId: row.garden_plant_id,
       plantName: row.plant_nickname || row.plant_name,
-      frequency: row.freq_amount ? `${row.freq_amount}x per ${row.freq_period || 'week'}` : null,
-      enabled: row.enabled,
+      scheduleKind: row.schedule_kind,
+      frequency: row.interval_amount ? `every ${row.interval_amount} ${row.interval_unit || 'week'}(s)` : null,
+      requiredCount: row.task_required_count || 1,
       occurrences: row.occurrences || []
     }))
   } catch (err) {
@@ -23862,21 +24132,37 @@ app.post('/api/ai/garden-chat', async (req, res) => {
     // Get garden ID for tool execution
     const gardenIdForTools = gardenContext?.gardenId || context.garden?.gardenId
     
-    // Format conversation history for the Responses API
+    // Format conversation history as structured input items for the Responses API.
+    // Returns an array of typed message objects instead of a plain text string,
+    // which maintains clear separation between user content, assistant content,
+    // and tool output — preventing prompt injection via content boundaries.
     const formatConversationForInput = (msgs) => {
       return msgs.slice(1).map(msg => { // Skip system message (handled via instructions)
-        const role = msg.role === 'assistant' ? 'Assistant' : 'User'
-        const content = typeof msg.content === 'string' 
-          ? msg.content 
-          : msg.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || ''
-        return `${role}: ${content}`
-      }).join('\n\n')
+        let content = msg.content
+        // Convert Chat Completions content parts to Responses API format
+        if (Array.isArray(content)) {
+          content = content.map(part => {
+            if (part.type === 'text') {
+              return { type: 'input_text', text: part.text }
+            }
+            if (part.type === 'image_url') {
+              return { type: 'input_image', image_url: part.image_url?.url || part.image_url }
+            }
+            return part
+          })
+        }
+        return { role: msg.role, content }
+      })
     }
     
-    // Helper to execute tools and build context
+    // Helper to execute tools and build structured result items for the Responses API.
+    // Returns function_call_output items (keyed by call_id) instead of plain text strings,
+    // so tool results are passed as typed objects — not concatenated into user content.
+    // This prevents prompt injection if tool results contain adversarial content
+    // (e.g. from user-controlled plant names, notes, or custom task names).
     const executeToolsIfNeeded = async (toolCalls) => {
       const toolCallsExecuted = []
-      const toolResultsContext = []
+      const toolResultItems = []
       
       for (const toolCall of toolCalls) {
         const toolName = toolCall.name || toolCall.function?.name
@@ -23899,10 +24185,20 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           result: result
         })
         
-        toolResultsContext.push(`Tool ${toolName} result: ${JSON.stringify(result)}`)
+        // Build structured function_call_output for the Responses API.
+        // The call_id links this result back to the specific function_call
+        // the model emitted, keeping tool output in its own typed lane.
+        const callId = toolCall.call_id || toolCall.id
+        if (callId) {
+          toolResultItems.push({
+            type: 'function_call_output',
+            call_id: callId,
+            output: JSON.stringify(result)
+          })
+        }
       }
       
-      return { toolCallsExecuted, toolResultsContext }
+      return { toolCallsExecuted, toolResultItems }
     }
     
     if (stream) {
@@ -23938,11 +24234,19 @@ app.post('/api/ai/garden-chat', async (req, res) => {
             if (toolUseOutputs.length > 0) {
               res.write(`data: ${JSON.stringify({ type: 'tool_start', tools: toolUseOutputs.map(t => t.name) })}\n\n`)
               
-              const { toolCallsExecuted: executed, toolResultsContext } = await executeToolsIfNeeded(toolUseOutputs)
+              const { toolCallsExecuted: executed, toolResultItems } = await executeToolsIfNeeded(toolUseOutputs)
               toolCallsExecuted = executed
               
-              // Add tool results to conversation context
-              conversationInput += '\n\n[Tool execution results]\n' + toolResultsContext.join('\n')
+              // Pass tool calls and results as structured Responses API input items.
+              // The model's output (containing function_call items) is spread back into
+              // the input, followed by our function_call_output items. This maintains
+              // clear separation between user content and tool output, preventing
+              // prompt injection via tool results that contain adversarial content.
+              conversationInput = [
+                ...conversationInput,
+                ...toolCheckResponse.output,
+                ...toolResultItems
+              ]
               
               res.write(`data: ${JSON.stringify({ type: 'tool_end', results: toolCallsExecuted })}\n\n`)
             }
@@ -24023,11 +24327,17 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
           const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
           if (toolUseOutputs.length > 0) {
-            const { toolCallsExecuted: executed, toolResultsContext } = await executeToolsIfNeeded(toolUseOutputs)
+            const { toolCallsExecuted: executed, toolResultItems } = await executeToolsIfNeeded(toolUseOutputs)
             toolCallsExecuted = executed
             
-            // Add tool results to conversation context
-            conversationInput += '\n\n[Tool execution results]\n' + toolResultsContext.join('\n')
+            // Pass tool calls and results as structured Responses API input items.
+            // See streaming path comment for full rationale on why we avoid plain
+            // text concatenation of tool results (prompt injection prevention).
+            conversationInput = [
+              ...conversationInput,
+              ...toolCheckResponse.output,
+              ...toolResultItems
+            ]
           }
         }
       }
@@ -25210,6 +25520,10 @@ async function processDueAutomations() {
             limit 1000
           `
         } else if (automation.trigger_type === 'daily_task_reminder') {
+          // Use a bounded 2-hour window (preferred hour + 1) instead of unbounded >=.
+          // This handles brief worker downtime without sending 8 AM notifications at 11 PM.
+          // BETWEEN is inclusive, and extract(hour ...) returns 0-23, so BETWEEN 23 AND 24
+          // only matches hour 23 (acceptable single-hour window for the last hour of day).
           recipientQuery = sql`
             select distinct p.id as user_id, p.display_name, p.language, p.timezone
             from public.profiles p
@@ -25220,8 +25534,9 @@ async function processDueAutomations() {
               and (p.push_task_reminders is null or p.push_task_reminders = true)
               and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
-              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) >=
-                coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
+                between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+                    and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
@@ -25262,7 +25577,7 @@ async function processDueAutomations() {
           if (!global[lastLogKey] || nowTs - global[lastLogKey] > 3600000) {
             // Log debug info about why there might be no recipients
             const logDetail = usesUserNotificationTime
-              ? 'No eligible recipients at/after preferred notification times'
+              ? 'No eligible recipients within preferred notification time window'
               : `No eligible recipients at send_hour=${sendHour}`
             console.log(`[automations] ${automation.trigger_type}: ${logDetail}`)
             
@@ -25272,8 +25587,9 @@ async function processDueAutomations() {
                 const debugCount = await sql`
                   select count(distinct p.id)::bigint as total_with_tasks,
                          count(distinct case
-                          when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) >=
-                               coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+                          when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
+                               between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+                                   and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
                            then p.id
                          end)::bigint as at_preferred_hour
                   from public.profiles p

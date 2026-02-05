@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates
+- **Feb 5, 2026:** Restricted `plant_contributors` RLS write policy to admins/editors only (was previously open to all authenticated users).
 - **Feb 4, 2026:** Added `plant_contributors` table to store contributor names per plant.
 
 ### Required Extensions
@@ -83,6 +84,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `plant_watering_schedules` | Watering frequency data |
 | `plant_sources` | Plant information sources |
 | `plant_infusion_mixes` | Infusion/tea recipes |
+| `plant_contributors` | Contributor names per plant (admin/editor write only) |
 | `plant_pro_advices` | Professional growing tips |
 | `plant_images` | Plant image gallery |
 | `colors` | Color catalog |
@@ -402,6 +404,8 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `admin_secrets` | Service role only - no user access |
 | `email_verification_codes` | Users can SELECT own, service role can ALL |
 | `gdpr_audit_log` | Admin SELECT only, anyone can INSERT |
+| `plant_contributors` | Anyone can SELECT; only admins/editors can INSERT/UPDATE/DELETE |
+| `plant_pro_advices` | Anyone can SELECT; author or admin/editor can UPDATE/DELETE; admin/editor/pro can INSERT |
 | `plant_scans` | Users can manage own scans |
 
 ---
