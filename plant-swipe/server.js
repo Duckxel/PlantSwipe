@@ -25391,6 +25391,10 @@ async function processDueAutomations() {
             limit 1000
           `
         } else if (automation.trigger_type === 'daily_task_reminder') {
+          // Use a bounded 2-hour window (preferred hour + 1) instead of unbounded >=.
+          // This handles brief worker downtime without sending 8 AM notifications at 11 PM.
+          // BETWEEN is inclusive, and extract(hour ...) returns 0-23, so BETWEEN 23 AND 24
+          // only matches hour 23 (acceptable single-hour window for the last hour of day).
           recipientQuery = sql`
             select distinct p.id as user_id, p.display_name, p.language, p.timezone
             from public.profiles p
@@ -25401,8 +25405,9 @@ async function processDueAutomations() {
               and (p.push_task_reminders is null or p.push_task_reminders = true)
               and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
-              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) >=
-                coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+              and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
+                between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+                    and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
@@ -25443,7 +25448,7 @@ async function processDueAutomations() {
           if (!global[lastLogKey] || nowTs - global[lastLogKey] > 3600000) {
             // Log debug info about why there might be no recipients
             const logDetail = usesUserNotificationTime
-              ? 'No eligible recipients at/after preferred notification times'
+              ? 'No eligible recipients within preferred notification time window'
               : `No eligible recipients at send_hour=${sendHour}`
             console.log(`[automations] ${automation.trigger_type}: ${logDetail}`)
             
@@ -25453,8 +25458,9 @@ async function processDueAutomations() {
                 const debugCount = await sql`
                   select count(distinct p.id)::bigint as total_with_tasks,
                          count(distinct case
-                          when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) >=
-                               coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+                          when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
+                               between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
+                                   and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
                            then p.id
                          end)::bigint as at_preferred_hour
                   from public.profiles p
