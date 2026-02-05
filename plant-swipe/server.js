@@ -1094,7 +1094,6 @@ const rateLimitStores = {
   scan: new Map(),           // Plant identification scans
   aiChat: new Map(),         // AI garden chat
   translate: new Map(),      // Translation API
-  adminTranslate: new Map(), // Admin translation API (higher limit)
   imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
   bugReport: new Map(),      // Bug report submissions
   emailVerifySend: new Map(),   // Email verification code sending
@@ -1125,15 +1124,10 @@ const rateLimitConfig = {
     perUser: true,
   },
   // Translation: 500 requests per hour per user (DeepL costs - generous for active translators)
+  // Admin users bypass all rate limits entirely (checked in checkRateLimit)
   translate: {
     windowMs: 60 * 60 * 1000,  // 1 hour
     maxAttempts: 500,
-    perUser: true,
-  },
-  // Admin translation: 10000 requests per hour (AI Fill ALL generates many translation calls)
-  adminTranslate: {
-    windowMs: 60 * 60 * 1000,  // 1 hour
-    maxAttempts: 10000,
     perUser: true,
   },
   // Image uploads: 100 per hour per user (storage costs)
@@ -1239,15 +1233,52 @@ function getRateLimitIdentifier(action, req, user) {
 }
 
 /**
+ * Short-lived admin status cache to avoid DB queries on every rate-limit check.
+ * Maps userId -> { isAdmin: boolean, expiresAt: number }
+ * Entries expire after 60 seconds.
+ */
+const adminStatusCache = new Map()
+const ADMIN_CACHE_TTL_MS = 60_000 // 1 minute
+
+/**
+ * Check if a user is an admin (with caching to avoid repeated DB lookups).
+ * Returns false if user is null or has no id.
+ */
+async function isAdminUser(user) {
+  if (!user?.id) return false
+  
+  const cached = adminStatusCache.get(user.id)
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.isAdmin
+  }
+  
+  const isAdmin = await isAdminUserId(user.id)
+  adminStatusCache.set(user.id, { isAdmin, expiresAt: Date.now() + ADMIN_CACHE_TTL_MS })
+  return isAdmin
+}
+
+// Clean up expired admin cache entries every 5 minutes
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, entry] of adminStatusCache.entries()) {
+    if (now >= entry.expiresAt) adminStatusCache.delete(key)
+  }
+}, 5 * 60 * 1000)
+
+/**
  * Check rate limit and return 429 if exceeded
  * Returns true if request should be blocked, false if allowed
+ * Admin users bypass all rate limits.
  * @param {string} action - The action type
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  * @param {object|null} user - User object (if authenticated)
- * @returns {boolean} - True if blocked (429 sent), false if allowed
+ * @returns {Promise<boolean>} - True if blocked (429 sent), false if allowed
  */
-function checkRateLimit(action, req, res, user = null) {
+async function checkRateLimit(action, req, res, user = null) {
+  // Admin users are exempt from all rate limits
+  if (await isAdminUser(user)) return false
+  
   const identifier = getRateLimitIdentifier(action, req, user)
   
   if (isRateLimited(action, identifier)) {
@@ -1262,13 +1293,17 @@ function checkRateLimit(action, req, res, user = null) {
  * Check rate limit AND record the attempt
  * Returns true if request should be blocked, false if allowed
  * Unlike checkRateLimit, this also records the current request for future checks
+ * Admin users bypass all rate limits.
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  * @param {string} action - The action type
  * @param {object|null} user - User object (if authenticated)
- * @returns {boolean} - True if blocked (429 sent), false if allowed
+ * @returns {Promise<boolean>} - True if blocked (429 sent), false if allowed
  */
-function checkAndRecordRateLimit(req, res, action, user = null) {
+async function checkAndRecordRateLimit(req, res, action, user = null) {
+  // Admin users are exempt from all rate limits
+  if (await isAdminUser(user)) return false
+  
   const store = rateLimitStores[action]
   const config = rateLimitConfig[action]
   
@@ -6642,7 +6677,7 @@ app.post('/api/messages/upload-image', async (req, res) => {
   }
 
   // Rate limit: 50 image uploads per hour per user
-  if (checkRateLimit('imageUpload', req, res, uploader)) {
+  if (await checkRateLimit('imageUpload', req, res, uploader)) {
     return
   }
 
@@ -14042,13 +14077,10 @@ app.post('/api/contact', async (req, res) => {
 // DeepL Translation API endpoint
 app.post('/api/translate', async (req, res) => {
   try {
-    // Rate limit: check admin status for higher limit
+    // Rate limit (admins are exempt via checkRateLimit)
     let user = null
     try { user = await getUserFromRequest(req) } catch { }
-    const isAdmin = user?.id ? await isAdminUserId(user.id) : false
-    // Admins get a much higher rate limit (10000/hr vs 500/hr) for bulk operations like AI Fill
-    const rateLimitAction = isAdmin ? 'adminTranslate' : 'translate'
-    if (checkRateLimit(rateLimitAction, req, res, user)) {
+    if (await checkRateLimit('translate', req, res, user)) {
       return
     }
 
@@ -14121,8 +14153,8 @@ app.post('/api/translate-batch', async (req, res) => {
       return res.status(403).json({ error: 'Admin privileges required for batch translation' })
     }
     
-    // Use the higher admin rate limit
-    if (checkRateLimit('adminTranslate', req, res, user)) {
+    // Rate limit (admins are exempt via checkRateLimit)
+    if (await checkRateLimit('translate', req, res, user)) {
       return
     }
 
@@ -14197,10 +14229,10 @@ app.post('/api/translate-batch', async (req, res) => {
 // Uses DeepL's translation API with auto-detect (omitting source_lang)
 app.post('/api/detect-language', async (req, res) => {
   try {
-    // Rate limit: 200 requests per hour (per user or IP)
+    // Rate limit (admins are exempt via checkRateLimit)
     let user = null
     try { user = await getUserFromRequest(req) } catch { }
-    if (checkRateLimit('translate', req, res, user)) {
+    if (await checkRateLimit('translate', req, res, user)) {
       return
     }
 
@@ -14254,10 +14286,10 @@ app.post('/api/detect-language', async (req, res) => {
 // Translates text AND returns the detected source language
 app.post('/api/translate-detect', async (req, res) => {
   try {
-    // Rate limit: 200 requests per hour (per user or IP)
+    // Rate limit (admins are exempt via checkRateLimit)
     let user = null
     try { user = await getUserFromRequest(req) } catch { }
-    if (checkRateLimit('translate', req, res, user)) {
+    if (await checkRateLimit('translate', req, res, user)) {
       return
     }
 
@@ -16857,7 +16889,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
   }
 
   // Rate limit: 50 image uploads per hour per user
-  if (checkRateLimit('imageUpload', req, res, user)) {
+  if (await checkRateLimit('imageUpload', req, res, user)) {
     return
   }
 
@@ -17088,7 +17120,7 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
   }
 
   // Rate limit: 30 scans per hour per user
-  if (checkRateLimit('scan', req, res, user)) {
+  if (await checkRateLimit('scan', req, res, user)) {
     return
   }
 
@@ -17337,7 +17369,7 @@ app.post('/api/bug-report/upload-screenshot', async (req, res) => {
   }
 
   // Rate limit: 10 bug reports per hour per IP (spam prevention)
-  if (checkRateLimit('bugReport', req, res, user)) {
+  if (await checkRateLimit('bugReport', req, res, user)) {
     return
   }
 
@@ -17761,7 +17793,7 @@ app.post('/api/garden/:id/activity', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
 
     // Rate limit: 100 activity logs per hour per user
-    if (checkRateLimit('gardenActivity', req, res, user)) {
+    if (await checkRateLimit('gardenActivity', req, res, user)) {
       return
     }
 
@@ -20444,7 +20476,7 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
 
     // Rate limit: 20 journal entries per hour per user
-    if (checkRateLimit('gardenJournal', req, res, user)) {
+    if (await checkRateLimit('gardenJournal', req, res, user)) {
       return
     }
 
@@ -20954,8 +20986,8 @@ app.post('/api/garden/:id/upload', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
 
-    // Rate limit: 50 image uploads per hour per user
-    if (checkRateLimit('imageUpload', req, res, user)) {
+    // Rate limit: 50 image uploads per hour per user (admins exempt)
+    if (await checkRateLimit('imageUpload', req, res, user)) {
       return
     }
 
@@ -21533,8 +21565,8 @@ app.post('/api/push/instant', async (req, res) => {
     return
   }
 
-  // Rate limit: 100 push notifications per hour per user
-  if (checkRateLimit('pushNotify', req, res, user)) {
+  // Rate limit: 100 push notifications per hour per user (admins exempt)
+  if (await checkRateLimit('pushNotify', req, res, user)) {
     return
   }
 
@@ -21858,8 +21890,8 @@ app.post('/api/ai/garden-chat/upload', chatImageUpload.single('image'), async (r
       return
     }
     
-    // Rate limit: 50 image uploads per hour per user
-    if (checkRateLimit('imageUpload', req, res, user)) {
+    // Rate limit: 50 image uploads per hour per user (admins exempt)
+    if (await checkRateLimit('imageUpload', req, res, user)) {
       return
     }
     
@@ -23617,8 +23649,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       return
     }
     
-    // Rate limit: 60 AI chat messages per hour per user
-    if (checkRateLimit('aiChat', req, res, user)) {
+    // Rate limit: 60 AI chat messages per hour per user (admins exempt)
+    if (await checkRateLimit('aiChat', req, res, user)) {
       return
     }
     
