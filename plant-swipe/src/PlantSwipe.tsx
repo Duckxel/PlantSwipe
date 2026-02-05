@@ -743,24 +743,17 @@ export default function PlantSwipe() {
       const colors = [...legacyColors, ...identityColors]
       const normalizedColors = colors.map(c => c.toLowerCase().trim())
       
+      // ⚡ Bolt: Lazy compute color tokens to avoid eager regex/set creation
       // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
       // This avoids regex operations during filtering
       // Enhanced: Also add translations for bi-directional matching
       // (e.g., plant with "red" will also match filter "rouge")
-      const colorTokens = new Set<string>()
-      normalizedColors.forEach(color => {
-        const cachedTokens = getTokensForColor(color)
-        for (const t of cachedTokens) {
-          colorTokens.add(t)
-        }
-      })
+      let _cachedColorTokens: Set<string> | null = null
 
+      // ⚡ Bolt: Lazy compute search string to avoid eager string concatenation
       // Search string - includes name, scientific name, meaning, colors, common names and synonyms
       // This allows users to search by any name they might know the plant by
-      const commonNames = (p.identity?.commonNames || []).join(' ')
-      const synonyms = (p.identity?.synonyms || []).join(' ')
-      const givenNames = (p.identity?.givenNames || []).join(' ')
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+      let _cachedSearchString: string | null = null
 
       // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
@@ -809,9 +802,27 @@ export default function PlantSwipe() {
 
       return {
         ...p,
-        _searchString: searchString,
+        get _searchString() {
+          if (_cachedSearchString) return _cachedSearchString
+          const commonNames = (p.identity?.commonNames || []).join(' ')
+          const synonyms = (p.identity?.synonyms || []).join(' ')
+          const givenNames = (p.identity?.givenNames || []).join(' ')
+          _cachedSearchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+          return _cachedSearchString
+        },
         _normalizedColors: normalizedColors,
-        _colorTokens: colorTokens,
+        get _colorTokens() {
+          if (_cachedColorTokens) return _cachedColorTokens
+          const tokens = new Set<string>()
+          normalizedColors.forEach(color => {
+            const cachedTokens = getTokensForColor(color)
+            for (const t of cachedTokens) {
+              tokens.add(t)
+            }
+          })
+          _cachedColorTokens = tokens
+          return _cachedColorTokens
+        },
         _typeLabel: typeLabel,
         _usageLabels: usageLabels,
         _usageSet: usageSet,
