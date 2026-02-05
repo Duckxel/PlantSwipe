@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React from 'react'
+import ReactDOM from 'react-dom'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
@@ -423,17 +424,20 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
       >
         ⋯
       </Button>
-      {open && (
+      {/* Portal the menu to document.body so it escapes the Dialog's CSS
+          transform which breaks position:fixed inside transformed ancestors */}
+      {open && ReactDOM.createPortal(
         <div
           ref={menuRef as any}
-          className="fixed w-40 bg-white dark:bg-[#252526] border border-stone-300 dark:border-[#3e3e42] rounded-xl shadow-lg z-[80]"
+          className="fixed w-40 bg-white dark:bg-[#252526] border border-stone-300 dark:border-[#3e3e42] rounded-xl shadow-lg z-[9999]"
           style={{ top: position.top, left: position.left }}
         >
           {onEdit && (
             <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white">{t('gardenDashboard.taskDialog.edit')}</button>
           )}
           <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400`}>{t('gardenDashboard.taskDialog.delete')}</button>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
