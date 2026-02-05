@@ -846,6 +846,90 @@ verify_sentry_sitemap_config() {
 verify_sentry_admin_api_config
 verify_sentry_sitemap_config
 
+# Install Capacitor for native mobile app builds (iOS/Android)
+log "Setting up Capacitor for mobile app builds…"
+install_capacitor() {
+  local bun_path=""
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+    if [[ -x "$SERVICE_HOME/.bun/bin/bun" ]]; then
+      bun_path="$SERVICE_HOME/.bun/bin"
+    elif [[ -x "/usr/local/bin/bun" ]]; then
+      bun_path="/usr/local/bin"
+    elif [[ -x "$HOME/.bun/bin/bun" ]]; then
+      bun_path="$HOME/.bun/bin"
+    fi
+  fi
+  
+  # Check if Capacitor packages are already installed
+  local needs_capacitor=true
+  
+  if [[ -f "$NODE_DIR/package.json" ]]; then
+    if grep -q '"@capacitor/core"' "$NODE_DIR/package.json" 2>/dev/null; then
+      needs_capacitor=false
+      log "Capacitor packages are already in package.json."
+    fi
+  fi
+  
+  if $needs_capacitor; then
+    log "Adding Capacitor packages to package.json…"
+    local capacitor_packages="@capacitor/cli @capacitor/core @capacitor/ios @capacitor/android @capacitor/app @capacitor/splash-screen @capacitor/status-bar @capacitor/keyboard @capacitor/push-notifications @capacitor/local-notifications"
+    
+    if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+      if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add $capacitor_packages" 2>&1; then
+        log "Capacitor packages installed successfully."
+      else
+        log "[WARN] Failed to install Capacitor packages. You can manually install with: cd $NODE_DIR && bun add $capacitor_packages"
+      fi
+    else
+      if bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add $capacitor_packages" 2>&1; then
+        log "Capacitor packages installed successfully."
+      else
+        log "[WARN] Failed to install Capacitor packages. You can manually install with: cd $NODE_DIR && bun add $capacitor_packages"
+      fi
+    fi
+  else
+    log "Capacitor packages are already installed."
+  fi
+  
+  # Initialize Capacitor native platforms if not already initialized
+  # Note: This only works properly in development environments with proper SDKs
+  # In production server environments, we skip platform initialization
+  if [[ "${SETUP_CAPACITOR_PLATFORMS:-false}" == "true" ]]; then
+    log "Initializing Capacitor native platforms (SETUP_CAPACITOR_PLATFORMS=true)…"
+    
+    # Check if iOS platform exists
+    if [[ ! -d "$NODE_DIR/ios" ]]; then
+      log "Adding iOS platform…"
+      if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+        sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && npx cap add ios" 2>&1 || log "[WARN] Failed to add iOS platform. Requires macOS with Xcode."
+      else
+        bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && npx cap add ios" 2>&1 || log "[WARN] Failed to add iOS platform. Requires macOS with Xcode."
+      fi
+    else
+      log "iOS platform already exists."
+    fi
+    
+    # Check if Android platform exists
+    if [[ ! -d "$NODE_DIR/android" ]]; then
+      log "Adding Android platform…"
+      if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+        sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && npx cap add android" 2>&1 || log "[WARN] Failed to add Android platform. Requires Android SDK."
+      else
+        bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && npx cap add android" 2>&1 || log "[WARN] Failed to add Android platform. Requires Android SDK."
+      fi
+    else
+      log "Android platform already exists."
+    fi
+  else
+    log "[INFO] Skipping Capacitor native platform initialization (server environment)."
+    log "[INFO] To initialize native platforms, run: SETUP_CAPACITOR_PLATFORMS=true ./setup.sh"
+    log "[INFO] Or manually: cd plant-swipe && npx cap add ios && npx cap add android"
+  fi
+}
+
+install_capacitor
+
 # Build frontend and API bundle using Bun
 # Delegate to refresh script if available (avoids code duplication and uses optimized build)
 REFRESH_SCRIPT="$REPO_DIR/scripts/refresh-plant-swipe.sh"
@@ -2169,4 +2253,21 @@ Next steps:
    sudo bash scripts/refresh-plant-swipe.sh
 
 Admin API endpoints are proxied at /admin/* per nginx snippet.
+
+=== Mobile App Development (Capacitor) ===
+Capacitor packages have been installed for building native iOS and Android apps.
+The app wraps the existing PWA with minimal modifications for easy maintenance.
+
+To set up native platforms on a development machine:
+  cd plant-swipe
+  bun run build           # Build the web app first
+  npx cap add ios         # Requires macOS with Xcode
+  npx cap add android     # Requires Android SDK/Android Studio
+
+To build and open in IDE:
+  bun run cap:build:ios     # Build and open in Xcode
+  bun run cap:build:android # Build and open in Android Studio
+
+Mobile app builds are also automated via GitHub Actions.
+See .github/workflows/build-mobile-apps.yml for CI/CD configuration.
 NOTE

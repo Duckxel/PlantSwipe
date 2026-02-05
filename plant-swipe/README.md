@@ -1047,6 +1047,186 @@ sudo bash scripts/refresh-plant-swipe.sh
 
 ---
 
+## 📲 Native Mobile Apps (Capacitor)
+
+Aphylia can be built as native iOS and Android apps using Capacitor. The native apps wrap the existing PWA with minimal modifications, making the codebase easy to maintain.
+
+<details>
+<summary><strong>📱 Mobile Development Setup</strong></summary>
+
+### Prerequisites
+
+| Platform | Requirements |
+|----------|--------------|
+| **iOS** | macOS, Xcode 15+, CocoaPods, Apple Developer Account |
+| **Android** | Android Studio, Android SDK (API 22+), JDK 17+, Google Play Account |
+
+### Initial Setup
+
+```bash
+# Install dependencies (includes Capacitor)
+bun install
+
+# Build the web app
+bun run build
+
+# Add native platforms (first time only)
+npx cap add ios      # Requires macOS
+npx cap add android  # Requires Android SDK
+```
+
+### Development Workflow
+
+```bash
+# Build web app and sync to native platforms
+bun run cap:build
+
+# Open in Xcode (iOS)
+bun run cap:open:ios
+
+# Open in Android Studio (Android)
+bun run cap:open:android
+
+# Run on connected device/simulator
+bun run cap:run:ios
+bun run cap:run:android
+```
+
+### Live Reload (Development)
+
+For live reload during development, edit `capacitor.config.ts`:
+
+```typescript
+server: {
+  url: 'http://YOUR_DEV_MACHINE_IP:5173',
+  cleartext: true, // Android only - allows HTTP
+}
+```
+
+Then run `bun run dev` and `npx cap run ios/android`.
+
+</details>
+
+<details>
+<summary><strong>🔧 Capacitor Configuration</strong></summary>
+
+### Configuration File
+
+The Capacitor configuration is in `capacitor.config.ts`:
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `appId` | `app.aphylia.mobile` | Unique app identifier |
+| `appName` | `Aphylia` | Display name |
+| `webDir` | `dist` | Built web assets directory |
+
+### Plugins Included
+
+| Plugin | Purpose |
+|--------|---------|
+| `@capacitor/app` | App lifecycle, deep linking |
+| `@capacitor/splash-screen` | Native splash screen |
+| `@capacitor/status-bar` | Status bar styling |
+| `@capacitor/keyboard` | Keyboard handling |
+| `@capacitor/push-notifications` | Native push notifications |
+| `@capacitor/local-notifications` | Task reminders |
+
+### Version Synchronization
+
+The app version is automatically read from `package.json` and synchronized:
+
+- **iOS**: `Info.plist` CFBundleShortVersionString
+- **Android**: `build.gradle` versionName and versionCode
+
+Version code format: `MAJOR * 1000000 + MINOR * 1000 + PATCH`
+Example: `3.2.7` → `3002007`
+
+</details>
+
+<details>
+<summary><strong>🚀 Building for Release</strong></summary>
+
+### iOS Release Build
+
+```bash
+# Build web app
+bun run build
+
+# Sync to iOS
+npx cap sync ios
+
+# Open Xcode
+npx cap open ios
+
+# In Xcode:
+# 1. Select "Any iOS Device" target
+# 2. Product → Archive
+# 3. Distribute App → App Store Connect
+```
+
+### Android Release Build
+
+```bash
+# Build web app
+bun run build
+
+# Sync to Android
+npx cap sync android
+
+# Open Android Studio
+npx cap open android
+
+# In Android Studio:
+# 1. Build → Generate Signed Bundle / APK
+# 2. Select Android App Bundle
+# 3. Sign with release key
+```
+
+### CI/CD (GitHub Actions)
+
+Mobile app builds are automated via GitHub Actions:
+
+- **Trigger**: After version bump on main branch
+- **iOS**: Builds on macOS runner, archives for App Store
+- **Android**: Builds on Ubuntu runner, creates signed AAB
+- **Version**: Automatically synced from `package.json`
+
+See `.github/workflows/build-mobile-apps.yml` for the complete workflow.
+
+</details>
+
+<details>
+<summary><strong>🎨 Native Assets</strong></summary>
+
+### Required Assets
+
+| Asset | iOS | Android |
+|-------|-----|---------|
+| **App Icon** | `ios/App/App/Assets.xcassets/AppIcon.appiconset/` | `android/app/src/main/res/mipmap-*/` |
+| **Splash Screen** | `ios/App/App/Assets.xcassets/Splash.imageset/` | `android/app/src/main/res/drawable/splash.png` |
+
+### Generating Assets
+
+Use the Capacitor Assets tool:
+
+```bash
+# Install assets generator
+npm install -g @capacitor/assets
+
+# Generate from source images
+npx capacitor-assets generate --iconBackgroundColor '#052e16' --splashBackgroundColor '#052e16'
+```
+
+Required source files:
+- `assets/icon-only.png` (1024x1024, no padding)
+- `assets/icon-foreground.png` (1024x1024, adaptive icon foreground)
+- `assets/icon-background.png` (1024x1024, adaptive icon background)
+- `assets/splash.png` (2732x2732, centered logo)
+
+</details>
+
+---
+
 ## 🔧 Troubleshooting
 
 <details>

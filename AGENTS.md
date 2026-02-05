@@ -366,6 +366,134 @@ await sendEmail(email);
 
 ---
 
+## Mobile Development (Capacitor)
+
+### Overview
+
+Aphylia uses Capacitor to build native iOS and Android apps from the existing PWA. The native apps wrap the web app with minimal modifications to keep the codebase easy to maintain.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `plant-swipe/capacitor.config.ts` | Capacitor configuration |
+| `plant-swipe/ios/` | iOS native project (generated) |
+| `plant-swipe/android/` | Android native project (generated) |
+| `.github/workflows/build-mobile-apps.yml` | CI/CD for mobile builds |
+
+### Development Guidelines
+
+#### 1. Maintain Web-First Approach
+
+The app is designed to work primarily as a PWA. When adding features:
+
+- **Test in browser first** — Ensure features work in the web app
+- **Avoid native-only code** — Use Capacitor plugins that gracefully degrade
+- **Check platform detection** — Use `Capacitor.isNativePlatform()` when needed
+
+```typescript
+import { Capacitor } from '@capacitor/core';
+
+if (Capacitor.isNativePlatform()) {
+  // Native-specific code
+} else {
+  // Web fallback
+}
+```
+
+#### 2. Version Synchronization
+
+The app version is centralized in `package.json` and automatically synced:
+
+- **Web**: Read at build time via `vite.config.ts`
+- **iOS**: Synced during `cap sync` via configuration
+- **Android**: Calculated from semver (e.g., 3.2.7 → 3002007)
+
+**Never manually edit native version numbers.** Update `package.json` and run `npx cap sync`.
+
+#### 3. Plugin Usage
+
+When using Capacitor plugins:
+
+```typescript
+// ✓ Good - Check if plugin is available
+import { Capacitor } from '@capacitor/core';
+import { PushNotifications } from '@capacitor/push-notifications';
+
+if (Capacitor.isPluginAvailable('PushNotifications')) {
+  await PushNotifications.requestPermissions();
+}
+
+// ✗ Bad - Assumes plugin is always available
+await PushNotifications.requestPermissions();
+```
+
+#### 4. Building Native Apps
+
+**Local Development:**
+```bash
+cd plant-swipe
+bun run build           # Build web app
+npx cap sync            # Sync to native platforms
+npx cap open ios        # Open Xcode
+npx cap open android    # Open Android Studio
+```
+
+**CI/CD (GitHub Actions):**
+- Mobile builds are triggered after version bumps on main
+- iOS builds require macOS runner with Xcode
+- Android builds require JDK and Android SDK
+- Artifacts are uploaded as release assets
+
+#### 5. Testing Checklist
+
+Before releasing a mobile app update:
+
+- [ ] Test all features in the browser first
+- [ ] Build and test on iOS simulator
+- [ ] Build and test on Android emulator
+- [ ] Test on physical iOS device
+- [ ] Test on physical Android device
+- [ ] Verify push notifications work
+- [ ] Verify splash screen displays correctly
+- [ ] Verify status bar styling
+- [ ] Verify keyboard handling in forms
+- [ ] Test offline functionality
+- [ ] Verify deep links work
+
+### Common Issues
+
+#### iOS Build Fails
+
+```bash
+# Update CocoaPods
+cd ios/App && pod install --repo-update
+
+# Clean build
+rm -rf ios/App/build
+```
+
+#### Android Build Fails
+
+```bash
+# Clean Gradle cache
+cd android && ./gradlew clean
+
+# Update Gradle wrapper
+./gradlew wrapper --gradle-version=8.4
+```
+
+#### Capacitor Sync Issues
+
+```bash
+# Force sync with fresh build
+rm -rf dist
+bun run build
+npx cap sync --force
+```
+
+---
+
 ## Testing & Validation
 
 ### Before Submitting Changes
@@ -410,6 +538,11 @@ await sendEmail(email);
 | `bun run build` | Production build (includes type check) |
 | `bun run lint` | Lint check |
 | `bun run check-translations` | Validate locale files |
+| `bun run cap:build` | Build web app and sync to native platforms |
+| `bun run cap:build:ios` | Build and open in Xcode |
+| `bun run cap:build:android` | Build and open in Android Studio |
+| `bun run cap:run:ios` | Run on iOS device/simulator |
+| `bun run cap:run:android` | Run on Android device/emulator |
 
 ### Key Files
 

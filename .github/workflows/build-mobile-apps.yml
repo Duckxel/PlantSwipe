@@ -1,0 +1,385 @@
+name: Build Mobile Apps
+
+on:
+  # Trigger after version bump commits on main branch
+  push:
+    branches:
+      - main
+    paths:
+      - 'plant-swipe/package.json'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      skip_ios:
+        description: 'Skip iOS build'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_android:
+        description: 'Skip Android build'
+        required: false
+        default: 'false'
+        type: boolean
+      create_release:
+        description: 'Create GitHub release'
+        required: false
+        default: 'true'
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '20'
+  BUN_VERSION: '1.1.0'
+
+jobs:
+  # Get version from package.json
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_code: ${{ steps.version.outputs.version_code }}
+      should_build: ${{ steps.check.outputs.should_build }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Check if this is a version bump commit
+        id: check
+        run: |
+          # Get the last commit message
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          
+          # Check if it's a version bump commit or manual trigger
+          if [[ "$COMMIT_MSG" == *"chore: bump version"* ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "This is a version bump commit or manual trigger, proceeding with build"
+          else
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "Not a version bump commit, skipping build"
+          fi
+      
+      - name: Get version from package.json
+        id: version
+        if: steps.check.outputs.should_build == 'true'
+        run: |
+          VERSION=$(node -p "require('./plant-swipe/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Calculate Android versionCode: MAJOR * 1000000 + MINOR * 1000 + PATCH
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+          VERSION_CODE=$((MAJOR * 1000000 + MINOR * 1000 + PATCH))
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          
+          echo "Version: $VERSION"
+          echo "Version Code: $VERSION_CODE"
+
+  # Build web app (shared between iOS and Android)
+  build-web:
+    needs: get-version
+    if: needs.get-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      
+      - name: Install dependencies
+        working-directory: plant-swipe
+        run: bun install
+      
+      - name: Build web app
+        working-directory: plant-swipe
+        run: bun run build
+        env:
+          SKIP_SITEMAP_GENERATION: '1'
+          VITE_APP_VERSION: ${{ needs.get-version.outputs.version }}
+      
+      - name: Upload web build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: plant-swipe/dist
+          retention-days: 1
+
+  # Build iOS app
+  build-ios:
+    needs: [get-version, build-web]
+    if: |
+      needs.get-version.outputs.should_build == 'true' && 
+      (github.event.inputs.skip_ios != 'true' || github.event_name != 'workflow_dispatch')
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      
+      - name: Download web build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: plant-swipe/dist
+      
+      - name: Install dependencies
+        working-directory: plant-swipe
+        run: bun install
+      
+      - name: Add iOS platform if not exists
+        working-directory: plant-swipe
+        run: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+      
+      - name: Update iOS version
+        working-directory: plant-swipe
+        run: |
+          # Update Info.plist with version
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ needs.get-version.outputs.version }}" ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ needs.get-version.outputs.version_code }}" ios/App/App/Info.plist
+      
+      - name: Sync Capacitor
+        working-directory: plant-swipe
+        run: npx cap sync ios
+      
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+      
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
+          cd plant-swipe/ios/App && pod install --repo-update
+      
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app
+      
+      - name: Build iOS app (unsigned)
+        working-directory: plant-swipe/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination generic/platform=iOS \
+            -archivePath build/App.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION=${{ needs.get-version.outputs.version }} \
+            CURRENT_PROJECT_VERSION=${{ needs.get-version.outputs.version_code }}
+      
+      - name: Create unsigned IPA
+        working-directory: plant-swipe/ios/App
+        run: |
+          mkdir -p build/Payload
+          cp -r build/App.xcarchive/Products/Applications/App.app build/Payload/
+          cd build
+          zip -r ../Aphylia-${{ needs.get-version.outputs.version }}-unsigned.ipa Payload
+      
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app
+          path: plant-swipe/ios/App/Aphylia-${{ needs.get-version.outputs.version }}-unsigned.ipa
+          retention-days: 30
+
+  # Build Android app
+  build-android:
+    needs: [get-version, build-web]
+    if: |
+      needs.get-version.outputs.should_build == 'true' && 
+      (github.event.inputs.skip_android != 'true' || github.event_name != 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Download web build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: plant-swipe/dist
+      
+      - name: Install dependencies
+        working-directory: plant-swipe
+        run: bun install
+      
+      - name: Add Android platform if not exists
+        working-directory: plant-swipe
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+      
+      - name: Update Android version
+        working-directory: plant-swipe/android
+        run: |
+          # Update version in build.gradle
+          sed -i "s/versionCode [0-9]*/versionCode ${{ needs.get-version.outputs.version_code }}/" app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"${{ needs.get-version.outputs.version }}\"/" app/build.gradle
+      
+      - name: Sync Capacitor
+        working-directory: plant-swipe
+        run: npx cap sync android
+      
+      - name: Build Android APK (debug)
+        working-directory: plant-swipe/android
+        run: ./gradlew assembleDebug
+      
+      - name: Build Android Bundle (release unsigned)
+        working-directory: plant-swipe/android
+        run: ./gradlew bundleRelease
+      
+      - name: Rename artifacts
+        working-directory: plant-swipe/android/app/build/outputs
+        run: |
+          mv apk/debug/app-debug.apk apk/debug/Aphylia-${{ needs.get-version.outputs.version }}-debug.apk
+          mv bundle/release/app-release.aab bundle/release/Aphylia-${{ needs.get-version.outputs.version }}-release.aab
+      
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: plant-swipe/android/app/build/outputs/apk/debug/Aphylia-${{ needs.get-version.outputs.version }}-debug.apk
+          retention-days: 30
+      
+      - name: Upload Android Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-bundle
+          path: plant-swipe/android/app/build/outputs/bundle/release/Aphylia-${{ needs.get-version.outputs.version }}-release.aab
+          retention-days: 30
+
+  # Create GitHub Release
+  create-release:
+    needs: [get-version, build-ios, build-android]
+    if: |
+      always() && 
+      needs.get-version.outputs.should_build == 'true' &&
+      (github.event.inputs.create_release != 'false' || github.event_name != 'workflow_dispatch') &&
+      (needs.build-ios.result == 'success' || needs.build-android.result == 'success')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: List artifacts
+        run: find artifacts -type f -name "*.apk" -o -name "*.aab" -o -name "*.ipa" | head -20
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.get-version.outputs.version }}
+          name: Aphylia v${{ needs.get-version.outputs.version }}
+          body: |
+            ## Aphylia v${{ needs.get-version.outputs.version }}
+            
+            ### Mobile App Downloads
+            
+            #### iOS
+            - **Unsigned IPA**: For development/enterprise deployment
+            - To install, use Apple Configurator, Xcode, or sign with your developer certificate
+            
+            #### Android
+            - **Debug APK**: Install directly on Android devices (developer mode required)
+            - **Release AAB**: Upload to Google Play Console for distribution
+            
+            ### Web App
+            The web app at [aphylia.app](https://aphylia.app) has been updated to this version.
+            
+            ### Changelog
+            See the [commit history](https://github.com/${{ github.repository }}/commits/main) for changes.
+            
+            ---
+            
+            **Build Info**
+            - Version: ${{ needs.get-version.outputs.version }}
+            - Version Code: ${{ needs.get-version.outputs.version_code }}
+            - Build: ${{ github.run_number }}
+            - Commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/ios-app/*.ipa
+            artifacts/android-apk/*.apk
+            artifacts/android-bundle/*.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Summary job
+  summary:
+    needs: [get-version, build-web, build-ios, build-android, create-release]
+    if: always() && needs.get-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Build Summary
+        run: |
+          echo "## Mobile App Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.get-version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version Code | ${{ needs.get-version.outputs.version_code }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web Build | ${{ needs.build-web.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| iOS Build | ${{ needs.build-ios.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android Build | ${{ needs.build-android.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.create-release.result }}" == "success" ]]; then
+            echo "### Release Created" >> $GITHUB_STEP_SUMMARY
+            echo "Download the mobile apps from the [Releases page](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.get-version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -142,6 +142,23 @@ Made with care by **Neolite** & **Five**
 </details>
 
 <details>
+<summary><strong>📲 Native Mobile Apps</strong> — iOS & Android via Capacitor</summary>
+
+- **App Store Ready**: Native apps for iOS and Android app stores
+- **Same Codebase**: Built from the existing PWA with minimal modifications
+- **Deep Integration**: Native splash screens, status bar, keyboard handling
+- **Push Notifications**: Native push notification support
+- **Auto-Versioning**: Version synced with web app via CI/CD
+- **Automated Builds**: GitHub Actions for building and releasing
+
+| Platform | Technology | Requirements |
+|----------|------------|--------------|
+| **iOS** | Capacitor + Xcode | macOS, Xcode 15+, Apple Developer Account |
+| **Android** | Capacitor + Gradle | Android Studio, Android SDK, Google Play Account |
+
+</details>
+
+<details>
 <summary><strong>⚙️ Admin Console</strong> — Powerful management tools</summary>
 
 - **Git Integration**: View branches, pull latest changes
@@ -510,6 +527,19 @@ sudo systemctl reload nginx
 
 </details>
 
+<details>
+<summary><strong>Mobile Development (Capacitor)</strong></summary>
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Capacitor CLI | 7.x | Native app tooling |
+| Capacitor Core | 7.x | Native bridge |
+| Capacitor iOS | 7.x | iOS platform |
+| Capacitor Android | 7.x | Android platform |
+| Capacitor Plugins | 7.x | Splash screen, status bar, keyboard, notifications |
+
+</details>
+
 ---
 
 ## ❓ FAQ
@@ -533,7 +563,9 @@ A: Plant data can be translated manually or automatically via DeepL API integrat
 A: Yes — extend `SUPPORTED_LANGUAGES` in the i18n config and add translation files in `public/locales/`.
 
 **Q: Is there a mobile app?**  
-A: Yes! Aphylia is a Progressive Web App (PWA) — fully installable on iOS, Android, and desktop with offline support, push notifications, and a native-like experience. No app store needed!
+A: Yes! Aphylia is available in two ways:
+1. **PWA (Progressive Web App)** — Installable directly from the browser on iOS, Android, and desktop with offline support, push notifications, and a native-like experience. No app store needed!
+2. **Native Apps (via Capacitor)** — Full native iOS and Android apps available on the App Store and Google Play, built from the same codebase using Capacitor. These provide deeper system integration and better app store discoverability.
 
 **Q: How does the PWA work offline?**  
 A: The service worker caches routes, translations, and static assets. API calls use NetworkFirst strategy with fallback.
