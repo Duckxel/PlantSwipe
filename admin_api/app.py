@@ -2,6 +2,7 @@ import hmac
 import hashlib
 import os
 import subprocess
+import sys
 from typing import Set, Optional
 
 from flask import Flask, request, abort, jsonify, Response
@@ -260,6 +261,19 @@ _load_repo_env()
 # Now read config variables AFTER env files are loaded
 APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
 ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
+
+# 🛡️ Sentinel Security Check
+if APP_SECRET == "change-me":
+    is_prod = os.environ.get("FLASK_ENV", "production") == "production"
+    msg = "[SECURITY] CRITICAL: ADMIN_BUTTON_SECRET is set to default 'change-me'. This allows unauthorized access."
+    if is_prod:
+        # Fail secure in production
+        print(f"{msg} Exiting.", file=sys.stderr)
+        sys.exit(1)
+    else:
+        # Warn in dev
+        print(f"{msg} Please set a strong secret in .env.", file=sys.stderr)
+
 # Allow nginx, node app, and admin api by default; can be overridden via env
 ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
 DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
