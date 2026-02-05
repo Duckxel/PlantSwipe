@@ -4,6 +4,10 @@ import { Workbox } from 'workbox-window'
 const AUTO_HIDE_MS = 8000
 const READY_ACK_KEY = 'plantswipe.offlineReadyAck'
 const VERSION_KEY = 'plantswipe.appVersion'
+/** Delay (ms) after an offline event before we verify with a real fetch */
+const OFFLINE_VERIFY_DELAY_MS = 3000
+/** How often (ms) to re-check connectivity while the offline popup is shown */
+const OFFLINE_RECHECK_INTERVAL_MS = 10000
 const disablePwaFlag = String(import.meta.env.VITE_DISABLE_PWA ?? '').trim().toLowerCase()
 const PWA_DISABLED = disablePwaFlag === 'true' || disablePwaFlag === '1' || disablePwaFlag === 'yes' || disablePwaFlag === 'on' || disablePwaFlag === 'disable' || disablePwaFlag === 'disabled'
 
@@ -12,9 +16,39 @@ const resolveScope = () => {
   return scope.endsWith('/') ? scope : `${scope}/`
 }
 
-const getIsOffline = () => {
-  if (typeof navigator === 'undefined') return false
-  return !navigator.onLine
+/**
+ * Perform a real network connectivity check by fetching a tiny resource.
+ * Returns true if the network is reachable, false otherwise.
+ */
+const checkRealConnectivity = async (): Promise<boolean> => {
+  try {
+    // Use a cache-busted HEAD request to a lightweight same-origin endpoint.
+    // Fallback to fetching the favicon if no API is available.
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000)
+    const response = await fetch(`/api/health?_cb=${Date.now()}`, {
+      method: 'HEAD',
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    return response.ok || response.status === 204 || response.status === 304
+  } catch {
+    // First attempt failed, try favicon as fallback
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 5000)
+      const response = await fetch(`/favicon.ico?_cb=${Date.now()}`, {
+        method: 'HEAD',
+        cache: 'no-store',
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+      return response.ok || response.status === 204 || response.status === 304
+    } catch {
+      return false
+    }
+  }
 }
 
 const readReadyAck = () => {
@@ -64,14 +98,19 @@ export function ServiceWorkerToast() {
   const [refreshDismissed, setRefreshDismissed] = React.useState(false)
   const [offlineReadyFlag, setOfflineReadyFlag] = React.useState(false)
   const [needRefreshFlag, setNeedRefreshFlag] = React.useState(false)
-  const [isOffline, setIsOffline] = React.useState(getIsOffline)
+  // Start as online — the real connectivity check will update this if truly offline.
+  // This prevents false-positive offline popups on page load.
+  const [isOffline, setIsOffline] = React.useState(false)
   const [offlineHint, setOfflineHint] = React.useState<string | null>(null)
   const [activeVersion, setActiveVersion] = React.useState<string | null>(readStoredVersion)
   const [availableVersion, setAvailableVersion] = React.useState<string | null>(null)
   const autoHideTimer = React.useRef<number | null>(null)
   const wbRef = React.useRef<Workbox | null>(null)
   const pendingReloadRef = React.useRef(false)
-  const updateShownRef = React.useRef(false) // Track if update notification was already shown
+  // Guard: once set to true, prevents any further update popups for this
+  // service-worker lifecycle.  Only reset when a new SW actually activates
+  // (i.e. the version changes), so that a *future* update can still be surfaced.
+  const updateShownRef = React.useRef(false)
 
   const requestRegistrationUpdate = React.useCallback(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
@@ -125,6 +164,9 @@ export function ServiceWorkerToast() {
           setActiveVersion(nextVersion)
           persistVersion(nextVersion)
           setAvailableVersion((current) => (current === nextVersion ? null : current))
+          // The current update cycle is complete — reset the guard so that
+          // a *future* service-worker update can surface a new popup.
+          updateShownRef.current = false
         }
       }
     },
@@ -205,12 +247,10 @@ export function ServiceWorkerToast() {
     }
   }, [offlineReadyFlag, readyAcknowledged, isOffline])
 
-  React.useEffect(() => {
-    if (needRefreshFlag && !isOffline) {
-      setMode('update')
-      setVisible(true)
-    }
-  }, [needRefreshFlag, isOffline])
+  // Note: no separate effect for needRefreshFlag — surfaceWaitingUpdate()
+  // already sets mode='update' and visible=true directly.  A duplicate
+  // effect here was causing the popup to re-appear after dismiss because
+  // needRefreshFlag could still be true from a prior trigger.
 
   React.useEffect(() => {
     if (!visible || mode !== 'ready') return
@@ -224,17 +264,89 @@ export function ServiceWorkerToast() {
     return () => window.clearTimeout(autoHideTimer.current ?? undefined)
   }, [visible, mode])
 
+  // -- Robust offline detection: verify with real network requests --
+  const offlineVerifyTimer = React.useRef<number | null>(null)
+  const offlineRecheckTimer = React.useRef<number | null>(null)
+
+  const clearOfflineTimers = React.useCallback(() => {
+    if (offlineVerifyTimer.current !== null) {
+      window.clearTimeout(offlineVerifyTimer.current)
+      offlineVerifyTimer.current = null
+    }
+    if (offlineRecheckTimer.current !== null) {
+      window.clearInterval(offlineRecheckTimer.current)
+      offlineRecheckTimer.current = null
+    }
+  }, [])
+
+  const verifyOffline = React.useCallback(async () => {
+    const isReachable = await checkRealConnectivity()
+    if (isReachable) {
+      // Network is actually reachable — do NOT show offline popup
+      setIsOffline(false)
+    } else {
+      // Confirmed offline
+      setIsOffline(true)
+    }
+  }, [])
+
   React.useEffect(() => {
     if (typeof window === 'undefined') return
-    const handleOnline = () => setIsOffline(false)
-    const handleOffline = () => setIsOffline(true)
+
+    const handleOnline = () => {
+      // Browser says online — trust it and clear timers
+      clearOfflineTimers()
+      setIsOffline(false)
+    }
+
+    const handleOffline = () => {
+      // Browser says offline — don't trust it immediately.
+      // Wait a short delay then verify with a real network request.
+      if (offlineVerifyTimer.current !== null) return // already scheduled
+      offlineVerifyTimer.current = window.setTimeout(() => {
+        offlineVerifyTimer.current = null
+        void verifyOffline()
+      }, OFFLINE_VERIFY_DELAY_MS)
+    }
+
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
+
+    // If navigator.onLine is false at mount, schedule a verification
+    if (!navigator.onLine) {
+      offlineVerifyTimer.current = window.setTimeout(() => {
+        offlineVerifyTimer.current = null
+        void verifyOffline()
+      }, OFFLINE_VERIFY_DELAY_MS)
+    }
+
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      clearOfflineTimers()
     }
-  }, [])
+  }, [verifyOffline, clearOfflineTimers])
+
+  // Periodically re-check connectivity while the offline popup is shown,
+  // so it auto-dismisses once the connection is restored.
+  React.useEffect(() => {
+    if (!isOffline) {
+      if (offlineRecheckTimer.current !== null) {
+        window.clearInterval(offlineRecheckTimer.current)
+        offlineRecheckTimer.current = null
+      }
+      return
+    }
+    offlineRecheckTimer.current = window.setInterval(() => {
+      void verifyOffline()
+    }, OFFLINE_RECHECK_INTERVAL_MS)
+    return () => {
+      if (offlineRecheckTimer.current !== null) {
+        window.clearInterval(offlineRecheckTimer.current)
+        offlineRecheckTimer.current = null
+      }
+    }
+  }, [isOffline, verifyOffline])
 
   React.useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
@@ -274,8 +386,11 @@ export function ServiceWorkerToast() {
     } else if (mode === 'update') {
       setRefreshDismissed(true)
       setNeedRefreshFlag(false)
-      // Reset the update shown flag so it can show again on next update
-      updateShownRef.current = false
+      // Do NOT reset updateShownRef here — the same waiting SW is still
+      // present and other triggers (Workbox 'waiting', SW_UPDATE_FOUND
+      // message, registration.waiting check) could fire again and re-show
+      // the popup.  The ref is only reset when SW_ACTIVATED arrives with
+      // a new version, so a genuinely new update can still be surfaced.
     }
     setVisible(false)
   }
@@ -284,8 +399,8 @@ export function ServiceWorkerToast() {
     setNeedRefreshFlag(false)
     setRefreshDismissed(false)
     setAvailableVersion(null)
-    // Reset the update shown flag
-    updateShownRef.current = false
+    // Do NOT reset updateShownRef — a reload is pending; no reason to
+    // allow the popup to re-appear if the reload takes a moment.
     pendingReloadRef.current = true
     const wb = wbRef.current
     const postSkipWaiting = () => {
@@ -305,9 +420,12 @@ export function ServiceWorkerToast() {
     setVisible(false)
   }
 
-  const retryConnection = () => {
+  const retryConnection = async () => {
     if (typeof window === 'undefined') return
-    if (navigator.onLine) {
+    setOfflineHint('Checking connection…')
+    const isReachable = await checkRealConnectivity()
+    if (isReachable) {
+      setIsOffline(false)
       requestRegistrationUpdate()
       window.location.reload()
       return
