@@ -7,7 +7,7 @@
 
 import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, getEnglishPlantName } from "@/lib/aiPlantFill"
-import { translateText, translateArray } from "@/lib/deepl"
+import { translateBatch } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
@@ -756,102 +756,140 @@ export async function processPlantRequest(
       throw new DOMException('Operation cancelled', 'AbortError')
     }
     
-    // Stage 3: Translate to other languages (in parallel)
+    // Stage 3: Translate to other languages (sequentially to avoid rate limiting)
     onProgress?.({ stage: 'translating', plantName: displayName })
     
     const targetLanguages = SUPPORTED_LANGUAGES.filter((lang) => lang !== 'en')
     
-    // Translate to all languages in parallel
-    const translatedRows = await Promise.all(
-      targetLanguages.map(async (target) => {
+    // Process languages sequentially to avoid overwhelming the translation API
+    const translatedRows: Array<Record<string, unknown>> = []
+    
+    for (const target of targetLanguages) {
+      if (signal?.aborted) {
+        throw new DOMException('Operation cancelled', 'AbortError')
+      }
+      
+      try {
+        // Collect all single-string fields for batch translation
+        // This allows translating all strings in 1 API call instead of 10+
+        const stringFields: Array<{ key: string; value: string }> = []
+        const addStringField = (key: string, value?: string | null) => {
+          if (value && typeof value === 'string' && value.trim()) {
+            stringFields.push({ key, value: value.trim() })
+          }
+        }
+        
+        addStringField('name', String(plant.name || trimmedName || ''))
+        addStringField('sourceName', primarySource?.name ? String(primarySource.name) : undefined)
+        addStringField('overview', plant.identity?.overview)
+        addStringField('advice_soil', plant.plantCare?.adviceSoil)
+        addStringField('advice_mulching', plant.plantCare?.adviceMulching)
+        addStringField('advice_fertilizer', plant.plantCare?.adviceFertilizer)
+        addStringField('advice_tutoring', plant.growth?.adviceTutoring)
+        addStringField('advice_sowing', plant.growth?.adviceSowing)
+        addStringField('cut', plant.growth?.cut)
+        addStringField('advice_medicinal', plant.usage?.adviceMedicinal)
+        addStringField('advice_infusion', plant.usage?.adviceInfusion)
+        addStringField('ground_effect', plant.ecology?.groundEffect)
+        
+        // Batch translate all single-string fields in one API call
+        const stringTexts = stringFields.map(f => f.value)
+        const translatedStrings = stringTexts.length > 0 
+          ? await translateBatch(stringTexts, target, 'en')
+          : []
+        
+        // Build lookup map for translated strings
+        const stringMap = new Map<string, string>()
+        stringFields.forEach((field, i) => {
+          stringMap.set(field.key, translatedStrings[i] || field.value)
+        })
+        
         if (signal?.aborted) {
           throw new DOMException('Operation cancelled', 'AbortError')
         }
         
-        const translateArraySafe = (arr?: string[]) => translateArray((arr || []).map(s => String(s || '')), target, 'en')
-        const translateStringSafe = async (s?: string | null) => {
-          if (!s || typeof s !== 'string') return null
-          return translateText(s, target, 'en')
+        // Collect all array fields for batch translation  
+        // Flatten all arrays into one big batch, then split results back
+        const arrayFields: Array<{ key: string; items: string[] }> = []
+        const addArrayField = (key: string, arr?: string[]) => {
+          const items = (arr || []).map(s => String(s || '')).filter(s => s.trim())
+          if (items.length > 0) {
+            arrayFields.push({ key, items })
+          }
         }
         
-        // Run all translations for this language in parallel
-        const [
-          translatedName,
-          translatedGivenNames,
-          translatedSourceName,
-          overview,
-          allergens,
-          symbolism,
-          origin,
-          advice_soil,
-          advice_mulching,
-          advice_fertilizer,
-          advice_tutoring,
-          advice_sowing,
-          cut,
-          advice_medicinal,
-          nutritional_intake,
-          recipes_ideas,
-          advice_infusion,
-          ground_effect,
-          tags,
-          spice_mixes,
-          pests,
-          diseases,
-        ] = await Promise.all([
-          translateText(String(plant.name || trimmedName || ''), target, 'en'),
-          translateArray(plant.identity?.givenNames || [], target, 'en'),
-          primarySource?.name ? translateText(String(primarySource.name), target, 'en') : Promise.resolve(undefined),
-          translateStringSafe(plant.identity?.overview),
-          translateArraySafe(plant.identity?.allergens),
-          translateArraySafe(plant.identity?.symbolism),
-          translateArraySafe(plant.plantCare?.origin),
-          translateStringSafe(plant.plantCare?.adviceSoil),
-          translateStringSafe(plant.plantCare?.adviceMulching),
-          translateStringSafe(plant.plantCare?.adviceFertilizer),
-          translateStringSafe(plant.growth?.adviceTutoring),
-          translateStringSafe(plant.growth?.adviceSowing),
-          translateStringSafe(plant.growth?.cut),
-          translateStringSafe(plant.usage?.adviceMedicinal),
-          translateArraySafe(plant.usage?.nutritionalIntake),
-          translateArraySafe(plant.usage?.recipesIdeas),
-          translateStringSafe(plant.usage?.adviceInfusion),
-          translateStringSafe(plant.ecology?.groundEffect),
-          translateArraySafe(plant.miscellaneous?.tags),
-          translateArraySafe(plant.usage?.spiceMixes),
-          translateArraySafe(plant.danger?.pests),
-          translateArraySafe(plant.danger?.diseases),
-        ])
+        addArrayField('given_names', plant.identity?.givenNames)
+        addArrayField('allergens', plant.identity?.allergens)
+        addArrayField('symbolism', plant.identity?.symbolism)
+        addArrayField('origin', plant.plantCare?.origin)
+        addArrayField('nutritional_intake', plant.usage?.nutritionalIntake)
+        addArrayField('recipes_ideas', plant.usage?.recipesIdeas)
+        addArrayField('tags', plant.miscellaneous?.tags)
+        addArrayField('spice_mixes', plant.usage?.spiceMixes)
+        addArrayField('pests', plant.danger?.pests)
+        addArrayField('diseases', plant.danger?.diseases)
         
-        return {
+        // Flatten all array items into one batch
+        const allArrayItems: string[] = []
+        const arrayOffsets: Array<{ key: string; start: number; count: number }> = []
+        for (const field of arrayFields) {
+          arrayOffsets.push({ key: field.key, start: allArrayItems.length, count: field.items.length })
+          allArrayItems.push(...field.items)
+        }
+        
+        // Translate all array items in one batch call (or split into chunks of 50)
+        const translatedArrayItems: string[] = []
+        if (allArrayItems.length > 0) {
+          const BATCH_SIZE = 50
+          for (let i = 0; i < allArrayItems.length; i += BATCH_SIZE) {
+            if (signal?.aborted) {
+              throw new DOMException('Operation cancelled', 'AbortError')
+            }
+            const chunk = allArrayItems.slice(i, i + BATCH_SIZE)
+            const translated = await translateBatch(chunk, target, 'en')
+            translatedArrayItems.push(...translated)
+          }
+        }
+        
+        // Split translated items back into their respective arrays
+        const arrayMap = new Map<string, string[]>()
+        for (const offset of arrayOffsets) {
+          arrayMap.set(offset.key, translatedArrayItems.slice(offset.start, offset.start + offset.count))
+        }
+        
+        translatedRows.push({
           plant_id: plantId,
           language: target,
-          name: translatedName,
-          given_names: translatedGivenNames,
-          overview,
-          allergens,
-          symbolism,
-          origin,
-          advice_soil,
-          advice_mulching,
-          advice_fertilizer,
-          advice_tutoring,
-          advice_sowing,
-          cut,
-          advice_medicinal,
-          nutritional_intake,
-          recipes_ideas,
-          advice_infusion,
-          ground_effect,
-          source_name: translatedSourceName || null,
+          name: stringMap.get('name') || trimmedName,
+          given_names: arrayMap.get('given_names') || [],
+          overview: stringMap.get('overview') || null,
+          allergens: arrayMap.get('allergens') || [],
+          symbolism: arrayMap.get('symbolism') || [],
+          origin: arrayMap.get('origin') || [],
+          advice_soil: stringMap.get('advice_soil') || null,
+          advice_mulching: stringMap.get('advice_mulching') || null,
+          advice_fertilizer: stringMap.get('advice_fertilizer') || null,
+          advice_tutoring: stringMap.get('advice_tutoring') || null,
+          advice_sowing: stringMap.get('advice_sowing') || null,
+          cut: stringMap.get('cut') || null,
+          advice_medicinal: stringMap.get('advice_medicinal') || null,
+          nutritional_intake: arrayMap.get('nutritional_intake') || [],
+          recipes_ideas: arrayMap.get('recipes_ideas') || [],
+          advice_infusion: stringMap.get('advice_infusion') || null,
+          ground_effect: stringMap.get('ground_effect') || null,
+          source_name: stringMap.get('sourceName') || null,
           source_url: primarySource?.url ? String(primarySource.url) : null,
-          tags,
-          spice_mixes,
-          pests,
-          diseases,
-        }
-      })
-    )
+          tags: arrayMap.get('tags') || [],
+          spice_mixes: arrayMap.get('spice_mixes') || [],
+          pests: arrayMap.get('pests') || [],
+          diseases: arrayMap.get('diseases') || [],
+        })
+      } catch (err) {
+        // If translation for one language fails, log and continue with others
+        if (isCancellationError(err)) throw err
+        console.error(`[aiPrefillService] Translation to ${target} failed for "${englishPlantName}":`, err)
+      }
+    }
     
     if (signal?.aborted) {
       // Clean up

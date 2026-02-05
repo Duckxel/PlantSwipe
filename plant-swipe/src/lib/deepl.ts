@@ -77,7 +77,47 @@ function restoreTemplateVariables(text: string, variableMap: Map<string, string>
 }
 
 /**
+ * Retry helper with exponential backoff for rate-limited (429) requests
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+  baseDelayMs = 1000
+): Promise<Response> {
+  let lastError: Error | null = null
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options)
+      
+      // If rate limited, wait and retry
+      if (response.status === 429 && attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500
+        console.warn(`[translate] Rate limited (429), retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+      
+      return response
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      // Only retry on network errors, not on other failures
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500
+        console.warn(`[translate] Network error, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+    }
+  }
+  
+  throw lastError || new Error('Translation request failed after retries')
+}
+
+/**
  * Translate text using DeepL API via backend endpoint
+ * Includes automatic retry with exponential backoff for rate-limited requests
  */
 export async function translateText(
   text: string,
@@ -94,7 +134,7 @@ export async function translateText(
 
   try {
     // Call backend endpoint that has the DeepL API key
-    const response = await fetch('/api/translate', {
+    const response = await fetchWithRetry('/api/translate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -124,7 +164,84 @@ export async function translateText(
 }
 
 /**
+ * Translate multiple texts in a single batch request (admin-only endpoint)
+ * Falls back to individual requests if batch endpoint fails
+ */
+export async function translateBatch(
+  texts: string[],
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<string[]> {
+  if (!texts || texts.length === 0) return texts
+  if (sourceLang === targetLang) return texts
+  
+  // Protect template variables in all texts
+  const protected_ = texts.map(text => protectTemplateVariables(text || ''))
+  const protectedTexts = protected_.map(p => p.text.trim())
+  
+  try {
+    const response = await fetchWithRetry('/api/translate-batch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        texts: protectedTexts,
+        source_lang: sourceLang.toUpperCase(),
+        target_lang: targetLang.toUpperCase(),
+      }),
+    })
+
+    if (!response.ok) {
+      // If batch endpoint fails (e.g., non-admin), fall back to individual requests
+      console.warn('[translate] Batch endpoint failed, falling back to individual requests')
+      return translateArrayIndividual(texts, targetLang, sourceLang)
+    }
+
+    const data = await response.json()
+    const translations: string[] = data.translations || []
+    
+    // Restore template variables in all translations
+    return translations.map((translated, i) => {
+      const variableMap = protected_[i]?.variableMap
+      return variableMap ? restoreTemplateVariables(translated, variableMap) : translated
+    })
+  } catch (error) {
+    console.warn('[translate] Batch translation failed, falling back to individual:', error)
+    return translateArrayIndividual(texts, targetLang, sourceLang)
+  }
+}
+
+/**
+ * Translate array of strings individually (fallback for non-admin users)
+ * Uses concurrency control to avoid overwhelming the API
+ */
+async function translateArrayIndividual(
+  items: string[],
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<string[]> {
+  if (!items || items.length === 0) return items
+  if (sourceLang === targetLang) return items
+  
+  // Process in chunks of 5 to limit concurrency
+  const CHUNK_SIZE = 5
+  const results: string[] = []
+  
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    const chunk = items.slice(i, i + CHUNK_SIZE)
+    const chunkResults = await Promise.all(
+      chunk.map(item => translateText(item, targetLang, sourceLang))
+    )
+    results.push(...chunkResults)
+  }
+  
+  return results
+}
+
+/**
  * Translate array of strings
+ * Uses batch endpoint for efficiency when available, falls back to individual requests
  */
 export async function translateArray(
   items: string[],
@@ -134,10 +251,8 @@ export async function translateArray(
   if (!items || items.length === 0) return items
   if (sourceLang === targetLang) return items
   
-  const translated = await Promise.all(
-    items.map(item => translateText(item, targetLang, sourceLang))
-  )
-  return translated
+  // Use batch endpoint for arrays (more efficient, 1 API call instead of N)
+  return translateBatch(items, targetLang, sourceLang)
 }
 
 /**

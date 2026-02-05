@@ -1124,6 +1124,7 @@ const rateLimitConfig = {
     perUser: true,
   },
   // Translation: 500 requests per hour per user (DeepL costs - generous for active translators)
+  // Admin users bypass all rate limits entirely (checked in checkRateLimit)
   translate: {
     windowMs: 60 * 60 * 1000,  // 1 hour
     maxAttempts: 500,
@@ -1232,15 +1233,52 @@ function getRateLimitIdentifier(action, req, user) {
 }
 
 /**
+ * Short-lived admin status cache to avoid DB queries on every rate-limit check.
+ * Maps userId -> { isAdmin: boolean, expiresAt: number }
+ * Entries expire after 60 seconds.
+ */
+const adminStatusCache = new Map()
+const ADMIN_CACHE_TTL_MS = 60_000 // 1 minute
+
+/**
+ * Check if a user is an admin (with caching to avoid repeated DB lookups).
+ * Returns false if user is null or has no id.
+ */
+async function isAdminUser(user) {
+  if (!user?.id) return false
+  
+  const cached = adminStatusCache.get(user.id)
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.isAdmin
+  }
+  
+  const isAdmin = await isAdminUserId(user.id)
+  adminStatusCache.set(user.id, { isAdmin, expiresAt: Date.now() + ADMIN_CACHE_TTL_MS })
+  return isAdmin
+}
+
+// Clean up expired admin cache entries every 5 minutes
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, entry] of adminStatusCache.entries()) {
+    if (now >= entry.expiresAt) adminStatusCache.delete(key)
+  }
+}, 5 * 60 * 1000)
+
+/**
  * Check rate limit and return 429 if exceeded
  * Returns true if request should be blocked, false if allowed
+ * Admin users bypass all rate limits.
  * @param {string} action - The action type
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  * @param {object|null} user - User object (if authenticated)
- * @returns {boolean} - True if blocked (429 sent), false if allowed
+ * @returns {Promise<boolean>} - True if blocked (429 sent), false if allowed
  */
-function checkRateLimit(action, req, res, user = null) {
+async function checkRateLimit(action, req, res, user = null) {
+  // Admin users are exempt from all rate limits
+  if (await isAdminUser(user)) return false
+  
   const identifier = getRateLimitIdentifier(action, req, user)
   
   if (isRateLimited(action, identifier)) {
@@ -1255,13 +1293,17 @@ function checkRateLimit(action, req, res, user = null) {
  * Check rate limit AND record the attempt
  * Returns true if request should be blocked, false if allowed
  * Unlike checkRateLimit, this also records the current request for future checks
+ * Admin users bypass all rate limits.
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  * @param {string} action - The action type
  * @param {object|null} user - User object (if authenticated)
- * @returns {boolean} - True if blocked (429 sent), false if allowed
+ * @returns {Promise<boolean>} - True if blocked (429 sent), false if allowed
  */
-function checkAndRecordRateLimit(req, res, action, user = null) {
+async function checkAndRecordRateLimit(req, res, action, user = null) {
+  // Admin users are exempt from all rate limits
+  if (await isAdminUser(user)) return false
+  
   const store = rateLimitStores[action]
   const config = rateLimitConfig[action]
   
@@ -3565,7 +3607,7 @@ const CSP_POLICY = [
   "default-src 'self' *.aphylia.app",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.aphylia.app https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://recaptchaenterprise.googleapis.com",
   "style-src 'self' 'unsafe-inline' *.aphylia.app https://fonts.googleapis.com",
-  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://*.sentry.io https://fonts.googleapis.com https://fonts.gstatic.com https://ipapi.co https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org",
+  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://www.google.com https://*.sentry.io https://fonts.googleapis.com https://fonts.gstatic.com https://ipapi.co https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org",
   "font-src 'self' *.aphylia.app https://fonts.gstatic.com data:",
   "frame-src 'self' *.aphylia.app https://www.google.com https://recaptcha.google.com",
   "img-src * data: blob:",
@@ -6635,7 +6677,7 @@ app.post('/api/messages/upload-image', async (req, res) => {
   }
 
   // Rate limit: 50 image uploads per hour per user
-  if (checkRateLimit('imageUpload', req, res, uploader)) {
+  if (await checkRateLimit('imageUpload', req, res, uploader)) {
     return
   }
 
@@ -14035,10 +14077,10 @@ app.post('/api/contact', async (req, res) => {
 // DeepL Translation API endpoint
 app.post('/api/translate', async (req, res) => {
   try {
-    // Rate limit: 200 translations per hour (per user or IP)
+    // Rate limit (admins are exempt via checkRateLimit)
     let user = null
     try { user = await getUserFromRequest(req) } catch { }
-    if (checkRateLimit('translate', req, res, user)) {
+    if (await checkRateLimit('translate', req, res, user)) {
       return
     }
 
@@ -14096,14 +14138,101 @@ app.post('/api/translate', async (req, res) => {
   }
 })
 
+// DeepL Batch Translation API endpoint
+// Accepts multiple texts and translates them in a single DeepL API call
+// This dramatically reduces the number of HTTP round-trips for bulk operations
+app.post('/api/translate-batch', async (req, res) => {
+  try {
+    // Check if user is admin - batch endpoint is admin-only with higher rate limits
+    let user = null
+    try { user = await getUserFromRequest(req) } catch { }
+    
+    const admin = user?.id ? await isAdminUserId(user.id) : false
+    
+    if (!admin) {
+      return res.status(403).json({ error: 'Admin privileges required for batch translation' })
+    }
+    
+    // Rate limit (admins are exempt via checkRateLimit)
+    if (await checkRateLimit('translate', req, res, user)) {
+      return
+    }
+
+    const { texts, source_lang, target_lang } = req.body
+
+    if (!Array.isArray(texts) || texts.length === 0) {
+      return res.status(400).json({ error: 'Missing or invalid texts array' })
+    }
+
+    if (texts.length > 50) {
+      return res.status(400).json({ error: 'Maximum 50 texts per batch request' })
+    }
+
+    if (!source_lang || !target_lang) {
+      return res.status(400).json({ error: 'Missing source_lang or target_lang' })
+    }
+
+    // Skip translation if source and target are the same
+    if (source_lang.toUpperCase() === target_lang.toUpperCase()) {
+      return res.json({ translations: texts })
+    }
+
+    // Get DeepL API key from environment
+    const deeplApiKey = process.env.DEEPL_API_KEY
+    if (!deeplApiKey) {
+      console.error('[translate-batch] DeepL API key not configured')
+      return res.status(500).json({ error: 'Translation service not configured' })
+    }
+
+    // Use DeepL API with multiple text parameters
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
+
+    // Build URL-encoded body with multiple text parameters
+    const params = new URLSearchParams()
+    for (const text of texts) {
+      params.append('text', typeof text === 'string' ? text : String(text || ''))
+    }
+    params.append('source_lang', source_lang.toUpperCase())
+    params.append('target_lang', target_lang.toUpperCase())
+
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[translate-batch] DeepL API error:', response.status, errorText)
+      return res.status(response.status).json({ error: 'Batch translation failed: ' + (errorText || response.statusText) })
+    }
+
+    const data = await response.json()
+    const translations = (data.translations || []).map((t) => t?.text || '')
+
+    // Ensure we return same number of results as inputs
+    while (translations.length < texts.length) {
+      translations.push(texts[translations.length] || '')
+    }
+
+    res.json({ translations })
+  } catch (error) {
+    console.error('[translate-batch] Translation error:', error)
+    res.status(500).json({ error: 'Batch translation service error: ' + (error?.message || 'Unknown error') })
+  }
+})
+
 // DeepL Language Detection API endpoint
 // Uses DeepL's translation API with auto-detect (omitting source_lang)
 app.post('/api/detect-language', async (req, res) => {
   try {
-    // Rate limit: 200 requests per hour (per user or IP)
+    // Rate limit (admins are exempt via checkRateLimit)
     let user = null
     try { user = await getUserFromRequest(req) } catch { }
-    if (checkRateLimit('translate', req, res, user)) {
+    if (await checkRateLimit('translate', req, res, user)) {
       return
     }
 
@@ -14157,10 +14286,10 @@ app.post('/api/detect-language', async (req, res) => {
 // Translates text AND returns the detected source language
 app.post('/api/translate-detect', async (req, res) => {
   try {
-    // Rate limit: 200 requests per hour (per user or IP)
+    // Rate limit (admins are exempt via checkRateLimit)
     let user = null
     try { user = await getUserFromRequest(req) } catch { }
-    if (checkRateLimit('translate', req, res, user)) {
+    if (await checkRateLimit('translate', req, res, user)) {
       return
     }
 
@@ -16760,7 +16889,7 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
   }
 
   // Rate limit: 50 image uploads per hour per user
-  if (checkRateLimit('imageUpload', req, res, user)) {
+  if (await checkRateLimit('imageUpload', req, res, user)) {
     return
   }
 
@@ -16991,7 +17120,7 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
   }
 
   // Rate limit: 30 scans per hour per user
-  if (checkRateLimit('scan', req, res, user)) {
+  if (await checkRateLimit('scan', req, res, user)) {
     return
   }
 
@@ -17240,7 +17369,7 @@ app.post('/api/bug-report/upload-screenshot', async (req, res) => {
   }
 
   // Rate limit: 10 bug reports per hour per IP (spam prevention)
-  if (checkRateLimit('bugReport', req, res, user)) {
+  if (await checkRateLimit('bugReport', req, res, user)) {
     return
   }
 
@@ -17664,7 +17793,7 @@ app.post('/api/garden/:id/activity', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
 
     // Rate limit: 100 activity logs per hour per user
-    if (checkRateLimit('gardenActivity', req, res, user)) {
+    if (await checkRateLimit('gardenActivity', req, res, user)) {
       return
     }
 
@@ -20347,7 +20476,7 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
 
     // Rate limit: 20 journal entries per hour per user
-    if (checkRateLimit('gardenJournal', req, res, user)) {
+    if (await checkRateLimit('gardenJournal', req, res, user)) {
       return
     }
 
@@ -20857,8 +20986,8 @@ app.post('/api/garden/:id/upload', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
 
-    // Rate limit: 50 image uploads per hour per user
-    if (checkRateLimit('imageUpload', req, res, user)) {
+    // Rate limit: 50 image uploads per hour per user (admins exempt)
+    if (await checkRateLimit('imageUpload', req, res, user)) {
       return
     }
 
@@ -21436,8 +21565,8 @@ app.post('/api/push/instant', async (req, res) => {
     return
   }
 
-  // Rate limit: 100 push notifications per hour per user
-  if (checkRateLimit('pushNotify', req, res, user)) {
+  // Rate limit: 100 push notifications per hour per user (admins exempt)
+  if (await checkRateLimit('pushNotify', req, res, user)) {
     return
   }
 
@@ -21761,8 +21890,8 @@ app.post('/api/ai/garden-chat/upload', chatImageUpload.single('image'), async (r
       return
     }
     
-    // Rate limit: 50 image uploads per hour per user
-    if (checkRateLimit('imageUpload', req, res, user)) {
+    // Rate limit: 50 image uploads per hour per user (admins exempt)
+    if (await checkRateLimit('imageUpload', req, res, user)) {
       return
     }
     
@@ -23520,8 +23649,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       return
     }
     
-    // Rate limit: 60 AI chat messages per hour per user
-    if (checkRateLimit('aiChat', req, res, user)) {
+    // Rate limit: 60 AI chat messages per hour per user (admins exempt)
+    if (await checkRateLimit('aiChat', req, res, user)) {
       return
     }
     
