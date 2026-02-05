@@ -291,7 +291,7 @@ export function SchedulePickerDialog(props: {
 
           {(lockToYear || period === 'year') && (
             <>
-              <div className="text-xs opacity-70">Pick weeks (1–4) and weekdays per month. Example: Jan 1st Mon.</div>
+              <div className="text-xs opacity-70">Select a month, then pick the week &amp; weekday. Example: Jan 1st Mon.</div>
               <YearMonthNthWeekdayPicker selected={yearlyDays} onToggle={toggleYearNthWeekday} onToggleHeader={toggleYearMonthHeader} disabledMore={disabledMore} />
             </>
           )}
@@ -406,56 +406,144 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
   )
 }
 
-function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMore }: { selected: string[]; onToggle: (monthIdx: number, weekIndex: number, uiIndex: number) => void; onToggleHeader: (monthIdx: number, uiIndex: number) => void; disabledMore: boolean }) {
-  const months = [
-    'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
-  ]
-  const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-  const weekNames = ['1st','2nd','3rd','4th']
+function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader: _onToggleHeader, disabledMore }: { selected: string[]; onToggle: (monthIdx: number, weekIndex: number, uiIndex: number) => void; onToggleHeader: (monthIdx: number, uiIndex: number) => void; disabledMore: boolean }) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const weekLabels = ['1st','2nd','3rd','4th']
   const mondayFirstMap = [1,2,3,4,5,6,0]
+  // Reverse map: weekday number → UI label index
+  const weekdayToUI: Record<number, number> = { 1:0, 2:1, 3:2, 4:3, 5:4, 6:5, 0:6 }
+
+  const [activeMonth, setActiveMonth] = React.useState<number | null>(null)
+
+  // Count selections per month for badges
+  const countByMonth = React.useMemo(() => {
+    const counts: Record<number, number> = {}
+    for (const key of selected) {
+      const mm = parseInt(key.split('-')[0], 10)
+      if (mm >= 1 && mm <= 12) counts[mm] = (counts[mm] || 0) + 1
+    }
+    return counts
+  }, [selected])
+
+  // Format a key like "03-1-1" into "Mar · 1st Mon"
+  const formatKey = (key: string) => {
+    const [mm, wi, wd] = key.split('-').map(Number)
+    const monthLabel = months[mm - 1] || '?'
+    const weekLabel = weekLabels[wi - 1] || `W${wi}`
+    const dayLabel = dayLabels[weekdayToUI[wd] ?? 0] || '?'
+    return `${monthLabel} · ${weekLabel} ${dayLabel}`
+  }
+
+  // Remove a single selection
+  const removeKey = (key: string) => {
+    const [mm, wi, wd] = key.split('-').map(Number)
+    const uiIdx = weekdayToUI[wd] ?? 0
+    // Calling onToggle on an already-selected cell removes it
+    onToggle(mm - 1, wi, uiIdx)
+  }
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[60vh] overflow-auto pr-1">
-      {months.map((label, monthIdx) => (
-        <div key={label} className="rounded-xl border dark:border-stone-700 p-2">
-          <div className="text-xs opacity-70 mb-2">{label}</div>
-          <div className="space-y-2">
-            <div className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
-              <div className="text-xs opacity-70 text-center">WEEK</div>
-              {labels.map((l, uiIndex) => (
-                <button
-                  key={l}
-                  type="button"
-                  onClick={() => onToggleHeader(monthIdx, uiIndex)}
-                  className="h-8 rounded-lg border text-[11px] bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600"
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
-            {weekNames.map((wn, rowIdx) => (
-              <div key={wn} className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
-                <div className="text-xs opacity-70 text-center">{rowIdx + 1}</div>
-                {labels.map((_, uiIndex) => {
+    <div className="space-y-4">
+      {/* Summary chips */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {[...selected].sort().map((key) => (
+            <span
+              key={key}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 text-xs font-medium"
+            >
+              {formatKey(key)}
+              <button
+                type="button"
+                onClick={() => removeKey(key)}
+                className="ml-0.5 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                aria-label="Remove"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Month grid */}
+      <div className="grid grid-cols-4 gap-2">
+        {months.map((label, idx) => {
+          const count = countByMonth[idx + 1] || 0
+          const isActive = activeMonth === idx
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setActiveMonth(isActive ? null : idx)}
+              className={`relative h-12 rounded-xl border text-sm font-medium transition-all ${
+                isActive
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                  : 'bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600'
+              }`}
+            >
+              {label}
+              {count > 0 && !isActive && (
+                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Week × Weekday picker for active month */}
+      {activeMonth !== null && (
+        <div className="rounded-xl border dark:border-stone-700 p-3 space-y-2 animate-in fade-in-0 slide-in-from-top-2 duration-200">
+          <div className="text-sm font-medium mb-1">
+            {months[activeMonth]} — pick a week &amp; day
+          </div>
+          {/* Header row */}
+          <div className="grid grid-cols-[48px_repeat(7,minmax(0,1fr))] gap-1.5 items-center">
+            <div />
+            {dayLabels.map((l) => (
+              <div key={l} className="text-[11px] text-center opacity-60 font-medium">{l}</div>
+            ))}
+          </div>
+          {/* Week rows */}
+          {weekLabels.map((wn, rowIdx) => {
+            const weekIndex = rowIdx + 1
+            return (
+              <div key={wn} className="grid grid-cols-[48px_repeat(7,minmax(0,1fr))] gap-1.5 items-center">
+                <div className="text-xs opacity-60 text-center">{wn}</div>
+                {dayLabels.map((dl, uiIndex) => {
                   const weekday = mondayFirstMap[uiIndex]
-                  const mm = String(monthIdx + 1).padStart(2, '0')
-                  const key = `${mm}-${rowIdx + 1}-${weekday}`
+                  const mm = String(activeMonth + 1).padStart(2, '0')
+                  const key = `${mm}-${weekIndex}-${weekday}`
                   const isOn = selected.includes(key)
                   return (
                     <button
                       key={uiIndex}
                       type="button"
-                      onClick={() => onToggle(monthIdx, rowIdx + 1, uiIndex)}
-                      className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      onClick={() => {
+                        onToggle(activeMonth, weekIndex, uiIndex)
+                        // If adding (not removing) and it completes the selection, close the month
+                        // We don't auto-close on removal
+                      }}
+                      className={`h-10 rounded-xl border text-xs font-medium transition-all ${
+                        isOn
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-white hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700 dark:border-stone-600'
+                      } ${!isOn && disabledMore ? 'opacity-40 cursor-not-allowed' : ''}`}
                       disabled={!isOn && disabledMore}
-                      aria-label={`${label} ${wn} ${labels[uiIndex]}`}
-                    />
+                      aria-label={`${months[activeMonth]} ${wn} ${dl}`}
+                    >
+                      {dl.slice(0, 2)}
+                    </button>
                   )
                 })}
               </div>
-            ))}
-          </div>
+            )
+          })}
         </div>
-      ))}
+      )}
     </div>
   )
 }
