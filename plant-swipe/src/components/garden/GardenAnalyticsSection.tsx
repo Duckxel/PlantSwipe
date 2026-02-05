@@ -846,32 +846,47 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </h3>
                 </div>
                 <div className="flex items-center gap-6">
-                  <div className="w-32 h-32">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: "Water", value: analytics.weeklyStats.tasksByType.water, fill: CHART_COLORS.water },
-                            { name: "Fertilize", value: analytics.weeklyStats.tasksByType.fertilize, fill: CHART_COLORS.fertilize },
-                            { name: "Harvest", value: analytics.weeklyStats.tasksByType.harvest, fill: CHART_COLORS.harvest },
-                            { name: "Cut", value: analytics.weeklyStats.tasksByType.cut, fill: CHART_COLORS.cut },
-                            { name: "Custom", value: analytics.weeklyStats.tasksByType.custom, fill: CHART_COLORS.custom },
-                          ].filter((d) => d.value > 0)}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={35}
-                          outerRadius={55}
-                          paddingAngle={3}
-                          dataKey="value"
-                          animationDuration={300}
-                        >
-                          {[CHART_COLORS.water, CHART_COLORS.fertilize, CHART_COLORS.harvest, CHART_COLORS.cut, CHART_COLORS.custom].map((color, index) => (
-                            <Cell key={`cell-${index}`} fill={color} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {(() => {
+                    // Build filtered data for the donut chart and derive Cell
+                    // colors from it so colours stay correct after zero-value
+                    // types are removed.
+                    const pieData = [
+                      { name: "Water", value: analytics.weeklyStats.tasksByType.water, fill: CHART_COLORS.water },
+                      { name: "Fertilize", value: analytics.weeklyStats.tasksByType.fertilize, fill: CHART_COLORS.fertilize },
+                      { name: "Harvest", value: analytics.weeklyStats.tasksByType.harvest, fill: CHART_COLORS.harvest },
+                      { name: "Cut", value: analytics.weeklyStats.tasksByType.cut, fill: CHART_COLORS.cut },
+                      { name: "Custom", value: analytics.weeklyStats.tasksByType.custom, fill: CHART_COLORS.custom },
+                    ].filter((d) => d.value > 0);
+
+                    if (pieData.length === 0) return null;
+
+                    return (
+                      <div className="w-32 h-32">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              // Force remount when the set of visible slices
+                              // changes so Recharts animates correctly from an
+                              // initially-empty state.
+                              key={pieData.map((d) => d.name).join(",")}
+                              data={pieData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={35}
+                              outerRadius={55}
+                              paddingAngle={3}
+                              dataKey="value"
+                              animationDuration={300}
+                            >
+                              {pieData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    );
+                  })()}
                   <div className="flex-1 space-y-2">
                     {[
                       { key: "water", label: t("garden.taskTypes.water", { defaultValue: "Water" }), icon: Droplets, color: CHART_COLORS.water },
