@@ -23733,21 +23733,37 @@ app.post('/api/ai/garden-chat', async (req, res) => {
     // Get garden ID for tool execution
     const gardenIdForTools = gardenContext?.gardenId || context.garden?.gardenId
     
-    // Format conversation history for the Responses API
+    // Format conversation history as structured input items for the Responses API.
+    // Returns an array of typed message objects instead of a plain text string,
+    // which maintains clear separation between user content, assistant content,
+    // and tool output — preventing prompt injection via content boundaries.
     const formatConversationForInput = (msgs) => {
       return msgs.slice(1).map(msg => { // Skip system message (handled via instructions)
-        const role = msg.role === 'assistant' ? 'Assistant' : 'User'
-        const content = typeof msg.content === 'string' 
-          ? msg.content 
-          : msg.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || ''
-        return `${role}: ${content}`
-      }).join('\n\n')
+        let content = msg.content
+        // Convert Chat Completions content parts to Responses API format
+        if (Array.isArray(content)) {
+          content = content.map(part => {
+            if (part.type === 'text') {
+              return { type: 'input_text', text: part.text }
+            }
+            if (part.type === 'image_url') {
+              return { type: 'input_image', image_url: part.image_url?.url || part.image_url }
+            }
+            return part
+          })
+        }
+        return { role: msg.role, content }
+      })
     }
     
-    // Helper to execute tools and build context
+    // Helper to execute tools and build structured result items for the Responses API.
+    // Returns function_call_output items (keyed by call_id) instead of plain text strings,
+    // so tool results are passed as typed objects — not concatenated into user content.
+    // This prevents prompt injection if tool results contain adversarial content
+    // (e.g. from user-controlled plant names, notes, or custom task names).
     const executeToolsIfNeeded = async (toolCalls) => {
       const toolCallsExecuted = []
-      const toolResultsContext = []
+      const toolResultItems = []
       
       for (const toolCall of toolCalls) {
         const toolName = toolCall.name || toolCall.function?.name
@@ -23770,10 +23786,20 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           result: result
         })
         
-        toolResultsContext.push(`Tool ${toolName} result: ${JSON.stringify(result)}`)
+        // Build structured function_call_output for the Responses API.
+        // The call_id links this result back to the specific function_call
+        // the model emitted, keeping tool output in its own typed lane.
+        const callId = toolCall.call_id || toolCall.id
+        if (callId) {
+          toolResultItems.push({
+            type: 'function_call_output',
+            call_id: callId,
+            output: JSON.stringify(result)
+          })
+        }
       }
       
-      return { toolCallsExecuted, toolResultsContext }
+      return { toolCallsExecuted, toolResultItems }
     }
     
     if (stream) {
@@ -23809,11 +23835,19 @@ app.post('/api/ai/garden-chat', async (req, res) => {
             if (toolUseOutputs.length > 0) {
               res.write(`data: ${JSON.stringify({ type: 'tool_start', tools: toolUseOutputs.map(t => t.name) })}\n\n`)
               
-              const { toolCallsExecuted: executed, toolResultsContext } = await executeToolsIfNeeded(toolUseOutputs)
+              const { toolCallsExecuted: executed, toolResultItems } = await executeToolsIfNeeded(toolUseOutputs)
               toolCallsExecuted = executed
               
-              // Add tool results to conversation context
-              conversationInput += '\n\n[Tool execution results]\n' + toolResultsContext.join('\n')
+              // Pass tool calls and results as structured Responses API input items.
+              // The model's output (containing function_call items) is spread back into
+              // the input, followed by our function_call_output items. This maintains
+              // clear separation between user content and tool output, preventing
+              // prompt injection via tool results that contain adversarial content.
+              conversationInput = [
+                ...conversationInput,
+                ...toolCheckResponse.output,
+                ...toolResultItems
+              ]
               
               res.write(`data: ${JSON.stringify({ type: 'tool_end', results: toolCallsExecuted })}\n\n`)
             }
@@ -23894,11 +23928,17 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
           const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
           if (toolUseOutputs.length > 0) {
-            const { toolCallsExecuted: executed, toolResultsContext } = await executeToolsIfNeeded(toolUseOutputs)
+            const { toolCallsExecuted: executed, toolResultItems } = await executeToolsIfNeeded(toolUseOutputs)
             toolCallsExecuted = executed
             
-            // Add tool results to conversation context
-            conversationInput += '\n\n[Tool execution results]\n' + toolResultsContext.join('\n')
+            // Pass tool calls and results as structured Responses API input items.
+            // See streaming path comment for full rationale on why we avoid plain
+            // text concatenation of tool results (prompt injection prevention).
+            conversationInput = [
+              ...conversationInput,
+              ...toolCheckResponse.output,
+              ...toolResultItems
+            ]
           }
         }
       }
