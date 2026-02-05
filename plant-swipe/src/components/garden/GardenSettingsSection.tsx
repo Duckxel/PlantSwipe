@@ -40,6 +40,8 @@ interface GardenSettingsSectionProps {
   onQuitGarden: () => Promise<void>;
   onInviteMember: () => void;
   onMemberChanged: () => Promise<void>;
+  /** When provided, the settings panel opens on this category instead of "general". */
+  initialCategory?: SettingsCategory;
   // Editor components passed in
   GardenDetailsEditor: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean }>;
   GardenLocationEditor: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean }>;
@@ -63,6 +65,7 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
   onQuitGarden,
   onInviteMember,
   onMemberChanged,
+  initialCategory,
   GardenDetailsEditor,
   GardenLocationEditor,
   GardenAdviceLanguageEditor,
@@ -71,7 +74,12 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
   MemberCard,
 }) => {
   const { t } = useTranslation("common");
-  const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>("general");
+  const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>(initialCategory || "general");
+
+  // Sync with prop when it changes (e.g. deep-link from Weather tab)
+  React.useEffect(() => {
+    if (initialCategory) setActiveCategory(initialCategory);
+  }, [initialCategory]);
 
   const categories: Array<{
     id: SettingsCategory;

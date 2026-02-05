@@ -3097,7 +3097,7 @@ export const GardenDashboardPage: React.FC = () => {
                       plants={plants}
                       members={members}
                       dailyStats={dailyStats}
-                      onNavigateToSettings={() => navigate(`/garden/${id}/settings`)}
+                      onNavigateToSettings={() => navigate(`/garden/${id}/settings?section=location`)}
                       hideAiFeatures={garden?.hideAiChat ?? false}
                     />
                   ) : (
@@ -3117,6 +3117,9 @@ export const GardenDashboardPage: React.FC = () => {
                       isOwner={isOwner}
                       currentUserId={currentUserId}
                       ownersCount={ownersCount}
+                      initialCategory={
+                        (new URLSearchParams(location.search).get("section") as "general" | "location" | "privacy" | "members" | "danger") || undefined
+                      }
                       onSaved={load}
                       onRefreshGarden={refreshGarden}
                       onDeleteGarden={async () => {
