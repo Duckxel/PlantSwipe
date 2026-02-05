@@ -33,6 +33,7 @@ import {
   Film,
   Images,
 } from "lucide-react";
+import { useHotkeys } from "react-hotkeys-hook";
 import type { Garden } from "@/types/garden";
 
 // Types
@@ -202,6 +203,16 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       }
     };
   }, [isPlaying, allPhotos.length, timelapseSpeed]);
+
+  // Keyboard navigation for timelapse
+  useHotkeys('left', () => setTimelapseIndex((prev) => Math.max(0, prev - 1)), { enabled: showTimelapse });
+  useHotkeys('right', () => setTimelapseIndex((prev) => Math.min(allPhotos.length - 1, prev + 1)), { enabled: showTimelapse });
+  useHotkeys('esc', () => { setShowTimelapse(false); setIsPlaying(false); }, { enabled: showTimelapse });
+  useHotkeys('space', (e) => {
+    if (e.repeat) return;
+    e.preventDefault();
+    setIsPlaying((prev) => !prev);
+  }, { enabled: showTimelapse });
 
   // Export state
   const [showExportMenu, setShowExportMenu] = React.useState(false);
@@ -793,6 +804,13 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 >
                   <ChevronRight className="w-6 h-6" />
                 </Button>
+              </div>
+
+              {/* Keyboard shortcuts hint */}
+              <div className="text-center mt-2 text-white/50 text-xs hidden sm:block">
+                <span className="mr-3">← / → to navigate</span>
+                <span className="mr-3">Space to play/pause</span>
+                <span>Esc to close</span>
               </div>
 
               {/* Speed control and export */}
