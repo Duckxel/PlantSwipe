@@ -1,9 +1,9 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
-import { MapPin, Loader2, Check, CloudSun, Search, X } from "lucide-react";
+import { MapPin, Loader2, Check, CloudSun, X } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
 interface LocationSuggestion {
@@ -340,23 +340,19 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
             )}
           </div>
         ) : (
-          /* Search input with suggestions */
+          /* Search input with suggestions — uses the shared SearchInput preset */
           <div className="relative">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                ref={inputRef}
-                value={searchQuery}
-                onChange={(e) => handleInputChange(e.target.value)}
-                onFocus={() => searchQuery.length >= 2 && setShowSuggestions(true)}
-                placeholder={t("gardenDashboard.settingsSection.searchLocation", "Search for a city...")}
-                disabled={!canEdit}
-                className="rounded-xl pl-10 pr-10"
-              />
-              {searching && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
-              )}
-            </div>
+            <SearchInput
+              ref={inputRef}
+              value={searchQuery}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onFocus={() => searchQuery.length >= 2 && setShowSuggestions(true)}
+              placeholder={t("gardenDashboard.settingsSection.searchLocation", "Search for a city...")}
+              disabled={!canEdit}
+              loading={searching}
+              onClear={searchQuery ? () => { setSearchQuery(""); setSuggestions([]); setShowSuggestions(false); } : undefined}
+              icon={<MapPin className="h-full w-full" />}
+            />
             
             {/* Suggestions dropdown */}
             {showSuggestions && suggestions.length > 0 && (
