@@ -1315,9 +1315,16 @@ PY
     # Ask for full domains (domain and subdomains included)
     echo ""
     echo "Enter the full domain(s) you want SSL certificates for."
+    echo ""
+    echo "IMPORTANT: Include 'media.aphylia.app' if you want images to work correctly!"
+    echo "The media subdomain is required for serving images from Supabase storage."
+    echo ""
     echo "Examples:"
     echo "  - Single domain: aphylia.app"
-    echo "  - Multiple domains: dev01.aphylia.app,dev02.aphylia.app,aphylia.app"
+    echo "  - With media: aphylia.app,media.aphylia.app"
+    echo "  - Full setup: aphylia.app,www.aphylia.app,media.aphylia.app"
+    echo ""
+    echo "See domain.json.example in the repository for a sample configuration."
     echo ""
     read -p "Enter domain(s) (comma-separated): " domains_input
     domains_input="${domains_input// /}"  # trim whitespace
@@ -2165,6 +2172,13 @@ Next steps:
      * staging: Set to true to use Let's Encrypt staging (for testing)
    - For wildcard certificates (*.domain), set dns_plugin and dns_credentials in cert-info.json
    - Certificates auto-renew via certbot.timer (enabled by default)
+   
+   IMPORTANT: Media Subdomain for Images
+   - Include 'media.aphylia.app' in domain.json for proper image serving!
+   - The media subdomain proxies requests to Supabase storage
+   - See domain.json.example for a sample configuration
+   - Without media.aphylia.app, images will not load correctly
+   
 3) Then run:
    sudo bash scripts/refresh-plant-swipe.sh
 
