@@ -814,12 +814,16 @@ export const GardenDashboardPage: React.FC = () => {
                 if (!cached) return day;
                 const finalDue = cached.due ?? day.due;
                 const finalCompleted = cached.completed ?? day.completed;
-                // Compute success from merged due/completed when we have cached task data
-                // When no tasks are due (finalDue === 0), day is automatically successful
-                // Otherwise check if garden_tasks recorded success or compute from completion
+                // Only compute success from due/completed when we have real occurrence
+                // data (i.e. at least one value is non-zero).  The initial load seeds
+                // every day with due=0, completed=0 as a template; those zeroes must
+                // NOT be treated as "no tasks were due → success", otherwise all past
+                // days would flip to green on subsequent reloads.  When both values
+                // are still at the template default (0), we trust the garden_tasks
+                // success flag which is the ground truth from the server.
+                const hasRealOccurrenceData = finalDue > 0 || finalCompleted > 0;
                 const computedSuccess = finalDue === 0 || finalCompleted >= finalDue;
-                // Use computed success if we have cached task data, otherwise prefer cached success over garden_tasks
-                const finalSuccess = cached.due !== undefined ? computedSuccess : (cached.success ?? day.success);
+                const finalSuccess = hasRealOccurrenceData ? computedSuccess : day.success;
                 return {
                   ...day,
                   due: finalDue,
