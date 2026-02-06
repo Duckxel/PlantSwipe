@@ -7181,8 +7181,6 @@ export const AdminPage: React.FC = () => {
                                       <ResponsiveContainer
                                         width="100%"
                                         height="100%"
-                                        minWidth={0}
-                                        minHeight={0}
                                       >
                                         <ComposedChart
                                           data={visitorsSeries}
@@ -7355,8 +7353,6 @@ export const AdminPage: React.FC = () => {
                                               <ResponsiveContainer
                                                 width="100%"
                                                 height={150}
-                                                minWidth={0}
-                                                minHeight={0}
                                               >
                                                 <PieChart
                                                   margin={{
@@ -8035,7 +8031,7 @@ export const AdminPage: React.FC = () => {
                                               </div>
                                             }
                                           >
-                                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                                            <ResponsiveContainer width="100%" height="100%">
                                               <PieChart>
                                                 <Pie
                                                   data={plantStatusDonutData}
@@ -8118,7 +8114,7 @@ export const AdminPage: React.FC = () => {
                                                 </div>
                                               }
                                             >
-                                              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                                              <ResponsiveContainer width="100%" height="100%">
                                                 <RadialBarChart
                                                   data={[{ name: "ratio", value: requestsVsApproved.gaugeValue }]}
                                                   startAngle={180}
@@ -8195,7 +8191,7 @@ export const AdminPage: React.FC = () => {
                                             </div>
                                           }
                                         >
-                                          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                                          <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 16, right: 16, top: 16, bottom: 12 }}>
                                               <CartesianGrid
                                                 strokeDasharray="3 3"
@@ -10882,8 +10878,6 @@ export const AdminPage: React.FC = () => {
                                           <ResponsiveContainer
                                             width="100%"
                                             height="100%"
-                                            minWidth={0}
-                                            minHeight={0}
                                           >
                                             <ComposedChart
                                               data={memberVisitsSeries}
