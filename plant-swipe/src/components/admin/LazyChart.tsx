@@ -1,5 +1,5 @@
  // @ts-nocheck
-import React, { Suspense, createContext, useContext, useState, useEffect, useRef, useLayoutEffect } from 'react'
+import React, { Suspense, createContext, useContext, useState, useEffect, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import type {
   ResponsiveContainerProps,
@@ -63,29 +63,28 @@ const ChartSkeleton: React.FC<{ height?: number | string }> = ({ height = 200 })
   </div>
 )
 
-// Hook to safely measure container dimensions before rendering chart
+// Hook to safely measure container dimensions before rendering chart.
 // This prevents the recharts warning about negative dimensions (-1, -1)
+// by deferring the initial measurement to requestAnimationFrame — at
+// that point the browser has completed layout and dimensions are valid.
 const useSafeContainerDimensions = (minWidth = 1, minHeight = 1) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null)
   
-  // Use layout effect for synchronous measurement to avoid flash
-  useLayoutEffect(() => {
+  useEffect(() => {
     const container = containerRef.current
     if (!container) return
     
-    const measureDimensions = () => {
+    // Defer first measurement to after browser paint so the container
+    // has been laid out with valid (non-negative) dimensions.
+    const rafId = requestAnimationFrame(() => {
       const { width, height } = container.getBoundingClientRect()
-      // Only set dimensions if they are valid (greater than minWidth/minHeight)
       if (width >= minWidth && height >= minHeight) {
         setDimensions({ width, height })
       }
-    }
+    })
     
-    // Initial measurement
-    measureDimensions()
-    
-    // Use ResizeObserver for reliable dimension tracking
+    // Use ResizeObserver for subsequent dimension changes
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect
@@ -98,6 +97,7 @@ const useSafeContainerDimensions = (minWidth = 1, minHeight = 1) => {
     resizeObserver.observe(container)
     
     return () => {
+      cancelAnimationFrame(rafId)
       resizeObserver.disconnect()
     }
   }, [minWidth, minHeight])
