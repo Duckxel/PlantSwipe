@@ -912,7 +912,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       fillOpacity={0.2}
                       stroke={CHART_COLORS.muted}
                       strokeWidth={2}
-                      animationDuration={300}
+                      isAnimationActive={false}
                     />
                     <Line
                       type="monotone"
@@ -922,7 +922,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       strokeWidth={3}
                       dot={{ r: 2 }}
                       activeDot={{ r: 4 }}
-                      animationDuration={300}
+                      isAnimationActive={false}
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -967,7 +967,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                               outerRadius={55}
                               paddingAngle={3}
                               dataKey="value"
-                              animationDuration={300}
+                              isAnimationActive={false}
                             >
                               {pieData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -1725,7 +1725,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     fill={CHART_COLORS.primary}
                     radius={[4, 4, 0, 0]}
                     stackId="stack"
-                    animationDuration={300}
+                    isAnimationActive={false}
                   />
                   <Bar
                     dataKey="due"
@@ -1733,7 +1733,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     fill={CHART_COLORS.muted}
                     radius={[4, 4, 0, 0]}
                     stackId="stack"
-                    animationDuration={300}
+                    isAnimationActive={false}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -1846,7 +1846,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       background
                       dataKey="value"
                       cornerRadius={10}
-                      animationDuration={300}
+                      isAnimationActive={false}
                     />
                     <text
                       x="50%"
@@ -1898,7 +1898,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                               outerRadius={55}
                               paddingAngle={3}
                               dataKey="value"
-                              animationDuration={300}
+                              isAnimationActive={false}
                             >
                               {analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m, index) => (
                                 <Cell key={`cell-${index}`} fill={m.color} />
