@@ -2894,9 +2894,15 @@ export const GardenDashboardPage: React.FC = () => {
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
                                   {Number(gp.plantsOnHand ?? 0)} {t("gardenDashboard.plantsSection.onHand")}
                                 </span>
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
-                                  {taskCountsByPlant[gp.id] || 0} {t("gardenDashboard.plantsSection.tasks")}
-                                </span>
+                                {(taskCountsByPlant[gp.id] || 0) > 0 ? (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
+                                    {taskCountsByPlant[gp.id]} {t("gardenDashboard.plantsSection.tasks")}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1">
+                                    ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
+                                  </span>
+                                )}
                                 {(taskOccDueToday[gp.id] || 0) > 0 && (
                                   <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium">
                                     {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
@@ -4665,11 +4671,15 @@ function OverviewSection({
                   )}
                   {plant.plantsOnHand <= 1 && <span />}
                   {/* Tasks due today badge */}
-                  {plant.tasksDueToday > 0 && (
+                  {plant.tasksDueToday > 0 ? (
                     <span className="px-2 py-0.5 rounded-full bg-amber-500 text-xs font-semibold text-white shadow-sm">
                       {plant.tasksDueToday} 📋
                     </span>
-                  )}
+                  ) : plant.taskCount === 0 ? (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/90 text-xs font-semibold text-white shadow-sm">
+                      ⚠️
+                    </span>
+                  ) : null}
                 </div>
                 
                 {/* Bottom info: name and task count */}
@@ -4678,14 +4688,13 @@ function OverviewSection({
                     {plant.name}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    {plant.taskCount > 0 && (
+                    {plant.taskCount > 0 ? (
                       <span className="text-white/80 text-xs">
                         {plant.taskCount} {plant.taskCount === 1 ? t("gardenDashboard.plantsSection.task", "task") : t("gardenDashboard.plantsSection.tasks")}
                       </span>
-                    )}
-                    {plant.taskCount === 0 && (
-                      <span className="text-white/60 text-xs">
-                        {t("gardenDashboard.overviewSection.noTasks", "No tasks")}
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/90 text-white font-medium flex items-center gap-1">
+                        ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
                       </span>
                     )}
                   </div>
