@@ -703,7 +703,30 @@ export const AdminEmailTemplatePage: React.FC = () => {
         }
       }
 
-      navigate("/admin/emails/templates")
+      if (isNew) {
+        // For new templates, navigate to the edit page of the newly created template
+        if (templateId) {
+          navigate(`/admin/emails/templates/${templateId}`)
+        } else {
+          navigate("/admin/emails/templates")
+        }
+      } else {
+        // For existing templates, stay on the page and update local state
+        const savedTemplate = data.template
+        if (savedTemplate) {
+          setExistingTemplate(prev => prev ? {
+            ...prev,
+            title: savedTemplate.title ?? templateForm.title,
+            subject: savedTemplate.subject ?? defaultContent.subject,
+            description: savedTemplate.description ?? templateForm.description,
+            bodyHtml: savedTemplate.bodyHtml ?? defaultContent.bodyHtml,
+            bodyJson: savedTemplate.bodyJson ?? defaultContent.bodyDoc,
+            updatedAt: savedTemplate.updatedAt ?? new Date().toISOString(),
+            version: savedTemplate.version ?? prev.version,
+          } : prev)
+        }
+        setTranslationsCache(updatedCache)
+      }
     } catch (err) {
       alert((err as Error).message)
     } finally {
