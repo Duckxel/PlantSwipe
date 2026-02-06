@@ -422,7 +422,8 @@ export const FriendsPage: React.FC = () => {
           // If there's a pending request FROM the other user TO us, we should accept it instead
           if (existingRequest.requester_id === recipientId) {
             // Accept their request instead of sending a new one
-            await supabase.rpc("accept_friend_request", { _request_id: existingRequest.id });
+            const { error: acceptErr } = await supabase.rpc("accept_friend_request", { _request_id: existingRequest.id });
+            if (acceptErr) throw acceptErr;
             handleDialogSearch();
             await Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()]);
             setError(null);
@@ -469,7 +470,8 @@ export const FriendsPage: React.FC = () => {
   const acceptRequest = React.useCallback(async (requestId: string) => {
     setProcessingId(requestId);
     try {
-      await supabase.rpc("accept_friend_request", { _request_id: requestId });
+      const { error } = await supabase.rpc("accept_friend_request", { _request_id: requestId });
+      if (error) throw error;
       await Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()]);
       setError(null);
       // Refresh app badge after accepting request
@@ -487,7 +489,8 @@ export const FriendsPage: React.FC = () => {
   const rejectRequest = React.useCallback(async (requestId: string) => {
     setProcessingId(requestId);
     try {
-      await supabase.from("friend_requests").update({ status: "rejected" }).eq("id", requestId);
+      const { error } = await supabase.from("friend_requests").update({ status: "rejected" }).eq("id", requestId);
+      if (error) throw error;
       await Promise.all([loadPendingRequests(), loadSentPendingRequests()]);
       setError(null);
       // Refresh app badge after rejecting request

@@ -53,6 +53,17 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const [notificationSheetOpen, setNotificationSheetOpen] = React.useState(false)
   const navRef = React.useRef<HTMLElement | null>(null)
 
+  // Helper to open notification sheet from profile menu.
+  // Delays the notification sheet opening so the profile menu Sheet
+  // fully closes first — avoids overlapping Radix Dialog transitions
+  // which can break pointer-event handling on mobile.
+  const openNotificationsFromMenu = React.useCallback(() => {
+    setProfileMenuOpen(false)
+    // Wait for the Sheet close animation (150ms) to finish before opening
+    // the notification sheet so Radix Dialog can clean up properly.
+    setTimeout(() => setNotificationSheetOpen(true), 180)
+  }, [])
+
   React.useEffect(() => {
     if (typeof document === "undefined") return undefined
     document.body.classList.add("mobile-nav-mounted")
@@ -201,10 +212,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   variant="secondary"
                   size="icon"
                   className="rounded-2xl h-9 w-9"
-                  onClick={() => {
-                    setProfileMenuOpen(false)
-                    setNotificationSheetOpen(true)
-                  }}
+                  onClick={openNotificationsFromMenu}
                   aria-label="Notifications"
                 >
                   <Bell className="h-4 w-4" />
@@ -226,10 +234,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             {combinedNotificationCount > 0 && (
               <div className="px-4 py-3">
                 <button
-                  onClick={() => {
-                    setProfileMenuOpen(false)
-                    setNotificationSheetOpen(true)
-                  }}
+                  onClick={openNotificationsFromMenu}
                   className="w-full p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200/50 dark:border-amber-800/30 flex items-center gap-4 active:scale-[0.98] transition-transform"
                 >
                   <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
