@@ -95,6 +95,7 @@ export function MobileNotificationSheet({
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
   const [processingId, setProcessingId] = React.useState<string | null>(null)
+  const [actionError, setActionError] = React.useState<string | null>(null)
   const [userId, setUserId] = React.useState<string | null>(null)
 
   // Get current user ID for badge updates
@@ -104,6 +105,11 @@ export function MobileNotificationSheet({
     })
   }, [])
 
+  // Clear error when sheet closes
+  React.useEffect(() => {
+    if (!isOpen) setActionError(null)
+  }, [isOpen])
+
   // Helper to refresh badge after actions
   const refreshBadge = React.useCallback(() => {
     if (userId) {
@@ -112,57 +118,76 @@ export function MobileNotificationSheet({
   }, [userId])
 
   // Friend request actions
-  const handleAcceptFriendRequest = async (requestId: string) => {
+  const handleAcceptFriendRequest = async (e: React.MouseEvent, requestId: string) => {
+    // Stop propagation to prevent the Sheet's drag handlers from interfering
+    e.stopPropagation()
+    if (processingId) return // Prevent double-clicks
     setProcessingId(requestId)
+    setActionError(null)
     try {
-      await supabase.rpc('accept_friend_request', { _request_id: requestId })
+      const { error } = await supabase.rpc('accept_friend_request', { _request_id: requestId })
+      if (error) throw error
       await onRefresh(true) // Force refresh to bypass throttle
       refreshBadge()
-    } catch (e: any) {
-      console.error('Failed to accept friend request:', e)
+    } catch (err: any) {
+      console.error('Failed to accept friend request:', err)
+      setActionError(err?.message || t('notifications.actionFailed', { defaultValue: 'Action failed. Please try again.' }))
     } finally {
       setProcessingId(null)
     }
   }
 
-  const handleRejectFriendRequest = async (requestId: string) => {
+  const handleRejectFriendRequest = async (e: React.MouseEvent, requestId: string) => {
+    e.stopPropagation()
+    if (processingId) return
     setProcessingId(requestId)
+    setActionError(null)
     try {
-      await supabase
+      const { error } = await supabase
         .from('friend_requests')
         .update({ status: 'rejected' })
         .eq('id', requestId)
+      if (error) throw error
       await onRefresh(true) // Force refresh to bypass throttle
       refreshBadge()
-    } catch (e: any) {
-      console.error('Failed to reject friend request:', e)
+    } catch (err: any) {
+      console.error('Failed to reject friend request:', err)
+      setActionError(err?.message || t('notifications.actionFailed', { defaultValue: 'Action failed. Please try again.' }))
     } finally {
       setProcessingId(null)
     }
   }
 
   // Garden invite actions
-  const handleAcceptGardenInvite = async (inviteId: string) => {
+  const handleAcceptGardenInvite = async (e: React.MouseEvent, inviteId: string) => {
+    e.stopPropagation()
+    if (processingId) return
     setProcessingId(inviteId)
+    setActionError(null)
     try {
       await acceptGardenInvite(inviteId)
       await onRefresh(true) // Force refresh to bypass throttle
       refreshBadge()
-    } catch (e: any) {
-      console.error('Failed to accept garden invite:', e)
+    } catch (err: any) {
+      console.error('Failed to accept garden invite:', err)
+      setActionError(err?.message || t('notifications.actionFailed', { defaultValue: 'Action failed. Please try again.' }))
     } finally {
       setProcessingId(null)
     }
   }
 
-  const handleDeclineGardenInvite = async (inviteId: string) => {
+  const handleDeclineGardenInvite = async (e: React.MouseEvent, inviteId: string) => {
+    e.stopPropagation()
+    if (processingId) return
     setProcessingId(inviteId)
+    setActionError(null)
     try {
       await declineGardenInvite(inviteId)
       await onRefresh(true) // Force refresh to bypass throttle
       refreshBadge()
-    } catch (e: any) {
-      console.error('Failed to decline garden invite:', e)
+    } catch (err: any) {
+      console.error('Failed to decline garden invite:', err)
+      setActionError(err?.message || t('notifications.actionFailed', { defaultValue: 'Action failed. Please try again.' }))
     } finally {
       setProcessingId(null)
     }
@@ -199,6 +224,17 @@ export function MobileNotificationSheet({
             </div>
           </div>
         </SheetHeader>
+
+        {/* Error Banner */}
+        {actionError && (
+          <div className="mx-4 mt-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
+            <X className="h-4 w-4 flex-shrink-0" />
+            <span className="flex-1">{actionError}</span>
+            <button onClick={() => setActionError(null)} className="text-red-500 hover:text-red-700 dark:hover:text-red-200 p-1">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-4 py-5">
@@ -301,7 +337,7 @@ export function MobileNotificationSheet({
                               variant="outline"
                               size="sm"
                               className="h-10 w-10 p-0 rounded-xl border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                              onClick={() => handleRejectFriendRequest(request.id)}
+                              onClick={(e) => handleRejectFriendRequest(e, request.id)}
                               disabled={isProcessing}
                             >
                               {isProcessing ? (
@@ -313,7 +349,7 @@ export function MobileNotificationSheet({
                             <Button
                               size="sm"
                               className="h-10 rounded-xl text-sm bg-blue-500 hover:bg-blue-600 text-white shadow-md shadow-blue-500/25 px-5"
-                              onClick={() => handleAcceptFriendRequest(request.id)}
+                              onClick={(e) => handleAcceptFriendRequest(e, request.id)}
                               disabled={isProcessing}
                             >
                               {isProcessing ? (
@@ -421,7 +457,7 @@ export function MobileNotificationSheet({
                               variant="outline"
                               size="sm"
                               className="h-10 w-10 p-0 rounded-xl border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                              onClick={() => handleDeclineGardenInvite(invite.id)}
+                              onClick={(e) => handleDeclineGardenInvite(e, invite.id)}
                               disabled={isProcessing}
                             >
                               {isProcessing ? (
@@ -433,7 +469,7 @@ export function MobileNotificationSheet({
                             <Button
                               size="sm"
                               className="h-10 rounded-xl text-sm bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25 px-5"
-                              onClick={() => handleAcceptGardenInvite(invite.id)}
+                              onClick={(e) => handleAcceptGardenInvite(e, invite.id)}
                               disabled={isProcessing}
                             >
                               {isProcessing ? (

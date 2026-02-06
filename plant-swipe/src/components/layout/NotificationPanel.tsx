@@ -157,7 +157,8 @@ export function NotificationPanel({
   const handleAcceptFriendRequest = async (requestId: string) => {
     setProcessingId(requestId)
     try {
-      await supabase.rpc('accept_friend_request', { _request_id: requestId })
+      const { error } = await supabase.rpc('accept_friend_request', { _request_id: requestId })
+      if (error) throw error
       await onRefresh(true) // Force refresh to bypass throttle
       refreshBadge()
     } catch (e: any) {
@@ -170,10 +171,11 @@ export function NotificationPanel({
   const handleRejectFriendRequest = async (requestId: string) => {
     setProcessingId(requestId)
     try {
-      await supabase
+      const { error } = await supabase
         .from('friend_requests')
         .update({ status: 'rejected' })
         .eq('id', requestId)
+      if (error) throw error
       await onRefresh(true) // Force refresh to bypass throttle
       refreshBadge()
     } catch (e: any) {
