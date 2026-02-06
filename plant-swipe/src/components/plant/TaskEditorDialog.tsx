@@ -11,6 +11,14 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
+import { Pencil, Trash2, Plus } from 'lucide-react'
+
+const TASK_EMOJIS: Record<string, string> = {
+  water: '💧',
+  fertilize: '🍽️',
+  harvest: '🌾',
+  cut: '✂️',
+}
 
 export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, onChanged }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string; onChanged?: () => Promise<void> | void }) {
   const { user } = useAuth()
@@ -27,6 +35,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   const [editingTask, setEditingTask] = React.useState<GardenPlantTask | null>(null)
 
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
     if (!gardenPlantId) return
@@ -34,7 +43,6 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
     setError(null)
     try {
       const rows = await listPlantTasks(gardenPlantId)
-      // Sort by normalized frequency (descending)
       const score = (task: GardenPlantTask): number => {
         try {
           if (task.scheduleKind === 'repeat_pattern') {
@@ -70,59 +78,34 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
 
   React.useEffect(() => { if (open) load() }, [open, load])
 
-  // Listen for task completion broadcasts from other users
+  // Listen for task broadcasts from other users
   React.useEffect(() => {
     if (!open || !gardenId) return
     let active = true
     let teardown: (() => Promise<void>) | null = null
-
     addGardenBroadcastListener((message) => {
       if (!active) return
       if (message.gardenId !== gardenId) return
       if (message.kind !== 'tasks') return
       if (message.actorId && message.actorId === user?.id) return
-      // Reload tasks when other users complete tasks or make changes
       load().catch(() => {})
-    })
-      .then((unsubscribe) => {
-        if (!active) {
-          unsubscribe().catch(() => {})
-        } else {
-          teardown = unsubscribe
-        }
-      })
-      .catch(() => {})
-
-    return () => {
-      active = false
-      if (teardown) teardown().catch(() => {})
-    }
+    }).then((unsubscribe) => {
+      if (!active) unsubscribe().catch(() => {})
+      else teardown = unsubscribe
+    }).catch(() => {})
+    return () => { active = false; if (teardown) teardown().catch(() => {}) }
   }, [open, gardenId, load, user?.id])
 
-  // Also listen to postgres changes for immediate updates
+  // Postgres realtime
   React.useEffect(() => {
     if (!open || !gardenId) return
-
     const channel = supabase.channel(`rt-tasks-editor-${gardenId}`)
-      // Task definition changes
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => {
-        load().catch(() => {})
-      })
-      // Task occurrence changes (completions)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => {
-        load().catch(() => {})
-      })
-      // Garden activity changes (may indicate task completions)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${gardenId}` }, () => {
-        load().catch(() => {})
-      })
-
-    const subscription = channel.subscribe()
-    if (subscription instanceof Promise) subscription.catch(() => {})
-
-    return () => {
-      try { supabase.removeChannel(channel) } catch {}
-    }
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => load().catch(() => {}))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => load().catch(() => {}))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${gardenId}` }, () => load().catch(() => {}))
+    const sub = channel.subscribe()
+    if (sub instanceof Promise) sub.catch(() => {})
+    return () => { try { supabase.removeChannel(channel) } catch {} }
   }, [open, gardenId, load])
 
   const resetEditor = () => {
@@ -135,118 +118,172 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   const remove = async (taskId: string) => {
     const task = tasks.find((x) => x.id === taskId)
     const label = task ? (task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)) : t('garden.taskTypes.custom')
-    
-    // Optimistic update - remove from UI immediately
     setTasks(prev => prev.filter(t => t.id !== taskId))
-    
+    setConfirmDelete(null)
     try {
       await deletePlantTask(taskId)
-      
-      // Broadcast immediately (non-blocking)
       emitTasksRealtime({ action: 'delete', taskId }).catch(() => {})
       try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-      
-      // Background tasks - don't block UI
       const backgroundTasks = () => {
-        // Resync occurrences in background
         const now = new Date()
         const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
         const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
-        resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
-          // Refresh cache after resync
-          refreshGardenTaskCache(gardenId).catch(() => {})
-        }).catch(() => {})
-        
-        // Log activity (non-blocking)
+        resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => refreshGardenTaskCache(gardenId).catch(() => {})).catch(() => {})
         logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.deletedTask', { taskName: label }), taskName: label, actorColor: null }).catch(() => {})
-        
-        // Reload tasks in background
         load().catch(() => {})
-        if (onChanged) {
-          Promise.resolve(onChanged()).catch(() => {})
-        }
+        if (onChanged) Promise.resolve(onChanged()).catch(() => {})
       }
-      
-      // Use requestIdleCallback to avoid blocking UI
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(backgroundTasks, { timeout: 1000 })
-      } else {
-        setTimeout(backgroundTasks, 100)
-      }
+      if ('requestIdleCallback' in window) window.requestIdleCallback(backgroundTasks, { timeout: 1000 })
+      else setTimeout(backgroundTasks, 100)
     } catch (e: any) {
-      // Revert optimistic update on error
       setTasks(tasks)
       setError(e?.message || t('gardenDashboard.taskDialog.failedToDelete'))
     }
   }
 
+  const startEdit = (task: GardenPlantTask) => {
+    if (task.scheduleKind !== 'repeat_pattern') return
+    setEditingTask(task)
+    setPatternPeriod((task.period as any) || 'week')
+    setPatternAmount(Number(task.amount || task.requiredCount || 1))
+    setPatternSelection({
+      weeklyDays: task.weeklyDays || undefined,
+      monthlyDays: task.monthlyDays || undefined,
+      yearlyDays: task.yearlyDays || undefined,
+      monthlyNthWeekdays: task.monthlyNthWeekdays || undefined,
+    })
+    setTimeout(() => setPatternOpen(true), 0)
+  }
+
+  const getTaskEmoji = (task: GardenPlantTask) =>
+    task.type === 'custom' ? (task.emoji || '🪴') : (TASK_EMOJIS[task.type] || '📋')
+
+  const getTaskName = (task: GardenPlantTask) =>
+    task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          className="rounded-2xl"
-          onOpenAutoFocus={(e) => { e.preventDefault() }}
-        // Allow outside pointer events so absolutely positioned menu stays interactive
-          onPointerDownOutside={(_e) => { /* allow */ }}
-          onInteractOutside={(_e) => { /* allow */ }}
-          onCloseAutoFocus={(_e) => { /* allow */ }}
-          aria-describedby={undefined}
+      <DialogContent
+        className="rounded-2xl p-0 overflow-hidden max-w-md"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onPointerDownOutside={(_e) => {}}
+        onInteractOutside={(_e) => {}}
+        onCloseAutoFocus={(_e) => {}}
+        aria-describedby={undefined}
       >
-        <DialogHeader>
-          <DialogTitle>{t('gardenDashboard.taskDialog.tasks')}</DialogTitle>
+        {/* Header */}
+        <div className="px-6 pt-6 pb-3">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              {t('gardenDashboard.taskDialog.tasks', 'Tasks')}
+            </DialogTitle>
             <DialogDescription className="sr-only">
               {t('gardenDashboard.taskDialog.existingTasks')}
             </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-medium">{t('gardenDashboard.taskDialog.existingTasks')}</div>
-            <Button className="rounded-2xl" onClick={() => setCreateOpen(true)}>{t('gardenDashboard.taskDialog.addTask')}</Button>
-          </div>
-          <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526]">
-            {loading && <div className="p-3 text-sm opacity-60">{t('gardenDashboard.taskDialog.loading')}</div>}
-            {error && <div className="p-3 text-sm text-red-600 dark:text-red-400">{error}</div>}
-            {!loading && tasks.length === 0 && <div className="p-3 text-sm opacity-60">{t('gardenDashboard.taskDialog.noTasksYet')}</div>}
-            <div className="divide-y divide-stone-200 dark:divide-[#3e3e42]">
-              {tasks.map(task => (
-                <div key={task.id} className="flex items-center justify-between px-3 py-2">
-                  <div className="text-sm">
-                    <div className="font-medium capitalize flex items-center gap-2">
-                      <span className="h-6 w-6 rounded-md border border-stone-300 dark:border-[#3e3e42] bg-stone-100 dark:bg-[#2d2d30] flex items-center justify-center text-base">
-                        {task.type === 'water' && '💧'}
-                        {task.type === 'fertilize' && '🍽️'}
-                        {task.type === 'harvest' && '🌾'}
-                        {task.type === 'cut' && '✂️'}
-                        {task.type === 'custom' && (task.emoji || '🪴')}
-                      </span>
-                      <span>{task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)}</span>
-                    </div>
-                    <div className="text-xs opacity-60">{renderTaskSummary(task, t)}</div>
-                  </div>
-                  <TaskRowMenu
-                    onEdit={task.scheduleKind === 'repeat_pattern' ? () => {
-                      setEditingTask(task)
-                      setPatternPeriod((task.period as any) || 'week')
-                      setPatternAmount(Number(task.amount || task.requiredCount || 1))
-                      setPatternSelection({
-                        weeklyDays: task.weeklyDays || undefined,
-                        monthlyDays: task.monthlyDays || undefined,
-                        yearlyDays: task.yearlyDays || undefined,
-                        monthlyNthWeekdays: task.monthlyNthWeekdays || undefined,
-                      })
-                      // Delay open to next tick to avoid menu overlay capturing events
-                      setTimeout(() => setPatternOpen(true), 0)
-                    } : undefined}
-                    onDelete={() => remove(task.id)}
-                  />
-                </div>
-              ))}
+          </DialogHeader>
+        </div>
+
+        <div className="px-6 pb-6 space-y-3">
+          {/* Task list */}
+          {loading && (
+            <div className="py-8 text-center text-sm text-stone-500 dark:text-stone-400">
+              {t('gardenDashboard.taskDialog.loading', 'Loading...')}
             </div>
+          )}
+          {error && (
+            <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2">
+              {error}
+            </div>
+          )}
+
+          {!loading && tasks.length === 0 && (
+            <div className="py-8 text-center">
+              <div className="text-3xl mb-2">🌱</div>
+              <div className="text-sm text-stone-500 dark:text-stone-400">
+                {t('gardenDashboard.taskDialog.noTasksYet', 'No tasks yet')}
+              </div>
+              <div className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+                {t('gardenDashboard.taskDialog.addFirstTask', 'Add a task to get started')}
+              </div>
+            </div>
+          )}
+
+          {/* Task cards */}
+          <div className="space-y-2">
+            {tasks.map(task => (
+              <div
+                key={task.id}
+                className="group flex items-center gap-3 p-3 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800/50 hover:border-stone-300 dark:hover:border-stone-600 transition-colors"
+              >
+                {/* Emoji */}
+                <div className="h-10 w-10 rounded-xl bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-xl flex-shrink-0">
+                  {getTaskEmoji(task)}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate">{getTaskName(task)}</div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400 truncate">
+                    {renderTaskSummary(task, t)}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                  {task.scheduleKind === 'repeat_pattern' && (
+                    <button
+                      type="button"
+                      onClick={() => startEdit(task)}
+                      className="h-8 w-8 rounded-lg flex items-center justify-center text-stone-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                      aria-label={t('gardenDashboard.taskDialog.edit', 'Edit')}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {confirmDelete === task.id ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => remove(task.id)}
+                        className="h-8 px-2 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+                      >
+                        {t('gardenDashboard.taskDialog.confirmDelete', 'Delete?')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(null)}
+                        className="h-8 px-2 rounded-lg text-xs font-medium text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(task.id)}
+                      className="h-8 w-8 rounded-lg flex items-center justify-center text-stone-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                      aria-label={t('gardenDashboard.taskDialog.delete', 'Delete')}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="flex justify-end">
-            <Button variant="secondary" className="rounded-2xl" onClick={() => { resetEditor(); onOpenChange(false) }}>{t('gardenDashboard.taskDialog.close')}</Button>
-          </div>
+
+          {/* Add task button */}
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-emerald-400 hover:text-emerald-600 dark:hover:border-emerald-600 dark:hover:text-emerald-400 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm font-medium">{t('gardenDashboard.taskDialog.addTask', 'Add Task')}</span>
+          </button>
         </div>
       </DialogContent>
+
       <SchedulePickerDialog
         open={patternOpen}
         onOpenChange={(o) => setPatternOpen(o)}
@@ -256,12 +293,9 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
           setPatternSelection(sel)
           if (editingTask && editingTask.scheduleKind === 'repeat_pattern') {
             try {
-              // Optimistic update - update UI immediately
               const updatedTask = { ...editingTask, period: patternPeriod, amount: patternAmount }
               setTasks(prev => prev.map(t => t.id === editingTask.id ? updatedTask : t))
               setEditingTask(null)
-              
-              // Update task in database
               await updatePatternTask({
                 taskId: editingTask.id,
                 period: patternPeriod,
@@ -272,41 +306,19 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                 monthlyNthWeekdays: patternPeriod === 'month' ? (sel.monthlyNthWeekdays || []) : null,
                 requiredCount: editingTask.requiredCount || 1,
               })
-              
-              // Broadcast immediately (non-blocking)
               emitTasksRealtime({ action: 'update', taskId: editingTask.id }).catch(() => {})
               try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-              
-              // Background tasks - don't block UI
               const backgroundTasks = () => {
-                // Resync occurrences in background
                 const now = new Date()
-                const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
-                const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
-                resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
-                  // Refresh cache after resync
-                  refreshGardenTaskCache(gardenId).catch(() => {})
-                }).catch(() => {})
-                
-                // Log activity (non-blocking)
+                resyncTaskOccurrencesForGarden(gardenId, new Date(now.getTime() - 7*24*3600*1000).toISOString(), new Date(now.getTime() + 60*24*3600*1000).toISOString()).then(() => refreshGardenTaskCache(gardenId).catch(() => {})).catch(() => {})
                 const label = editingTask.type === 'custom' ? (editingTask.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${editingTask.type}`)
                 logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.updatedTask', { taskName: label }), taskName: label, actorColor: null }).catch(() => {})
-                
-                // Reload tasks in background
                 load().catch(() => {})
-                if (onChanged) {
-                  Promise.resolve(onChanged()).catch(() => {})
-                }
+                if (onChanged) Promise.resolve(onChanged()).catch(() => {})
               }
-              
-              // Use requestIdleCallback to avoid blocking UI
-              if ('requestIdleCallback' in window) {
-                window.requestIdleCallback(backgroundTasks, { timeout: 1000 })
-              } else {
-                setTimeout(backgroundTasks, 100)
-              }
+              if ('requestIdleCallback' in window) window.requestIdleCallback(backgroundTasks, { timeout: 1000 })
+              else setTimeout(backgroundTasks, 100)
             } catch (e: any) {
-              // Revert optimistic update on error
               setTasks(prev => prev.map(t => t.id === editingTask.id ? editingTask : t))
               setEditingTask(editingTask)
               setError(e?.message || t('gardenDashboard.taskDialog.failedToUpdate'))
@@ -316,8 +328,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         initialSelection={patternSelection}
         onChangePeriod={(p) => setPatternPeriod(p)}
         onChangeAmount={(n) => setPatternAmount(n)}
-        // Allow switching across week/month/year as requested
-        allowedPeriods={[ 'week', 'month', 'year' ] as any}
+        allowedPeriods={['week', 'month', 'year'] as any}
         modal={false}
       />
       <TaskCreateDialog
@@ -326,23 +337,14 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         gardenId={gardenId}
         gardenPlantId={gardenPlantId}
         onCreated={async () => {
-          // Broadcast update immediately (non-blocking)
           emitTasksRealtime({ action: 'create', gardenPlantId }).catch(() => {})
           try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-          
-          // Reload in background
           const reloadFn = () => {
             load().catch(() => {})
-            if (onChanged) {
-              Promise.resolve(onChanged()).catch(() => {})
-            }
+            if (onChanged) Promise.resolve(onChanged()).catch(() => {})
           }
-          
-          if ('requestIdleCallback' in window) {
-            window.requestIdleCallback(reloadFn, { timeout: 500 })
-          } else {
-            setTimeout(reloadFn, 100)
-          }
+          if ('requestIdleCallback' in window) window.requestIdleCallback(reloadFn, { timeout: 500 })
+          else setTimeout(reloadFn, 100)
         }}
       />
     </Dialog>
@@ -366,80 +368,3 @@ function renderTaskSummary(task: GardenPlantTask, translate: ReturnType<typeof u
   }
   return ''
 }
-
-function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () => void }) {
-  const { t } = useTranslation('common')
-  const [open, setOpen] = React.useState(false)
-  const buttonRef = React.useRef<HTMLButtonElement | null>(null)
-  const menuRef = React.useRef<HTMLDivElement | null>(null)
-  const [position, setPosition] = React.useState<{ top: number; left: number; placement: 'top' | 'bottom' }>({ top: 0, left: 0, placement: 'bottom' })
-  const rafRef = React.useRef<number | null>(null)
-
-  const computePosition = React.useCallback((placementHint?: 'top' | 'bottom') => {
-    const btn = buttonRef.current
-    if (!btn) return
-    const rect = btn.getBoundingClientRect()
-    const predictedHeight = onEdit ? 88 : 46 // approximate menu height
-    const predictedWidth = 160 // w-40 => 10rem
-    const spaceBelow = window.innerHeight - rect.bottom
-    const place: 'top' | 'bottom' = placementHint || (spaceBelow < predictedHeight + 12 ? 'top' : 'bottom')
-    const top = place === 'bottom' ? (rect.bottom + 8) : (rect.top - predictedHeight - 8)
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - predictedWidth - 8))
-    setPosition({ top: Math.max(8, Math.min(top, window.innerHeight - 8 - predictedHeight)), left, placement: place })
-  }, [onEdit])
-
-  React.useEffect(() => {
-    if (!open) return
-    computePosition()
-    const onWindow = () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      rafRef.current = requestAnimationFrame(() => computePosition(position.placement))
-    }
-    const onDocClick = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (menuRef.current && menuRef.current.contains(target)) return
-      if (buttonRef.current && buttonRef.current.contains(target)) return
-      setOpen(false)
-    }
-    window.addEventListener('resize', onWindow)
-    // capture scroll from any ancestor; recalc to keep anchored
-    window.addEventListener('scroll', onWindow, true)
-    document.addEventListener('mousedown', onDocClick, true)
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false) }, { once: true })
-    return () => {
-      window.removeEventListener('resize', onWindow)
-      window.removeEventListener('scroll', onWindow, true)
-      document.removeEventListener('mousedown', onDocClick, true)
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
-  }, [open, computePosition, position.placement])
-
-  return (
-    <div className="relative">
-      <Button
-        ref={buttonRef as any}
-        variant="secondary"
-        className="rounded-xl px-2"
-        onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}
-      >
-        ⋯
-      </Button>
-      {/* Portal the menu to document.body so it escapes the Dialog's CSS
-          transform which breaks position:fixed inside transformed ancestors */}
-      {open && ReactDOM.createPortal(
-        <div
-          ref={menuRef as any}
-          className="fixed w-40 bg-white dark:bg-[#252526] border border-stone-300 dark:border-[#3e3e42] rounded-xl shadow-lg z-[9999]"
-          style={{ top: position.top, left: position.left }}
-        >
-          {onEdit && (
-            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white">{t('gardenDashboard.taskDialog.edit')}</button>
-          )}
-          <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400`}>{t('gardenDashboard.taskDialog.delete')}</button>
-        </div>,
-        document.body
-      )}
-    </div>
-  )
-}
-
