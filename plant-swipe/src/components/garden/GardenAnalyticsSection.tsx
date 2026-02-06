@@ -22,6 +22,33 @@ import {
   RadialBar,
   PolarAngleAxis,
 } from "recharts";
+
+/**
+ * Defers ResponsiveContainer rendering by one animation frame so the
+ * browser has finished layout.  Recharts measures the parent via
+ * ResizeObserver on mount — if layout hasn't settled yet the observed
+ * size can be -1 × -1 which logs a noisy warning and may crash React.
+ */
+const ChartContainer: React.FC<
+  React.ComponentProps<typeof ResponsiveContainer>
+> = ({ children, width, height, ...rest }) => {
+  const [ready, setReady] = React.useState(false);
+  React.useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  const w = width ?? "100%";
+  const h = height ?? "100%";
+  if (!ready) {
+    // Placeholder that occupies the same space so layout doesn't jump
+    return <div style={{ width: typeof w === "number" ? w : "100%", height: typeof h === "number" ? h : 0 }} />;
+  }
+  return (
+    <ResponsiveContainer width={w} height={h} minWidth={0} minHeight={0} {...rest}>
+      {children}
+    </ResponsiveContainer>
+  );
+};
 import { useAuth } from "@/context/AuthContext";
 import {
   TrendingUp,
@@ -886,7 +913,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     {t("gardenDashboard.analyticsSection.last30Days", { defaultValue: "Last 30 days" })}
                   </span>
                 </div>
-                <ResponsiveContainer width="100%" height={200} minWidth={0} minHeight={0}>
+                <ChartContainer width="100%" height={200}>
                   <ComposedChart
                     data={analytics.dailyStats.slice(-30).map((d) => ({
                       date: new Date(d.date).toLocaleDateString(currentLang, { month: "short", day: "numeric" }),
@@ -925,7 +952,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       isAnimationActive={false}
                     />
                   </ComposedChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </Card>
 
               {/* Task Type Distribution */}
@@ -953,7 +980,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
 
                     return (
                       <div className="w-32 h-32">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                        <ChartContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
                               // Force remount when the set of visible slices
@@ -974,7 +1001,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                               ))}
                             </Pie>
                           </PieChart>
-                        </ResponsiveContainer>
+                        </ChartContainer>
                       </div>
                     );
                   })()}
@@ -1706,7 +1733,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 <Activity className="w-5 h-5 text-blue-500" />
                 {t("gardenDashboard.analyticsSection.weeklyPerformance", { defaultValue: "Weekly Performance" })}
               </h3>
-              <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
+              <ChartContainer width="100%" height={250}>
                 <BarChart
                   data={analytics.dailyStats.slice(-7).map((d) => ({
                     day: new Date(d.date).toLocaleDateString(currentLang, { weekday: "short" }),
@@ -1736,7 +1763,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     isAnimationActive={false}
                   />
                 </BarChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </Card>
 
             {/* Task Type Trends */}
@@ -1822,7 +1849,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 {t("gardenDashboard.analyticsSection.plantHealth", { defaultValue: "Plant Health" })}
               </h3>
               <div className="flex items-center justify-center">
-                <ResponsiveContainer width={200} height={200} minWidth={0} minHeight={0}>
+                <ChartContainer width={200} height={200}>
                   <RadialBarChart
                     cx="50%"
                     cy="50%"
@@ -1860,7 +1887,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                         : 100}%
                     </text>
                   </RadialBarChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </div>
             </Card>
         </div>
@@ -1884,7 +1911,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   {analytics.memberContributions.length > 1 && analytics.memberContributions.some(m => m.tasksCompleted > 0) && (
                     <div className="flex items-center gap-6 mb-6">
                       <div className="w-32 h-32">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                        <ChartContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
                               data={analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m) => ({
@@ -1905,7 +1932,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                               ))}
                             </Pie>
                           </PieChart>
-                        </ResponsiveContainer>
+                        </ChartContainer>
                       </div>
                       <div className="flex-1 text-sm text-muted-foreground">
                         {t("gardenDashboard.analyticsSection.weeklyContributions", { defaultValue: "Weekly task contributions by member" })}
