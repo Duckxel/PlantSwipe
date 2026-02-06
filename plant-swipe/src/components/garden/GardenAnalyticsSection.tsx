@@ -44,7 +44,7 @@ const ChartContainer: React.FC<
     return <div style={{ width: typeof w === "number" ? w : "100%", height: typeof h === "number" ? h : 0 }} />;
   }
   return (
-    <ResponsiveContainer width={w} height={h} minWidth={0} minHeight={0} {...rest}>
+    <ResponsiveContainer width={w} height={h} minWidth={1} minHeight={1} {...rest}>
       {children}
     </ResponsiveContainer>
   );

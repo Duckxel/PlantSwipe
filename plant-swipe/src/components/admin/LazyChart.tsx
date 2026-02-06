@@ -107,28 +107,32 @@ const useSafeContainerDimensions = (minWidth = 1, minHeight = 1) => {
 
 // Chart components that use the shared context
 // SafeResponsiveContainer waits for valid dimensions before rendering
-const ResponsiveContainerImpl: React.FC<ResponsiveContainerProps> = (props) => {
+const ResponsiveContainerImpl: React.FC<ResponsiveContainerProps> = ({ minWidth, minHeight, ...restProps }) => {
   const charts = useCharts()
   const { containerRef, isReady } = useSafeContainerDimensions(1, 1)
+  
+  // Enforce a floor of 1 so recharts never sees 0 or negative dimensions
+  const safeMinWidth = Math.max(Number(minWidth) || 1, 1)
+  const safeMinHeight = Math.max(Number(minHeight) || 1, 1)
   
   return (
     <div 
       ref={containerRef} 
       style={{ 
-        width: props.width ?? '100%', 
-        height: props.height ?? '100%',
-        minWidth: props.minWidth ?? 1,
-        minHeight: props.minHeight ?? 1,
+        width: restProps.width ?? '100%', 
+        height: restProps.height ?? '100%',
+        minWidth: safeMinWidth,
+        minHeight: safeMinHeight,
       }}
     >
       {isReady ? (
         <charts.ResponsiveContainer 
           debounce={50}
-          minWidth={1}
-          minHeight={1}
-          {...props}
+          {...restProps}
           width="100%"
           height="100%"
+          minWidth={safeMinWidth}
+          minHeight={safeMinHeight}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
@@ -280,12 +284,16 @@ export const SafeResponsiveContainer: React.FC<
   ResponsiveContainerProps & { 
     loadingFallback?: React.ReactNode 
   }
-> = ({ loadingFallback, children, ...props }) => {
+> = ({ loadingFallback, children, minWidth, minHeight, ...restProps }) => {
   const { containerRef, isReady } = useSafeContainerDimensions(1, 1)
   // Dynamically import ResponsiveContainer from recharts
   const [RechartResponsiveContainer, setRechartResponsiveContainer] = useState<
     typeof import('recharts').ResponsiveContainer | null
   >(null)
+  
+  // Enforce a floor of 1 so recharts never sees 0 or negative dimensions
+  const safeMinWidth = Math.max(Number(minWidth) || 1, 1)
+  const safeMinHeight = Math.max(Number(minHeight) || 1, 1)
   
   useEffect(() => {
     import('recharts').then((mod) => {
@@ -297,20 +305,20 @@ export const SafeResponsiveContainer: React.FC<
     <div 
       ref={containerRef} 
       style={{ 
-        width: props.width ?? '100%', 
-        height: props.height ?? '100%',
-        minWidth: props.minWidth ?? 1,
-        minHeight: props.minHeight ?? 1,
+        width: restProps.width ?? '100%', 
+        height: restProps.height ?? '100%',
+        minWidth: safeMinWidth,
+        minHeight: safeMinHeight,
       }}
     >
       {isReady && RechartResponsiveContainer ? (
         <RechartResponsiveContainer 
           debounce={50}
-          minWidth={1}
-          minHeight={1}
-          {...props}
+          {...restProps}
           width="100%"
           height="100%"
+          minWidth={safeMinWidth}
+          minHeight={safeMinHeight}
         >
           {children}
         </RechartResponsiveContainer>
