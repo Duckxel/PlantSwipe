@@ -886,7 +886,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     {t("gardenDashboard.analyticsSection.last30Days", { defaultValue: "Last 30 days" })}
                   </span>
                 </div>
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={200} minWidth={0} minHeight={0}>
                   <ComposedChart
                     data={analytics.dailyStats.slice(-30).map((d) => ({
                       date: new Date(d.date).toLocaleDateString(currentLang, { month: "short", day: "numeric" }),
@@ -953,7 +953,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
 
                     return (
                       <div className="w-32 h-32">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                           <PieChart>
                             <Pie
                               // Force remount when the set of visible slices
@@ -1706,7 +1706,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 <Activity className="w-5 h-5 text-blue-500" />
                 {t("gardenDashboard.analyticsSection.weeklyPerformance", { defaultValue: "Weekly Performance" })}
               </h3>
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
                 <BarChart
                   data={analytics.dailyStats.slice(-7).map((d) => ({
                     day: new Date(d.date).toLocaleDateString(currentLang, { weekday: "short" }),
@@ -1822,7 +1822,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 {t("gardenDashboard.analyticsSection.plantHealth", { defaultValue: "Plant Health" })}
               </h3>
               <div className="flex items-center justify-center">
-                <ResponsiveContainer width={200} height={200}>
+                <ResponsiveContainer width={200} height={200} minWidth={0} minHeight={0}>
                   <RadialBarChart
                     cx="50%"
                     cy="50%"
@@ -1884,7 +1884,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   {analytics.memberContributions.length > 1 && analytics.memberContributions.some(m => m.tasksCompleted > 0) && (
                     <div className="flex items-center gap-6 mb-6">
                       <div className="w-32 h-32">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                           <PieChart>
                             <Pie
                               data={analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m) => ({
@@ -1983,4 +1983,46 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   );
 };
 
-export default GardenAnalyticsSection;
+// Error boundary to prevent chart crashes from breaking the entire page
+class AnalyticsErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback?: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback?: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.warn("[Analytics] Chart rendering error caught by boundary:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        this.props.fallback || (
+          <div className="p-8 text-center text-sm text-stone-500 dark:text-stone-400">
+            <p>Something went wrong loading the charts.</p>
+            <button
+              className="mt-2 text-emerald-600 hover:underline"
+              onClick={() => this.setState({ hasError: false })}
+            >
+              Try again
+            </button>
+          </div>
+        )
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Wrapped export that prevents chart errors from crashing the page
+const GardenAnalyticsSectionSafe: React.FC<GardenAnalyticsSectionProps> = (props) => (
+  <AnalyticsErrorBoundary>
+    <GardenAnalyticsSection {...props} />
+  </AnalyticsErrorBoundary>
+);
+
+export default GardenAnalyticsSectionSafe;
