@@ -1,5 +1,5 @@
  // @ts-nocheck
-import React, { Suspense, createContext, useContext, useState, useEffect, useRef, useLayoutEffect } from 'react'
+import React, { Suspense, createContext, useContext, useState, useEffect, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import type {
   ResponsiveContainerProps,
@@ -63,29 +63,28 @@ const ChartSkeleton: React.FC<{ height?: number | string }> = ({ height = 200 })
   </div>
 )
 
-// Hook to safely measure container dimensions before rendering chart
+// Hook to safely measure container dimensions before rendering chart.
 // This prevents the recharts warning about negative dimensions (-1, -1)
+// by deferring the initial measurement to requestAnimationFrame — at
+// that point the browser has completed layout and dimensions are valid.
 const useSafeContainerDimensions = (minWidth = 1, minHeight = 1) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null)
   
-  // Use layout effect for synchronous measurement to avoid flash
-  useLayoutEffect(() => {
+  useEffect(() => {
     const container = containerRef.current
     if (!container) return
     
-    const measureDimensions = () => {
+    // Defer first measurement to after browser paint so the container
+    // has been laid out with valid (non-negative) dimensions.
+    const rafId = requestAnimationFrame(() => {
       const { width, height } = container.getBoundingClientRect()
-      // Only set dimensions if they are valid (greater than minWidth/minHeight)
       if (width >= minWidth && height >= minHeight) {
         setDimensions({ width, height })
       }
-    }
+    })
     
-    // Initial measurement
-    measureDimensions()
-    
-    // Use ResizeObserver for reliable dimension tracking
+    // Use ResizeObserver for subsequent dimension changes
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect
@@ -98,6 +97,7 @@ const useSafeContainerDimensions = (minWidth = 1, minHeight = 1) => {
     resizeObserver.observe(container)
     
     return () => {
+      cancelAnimationFrame(rafId)
       resizeObserver.disconnect()
     }
   }, [minWidth, minHeight])
@@ -107,28 +107,32 @@ const useSafeContainerDimensions = (minWidth = 1, minHeight = 1) => {
 
 // Chart components that use the shared context
 // SafeResponsiveContainer waits for valid dimensions before rendering
-const ResponsiveContainerImpl: React.FC<ResponsiveContainerProps> = (props) => {
+const ResponsiveContainerImpl: React.FC<ResponsiveContainerProps> = ({ minWidth, minHeight, ...restProps }) => {
   const charts = useCharts()
   const { containerRef, isReady } = useSafeContainerDimensions(1, 1)
+  
+  // Enforce a floor of 1 so recharts never sees 0 or negative dimensions
+  const safeMinWidth = Math.max(Number(minWidth) || 1, 1)
+  const safeMinHeight = Math.max(Number(minHeight) || 1, 1)
   
   return (
     <div 
       ref={containerRef} 
       style={{ 
-        width: props.width ?? '100%', 
-        height: props.height ?? '100%',
-        minWidth: props.minWidth ?? 1,
-        minHeight: props.minHeight ?? 1,
+        width: restProps.width ?? '100%', 
+        height: restProps.height ?? '100%',
+        minWidth: safeMinWidth,
+        minHeight: safeMinHeight,
       }}
     >
       {isReady ? (
         <charts.ResponsiveContainer 
           debounce={50}
-          minWidth={1}
-          minHeight={1}
-          {...props}
+          {...restProps}
           width="100%"
           height="100%"
+          minWidth={safeMinWidth}
+          minHeight={safeMinHeight}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
@@ -280,12 +284,16 @@ export const SafeResponsiveContainer: React.FC<
   ResponsiveContainerProps & { 
     loadingFallback?: React.ReactNode 
   }
-> = ({ loadingFallback, children, ...props }) => {
+> = ({ loadingFallback, children, minWidth, minHeight, ...restProps }) => {
   const { containerRef, isReady } = useSafeContainerDimensions(1, 1)
   // Dynamically import ResponsiveContainer from recharts
   const [RechartResponsiveContainer, setRechartResponsiveContainer] = useState<
     typeof import('recharts').ResponsiveContainer | null
   >(null)
+  
+  // Enforce a floor of 1 so recharts never sees 0 or negative dimensions
+  const safeMinWidth = Math.max(Number(minWidth) || 1, 1)
+  const safeMinHeight = Math.max(Number(minHeight) || 1, 1)
   
   useEffect(() => {
     import('recharts').then((mod) => {
@@ -297,20 +305,20 @@ export const SafeResponsiveContainer: React.FC<
     <div 
       ref={containerRef} 
       style={{ 
-        width: props.width ?? '100%', 
-        height: props.height ?? '100%',
-        minWidth: props.minWidth ?? 1,
-        minHeight: props.minHeight ?? 1,
+        width: restProps.width ?? '100%', 
+        height: restProps.height ?? '100%',
+        minWidth: safeMinWidth,
+        minHeight: safeMinHeight,
       }}
     >
       {isReady && RechartResponsiveContainer ? (
         <RechartResponsiveContainer 
           debounce={50}
-          minWidth={1}
-          minHeight={1}
-          {...props}
+          {...restProps}
           width="100%"
           height="100%"
+          minWidth={safeMinWidth}
+          minHeight={safeMinHeight}
         >
           {children}
         </RechartResponsiveContainer>

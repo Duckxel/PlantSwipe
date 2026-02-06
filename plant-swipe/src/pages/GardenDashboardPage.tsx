@@ -814,12 +814,16 @@ export const GardenDashboardPage: React.FC = () => {
                 if (!cached) return day;
                 const finalDue = cached.due ?? day.due;
                 const finalCompleted = cached.completed ?? day.completed;
-                // Compute success from merged due/completed when we have cached task data
-                // When no tasks are due (finalDue === 0), day is automatically successful
-                // Otherwise check if garden_tasks recorded success or compute from completion
+                // Only compute success from due/completed when we have real occurrence
+                // data (i.e. at least one value is non-zero).  The initial load seeds
+                // every day with due=0, completed=0 as a template; those zeroes must
+                // NOT be treated as "no tasks were due → success", otherwise all past
+                // days would flip to green on subsequent reloads.  When both values
+                // are still at the template default (0), we trust the garden_tasks
+                // success flag which is the ground truth from the server.
+                const hasRealOccurrenceData = finalDue > 0 || finalCompleted > 0;
                 const computedSuccess = finalDue === 0 || finalCompleted >= finalDue;
-                // Use computed success if we have cached task data, otherwise prefer cached success over garden_tasks
-                const finalSuccess = cached.due !== undefined ? computedSuccess : (cached.success ?? day.success);
+                const finalSuccess = hasRealOccurrenceData ? computedSuccess : day.success;
                 return {
                   ...day,
                   due: finalDue,
@@ -2790,7 +2794,11 @@ export const GardenDashboardPage: React.FC = () => {
                       {plants.map((gp: any, idx: number) => (
                         <Card
                           key={gp.id}
-                          className={`rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur overflow-hidden relative shadow-sm ${dragIdx === idx ? "ring-2 ring-emerald-500" : ""}`}
+                          className={`rounded-[28px] border overflow-hidden relative shadow-sm transition-all ${dragIdx === idx ? "ring-2 ring-emerald-500" : ""} ${
+                            (taskCountsByPlant[gp.id] || 0) === 0
+                              ? "border-orange-300 dark:border-orange-700/60 bg-white/80 dark:bg-[#1f1f1f]/80 shadow-[0_0_15px_-3px_rgba(251,146,60,0.3)] dark:shadow-[0_0_15px_-3px_rgba(251,146,60,0.15)]"
+                              : "border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80"
+                          } backdrop-blur`}
                           draggable
                           onDragStart={(e) => {
                             // Prevent drag when starting from interactive controls
@@ -2890,12 +2898,18 @@ export const GardenDashboardPage: React.FC = () => {
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
                                   {Number(gp.plantsOnHand ?? 0)} {t("gardenDashboard.plantsSection.onHand")}
                                 </span>
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
-                                  {taskCountsByPlant[gp.id] || 0} {t("gardenDashboard.plantsSection.tasks")}
-                                </span>
+                                {(taskCountsByPlant[gp.id] || 0) > 0 ? (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
+                                    {taskCountsByPlant[gp.id]} {t("gardenDashboard.plantsSection.tasks")}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-medium flex items-center gap-1">
+                                    ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
+                                  </span>
+                                )}
                                 {(taskOccDueToday[gp.id] || 0) > 0 && (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium">
-                                    {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
+                                    📋 {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
                                   </span>
                                 )}
                               </div>
@@ -3093,7 +3107,7 @@ export const GardenDashboardPage: React.FC = () => {
                       plants={plants}
                       members={members}
                       dailyStats={dailyStats}
-                      onNavigateToSettings={() => navigate(`/garden/${id}/settings`)}
+                      onNavigateToSettings={() => navigate(`/garden/${id}/settings?section=location`)}
                       hideAiFeatures={garden?.hideAiChat ?? false}
                     />
                   ) : (
@@ -3113,6 +3127,9 @@ export const GardenDashboardPage: React.FC = () => {
                       isOwner={isOwner}
                       currentUserId={currentUserId}
                       ownersCount={ownersCount}
+                      initialCategory={
+                        (new URLSearchParams(location.search).get("section") as "general" | "location" | "privacy" | "members" | "danger") || undefined
+                      }
                       onSaved={load}
                       onRefreshGarden={refreshGarden}
                       onDeleteGarden={async () => {
@@ -4624,7 +4641,11 @@ function OverviewSection({
             {allPlantsDisplay.slice(0, 15).map((plant, idx) => (
               <div
                 key={plant.id}
-                className="group relative aspect-[4/5] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]"
+                className={`group relative aspect-[4/5] rounded-2xl overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] ${
+                  plant.taskCount === 0
+                    ? "ring-2 ring-orange-400/70 dark:ring-orange-500/50 shadow-[0_0_12px_-2px_rgba(251,146,60,0.35)] dark:shadow-[0_0_12px_-2px_rgba(251,146,60,0.2)] bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20"
+                    : "bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30"
+                }`}
                 onClick={() => {
                   if (plant.plantId) navigate(`/plants/${plant.plantId}`);
                 }}
@@ -4657,12 +4678,16 @@ function OverviewSection({
                     </span>
                   )}
                   {plant.plantsOnHand <= 1 && <span />}
-                  {/* Tasks due today badge */}
-                  {plant.tasksDueToday > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-amber-500 text-xs font-semibold text-white shadow-sm">
+                  {/* Tasks due today badge (blue) or no-tasks warning (orange) */}
+                  {plant.tasksDueToday > 0 ? (
+                    <span className="px-2 py-0.5 rounded-full bg-blue-500 text-xs font-semibold text-white shadow-sm">
                       {plant.tasksDueToday} 📋
                     </span>
-                  )}
+                  ) : plant.taskCount === 0 ? (
+                    <span className="px-2 py-0.5 rounded-full bg-orange-500 text-xs font-semibold text-white shadow-sm">
+                      ⚠️
+                    </span>
+                  ) : null}
                 </div>
                 
                 {/* Bottom info: name and task count */}
@@ -4671,14 +4696,13 @@ function OverviewSection({
                     {plant.name}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    {plant.taskCount > 0 && (
+                    {plant.taskCount > 0 ? (
                       <span className="text-white/80 text-xs">
                         {plant.taskCount} {plant.taskCount === 1 ? t("gardenDashboard.plantsSection.task", "task") : t("gardenDashboard.plantsSection.tasks")}
                       </span>
-                    )}
-                    {plant.taskCount === 0 && (
-                      <span className="text-white/60 text-xs">
-                        {t("gardenDashboard.overviewSection.noTasks", "No tasks")}
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/90 text-white font-medium flex items-center gap-1">
+                        ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
                       </span>
                     )}
                   </div>

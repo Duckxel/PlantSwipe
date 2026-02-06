@@ -22,6 +22,33 @@ import {
   RadialBar,
   PolarAngleAxis,
 } from "recharts";
+
+/**
+ * Defers ResponsiveContainer rendering by one animation frame so the
+ * browser has finished layout.  Recharts measures the parent via
+ * ResizeObserver on mount — if layout hasn't settled yet the observed
+ * size can be -1 × -1 which logs a noisy warning and may crash React.
+ */
+const ChartContainer: React.FC<
+  React.ComponentProps<typeof ResponsiveContainer>
+> = ({ children, width, height, ...rest }) => {
+  const [ready, setReady] = React.useState(false);
+  React.useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  const w = width ?? "100%";
+  const h = height ?? "100%";
+  if (!ready) {
+    // Placeholder that occupies the same space so layout doesn't jump
+    return <div style={{ width: typeof w === "number" ? w : "100%", height: typeof h === "number" ? h : 0 }} />;
+  }
+  return (
+    <ResponsiveContainer width={w} height={h} minWidth={1} minHeight={1} {...rest}>
+      {children}
+    </ResponsiveContainer>
+  );
+};
 import { useAuth } from "@/context/AuthContext";
 import {
   TrendingUp,
@@ -614,20 +641,111 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     }
   }, [activeTab, garden?.locationCity, garden?.locationLat, garden?.locationLon, fetchWeather]);
 
-  // Merge server analytics with computed analytics to ensure all fields are present
+  // Merge server analytics with computed analytics to ensure all fields are present.
+  // The server provides dailyStats with accurate due/completed counts for every
+  // day, while the client-side prop only has real data for today (the rest are
+  // template zeros).  Derived metrics like allTimeStats and streakInfo must be
+  // (re)computed from the best available dailyStats to show correct numbers.
   const analytics = React.useMemo(() => {
     if (!computedAnalytics) return analyticsData;
     if (!analyticsData) return computedAnalytics;
-    // Merge: prefer server data but fall back to computed for missing fields
+
+    // Pick the richest dailyStats source for aggregate computations.
+    const bestDailyStats =
+      analyticsData.dailyStats?.length
+        ? analyticsData.dailyStats
+        : computedAnalytics.dailyStats;
+
+    // --- Recompute allTimeStats from bestDailyStats ----------------------
+    const todayIso = serverToday || new Date().toISOString().slice(0, 10);
+
+    const totalTasksCompleted = bestDailyStats.reduce(
+      (sum, d) => sum + (d.completed || 0), 0,
+    );
+    const totalDaysActive = bestDailyStats.filter(
+      (d) => (d.completed || 0) > 0,
+    ).length;
+    const perfectDays = bestDailyStats.filter(
+      (d) => d.success && (d.due || 0) > 0,
+    ).length;
+    const averageTasksPerDay =
+      totalDaysActive > 0
+        ? Math.round((totalTasksCompleted / totalDaysActive) * 10) / 10
+        : 0;
+
+    // Most active day of week
+    const dowCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    bestDailyStats.forEach((d) => {
+      dowCounts[new Date(d.date).getDay()] += d.completed || 0;
+    });
+    const mostActiveDay = parseInt(
+      Object.entries(dowCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "0",
+    );
+
+    // Streak calculation
+    let bestStreak = 0;
+    let runStreak = 0;
+    const sorted = [...bestDailyStats].sort((a, b) => a.date.localeCompare(b.date));
+    for (const stat of sorted) {
+      if (stat.success) {
+        runStreak++;
+        bestStreak = Math.max(bestStreak, runStreak);
+      } else {
+        runStreak = 0;
+      }
+    }
+    const lastMissed =
+      sorted.filter((d) => !d.success && (d.due || 0) > 0).pop()?.date || null;
+
+    // Monthly comparison
+    const thisMonthStart = new Date(todayIso);
+    thisMonthStart.setDate(1);
+    const lastMonthStart = new Date(thisMonthStart);
+    lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+
+    const thisMonthTasks = bestDailyStats
+      .filter((d) => new Date(d.date) >= thisMonthStart)
+      .reduce((sum, d) => sum + (d.completed || 0), 0);
+    const lastMonthTasks = bestDailyStats
+      .filter((d) => {
+        const dt = new Date(d.date);
+        return dt >= lastMonthStart && dt < thisMonthStart;
+      })
+      .reduce((sum, d) => sum + (d.completed || 0), 0);
+    const monthlyChange =
+      lastMonthTasks > 0
+        ? Math.round(((thisMonthTasks - lastMonthTasks) / lastMonthTasks) * 100)
+        : 0;
+
+    const recomputedAllTimeStats = {
+      totalTasksCompleted,
+      totalDaysActive,
+      perfectDays,
+      mostActiveDay,
+      averageTasksPerDay,
+      longestStreak: Math.max(bestStreak, streak),
+      monthlyComparison: {
+        thisMonth: thisMonthTasks,
+        lastMonth: lastMonthTasks,
+        change: monthlyChange,
+      },
+    };
+
+    const recomputedStreakInfo = {
+      current: streak,
+      best: Math.max(bestStreak, streak),
+      lastMissed,
+    };
+
     return {
       ...computedAnalytics,
       ...analyticsData,
-      // Ensure streakInfo is always present (server might not send it)
-      streakInfo: analyticsData.streakInfo || computedAnalytics.streakInfo,
+      streakInfo: analyticsData.streakInfo || recomputedStreakInfo,
       weeklyStats: analyticsData.weeklyStats || computedAnalytics.weeklyStats,
       plantStats: analyticsData.plantStats || computedAnalytics.plantStats,
+      allTimeStats: analyticsData.allTimeStats || recomputedAllTimeStats,
     };
-  }, [analyticsData, computedAnalytics]);
+  }, [analyticsData, computedAnalytics, serverToday, streak]);
 
   if (!analytics) {
     return (
@@ -795,7 +913,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     {t("gardenDashboard.analyticsSection.last30Days", { defaultValue: "Last 30 days" })}
                   </span>
                 </div>
-                <ResponsiveContainer width="100%" height={200}>
+                <ChartContainer width="100%" height={200}>
                   <ComposedChart
                     data={analytics.dailyStats.slice(-30).map((d) => ({
                       date: new Date(d.date).toLocaleDateString(currentLang, { month: "short", day: "numeric" }),
@@ -821,7 +939,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       fillOpacity={0.2}
                       stroke={CHART_COLORS.muted}
                       strokeWidth={2}
-                      animationDuration={300}
+                      isAnimationActive={false}
                     />
                     <Line
                       type="monotone"
@@ -831,10 +949,10 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       strokeWidth={3}
                       dot={{ r: 2 }}
                       activeDot={{ r: 4 }}
-                      animationDuration={300}
+                      isAnimationActive={false}
                     />
                   </ComposedChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </Card>
 
               {/* Task Type Distribution */}
@@ -846,32 +964,47 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </h3>
                 </div>
                 <div className="flex items-center gap-6">
-                  <div className="w-32 h-32">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: "Water", value: analytics.weeklyStats.tasksByType.water, fill: CHART_COLORS.water },
-                            { name: "Fertilize", value: analytics.weeklyStats.tasksByType.fertilize, fill: CHART_COLORS.fertilize },
-                            { name: "Harvest", value: analytics.weeklyStats.tasksByType.harvest, fill: CHART_COLORS.harvest },
-                            { name: "Cut", value: analytics.weeklyStats.tasksByType.cut, fill: CHART_COLORS.cut },
-                            { name: "Custom", value: analytics.weeklyStats.tasksByType.custom, fill: CHART_COLORS.custom },
-                          ].filter((d) => d.value > 0)}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={35}
-                          outerRadius={55}
-                          paddingAngle={3}
-                          dataKey="value"
-                          animationDuration={300}
-                        >
-                          {[CHART_COLORS.water, CHART_COLORS.fertilize, CHART_COLORS.harvest, CHART_COLORS.cut, CHART_COLORS.custom].map((color, index) => (
-                            <Cell key={`cell-${index}`} fill={color} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {(() => {
+                    // Build filtered data for the donut chart and derive Cell
+                    // colors from it so colours stay correct after zero-value
+                    // types are removed.
+                    const pieData = [
+                      { name: "Water", value: analytics.weeklyStats.tasksByType.water, fill: CHART_COLORS.water },
+                      { name: "Fertilize", value: analytics.weeklyStats.tasksByType.fertilize, fill: CHART_COLORS.fertilize },
+                      { name: "Harvest", value: analytics.weeklyStats.tasksByType.harvest, fill: CHART_COLORS.harvest },
+                      { name: "Cut", value: analytics.weeklyStats.tasksByType.cut, fill: CHART_COLORS.cut },
+                      { name: "Custom", value: analytics.weeklyStats.tasksByType.custom, fill: CHART_COLORS.custom },
+                    ].filter((d) => d.value > 0);
+
+                    if (pieData.length === 0) return null;
+
+                    return (
+                      <div className="w-32 h-32">
+                        <ChartContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              // Force remount when the set of visible slices
+                              // changes so Recharts animates correctly from an
+                              // initially-empty state.
+                              key={pieData.map((d) => d.name).join(",")}
+                              data={pieData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={35}
+                              outerRadius={55}
+                              paddingAngle={3}
+                              dataKey="value"
+                              isAnimationActive={false}
+                            >
+                              {pieData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ChartContainer>
+                      </div>
+                    );
+                  })()}
                   <div className="flex-1 space-y-2">
                     {[
                       { key: "water", label: t("garden.taskTypes.water", { defaultValue: "Water" }), icon: Droplets, color: CHART_COLORS.water },
@@ -1600,7 +1733,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 <Activity className="w-5 h-5 text-blue-500" />
                 {t("gardenDashboard.analyticsSection.weeklyPerformance", { defaultValue: "Weekly Performance" })}
               </h3>
-              <ResponsiveContainer width="100%" height={250}>
+              <ChartContainer width="100%" height={250}>
                 <BarChart
                   data={analytics.dailyStats.slice(-7).map((d) => ({
                     day: new Date(d.date).toLocaleDateString(currentLang, { weekday: "short" }),
@@ -1619,7 +1752,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     fill={CHART_COLORS.primary}
                     radius={[4, 4, 0, 0]}
                     stackId="stack"
-                    animationDuration={300}
+                    isAnimationActive={false}
                   />
                   <Bar
                     dataKey="due"
@@ -1627,10 +1760,10 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     fill={CHART_COLORS.muted}
                     radius={[4, 4, 0, 0]}
                     stackId="stack"
-                    animationDuration={300}
+                    isAnimationActive={false}
                   />
                 </BarChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </Card>
 
             {/* Task Type Trends */}
@@ -1716,7 +1849,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 {t("gardenDashboard.analyticsSection.plantHealth", { defaultValue: "Plant Health" })}
               </h3>
               <div className="flex items-center justify-center">
-                <ResponsiveContainer width={200} height={200}>
+                <ChartContainer width={200} height={200}>
                   <RadialBarChart
                     cx="50%"
                     cy="50%"
@@ -1740,7 +1873,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                       background
                       dataKey="value"
                       cornerRadius={10}
-                      animationDuration={300}
+                      isAnimationActive={false}
                     />
                     <text
                       x="50%"
@@ -1754,7 +1887,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                         : 100}%
                     </text>
                   </RadialBarChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </div>
             </Card>
         </div>
@@ -1778,7 +1911,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   {analytics.memberContributions.length > 1 && analytics.memberContributions.some(m => m.tasksCompleted > 0) && (
                     <div className="flex items-center gap-6 mb-6">
                       <div className="w-32 h-32">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ChartContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
                               data={analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m) => ({
@@ -1792,14 +1925,14 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                               outerRadius={55}
                               paddingAngle={3}
                               dataKey="value"
-                              animationDuration={300}
+                              isAnimationActive={false}
                             >
                               {analytics.memberContributions.filter(m => m.tasksCompleted > 0).map((m, index) => (
                                 <Cell key={`cell-${index}`} fill={m.color} />
                               ))}
                             </Pie>
                           </PieChart>
-                        </ResponsiveContainer>
+                        </ChartContainer>
                       </div>
                       <div className="flex-1 text-sm text-muted-foreground">
                         {t("gardenDashboard.analyticsSection.weeklyContributions", { defaultValue: "Weekly task contributions by member" })}
@@ -1877,4 +2010,46 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   );
 };
 
-export default GardenAnalyticsSection;
+// Error boundary to prevent chart crashes from breaking the entire page
+class AnalyticsErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback?: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback?: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.warn("[Analytics] Chart rendering error caught by boundary:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        this.props.fallback || (
+          <div className="p-8 text-center text-sm text-stone-500 dark:text-stone-400">
+            <p>Something went wrong loading the charts.</p>
+            <button
+              className="mt-2 text-emerald-600 hover:underline"
+              onClick={() => this.setState({ hasError: false })}
+            >
+              Try again
+            </button>
+          </div>
+        )
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Wrapped export that prevents chart errors from crashing the page
+const GardenAnalyticsSectionSafe: React.FC<GardenAnalyticsSectionProps> = (props) => (
+  <AnalyticsErrorBoundary>
+    <GardenAnalyticsSection {...props} />
+  </AnalyticsErrorBoundary>
+);
+
+export default GardenAnalyticsSectionSafe;
