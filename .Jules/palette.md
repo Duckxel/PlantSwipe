@@ -29,3 +29,7 @@
 ## 2025-05-26 - Search Keyboard Shortcut
 **Learning:** Adding a global search shortcut (⌘K/Ctrl+K) significantly improves navigation speed for power users. Visual hints in the search bar are essential for discoverability.
 **Action:** When implementing search, always include a keyboard shortcut and a visual badge (e.g., `<kbd>⌘K</kbd>`) when the input is empty.
+
+## 2025-05-27 - Focus Styles on Custom Interactive Elements
+**Learning:** Custom interactive elements (like icon-only buttons or mobile navigation items) using raw HTML tags often miss focus styles, making them inaccessible to keyboard users.
+**Action:** Always verify `focus-visible` styles when using raw `button` or `a` tags, especially in custom UI components like search inputs or navigation bars.
