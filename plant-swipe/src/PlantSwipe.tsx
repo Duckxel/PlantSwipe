@@ -741,43 +741,15 @@ export default function PlantSwipe() {
     }
 
     return plants.map((p) => {
-      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors)
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
-      const normalizedColors = colors.map(c => c.toLowerCase().trim())
-      
-      // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
-      // This avoids regex operations during filtering
-      // Enhanced: Also add translations for bi-directional matching
-      // (e.g., plant with "red" will also match filter "rouge")
-      const colorTokens = new Set<string>()
-      normalizedColors.forEach(color => {
-        const cachedTokens = getTokensForColor(color)
-        for (const t of cachedTokens) {
-          colorTokens.add(t)
-        }
-      })
+      // ⚡ Bolt: Lazy Initialization for Expensive Fields
+      // Only compute heavy strings and Sets when they are actually accessed (e.g. during active filtering).
+      // This saves significant CPU on initial render for fields like _searchString which are O(N) string ops.
 
-      // Search string - includes name, scientific name, meaning, colors, common names and synonyms
-      // This allows users to search by any name they might know the plant by
-      const commonNames = (p.identity?.commonNames || []).join(' ')
-      const synonyms = (p.identity?.synonyms || []).join(' ')
-      const givenNames = (p.identity?.givenNames || []).join(' ')
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+      // --- Cheap Props (Eager) ---
+      // These are used for sorting or basic display and are cheap to compute.
 
       // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
-
-      // Usage - both array and Set
-      const usageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-      const usageSet = new Set(usageLabels)
-
-      // Habitat - both array and Set for O(1) lookups
-      const habitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
-      const habitatSet = new Set(habitats)
 
       // Maintenance
       const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
@@ -788,10 +760,6 @@ export default function PlantSwipe() {
 
       // Living space
       const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
-
-      // Seasons - convert to Set for O(1) lookups
-      const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const seasonsSet = new Set(seasons.map(s => String(s)))
 
       // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
       const createdAtValue = p.meta?.createdAt
@@ -813,27 +781,134 @@ export default function PlantSwipe() {
       const status = p.meta?.status?.toLowerCase()
       const isInProgress = status === 'in progres' || status === 'in progress'
 
-      return {
+      // Prepare base object with eager props
+      const prepared = {
         ...p,
-        _searchString: searchString,
-        _normalizedColors: normalizedColors,
-        _colorTokens: colorTokens,
         _typeLabel: typeLabel,
-        _usageLabels: usageLabels,
-        _usageSet: usageSet,
-        _habitats: habitats,
-        _habitatSet: habitatSet,
         _maintenance: maintenance,
         _petSafe: petSafe,
         _humanSafe: humanSafe,
         _livingSpace: livingSpace,
-        _seasonsSet: seasonsSet,
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
         _hasImage: hasImage,
         _isPromoted: isPromoted,
         _isInProgress: isInProgress
-      } as PreparedPlant
+        // Lazy props will be defined below
+      } as Partial<PreparedPlant>
+
+      // --- Lazy Props (Getters) ---
+      // These use closure variables to cache results after first access.
+
+      let _lazyNormalizedColors: string[] | undefined
+      const getNormalizedColors = () => {
+        if (_lazyNormalizedColors) return _lazyNormalizedColors
+
+        const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+        const identityColors = Array.isArray(p.identity?.colors)
+          ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+          : []
+        const colors = [...legacyColors, ...identityColors]
+        _lazyNormalizedColors = colors.map(c => c.toLowerCase().trim())
+        return _lazyNormalizedColors
+      }
+
+      let _lazyColorTokens: Set<string> | undefined
+      let _lazySearchString: string | undefined
+
+      let _lazyUsageLabels: string[] | undefined
+      const getUsageLabels = () => {
+        if (_lazyUsageLabels) return _lazyUsageLabels
+        _lazyUsageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
+        return _lazyUsageLabels
+      }
+
+      let _lazyUsageSet: Set<string> | undefined
+
+      let _lazyHabitats: string[] | undefined
+      const getHabitats = () => {
+         if (_lazyHabitats) return _lazyHabitats
+         _lazyHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+         return _lazyHabitats
+      }
+
+      let _lazyHabitatSet: Set<string> | undefined
+      let _lazySeasonsSet: Set<string> | undefined
+
+      Object.defineProperties(prepared, {
+        _normalizedColors: {
+          get: getNormalizedColors,
+          enumerable: true
+        },
+        _colorTokens: {
+          get: () => {
+            if (_lazyColorTokens) return _lazyColorTokens
+
+            const normalizedColors = getNormalizedColors()
+            _lazyColorTokens = new Set<string>()
+            normalizedColors.forEach(color => {
+              const cachedTokens = getTokensForColor(color)
+              for (const t of cachedTokens) {
+                _lazyColorTokens!.add(t)
+              }
+            })
+            return _lazyColorTokens
+          },
+          enumerable: true
+        },
+        _searchString: {
+          get: () => {
+            if (_lazySearchString) return _lazySearchString
+
+            // Re-use normalized colors to avoid re-joining raw colors and lowercasing
+            const colorString = getNormalizedColors().join(" ")
+
+            const commonNames = (p.identity?.commonNames || []).join(' ')
+            const synonyms = (p.identity?.synonyms || []).join(' ')
+            const givenNames = (p.identity?.givenNames || []).join(' ')
+
+            // Construct string (already lowercased where possible)
+            _lazySearchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colorString} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+            return _lazySearchString
+          },
+          enumerable: true
+        },
+        _usageLabels: {
+          get: getUsageLabels,
+          enumerable: true
+        },
+        _usageSet: {
+          get: () => {
+            if (_lazyUsageSet) return _lazyUsageSet
+            _lazyUsageSet = new Set(getUsageLabels())
+            return _lazyUsageSet
+          },
+          enumerable: true
+        },
+        _habitats: {
+          get: getHabitats,
+          enumerable: true
+        },
+        _habitatSet: {
+          get: () => {
+            if (_lazyHabitatSet) return _lazyHabitatSet
+            _lazyHabitatSet = new Set(getHabitats())
+            return _lazyHabitatSet
+          },
+          enumerable: true
+        },
+        _seasonsSet: {
+          get: () => {
+            if (_lazySeasonsSet) return _lazySeasonsSet
+            const seasons = Array.isArray(p.seasons) ? p.seasons : []
+            _lazySeasonsSet = new Set(seasons.map(s => String(s)))
+            return _lazySeasonsSet
+          },
+          enumerable: true
+        }
+      })
+
+      return prepared as PreparedPlant
     })
   }, [plants, colorLookups])
 
