@@ -114,7 +114,7 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
             type="button"
             onClick={onClear}
             className={cn(
-              "absolute top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 p-0.5",
+              "absolute top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
               isLarge ? "right-4" : isSmall ? "right-2.5" : "right-3"
             )}
             aria-label="Clear search"

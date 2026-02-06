@@ -410,6 +410,7 @@ function NavItem({
       className={`
         flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-w-[56px] rounded-xl no-underline
         transition-colors duration-150 active:scale-95
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500
         ${isActive 
           ? 'text-emerald-600 dark:text-emerald-400' 
           : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
@@ -464,6 +465,7 @@ function NavItemButton({
       className={`
         flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-w-[56px] rounded-xl
         transition-colors duration-150 active:scale-95
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500
         ${highlight
           ? 'text-emerald-600 dark:text-emerald-400'
           : isActive 
@@ -508,7 +510,7 @@ function QuickActionButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-center gap-2 p-3 rounded-2xl active:scale-95 transition-all ${
+      className={`flex flex-col items-center gap-2 p-3 rounded-2xl active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
         highlight 
           ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30' 
           : 'bg-stone-50 dark:bg-[#2a2a2d] hover:bg-stone-100 dark:hover:bg-[#333336]'
@@ -553,6 +555,7 @@ function MenuButton({
       className={`
         w-full flex items-center gap-3 px-4 py-3 rounded-xl
         transition-all duration-150 active:scale-[0.98]
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500
         ${destructive 
           ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20' 
           : bugCatcher
