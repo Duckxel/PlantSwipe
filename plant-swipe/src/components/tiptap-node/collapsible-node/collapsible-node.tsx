@@ -157,6 +157,8 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
           !isEditingTitle ? classes.headerHover : ""
         }`}
         contentEditable={false}
+        data-node-editing
+        onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
         <div
