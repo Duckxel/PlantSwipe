@@ -46,13 +46,32 @@ export function cn(
 }
 
 /**
- * Prevent ProseMirror from hijacking form field events in NodeViews.
- * This keeps inputs/selects editable in browsers like Firefox.
+ * Prevent ProseMirror from hijacking interactive element events in NodeViews.
+ * This keeps inputs, buttons, and editing UIs functional inside node views.
+ *
+ * Without this, ProseMirror intercepts mousedown/keydown events on interactive
+ * elements inside atom node views, which can:
+ * - Steal focus from inputs via view.focus()
+ * - Prevent button clicks from working properly
+ * - Interfere with the editing UI by creating NodeSelections
+ *
+ * Add `data-node-editing` to any editing form container to protect ALL
+ * events inside it from ProseMirror interference.
  */
 export const shouldStopNodeViewEvent = (event: Event) => {
   const target = event.target
   if (!(target instanceof Element)) return false
-  return Boolean(target.closest("input, textarea, select"))
+
+  // Stop events on standard form/interactive elements
+  if (target.closest("input, textarea, select, button, label")) return true
+
+  // Stop all events inside explicitly-marked editing containers.
+  // Node view components add data-node-editing to their editing form
+  // wrappers so that clicks on padding, labels, gaps, etc. are also
+  // protected from ProseMirror event handling.
+  if (target.closest("[data-node-editing]")) return true
+
+  return false
 }
 
 /**

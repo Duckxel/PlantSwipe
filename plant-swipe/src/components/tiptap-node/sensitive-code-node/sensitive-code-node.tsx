@@ -75,7 +75,9 @@ export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeView
           className="relative mx-auto max-w-md rounded-2xl border-[3px] border-dashed p-7 transition-all"
           style={{ backgroundColor: styles.bg, borderColor: styles.borderColor }}
           contentEditable={false}
+          data-node-editing
           onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="space-y-4">
             {/* Type selector */}
