@@ -90,22 +90,28 @@ const NODE_VIEW_EDITING_EVENTS = [
 /**
  * Returns a callback-ref to attach to a node-view editing container.
  *
- * Native DOM event listeners are attached that call `event.stopPropagation()`
- * so that **no** mouse, keyboard, clipboard or composition event can bubble
- * past the container into ProseMirror's editor-DOM listener.
+ * Two layers of isolation are applied:
  *
- * This is necessary because:
- * 1. ProseMirror's `stopEvent` callback only runs inside PM's own handler —
- *    the **browser's** contentEditable layer processes the native event first
- *    and can interfere with cursor positioning inside `<input>` / `<textarea>`
- *    elements nested in `contenteditable="false"` blocks.
- * 2. React's `onMouseDown` etc. fire via delegation at the React root, which
- *    is **above** ProseMirror's listener, so `e.stopPropagation()` in React
- *    arrives too late.
+ * **Layer 1 – stopPropagation on interactive events**
+ * Native DOM listeners call `event.stopPropagation()` so that no mouse,
+ * keyboard, clipboard or composition event can bubble past the container
+ * into ProseMirror's editor-DOM listener.  React's synthetic handlers
+ * fire too late (they delegate at the React root, which sits *above*
+ * ProseMirror), so native listeners are required.
  *
- * By placing a plain DOM listener on the editing container (which sits
- * **below** the ProseMirror editor DOM in the bubble path), `stopPropagation`
- * prevents the event from ever reaching ProseMirror.
+ * **Layer 2 – clear the browser Selection on focusin**
+ * ProseMirror registers a `selectionchange` listener on the **document**
+ * (not the editor DOM), which `stopPropagation` cannot intercept.
+ * When focus moves into a form field, ProseMirror's handler detects that
+ * its NodeSelection ranges are still present inside the editor DOM and
+ * calls `selectionToDOM()` to "restore" them — stealing focus or
+ * overwriting the cursor position inside the input/textarea.
+ *
+ * By clearing the browser Selection (`removeAllRanges`) when focus enters
+ * the editing form, ProseMirror's `view.hasFocus()` returns `false` (it
+ * checks `sel.rangeCount`), so the `selectionchange` handler becomes a
+ * no-op.  The textarea/input cursor is completely independent of the
+ * browser's Selection API, so clearing ranges does not affect it.
  *
  * Usage:
  * ```tsx
@@ -124,10 +130,28 @@ export function useNodeViewEditingRef<T extends HTMLElement = HTMLDivElement>() 
     if (!el) return
 
     const stop = (e: Event) => e.stopPropagation()
+
+    // Layer 1: stop interactive events from reaching ProseMirror
     NODE_VIEW_EDITING_EVENTS.forEach((evt) => el.addEventListener(evt, stop))
+
+    // Layer 2: neuter ProseMirror's document-level selectionchange handler
+    // by clearing the browser Selection whenever focus enters the editing
+    // form.  This makes view.hasFocus() → false → handler skips.
+    const handleFocusIn = (e: Event) => {
+      e.stopPropagation()
+      try { window.getSelection()?.removeAllRanges() } catch { /* ignore */ }
+    }
+    const handleFocusOut = (e: Event) => {
+      e.stopPropagation()
+    }
+
+    el.addEventListener("focusin", handleFocusIn)
+    el.addEventListener("focusout", handleFocusOut)
 
     cleanupRef.current = () => {
       NODE_VIEW_EDITING_EVENTS.forEach((evt) => el.removeEventListener(evt, stop))
+      el.removeEventListener("focusin", handleFocusIn)
+      el.removeEventListener("focusout", handleFocusOut)
     }
   }, [])
 
