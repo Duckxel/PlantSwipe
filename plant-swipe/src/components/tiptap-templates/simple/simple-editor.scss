@@ -122,3 +122,28 @@ body,
 .ProseMirror-focused .ProseMirror-gapcursor {
   display: block;
 }
+
+/*
+ * Node view editing forms (cards, boxes, buttons, etc.)
+ *
+ * The global body { user-select: none } in index.scss is inherited by all
+ * elements, including inputs/textareas inside node view editing forms.
+ * When combined with the contentEditable context of the ProseMirror editor,
+ * this prevents browsers from properly positioning the text cursor on click
+ * within those inputs — even though they still receive focus and keyboard
+ * input. Override with user-select: text so clicking inside a field moves
+ * the caret to the clicked position.
+ */
+[data-node-editing] {
+  -webkit-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+[data-node-editing] input,
+[data-node-editing] textarea,
+[data-node-editing] select {
+  -webkit-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
