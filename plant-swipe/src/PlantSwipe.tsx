@@ -5,7 +5,7 @@ import { Navigate } from "@/components/i18n/Navigate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, Eye, EyeOff } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGlobalNavigationTracker } from "@/hooks/useNavigationHistory";
@@ -242,6 +242,8 @@ export default function PlantSwipe() {
   const [authEmail, setAuthEmail] = useState("")
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [authDisplayName, setAuthDisplayName] = useState("")
   const [authAcceptedTerms, setAuthAcceptedTerms] = useState(false)
   const [authMarketingConsent, setAuthMarketingConsent] = useState(false) // GDPR: Must be unchecked by default - pre-ticked boxes don't constitute valid consent (Recital 32)
@@ -1435,6 +1437,8 @@ export default function PlantSwipe() {
       setAuthEmail("")
       setAuthPassword("")
       setAuthPassword2("")
+      setShowPassword(false)
+      setShowConfirmPassword(false)
       setAuthDisplayName("")
     }
   }, [authOpen])
@@ -1444,6 +1448,9 @@ export default function PlantSwipe() {
       setAuthAcceptedTerms(false)
       setAuthMarketingConsent(false) // Reset to default (unchecked - GDPR compliant)
     }
+    // Reset password visibility when switching auth modes
+    setShowPassword(false)
+    setShowConfirmPassword(false)
   }, [authMode])
 
 
@@ -1631,12 +1638,34 @@ export default function PlantSwipe() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="password">{t('auth.password')}</Label>
-                  <Input id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
+                  <div className="relative">
+                    <Input id="password" type={showPassword ? "text" : "password"} placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} className="pr-10" />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 {authMode === 'signup' && (
                   <div className="grid gap-2">
                     <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
-                    <Input id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+                    <div className="relative">
+                      <Input id="confirm" type={showConfirmPassword ? "text" : "password"} placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} className="pr-10" />
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onClick={() => setShowConfirmPassword((v) => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                 )}
                 {authMode === 'signup' && (
@@ -2342,12 +2371,34 @@ export default function PlantSwipe() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">{t('auth.password')}</Label>
-              <Input id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
+              <div className="relative">
+                <Input id="password" type={showPassword ? "text" : "password"} placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} className="pr-10" />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
             {authMode === 'signup' && (
               <div className="grid gap-2">
                 <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
-                <Input id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+                <div className="relative">
+                  <Input id="confirm" type={showConfirmPassword ? "text" : "password"} placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} className="pr-10" />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             )}
             {authMode === 'signup' && (
