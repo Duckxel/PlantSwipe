@@ -347,6 +347,36 @@ used_at     TIMESTAMPTZ
 UNIQUE(user_id, code)
 ```
 
+### `plant_scans`
+
+```sql
+id                          UUID PRIMARY KEY
+user_id                     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+image_url                   TEXT NOT NULL
+image_path                  TEXT             -- Storage path if stored in Supabase
+image_bucket                TEXT DEFAULT 'PHOTOS'
+api_access_token            TEXT             -- Kindwise API access token for the request
+api_model_version           TEXT             -- e.g., 'plant_id:3.1.0'
+api_status                  TEXT DEFAULT 'pending'  -- pending, processing, completed, failed
+api_response                JSONB            -- Full API response stored for reference
+is_plant                    BOOLEAN
+is_plant_probability        NUMERIC(5,4)     -- 0.0000 to 1.0000
+top_match_name              TEXT
+top_match_scientific_name   TEXT
+top_match_probability       NUMERIC(5,4)
+top_match_entity_id         TEXT
+suggestions                 JSONB DEFAULT '[]'  -- All identification suggestions
+similar_images              JSONB DEFAULT '[]'  -- Similar images from API
+latitude                    NUMERIC(9,6)
+longitude                   NUMERIC(9,6)
+classification_level        TEXT DEFAULT 'species'  -- 'species', 'all', or 'genus'
+matched_plant_id            TEXT REFERENCES plants(id) ON DELETE SET NULL
+user_notes                  TEXT
+created_at                  TIMESTAMPTZ DEFAULT NOW()
+updated_at                  TIMESTAMPTZ DEFAULT NOW()
+deleted_at                  TIMESTAMPTZ      -- Soft delete
+```
+
 ---
 
 ## Row Level Security (RLS)
