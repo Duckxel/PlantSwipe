@@ -910,8 +910,8 @@ BEGIN
   IF NEW.status = 'pending' THEN
     -- Count pending friend requests sent by this user in the last hour
     SELECT COUNT(*)::INTEGER INTO v_request_count
-    FROM public.friends
-    WHERE user_id = NEW.user_id
+    FROM public.friend_requests
+    WHERE requester_id = NEW.requester_id
       AND status = 'pending'
       AND created_at > NOW() - v_window_interval;
     
@@ -924,9 +924,12 @@ BEGIN
 END;
 $$;
 
+-- Remove the old incorrect trigger from the friends table
 DROP TRIGGER IF EXISTS friend_request_rate_limit_trigger ON public.friends;
+-- Create the trigger on the correct table: friend_requests
+DROP TRIGGER IF EXISTS friend_request_rate_limit_trigger ON public.friend_requests;
 CREATE TRIGGER friend_request_rate_limit_trigger
-  BEFORE INSERT ON public.friends
+  BEFORE INSERT ON public.friend_requests
   FOR EACH ROW
   EXECUTE FUNCTION public.check_friend_request_rate_limit();
 
