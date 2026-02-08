@@ -1,5 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState } from "react"
+import { useNodeViewEditingRef } from "@/lib/tiptap-utils"
 import type { CodeType } from "./sensitive-code-node-extension"
 
 const CODE_TYPES: { value: CodeType; label: string; icon: string; description: string }[] = [
@@ -60,6 +61,7 @@ export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeView
   }
 
   const [isEditing, setIsEditing] = useState(false)
+  const editingRef = useNodeViewEditingRef()
 
   const styles = EMAIL_STYLES[type] || EMAIL_STYLES.otp
   const currentType = CODE_TYPES.find((t) => t.value === type) || CODE_TYPES[0]
@@ -72,12 +74,12 @@ export function SensitiveCodeNode({ node, updateAttributes, selected }: NodeView
       {isEditing ? (
         // Editing mode - keep the nice UI for editing
         <div
+          ref={editingRef}
           className="relative mx-auto max-w-md rounded-2xl border-[3px] border-dashed p-7 transition-all"
           style={{ backgroundColor: styles.bg, borderColor: styles.borderColor }}
           contentEditable={false}
           data-node-editing
           onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="space-y-4">
             {/* Type selector */}

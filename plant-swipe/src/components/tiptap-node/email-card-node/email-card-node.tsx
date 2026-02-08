@@ -1,5 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback } from "react"
+import { useNodeViewEditingRef } from "@/lib/tiptap-utils"
 import type { CardStyle } from "./email-card-node-extension"
 
 const CARD_STYLES: { value: CardStyle; label: string; bg: string; border: string }[] = [
@@ -22,6 +23,7 @@ export function EmailCardNode({ node, updateAttributes, selected }: NodeViewProp
   }
 
   const [isEditing, setIsEditing] = useState(false)
+  const editingRef = useNodeViewEditingRef()
 
   const handleTitleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,7 +93,7 @@ export function EmailCardNode({ node, updateAttributes, selected }: NodeViewProp
           {/* Content */}
           <div className="flex-1 min-w-0">
             {isEditing ? (
-              <div className="space-y-3" contentEditable={false} data-node-editing onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+              <div ref={editingRef} className="space-y-3" contentEditable={false} data-node-editing onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
                   value={title}

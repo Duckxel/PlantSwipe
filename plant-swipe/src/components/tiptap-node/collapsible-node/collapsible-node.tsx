@@ -2,6 +2,7 @@ import { NodeViewWrapper, NodeViewContent, type NodeViewProps } from "@tiptap/re
 import { useState, useCallback, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { ChevronDown, ChevronRight, Settings2, GripVertical } from "lucide-react"
+import { useNodeViewEditingRef } from "@/lib/tiptap-utils"
 import type { CollapsibleStyle } from "./collapsible-node-extension"
 
 const COLLAPSIBLE_STYLES: { value: CollapsibleStyle; label: string; icon: string }[] = [
@@ -59,6 +60,7 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
 
   const [showSettings, setShowSettings] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const titleEditingRef = useNodeViewEditingRef()
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
   const titleInputRef = useRef<HTMLInputElement>(null)
   const settingsRef = useRef<HTMLDivElement>(null)
@@ -158,7 +160,6 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
         }`}
         contentEditable={false}
         data-node-editing
-        onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
         <div
@@ -192,17 +193,19 @@ export function CollapsibleNode({ node, updateAttributes, selected }: NodeViewPr
         {/* Title */}
         <div className="flex-1 min-w-0">
           {isEditingTitle ? (
-            <input
-              ref={titleInputRef}
-              type="text"
-              value={title}
-              onChange={handleTitleChange}
-              onBlur={handleTitleBlur}
-              onKeyDown={handleTitleKeyDown}
-              className={`w-full bg-white dark:bg-stone-800 rounded-lg px-3 py-1.5 text-sm font-semibold border border-stone-200 dark:border-stone-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${classes.accent}`}
-              placeholder="Section title..."
-              onClick={(e) => e.stopPropagation()}
-            />
+            <div ref={titleEditingRef}>
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={title}
+                onChange={handleTitleChange}
+                onBlur={handleTitleBlur}
+                onKeyDown={handleTitleKeyDown}
+                className={`w-full bg-white dark:bg-stone-800 rounded-lg px-3 py-1.5 text-sm font-semibold border border-stone-200 dark:border-stone-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${classes.accent}`}
+                placeholder="Section title..."
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           ) : (
             <span
               onClick={handleTitleClick}

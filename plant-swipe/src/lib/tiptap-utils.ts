@@ -7,6 +7,7 @@ import {
   TextSelection,
 } from "@tiptap/pm/state"
 import type { Editor, NodeWithPos } from "@tiptap/react"
+import { useCallback, useEffect, useRef } from "react"
 import { uploadBlogImage } from "@/lib/blogMedia"
 
 export const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
@@ -72,6 +73,68 @@ export const shouldStopNodeViewEvent = (event: Event) => {
   if (target.closest("[data-node-editing]")) return true
 
   return false
+}
+
+/**
+ * Events that must be stopped from propagating to ProseMirror when the user
+ * interacts with editing forms inside node views.
+ */
+const NODE_VIEW_EDITING_EVENTS = [
+  "mousedown", "mouseup", "click", "dblclick",
+  "keydown", "keyup", "keypress",
+  "input", "beforeinput",
+  "paste", "cut", "copy",
+  "compositionstart", "compositionend", "compositionupdate",
+] as const
+
+/**
+ * Returns a callback-ref to attach to a node-view editing container.
+ *
+ * Native DOM event listeners are attached that call `event.stopPropagation()`
+ * so that **no** mouse, keyboard, clipboard or composition event can bubble
+ * past the container into ProseMirror's editor-DOM listener.
+ *
+ * This is necessary because:
+ * 1. ProseMirror's `stopEvent` callback only runs inside PM's own handler —
+ *    the **browser's** contentEditable layer processes the native event first
+ *    and can interfere with cursor positioning inside `<input>` / `<textarea>`
+ *    elements nested in `contenteditable="false"` blocks.
+ * 2. React's `onMouseDown` etc. fire via delegation at the React root, which
+ *    is **above** ProseMirror's listener, so `e.stopPropagation()` in React
+ *    arrives too late.
+ *
+ * By placing a plain DOM listener on the editing container (which sits
+ * **below** the ProseMirror editor DOM in the bubble path), `stopPropagation`
+ * prevents the event from ever reaching ProseMirror.
+ *
+ * Usage:
+ * ```tsx
+ * const editingRef = useNodeViewEditingRef()
+ * return isEditing ? <div ref={editingRef} data-node-editing>…</div> : …
+ * ```
+ */
+export function useNodeViewEditingRef<T extends HTMLElement = HTMLDivElement>() {
+  const cleanupRef = useRef<(() => void) | null>(null)
+
+  const callbackRef = useCallback((el: T | null) => {
+    // Tear down previous listeners (if the ref is reassigned)
+    cleanupRef.current?.()
+    cleanupRef.current = null
+
+    if (!el) return
+
+    const stop = (e: Event) => e.stopPropagation()
+    NODE_VIEW_EDITING_EVENTS.forEach((evt) => el.addEventListener(evt, stop))
+
+    cleanupRef.current = () => {
+      NODE_VIEW_EDITING_EVENTS.forEach((evt) => el.removeEventListener(evt, stop))
+    }
+  }, [])
+
+  // Clean up on unmount
+  useEffect(() => () => cleanupRef.current?.(), [])
+
+  return callbackRef
 }
 
 /**
