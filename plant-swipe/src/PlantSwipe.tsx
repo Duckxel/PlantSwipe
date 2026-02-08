@@ -741,14 +741,33 @@ export default function PlantSwipe() {
     }
 
     return plants.map((p) => {
-      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors)
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
-      const normalizedColors = colors.map(c => c.toLowerCase().trim())
-      
+      // ⚡ Bolt: Optimize color processing to avoid intermediate arrays
+      const rawColors: string[] = []
+      const normalizedColors: string[] = []
+
+      // Legacy colors
+      if (Array.isArray(p.colors)) {
+        for (const c of p.colors) {
+          if (c) {
+            const s = String(c)
+            rawColors.push(s)
+            normalizedColors.push(s.toLowerCase().trim())
+          }
+        }
+      }
+
+      // Identity colors
+      if (Array.isArray(p.identity?.colors)) {
+        for (const c of p.identity.colors) {
+          // Handle both object and string format if necessary (though type says object)
+          const name = typeof c === 'object' && c?.name ? c.name : String(c)
+          if (name) {
+            rawColors.push(name)
+            normalizedColors.push(name.toLowerCase().trim())
+          }
+        }
+      }
+
       // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
       // This avoids regex operations during filtering
       // Enhanced: Also add translations for bi-directional matching
@@ -761,12 +780,28 @@ export default function PlantSwipe() {
         }
       })
 
-      // Search string - includes name, scientific name, meaning, colors, common names and synonyms
+      // ⚡ Bolt: Optimize search string generation to avoid intermediate strings and joins
       // This allows users to search by any name they might know the plant by
-      const commonNames = (p.identity?.commonNames || []).join(' ')
-      const synonyms = (p.identity?.synonyms || []).join(' ')
-      const givenNames = (p.identity?.givenNames || []).join(' ')
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+      const searchTerms: string[] = []
+      if (p.name) searchTerms.push(p.name)
+      if (p.scientificName) searchTerms.push(p.scientificName)
+      if (p.meaning) searchTerms.push(p.meaning)
+
+      // Add colors
+      for (const c of rawColors) searchTerms.push(c)
+
+      // Add aliases/synonyms
+      if (p.identity?.commonNames) {
+        for (const name of p.identity.commonNames) if (name) searchTerms.push(name)
+      }
+      if (p.identity?.synonyms) {
+        for (const name of p.identity.synonyms) if (name) searchTerms.push(name)
+      }
+      if (p.identity?.givenNames) {
+        for (const name of p.identity.givenNames) if (name) searchTerms.push(name)
+      }
+
+      const searchString = searchTerms.join(' ').toLowerCase()
 
       // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
