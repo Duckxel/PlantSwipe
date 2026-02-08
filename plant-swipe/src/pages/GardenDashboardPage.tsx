@@ -821,9 +821,22 @@ export const GardenDashboardPage: React.FC = () => {
                 // days would flip to green on subsequent reloads.  When both values
                 // are still at the template default (0), we trust the garden_tasks
                 // success flag which is the ground truth from the server.
+                //
+                // Exception: for TODAY, we have already computed the correct success
+                // value from real occurrence data (via getGardenTodayProgressUltraFast
+                // or the overview API).  A garden with 0 tasks legitimately has
+                // due=0, completed=0 and success=true.  Overriding today's cached
+                // success with the garden_tasks value causes the streak badge and
+                // today's heatmap cell to flash when garden_tasks hasn't been updated
+                // yet. Preserve the cached success for today to prevent this.
+                const isToday = day.date === today;
                 const hasRealOccurrenceData = finalDue > 0 || finalCompleted > 0;
                 const computedSuccess = finalDue === 0 || finalCompleted >= finalDue;
-                const finalSuccess = hasRealOccurrenceData ? computedSuccess : day.success;
+                const finalSuccess = hasRealOccurrenceData
+                  ? computedSuccess
+                  : isToday
+                    ? cached.success
+                    : day.success;
                 return {
                   ...day,
                   due: finalDue,
@@ -1506,9 +1519,30 @@ export const GardenDashboardPage: React.FC = () => {
         }
 
         if (kind === "settings" || kind === "general") {
-          // Settings: Update garden info
+          // Settings: Update garden info - use functional update to skip
+          // re-render when nothing meaningful changed (e.g. after
+          // refreshGardenStreak already updated the garden during load)
           const g0 = await getGarden(id);
-          if (g0) setGarden(g0);
+          if (g0) {
+            setGarden((prev) => {
+              if (
+                prev &&
+                prev.id === g0.id &&
+                prev.name === g0.name &&
+                prev.streak === g0.streak &&
+                prev.coverImageUrl === g0.coverImageUrl &&
+                prev.privacy === g0.privacy &&
+                prev.locationCity === g0.locationCity &&
+                prev.locationCountry === g0.locationCountry &&
+                prev.locationTimezone === g0.locationTimezone &&
+                prev.hideAiChat === g0.hideAiChat &&
+                prev.preferredLanguage === g0.preferredLanguage
+              ) {
+                return prev; // No change, skip re-render
+              }
+              return g0;
+            });
+          }
         }
       } catch (e) {
         // Fallback to full reload on error
@@ -4243,7 +4277,9 @@ function OverviewSection({
     return "bg-emerald-700 dark:bg-emerald-400";
   };
 
-  const days = Array.from({ length: 30 }, (_, i) => {
+  // Memoize days array to avoid recomputing on every parent re-render
+  // (only recompute when the anchor date or daily stats actually change)
+  const days = React.useMemo(() => Array.from({ length: 30 }, (_, i) => {
     const d = new Date(anchor);
     d.setDate(d.getDate() - (29 - i));
     const dateIso = d.toISOString().slice(0, 10);
@@ -4252,16 +4288,17 @@ function OverviewSection({
     const success = found ? found.success : false;
     const completed = found ? found.completed || 0 : 0;
     return { dayNum, isToday: i === 29, success, completed };
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [serverToday, dailyStats]);
 
-  const streak = (() => {
+  const streak = React.useMemo(() => {
     let s = baseStreak;
     if (serverToday) {
       const today = dailyStats.find((d) => d.date === serverToday);
       if (today && today.success) s = baseStreak + 1;
     }
     return s;
-  })();
+  }, [baseStreak, serverToday, dailyStats]);
 
   // Calculate task counts per plant - use server data or compute from todayTaskOccurrences
   const taskCountsPerPlant = React.useMemo(() => {
