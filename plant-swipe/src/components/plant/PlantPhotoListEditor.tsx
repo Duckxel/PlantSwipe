@@ -120,27 +120,27 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
                 value={photo.url}
                 onChange={(e) => updatePhoto(index, { url: e.target.value })}
                 placeholder="https://example.com/photo.jpg"
+                aria-label={`Photo URL ${index + 1}`}
               />
               <div className="flex flex-wrap gap-4 text-sm">
-                  <label className="flex items-center gap-2">
-                    <Select
-                      value={
-                        photo.isPrimary
-                          ? "primary"
-                          : photo.isVertical
-                          ? "vertical"
-                          : "other"
-                      }
-                      onChange={(e) =>
-                        setRole(index, e.target.value as "primary" | "vertical" | "other")
-                      }
-                      className="h-9 w-[140px] rounded-md px-3 py-1 text-sm"
-                    >
-                      <option value="primary">Primary</option>
-                      <option value="vertical">Vertical</option>
-                      <option value="other">Other</option>
-                    </Select>
-                  </label>
+                <Select
+                  value={
+                    photo.isPrimary
+                      ? "primary"
+                      : photo.isVertical
+                      ? "vertical"
+                      : "other"
+                  }
+                  onChange={(e) =>
+                    setRole(index, e.target.value as "primary" | "vertical" | "other")
+                  }
+                  className="h-9 w-[140px] rounded-md px-3 py-1 text-sm"
+                  aria-label={`Photo role ${index + 1}`}
+                >
+                  <option value="primary">Primary</option>
+                  <option value="vertical">Vertical</option>
+                  <option value="other">Other</option>
+                </Select>
               </div>
               <Button
                 type="button"
@@ -148,6 +148,7 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
                 onClick={() => removePhoto(index)}
                 disabled={list.length === 1}
                 className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                aria-label={`Remove photo ${index + 1}`}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
