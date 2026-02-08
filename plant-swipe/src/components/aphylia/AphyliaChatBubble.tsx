@@ -47,7 +47,7 @@ export const AphyliaChatBubble: React.FC<AphyliaChatBubbleProps> = ({
       aria-label={isOpen ? 'Close Aphylia chat' : 'Open Aphylia chat'}
     >
       <svg
-        className="w-12 h-12 md:w-14 md:h-14"
+        className="w-16 h-16 md:w-[4.5rem] md:h-[4.5rem]"
         viewBox="0 0 2000 2000"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
