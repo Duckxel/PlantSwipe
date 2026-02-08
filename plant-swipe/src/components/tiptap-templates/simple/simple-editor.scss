@@ -126,18 +126,21 @@ body,
 /*
  * Node view editing forms (cards, boxes, buttons, etc.)
  *
- * The global body { user-select: none } in index.scss is inherited by all
- * elements, including inputs/textareas inside node view editing forms.
- * When combined with the contentEditable context of the ProseMirror editor,
- * this prevents browsers from properly positioning the text cursor on click
- * within those inputs — even though they still receive focus and keyboard
- * input. Override with user-select: text so clicking inside a field moves
- * the caret to the clicked position.
+ * The editing container is set to contenteditable="true" (via JS) to create
+ * an "editable island" that fixes Firefox cursor positioning inside inputs.
+ * The styles below:
+ * 1. Override the global body { user-select: none } so clicks position the
+ *    caret correctly inside form fields.
+ * 2. Hide the blinking cursor on the container div itself (only inputs
+ *    should show a cursor).
+ * 3. Suppress the outline Firefox draws on focused contenteditable elements.
  */
 [data-node-editing] {
   -webkit-user-select: text;
   -ms-user-select: text;
   user-select: text;
+  caret-color: transparent;
+  outline: none !important;
 }
 
 [data-node-editing] input,
@@ -146,4 +149,5 @@ body,
   -webkit-user-select: text;
   -ms-user-select: text;
   user-select: text;
+  caret-color: auto;
 }

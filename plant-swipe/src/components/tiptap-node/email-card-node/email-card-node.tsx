@@ -93,7 +93,7 @@ export function EmailCardNode({ node, updateAttributes, selected }: NodeViewProp
           {/* Content */}
           <div className="flex-1 min-w-0">
             {isEditing ? (
-              <div ref={editingRef} className="space-y-3" contentEditable={false} data-node-editing onClick={(e) => e.stopPropagation()}>
+              <div ref={editingRef} className="space-y-3" data-node-editing onClick={(e) => e.stopPropagation()}>
                 <input
                   type="text"
                   value={title}

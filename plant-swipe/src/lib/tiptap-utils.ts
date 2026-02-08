@@ -90,28 +90,27 @@ const NODE_VIEW_EDITING_EVENTS = [
 /**
  * Returns a callback-ref to attach to a node-view editing container.
  *
- * Two layers of isolation are applied:
+ * Three layers of isolation are applied:
  *
- * **Layer 1 – stopPropagation on interactive events**
+ * **Layer 1 – `contenteditable="true"` editable island**
+ * The Tiptap atom-node wrapper has `contenteditable="false"`.  Firefox's
+ * contentEditable implementation prevents cursor positioning inside
+ * `<input>` / `<textarea>` elements nested in a non-editable block within
+ * an editable context.  By setting `contenteditable="true"` on the editing
+ * form container we create an "editable island" that Firefox treats
+ * normally — cursor click-to-position, text selection etc. all work.
+ * A `beforeinput` guard prevents accidental text entry directly into the
+ * container div (only form elements inside should accept input).
+ *
+ * **Layer 2 – `stopPropagation` on interactive events**
  * Native DOM listeners call `event.stopPropagation()` so that no mouse,
  * keyboard, clipboard or composition event can bubble past the container
- * into ProseMirror's editor-DOM listener.  React's synthetic handlers
- * fire too late (they delegate at the React root, which sits *above*
- * ProseMirror), so native listeners are required.
+ * into ProseMirror's editor-DOM listener.
  *
- * **Layer 2 – clear the browser Selection on focusin**
- * ProseMirror registers a `selectionchange` listener on the **document**
- * (not the editor DOM), which `stopPropagation` cannot intercept.
- * When focus moves into a form field, ProseMirror's handler detects that
- * its NodeSelection ranges are still present inside the editor DOM and
- * calls `selectionToDOM()` to "restore" them — stealing focus or
- * overwriting the cursor position inside the input/textarea.
- *
- * By clearing the browser Selection (`removeAllRanges`) when focus enters
- * the editing form, ProseMirror's `view.hasFocus()` returns `false` (it
- * checks `sel.rangeCount`), so the `selectionchange` handler becomes a
- * no-op.  The textarea/input cursor is completely independent of the
- * browser's Selection API, so clearing ranges does not affect it.
+ * **Layer 3 – clear browser Selection on `focusin`**
+ * ProseMirror's document-level `selectionchange` handler is neutered by
+ * clearing the browser Selection when focus enters the form, making
+ * `view.hasFocus()` return `false`.
  *
  * Usage:
  * ```tsx
@@ -129,14 +128,29 @@ export function useNodeViewEditingRef<T extends HTMLElement = HTMLDivElement>() 
 
     if (!el) return
 
+    // Layer 1: create an editable island so Firefox allows normal cursor
+    // positioning inside form elements.  The attribute is set directly on
+    // the DOM to override any React-applied contentEditable={false}.
+    el.contentEditable = "true"
+
+    // Prevent the contenteditable div itself from accepting typed text.
+    // Only form elements (input/textarea) inside should receive input.
+    const guardDirectInput = (e: Event) => {
+      if (e.target === el) e.preventDefault()
+      e.stopPropagation()
+    }
+
     const stop = (e: Event) => e.stopPropagation()
 
-    // Layer 1: stop interactive events from reaching ProseMirror
-    NODE_VIEW_EDITING_EVENTS.forEach((evt) => el.addEventListener(evt, stop))
+    // Layer 2: stop interactive events from reaching ProseMirror
+    NODE_VIEW_EDITING_EVENTS.forEach((evt) => {
+      // beforeinput gets the guard handler instead of plain stop
+      if (evt === "beforeinput") return
+      el.addEventListener(evt, stop)
+    })
+    el.addEventListener("beforeinput", guardDirectInput)
 
-    // Layer 2: neuter ProseMirror's document-level selectionchange handler
-    // by clearing the browser Selection whenever focus enters the editing
-    // form.  This makes view.hasFocus() → false → handler skips.
+    // Layer 3: neuter ProseMirror's document-level selectionchange handler
     const handleFocusIn = (e: Event) => {
       e.stopPropagation()
       try { window.getSelection()?.removeAllRanges() } catch { /* ignore */ }
@@ -149,7 +163,12 @@ export function useNodeViewEditingRef<T extends HTMLElement = HTMLDivElement>() 
     el.addEventListener("focusout", handleFocusOut)
 
     cleanupRef.current = () => {
-      NODE_VIEW_EDITING_EVENTS.forEach((evt) => el.removeEventListener(evt, stop))
+      el.contentEditable = "false"
+      NODE_VIEW_EDITING_EVENTS.forEach((evt) => {
+        if (evt === "beforeinput") return
+        el.removeEventListener(evt, stop)
+      })
+      el.removeEventListener("beforeinput", guardDirectInput)
       el.removeEventListener("focusin", handleFocusIn)
       el.removeEventListener("focusout", handleFocusOut)
     }
