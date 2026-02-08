@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey, getAccentOption, type AccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle, Bug, Medal } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle, Bug, Medal, Briefcase, ExternalLink, Leaf } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
 import type { UserRole } from "@/constants/userRoles"
 import { hasBugCatcherRole } from "@/constants/userRoles"
@@ -43,6 +43,10 @@ type PublicProfile = {
   is_private?: boolean | null
   disable_friend_requests?: boolean | null
   isAdminViewingPrivateNonFriend?: boolean | null
+  experience_level?: string | null
+  job?: string | null
+  profile_link?: string | null
+  show_country?: boolean | null
 }
 
 type PublicStats = {
@@ -165,7 +169,7 @@ export default function PublicProfilePage() {
           // Look up current user by ID
           const { data: profileData, error: pErr } = await supabase
             .from('profiles')
-            .select('id, display_name, country, bio, avatar_url, is_admin, roles, accent_key, is_private, disable_friend_requests')
+            .select('id, display_name, country, bio, avatar_url, is_admin, roles, accent_key, is_private, disable_friend_requests, experience_level, job, profile_link, show_country')
             .eq('id', user.id)
             .maybeSingle()
           if (!pErr && profileData) {
@@ -317,6 +321,10 @@ export default function PublicProfilePage() {
           is_private: profileIsPrivate,
           disable_friend_requests: Boolean(row.disable_friend_requests || false),
           isAdminViewingPrivateNonFriend: isAdminViewingPrivateNonFriend,
+          experience_level: row.experience_level || null,
+          job: row.job || null,
+          profile_link: row.profile_link || null,
+          show_country: row.show_country != null ? Boolean(row.show_country) : true,
         })
 
         // Only load stats and data if user can view profile
@@ -1036,7 +1044,21 @@ export default function PublicProfilePage() {
                   </div>
                   {canViewProfile && (
                     <>
-                      <div className="text-sm opacity-70 mt-1 flex items-center gap-1 justify-center sm:justify-start">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
+                      {/* Country + Job info line */}
+                      <div className="text-sm opacity-70 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 justify-center sm:justify-start">
+                        {pp.show_country !== false && pp.country ? (
+                          <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{pp.country}</span>
+                        ) : null}
+                        {pp.job ? (
+                          <span className="inline-flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" />{pp.job}</span>
+                        ) : null}
+                        {pp.experience_level ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                            <Leaf className="h-3 w-3" />
+                            {t(`setup.experience.${pp.experience_level}`, { defaultValue: pp.experience_level })}
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="text-xs opacity-70 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 justify-center sm:justify-start">
                         {pp.is_online ? (
                           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-500" />{t('profile.currentlyOnline')}</span>
@@ -1324,6 +1346,26 @@ export default function PublicProfilePage() {
               {canViewProfile && pp.bio && (
                 <div className="text-sm opacity-90 text-center sm:text-left">{pp.bio}</div>
               )}
+              {canViewProfile && pp.profile_link && (
+                <div className="text-center sm:text-left">
+                  <a
+                    href={pp.profile_link.startsWith('http') ? pp.profile_link : `https://${pp.profile_link}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:underline transition-colors"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    {(() => {
+                      try {
+                        const url = new URL(pp.profile_link.startsWith('http') ? pp.profile_link : `https://${pp.profile_link}`)
+                        return url.hostname.replace(/^www\./, '')
+                      } catch {
+                        return pp.profile_link
+                      }
+                    })()}
+                  </a>
+                </div>
+              )}
               {!canViewProfile && !isOwner && pp.is_private && (
                 <div className="mt-4 p-4 rounded-xl bg-stone-50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-700 flex items-start gap-3">
                   <Lock className="h-5 w-5 mt-0.5 text-stone-600 dark:text-stone-400 shrink-0" />
@@ -1454,7 +1496,9 @@ export default function PublicProfilePage() {
                 display_name: (pp.display_name || ''),
                 country: (pp.country || ''),
                 bio: (pp.bio || ''),
-                experience_years: (profile?.experience_years != null ? String(profile.experience_years) : ''),
+                job: (pp.job || ''),
+                profile_link: (pp.profile_link || ''),
+                show_country: pp.show_country !== false,
                 accent_key: (pp.accent_key as AccentKey) || null,
               }}
               submitting={editSubmitting}
@@ -1484,9 +1528,10 @@ export default function PublicProfilePage() {
                   const updates: Record<string, any> = {
                     id: user.id,
                     display_name: dn,
-                    country: vals.country || null,
                     bio: vals.bio || null,
-                    experience_years: vals.experience_years ? Number(vals.experience_years) : null,
+                    job: vals.job || null,
+                    profile_link: vals.profile_link || null,
+                    show_country: vals.show_country,
                   }
 
                   const { error: uerr } = await supabase.from('profiles').upsert(updates, { onConflict: 'id' })

@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates
+- **Feb 8, 2026:** Added `job`, `profile_link`, `show_country` columns to `profiles` table for public profile display. Updated `get_profile_public_by_display_name` RPC to return `experience_level`, `job`, `profile_link`, `show_country`.
 - **Feb 5, 2026:** Restricted `plant_contributors` RLS write policy to admins/editors only (was previously open to all authenticated users).
 - **Feb 4, 2026:** Added `plant_contributors` table to store contributor names per plant.
 
@@ -254,6 +255,9 @@ notify_email                BOOLEAN DEFAULT true
 roles                       TEXT[] DEFAULT '{}'
 threat_level                INTEGER DEFAULT 0 (0-3)
 bug_points                  INTEGER DEFAULT 0
+job                         TEXT                    -- Optional job/occupation displayed on public profile
+profile_link                TEXT                    -- Optional external URL displayed on public profile
+show_country                BOOLEAN DEFAULT true    -- Whether to display country on public profile
 liked_plant_ids             TEXT[] DEFAULT '{}'
 is_admin                    BOOLEAN DEFAULT false
 -- GDPR fields

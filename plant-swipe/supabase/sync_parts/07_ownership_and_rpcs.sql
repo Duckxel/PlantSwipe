@@ -435,7 +435,11 @@ returns table(
   disable_friend_requests boolean,
   joined_at timestamptz,
   last_seen_at timestamptz,
-  is_online boolean
+  is_online boolean,
+  experience_level text,
+  job text,
+  profile_link text,
+  show_country boolean
 )
 language sql
 stable
@@ -443,7 +447,7 @@ security definer
 set search_path = public
 as $$
   with base as (
-    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.roles, '{}') as roles, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests
+    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.roles, '{}') as roles, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests, p.experience_level, p.job, p.profile_link, coalesce(p.show_country, true) as show_country
     from public.profiles p
     where lower(p.display_name) = lower(_name)
     limit 1
@@ -471,7 +475,11 @@ as $$
          b.disable_friend_requests,
          a.joined_at,
          l.last_seen_at,
-         coalesce((l.last_seen_at is not null and (now() - l.last_seen_at) <= make_interval(mins => 10)), false) as is_online
+         coalesce((l.last_seen_at is not null and (now() - l.last_seen_at) <= make_interval(mins => 10)), false) as is_online,
+         b.experience_level,
+         b.job,
+         b.profile_link,
+         b.show_country
   from base b
   left join auth_meta a on a.id = b.id
   left join ls l on l.user_id = b.id

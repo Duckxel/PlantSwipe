@@ -68,6 +68,9 @@ export type ProfileRow = {
   timezone?: string | null
   language?: string | null
   experience_years?: number | null
+  job?: string | null
+  profile_link?: string | null
+  show_country?: boolean | null
   accent_key?: string | null
   is_private?: boolean | null
   disable_friend_requests?: boolean | null

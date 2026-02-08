@@ -4,15 +4,20 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import type { AccentKey } from "@/lib/accent"
 import { useTranslation } from "react-i18next"
+import { MapPin, ExternalLink, ArrowRight } from "lucide-react"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
 
 export type EditProfileValues = {
   display_name: string
   country: string
   bio: string
-  experience_years: string
+  job: string
+  profile_link: string
+  show_country: boolean
   accent_key: AccentKey | null
 }
 
@@ -25,11 +30,12 @@ export const EditProfileDialog: React.FC<{
   error?: string | null
 }> = ({ open, onOpenChange, initial, onSubmit, submitting, error }) => {
   const { t } = useTranslation('common')
+  const navigate = useLanguageNavigate()
   const [values, setValues] = React.useState<EditProfileValues>(initial)
 
   React.useEffect(() => { setValues(initial) }, [initial])
 
-  const set = (k: keyof EditProfileValues, v: string) => setValues((prev) => ({ ...prev, [k]: v }))
+  const set = (k: keyof EditProfileValues, v: string | boolean) => setValues((prev) => ({ ...prev, [k]: v }))
 
   const chooseAccent = (key: AccentKey) => {
     set('accent_key', key)
@@ -55,17 +61,71 @@ export const EditProfileDialog: React.FC<{
             <Label htmlFor="ep-name">{t('profile.editProfile.displayName')}</Label>
             <Input id="ep-name" value={values.display_name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('display_name', e.target.value)} />
           </div>
+
+          {/* Country - read-only with show/hide toggle and link to settings */}
           <div className="grid gap-2">
-            <Label htmlFor="ep-country">{t('profile.editProfile.country')}</Label>
-            <Input id="ep-country" value={values.country} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('country', e.target.value)} />
+            <Label className="flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 opacity-60" />
+              {t('profile.editProfile.country')}
+            </Label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2d2d30] px-3 py-2 text-sm text-stone-500 dark:text-stone-400">
+                {values.country || t('profile.editProfile.noCountrySet', { defaultValue: 'Not set' })}
+              </div>
+              <button
+                type="button"
+                onClick={() => { onOpenChange(false); navigate('/settings') }}
+                className="flex items-center gap-1 rounded-xl border border-stone-200 dark:border-[#3e3e42] px-3 py-2 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-[#2d2d30] transition-colors"
+                title={t('profile.editProfile.changeInSettings', { defaultValue: 'Change in settings' })}
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+                {t('profile.editProfile.changeInSettings', { defaultValue: 'Change in settings' })}
+              </button>
+            </div>
+            <div className="flex items-center justify-between mt-1">
+              <Label htmlFor="ep-show-country" className="text-xs opacity-70 cursor-pointer">
+                {t('profile.editProfile.showCountryOnProfile', { defaultValue: 'Show country on profile' })}
+              </Label>
+              <Switch
+                id="ep-show-country"
+                checked={values.show_country}
+                onCheckedChange={(checked) => set('show_country', checked)}
+              />
+            </div>
           </div>
+
+          {/* Job */}
           <div className="grid gap-2">
-            <Label htmlFor="ep-exp">{t('profile.editProfile.experienceYears')}</Label>
-            <Input id="ep-exp" type="number" inputMode="numeric" value={values.experience_years} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('experience_years', e.target.value)} />
+            <Label htmlFor="ep-job">{t('profile.editProfile.job', { defaultValue: 'Job' })}</Label>
+            <Input
+              id="ep-job"
+              value={values.job}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('job', e.target.value)}
+              placeholder={t('profile.editProfile.jobPlaceholder', { defaultValue: 'e.g. Landscape designer, Botanist...' })}
+              maxLength={100}
+            />
           </div>
+
+          {/* Bio */}
           <div className="grid gap-2">
             <Label htmlFor="ep-bio">{t('profile.editProfile.bio')}</Label>
             <Textarea id="ep-bio" value={values.bio} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => set('bio', e.target.value)} />
+          </div>
+
+          {/* External link */}
+          <div className="grid gap-2">
+            <Label htmlFor="ep-link" className="flex items-center gap-1.5">
+              <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+              {t('profile.editProfile.profileLink', { defaultValue: 'External link' })}
+            </Label>
+            <Input
+              id="ep-link"
+              type="url"
+              value={values.profile_link}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('profile_link', e.target.value)}
+              placeholder={t('profile.editProfile.profileLinkPlaceholder', { defaultValue: 'https://...' })}
+            />
+            <p className="text-[11px] opacity-50">{t('profile.editProfile.profileLinkHint', { defaultValue: 'Visitors will be redirected to this link in a new tab.' })}</p>
           </div>
 
           <div className="grid gap-2">
@@ -98,4 +158,3 @@ export const EditProfileDialog: React.FC<{
     </Dialog>
   )
 }
-

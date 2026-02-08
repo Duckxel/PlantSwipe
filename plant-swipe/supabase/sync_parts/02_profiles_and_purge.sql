@@ -36,6 +36,15 @@ alter table if exists public.profiles add column if not exists roles text[] defa
 alter table if exists public.profiles add column if not exists threat_level integer not null default 0 check (threat_level >= 0 and threat_level <= 3);
 -- Bug Catcher points: total accumulated bug points for users with bug_catcher role
 alter table if exists public.profiles add column if not exists bug_points integer default 0;
+-- Job title: optional job/occupation field shown on public profile
+alter table if exists public.profiles add column if not exists job text;
+COMMENT ON COLUMN public.profiles.job IS 'Optional job/occupation field displayed on public profile';
+-- Profile link: one external URL the user can display on their public profile
+alter table if exists public.profiles add column if not exists profile_link text;
+COMMENT ON COLUMN public.profiles.profile_link IS 'Optional external URL displayed on public profile (opens in new tab)';
+-- Show country: whether to display country on the public profile (default true)
+alter table if exists public.profiles add column if not exists show_country boolean default true;
+COMMENT ON COLUMN public.profiles.show_country IS 'Whether to display country on public profile. Editable from edit profile dialog.';
 -- Create GIN index for efficient role queries
 create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
 -- Create index for threat level queries
