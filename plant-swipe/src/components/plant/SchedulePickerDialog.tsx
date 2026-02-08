@@ -2,6 +2,7 @@
 import React from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Minus, Plus } from 'lucide-react'
 
 type Period = 'week' | 'month' | 'year'
 
@@ -260,15 +261,25 @@ export function SchedulePickerDialog(props: {
                 })}
               </div>
             </div>
-            <input
-              type="number"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
-              min={1}
-              max={maxForPeriod(lockToYear ? 'year' : period)}
-              value={String(amount)}
-              onChange={(e) => handleAmountChange(Number(e.target.value || '1'))}
-              disabled={!!lockToYear}
-            />
+            <div className="flex items-center gap-0 rounded-md border border-input bg-transparent overflow-hidden h-9">
+              <button
+                type="button"
+                onClick={() => handleAmountChange(amount - 1)}
+                disabled={amount <= 1 || !!lockToYear}
+                className="h-full w-9 flex items-center justify-center text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-700 disabled:opacity-30 transition-colors"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <span className="flex-1 text-center font-bold text-base tabular-nums select-none">{amount}</span>
+              <button
+                type="button"
+                onClick={() => handleAmountChange(amount + 1)}
+                disabled={amount >= maxForPeriod(lockToYear ? 'year' : period) || !!lockToYear}
+                className="h-full w-9 flex items-center justify-center text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-700 disabled:opacity-30 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
           </div>
             <div className="text-xs opacity-60">
               {(!lockToYear && period === 'week') && 'Max 7 per week.'}
