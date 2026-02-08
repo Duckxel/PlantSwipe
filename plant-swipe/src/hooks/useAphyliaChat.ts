@@ -98,9 +98,34 @@ export function useAphyliaChat(options?: UseAphyliaChatOptions): UseAphyliaChatR
   const gardenContextRef = useRef(options?.gardenContext || null)
   const plantContextRef = useRef(options?.plantContext || null)
   
+  // Track previously auto-added garden chip to detect changes
+  const prevAutoGardenIdRef = useRef<string | null>(null)
+  
   // Update refs when options change (no re-render triggered)
   gardenContextRef.current = options?.gardenContext || null
   plantContextRef.current = options?.plantContext || null
+  
+  // Auto-include garden context chip whenever garden context is available
+  // This ensures the context is ALWAYS included with no user toggle
+  const gardenId = options?.gardenContext?.gardenId || null
+  const gardenName = options?.gardenContext?.gardenName || null
+  if (gardenId && gardenName && gardenId !== prevAutoGardenIdRef.current) {
+    prevAutoGardenIdRef.current = gardenId
+    // Synchronously set initial selectedChips to include garden chip
+    const gardenChip: ContextChip = {
+      type: 'garden',
+      id: gardenId,
+      label: gardenName,
+      data: { gardenId, gardenName }
+    }
+    setState(prev => {
+      const hasGardenChip = prev.selectedChips.some(c => c.type === 'garden' && c.id === gardenId)
+      if (hasGardenChip) return prev
+      // Replace any existing garden chip with the new one
+      const filteredChips = prev.selectedChips.filter(c => c.type !== 'garden')
+      return { ...prev, selectedChips: [gardenChip, ...filteredChips] }
+    })
+  }
   
   // Open chat panel
   const openChat = useCallback(() => {
@@ -253,14 +278,15 @@ export function useAphyliaChat(options?: UseAphyliaChatOptions): UseAphyliaChatR
     }))
   }, [])
   
-  // Clear messages
+  // Clear messages - preserves auto-included context chips (garden/plant)
   const clearMessages = useCallback(() => {
     abortStream()
     setState(prev => ({
       ...prev,
       messages: [],
       pendingAttachments: [],
-      selectedChips: []
+      // Keep auto-included context chips (garden context is always included)
+      selectedChips: prev.selectedChips.filter(c => c.type === 'garden' || c.type === 'plant')
     }))
   }, [abortStream])
   
