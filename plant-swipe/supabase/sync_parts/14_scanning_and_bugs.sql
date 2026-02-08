@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS public.plant_scans (
   latitude NUMERIC(9,6),
   longitude NUMERIC(9,6),
   
+  -- Classification level used for the identification request
+  classification_level TEXT DEFAULT 'species',  -- 'species', 'all', or 'genus'
+  
   -- Link to our database plant (if matched)
   matched_plant_id TEXT REFERENCES public.plants(id) ON DELETE SET NULL,
   
@@ -68,6 +71,7 @@ ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS suggestions JSONB DEFAUL
 ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS similar_images JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS latitude NUMERIC(9,6);
 ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS longitude NUMERIC(9,6);
+ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS classification_level TEXT DEFAULT 'species';
 ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS matched_plant_id TEXT;
 ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS user_notes TEXT;
 ALTER TABLE public.plant_scans ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
