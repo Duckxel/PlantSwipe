@@ -44,7 +44,6 @@ interface AphyliaChatPanelProps {
   input: string
   pendingAttachments: ChatAttachment[]
   selectedChips: ContextChip[]
-  availableChips: ContextChip[]
   isSending: boolean
   isStreaming: boolean
   onClose: () => void
@@ -53,8 +52,6 @@ interface AphyliaChatPanelProps {
   onSendMessage: (content?: string) => void
   onUploadImage: (file: File) => Promise<void>
   onRemoveAttachment: (id: string) => void
-  onAddChip: (chip: ContextChip) => void
-  onRemoveChip: (id: string) => void
   onClearMessages: () => void
   onQuickAction: (actionId: QuickActionId) => void
   onAbortStream: () => void
@@ -261,7 +258,6 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
   input,
   pendingAttachments,
   selectedChips,
-  availableChips,
   isSending,
   isStreaming,
   onClose,
@@ -270,8 +266,6 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
   onSendMessage,
   onUploadImage,
   onRemoveAttachment,
-  onAddChip,
-  onRemoveChip,
   onClearMessages,
   onQuickAction,
   onAbortStream,
@@ -513,19 +507,17 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       </div>
                     </div>
                     
-                    {/* Context chips */}
-                    {availableChips.length > 0 && (
+                    {/* Active context indicator - garden context is always included */}
+                    {selectedChips.length > 0 && (
                       <div className="space-y-2">
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide px-1">
-                          {t('aphylia.context.title', 'Add Context')}
+                          {t('aphylia.context.activeTitle', 'Context')}
                         </p>
                         <div className="flex flex-wrap gap-2">
-                          {availableChips.map(chip => (
+                          {selectedChips.map(chip => (
                             <ContextChipBadge
                               key={`${chip.type}-${chip.id}`}
                               chip={chip}
-                              selectable
-                              onSelect={() => onAddChip(chip)}
                             />
                           ))}
                         </div>
@@ -547,15 +539,14 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                 )}
               </div>
               
-              {/* Selected context chips */}
-              {selectedChips.length > 0 && (
+              {/* Active context chips (always included, non-removable) */}
+              {selectedChips.length > 0 && messages.length > 0 && (
                 <div className="flex-shrink-0 px-3 py-2 border-t border-gray-100 dark:border-gray-800">
                   <div className="flex flex-wrap gap-1.5">
                     {selectedChips.map(chip => (
                       <ContextChipBadge
                         key={`selected-${chip.type}-${chip.id}`}
                         chip={chip}
-                        onRemove={() => onRemoveChip(chip.id)}
                       />
                     ))}
                   </div>
