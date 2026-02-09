@@ -29,3 +29,7 @@
 ## 2025-05-26 - Search Keyboard Shortcut
 **Learning:** Adding a global search shortcut (⌘K/Ctrl+K) significantly improves navigation speed for power users. Visual hints in the search bar are essential for discoverability.
 **Action:** When implementing search, always include a keyboard shortcut and a visual badge (e.g., `<kbd>⌘K</kbd>`) when the input is empty.
+
+## 2025-05-27 - Garden List Empty State
+**Learning:** The "No gardens yet" empty state was previously just a text line, which failed to encourage new users to create their first garden.
+**Action:** Replaced the text-only empty state with a centered `Card` component featuring a `Sprout` icon and a prominent "Create Garden" button, aligning with the established empty state pattern used elsewhere in the app.
