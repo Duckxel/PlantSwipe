@@ -1102,7 +1102,6 @@ const rateLimitStores = {
   gardenJournal: new Map(),  // Journal entries
   pushNotify: new Map(),     // Push notification sending
   authAttempt: new Map(),    // Authentication attempts (brute force protection)
-  forgotUsername: new Map(),  // Forgot username requests (prevent email enumeration spam)
   forgotPassword: new Map(), // Forgot password requests (prevent magic link spam)
 }
 
@@ -1181,12 +1180,6 @@ const rateLimitConfig = {
     windowMs: 15 * 60 * 1000,  // 15 minutes
     maxAttempts: 10,
     perUser: true,
-  },
-  // Forgot username: 5 per 15 minutes per IP (prevent email enumeration)
-  forgotUsername: {
-    windowMs: 15 * 60 * 1000,  // 15 minutes
-    maxAttempts: 5,
-    perUser: false,
   },
   // Forgot password: 5 per 15 minutes per IP (prevent magic link spam)
   forgotPassword: {
@@ -9529,12 +9522,6 @@ const DEFAULT_EMAIL_TRIGGERS = [
     displayName: 'Email Verification Code',
     description: 'Sent when user needs to verify their email address (after setup). Contains a 6-character verification code. Variables: {{code}}, {{user}}, {{email}}',
   },
-  // Forgot Username
-  {
-    triggerType: 'FORGOT_USERNAME',
-    displayName: 'Forgot Username Reminder',
-    description: 'Sent when a user requests their username via the forgot username form. Variables: {{user}}, {{email}}',
-  },
   // Forgot Password (Magic Link)
   {
     triggerType: 'FORGOT_PASSWORD',
@@ -10089,7 +10076,6 @@ app.post('/api/send-security-email', async (req, res) => {
     'SUSPICIOUS_LOGIN_ALERT',
     'NEW_DEVICE_LOGIN',
     'EMAIL_VERIFICATION',
-    'FORGOT_USERNAME',
     'FORGOT_PASSWORD',
   ]
 
@@ -10115,73 +10101,6 @@ app.post('/api/send-security-email', async (req, res) => {
     : result?.reason === 'Email service not configured' ? 500 
     : 200
   res.status(status).json(result)
-})
-
-// =============================================================================
-// FORGOT USERNAME - Sends the user their username via email
-// =============================================================================
-
-/**
- * Forgot Username endpoint
- * Looks up user by email, sends their username via email template
- * SECURITY: Rate limited per IP to prevent email enumeration
- */
-app.post('/api/forgot-username', async (req, res) => {
-  // Rate limiting: prevent email enumeration / spam
-  if (await checkAndRecordRateLimit(req, res, 'forgotUsername', null)) {
-    return // Response already sent by rate limiter
-  }
-
-  const { email } = req.body || {}
-  if (!email || typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    return res.status(400).json({ error: 'A valid email address is required.' })
-  }
-
-  if (!sql) {
-    return res.status(500).json({ error: 'Database not configured' })
-  }
-
-  try {
-    // Look up user by email in auth.users, join with profiles
-    const rows = await sql`
-      select u.id, u.email, p.display_name, p.language
-      from auth.users u
-      join public.profiles p on p.id = u.id
-      where lower(u.email) = lower(${email.trim()})
-      limit 1
-    `
-
-    if (!rows || !rows.length) {
-      // SECURITY: Tell the user no account was found (per requirement)
-      return res.status(404).json({ found: false, error: 'No account found with this email address.' })
-    }
-
-    const user = rows[0]
-    const displayName = user.display_name || 'User'
-
-    // Send the forgot username email through the automation system
-    const result = await sendSecurityEmail('FORGOT_USERNAME', {
-      recipientEmail: user.email,
-      userId: user.id,
-      userDisplayName: displayName,
-      userLanguage: user.language || 'en',
-      extraContext: {
-        email: user.email,
-      }
-    })
-
-    if (result.sent) {
-      console.log(`[forgot-username] Sent username reminder to ${user.email}`)
-      return res.json({ found: true, sent: true })
-    } else {
-      console.warn(`[forgot-username] Failed to send email: ${result.reason}`)
-      // Still tell the user we found the account, but email failed
-      return res.json({ found: true, sent: false, reason: result.reason || 'Failed to send email' })
-    }
-  } catch (err) {
-    console.error('[forgot-username] Error:', err?.message || err)
-    return res.status(500).json({ error: 'An unexpected error occurred.' })
-  }
 })
 
 // =============================================================================

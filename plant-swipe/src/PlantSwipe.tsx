@@ -72,7 +72,6 @@ const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module =
 const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
 const SetupPageLazy = lazy(() => import("@/pages/SetupPage").then(module => ({ default: module.SetupPage })))
 const EmailVerificationPageLazy = lazy(() => import("@/pages/EmailVerificationPage").then(module => ({ default: module.EmailVerificationPage })))
-const ForgotUsernamePageLazy = lazy(() => import("@/pages/ForgotUsernamePage").then(module => ({ default: module.ForgotUsernamePage })))
 const ForgotPasswordPageLazy = lazy(() => import("@/pages/ForgotPasswordPage").then(module => ({ default: module.ForgotPasswordPage })))
 const PasswordChangePageLazy = lazy(() => import("@/pages/PasswordChangePage").then(module => ({ default: module.PasswordChangePage })))
 
@@ -1470,7 +1469,7 @@ export default function PlantSwipe() {
     // IMPORTANT: Legal update modal takes priority over setup - don't redirect if user needs to accept new terms
     const needsSetup = user && profile && profile.setup_completed !== true
     // Only exclude: setup page itself, admin panel, landing page, and forgot/password-change pages
-    const setupExcludedPaths = ['/setup', '/admin', '/forgot-username', '/forgot-password', '/password-change']
+    const setupExcludedPaths = ['/setup', '/admin', '/forgot-password', '/password-change']
     const isExcludedFromSetup = pathWithoutLang === '/' || setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !isExcludedFromSetup
 
@@ -1479,15 +1478,14 @@ export default function PlantSwipe() {
     // SECURITY: Use !== true to catch both false AND null/undefined values
     const needsEmailVerification = user && profile && profile.setup_completed === true && profile.email_verified !== true
     // Exclude: verify-email page itself, admin panel, landing page, and forgot/password-change pages
-    const emailVerifyExcludedPaths = ['/verify-email', '/admin', '/forgot-username', '/forgot-password', '/password-change']
+    const emailVerifyExcludedPaths = ['/verify-email', '/admin', '/forgot-password', '/password-change']
     const isExcludedFromEmailVerify = pathWithoutLang === '/' || emailVerifyExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToEmailVerify = needsEmailVerification && !needsLegalUpdate && !shouldRedirectToSetup && !isExcludedFromEmailVerify
     
     // Email verification page - full screen experience
     const isEmailVerificationPage = pathWithoutLang === "/verify-email"
 
-    // Forgot username/password pages - accessible without login (full screen)
-    const isForgotUsernamePage = pathWithoutLang === "/forgot-username"
+    // Forgot password page - accessible without login (full screen)
     const isForgotPasswordPage = pathWithoutLang === "/forgot-password"
 
     // Password change page - full screen, only for logged-in users who must change password
@@ -1582,20 +1580,6 @@ export default function PlantSwipe() {
       return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
           <Navigate to="/verify-email" replace />
-        </AuthActionsProvider>
-      )
-    }
-
-    // Forgot username page - full screen, accessible without login
-    if (isForgotUsernamePage) {
-      return (
-        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
-          <ErrorBoundary fallback={routeErrorFallback}>
-            <Suspense fallback={routeLoadingFallback}>
-              <ForgotUsernamePageLazy />
-            </Suspense>
-          </ErrorBoundary>
-          <CookieConsent />
         </AuthActionsProvider>
       )
     }
@@ -1795,15 +1779,7 @@ export default function PlantSwipe() {
                     )}
                   </div>
                   {authMode === 'login' && (
-                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
-                      <button
-                        className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
-                        onClick={() => { setAuthOpen(false); navigate('/forgot-username') }}
-                        disabled={authSubmitting}
-                      >
-                        {t('auth.forgotUsername', 'Forgot Username?')}
-                      </button>
-                      <span className="text-stone-300 dark:text-stone-600 select-none" aria-hidden="true">·</span>
+                    <div className="text-center text-[11px]">
                       <button
                         className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
                         onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
@@ -2549,15 +2525,7 @@ export default function PlantSwipe() {
                 )}
               </div>
               {authMode === 'login' && (
-                <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
-                  <button
-                    className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
-                    onClick={() => { setAuthOpen(false); navigate('/forgot-username') }}
-                    disabled={authSubmitting}
-                  >
-                    {t('auth.forgotUsername', 'Forgot Username?')}
-                  </button>
-                  <span className="text-stone-300 dark:text-stone-600 select-none" aria-hidden="true">·</span>
+                <div className="text-center text-[11px]">
                   <button
                     className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
                     onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
