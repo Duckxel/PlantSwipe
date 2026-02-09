@@ -509,19 +509,6 @@ export default function SettingsPage() {
         secureHeaders['Authorization'] = `Bearer ${session.access_token}`
       }
 
-      // Reset email_verified to false since user is changing their email
-      // They will need to verify the new email address via OTP
-      if (user?.id) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({ email_verified: false })
-          .eq('id', user.id)
-        
-        if (profileError) {
-          console.warn('[email-change] Failed to reset email_verified:', profileError)
-        }
-      }
-
       // Send OTP verification code to the NEW email address
       // The server will validate the email, check availability, store the target email,
       // and send the verification code to the new address.
@@ -548,6 +535,19 @@ export default function SettingsPage() {
           throw new Error(t('settings.email.emailAlreadyInUse', { defaultValue: 'This email is already in use by another account.' }))
         }
         throw new Error(errorData.error || errorData.reason || t('settings.email.failedToUpdate'))
+      }
+
+      // OTP sent successfully — now reset email_verified to false
+      // (only after send succeeds, so a failure doesn't leave the current email unverified)
+      if (user?.id) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ email_verified: false })
+          .eq('id', user.id)
+        
+        if (profileError) {
+          console.warn('[email-change] Failed to reset email_verified:', profileError)
+        }
       }
 
       // Refresh profile to get the updated email_verified status

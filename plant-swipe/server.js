@@ -10660,10 +10660,27 @@ app.post('/api/email-verification/send', requireCsrfToken, async (req, res) => {
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes from now
 
     // Insert the new code (with optional target_email for email change flow)
-    await sql`
-      insert into email_verification_codes (user_id, code, expires_at, target_email)
-      values (${authUser.id}, ${code}, ${expiresAt.toISOString()}, ${targetEmail})
-    `
+    // Gracefully handle missing target_email column (migration may not have run yet)
+    try {
+      await sql`
+        insert into email_verification_codes (user_id, code, expires_at, target_email)
+        values (${authUser.id}, ${code}, ${expiresAt.toISOString()}, ${targetEmail})
+      `
+    } catch (insertErr) {
+      if (insertErr?.message?.includes('target_email') || insertErr?.code === '42703') {
+        if (isEmailChange) {
+          console.error('[email-verification/send] target_email column missing – run schema sync to enable email change')
+          return res.status(500).json({ error: 'Email change requires a database migration. Please run schema sync.', code: 'MIGRATION_PENDING' })
+        }
+        // Standard verification – insert without target_email
+        await sql`
+          insert into email_verification_codes (user_id, code, expires_at)
+          values (${authUser.id}, ${code}, ${expiresAt.toISOString()})
+        `
+      } else {
+        throw insertErr
+      }
+    }
 
     // SECURITY: Do not log the actual code - only log that a code was generated
     console.log(`[email-verification] Generated verification code for user ${authUser.id.slice(0, 8)}...${isEmailChange ? ' (email change)' : ''} (expires ${expiresAt.toISOString()})`)
@@ -10740,13 +10757,30 @@ app.post('/api/email-verification/verify', requireCsrfToken, async (req, res) =>
     `
 
     // Look up the code (include target_email to detect email-change flow)
-    const codeRows = await sql`
-      select id, code, expires_at, used_at, target_email
-      from email_verification_codes
-      where user_id = ${authUser.id}
-      and code = ${normalizedCode}
-      limit 1
-    `
+    // Gracefully handle missing target_email column (migration may not have run yet)
+    let codeRows
+    try {
+      codeRows = await sql`
+        select id, code, expires_at, used_at, target_email
+        from email_verification_codes
+        where user_id = ${authUser.id}
+        and code = ${normalizedCode}
+        limit 1
+      `
+    } catch (selectErr) {
+      if (selectErr?.message?.includes('target_email') || selectErr?.code === '42703') {
+        // Fallback: column doesn't exist yet, query without it
+        codeRows = await sql`
+          select id, code, expires_at, used_at
+          from email_verification_codes
+          where user_id = ${authUser.id}
+          and code = ${normalizedCode}
+          limit 1
+        `
+      } else {
+        throw selectErr
+      }
+    }
 
     if (!codeRows || !codeRows.length) {
       // SECURITY: Do not log the attempted code to prevent log injection
