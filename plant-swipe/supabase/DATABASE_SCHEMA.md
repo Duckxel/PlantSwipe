@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates
+- **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type to `notification_automations` for event-driven notifications when a plant request is fulfilled via AI prefill or manual creation. Added `/api/admin/notify-plant-requesters` endpoint.
 - **Feb 8, 2026:** Added `job`, `profile_link`, `show_country` columns to `profiles` table for public profile display. Updated `get_profile_public_by_display_name` RPC to return `experience_level`, `job`, `profile_link`, `show_country`.
 - **Feb 5, 2026:** Restricted `plant_contributors` RLS write policy to admins/editors only (was previously open to all authenticated users).
 - **Feb 4, 2026:** Added `plant_contributors` table to store contributor names per plant.
@@ -152,7 +153,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `notification_campaigns` | Admin notification campaigns |
 | `notification_templates` | Notification message templates |
 | `notification_template_translations` | Template translations |
-| `notification_automations` | Automated notification rules |
+| `notification_automations` | Automated notification rules (cron-based and event-driven) |
 | `user_notifications` | User notification inbox |
 | `user_push_subscriptions` | Push notification subscriptions |
 
@@ -487,6 +488,15 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `invoke_edge_function(text, jsonb)` | Call Supabase edge function |
 | `cleanup_expired_verification_codes()` | Remove expired OTP codes |
 | `reset_email_verification_on_email_change(uuid)` | Reset verification on email change |
+
+### Notification Automation Trigger Types
+
+| Trigger Type | Kind | Description |
+|-------------|------|-------------|
+| `weekly_inactive_reminder` | Cron (hourly) | Sends reminders to users inactive 7+ days |
+| `daily_task_reminder` | Cron (hourly) | Sends reminders about incomplete tasks for today |
+| `journal_continue_reminder` | Cron (hourly) | Encourages users who journaled yesterday to continue |
+| `plant_request_fulfilled` | Event-driven | Notifies users when a plant they requested is added to the encyclopedia. Triggered by AI prefill or manual plant creation. Supports `{{plant}}` and `{{plantName}}` template variables. |
 
 ---
 
