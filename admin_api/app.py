@@ -2,6 +2,8 @@ import hmac
 import hashlib
 import os
 import subprocess
+import sys
+import re
 from typing import Set, Optional
 
 from flask import Flask, request, abort, jsonify, Response
@@ -60,7 +62,6 @@ def _init_sentry() -> None:
 
 def _scrub_pii_from_string(value: str) -> str:
     """Scrub PII patterns from a string."""
-    import re
     if not value:
         return value
     # Scrub email addresses
@@ -209,6 +210,17 @@ def _get_env_var(name: str, default: Optional[str] = None) -> str:
     return value
 
 
+def _validate_branch_name(name: str) -> None:
+    if not name:
+        return
+    if len(name) > 255:
+        abort(400, description="Branch name too long")
+    if name.startswith("-"):
+        abort(400, description="Branch name cannot start with hyphen")
+    if not re.match(r"^[a-zA-Z0-9_./-]+$", name):
+        abort(400, description="Branch name contains invalid characters")
+
+
 def _parse_allowed_services(env_value: str) -> Set[str]:
     services: Set[str] = set()
     for raw in env_value.split(","):
@@ -259,6 +271,16 @@ _load_repo_env()
 
 # Now read config variables AFTER env files are loaded
 APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
+
+# Fail Secure: Ensure default secret is not used in production
+if APP_SECRET == "change-me":
+    # If explicitly set to production, fail hard
+    if os.environ.get("FLASK_ENV") == "production":
+        print("CRITICAL: APP_SECRET (ADMIN_BUTTON_SECRET) is set to default 'change-me' in production! Exiting.", file=sys.stderr)
+        sys.exit(1)
+    else:
+        print("WARNING: APP_SECRET (ADMIN_BUTTON_SECRET) is set to default 'change-me'. This is insecure.", file=sys.stderr)
+
 ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
 # Allow nginx, node app, and admin api by default; can be overridden via env
 ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
@@ -613,6 +635,8 @@ def _run_refresh(branch: Optional[str], stream: bool):
 def admin_refresh_stream():
     _verify_request()
     branch = (request.args.get("branch") or "").strip() or None
+    if branch:
+        _validate_branch_name(branch)
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
@@ -626,6 +650,8 @@ def admin_refresh():
     _verify_request()
     body = request.get_json(silent=True) or {}
     branch = (request.args.get("branch") or body.get("branch") or "").strip() or None
+    if branch:
+        _validate_branch_name(branch)
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
