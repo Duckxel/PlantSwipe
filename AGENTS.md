@@ -27,7 +27,7 @@ Aphylia is a plant care application serving users in the European Union. All con
 **Before you begin:**
 - Read relevant documentation files
 - Start with `plant-swipe/README.md` for setup and commands
-- Read `plant-swipe/REUSABLE_COMPONENTS.md` before creating any new UI components, hooks, or validation utilities
+- Read `plant-swipe/src/REUSABLE_COMPONENTS.md` before creating any new UI components, hooks, or validation utilities
 - Understand the existing architecture
 - Follow the guidelines in this document
 - Ask questions if anything is unclear
@@ -307,7 +307,7 @@ if (cookieConsent.level === 'analytics' || cookieConsent.level === 'all') {
 **Before creating any new UI component, hook, or validation utility, you MUST read:**
 
 ```
-plant-swipe/REUSABLE_COMPONENTS.md
+plant-swipe/src/REUSABLE_COMPONENTS.md
 ```
 
 This document catalogues all shared components including:
@@ -319,7 +319,7 @@ This document catalogues all shared components including:
 
 **Rules:**
 - Always reuse existing components instead of creating new ones
-- If you add, modify, or remove a reusable component — **update `REUSABLE_COMPONENTS.md`**
+- If you add, modify, or remove a reusable component — **update `src/REUSABLE_COMPONENTS.md`**
 - Use `ValidatedInput` + `useFieldValidation` for any field that needs live validation
 - Use `PasswordRules` + `validatePassword` whenever a password field is created
 
@@ -438,7 +438,7 @@ await sendEmail(email);
 | File | Purpose |
 |------|---------|
 | `plant-swipe/supabase/DATABASE_SCHEMA.md` | Database documentation |
-| `plant-swipe/REUSABLE_COMPONENTS.md` | Reusable UI components & hooks reference |
+| `plant-swipe/src/REUSABLE_COMPONENTS.md` | Reusable UI components & hooks reference |
 | `plant-swipe/supabase/sync_parts/*.sql` | Schema definition files |
 | `plant-swipe/server.js` | Backend API |
 | `plant-swipe/src/PlantSwipe.tsx` | Main app component |
