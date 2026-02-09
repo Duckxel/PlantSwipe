@@ -1794,16 +1794,17 @@ export default function PlantSwipe() {
                   )}
                 </div>
                 {authMode === 'login' && (
-                  <div className="flex justify-center gap-4 text-xs text-stone-400 dark:text-stone-500">
+                  <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
                     <button
-                      className="hover:text-stone-600 dark:hover:text-stone-300 underline transition-colors"
+                      className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
                       onClick={() => { setAuthOpen(false); navigate('/forgot-username') }}
                       disabled={authSubmitting}
                     >
                       {t('auth.forgotUsername', 'Forgot Username?')}
                     </button>
+                    <span className="text-stone-300 dark:text-stone-600 select-none" aria-hidden="true">·</span>
                     <button
-                      className="hover:text-stone-600 dark:hover:text-stone-300 underline transition-colors"
+                      className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
                       onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
                       disabled={authSubmitting}
                     >
@@ -2545,16 +2546,17 @@ export default function PlantSwipe() {
               )}
             </div>
             {authMode === 'login' && (
-              <div className="flex justify-center gap-4 text-xs text-stone-400 dark:text-stone-500">
+              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
                 <button
-                  className="hover:text-stone-600 dark:hover:text-stone-300 underline transition-colors"
+                  className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
                   onClick={() => { setAuthOpen(false); navigate('/forgot-username') }}
                   disabled={authSubmitting}
                 >
                   {t('auth.forgotUsername', 'Forgot Username?')}
                 </button>
+                <span className="text-stone-300 dark:text-stone-600 select-none" aria-hidden="true">·</span>
                 <button
-                  className="hover:text-stone-600 dark:hover:text-stone-300 underline transition-colors"
+                  className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
                   onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
                   disabled={authSubmitting}
                 >
