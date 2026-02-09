@@ -302,7 +302,6 @@ import multer from 'multer'
 import sharp from 'sharp'
 import webpush from 'web-push'
 import cron from 'node-cron'
-import dns from 'dns'
 
 // Note: dotenv already loaded at top of file before Sentry init
 

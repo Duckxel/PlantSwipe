@@ -465,6 +465,17 @@
       "disposableEmail": "Disposable email addresses are not allowed. Please use a permanent email.",
       "domainCannotReceiveEmail": "This email domain cannot receive emails. Please check the address.",
       "domainNotFound": "This email domain does not exist. Please check the address."
+    },
+    "usernameErrors": {
+      "invalid": "Please enter a valid username",
+      "taken": "This username is already taken"
+    },
+    "passwordRules": {
+      "minLength": "At least 8 characters",
+      "hasLetter": "Contains a letter",
+      "hasNumber": "Contains a number",
+      "hasSpecial": "Contains a special character",
+      "tooWeak": "Password does not meet the requirements"
     }
   },
   "settings": {

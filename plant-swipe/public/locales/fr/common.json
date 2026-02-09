@@ -465,6 +465,17 @@
       "disposableEmail": "Les adresses e-mail jetables ne sont pas autorisées. Veuillez utiliser une adresse permanente.",
       "domainCannotReceiveEmail": "Ce domaine e-mail ne peut pas recevoir de messages. Veuillez vérifier l'adresse.",
       "domainNotFound": "Ce domaine e-mail n'existe pas. Veuillez vérifier l'adresse."
+    },
+    "usernameErrors": {
+      "invalid": "Veuillez entrer un nom d'utilisateur valide",
+      "taken": "Ce nom d'utilisateur est déjà pris"
+    },
+    "passwordRules": {
+      "minLength": "Au moins 8 caractères",
+      "hasLetter": "Contient une lettre",
+      "hasNumber": "Contient un chiffre",
+      "hasSpecial": "Contient un caractère spécial",
+      "tooWeak": "Le mot de passe ne respecte pas les exigences"
     }
   },
   "settings": {
