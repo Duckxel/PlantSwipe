@@ -1759,7 +1759,7 @@ export default function PlantSwipe() {
                 <div className="grid gap-1">
                   <Label htmlFor="password">{t('auth.password')}</Label>
                   <ValidatedInput id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} status={isSignupMode ? passwordValidation.status : 'idle'} error={passwordValidation.error} />
-                  {isSignupMode && <PasswordRules rules={passwordResult.rules} visible={authPassword.length > 0} />}
+                  {isSignupMode && <PasswordRules rules={passwordResult.rules} visible={authPassword.length > 0} allPassedLabel={t('auth.passwordRules.strong', { defaultValue: 'Password is strong' })} />}
                 </div>
                 {authMode === 'signup' && (
                   <div className="grid gap-1">
@@ -2471,7 +2471,7 @@ export default function PlantSwipe() {
             <div className="grid gap-1">
               <Label htmlFor="password">{t('auth.password')}</Label>
               <ValidatedInput id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} status={isSignupMode ? passwordValidation.status : 'idle'} error={passwordValidation.error} />
-              {isSignupMode && <PasswordRules rules={passwordResult.rules} visible={authPassword.length > 0} />}
+              {isSignupMode && <PasswordRules rules={passwordResult.rules} visible={authPassword.length > 0} allPassedLabel={t('auth.passwordRules.strong', { defaultValue: 'Password is strong' })} />}
             </div>
             {authMode === 'signup' && (
               <div className="grid gap-1">

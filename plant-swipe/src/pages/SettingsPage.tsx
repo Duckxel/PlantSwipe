@@ -1537,7 +1537,7 @@ export default function SettingsPage() {
                     status={newPasswordValidation.status}
                     error={newPasswordValidation.error}
                   />
-                  <PasswordRules rules={newPasswordResult.rules} visible={newPassword.length > 0} />
+                  <PasswordRules rules={newPasswordResult.rules} visible={newPassword.length > 0} allPassedLabel={t('auth.passwordRules.strong', { defaultValue: 'Password is strong' })} />
                 </div>
                 <div className="grid gap-1">
                   <Label htmlFor="confirm-password">{t('settings.password.confirmPassword')}</Label>

@@ -476,7 +476,8 @@
       "hasLetter": "Contient une lettre",
       "hasNumber": "Contient un chiffre",
       "hasSpecial": "Contient un caractère spécial",
-      "tooWeak": "Le mot de passe ne respecte pas les exigences"
+      "tooWeak": "Le mot de passe ne respecte pas les exigences",
+      "strong": "Le mot de passe est fort"
     }
   },
   "settings": {

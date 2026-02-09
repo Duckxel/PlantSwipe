@@ -476,7 +476,8 @@
       "hasLetter": "Contains a letter",
       "hasNumber": "Contains a number",
       "hasSpecial": "Contains a special character",
-      "tooWeak": "Password does not meet the requirements"
+      "tooWeak": "Password does not meet the requirements",
+      "strong": "Password is strong"
     }
   },
   "settings": {
