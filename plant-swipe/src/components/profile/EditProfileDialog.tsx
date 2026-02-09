@@ -2,6 +2,9 @@ import React from "react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { ValidatedInput } from "@/components/ui/validated-input"
+import { useFieldValidation } from "@/hooks/useFieldValidation"
+import { validateUsername } from "@/lib/username"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
@@ -10,6 +13,8 @@ import type { AccentKey } from "@/lib/accent"
 import { useTranslation } from "react-i18next"
 import { MapPin, ExternalLink, ArrowRight } from "lucide-react"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { useAuth } from "@/context/AuthContext"
+import { supabase } from "@/lib/supabaseClient"
 
 export type EditProfileValues = {
   display_name: string
@@ -31,11 +36,45 @@ export const EditProfileDialog: React.FC<{
 }> = ({ open, onOpenChange, initial, onSubmit, submitting, error }) => {
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
+  const { user } = useAuth()
   const [values, setValues] = React.useState<EditProfileValues>(initial)
 
   React.useEffect(() => { setValues(initial) }, [initial])
 
   const set = (k: keyof EditProfileValues, v: string | boolean) => setValues((prev) => ({ ...prev, [k]: v }))
+
+  // Debounced username validation (format + uniqueness check)
+  const usernameValidation = useFieldValidation(
+    values.display_name,
+    React.useCallback(async (val: string) => {
+      // Format check using shared utility
+      const fmt = validateUsername(val)
+      if (!fmt.valid) return { valid: false, error: fmt.error }
+
+      // If unchanged from initial, skip uniqueness check
+      if (fmt.normalized === initial.display_name.trim().toLowerCase()) {
+        return { valid: true }
+      }
+
+      // Uniqueness check (case-insensitive)
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('display_name', fmt.normalized!)
+          .neq('id', user?.id ?? '')
+          .maybeSingle()
+        if (data?.id) {
+          return { valid: false, error: t('profile.editProfile.displayNameTaken', { defaultValue: 'This username is already taken.' }) }
+        }
+      } catch {
+        // Network error – don't block, format validation passed
+      }
+
+      return { valid: true }
+    }, [initial.display_name, user?.id, t]),
+    400,
+  )
 
   const chooseAccent = (key: AccentKey) => {
     set('accent_key', key)
@@ -59,7 +98,14 @@ export const EditProfileDialog: React.FC<{
         <div className="space-y-3">
           <div className="grid gap-2">
             <Label htmlFor="ep-name">{t('profile.editProfile.displayName')}</Label>
-            <Input id="ep-name" value={values.display_name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('display_name', e.target.value)} />
+            <ValidatedInput
+              id="ep-name"
+              value={values.display_name}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('display_name', e.target.value)}
+              status={usernameValidation.status}
+              error={usernameValidation.error}
+              placeholder={t('profile.editProfile.displayNamePlaceholder', { defaultValue: 'Enter your username' })}
+            />
           </div>
 
           {/* Country - read-only with show/hide toggle and link to settings */}
@@ -152,7 +198,7 @@ export const EditProfileDialog: React.FC<{
         </div>
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
-          <Button onClick={submit} disabled={submitting}>{t('common.save')}</Button>
+          <Button onClick={submit} disabled={submitting || usernameValidation.status === 'error'}>{t('common.save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
