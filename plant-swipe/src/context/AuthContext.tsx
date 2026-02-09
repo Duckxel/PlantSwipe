@@ -85,10 +85,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, city, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, threat_level, terms_version_accepted, privacy_version_accepted, terms_accepted_date, privacy_policy_accepted_date, setup_completed, garden_type, experience_level, looking_for, notification_time, email_verified, force_password_change')
+      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, city, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, threat_level, terms_version_accepted, privacy_version_accepted, terms_accepted_date, privacy_policy_accepted_date, setup_completed, garden_type, experience_level, looking_for, notification_time, email_verified')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
+      // Try to fetch force_password_change separately (column may not exist yet)
+      // This avoids breaking the entire profile load if the migration hasn't run
+      const { data: pwData, error: pwError } = await supabase
+        .from('profiles')
+        .select('force_password_change')
+        .eq('id', currentId)
+        .maybeSingle()
+      if (!pwError && pwData && data) {
+        ;(data as any).force_password_change = pwData.force_password_change ?? false
+      }
       // Check if user is banned (threat_level === 3)
       if (data?.threat_level === 3) {
         console.warn('[auth] User is banned, signing out')
