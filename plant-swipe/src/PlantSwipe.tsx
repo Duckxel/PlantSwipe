@@ -72,6 +72,8 @@ const BookmarkPageLazy = lazy(() => import("@/pages/BookmarkPage").then(module =
 const LandingPageLazy = lazy(() => import("@/pages/LandingPage"))
 const SetupPageLazy = lazy(() => import("@/pages/SetupPage").then(module => ({ default: module.SetupPage })))
 const EmailVerificationPageLazy = lazy(() => import("@/pages/EmailVerificationPage").then(module => ({ default: module.EmailVerificationPage })))
+const ForgotPasswordPageLazy = lazy(() => import("@/pages/ForgotPasswordPage").then(module => ({ default: module.ForgotPasswordPage })))
+const PasswordChangePageLazy = lazy(() => import("@/pages/PasswordChangePage").then(module => ({ default: module.PasswordChangePage })))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
@@ -1466,8 +1468,8 @@ export default function PlantSwipe() {
     // Only redirect if not already on setup page and not on excluded pages
     // IMPORTANT: Legal update modal takes priority over setup - don't redirect if user needs to accept new terms
     const needsSetup = user && profile && profile.setup_completed !== true
-    // Only exclude: setup page itself, admin panel, and landing page (exact match for "/")
-    const setupExcludedPaths = ['/setup', '/admin']
+    // Only exclude: setup page itself, admin panel, landing page, and forgot/password-change pages
+    const setupExcludedPaths = ['/setup', '/admin', '/forgot-password', '/password-change']
     const isExcludedFromSetup = pathWithoutLang === '/' || setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !isExcludedFromSetup
 
@@ -1475,13 +1477,31 @@ export default function PlantSwipe() {
     // Only check if setup is completed to avoid conflicting with setup flow
     // SECURITY: Use !== true to catch both false AND null/undefined values
     const needsEmailVerification = user && profile && profile.setup_completed === true && profile.email_verified !== true
-    // Exclude: verify-email page itself, admin panel, and landing page
-    const emailVerifyExcludedPaths = ['/verify-email', '/admin']
+    // Exclude: verify-email page itself, admin panel, landing page, and forgot/password-change pages
+    const emailVerifyExcludedPaths = ['/verify-email', '/admin', '/forgot-password', '/password-change']
     const isExcludedFromEmailVerify = pathWithoutLang === '/' || emailVerifyExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToEmailVerify = needsEmailVerification && !needsLegalUpdate && !shouldRedirectToSetup && !isExcludedFromEmailVerify
     
     // Email verification page - full screen experience
     const isEmailVerificationPage = pathWithoutLang === "/verify-email"
+
+    // Forgot password page - accessible without login (full screen)
+    const isForgotPasswordPage = pathWithoutLang === "/forgot-password"
+
+    // Password change page - full screen, only for logged-in users who must change password
+    const isPasswordChangePage = pathWithoutLang === "/password-change"
+
+    // Check if user must change password (after forgot-password magic link login)
+    // Check both: DB flag (profile.force_password_change) and localStorage flag
+    // localStorage flag is set when user requests forgot-password, ensures redirect works
+    // even if the DB column hasn't been migrated yet
+    const localStorageForceChange = (() => {
+      try { return localStorage.getItem('plantswipe.force_password_change') === 'true' } catch { return false }
+    })()
+    const needsPasswordChange = user && profile && (profile.force_password_change === true || localStorageForceChange)
+    const passwordChangeExcludedPaths = ['/password-change', '/admin']
+    const isExcludedFromPasswordChange = passwordChangeExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    const shouldRedirectToPasswordChange = needsPasswordChange && !needsLegalUpdate && !isExcludedFromPasswordChange
 
     // Setup page - full screen wizard experience
     // Render directly without nested Routes since we've already determined the path
@@ -1566,6 +1586,43 @@ export default function PlantSwipe() {
       return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
           <Navigate to="/verify-email" replace />
+        </AuthActionsProvider>
+      )
+    }
+
+    // Forgot password page - full screen, accessible without login
+    if (isForgotPasswordPage) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <ErrorBoundary fallback={routeErrorFallback}>
+            <Suspense fallback={routeLoadingFallback}>
+              <ForgotPasswordPageLazy />
+            </Suspense>
+          </ErrorBoundary>
+          <CookieConsent />
+        </AuthActionsProvider>
+      )
+    }
+
+    // Password change page - full screen, for logged-in users who must change password
+    if (isPasswordChangePage && user) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <ErrorBoundary fallback={routeErrorFallback}>
+            <Suspense fallback={routeLoadingFallback}>
+              <PasswordChangePageLazy />
+            </Suspense>
+          </ErrorBoundary>
+          <CookieConsent />
+        </AuthActionsProvider>
+      )
+    }
+
+    // Redirect to password change if user must change their password
+    if (shouldRedirectToPasswordChange) {
+      return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <Navigate to="/password-change" replace />
         </AuthActionsProvider>
       )
     }
@@ -1716,21 +1773,34 @@ export default function PlantSwipe() {
                   </div>
                 )}
                 {authError && <div className="text-sm text-red-600">{authError}</div>}
-                <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
-                  {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
-                </Button>
-                <div className="text-center text-sm">
-                  {authMode === 'login' ? (
-                    <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
-                  ) : (
-                    <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
+                <div className="pt-2 space-y-3">
+                  <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
+                    {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
+                  </Button>
+                  <div className="text-center text-sm">
+                    {authMode === 'login' ? (
+                      <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
+                    ) : (
+                      <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
+                    )}
+                  </div>
+                  {authMode === 'login' && (
+                    <div className="text-center text-[11px]">
+                      <button
+                        className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
+                        onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
+                        disabled={authSubmitting}
+                      >
+                        {t('auth.forgotPassword', 'Forgot Password?')}
+                      </button>
+                    </div>
                   )}
+                  <p className="text-[10px] text-center text-stone-400 dark:text-stone-500">
+                    This site is protected by reCAPTCHA and the Google{' '}
+                    <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+                    <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+                  </p>
                 </div>
-                <p className="text-[10px] text-center text-stone-400 dark:text-stone-500 mt-2">
-                  This site is protected by reCAPTCHA and the Google{' '}
-                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
-                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
-                </p>
               </div>
             </DialogContent>
           </Dialog>
@@ -2449,22 +2519,35 @@ export default function PlantSwipe() {
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
-            <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
-              {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
-            </Button>
-            <div className="text-center text-sm">
-              {authMode === 'login' ? (
-                <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
-              ) : (
-                <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
+            <div className="pt-2 space-y-3">
+              <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
+                {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
+              </Button>
+              <div className="text-center text-sm">
+                {authMode === 'login' ? (
+                  <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
+                ) : (
+                  <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
+                )}
+              </div>
+              {authMode === 'login' && (
+                <div className="text-center text-[11px]">
+                  <button
+                    className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
+                    onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
+                    disabled={authSubmitting}
+                  >
+                    {t('auth.forgotPassword', 'Forgot Password?')}
+                  </button>
+                </div>
               )}
+              {/* reCAPTCHA disclosure (required when hiding the badge) */}
+              <p className="text-[10px] text-center text-stone-400 dark:text-stone-500">
+                This site is protected by reCAPTCHA and the Google{' '}
+                <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+                <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+              </p>
             </div>
-            {/* reCAPTCHA disclosure (required when hiding the badge) */}
-            <p className="text-[10px] text-center text-stone-400 dark:text-stone-500 mt-2">
-              This site is protected by reCAPTCHA and the Google{' '}
-              <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
-              <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
-            </p>
           </div>
         </DialogContent>
       </Dialog>

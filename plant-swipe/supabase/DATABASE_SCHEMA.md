@@ -274,6 +274,7 @@ experience_level            TEXT ('novice'|'intermediate'|'expert')
 looking_for                 TEXT ('eat'|'ornamental'|'various')
 notification_time           TEXT DEFAULT '10h' (0-23h)
 email_verified              BOOLEAN DEFAULT false
+force_password_change       BOOLEAN DEFAULT false  -- When true, user must change password before accessing app
 -- Communication preferences
 email_product_updates       BOOLEAN DEFAULT true
 email_tips_advice           BOOLEAN DEFAULT true

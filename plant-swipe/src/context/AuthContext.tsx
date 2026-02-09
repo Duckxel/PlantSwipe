@@ -89,6 +89,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
+      // Try to fetch force_password_change separately (column may not exist yet)
+      // This avoids breaking the entire profile load if the migration hasn't run
+      const { data: pwData, error: pwError } = await supabase
+        .from('profiles')
+        .select('force_password_change')
+        .eq('id', currentId)
+        .maybeSingle()
+      if (!pwError && pwData && data) {
+        ;(data as any).force_password_change = pwData.force_password_change ?? false
+      }
       // Check if user is banned (threat_level === 3)
       if (data?.threat_level === 3) {
         console.warn('[auth] User is banned, signing out')
