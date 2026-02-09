@@ -1783,40 +1783,42 @@ export default function PlantSwipe() {
                   </div>
                 )}
                 {authError && <div className="text-sm text-red-600">{authError}</div>}
-                <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
-                  {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
-                </Button>
-                <div className="text-center text-sm">
-                  {authMode === 'login' ? (
-                    <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
-                  ) : (
-                    <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
-                  )}
-                </div>
-                {authMode === 'login' && (
-                  <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
-                    <button
-                      className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
-                      onClick={() => { setAuthOpen(false); navigate('/forgot-username') }}
-                      disabled={authSubmitting}
-                    >
-                      {t('auth.forgotUsername', 'Forgot Username?')}
-                    </button>
-                    <span className="text-stone-300 dark:text-stone-600 select-none" aria-hidden="true">·</span>
-                    <button
-                      className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
-                      onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
-                      disabled={authSubmitting}
-                    >
-                      {t('auth.forgotPassword', 'Forgot Password?')}
-                    </button>
+                <div className="pt-2 space-y-3">
+                  <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
+                    {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
+                  </Button>
+                  <div className="text-center text-sm">
+                    {authMode === 'login' ? (
+                      <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
+                    ) : (
+                      <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
+                    )}
                   </div>
-                )}
-                <p className="text-[10px] text-center text-stone-400 dark:text-stone-500 mt-2">
-                  This site is protected by reCAPTCHA and the Google{' '}
-                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
-                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
-                </p>
+                  {authMode === 'login' && (
+                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
+                      <button
+                        className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
+                        onClick={() => { setAuthOpen(false); navigate('/forgot-username') }}
+                        disabled={authSubmitting}
+                      >
+                        {t('auth.forgotUsername', 'Forgot Username?')}
+                      </button>
+                      <span className="text-stone-300 dark:text-stone-600 select-none" aria-hidden="true">·</span>
+                      <button
+                        className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
+                        onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
+                        disabled={authSubmitting}
+                      >
+                        {t('auth.forgotPassword', 'Forgot Password?')}
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-center text-stone-400 dark:text-stone-500">
+                    This site is protected by reCAPTCHA and the Google{' '}
+                    <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+                    <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+                  </p>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
@@ -2535,41 +2537,43 @@ export default function PlantSwipe() {
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
-            <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
-              {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
-            </Button>
-            <div className="text-center text-sm">
-              {authMode === 'login' ? (
-                <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
-              ) : (
-                <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
-              )}
-            </div>
-            {authMode === 'login' && (
-              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
-                <button
-                  className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
-                  onClick={() => { setAuthOpen(false); navigate('/forgot-username') }}
-                  disabled={authSubmitting}
-                >
-                  {t('auth.forgotUsername', 'Forgot Username?')}
-                </button>
-                <span className="text-stone-300 dark:text-stone-600 select-none" aria-hidden="true">·</span>
-                <button
-                  className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
-                  onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
-                  disabled={authSubmitting}
-                >
-                  {t('auth.forgotPassword', 'Forgot Password?')}
-                </button>
+            <div className="pt-2 space-y-3">
+              <Button className="w-full rounded-2xl" onClick={submitAuth} loading={authSubmitting}>
+                {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
+              </Button>
+              <div className="text-center text-sm">
+                {authMode === 'login' ? (
+                  <button className="underline" onClick={() => setAuthMode('signup')} disabled={authSubmitting}>{t('auth.noAccount')}</button>
+                ) : (
+                  <button className="underline" onClick={() => setAuthMode('login')} disabled={authSubmitting}>{t('auth.haveAccount')}</button>
+                )}
               </div>
-            )}
-            {/* reCAPTCHA disclosure (required when hiding the badge) */}
-            <p className="text-[10px] text-center text-stone-400 dark:text-stone-500 mt-2">
-              This site is protected by reCAPTCHA and the Google{' '}
-              <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
-              <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
-            </p>
+              {authMode === 'login' && (
+                <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
+                  <button
+                    className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
+                    onClick={() => { setAuthOpen(false); navigate('/forgot-username') }}
+                    disabled={authSubmitting}
+                  >
+                    {t('auth.forgotUsername', 'Forgot Username?')}
+                  </button>
+                  <span className="text-stone-300 dark:text-stone-600 select-none" aria-hidden="true">·</span>
+                  <button
+                    className="text-stone-400 dark:text-stone-500 hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2 transition-colors"
+                    onClick={() => { setAuthOpen(false); navigate('/forgot-password') }}
+                    disabled={authSubmitting}
+                  >
+                    {t('auth.forgotPassword', 'Forgot Password?')}
+                  </button>
+                </div>
+              )}
+              {/* reCAPTCHA disclosure (required when hiding the badge) */}
+              <p className="text-[10px] text-center text-stone-400 dark:text-stone-500">
+                This site is protected by reCAPTCHA and the Google{' '}
+                <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+                <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+              </p>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
