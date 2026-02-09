@@ -5,9 +5,12 @@ import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { ValidatedInput } from "@/components/ui/validated-input"
+import { PasswordRules } from "@/components/ui/password-rules"
+import { useFieldValidation } from "@/hooks/useFieldValidation"
+import { validatePassword } from "@/lib/passwordValidation"
 import { Label } from "@/components/ui/label"
-import { KeyRound, Loader2, Check, Eye, EyeOff } from "lucide-react"
+import { KeyRound, Loader2, Check } from "lucide-react"
 
 /**
  * Get CSRF token from backend (SECURITY: Required for state-changing operations)
@@ -40,11 +43,32 @@ export function PasswordChangePage() {
 
   const [newPassword, setNewPassword] = React.useState('')
   const [confirmPassword, setConfirmPassword] = React.useState('')
-  const [showNewPassword, setShowNewPassword] = React.useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [success, setSuccess] = React.useState(false)
+
+  // Password strength validation with shared components
+  const newPasswordResult = React.useMemo(() => validatePassword(newPassword), [newPassword])
+  const newPasswordValidation = useFieldValidation(
+    newPassword,
+    React.useCallback(async (val: string) => {
+      const r = validatePassword(val)
+      if (!r.valid) return { valid: false, error: r.error }
+      return { valid: true }
+    }, []),
+    400,
+  )
+
+  // Confirm password validation
+  const confirmPasswordValidation = useFieldValidation(
+    confirmPassword,
+    React.useCallback(async (val: string) => {
+      if (!newPassword) return { valid: false, error: t('passwordChange.passwordsDontMatch', 'Passwords do not match.') }
+      if (val !== newPassword) return { valid: false, error: t('passwordChange.passwordsDontMatch', 'Passwords do not match.') }
+      return { valid: true }
+    }, [newPassword, t]),
+    400,
+  )
 
   // Redirect if no user
   React.useEffect(() => {
@@ -66,9 +90,9 @@ export function PasswordChangePage() {
   const handleSubmit = async () => {
     if (loading) return
 
-    // Validate
-    if (!newPassword || newPassword.length < 6) {
-      setError(t('passwordChange.passwordTooShort', 'Password must be at least 6 characters.'))
+    // Validate using shared password validation
+    if (!validatePassword(newPassword).valid) {
+      setError(t('auth.passwordRules.tooWeak', { defaultValue: 'Password does not meet the requirements' }))
       return
     }
 
@@ -298,52 +322,35 @@ export function PasswordChangePage() {
                     <Label htmlFor="new-password">
                       {t('passwordChange.newPasswordLabel', 'New Password')}
                     </Label>
-                    <div className="relative">
-                      <Input
-                        id="new-password"
-                        type={showNewPassword ? "text" : "password"}
-                        placeholder={t('passwordChange.newPasswordPlaceholder', 'Enter new password')}
-                        value={newPassword}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPassword(e.target.value)}
-                        disabled={loading}
-                        className="pr-10"
-                        autoComplete="new-password"
-                      />
-                      <button
-                        type="button"
-                        tabIndex={-1}
-                        onClick={() => setShowNewPassword((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
-                      >
-                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
+                    <ValidatedInput
+                      id="new-password"
+                      type="password"
+                      placeholder={t('passwordChange.newPasswordPlaceholder', 'Enter new password')}
+                      value={newPassword}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPassword(e.target.value)}
+                      disabled={loading}
+                      autoComplete="new-password"
+                      status={newPasswordValidation.status}
+                      error={newPasswordValidation.error}
+                    />
+                    <PasswordRules rules={newPasswordResult.rules} visible={newPassword.length > 0} allPassedLabel={t('auth.passwordRules.strong', { defaultValue: 'Password is strong' })} />
                   </div>
 
                   <div className="grid gap-2 text-left">
                     <Label htmlFor="confirm-password">
                       {t('passwordChange.confirmPasswordLabel', 'Confirm Password')}
                     </Label>
-                    <div className="relative">
-                      <Input
-                        id="confirm-password"
-                        type={showConfirmPassword ? "text" : "password"}
-                        placeholder={t('passwordChange.confirmPasswordPlaceholder', 'Confirm new password')}
-                        value={confirmPassword}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
-                        disabled={loading}
-                        className="pr-10"
-                        autoComplete="new-password"
-                      />
-                      <button
-                        type="button"
-                        tabIndex={-1}
-                        onClick={() => setShowConfirmPassword((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
-                      >
-                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
+                    <ValidatedInput
+                      id="confirm-password"
+                      type="password"
+                      placeholder={t('passwordChange.confirmPasswordPlaceholder', 'Confirm new password')}
+                      value={confirmPassword}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
+                      disabled={loading}
+                      autoComplete="new-password"
+                      status={confirmPasswordValidation.status}
+                      error={confirmPasswordValidation.error}
+                    />
                   </div>
 
                   {/* Error message */}
@@ -359,7 +366,7 @@ export function PasswordChangePage() {
 
                   <Button
                     type="submit"
-                    disabled={loading || !newPassword || !confirmPassword}
+                    disabled={loading || !newPassword || !confirmPassword || newPasswordValidation.status === 'error' || confirmPasswordValidation.status === 'error'}
                     className="w-full rounded-full py-6 text-base font-semibold bg-accent hover:opacity-90 text-accent-foreground shadow-lg transition-all duration-200"
                   >
                     {loading ? (
@@ -373,14 +380,14 @@ export function PasswordChangePage() {
                   </Button>
                 </motion.form>
 
-                {/* Password requirements */}
+                {/* Password requirements note */}
                 <motion.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.3 }}
                   className="mt-6 text-xs text-stone-400 dark:text-stone-500 max-w-xs"
                 >
-                  {t('passwordChange.requirements', 'Password must be at least 6 characters long.')}
+                  {t('passwordChange.requirements', 'Password must be at least 8 characters and contain a letter, number, and special character.')}
                 </motion.p>
               </motion.div>
             )}
