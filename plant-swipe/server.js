@@ -10173,22 +10173,25 @@ app.post('/api/forgot-password', async (req, res) => {
     const displayName = user.display_name || 'User'
 
     // Generate a magic link using Supabase Admin API
+    const redirectTo = `${baseUrl}/password-change`
+    console.log(`[forgot-password] Using redirect: ${redirectTo} (PRIMARY_DOMAIN_URL=${PRIMARY_DOMAIN_URL})`)
+    
     const { data: linkData, error: linkError } = await supabaseServiceClient.auth.admin.generateLink({
       type: 'magiclink',
       email: user.email,
       options: {
-        redirectTo: `${baseUrl}/password-change`,
+        redirectTo,
       }
     })
 
-    if (linkError || !linkData?.properties?.hashed_token) {
-      console.error('[forgot-password] Failed to generate magic link:', linkError?.message || 'No token returned')
+    if (linkError || !linkData?.properties?.action_link) {
+      console.error('[forgot-password] Failed to generate magic link:', linkError?.message || 'No link returned')
       return res.status(500).json({ error: 'Failed to generate reset link.' })
     }
 
-    // Build the magic link URL using Supabase's verify endpoint
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-    const magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${linkData.properties.hashed_token}&type=magiclink&redirect_to=${encodeURIComponent(baseUrl + '/password-change')}`
+    // Use Supabase's action_link directly - it has the token and redirect baked in correctly
+    const magicLinkUrl = linkData.properties.action_link
+    console.log(`[forgot-password] Generated magic link for ${user.email}, redirect_to in link: ${linkData.properties.redirect_to || 'none'}`)
 
     // Set force_password_change flag on the user's profile
     await sql`
