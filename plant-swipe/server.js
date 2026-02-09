@@ -325,6 +325,30 @@ preferEnv('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Read primary domain from domain.json (server-specific, gitignored)
+// Format: {"domains": ["dev.aphylia.app", "other.aphylia.app"]}
+// The first entry is the primary domain used for redirects, magic links, etc.
+let PRIMARY_DOMAIN_URL = process.env.WEBSITE_URL || 'https://aphylia.app'
+try {
+  const domainJsonPath = path.resolve(__dirname, '..', 'domain.json')
+  if (fsSync.existsSync(domainJsonPath)) {
+    const domainData = JSON.parse(fsSync.readFileSync(domainJsonPath, 'utf-8'))
+    const domains = Array.isArray(domainData?.domains) ? domainData.domains : (Array.isArray(domainData) ? domainData : [])
+    if (domains.length > 0 && typeof domains[0] === 'string') {
+      const firstDomain = domains[0].trim()
+      // Build the full URL: assume https for real domains, http for localhost
+      if (firstDomain.startsWith('localhost') || firstDomain.startsWith('127.0.0.1')) {
+        PRIMARY_DOMAIN_URL = `http://${firstDomain}`
+      } else {
+        PRIMARY_DOMAIN_URL = `https://${firstDomain}`
+      }
+      console.log(`[server] Primary domain from domain.json: ${PRIMARY_DOMAIN_URL}`)
+    }
+  }
+} catch (err) {
+  console.warn('[server] Failed to read domain.json:', err?.message || err)
+}
+
 let aiFieldPromptsTemplate = {}
 try {
   const promptPath = path.join(__dirname, 'src', 'lib', 'aiFieldPrompts.json')
@@ -10119,7 +10143,7 @@ app.post('/api/forgot-password', async (req, res) => {
     return // Response already sent by rate limiter
   }
 
-  const { email, redirectOrigin } = req.body || {}
+  const { email } = req.body || {}
   if (!email || typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return res.status(400).json({ error: 'A valid email address is required.' })
   }
@@ -10129,31 +10153,8 @@ app.post('/api/forgot-password', async (req, res) => {
   }
 
   try {
-    // Determine the redirect base URL from the request origin
-    // Priority: request Origin header > body redirectOrigin > WEBSITE_URL env > fallback
-    const defaultUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
-    const requestOrigin = req.headers.origin || redirectOrigin || defaultUrl
-
-    // SECURITY: Validate the origin to prevent open-redirect attacks
-    // Only allow origins that match the app's known domains
-    let baseUrl = defaultUrl
-    try {
-      const parsed = new URL(requestOrigin)
-      const hostname = parsed.hostname.toLowerCase()
-      // Allow: exact match on aphylia.app, any subdomain of aphylia.app, or localhost for dev
-      if (
-        hostname === 'aphylia.app' ||
-        hostname.endsWith('.aphylia.app') ||
-        hostname === 'localhost' ||
-        hostname === '127.0.0.1'
-      ) {
-        baseUrl = parsed.origin // e.g. "https://dev.aphylia.app" or "http://localhost:5173"
-      } else {
-        console.warn(`[forgot-password] Rejected untrusted origin: ${requestOrigin}`)
-      }
-    } catch {
-      // Invalid URL, stick with default
-    }
+    // Use the primary domain from domain.json (server-specific) for the redirect
+    const baseUrl = PRIMARY_DOMAIN_URL
 
     // Look up user by email
     const rows = await sql`
