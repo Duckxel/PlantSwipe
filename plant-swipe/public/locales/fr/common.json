@@ -461,7 +461,7 @@
     "sending": "Envoi en cours...",
     "successTitle": "E-mail envoyé !",
     "successDescription": "Nous avons envoyé un lien de réinitialisation à votre adresse e-mail. Cliquez sur le lien pour vous connecter et définir un nouveau mot de passe.",
-    "backToLogin": "Retour à la connexion",
+    "backToHome": "Retour à l'accueil",
     "noAccountFound": "Aucun compte trouvé avec cette adresse e-mail.",
     "invalidEmail": "Veuillez saisir une adresse e-mail valide.",
     "failedToSend": "Échec de l'envoi de l'e-mail. Veuillez réessayer.",

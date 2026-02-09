@@ -144,7 +144,7 @@ export function ForgotPasswordPage() {
                     onClick={() => navigate('/')}
                     className="rounded-full px-8 py-3 bg-accent hover:opacity-90 text-accent-foreground"
                   >
-                    {t('forgotPassword.backToLogin', 'Back to Login')}
+                    {t('forgotPassword.backToHome', 'Back to Home')}
                   </Button>
                 </motion.div>
               </motion.div>

@@ -461,7 +461,7 @@
     "sending": "Sending...",
     "successTitle": "Email Sent!",
     "successDescription": "We have sent a password reset link to your email. Click the link to sign in and set a new password.",
-    "backToLogin": "Back to Login",
+    "backToHome": "Back to Home",
     "noAccountFound": "No account found with this email address.",
     "invalidEmail": "Please enter a valid email address.",
     "failedToSend": "Failed to send email. Please try again.",
