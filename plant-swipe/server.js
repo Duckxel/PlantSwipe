@@ -10119,7 +10119,7 @@ app.post('/api/forgot-password', async (req, res) => {
     return // Response already sent by rate limiter
   }
 
-  const { email } = req.body || {}
+  const { email, redirectOrigin } = req.body || {}
   if (!email || typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return res.status(400).json({ error: 'A valid email address is required.' })
   }
@@ -10129,6 +10129,32 @@ app.post('/api/forgot-password', async (req, res) => {
   }
 
   try {
+    // Determine the redirect base URL from the request origin
+    // Priority: request Origin header > body redirectOrigin > WEBSITE_URL env > fallback
+    const defaultUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+    const requestOrigin = req.headers.origin || redirectOrigin || defaultUrl
+
+    // SECURITY: Validate the origin to prevent open-redirect attacks
+    // Only allow origins that match the app's known domains
+    let baseUrl = defaultUrl
+    try {
+      const parsed = new URL(requestOrigin)
+      const hostname = parsed.hostname.toLowerCase()
+      // Allow: exact match on aphylia.app, any subdomain of aphylia.app, or localhost for dev
+      if (
+        hostname === 'aphylia.app' ||
+        hostname.endsWith('.aphylia.app') ||
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1'
+      ) {
+        baseUrl = parsed.origin // e.g. "https://dev.aphylia.app" or "http://localhost:5173"
+      } else {
+        console.warn(`[forgot-password] Rejected untrusted origin: ${requestOrigin}`)
+      }
+    } catch {
+      // Invalid URL, stick with default
+    }
+
     // Look up user by email
     const rows = await sql`
       select u.id, u.email, p.display_name, p.language
@@ -10144,14 +10170,13 @@ app.post('/api/forgot-password', async (req, res) => {
 
     const user = rows[0]
     const displayName = user.display_name || 'User'
-    const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
 
     // Generate a magic link using Supabase Admin API
     const { data: linkData, error: linkError } = await supabaseServiceClient.auth.admin.generateLink({
       type: 'magiclink',
       email: user.email,
       options: {
-        redirectTo: `${websiteUrl}/password-change`,
+        redirectTo: `${baseUrl}/password-change`,
       }
     })
 
@@ -10162,7 +10187,7 @@ app.post('/api/forgot-password', async (req, res) => {
 
     // Build the magic link URL using Supabase's verify endpoint
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-    const magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${linkData.properties.hashed_token}&type=magiclink&redirect_to=${encodeURIComponent(websiteUrl + '/password-change')}`
+    const magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${linkData.properties.hashed_token}&type=magiclink&redirect_to=${encodeURIComponent(baseUrl + '/password-change')}`
 
     // Set force_password_change flag on the user's profile
     await sql`
