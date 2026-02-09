@@ -18,8 +18,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    // Disable URL session detection to avoid any unnecessary waiting on success paths
-    detectSessionInUrl: false,
+    // Enable URL session detection for magic link (forgot password) flows
+    detectSessionInUrl: true,
     storageKey: 'plantswipe.auth',
   },
   realtime: {
@@ -105,6 +105,8 @@ export type ProfileRow = {
   notification_time?: string | null
   // Email verification status
   email_verified?: boolean | null
+  // Force password change (after forgot-password magic link login)
+  force_password_change?: boolean | null
 }
 
 export type BlogPostRow = {

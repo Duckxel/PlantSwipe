@@ -64,6 +64,11 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFA
 CREATE INDEX IF NOT EXISTS idx_profiles_email_verified ON public.profiles(email_verified);
 COMMENT ON COLUMN public.profiles.email_verified IS 'Whether the user has verified their email address via OTP code';
 
+-- Force Password Change
+-- When true, user must change their password before accessing the app (e.g., after magic link login)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS force_password_change BOOLEAN DEFAULT FALSE;
+COMMENT ON COLUMN public.profiles.force_password_change IS 'When true, user must change their password before accessing any other page. Set after forgot-password magic link login.';
+
 -- Email verification codes table for OTP-based email verification
 CREATE TABLE IF NOT EXISTS public.email_verification_codes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

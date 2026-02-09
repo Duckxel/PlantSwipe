@@ -326,6 +326,30 @@ preferEnv('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Read primary domain from domain.json (server-specific, gitignored)
+// Format: {"domains": ["dev.aphylia.app", "other.aphylia.app"]}
+// The first entry is the primary domain used for redirects, magic links, etc.
+let PRIMARY_DOMAIN_URL = process.env.WEBSITE_URL || 'https://aphylia.app'
+try {
+  const domainJsonPath = path.resolve(__dirname, '..', 'domain.json')
+  if (fsSync.existsSync(domainJsonPath)) {
+    const domainData = JSON.parse(fsSync.readFileSync(domainJsonPath, 'utf-8'))
+    const domains = Array.isArray(domainData?.domains) ? domainData.domains : (Array.isArray(domainData) ? domainData : [])
+    if (domains.length > 0 && typeof domains[0] === 'string') {
+      const firstDomain = domains[0].trim()
+      // Build the full URL: assume https for real domains, http for localhost
+      if (firstDomain.startsWith('localhost') || firstDomain.startsWith('127.0.0.1')) {
+        PRIMARY_DOMAIN_URL = `http://${firstDomain}`
+      } else {
+        PRIMARY_DOMAIN_URL = `https://${firstDomain}`
+      }
+      console.log(`[server] Primary domain from domain.json: ${PRIMARY_DOMAIN_URL}`)
+    }
+  }
+} catch (err) {
+  console.warn('[server] Failed to read domain.json:', err?.message || err)
+}
+
 let aiFieldPromptsTemplate = {}
 try {
   const promptPath = path.join(__dirname, 'src', 'lib', 'aiFieldPrompts.json')
@@ -1105,6 +1129,7 @@ const rateLimitStores = {
   gardenJournal: new Map(),  // Journal entries
   pushNotify: new Map(),     // Push notification sending
   authAttempt: new Map(),    // Authentication attempts (brute force protection)
+  forgotPassword: new Map(), // Forgot password requests (prevent magic link spam)
 }
 
 /**
@@ -1194,6 +1219,12 @@ const rateLimitConfig = {
     windowMs: 15 * 60 * 1000,  // 15 minutes
     maxAttempts: 10,
     perUser: true,
+  },
+  // Forgot password: 5 per 15 minutes per IP (prevent magic link spam)
+  forgotPassword: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 5,
+    perUser: false,
   },
 }
 
@@ -9530,6 +9561,12 @@ const DEFAULT_EMAIL_TRIGGERS = [
     displayName: 'Email Verification Code',
     description: 'Sent when user needs to verify their email address (after setup). Contains a 6-character verification code. Variables: {{code}}, {{user}}, {{email}}',
   },
+  // Forgot Password (Magic Link)
+  {
+    triggerType: 'FORGOT_PASSWORD',
+    displayName: 'Forgot Password Magic Link',
+    description: 'Sent when a user requests a password reset via magic link. The link logs the user in and redirects to the password change page. Variables: {{url}}, {{user}}, {{email}}',
+  },
 ]
 
 // Cache to prevent running ensureDefaultEmailTriggers on every request
@@ -10077,7 +10114,8 @@ app.post('/api/send-security-email', async (req, res) => {
     'PASSWORD_CHANGE_CONFIRMATION',
     'SUSPICIOUS_LOGIN_ALERT',
     'NEW_DEVICE_LOGIN',
-    'EMAIL_VERIFICATION'
+    'EMAIL_VERIFICATION',
+    'FORGOT_PASSWORD',
   ]
 
   if (!securityTriggers.includes(triggerType)) {
@@ -10102,6 +10140,195 @@ app.post('/api/send-security-email', async (req, res) => {
     : result?.reason === 'Email service not configured' ? 500 
     : 200
   res.status(status).json(result)
+})
+
+// =============================================================================
+// FORGOT PASSWORD - Sends a magic link to the user via email
+// =============================================================================
+
+/**
+ * Forgot Password endpoint
+ * Generates a Supabase magic link, sends it via admin email template
+ * Sets force_password_change flag on the profile
+ * SECURITY: Rate limited per IP to prevent magic link spam
+ */
+app.post('/api/forgot-password', async (req, res) => {
+  // Rate limiting: prevent magic link spam
+  if (await checkAndRecordRateLimit(req, res, 'forgotPassword', null)) {
+    return // Response already sent by rate limiter
+  }
+
+  const { email } = req.body || {}
+  if (!email || typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return res.status(400).json({ error: 'A valid email address is required.' })
+  }
+
+  if (!sql || !supabaseServiceClient) {
+    return res.status(500).json({ error: 'Service not configured' })
+  }
+
+  try {
+    // Use the primary domain from domain.json (server-specific) for the redirect
+    const baseUrl = PRIMARY_DOMAIN_URL
+
+    // Look up user by email
+    const rows = await sql`
+      select u.id, u.email, p.display_name, p.language
+      from auth.users u
+      join public.profiles p on p.id = u.id
+      where lower(u.email) = lower(${email.trim()})
+      limit 1
+    `
+
+    if (!rows || !rows.length) {
+      return res.status(404).json({ found: false, error: 'No account found with this email address.' })
+    }
+
+    const user = rows[0]
+    const displayName = user.display_name || 'User'
+
+    // Generate a magic link using Supabase Admin API
+    const redirectTo = `${baseUrl}/password-change`
+    console.log(`[forgot-password] Using redirect: ${redirectTo} (PRIMARY_DOMAIN_URL=${PRIMARY_DOMAIN_URL})`)
+    
+    const { data: linkData, error: linkError } = await supabaseServiceClient.auth.admin.generateLink({
+      type: 'magiclink',
+      email: user.email,
+      options: {
+        redirectTo,
+      }
+    })
+
+    if (linkError || !linkData?.properties?.action_link) {
+      console.error('[forgot-password] Failed to generate magic link:', linkError?.message || 'No link returned')
+      return res.status(500).json({ error: 'Failed to generate reset link.' })
+    }
+
+    // Use Supabase's action_link directly - it has the token and redirect baked in correctly
+    const magicLinkUrl = linkData.properties.action_link
+    console.log(`[forgot-password] Generated magic link for ${user.email}, redirect_to in link: ${linkData.properties.redirect_to || 'none'}`)
+
+    // Set force_password_change flag on the user's profile
+    await sql`
+      update public.profiles
+      set force_password_change = true
+      where id = ${user.id}
+    `
+
+    // Send the forgot password email through the automation system
+    const result = await sendSecurityEmail('FORGOT_PASSWORD', {
+      recipientEmail: user.email,
+      userId: user.id,
+      userDisplayName: displayName,
+      userLanguage: user.language || 'en',
+      extraContext: {
+        url: magicLinkUrl,
+        email: user.email,
+      }
+    })
+
+    if (result.sent) {
+      console.log(`[forgot-password] Sent magic link to ${user.email}`)
+      return res.json({ found: true, sent: true })
+    } else {
+      console.warn(`[forgot-password] Failed to send email: ${result.reason}`)
+      return res.json({ found: true, sent: false, reason: result.reason || 'Failed to send email' })
+    }
+  } catch (err) {
+    console.error('[forgot-password] Error:', err?.message || err)
+    return res.status(500).json({ error: 'An unexpected error occurred.' })
+  }
+})
+
+// =============================================================================
+// FORCE PASSWORD CHANGE - Change password after magic link login
+// =============================================================================
+
+/**
+ * Force password change endpoint
+ * Called when user is logged in via magic link and must change their password
+ * SECURITY: Requires authentication + CSRF token
+ */
+app.post('/api/force-password-change', requireCsrfToken, async (req, res) => {
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  const { newPassword } = req.body || {}
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' })
+  }
+
+  if (!sql || !supabaseServiceClient) {
+    return res.status(500).json({ error: 'Service not configured' })
+  }
+
+  try {
+    // Check if user actually needs to change password
+    // The column may not exist yet if the migration hasn't run, so handle gracefully
+    let needsChange = false
+    try {
+      const profileRows = await sql`
+        select force_password_change from public.profiles
+        where id = ${authUser.id}
+        limit 1
+      `
+      needsChange = profileRows?.[0]?.force_password_change === true
+    } catch {
+      // Column doesn't exist yet - allow if localStorage flag was used (client-side check)
+      needsChange = true
+    }
+
+    // Update the password via Supabase Admin API
+    const { error: updateError } = await supabaseServiceClient.auth.admin.updateUserById(authUser.id, {
+      password: newPassword,
+    })
+
+    if (updateError) {
+      console.error('[force-password-change] Failed to update password:', updateError.message)
+      return res.status(500).json({ error: 'Failed to update password.' })
+    }
+
+    // Clear the force_password_change flag (ignore errors if column doesn't exist)
+    try {
+      await sql`
+        update public.profiles
+        set force_password_change = false
+        where id = ${authUser.id}
+      `
+    } catch {
+      // Column doesn't exist yet - that's fine
+    }
+
+    console.log(`[force-password-change] Password changed for user ${authUser.id.slice(0, 8)}...`)
+
+    // Send password change confirmation email (non-blocking)
+    if (authUser.email) {
+      const profileForName = await sql`
+        select display_name, language from public.profiles where id = ${authUser.id} limit 1
+      `
+      const userName = profileForName?.[0]?.display_name || 'User'
+      const userLang = profileForName?.[0]?.language || 'en'
+
+      sendSecurityEmail('PASSWORD_CHANGE_CONFIRMATION', {
+        recipientEmail: authUser.email,
+        userId: authUser.id,
+        userDisplayName: userName,
+        userLanguage: userLang,
+        extraContext: {}
+      }).catch(err => {
+        console.warn('[force-password-change] Failed to send confirmation email:', err?.message)
+      })
+    }
+
+    // Return email so client can re-authenticate with the new password
+    // (the old magic link session is invalidated after password change)
+    return res.json({ success: true, email: authUser.email })
+  } catch (err) {
+    console.error('[force-password-change] Error:', err?.message || err)
+    return res.status(500).json({ error: 'An unexpected error occurred.' })
+  }
 })
 
 // =============================================================================

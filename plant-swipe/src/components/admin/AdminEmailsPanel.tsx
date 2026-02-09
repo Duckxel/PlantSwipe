@@ -126,6 +126,15 @@ const TRIGGER_VARIABLES: Record<string, {
       { token: '{{url}}', description: 'Website URL' },
     ]
   },
+  // Forgot Password (Magic Link)
+  FORGOT_PASSWORD: {
+    category: 'security',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{url}}', description: 'Magic link URL to reset password', required: true },
+    ]
+  },
 }
 
 // Get category badge color

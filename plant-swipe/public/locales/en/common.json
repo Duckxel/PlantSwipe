@@ -479,6 +479,39 @@
       "tooWeak": "Password does not meet the requirements",
       "strong": "Password is strong"
     }
+    "forgotPassword": "Forgot Password?"
+  },
+  "forgotPassword": {
+    "title": "Forgot Your Password?",
+    "description": "Enter the email address associated with your account and we will send you a link to reset your password.",
+    "emailLabel": "Email Address",
+    "emailPlaceholder": "you@example.com",
+    "submit": "Send Reset Link",
+    "sending": "Sending...",
+    "successTitle": "Email Sent!",
+    "successDescription": "We have sent a password reset link to your email. Click the link to sign in and set a new password.",
+    "backToHome": "Back to Home",
+    "noAccountFound": "No account found with this email address.",
+    "invalidEmail": "Please enter a valid email address.",
+    "failedToSend": "Failed to send email. Please try again.",
+    "unexpectedError": "An unexpected error occurred. Please try again.",
+    "checkSpam": "Check your spam folder if you don't see the email. The link will log you in and redirect you to change your password."
+  },
+  "passwordChange": {
+    "title": "Change Your Password",
+    "description": "You must set a new password before continuing.",
+    "newPasswordLabel": "New Password",
+    "newPasswordPlaceholder": "Enter new password",
+    "confirmPasswordLabel": "Confirm Password",
+    "confirmPasswordPlaceholder": "Confirm new password",
+    "submit": "Change Password",
+    "changing": "Changing Password...",
+    "successTitle": "Password Changed!",
+    "successDescription": "Redirecting you to the app...",
+    "connectedAs": "Connected as",
+    "passwordTooShort": "Password must be at least 6 characters.",
+    "passwordsDontMatch": "Passwords do not match.",
+    "requirements": "Password must be at least 6 characters long."
   },
   "settings": {
     "title": "Account Settings",
