@@ -1102,6 +1102,10 @@ const rateLimitStores = {
   gardenJournal: new Map(),  // Journal entries
   pushNotify: new Map(),     // Push notification sending
   authAttempt: new Map(),    // Authentication attempts (brute force protection)
+  // SECURITY: Admin destructive operations are rate-limited even for admins
+  // This prevents abuse from compromised tokens or rogue admin accounts
+  adminDestructive: new Map(),  // Restart, reboot, schema sync, deploy
+  adminAuth: new Map(),         // Admin authentication attempts (brute force on static token)
 }
 
 /**
@@ -1179,6 +1183,21 @@ const rateLimitConfig = {
     windowMs: 15 * 60 * 1000,  // 15 minutes
     maxAttempts: 10,
     perUser: true,
+  },
+  // SECURITY: Admin destructive operations (restart, reboot, deploy, schema sync)
+  // Even admins are limited to 10 destructive operations per hour per IP
+  // This mitigates damage from compromised admin tokens or accounts
+  adminDestructive: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 10,
+    perUser: false,  // Per IP to catch token reuse from different contexts
+  },
+  // SECURITY: Admin authentication failures (brute force on static token)
+  // 5 failed attempts per 15 minutes per IP triggers lockout
+  adminAuth: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 5,
+    perUser: false,  // Per IP
   },
 }
 
@@ -1334,6 +1353,81 @@ async function checkAndRecordRateLimit(req, res, action, user = null) {
 }
 
 /**
+ * Check rate limit for admin destructive operations.
+ * Unlike the regular checkRateLimit, this does NOT exempt admins.
+ * This protects against compromised admin tokens or rogue admin accounts.
+ * 
+ * @param {string} action - The rate limit action type (e.g., 'adminDestructive')
+ * @param {object} req - Express request object
+ * @param {object} res - Express response object
+ * @returns {boolean} - True if blocked (429 sent), false if allowed
+ */
+function checkAdminRateLimit(action, req, res) {
+  const store = rateLimitStores[action]
+  const config = rateLimitConfig[action]
+  if (!store || !config) return false
+
+  const ip = getClientIp(req) || 'unknown'
+  const identifier = `ip:${ip}`
+  const now = Date.now()
+  const history = store.get(identifier) || []
+  const recent = history.filter((ts) => now - ts < config.windowMs)
+
+  if (recent.length >= config.maxAttempts) {
+    console.warn(`[admin-rate-limit] ${action} rate limit exceeded for IP ${ip} (${recent.length}/${config.maxAttempts})`)
+    res.status(429).json({ error: 'Too many admin operations. Please wait before trying again.' })
+    return true
+  }
+
+  recent.push(now)
+  store.set(identifier, recent)
+  return false
+}
+
+/**
+ * Record a failed admin authentication attempt for rate limiting.
+ * This helps detect brute-force attacks on the admin static token.
+ * 
+ * @param {object} req - Express request object
+ */
+function recordFailedAdminAuth(req) {
+  const store = rateLimitStores.adminAuth
+  const config = rateLimitConfig.adminAuth
+  if (!store || !config) return
+
+  const ip = getClientIp(req) || 'unknown'
+  const identifier = `ip:${ip}`
+  const now = Date.now()
+  const history = store.get(identifier) || []
+  const recent = history.filter((ts) => now - ts < config.windowMs)
+  recent.push(now)
+  store.set(identifier, recent)
+
+  if (recent.length >= config.maxAttempts) {
+    console.warn(`[admin-rate-limit] Admin auth rate limit reached for IP ${ip} - possible brute force`)
+  }
+}
+
+/**
+ * Check if an IP is blocked from admin authentication attempts.
+ * 
+ * @param {object} req - Express request object
+ * @returns {boolean} - True if blocked
+ */
+function isAdminAuthBlocked(req) {
+  const store = rateLimitStores.adminAuth
+  const config = rateLimitConfig.adminAuth
+  if (!store || !config) return false
+
+  const ip = getClientIp(req) || 'unknown'
+  const identifier = `ip:${ip}`
+  const now = Date.now()
+  const history = store.get(identifier) || []
+  const recent = history.filter((ts) => now - ts < config.windowMs)
+  return recent.length >= config.maxAttempts
+}
+
+/**
  * Periodically clean up old entries from rate limit stores
  * Runs every 10 minutes to prevent memory bloat
  */
@@ -1395,6 +1489,43 @@ if (vapidPublicKey && vapidPrivateKey) {
 // Support both server-only and Vite-style env variable names
 const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
 const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || process.env.VITE_ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true'
+
+// SECURITY: Warn loudly if adminPublicMode is enabled in production
+if (adminPublicMode && process.env.NODE_ENV === 'production') {
+  console.error('[SECURITY] ========================================')
+  console.error('[SECURITY] ADMIN_PUBLIC_MODE is enabled in PRODUCTION!')
+  console.error('[SECURITY] All admin endpoints are PUBLICLY ACCESSIBLE.')
+  console.error('[SECURITY] This should ONLY be used for emergency maintenance.')
+  console.error('[SECURITY] Disable it immediately after maintenance is complete.')
+  console.error('[SECURITY] ========================================')
+}
+
+/**
+ * Timing-safe comparison for admin static tokens.
+ * Prevents timing attacks where an attacker can brute-force the token
+ * character by character by measuring response time differences.
+ * 
+ * @param {string} provided - The token provided in the request
+ * @param {string} expected - The expected token stored in configuration
+ * @returns {boolean} - True if tokens match
+ */
+function timingSafeTokenCompare(provided, expected) {
+  if (!provided || !expected) return false
+  try {
+    const a = Buffer.from(provided, 'utf-8')
+    const b = Buffer.from(expected, 'utf-8')
+    if (a.length !== b.length) {
+      // Even though lengths differ, still do a comparison to avoid 
+      // leaking information about the expected token length.
+      // We compare against itself to maintain constant time.
+      crypto.timingSafeEqual(a, a)
+      return false
+    }
+    return crypto.timingSafeEqual(a, b)
+  } catch {
+    return false
+  }
+}
 
 const adminUploadBucket = 'UTILITY' // Admin uploads go to UTILITY bucket
 const adminUploadPrefixRaw = (process.env.ADMIN_UPLOAD_PREFIX || 'admin/uploads').trim()
@@ -2051,11 +2182,19 @@ function getAuthTokenFromRequest(req) {
 }
 async function isAdminFromRequest(req) {
   try {
+    // SECURITY: Check if IP is blocked due to too many failed admin auth attempts
+    if (isAdminAuthBlocked(req)) return false
+
     // Allow explicit public mode for maintenance
     if (adminPublicMode === true) return true
     // Static header token support for non-authenticated admin actions (CI/ops)
+    // SECURITY: Uses timing-safe comparison to prevent timing attacks
     const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
-    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return true
+    if (adminStaticToken && headerToken) {
+      if (timingSafeTokenCompare(headerToken, adminStaticToken)) return true
+      // SECURITY: Record failed admin auth attempt for rate limiting
+      recordFailedAdminAuth(req)
+    }
 
     // Bearer token path: resolve user and check admin
     const user = await getUserFromRequest(req)
@@ -2108,8 +2247,9 @@ async function isEditorFromRequest(req) {
     // Allow explicit public mode for maintenance
     if (adminPublicMode === true) return true
     // Static header token support for non-authenticated admin actions (CI/ops)
+    // SECURITY: Uses timing-safe comparison to prevent timing attacks
     const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
-    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return true
+    if (adminStaticToken && headerToken && timingSafeTokenCompare(headerToken, adminStaticToken)) return true
 
     // Bearer token path: resolve user and check admin or editor role
     const user = await getUserFromRequest(req)
@@ -2170,8 +2310,9 @@ async function isProOrEditorFromRequest(req) {
     // Editors/admins are already allowed
     if (await isEditorFromRequest(req)) return true
     if (adminPublicMode === true) return true
+    // SECURITY: Uses timing-safe comparison to prevent timing attacks
     const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
-    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return true
+    if (adminStaticToken && headerToken && timingSafeTokenCompare(headerToken, adminStaticToken)) return true
 
     const user = await getUserFromRequest(req)
     if (!user?.id) return false
@@ -2229,8 +2370,9 @@ async function ensureEditor(req, res) {
   try {
     // Public mode or static token
     if (adminPublicMode === true) return 'public'
+    // SECURITY: Uses timing-safe comparison to prevent timing attacks
     const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
-    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return 'static-admin'
+    if (adminStaticToken && headerToken && timingSafeTokenCompare(headerToken, adminStaticToken)) return 'static-admin'
 
     // Bearer token path
     const user = await getUserFromRequest(req)
@@ -2255,8 +2397,9 @@ async function ensureEditor(req, res) {
 async function ensureProOrEditor(req, res) {
   try {
     if (adminPublicMode === true) return 'public'
+    // SECURITY: Uses timing-safe comparison to prevent timing attacks
     const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
-    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return 'static-admin'
+    if (adminStaticToken && headerToken && timingSafeTokenCompare(headerToken, adminStaticToken)) return 'static-admin'
 
     const user = await getUserFromRequest(req)
     if (!user?.id) {
@@ -2294,8 +2437,9 @@ async function ensureAdmin(req, res) {
   try {
     // Public mode or static token
     if (adminPublicMode === true) return 'public'
+    // SECURITY: Uses timing-safe comparison to prevent timing attacks
     const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
-    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return 'static-admin'
+    if (adminStaticToken && headerToken && timingSafeTokenCompare(headerToken, adminStaticToken)) return 'static-admin'
 
     // Bearer token path
     const user = await getUserFromRequest(req)
@@ -3565,20 +3709,68 @@ function requireCsrfToken(req, res, next) {
   next()
 }
 
+// SECURITY: Build allowed origins list for CORS
+// Admin endpoints have stricter CORS than public API endpoints
+const corsAllowList = (process.env.CORS_ALLOW_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+const adminCorsAllowList = (() => {
+  // Admin CORS: only allow same-origin and explicitly configured origins
+  // If ADMIN_CORS_ORIGINS is set, use it; otherwise fall back to CORS_ALLOW_ORIGINS
+  const adminOrigins = (process.env.ADMIN_CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+  return adminOrigins.length > 0 ? adminOrigins : corsAllowList
+})()
+
+/**
+ * Check if an origin is allowed for admin endpoints.
+ * Returns true if allowed, false if denied.
+ */
+function isAdminCorsAllowed(origin) {
+  // No origin header means same-origin request (not cross-origin)
+  if (!origin) return true
+  // If admin allow list is configured, check against it
+  if (adminCorsAllowList.length > 0) {
+    return adminCorsAllowList.some(allowed => {
+      // Support wildcard subdomains (e.g., *.aphylia.app)
+      if (allowed.startsWith('*.')) {
+        const domain = allowed.slice(1) // e.g., ".aphylia.app"
+        return origin.endsWith(domain) || origin === `https://${allowed.slice(2)}` || origin === `http://${allowed.slice(2)}`
+      }
+      return origin === allowed
+    })
+  }
+  // No admin CORS configured - block cross-origin admin requests by default
+  // This is the safe default: admin endpoints should not be accessible cross-origin
+  return false
+}
+
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
   try {
     const origin = req.headers.origin
-    // Allow all origins by default; optionally restrict via CORS_ALLOW_ORIGINS
-    const allowList = (process.env.CORS_ALLOW_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
-    if (origin) {
-      if (allowList.length === 0 || allowList.includes(origin)) {
-        res.setHeader('Access-Control-Allow-Origin', allowList.length ? origin : '*')
-        res.setHeader('Vary', 'Origin')
+    const isAdminPath = req.path && req.path.startsWith('/api/admin')
+
+    if (isAdminPath) {
+      // SECURITY: Admin endpoints have restricted CORS
+      // Only same-origin or explicitly allowed origins can access admin APIs
+      if (isAdminCorsAllowed(origin)) {
+        if (origin) {
+          res.setHeader('Access-Control-Allow-Origin', origin)
+          res.setHeader('Vary', 'Origin')
+        }
+        // No wildcard for admin endpoints - credentials must be explicit
       }
+      // Note: if origin is not allowed, no CORS headers are set, causing browser to block the request
     } else {
-      res.setHeader('Access-Control-Allow-Origin', '*')
+      // Non-admin endpoints: allow configured origins or all
+      if (origin) {
+        if (corsAllowList.length === 0 || corsAllowList.includes(origin)) {
+          res.setHeader('Access-Control-Allow-Origin', corsAllowList.length ? origin : '*')
+          res.setHeader('Vary', 'Origin')
+        }
+      } else {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+      }
     }
+
     if (req.path && req.path.startsWith('/api/')) {
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
@@ -5472,6 +5664,8 @@ async function handleRestartServer(req, res) {
       res.status(403).json({ error: 'Admin privileges required' })
       return
     }
+    // SECURITY: Rate limit destructive admin operations even for admins
+    if (checkAdminRateLimit('adminDestructive', req, res)) return
 
     try {
       const caller = await getUserFromRequest(req)
@@ -5524,9 +5718,10 @@ async function handleRestartServer(req, res) {
 }
 
 app.post('/api/admin/restart-server', handleRestartServer)
-app.get('/api/admin/restart-server', handleRestartServer)
+// SECURITY: Removed GET method for state-changing operation (restart-server)
+// GET requests are vulnerable to CSRF via img tags, link prefetching, etc.
 app.options('/api/admin/restart-server', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
@@ -5565,6 +5760,8 @@ app.post('/api/admin/restart-all', async (req, res) => {
       res.status(403).json({ error: 'Admin privileges required' })
       return
     }
+    // SECURITY: Rate limit destructive admin operations even for admins
+    if (checkAdminRateLimit('adminDestructive', req, res)) return
 
     try {
       const caller = await getUserFromRequest(req)
@@ -6240,6 +6437,8 @@ async function handleSyncSchema(req, res) {
       res.status(403).json({ error: 'Admin privileges required' })
       return
     }
+    // SECURITY: Rate limit destructive admin operations even for admins
+    if (checkAdminRateLimit('adminDestructive', req, res)) return
 
     // Read all SQL files from sync_parts folder and execute them in order
     const syncPartsDir = path.resolve(__dirname, 'supabase', 'sync_parts')
@@ -6402,10 +6601,11 @@ async function handleSyncSchema(req, res) {
 }
 
 app.post('/api/admin/sync-schema', handleSyncSchema)
-app.get('/api/admin/sync-schema', handleSyncSchema)
+// SECURITY: Removed GET method for state-changing operation (sync-schema)
+// GET requests are vulnerable to CSRF via img tags, link prefetching, etc.
 app.options('/api/admin/sync-schema', (_req, res) => {
   // Allow standard headers for admin calls
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
@@ -6450,6 +6650,8 @@ function tailLines(text, limit) {
 async function handleDeployEdgeFunctions(req, res) {
   const caller = await ensureAdmin(req, res)
   if (!caller) return
+  // SECURITY: Rate limit destructive admin operations even for admins
+  if (checkAdminRateLimit('adminDestructive', req, res)) return
   try {
     const result = await runSupabaseEdgeDeploy()
     const stdoutTail = tailLines(result.stdout, 200)
@@ -6485,10 +6687,10 @@ async function handleDeployEdgeFunctions(req, res) {
 }
 
 app.post('/api/admin/deploy-edge-functions', handleDeployEdgeFunctions)
-app.get('/api/admin/deploy-edge-functions', handleDeployEdgeFunctions)
-
+// SECURITY: Removed GET method for state-changing operation (deploy-edge-functions)
+// GET requests are vulnerable to CSRF via img tags, link prefetching, etc.
 app.options('/api/admin/deploy-edge-functions', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
@@ -18389,12 +18591,18 @@ app.get('/api/garden/:id/stream', async (req, res) => {
 })
 
 // ---- Admin logs SSE ----
+// SECURITY NOTE: EventSource API doesn't support custom headers, so we must accept
+// auth tokens via query parameters. These tokens may appear in server access logs,
+// browser history, and proxy logs. This is a known limitation of SSE.
+// Mitigation: Prefer Bearer token from session over static admin token in URL params.
 app.get('/api/admin/admin-logs/stream', async (req, res) => {
   try {
-    // Allow admin static token via query param for EventSource
+    // Allow admin static token via query param for EventSource (SSE limitation)
+    // SECURITY: Log a warning when static token is passed via URL (prefer Bearer auth)
     try {
       const adminToken = (req.query?.admin_token ? String(req.query.admin_token) : '')
       if (adminToken) {
+        console.warn('[security] Admin static token passed via URL query param for SSE - prefer Bearer auth')
         try { req.headers['x-admin-token'] = adminToken } catch { }
       }
     } catch { }
