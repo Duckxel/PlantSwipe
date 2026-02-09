@@ -10604,6 +10604,48 @@ app.post('/api/security/check-email-available', requireCsrfToken, async (req, re
   const userIdToExclude = authUser.id
   const normalizedEmail = email.toLowerCase().trim()
 
+  // Server-side email format validation (defense-in-depth)
+  const atIdx = normalizedEmail.indexOf('@')
+  if (atIdx === -1 || atIdx !== normalizedEmail.lastIndexOf('@')) {
+    return res.status(400).json({ available: false, error: 'Invalid email format' })
+  }
+  const emailDomain = normalizedEmail.slice(atIdx + 1)
+  if (!emailDomain || !emailDomain.includes('.')) {
+    return res.status(400).json({ available: false, error: 'Invalid email domain' })
+  }
+
+  // DNS MX record validation (ensure domain can receive emails)
+  try {
+    const mxRecords = await new Promise((resolve, reject) => {
+      dns.resolveMx(emailDomain, (err, addresses) => {
+        if (err) reject(err)
+        else resolve(addresses)
+      })
+    })
+    if (!mxRecords || !Array.isArray(mxRecords) || mxRecords.length === 0) {
+      // Try A record fallback
+      try {
+        const aRecords = await new Promise((resolve, reject) => {
+          dns.resolve4(emailDomain, (err, addresses) => {
+            if (err) reject(err)
+            else resolve(addresses)
+          })
+        })
+        if (!aRecords || !Array.isArray(aRecords) || aRecords.length === 0) {
+          return res.json({ available: false, error: 'This email domain cannot receive emails.' })
+        }
+      } catch {
+        return res.json({ available: false, error: 'This email domain cannot receive emails.' })
+      }
+    }
+  } catch (dnsErr) {
+    if (dnsErr.code === 'ENOTFOUND' || dnsErr.code === 'ENODATA') {
+      return res.json({ available: false, error: 'This email domain does not exist.' })
+    }
+    // DNS timeout/failure - don't block, proceed with availability check
+    console.warn(`[check-email-available] DNS check failed for ${emailDomain}:`, dnsErr.code || dnsErr.message)
+  }
+
   try {
     if (sql) {
       // Check if email exists in auth.users (excluding the current authenticated user)
