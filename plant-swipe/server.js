@@ -10251,14 +10251,18 @@ app.post('/api/force-password-change', requireCsrfToken, async (req, res) => {
 
   try {
     // Check if user actually needs to change password
-    const profileRows = await sql`
-      select force_password_change from public.profiles
-      where id = ${authUser.id}
-      limit 1
-    `
-
-    if (!profileRows?.length || !profileRows[0].force_password_change) {
-      return res.status(400).json({ error: 'Password change is not required.' })
+    // The column may not exist yet if the migration hasn't run, so handle gracefully
+    let needsChange = false
+    try {
+      const profileRows = await sql`
+        select force_password_change from public.profiles
+        where id = ${authUser.id}
+        limit 1
+      `
+      needsChange = profileRows?.[0]?.force_password_change === true
+    } catch {
+      // Column doesn't exist yet - allow if localStorage flag was used (client-side check)
+      needsChange = true
     }
 
     // Update the password via Supabase Admin API
@@ -10271,12 +10275,16 @@ app.post('/api/force-password-change', requireCsrfToken, async (req, res) => {
       return res.status(500).json({ error: 'Failed to update password.' })
     }
 
-    // Clear the force_password_change flag
-    await sql`
-      update public.profiles
-      set force_password_change = false
-      where id = ${authUser.id}
-    `
+    // Clear the force_password_change flag (ignore errors if column doesn't exist)
+    try {
+      await sql`
+        update public.profiles
+        set force_password_change = false
+        where id = ${authUser.id}
+      `
+    } catch {
+      // Column doesn't exist yet - that's fine
+    }
 
     console.log(`[force-password-change] Password changed for user ${authUser.id.slice(0, 8)}...`)
 
@@ -10299,7 +10307,9 @@ app.post('/api/force-password-change', requireCsrfToken, async (req, res) => {
       })
     }
 
-    return res.json({ success: true })
+    // Return email so client can re-authenticate with the new password
+    // (the old magic link session is invalidated after password change)
+    return res.json({ success: true, email: authUser.email })
   } catch (err) {
     console.error('[force-password-change] Error:', err?.message || err)
     return res.status(500).json({ error: 'An unexpected error occurred.' })

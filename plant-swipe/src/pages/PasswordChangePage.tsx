@@ -110,8 +110,22 @@ export function PasswordChangePage() {
 
       if (data.success) {
         setSuccess(true)
-        // Clear both the DB flag (via profile refresh) and the localStorage flag
+        // Clear the localStorage flag
         try { localStorage.removeItem('plantswipe.force_password_change') } catch {}
+
+        // Re-authenticate with the new password since the old magic link session
+        // is invalidated after a password change
+        if (data.email) {
+          try {
+            await supabase.auth.signInWithPassword({
+              email: data.email,
+              password: newPassword,
+            })
+          } catch (signInErr) {
+            console.warn('[password-change] Re-auth failed:', signInErr)
+          }
+        }
+
         await refreshProfile()
 
         // Navigate after brief delay to show success
@@ -278,6 +292,8 @@ export function PasswordChangePage() {
                   onSubmit={(e: React.FormEvent) => { e.preventDefault(); handleSubmit() }}
                   autoComplete="off"
                 >
+                  {/* Hidden username field for accessibility (fixes browser warning) */}
+                  <input type="hidden" name="username" autoComplete="username" value={user?.email || ''} />
                   <div className="grid gap-2 text-left">
                     <Label htmlFor="new-password">
                       {t('passwordChange.newPasswordLabel', 'New Password')}
