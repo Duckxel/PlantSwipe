@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
 import { Label } from "@/components/ui/label"
 import { KeyRound, Loader2, Check, ArrowLeft, Mail } from "lucide-react"
 
@@ -196,21 +196,18 @@ export function ForgotPasswordPage() {
                     <Label htmlFor="forgot-password-email">
                       {t('forgotPassword.emailLabel', 'Email Address')}
                     </Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-                      <Input
-                        id="forgot-password-email"
-                        type="email"
-                        placeholder={t('forgotPassword.emailPlaceholder', 'you@example.com')}
-                        value={email}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                        disabled={loading}
-                        className="pl-10"
-                        onKeyDown={(e: React.KeyboardEvent) => {
-                          if (e.key === 'Enter') handleSubmit()
-                        }}
-                      />
-                    </div>
+                    <SearchInput
+                      id="forgot-password-email"
+                      icon={<Mail className="h-full w-full" />}
+                      placeholder={t('forgotPassword.emailPlaceholder', 'you@example.com')}
+                      value={email}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                      onClear={() => setEmail('')}
+                      disabled={loading}
+                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                        if (e.key === 'Enter') handleSubmit()
+                      }}
+                    />
                   </div>
 
                   {/* Error message */}
