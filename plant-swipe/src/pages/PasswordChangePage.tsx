@@ -246,17 +246,37 @@ export function PasswordChangePage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 }}
-                  className="text-stone-500 dark:text-stone-400 text-sm md:text-base mb-8"
+                  className="text-stone-500 dark:text-stone-400 text-sm md:text-base mb-4"
                 >
                   {t('passwordChange.description', 'You must set a new password before continuing.')}
                 </motion.p>
 
+                {/* Connected as badge */}
+                {(profile?.display_name || user?.email) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.18 }}
+                    className="mb-8 inline-flex items-center gap-2 rounded-full bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 px-4 py-2"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="text-sm text-stone-600 dark:text-stone-300">
+                      {t('passwordChange.connectedAs', 'Connected as')}{' '}
+                      <span className="font-semibold text-stone-800 dark:text-stone-100">
+                        {profile?.display_name || user?.email}
+                      </span>
+                    </span>
+                  </motion.div>
+                )}
+
                 {/* Password form */}
-                <motion.div
+                <motion.form
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
                   className="w-full space-y-4"
+                  onSubmit={(e: React.FormEvent) => { e.preventDefault(); handleSubmit() }}
+                  autoComplete="off"
                 >
                   <div className="grid gap-2 text-left">
                     <Label htmlFor="new-password">
@@ -271,6 +291,7 @@ export function PasswordChangePage() {
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPassword(e.target.value)}
                         disabled={loading}
                         className="pr-10"
+                        autoComplete="new-password"
                       />
                       <button
                         type="button"
@@ -296,9 +317,7 @@ export function PasswordChangePage() {
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
                         disabled={loading}
                         className="pr-10"
-                        onKeyDown={(e: React.KeyboardEvent) => {
-                          if (e.key === 'Enter') handleSubmit()
-                        }}
+                        autoComplete="new-password"
                       />
                       <button
                         type="button"
@@ -323,7 +342,7 @@ export function PasswordChangePage() {
                   )}
 
                   <Button
-                    onClick={handleSubmit}
+                    type="submit"
                     disabled={loading || !newPassword || !confirmPassword}
                     className="w-full rounded-full py-6 text-base font-semibold bg-accent hover:opacity-90 text-accent-foreground shadow-lg transition-all duration-200"
                   >
@@ -336,7 +355,7 @@ export function PasswordChangePage() {
                       t('passwordChange.submit', 'Change Password')
                     )}
                   </Button>
-                </motion.div>
+                </motion.form>
 
                 {/* Password requirements */}
                 <motion.p

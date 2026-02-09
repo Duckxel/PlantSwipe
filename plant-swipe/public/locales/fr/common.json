@@ -479,6 +479,7 @@
     "changing": "Modification en cours...",
     "successTitle": "Mot de passe modifié !",
     "successDescription": "Redirection vers l'application...",
+    "connectedAs": "Connecté en tant que",
     "passwordTooShort": "Le mot de passe doit comporter au moins 6 caractères.",
     "passwordsDontMatch": "Les mots de passe ne correspondent pas.",
     "requirements": "Le mot de passe doit comporter au moins 6 caractères."

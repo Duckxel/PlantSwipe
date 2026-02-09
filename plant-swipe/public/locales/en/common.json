@@ -479,6 +479,7 @@
     "changing": "Changing Password...",
     "successTitle": "Password Changed!",
     "successDescription": "Redirecting you to the app...",
+    "connectedAs": "Connected as",
     "passwordTooShort": "Password must be at least 6 characters.",
     "passwordsDontMatch": "Passwords do not match.",
     "requirements": "Password must be at least 6 characters long."
