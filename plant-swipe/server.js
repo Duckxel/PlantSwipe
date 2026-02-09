@@ -10902,23 +10902,43 @@ app.get('/api/email-verification/status', async (req, res) => {
 
     const verified = profileRows?.[0]?.email_verified === true
 
-    // Also check if there's a pending code (only return expiry time, not the code itself)
-    const pendingCodeRows = await sql`
-      select expires_at from email_verification_codes
-      where user_id = ${authUser.id}
-      and used_at is null
-      and expires_at > now()
-      order by created_at desc
-      limit 1
-    `
+    // Also check if there's a pending code (only return expiry time + target_email, not the code itself)
+    // Gracefully handle missing target_email column (migration may not have run yet)
+    let pendingCodeRows
+    try {
+      pendingCodeRows = await sql`
+        select expires_at, target_email from email_verification_codes
+        where user_id = ${authUser.id}
+        and used_at is null
+        and expires_at > now()
+        order by created_at desc
+        limit 1
+      `
+    } catch (selectErr) {
+      if (selectErr?.message?.includes('target_email') || selectErr?.code === '42703') {
+        pendingCodeRows = await sql`
+          select expires_at from email_verification_codes
+          where user_id = ${authUser.id}
+          and used_at is null
+          and expires_at > now()
+          order by created_at desc
+          limit 1
+        `
+      } else {
+        throw selectErr
+      }
+    }
 
     const hasPendingCode = pendingCodeRows && pendingCodeRows.length > 0
     const pendingCodeExpiresAt = hasPendingCode ? pendingCodeRows[0].expires_at : null
+    // Return target_email so the verify page can display the correct email and use it for resends
+    const pendingTargetEmail = hasPendingCode ? (pendingCodeRows[0].target_email || null) : null
 
     res.json({ 
       verified, 
       hasPendingCode,
-      pendingCodeExpiresAt 
+      pendingCodeExpiresAt,
+      targetEmail: pendingTargetEmail,
     })
   } catch (err) {
     console.error('[email-verification/status] Error:', err?.message)

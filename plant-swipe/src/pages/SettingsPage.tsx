@@ -554,9 +554,11 @@ export default function SettingsPage() {
       await refreshProfile()
       
       // Redirect to email verification page for OTP verification
+      // Pass the target email via navigation state so the page displays the correct address
+      // and can include it in resend requests.
       // The email change notification to the old email will be sent by the server
       // after the user successfully verifies the OTP code.
-      navigate('/verify-email')
+      navigate('/verify-email', { state: { targetEmail: newEmail } })
     } catch (e: any) {
       setError(e?.message || t('settings.email.failedToUpdate'))
     } finally {

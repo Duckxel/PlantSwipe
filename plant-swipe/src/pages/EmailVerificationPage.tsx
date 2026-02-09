@@ -1,6 +1,7 @@
 import React from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
+import { useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
@@ -105,6 +106,7 @@ export function EmailVerificationPage() {
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
   const currentLang = useLanguage()
+  const location = useLocation()
   const { user, profile, refreshProfile } = useAuth()
   
   const [code, setCode] = React.useState('')
@@ -116,6 +118,12 @@ export function EmailVerificationPage() {
   const [expiresAt, setExpiresAt] = React.useState<Date | null>(null)
   const [timeLeft, setTimeLeft] = React.useState<number>(0)
   const [resendCooldown, setResendCooldown] = React.useState(0)
+  
+  // Target email for email-change flow (passed via navigation state from SettingsPage,
+  // or loaded from the server's pending verification code)
+  const [targetEmail, setTargetEmail] = React.useState<string | null>(
+    (location.state as { targetEmail?: string } | null)?.targetEmail || null
+  )
   
   // Countdown timer for code expiration
   React.useEffect(() => {
@@ -187,6 +195,10 @@ export function EmailVerificationPage() {
         if (data.hasPendingCode && data.pendingCodeExpiresAt) {
           setCodeSent(true)
           setExpiresAt(new Date(data.pendingCodeExpiresAt))
+          // If server returns a targetEmail (email-change flow), use it
+          if (data.targetEmail) {
+            setTargetEmail(data.targetEmail)
+          }
           return
         }
 
@@ -222,10 +234,17 @@ export function EmailVerificationPage() {
         secureHeaders['Authorization'] = `Bearer ${sessionResult.data.session.access_token}`
       }
       
+      // Include targetEmail if this is an email-change flow, so the OTP
+      // is sent to the new email address (not the current auth email)
+      const sendBody: Record<string, string> = { language: currentLang }
+      if (targetEmail) {
+        sendBody.targetEmail = targetEmail
+      }
+      
       const response = await fetch('/api/email-verification/send', {
         method: 'POST',
         headers: secureHeaders,
-        body: JSON.stringify({ language: currentLang }),
+        body: JSON.stringify(sendBody),
         credentials: 'same-origin'
       })
       
@@ -451,7 +470,7 @@ export function EmailVerificationPage() {
                   transition={{ delay: 0.2 }}
                   className="text-stone-800 dark:text-stone-200 font-medium text-base md:text-lg mb-8"
                 >
-                  {user?.email}
+                  {targetEmail || user?.email}
                 </motion.p>
                 
                 {/* Code input */}
