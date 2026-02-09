@@ -1492,9 +1492,15 @@ export default function PlantSwipe() {
     const isPasswordChangePage = pathWithoutLang === "/password-change"
 
     // Check if user must change password (after forgot-password magic link login)
-    const needsPasswordChange = user && profile && profile.force_password_change === true
+    // Check both: DB flag (profile.force_password_change) and localStorage flag
+    // localStorage flag is set when user requests forgot-password, ensures redirect works
+    // even if the DB column hasn't been migrated yet
+    const localStorageForceChange = (() => {
+      try { return localStorage.getItem('plantswipe.force_password_change') === 'true' } catch { return false }
+    })()
+    const needsPasswordChange = user && profile && (profile.force_password_change === true || localStorageForceChange)
     const passwordChangeExcludedPaths = ['/password-change', '/admin']
-    const isExcludedFromPasswordChange = pathWithoutLang === '/' || passwordChangeExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    const isExcludedFromPasswordChange = passwordChangeExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToPasswordChange = needsPasswordChange && !needsLegalUpdate && !isExcludedFromPasswordChange
 
     // Setup page - full screen wizard experience

@@ -45,6 +45,9 @@ export function ForgotPasswordPage() {
       }
 
       if (data.found && data.sent) {
+        // Set localStorage flag so the app knows to redirect to /password-change
+        // after the magic link session is established (works even if DB column doesn't exist)
+        try { localStorage.setItem('plantswipe.force_password_change', 'true') } catch {}
         setSuccess(true)
       } else {
         setError(data.reason || t('forgotPassword.failedToSend', 'Failed to send email. Please try again.'))

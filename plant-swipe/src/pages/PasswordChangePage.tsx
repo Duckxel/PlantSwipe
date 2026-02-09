@@ -54,11 +54,14 @@ export function PasswordChangePage() {
   }, [user, navigate])
 
   // Redirect if user doesn't need password change
+  const localStorageFlag = (() => {
+    try { return localStorage.getItem('plantswipe.force_password_change') === 'true' } catch { return false }
+  })()
   React.useEffect(() => {
-    if (user && profile && !profile.force_password_change) {
+    if (user && profile && !profile.force_password_change && !localStorageFlag) {
       navigate('/discovery')
     }
-  }, [user, profile, navigate])
+  }, [user, profile, navigate, localStorageFlag])
 
   const handleSubmit = async () => {
     if (loading) return
@@ -107,7 +110,8 @@ export function PasswordChangePage() {
 
       if (data.success) {
         setSuccess(true)
-        // Refresh profile to clear force_password_change flag
+        // Clear both the DB flag (via profile refresh) and the localStorage flag
+        try { localStorage.removeItem('plantswipe.force_password_change') } catch {}
         await refreshProfile()
 
         // Navigate after brief delay to show success
@@ -154,6 +158,7 @@ export function PasswordChangePage() {
 
             <button
               onClick={async () => {
+                try { localStorage.removeItem('plantswipe.force_password_change') } catch {}
                 await signOut()
                 navigate('/')
               }}
