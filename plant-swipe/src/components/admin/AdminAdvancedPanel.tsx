@@ -149,9 +149,12 @@ const LogsTab: React.FC = () => {
         } catch {
           // Ignore env access errors
         }
+        // SECURITY: Prefer Bearer token over static admin token in URL params.
+        // URL query params may be logged in server access logs and browser history.
+        // Only fall back to admin_token if no Bearer token is available.
         const q: string[] = []
         if (token) q.push(`token=${encodeURIComponent(token)}`)
-        if (adminToken) q.push(`admin_token=${encodeURIComponent(adminToken)}`)
+        if (!token && adminToken) q.push(`admin_token=${encodeURIComponent(adminToken)}`)
         const url = `/api/admin/admin-logs/stream${q.length ? "?" + q.join("&") : ""}`
         es = new EventSource(url)
         es.addEventListener("snapshot", (ev: MessageEvent) => {
