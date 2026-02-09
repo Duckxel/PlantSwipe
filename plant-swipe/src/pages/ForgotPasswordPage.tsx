@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
-import { SearchInput } from "@/components/ui/search-input"
+import { ValidatedInput } from "@/components/ui/validated-input"
+import { useFieldValidation } from "@/hooks/useFieldValidation"
+import { validateEmailFormat } from "@/lib/emailValidation"
 import { Label } from "@/components/ui/label"
-import { KeyRound, Loader2, Check, ArrowLeft, Mail } from "lucide-react"
+import { KeyRound, Loader2, Check, ArrowLeft } from "lucide-react"
 
 export function ForgotPasswordPage() {
   const { t } = useTranslation('common')
@@ -16,12 +18,25 @@ export function ForgotPasswordPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [success, setSuccess] = React.useState(false)
 
+  // Email format validation using shared components
+  const emailValidation = useFieldValidation(
+    email,
+    React.useCallback(async (val: string) => {
+      const fmt = validateEmailFormat(val)
+      if (!fmt.valid) return { valid: false, error: t(fmt.errorKey || 'auth.emailErrors.invalidFormat', { defaultValue: fmt.error }) }
+      const suggestionText = fmt.suggestion ? t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: fmt.suggestion }) : undefined
+      return { valid: true, suggestion: suggestionText }
+    }, [t]),
+    400,
+  )
+
   const handleSubmit = async () => {
     if (loading || !email.trim()) return
 
-    // Basic email validation
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
-      setError(t('forgotPassword.invalidEmail', 'Please enter a valid email address.'))
+    // Validate email format using shared validation
+    const emailCheck = validateEmailFormat(email.trim())
+    if (!emailCheck.valid) {
+      setError(t(emailCheck.errorKey || 'auth.emailErrors.invalidFormat', { defaultValue: emailCheck.error || 'Please enter a valid email address.' }))
       return
     }
 
@@ -199,14 +214,17 @@ export function ForgotPasswordPage() {
                     <Label htmlFor="forgot-password-email">
                       {t('forgotPassword.emailLabel', 'Email Address')}
                     </Label>
-                    <SearchInput
+                    <ValidatedInput
                       id="forgot-password-email"
-                      icon={<Mail className="h-full w-full" />}
+                      type="email"
                       placeholder={t('forgotPassword.emailPlaceholder', 'you@example.com')}
                       value={email}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-                      onClear={() => setEmail('')}
                       disabled={loading}
+                      status={emailValidation.status}
+                      error={emailValidation.error}
+                      suggestion={emailValidation.suggestion}
+                      onAcceptSuggestion={emailValidation.suggestion ? () => { /* display-only */ } : undefined}
                       onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                         if (e.key === 'Enter') handleSubmit()
                       }}
@@ -226,7 +244,7 @@ export function ForgotPasswordPage() {
 
                   <Button
                     onClick={handleSubmit}
-                    disabled={loading || !email.trim()}
+                    disabled={loading || !email.trim() || emailValidation.status === 'error'}
                     className="w-full rounded-full py-6 text-base font-semibold bg-accent hover:opacity-90 text-accent-foreground shadow-lg transition-all duration-200"
                   >
                     {loading ? (
