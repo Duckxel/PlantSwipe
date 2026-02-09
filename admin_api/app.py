@@ -266,6 +266,76 @@ DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
 
 ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
 
+# =============================================================================
+# RATE LIMITING - Prevent abuse of admin endpoints
+# =============================================================================
+import threading
+from collections import defaultdict
+
+class AdminRateLimiter:
+    """Simple in-memory rate limiter for admin operations.
+    
+    Tracks requests per IP address within a rolling time window.
+    Protects against:
+    - Brute-force attacks on authentication tokens
+    - Repeated triggering of destructive operations from compromised tokens
+    """
+    
+    def __init__(self):
+        self._lock = threading.Lock()
+        # Maps (action, ip) -> list of timestamps
+        self._attempts: dict[tuple[str, str], list[float]] = defaultdict(list)
+        self._configs = {
+            # Auth failures: 5 per 15 minutes per IP
+            "auth": {"window": 15 * 60, "max": 5},
+            # Destructive ops: 10 per hour per IP  
+            "destructive": {"window": 60 * 60, "max": 10},
+        }
+    
+    def _get_ip(self) -> str:
+        """Get client IP from request, respecting X-Real-IP from nginx."""
+        return request.headers.get("X-Real-IP", request.remote_addr or "unknown")
+    
+    def _cleanup(self, key: tuple[str, str], window: float) -> list[float]:
+        """Remove expired entries and return recent ones."""
+        now = time.time()
+        recent = [ts for ts in self._attempts[key] if now - ts < window]
+        self._attempts[key] = recent
+        return recent
+    
+    def is_blocked(self, action: str) -> bool:
+        """Check if the current IP is rate-limited for the given action."""
+        config = self._configs.get(action)
+        if not config:
+            return False
+        ip = self._get_ip()
+        key = (action, ip)
+        with self._lock:
+            recent = self._cleanup(key, config["window"])
+            return len(recent) >= config["max"]
+    
+    def record(self, action: str) -> None:
+        """Record an attempt for the current IP."""
+        config = self._configs.get(action)
+        if not config:
+            return
+        ip = self._get_ip()
+        key = (action, ip)
+        with self._lock:
+            self._attempts[key].append(time.time())
+            # Prune old entries
+            self._cleanup(key, config["window"])
+    
+    def check_and_record(self, action: str) -> bool:
+        """Check rate limit and record attempt. Returns True if blocked."""
+        if self.is_blocked(action):
+            return True
+        self.record(action)
+        return False
+
+
+_rate_limiter = AdminRateLimiter()
+
 app = Flask(__name__)
 
 
@@ -292,6 +362,12 @@ def forbidden_handler(error):
 def not_found_handler(error):
     description = getattr(error, 'description', 'Not Found')
     return jsonify({"ok": False, "error": "Not Found", "message": description}), 404
+
+
+@app.errorhandler(429)
+def too_many_requests_handler(error):
+    description = getattr(error, 'description', 'Too Many Requests')
+    return jsonify({"ok": False, "error": "Too Many Requests", "message": description}), 429
 
 
 @app.errorhandler(500)
@@ -325,6 +401,10 @@ def _log_admin_action(action: str, target: str = "", detail: dict | None = None)
 
 
 def _verify_request() -> None:
+    # SECURITY: Check if IP is blocked due to too many failed auth attempts
+    if _rate_limiter.is_blocked("auth"):
+        abort(429, description="Too many failed authentication attempts. Please wait before trying again.")
+
     # Option A: HMAC on raw body via X-Button-Token
     provided_sig = request.headers.get(HMAC_HEADER, "")
     if provided_sig:
@@ -332,12 +412,18 @@ def _verify_request() -> None:
         computed_sig = hmac.new(APP_SECRET.encode("utf-8"), body, hashlib.sha256).hexdigest()
         if hmac.compare_digest(provided_sig, computed_sig):
             return
+        # SECURITY: Record failed auth attempt for rate limiting
+        _rate_limiter.record("auth")
         abort(401)
 
     # Option B: Shared static token header (X-Admin-Token)
     static_token = request.headers.get("X-Admin-Token", "")
     if ADMIN_STATIC_TOKEN and static_token and hmac.compare_digest(static_token, ADMIN_STATIC_TOKEN):
         return
+
+    # SECURITY: Record failed auth attempt if a token was provided but didn't match
+    if static_token:
+        _rate_limiter.record("auth")
 
     abort(401)
 
@@ -620,7 +706,7 @@ def admin_refresh_stream():
     return _run_refresh(branch, stream=True)
 
 
-@app.get("/admin/pull-code")
+# SECURITY: Removed GET method for state-changing operation (pull-code)
 @app.post("/admin/pull-code")
 def admin_refresh():
     _verify_request()
@@ -633,7 +719,7 @@ def admin_refresh():
     return _run_refresh(branch, stream=False)
 
 
-@app.get("/admin/deploy-edge-functions")
+# SECURITY: Removed GET method for state-changing operation (deploy-edge-functions)
 @app.post("/admin/deploy-edge-functions")
 def admin_deploy_edge_functions():
     _verify_request()
@@ -794,6 +880,9 @@ def disable_maintenance_mode():
 @app.post("/admin/restart-app")
 def restart_app():
     _verify_request()
+    # SECURITY: Rate limit destructive operations
+    if _rate_limiter.check_and_record("destructive"):
+        abort(429, description="Too many admin operations. Please wait before trying again.")
     payload = request.get_json(silent=True) or {}
     service = str(payload.get("service") or DEFAULT_SERVICE).strip()
     if not service:
@@ -809,6 +898,9 @@ def restart_app():
 @app.post("/admin/reload-nginx")
 def reload_nginx():
     _verify_request()
+    # SECURITY: Rate limit destructive operations
+    if _rate_limiter.check_and_record("destructive"):
+        abort(429, description="Too many admin operations. Please wait before trying again.")
     _reload_nginx()
     try:
         _log_admin_action("reload_nginx", "nginx")
@@ -820,6 +912,14 @@ def reload_nginx():
 @app.post("/admin/reboot")
 def reboot():
     _verify_request()
+    # SECURITY: Rate limit destructive operations
+    if _rate_limiter.check_and_record("destructive"):
+        abort(429, description="Too many admin operations. Please wait before trying again.")
+    # SECURITY: Require explicit confirmation for destructive operations
+    # Client must send {"confirm": true} in the request body
+    body = request.get_json(silent=True) or {}
+    if not body.get("confirm"):
+        abort(400, description="Reboot requires explicit confirmation: {\"confirm\": true}")
     _reboot_machine()
     # If reboot succeeds, client may never see this response
     try:
@@ -829,7 +929,8 @@ def reboot():
     return jsonify({"ok": True, "action": "reboot"})
 
 
-@app.get("/admin/sync-schema")
+# SECURITY: Removed GET method for state-changing operation (sync-schema)
+# GET requests are vulnerable to CSRF via img tags, link prefetching, etc.
 @app.post("/admin/sync-schema")
 def sync_schema():
     _verify_request()
@@ -1102,15 +1203,24 @@ def sync_schema():
             supa_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
             
             if supa_url and supa_key:
-                secret_sql = f"""
+                # SECURITY: Use parameterized queries via psql variables to prevent SQL injection.
+                # Never interpolate values directly into SQL strings, even from env vars.
+                secret_sql = r"""
+                \set supa_url_val :'supa_url'
+                \set supa_key_val :'supa_key'
                 INSERT INTO public.admin_secrets (key, value)
-                VALUES ('SUPABASE_URL', '{supa_url}'), ('SUPABASE_SERVICE_ROLE_KEY', '{supa_key}')
+                VALUES ('SUPABASE_URL', :'supa_url_val'), ('SUPABASE_SERVICE_ROLE_KEY', :'supa_key_val')
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
                 """
-                # Use subprocess to pipe SQL to psql to avoid escaping issues with shell arguments
-                # Use same SSL environment as the main psql call
+                # Use subprocess to pipe SQL to psql with variables passed via -v flags
+                # This avoids any string interpolation in SQL
                 p = subprocess.Popen(
-                    ["psql", db_url, "-q", "-f", "-"],
+                    [
+                        "psql", db_url, "-q",
+                        "-v", f"supa_url={supa_url}",
+                        "-v", f"supa_key={supa_key}",
+                        "-f", "-",
+                    ],
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
@@ -1385,7 +1495,7 @@ def git_pull_stream():
     return Response(generate(), mimetype="text/event-stream")
 
 
-@app.get("/admin/git-pull")
+# SECURITY: Removed GET method for state-changing operation (git-pull)
 @app.post("/admin/git-pull")
 def git_pull():
     """Simple git pull as www-data (non-streaming)."""
@@ -1437,7 +1547,7 @@ def _sitemap_script_path(repo_root: str) -> str:
     return str(Path(repo_root) / "scripts" / "generate-sitemap-daily.sh")
 
 
-@app.get("/admin/regenerate-sitemap")
+# SECURITY: Removed GET method for state-changing operation (regenerate-sitemap)
 @app.post("/admin/regenerate-sitemap")
 def regenerate_sitemap():
     """Regenerate the sitemap by running the sitemap generation script."""
