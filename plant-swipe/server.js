@@ -1097,6 +1097,7 @@ const rateLimitStores = {
   translate: new Map(),      // Translation API
   imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
   bugReport: new Map(),      // Bug report submissions
+  checkAvailable: new Map(),    // Username/email availability check (signup)
   emailValidate: new Map(),     // Email validation (DNS MX check)
   emailVerifySend: new Map(),   // Email verification code sending
   emailVerifyAttempt: new Map(), // Email verification code attempts (brute force protection)
@@ -1168,6 +1169,12 @@ const rateLimitConfig = {
     windowMs: 15 * 60 * 1000,  // 15 minutes
     maxAttempts: 10,
     perUser: false,  // Per IP to catch credential stuffing
+  },
+  // Username/email availability check: 30 per 15 minutes per IP (signup live validation)
+  checkAvailable: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 30,
+    perUser: false,  // Per IP since unauthenticated
   },
   // Email validation (DNS MX check): 20 per 15 minutes per IP (prevent abuse)
   emailValidate: {
@@ -10101,6 +10108,70 @@ app.post('/api/send-security-email', async (req, res) => {
 // EMAIL VERIFICATION - OTP-based email verification system
 // Codes are 6 alphanumeric characters and expire after 5 minutes
 // =============================================================================
+
+// ─── Username / Email Availability Check ─────────────────────────────────
+// Used during signup to give live feedback on whether a username or email is
+// already taken.  Does NOT require authentication (runs before account exists).
+// Uses direct SQL to bypass RLS – the anon Supabase client may not be able to
+// read the profiles table reliably.
+
+/**
+ * Check username and/or email availability for signup.
+ *
+ * Body: { username?: string, email?: string }
+ * Returns: { username?: { available: boolean }, email?: { available: boolean } }
+ *
+ * SECURITY: Rate limited to 30 requests per 15 minutes per IP.
+ *           No authentication required (pre-signup).
+ */
+app.post('/api/auth/check-available', async (req, res) => {
+  // Rate limiting
+  if (await checkAndRecordRateLimit(req, res, 'checkAvailable', null)) {
+    return
+  }
+
+  const { username, email } = req.body || {}
+  const result = {}
+
+  // ── Username availability ─────────────────────────────────────────
+  if (username && typeof username === 'string') {
+    const normalized = username.trim().toLowerCase()
+    if (normalized.length >= 2 && sql) {
+      try {
+        const rows = await sql`
+          SELECT id FROM profiles WHERE lower(display_name) = ${normalized} LIMIT 1
+        `
+        result.username = { available: !rows || rows.length === 0 }
+      } catch (err) {
+        console.warn('[check-available] Username check failed:', err?.message)
+        // On error don't block – return unknown
+        result.username = { available: true, uncertain: true }
+      }
+    } else if (!sql) {
+      result.username = { available: true, uncertain: true }
+    }
+  }
+
+  // ── Email availability ────────────────────────────────────────────
+  if (email && typeof email === 'string') {
+    const normalized = email.trim().toLowerCase()
+    if (normalized.includes('@') && sql) {
+      try {
+        const rows = await sql`
+          SELECT id FROM auth.users WHERE lower(email) = ${normalized} LIMIT 1
+        `
+        result.email = { available: !rows || rows.length === 0 }
+      } catch (err) {
+        console.warn('[check-available] Email check failed:', err?.message)
+        result.email = { available: true, uncertain: true }
+      }
+    } else if (!sql) {
+      result.email = { available: true, uncertain: true }
+    }
+  }
+
+  res.json(result)
+})
 
 // ─── Email Validation ──────────────────────────────────────────────────────
 // Validates email addresses by checking DNS MX records for the domain.

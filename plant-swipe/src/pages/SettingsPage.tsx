@@ -87,15 +87,32 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = React.useState("")
   const [confirmPassword, setConfirmPassword] = React.useState("")
 
-  // Debounced validation for new email field
+  // Debounced validation for new email field (format + DNS + uniqueness)
   const newEmailValidation = useFieldValidation(
     newEmail,
     React.useCallback(async (val: string) => {
-      if (val === email) return { valid: false, error: t('settings.email.enterNewEmail') }
+      if (val.trim().toLowerCase() === email.trim().toLowerCase()) return { valid: false, error: t('settings.email.enterNewEmail') }
       const fmt = validateEmailFormat(val)
       if (!fmt.valid) return { valid: false, error: t(fmt.errorKey || 'auth.emailErrors.invalidFormat', { defaultValue: fmt.error }) }
       const dns = await validateEmailDomain(val)
       if (!dns.valid) return { valid: false, error: t(dns.errorKey || 'auth.emailErrors.domainCannotReceiveEmail', { defaultValue: dns.error }) }
+      // Uniqueness check – is this email already taken by another user?
+      try {
+        const resp = await fetch('/api/auth/check-available', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: val.trim().toLowerCase() }),
+          credentials: 'same-origin',
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data.email && !data.email.available) {
+            return { valid: false, error: t('settings.email.emailAlreadyInUse', { defaultValue: 'This email is already in use by another account.' }) }
+          }
+        }
+      } catch {
+        // Network error – don't block, format + DNS passed
+      }
       const suggestionText = fmt.suggestion ? t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: fmt.suggestion }) : undefined
       return { valid: true, suggestion: suggestionText }
     // eslint-disable-next-line react-hooks/exhaustive-deps

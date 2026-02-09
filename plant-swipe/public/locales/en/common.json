@@ -464,7 +464,8 @@
       "noIpDomain": "IP address domains are not allowed",
       "disposableEmail": "Disposable email addresses are not allowed. Please use a permanent email.",
       "domainCannotReceiveEmail": "This email domain cannot receive emails. Please check the address.",
-      "domainNotFound": "This email domain does not exist. Please check the address."
+      "domainNotFound": "This email domain does not exist. Please check the address.",
+      "alreadyRegistered": "An account already exists with this email address"
     },
     "usernameErrors": {
       "invalid": "Please enter a valid username",

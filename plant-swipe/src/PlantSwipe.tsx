@@ -262,15 +262,29 @@ export default function PlantSwipe() {
   // ── Debounced field validation for signup ──────────────────────────
   const isSignupMode = authMode === 'signup'
 
-  // Username validation (format + availability check)
+  // Username validation (format + server-side availability check)
   const usernameValidation = useFieldValidation(
     authDisplayName,
     React.useCallback(async (val: string) => {
       const fmt = validateUsername(val)
       if (!fmt.valid) return { valid: false, error: fmt.error }
-      // Check availability via Supabase
-      const { data } = await supabase.from('profiles').select('id').ilike('display_name', fmt.normalized!).maybeSingle()
-      if (data?.id) return { valid: false, error: t('auth.usernameErrors.taken', { defaultValue: 'This username is already taken' }) }
+      // Server-side availability check (bypasses RLS, uses direct SQL)
+      try {
+        const resp = await fetch('/api/auth/check-available', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: fmt.normalized }),
+          credentials: 'same-origin',
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data.username && !data.username.available) {
+            return { valid: false, error: t('auth.usernameErrors.taken', { defaultValue: 'This username is already taken' }) }
+          }
+        }
+      } catch {
+        // Network error – don't block, format is valid
+      }
       return { valid: true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [t]),
@@ -278,14 +292,33 @@ export default function PlantSwipe() {
     isSignupMode,
   )
 
-  // Email validation (format + DNS MX)
+  // Email validation (format + DNS MX + uniqueness check)
   const emailValidation = useFieldValidation(
     authEmail,
     React.useCallback(async (val: string) => {
+      // 1. Format check (instant)
       const fmt = validateEmailFormat(val)
       if (!fmt.valid) return { valid: false, error: t(fmt.errorKey || 'auth.emailErrors.invalidFormat', { defaultValue: fmt.error }) }
+      // 2. DNS MX record check (server-side)
       const dns = await validateEmailDomain(val)
       if (!dns.valid) return { valid: false, error: t(dns.errorKey || 'auth.emailErrors.domainCannotReceiveEmail', { defaultValue: dns.error }) }
+      // 3. Uniqueness check – is this email already registered?
+      try {
+        const resp = await fetch('/api/auth/check-available', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: val.trim().toLowerCase() }),
+          credentials: 'same-origin',
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data.email && !data.email.available) {
+            return { valid: false, error: t('auth.emailErrors.alreadyRegistered', { defaultValue: 'An account already exists with this email address' }) }
+          }
+        }
+      } catch {
+        // Network error – don't block, format + DNS passed
+      }
       const suggestionText = fmt.suggestion ? t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: fmt.suggestion }) : undefined
       return { valid: true, suggestion: suggestionText }
     // eslint-disable-next-line react-hooks/exhaustive-deps
