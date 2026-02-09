@@ -450,6 +450,35 @@
     "cookiesRequiredTitle": "Cookies Required",
     "cookiesRequiredDescription": "To protect your account, we use reCAPTCHA which requires cookies. Please accept cookies to continue.",
     "acceptCookiesButton": "Accept Essential Cookies",
+    "emailSuggestion": "Did you mean {{suggestion}}?",
+    "emailValidating": "Checking email...",
+    "emailErrors": {
+      "required": "Email address is required",
+      "invalidFormat": "Please enter a valid email address",
+      "invalidCharacters": "Email contains invalid characters",
+      "localPartTooLong": "The part before @ is too long (max 64 characters)",
+      "missingDomain": "Please enter the domain part after @",
+      "invalidDomain": "Please enter a valid domain (e.g., example.com)",
+      "domainTooLong": "The domain name is too long",
+      "invalidTld": "Please enter a valid domain extension (e.g., .com, .fr)",
+      "noIpDomain": "IP address domains are not allowed",
+      "disposableEmail": "Disposable email addresses are not allowed. Please use a permanent email.",
+      "domainCannotReceiveEmail": "This email domain cannot receive emails. Please check the address.",
+      "domainNotFound": "This email domain does not exist. Please check the address.",
+      "alreadyRegistered": "An account already exists with this email address"
+    },
+    "usernameErrors": {
+      "invalid": "Please enter a valid username",
+      "taken": "This username is already taken"
+    },
+    "passwordRules": {
+      "minLength": "At least 8 characters",
+      "hasLetter": "Contains a letter",
+      "hasNumber": "Contains a number",
+      "hasSpecial": "Contains a special character",
+      "tooWeak": "Password does not meet the requirements",
+      "strong": "Password is strong"
+    }
     "forgotPassword": "Forgot Password?"
   },
   "forgotPassword": {

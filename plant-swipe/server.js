@@ -292,6 +292,7 @@ import { promisify } from 'util'
 import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
+import dns from 'dns'
 import net from 'net'
 import os from 'os'
 import OpenAI from 'openai'
@@ -1120,6 +1121,8 @@ const rateLimitStores = {
   translate: new Map(),      // Translation API
   imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
   bugReport: new Map(),      // Bug report submissions
+  checkAvailable: new Map(),    // Username/email availability check (signup)
+  emailValidate: new Map(),     // Email validation (DNS MX check)
   emailVerifySend: new Map(),   // Email verification code sending
   emailVerifyAttempt: new Map(), // Email verification code attempts (brute force protection)
   gardenActivity: new Map(), // Garden activity logging
@@ -1191,6 +1194,18 @@ const rateLimitConfig = {
     windowMs: 15 * 60 * 1000,  // 15 minutes
     maxAttempts: 10,
     perUser: false,  // Per IP to catch credential stuffing
+  },
+  // Username/email availability check: 30 per 15 minutes per IP (signup live validation)
+  checkAvailable: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 30,
+    perUser: false,  // Per IP since unauthenticated
+  },
+  // Email validation (DNS MX check): 20 per 15 minutes per IP (prevent abuse)
+  emailValidate: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 20,
+    perUser: false,  // Per IP since unauthenticated users can validate during signup
   },
   // Email verification code sending: 5 per 15 minutes per user (prevent email spam)
   emailVerifySend: {
@@ -10321,6 +10336,186 @@ app.post('/api/force-password-change', requireCsrfToken, async (req, res) => {
 // Codes are 6 alphanumeric characters and expire after 5 minutes
 // =============================================================================
 
+// ─── Username / Email Availability Check ─────────────────────────────────
+// Used during signup to give live feedback on whether a username or email is
+// already taken.  Does NOT require authentication (runs before account exists).
+// Uses direct SQL to bypass RLS – the anon Supabase client may not be able to
+// read the profiles table reliably.
+
+/**
+ * Check username and/or email availability for signup.
+ *
+ * Body: { username?: string, email?: string }
+ * Returns: { username?: { available: boolean }, email?: { available: boolean } }
+ *
+ * SECURITY: Rate limited to 30 requests per 15 minutes per IP.
+ *           No authentication required (pre-signup).
+ */
+app.post('/api/auth/check-available', async (req, res) => {
+  // Rate limiting
+  if (await checkAndRecordRateLimit(req, res, 'checkAvailable', null)) {
+    return
+  }
+
+  const { username, email } = req.body || {}
+  const result = {}
+
+  // ── Username availability ─────────────────────────────────────────
+  if (username && typeof username === 'string') {
+    const normalized = username.trim().toLowerCase()
+    if (normalized.length >= 2 && sql) {
+      try {
+        const rows = await sql`
+          SELECT id FROM profiles WHERE lower(display_name) = ${normalized} LIMIT 1
+        `
+        result.username = { available: !rows || rows.length === 0 }
+      } catch (err) {
+        console.warn('[check-available] Username check failed:', err?.message)
+        // On error don't block – return unknown
+        result.username = { available: true, uncertain: true }
+      }
+    } else if (!sql) {
+      result.username = { available: true, uncertain: true }
+    }
+  }
+
+  // ── Email availability ────────────────────────────────────────────
+  if (email && typeof email === 'string') {
+    const normalized = email.trim().toLowerCase()
+    if (normalized.includes('@') && sql) {
+      try {
+        const rows = await sql`
+          SELECT id FROM auth.users WHERE lower(email) = ${normalized} LIMIT 1
+        `
+        result.email = { available: !rows || rows.length === 0 }
+      } catch (err) {
+        console.warn('[check-available] Email check failed:', err?.message)
+        result.email = { available: true, uncertain: true }
+      }
+    } else if (!sql) {
+      result.email = { available: true, uncertain: true }
+    }
+  }
+
+  res.json(result)
+})
+
+// ─── Email Validation ──────────────────────────────────────────────────────
+// Validates email addresses by checking DNS MX records for the domain.
+// This ensures the domain can actually receive emails before we attempt delivery.
+
+/**
+ * Validate an email address by checking DNS MX records for its domain.
+ * 
+ * SECURITY: Rate limited to 20 requests per 15 minutes per IP
+ * Does NOT require authentication (used during signup before account exists)
+ */
+app.post('/api/email/validate', async (req, res) => {
+  // Rate limiting: prevent abuse
+  if (await checkAndRecordRateLimit(req, res, 'emailValidate', null)) {
+    return // Response already sent by rate limiter
+  }
+
+  const { email } = req.body || {}
+
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ 
+      valid: false, 
+      errorKey: 'auth.emailErrors.required',
+      error: 'Email address is required' 
+    })
+  }
+
+  const normalized = email.trim().toLowerCase()
+  
+  // Basic format check server-side too
+  const atIndex = normalized.indexOf('@')
+  if (atIndex === -1 || atIndex !== normalized.lastIndexOf('@')) {
+    return res.json({ 
+      valid: false, 
+      errorKey: 'auth.emailErrors.invalidFormat',
+      error: 'Invalid email format' 
+    })
+  }
+
+  const domain = normalized.slice(atIndex + 1)
+  
+  if (!domain || !domain.includes('.')) {
+    return res.json({ 
+      valid: false, 
+      errorKey: 'auth.emailErrors.invalidDomain',
+      error: 'Invalid email domain' 
+    })
+  }
+
+  try {
+    // Check DNS MX records for the domain
+    const mxRecords = await new Promise((resolve, reject) => {
+      dns.resolveMx(domain, (err, addresses) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve(addresses)
+        }
+      })
+    })
+
+    if (!mxRecords || !Array.isArray(mxRecords) || mxRecords.length === 0) {
+      // No MX records - try A record as fallback (some domains use A record for mail)
+      try {
+        const aRecords = await new Promise((resolve, reject) => {
+          dns.resolve4(domain, (err, addresses) => {
+            if (err) reject(err)
+            else resolve(addresses)
+          })
+        })
+
+        if (!aRecords || !Array.isArray(aRecords) || aRecords.length === 0) {
+          return res.json({ 
+            valid: false, 
+            errorKey: 'auth.emailErrors.domainCannotReceiveEmail',
+            error: 'This email domain cannot receive emails. Please check the address.' 
+          })
+        }
+        
+        // A record exists - domain might accept mail (implicit MX)
+        return res.json({ valid: true })
+      } catch {
+        return res.json({ 
+          valid: false, 
+          errorKey: 'auth.emailErrors.domainCannotReceiveEmail',
+          error: 'This email domain cannot receive emails. Please check the address.' 
+        })
+      }
+    }
+
+    // MX records exist - domain can receive email
+    res.json({ valid: true })
+  } catch (err) {
+    // DNS lookup errors
+    const dnsError = err
+
+    if (dnsError.code === 'ENOTFOUND' || dnsError.code === 'ENODATA') {
+      // Domain does not exist or has no mail records
+      return res.json({ 
+        valid: false, 
+        errorKey: 'auth.emailErrors.domainNotFound',
+        error: 'This email domain does not exist. Please check the address.' 
+      })
+    }
+
+    if (dnsError.code === 'ETIMEOUT' || dnsError.code === 'ESERVFAIL') {
+      // DNS timeout or server failure - don't block the user
+      console.warn(`[email-validate] DNS lookup timeout/failure for domain: ${domain}`)
+      return res.json({ valid: true, warning: 'DNS check timed out, proceeding' })
+    }
+
+    // Unknown DNS error - don't block the user
+    console.warn(`[email-validate] DNS lookup error for domain ${domain}:`, dnsError.code || dnsError.message)
+    return res.json({ valid: true, warning: 'DNS check failed, proceeding' })
+  }
+})
+
 /**
  * Generate a 6-character alphanumeric verification code
  * Uses uppercase letters and numbers for better readability
@@ -10705,6 +10900,48 @@ app.post('/api/security/check-email-available', requireCsrfToken, async (req, re
   // Use the authenticated user's ID to exclude from the check
   const userIdToExclude = authUser.id
   const normalizedEmail = email.toLowerCase().trim()
+
+  // Server-side email format validation (defense-in-depth)
+  const atIdx = normalizedEmail.indexOf('@')
+  if (atIdx === -1 || atIdx !== normalizedEmail.lastIndexOf('@')) {
+    return res.status(400).json({ available: false, error: 'Invalid email format' })
+  }
+  const emailDomain = normalizedEmail.slice(atIdx + 1)
+  if (!emailDomain || !emailDomain.includes('.')) {
+    return res.status(400).json({ available: false, error: 'Invalid email domain' })
+  }
+
+  // DNS MX record validation (ensure domain can receive emails)
+  try {
+    const mxRecords = await new Promise((resolve, reject) => {
+      dns.resolveMx(emailDomain, (err, addresses) => {
+        if (err) reject(err)
+        else resolve(addresses)
+      })
+    })
+    if (!mxRecords || !Array.isArray(mxRecords) || mxRecords.length === 0) {
+      // Try A record fallback
+      try {
+        const aRecords = await new Promise((resolve, reject) => {
+          dns.resolve4(emailDomain, (err, addresses) => {
+            if (err) reject(err)
+            else resolve(addresses)
+          })
+        })
+        if (!aRecords || !Array.isArray(aRecords) || aRecords.length === 0) {
+          return res.json({ available: false, error: 'This email domain cannot receive emails.' })
+        }
+      } catch {
+        return res.json({ available: false, error: 'This email domain cannot receive emails.' })
+      }
+    }
+  } catch (dnsErr) {
+    if (dnsErr.code === 'ENOTFOUND' || dnsErr.code === 'ENODATA') {
+      return res.json({ available: false, error: 'This email domain does not exist.' })
+    }
+    // DNS timeout/failure - don't block, proceed with availability check
+    console.warn(`[check-email-available] DNS check failed for ${emailDomain}:`, dnsErr.code || dnsErr.message)
+  }
 
   try {
     if (sql) {

@@ -2,6 +2,7 @@ import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
 import { validateUsername } from '@/lib/username'
+import { validateEmail } from '@/lib/emailValidation'
 import { setUser as setSentryUser } from '@/lib/sentry'
 
 // Import current legal document versions
@@ -223,6 +224,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
       if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
     } catch {}
+    // Validate email address (format + DNS MX record check)
+    const emailValidation = await validateEmail(email)
+    if (!emailValidation.valid) {
+      return { error: emailValidation.error || 'Invalid email address' }
+    }
+
     // Validate the display name (username)
     const validationResult = validateUsername(displayName)
     if (!validationResult.valid) {

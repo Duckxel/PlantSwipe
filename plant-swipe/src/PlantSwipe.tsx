@@ -5,14 +5,13 @@ import { Navigate } from "@/components/i18n/Navigate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGlobalNavigationTracker } from "@/hooks/useNavigationHistory";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { TopBar } from "@/components/layout/TopBar";
 import { Footer } from "@/components/layout/Footer";
@@ -36,6 +35,12 @@ import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
+import { validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation";
+import { validateUsername } from "@/lib/username";
+import { validatePassword } from "@/lib/passwordValidation";
+import { ValidatedInput } from "@/components/ui/validated-input";
+import { PasswordRules } from "@/components/ui/password-rules";
+import { useFieldValidation } from "@/hooks/useFieldValidation";
 
 import { SwipePage } from "@/pages/SwipePage"
 import { FilterControls } from "@/components/plant/FilterControls"
@@ -244,12 +249,10 @@ export default function PlantSwipe() {
   const [authEmail, setAuthEmail] = useState("")
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [authDisplayName, setAuthDisplayName] = useState("")
   const [authAcceptedTerms, setAuthAcceptedTerms] = useState(false)
   const [authMarketingConsent, setAuthMarketingConsent] = useState(false) // GDPR: Must be unchecked by default - pre-ticked boxes don't constitute valid consent (Recital 32)
-  
+
   // Track if cookie consent is needed for auth (reCAPTCHA requires cookies)
   const [authNeedsCookies, setAuthNeedsCookies] = useState(() => {
     const level = getConsentLevel()
@@ -257,6 +260,101 @@ export default function PlantSwipe() {
   })
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
+
+  // ── Debounced field validation for signup ──────────────────────────
+  const isSignupMode = authMode === 'signup'
+
+  // Username validation (format + server-side availability check)
+  const usernameValidation = useFieldValidation(
+    authDisplayName,
+    React.useCallback(async (val: string) => {
+      const fmt = validateUsername(val)
+      if (!fmt.valid) return { valid: false, error: fmt.error }
+      // Server-side availability check (bypasses RLS, uses direct SQL)
+      try {
+        const resp = await fetch('/api/auth/check-available', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: fmt.normalized }),
+          credentials: 'same-origin',
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data.username && !data.username.available) {
+            return { valid: false, error: t('auth.usernameErrors.taken', { defaultValue: 'This username is already taken' }) }
+          }
+        }
+      } catch {
+        // Network error – don't block, format is valid
+      }
+      return { valid: true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [t]),
+    400,
+    isSignupMode,
+  )
+
+  // Email validation (format + DNS MX + uniqueness check)
+  const emailValidation = useFieldValidation(
+    authEmail,
+    React.useCallback(async (val: string) => {
+      // 1. Format check (instant)
+      const fmt = validateEmailFormat(val)
+      if (!fmt.valid) return { valid: false, error: t(fmt.errorKey || 'auth.emailErrors.invalidFormat', { defaultValue: fmt.error }) }
+      // 2. DNS MX record check (server-side)
+      const dns = await validateEmailDomain(val)
+      if (!dns.valid) return { valid: false, error: t(dns.errorKey || 'auth.emailErrors.domainCannotReceiveEmail', { defaultValue: dns.error }) }
+      // 3. Uniqueness check – is this email already registered?
+      try {
+        const resp = await fetch('/api/auth/check-available', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: val.trim().toLowerCase() }),
+          credentials: 'same-origin',
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data.email && !data.email.available) {
+            return { valid: false, error: t('auth.emailErrors.alreadyRegistered', { defaultValue: 'An account already exists with this email address' }) }
+          }
+        }
+      } catch {
+        // Network error – don't block, format + DNS passed
+      }
+      const suggestionText = fmt.suggestion ? t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: fmt.suggestion }) : undefined
+      return { valid: true, suggestion: suggestionText }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [t]),
+    400,
+    isSignupMode,
+  )
+
+  // Password validation (strength rules)
+  const passwordResult = React.useMemo(() => validatePassword(authPassword), [authPassword])
+  const passwordValidation = useFieldValidation(
+    authPassword,
+    React.useCallback(async (val: string) => {
+      const r = validatePassword(val)
+      if (!r.valid) return { valid: false, error: r.error }
+      return { valid: true }
+    }, []),
+    400,
+    isSignupMode,
+  )
+
+  // Confirm password validation
+  const confirmPasswordValidation = useFieldValidation(
+    authPassword2,
+    React.useCallback(async (val: string) => {
+      if (!authPassword) return { valid: false, error: t('auth.passwordsDontMatch', { defaultValue: "Passwords do not match" }) }
+      if (val !== authPassword) return { valid: false, error: t('auth.passwordsDontMatch', { defaultValue: "Passwords do not match" }) }
+      return { valid: true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [authPassword, t]),
+    400,
+    isSignupMode,
+  )
+
   const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
   const privacyPath = React.useMemo(() => addLanguagePrefix('/privacy', currentLang), [currentLang])
   
@@ -1363,6 +1461,22 @@ export default function PlantSwipe() {
       }
       
       if (authMode === 'signup') {
+        // Gate on field-level validation states (already computed by hooks)
+        if (usernameValidation.status !== 'valid') {
+          setAuthError(usernameValidation.error || t('auth.usernameErrors.invalid', { defaultValue: 'Please enter a valid username' }))
+          setAuthSubmitting(false)
+          return
+        }
+        if (emailValidation.status !== 'valid') {
+          setAuthError(emailValidation.error || t('auth.emailErrors.invalidFormat', { defaultValue: 'Please enter a valid email address' }))
+          setAuthSubmitting(false)
+          return
+        }
+        if (!validatePassword(authPassword).valid) {
+          setAuthError(t('auth.passwordRules.tooWeak', { defaultValue: 'Password does not meet the requirements' }))
+          setAuthSubmitting(false)
+          return
+        }
         if (authPassword !== authPassword2) {
           console.warn('[auth] password mismatch')
           setAuthError(t('auth.passwordsDontMatch'))
@@ -1439,10 +1553,13 @@ export default function PlantSwipe() {
       setAuthEmail("")
       setAuthPassword("")
       setAuthPassword2("")
-      setShowPassword(false)
-      setShowConfirmPassword(false)
       setAuthDisplayName("")
+      usernameValidation.reset()
+      emailValidation.reset()
+      passwordValidation.reset()
+      confirmPasswordValidation.reset()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authOpen])
 
   React.useEffect(() => {
@@ -1450,9 +1567,12 @@ export default function PlantSwipe() {
       setAuthAcceptedTerms(false)
       setAuthMarketingConsent(false) // Reset to default (unchecked - GDPR compliant)
     }
-    // Reset password visibility when switching auth modes
-    setShowPassword(false)
-    setShowConfirmPassword(false)
+    // Reset validation states when switching auth modes
+    usernameValidation.reset()
+    emailValidation.reset()
+    passwordValidation.reset()
+    confirmPasswordValidation.reset()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authMode])
 
 
@@ -1683,46 +1803,25 @@ export default function PlantSwipe() {
                   </div>
                 )}
                 {authMode === 'signup' && (
-                  <div className="grid gap-2">
+                  <div className="grid gap-1">
                     <Label htmlFor="name">{t('auth.displayName')}</Label>
-                    <Input id="name" type="text" placeholder={t('auth.displayNamePlaceholder')} value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
+                    <ValidatedInput id="name" type="text" placeholder={t('auth.displayNamePlaceholder')} value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} disabled={authSubmitting} status={usernameValidation.status} error={usernameValidation.error} />
                   </div>
                 )}
                 
-                <div className="grid gap-2">
+                <div className="grid gap-1">
                   <Label htmlFor="email">{t('auth.email')}</Label>
-                  <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
+                  <ValidatedInput id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} status={isSignupMode ? emailValidation.status : 'idle'} error={emailValidation.error} suggestion={emailValidation.suggestion} onAcceptSuggestion={emailValidation.suggestion ? () => { /* suggestion is display-only, user can edit */ } : undefined} />
                 </div>
-                <div className="grid gap-2">
+                <div className="grid gap-1">
                   <Label htmlFor="password">{t('auth.password')}</Label>
-                  <div className="relative">
-                    <Input id="password" type={showPassword ? "text" : "password"} placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} className="pr-10" />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
+                  <ValidatedInput id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} status={isSignupMode ? passwordValidation.status : 'idle'} error={passwordValidation.error} />
+                  {isSignupMode && <PasswordRules rules={passwordResult.rules} visible={authPassword.length > 0} allPassedLabel={t('auth.passwordRules.strong', { defaultValue: 'Password is strong' })} />}
                 </div>
                 {authMode === 'signup' && (
-                  <div className="grid gap-2">
+                  <div className="grid gap-1">
                     <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
-                    <div className="relative">
-                      <Input id="confirm" type={showConfirmPassword ? "text" : "password"} placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} className="pr-10" />
-                      <button
-                        type="button"
-                        tabIndex={-1}
-                        onClick={() => setShowConfirmPassword((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
-                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                      >
-                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
+                    <ValidatedInput id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} status={confirmPasswordValidation.status} error={confirmPasswordValidation.error} />
                   </div>
                 )}
                 {authMode === 'signup' && (
@@ -2429,46 +2528,25 @@ export default function PlantSwipe() {
               </div>
             )}
             {authMode === 'signup' && (
-              <div className="grid gap-2">
+              <div className="grid gap-1">
                 <Label htmlFor="name">{t('auth.displayName')}</Label>
-                <Input id="name" type="text" placeholder={t('auth.displayNamePlaceholder')} value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
+                <ValidatedInput id="name" type="text" placeholder={t('auth.displayNamePlaceholder')} value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} disabled={authSubmitting} status={usernameValidation.status} error={usernameValidation.error} />
               </div>
             )}
             
-            <div className="grid gap-2">
+            <div className="grid gap-1">
               <Label htmlFor="email">{t('auth.email')}</Label>
-              <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
+              <ValidatedInput id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} status={isSignupMode ? emailValidation.status : 'idle'} error={emailValidation.error} suggestion={emailValidation.suggestion} onAcceptSuggestion={emailValidation.suggestion ? () => { /* suggestion is display-only */ } : undefined} />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-1">
               <Label htmlFor="password">{t('auth.password')}</Label>
-              <div className="relative">
-                <Input id="password" type={showPassword ? "text" : "password"} placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} className="pr-10" />
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+              <ValidatedInput id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} status={isSignupMode ? passwordValidation.status : 'idle'} error={passwordValidation.error} />
+              {isSignupMode && <PasswordRules rules={passwordResult.rules} visible={authPassword.length > 0} allPassedLabel={t('auth.passwordRules.strong', { defaultValue: 'Password is strong' })} />}
             </div>
             {authMode === 'signup' && (
-              <div className="grid gap-2">
+              <div className="grid gap-1">
                 <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
-                <div className="relative">
-                  <Input id="confirm" type={showConfirmPassword ? "text" : "password"} placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} className="pr-10" />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => setShowConfirmPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
-                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+                <ValidatedInput id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} status={confirmPasswordValidation.status} error={confirmPasswordValidation.error} />
               </div>
             )}
             {authMode === 'signup' && (

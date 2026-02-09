@@ -16,6 +16,11 @@ import usePushSubscription from "@/hooks/usePushSubscription"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
 import { SearchInput } from "@/components/ui/search-input"
 import { useDebounce } from "@/hooks/useDebounce"
+import { validateEmail, validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation"
+import { validatePassword } from "@/lib/passwordValidation"
+import { ValidatedInput } from "@/components/ui/validated-input"
+import { PasswordRules } from "@/components/ui/password-rules"
+import { useFieldValidation } from "@/hooks/useFieldValidation"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
 
@@ -81,7 +86,64 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = React.useState("")
   const [newPassword, setNewPassword] = React.useState("")
   const [confirmPassword, setConfirmPassword] = React.useState("")
-  
+
+  // Debounced validation for new email field (format + DNS + uniqueness)
+  const newEmailValidation = useFieldValidation(
+    newEmail,
+    React.useCallback(async (val: string) => {
+      if (val.trim().toLowerCase() === email.trim().toLowerCase()) return { valid: false, error: t('settings.email.enterNewEmail') }
+      const fmt = validateEmailFormat(val)
+      if (!fmt.valid) return { valid: false, error: t(fmt.errorKey || 'auth.emailErrors.invalidFormat', { defaultValue: fmt.error }) }
+      const dns = await validateEmailDomain(val)
+      if (!dns.valid) return { valid: false, error: t(dns.errorKey || 'auth.emailErrors.domainCannotReceiveEmail', { defaultValue: dns.error }) }
+      // Uniqueness check – is this email already taken by another user?
+      try {
+        const resp = await fetch('/api/auth/check-available', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: val.trim().toLowerCase() }),
+          credentials: 'same-origin',
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data.email && !data.email.available) {
+            return { valid: false, error: t('settings.email.emailAlreadyInUse', { defaultValue: 'This email is already in use by another account.' }) }
+          }
+        }
+      } catch {
+        // Network error – don't block, format + DNS passed
+      }
+      const suggestionText = fmt.suggestion ? t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: fmt.suggestion }) : undefined
+      return { valid: true, suggestion: suggestionText }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [email, t]),
+    400,
+  )
+
+  // Debounced validation for new password
+  const newPasswordResult = React.useMemo(() => validatePassword(newPassword), [newPassword])
+  const newPasswordValidation = useFieldValidation(
+    newPassword,
+    React.useCallback(async (val: string) => {
+      const r = validatePassword(val)
+      if (!r.valid) return { valid: false, error: r.error }
+      return { valid: true }
+    }, []),
+    400,
+  )
+
+  // Debounced validation for confirm password
+  const confirmPasswordValidation = useFieldValidation(
+    confirmPassword,
+    React.useCallback(async (val: string) => {
+      if (!newPassword) return { valid: false, error: t('settings.password.passwordsDontMatch') }
+      if (val !== newPassword) return { valid: false, error: t('settings.password.passwordsDontMatch') }
+      return { valid: true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [newPassword, t]),
+    400,
+  )
+
   // UI toggle states
   const [showEmail, setShowEmail] = React.useState(false)
   const [showNewEmailForm, setShowNewEmailForm] = React.useState(false)
@@ -419,9 +481,14 @@ export default function SettingsPage() {
       return
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      setError(t('settings.email.enterValidEmail'))
-      return
+    // Gate on debounced validation result (already computed by hook)
+    if (newEmailValidation.status !== 'valid') {
+      // If still validating, run a final synchronous check
+      const emailCheck = await validateEmail(newEmail)
+      if (!emailCheck.valid) {
+        setError(t(emailCheck.errorKey || 'settings.email.enterValidEmail', { defaultValue: emailCheck.error }))
+        return
+      }
     }
 
     setSaving(true)
@@ -558,8 +625,8 @@ export default function SettingsPage() {
       return
     }
 
-    if (!newPassword || newPassword.length < 6) {
-      setError(t('settings.password.passwordTooShort'))
+    if (!validatePassword(newPassword).valid) {
+      setError(t('auth.passwordRules.tooWeak', { defaultValue: 'Password does not meet the requirements' }))
       return
     }
 
@@ -1400,20 +1467,24 @@ export default function SettingsPage() {
             </CardHeader>
             {showNewEmailForm && (
               <CardContent className="space-y-4">
-                <div className="grid gap-2">
+                <div className="grid gap-1">
                   <Label htmlFor="new-email">{t('settings.email.newEmail')}</Label>
-                  <Input
+                  <ValidatedInput
                     id="new-email"
                     type="email"
                     placeholder={t('settings.email.newEmailPlaceholder')}
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     disabled={saving}
+                    status={newEmailValidation.status}
+                    error={newEmailValidation.error}
+                    suggestion={newEmailValidation.suggestion}
+                    onAcceptSuggestion={newEmailValidation.suggestion ? () => { /* display-only */ } : undefined}
                   />
                 </div>
                 <Button
                   onClick={handleUpdateEmail}
-                  disabled={saving || !newEmail || newEmail === email}
+                  disabled={saving || !newEmail || newEmail === email || newEmailValidation.status === 'error'}
                   className="rounded-2xl"
                 >
                   {saving ? t('settings.email.updating') : t('settings.email.update')}
@@ -1443,9 +1514,9 @@ export default function SettingsPage() {
             </CardHeader>
             {showPasswordForm && (
               <CardContent className="space-y-4">
-                <div className="grid gap-2">
+                <div className="grid gap-1">
                   <Label htmlFor="current-password">{t('settings.password.currentPassword')}</Label>
-                  <Input
+                  <ValidatedInput
                     id="current-password"
                     type="password"
                     placeholder={t('settings.password.currentPasswordPlaceholder')}
@@ -1454,31 +1525,36 @@ export default function SettingsPage() {
                     disabled={saving}
                   />
                 </div>
-                <div className="grid gap-2">
+                <div className="grid gap-1">
                   <Label htmlFor="new-password">{t('settings.password.newPassword')}</Label>
-                  <Input
+                  <ValidatedInput
                     id="new-password"
                     type="password"
                     placeholder={t('settings.password.newPasswordPlaceholder')}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     disabled={saving}
+                    status={newPasswordValidation.status}
+                    error={newPasswordValidation.error}
                   />
+                  <PasswordRules rules={newPasswordResult.rules} visible={newPassword.length > 0} allPassedLabel={t('auth.passwordRules.strong', { defaultValue: 'Password is strong' })} />
                 </div>
-                <div className="grid gap-2">
+                <div className="grid gap-1">
                   <Label htmlFor="confirm-password">{t('settings.password.confirmPassword')}</Label>
-                  <Input
+                  <ValidatedInput
                     id="confirm-password"
                     type="password"
                     placeholder={t('settings.password.confirmPasswordPlaceholder')}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     disabled={saving}
+                    status={confirmPasswordValidation.status}
+                    error={confirmPasswordValidation.error}
                   />
                 </div>
                 <Button
                   onClick={handleUpdatePassword}
-                  disabled={saving || !currentPassword || !newPassword || newPassword !== confirmPassword}
+                  disabled={saving || !currentPassword || !newPassword || newPasswordValidation.status === 'error' || confirmPasswordValidation.status === 'error'}
                   className="rounded-2xl"
                 >
                   {saving ? t('settings.password.updating') : t('settings.password.update')}

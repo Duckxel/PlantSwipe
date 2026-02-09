@@ -1,0 +1,252 @@
+# Reusable Components Reference
+
+> **For AI Agents and Human Developers**
+> Read this document before creating new UI elements. Prefer reusing existing components.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Form Inputs](#form-inputs)
+3. [Validation Hooks](#validation-hooks)
+4. [Validation Utilities](#validation-utilities)
+5. [Layout Components](#layout-components)
+6. [Usage Patterns](#usage-patterns)
+
+---
+
+## Overview
+
+This document catalogues all reusable components, hooks, and utilities in the Aphylia codebase. Before building new UI, check here first to avoid duplication and maintain consistency.
+
+**Rule:** If you add, modify, or remove a reusable component, hook, or utility — **update this file**.
+
+---
+
+## Form Inputs
+
+### `ValidatedInput`
+
+**File:** `src/components/ui/validated-input.tsx`
+
+An input field with built-in validation feedback. Shows a loading spinner while validating, a green checkmark when valid, and a red error icon plus message when invalid. Supports password visibility toggle and email typo suggestions.
+
+**Props (extends HTML `<input>`):**
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `status` | `'idle' \| 'validating' \| 'valid' \| 'error'` | Drives the icon and ring color |
+| `error` | `string \| null` | Error message displayed below the input |
+| `suggestion` | `string \| null` | Suggestion text (e.g., typo correction) |
+| `onAcceptSuggestion` | `() => void` | Callback when user clicks suggestion |
+| `type` | `string` | Supports `"password"` with auto toggle |
+| `wrapperClassName` | `string` | Class for the outer wrapper |
+
+**Example:**
+
+```tsx
+import { ValidatedInput } from "@/components/ui/validated-input"
+import { useFieldValidation } from "@/hooks/useFieldValidation"
+
+const { status, error } = useFieldValidation(email, validateFn)
+<ValidatedInput
+  type="email"
+  value={email}
+  onChange={e => setEmail(e.target.value)}
+  status={status}
+  error={error}
+  placeholder="you@example.com"
+/>
+```
+
+**Used in:** Signup dialog (PlantSwipe.tsx), Settings page (email change, password change)
+
+---
+
+### `PasswordRules`
+
+**File:** `src/components/ui/password-rules.tsx`
+
+A compact checklist that shows which password strength rules are met. Each rule displays a green check or red cross.
+
+**Props:**
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `rules` | `PasswordRule[]` | Array from `validatePassword()` |
+| `visible` | `boolean` | Controls visibility (hide when field is empty) |
+| `className` | `string` | Optional wrapper class |
+
+**Example:**
+
+```tsx
+import { PasswordRules } from "@/components/ui/password-rules"
+import { validatePassword } from "@/lib/passwordValidation"
+
+const result = validatePassword(password)
+<PasswordRules rules={result.rules} visible={password.length > 0} />
+```
+
+**Used in:** Signup dialog (PlantSwipe.tsx), Settings page (password change)
+
+---
+
+### `SearchInput`
+
+**File:** `src/components/ui/search-input.tsx`
+
+A search-specific input with a search icon, loading spinner, clear button, and keyboard shortcut hint. Consistent styling across all search fields.
+
+**Props (extends HTML `<input>`):**
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `loading` | `boolean` | Show loading spinner |
+| `icon` | `ReactNode \| null` | Custom icon or null to hide |
+| `variant` | `'sm' \| 'default' \| 'lg'` | Size variant |
+| `onClear` | `() => void` | Clear button callback |
+| `shortcut` | `string` | Keyboard shortcut hint |
+
+**Used in:** Discovery page search, garden search, messaging search, setup location search
+
+---
+
+### `Input`
+
+**File:** `src/components/ui/input.tsx`
+
+Basic styled input. Use `ValidatedInput` instead when you need validation feedback.
+
+---
+
+## Validation Hooks
+
+### `useFieldValidation`
+
+**File:** `src/hooks/useFieldValidation.ts`
+
+Performs debounced async validation on a field value. After the user stops typing for the specified delay, the validate function runs. Returns a status, error message, and optional suggestion.
+
+**Parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `value` | `string` | — | Current field value |
+| `validate` | `(value: string) => Promise<{valid, error?, suggestion?}>` | — | Async validation function |
+| `delay` | `number` | `400` | Debounce delay in ms |
+| `enabled` | `boolean` | `true` | Set to false to pause validation |
+
+**Returns:** `{ status, error, suggestion, reset }`
+
+**Example:**
+
+```tsx
+const validation = useFieldValidation(
+  email,
+  async (val) => {
+    const result = validateEmailFormat(val)
+    if (!result.valid) return { valid: false, error: result.error }
+    return { valid: true }
+  },
+  400,
+)
+// validation.status → 'idle' | 'validating' | 'valid' | 'error'
+```
+
+**Used in:** PlantSwipe.tsx (signup fields), SettingsPage.tsx (email/password change)
+
+---
+
+### `useDebounce`
+
+**File:** `src/hooks/useDebounce.ts`
+
+Simple value debounce hook. Returns the debounced value after the specified delay.
+
+**Used in:** Search inputs, location search
+
+---
+
+## Validation Utilities
+
+### Email Validation
+
+**File:** `src/lib/emailValidation.ts`
+
+Multi-layered email validation:
+- `validateEmailFormat(email)` — Instant client-side format check (RFC 5322, disposable domain blocking, typo detection)
+- `validateEmailDomain(email)` — Server-side DNS MX record check via `/api/email/validate`
+- `validateEmail(email)` — Runs both format + domain checks sequentially
+
+**Used in:** Signup (AuthContext.tsx), email change (SettingsPage.tsx), validation hooks
+
+---
+
+### Username Validation
+
+**File:** `src/lib/username.ts`
+
+- `validateUsername(username)` — Checks format (2-30 chars, URL-safe characters, no consecutive specials)
+- `normalizeUsername(username)` — Lowercase for comparison
+- `validateAndNormalizeUsername(username)` — Throws on invalid
+
+**Used in:** Signup (AuthContext.tsx), validation hooks
+
+---
+
+### Password Validation
+
+**File:** `src/lib/passwordValidation.ts`
+
+- `validatePassword(password)` — Checks strength rules (8+ chars, letter, number, special character). Returns per-rule details for the `PasswordRules` component.
+
+**Used in:** Signup (PlantSwipe.tsx), password change (SettingsPage.tsx), AuthContext.tsx
+
+---
+
+## Layout Components
+
+### `TopBar` / `BottomBar` / `MobileNavBar` / `Footer`
+
+**Files:** `src/components/layout/`
+
+Global layout components. Do not duplicate — extend if needed.
+
+---
+
+## Usage Patterns
+
+### Adding a Validated Field
+
+1. Import `ValidatedInput` and `useFieldValidation`
+2. Create a validation function that returns `{ valid, error?, suggestion? }`
+3. Wire up the hook and pass `status`/`error` to the component
+
+```tsx
+const validation = useFieldValidation(value, myValidateFn, 400)
+
+<ValidatedInput
+  value={value}
+  onChange={e => setValue(e.target.value)}
+  status={validation.status}
+  error={validation.error}
+/>
+```
+
+### Adding a Password Field
+
+1. Import `ValidatedInput`, `PasswordRules`, and `validatePassword`
+2. Compute rules with `useMemo` and create a validation hook
+3. Render both components together
+
+```tsx
+const result = useMemo(() => validatePassword(pw), [pw])
+const validation = useFieldValidation(pw, async v => {
+  const r = validatePassword(v)
+  return r.valid ? { valid: true } : { valid: false, error: r.error }
+}, 400)
+
+<ValidatedInput type="password" status={validation.status} error={validation.error} ... />
+<PasswordRules rules={result.rules} visible={pw.length > 0} />
+```
