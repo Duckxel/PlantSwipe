@@ -1102,6 +1102,8 @@ const rateLimitStores = {
   gardenJournal: new Map(),  // Journal entries
   pushNotify: new Map(),     // Push notification sending
   authAttempt: new Map(),    // Authentication attempts (brute force protection)
+  forgotUsername: new Map(),  // Forgot username requests (prevent email enumeration spam)
+  forgotPassword: new Map(), // Forgot password requests (prevent magic link spam)
 }
 
 /**
@@ -1179,6 +1181,18 @@ const rateLimitConfig = {
     windowMs: 15 * 60 * 1000,  // 15 minutes
     maxAttempts: 10,
     perUser: true,
+  },
+  // Forgot username: 5 per 15 minutes per IP (prevent email enumeration)
+  forgotUsername: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 5,
+    perUser: false,
+  },
+  // Forgot password: 5 per 15 minutes per IP (prevent magic link spam)
+  forgotPassword: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 5,
+    perUser: false,
   },
 }
 
@@ -9515,6 +9529,18 @@ const DEFAULT_EMAIL_TRIGGERS = [
     displayName: 'Email Verification Code',
     description: 'Sent when user needs to verify their email address (after setup). Contains a 6-character verification code. Variables: {{code}}, {{user}}, {{email}}',
   },
+  // Forgot Username
+  {
+    triggerType: 'FORGOT_USERNAME',
+    displayName: 'Forgot Username Reminder',
+    description: 'Sent when a user requests their username via the forgot username form. Variables: {{user}}, {{email}}',
+  },
+  // Forgot Password (Magic Link)
+  {
+    triggerType: 'FORGOT_PASSWORD',
+    displayName: 'Forgot Password Magic Link',
+    description: 'Sent when a user requests a password reset via magic link. The link logs the user in and redirects to the password change page. Variables: {{url}}, {{user}}, {{email}}',
+  },
 ]
 
 // Cache to prevent running ensureDefaultEmailTriggers on every request
@@ -10062,7 +10088,9 @@ app.post('/api/send-security-email', async (req, res) => {
     'PASSWORD_CHANGE_CONFIRMATION',
     'SUSPICIOUS_LOGIN_ALERT',
     'NEW_DEVICE_LOGIN',
-    'EMAIL_VERIFICATION'
+    'EMAIL_VERIFICATION',
+    'FORGOT_USERNAME',
+    'FORGOT_PASSWORD',
   ]
 
   if (!securityTriggers.includes(triggerType)) {
@@ -10087,6 +10115,247 @@ app.post('/api/send-security-email', async (req, res) => {
     : result?.reason === 'Email service not configured' ? 500 
     : 200
   res.status(status).json(result)
+})
+
+// =============================================================================
+// FORGOT USERNAME - Sends the user their username via email
+// =============================================================================
+
+/**
+ * Forgot Username endpoint
+ * Looks up user by email, sends their username via email template
+ * SECURITY: Rate limited per IP to prevent email enumeration
+ */
+app.post('/api/forgot-username', async (req, res) => {
+  // Rate limiting: prevent email enumeration / spam
+  if (await checkAndRecordRateLimit(req, res, 'forgotUsername', null)) {
+    return // Response already sent by rate limiter
+  }
+
+  const { email } = req.body || {}
+  if (!email || typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return res.status(400).json({ error: 'A valid email address is required.' })
+  }
+
+  if (!sql) {
+    return res.status(500).json({ error: 'Database not configured' })
+  }
+
+  try {
+    // Look up user by email in auth.users, join with profiles
+    const rows = await sql`
+      select u.id, u.email, p.display_name, p.language
+      from auth.users u
+      join public.profiles p on p.id = u.id
+      where lower(u.email) = lower(${email.trim()})
+      limit 1
+    `
+
+    if (!rows || !rows.length) {
+      // SECURITY: Tell the user no account was found (per requirement)
+      return res.status(404).json({ found: false, error: 'No account found with this email address.' })
+    }
+
+    const user = rows[0]
+    const displayName = user.display_name || 'User'
+
+    // Send the forgot username email through the automation system
+    const result = await sendSecurityEmail('FORGOT_USERNAME', {
+      recipientEmail: user.email,
+      userId: user.id,
+      userDisplayName: displayName,
+      userLanguage: user.language || 'en',
+      extraContext: {
+        email: user.email,
+      }
+    })
+
+    if (result.sent) {
+      console.log(`[forgot-username] Sent username reminder to ${user.email}`)
+      return res.json({ found: true, sent: true })
+    } else {
+      console.warn(`[forgot-username] Failed to send email: ${result.reason}`)
+      // Still tell the user we found the account, but email failed
+      return res.json({ found: true, sent: false, reason: result.reason || 'Failed to send email' })
+    }
+  } catch (err) {
+    console.error('[forgot-username] Error:', err?.message || err)
+    return res.status(500).json({ error: 'An unexpected error occurred.' })
+  }
+})
+
+// =============================================================================
+// FORGOT PASSWORD - Sends a magic link to the user via email
+// =============================================================================
+
+/**
+ * Forgot Password endpoint
+ * Generates a Supabase magic link, sends it via admin email template
+ * Sets force_password_change flag on the profile
+ * SECURITY: Rate limited per IP to prevent magic link spam
+ */
+app.post('/api/forgot-password', async (req, res) => {
+  // Rate limiting: prevent magic link spam
+  if (await checkAndRecordRateLimit(req, res, 'forgotPassword', null)) {
+    return // Response already sent by rate limiter
+  }
+
+  const { email } = req.body || {}
+  if (!email || typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return res.status(400).json({ error: 'A valid email address is required.' })
+  }
+
+  if (!sql || !supabaseServiceClient) {
+    return res.status(500).json({ error: 'Service not configured' })
+  }
+
+  try {
+    // Look up user by email
+    const rows = await sql`
+      select u.id, u.email, p.display_name, p.language
+      from auth.users u
+      join public.profiles p on p.id = u.id
+      where lower(u.email) = lower(${email.trim()})
+      limit 1
+    `
+
+    if (!rows || !rows.length) {
+      return res.status(404).json({ found: false, error: 'No account found with this email address.' })
+    }
+
+    const user = rows[0]
+    const displayName = user.display_name || 'User'
+    const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
+
+    // Generate a magic link using Supabase Admin API
+    const { data: linkData, error: linkError } = await supabaseServiceClient.auth.admin.generateLink({
+      type: 'magiclink',
+      email: user.email,
+      options: {
+        redirectTo: `${websiteUrl}/password-change`,
+      }
+    })
+
+    if (linkError || !linkData?.properties?.hashed_token) {
+      console.error('[forgot-password] Failed to generate magic link:', linkError?.message || 'No token returned')
+      return res.status(500).json({ error: 'Failed to generate reset link.' })
+    }
+
+    // Build the magic link URL using Supabase's verify endpoint
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+    const magicLinkUrl = `${supabaseUrl}/auth/v1/verify?token=${linkData.properties.hashed_token}&type=magiclink&redirect_to=${encodeURIComponent(websiteUrl + '/password-change')}`
+
+    // Set force_password_change flag on the user's profile
+    await sql`
+      update public.profiles
+      set force_password_change = true
+      where id = ${user.id}
+    `
+
+    // Send the forgot password email through the automation system
+    const result = await sendSecurityEmail('FORGOT_PASSWORD', {
+      recipientEmail: user.email,
+      userId: user.id,
+      userDisplayName: displayName,
+      userLanguage: user.language || 'en',
+      extraContext: {
+        url: magicLinkUrl,
+        email: user.email,
+      }
+    })
+
+    if (result.sent) {
+      console.log(`[forgot-password] Sent magic link to ${user.email}`)
+      return res.json({ found: true, sent: true })
+    } else {
+      console.warn(`[forgot-password] Failed to send email: ${result.reason}`)
+      return res.json({ found: true, sent: false, reason: result.reason || 'Failed to send email' })
+    }
+  } catch (err) {
+    console.error('[forgot-password] Error:', err?.message || err)
+    return res.status(500).json({ error: 'An unexpected error occurred.' })
+  }
+})
+
+// =============================================================================
+// FORCE PASSWORD CHANGE - Change password after magic link login
+// =============================================================================
+
+/**
+ * Force password change endpoint
+ * Called when user is logged in via magic link and must change their password
+ * SECURITY: Requires authentication + CSRF token
+ */
+app.post('/api/force-password-change', requireCsrfToken, async (req, res) => {
+  const authUser = await getUserFromRequest(req)
+  if (!authUser?.id) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  const { newPassword } = req.body || {}
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' })
+  }
+
+  if (!sql || !supabaseServiceClient) {
+    return res.status(500).json({ error: 'Service not configured' })
+  }
+
+  try {
+    // Check if user actually needs to change password
+    const profileRows = await sql`
+      select force_password_change from public.profiles
+      where id = ${authUser.id}
+      limit 1
+    `
+
+    if (!profileRows?.length || !profileRows[0].force_password_change) {
+      return res.status(400).json({ error: 'Password change is not required.' })
+    }
+
+    // Update the password via Supabase Admin API
+    const { error: updateError } = await supabaseServiceClient.auth.admin.updateUserById(authUser.id, {
+      password: newPassword,
+    })
+
+    if (updateError) {
+      console.error('[force-password-change] Failed to update password:', updateError.message)
+      return res.status(500).json({ error: 'Failed to update password.' })
+    }
+
+    // Clear the force_password_change flag
+    await sql`
+      update public.profiles
+      set force_password_change = false
+      where id = ${authUser.id}
+    `
+
+    console.log(`[force-password-change] Password changed for user ${authUser.id.slice(0, 8)}...`)
+
+    // Send password change confirmation email (non-blocking)
+    if (authUser.email) {
+      const profileForName = await sql`
+        select display_name, language from public.profiles where id = ${authUser.id} limit 1
+      `
+      const userName = profileForName?.[0]?.display_name || 'User'
+      const userLang = profileForName?.[0]?.language || 'en'
+
+      sendSecurityEmail('PASSWORD_CHANGE_CONFIRMATION', {
+        recipientEmail: authUser.email,
+        userId: authUser.id,
+        userDisplayName: userName,
+        userLanguage: userLang,
+        extraContext: {}
+      }).catch(err => {
+        console.warn('[force-password-change] Failed to send confirmation email:', err?.message)
+      })
+    }
+
+    return res.json({ success: true })
+  } catch (err) {
+    console.error('[force-password-change] Error:', err?.message || err)
+    return res.status(500).json({ error: 'An unexpected error occurred.' })
+  }
 })
 
 // =============================================================================
