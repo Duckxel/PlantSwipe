@@ -343,12 +343,13 @@ updated_at      TIMESTAMPTZ DEFAULT now()
 ### `email_verification_codes`
 
 ```sql
-id          UUID PRIMARY KEY
-user_id     UUID REFERENCES profiles(id) ON DELETE CASCADE
-code        VARCHAR(8) NOT NULL
-created_at  TIMESTAMPTZ DEFAULT now()
-expires_at  TIMESTAMPTZ NOT NULL
-used_at     TIMESTAMPTZ
+id            UUID PRIMARY KEY
+user_id       UUID REFERENCES profiles(id) ON DELETE CASCADE
+code          VARCHAR(8) NOT NULL
+created_at    TIMESTAMPTZ DEFAULT now()
+expires_at    TIMESTAMPTZ NOT NULL
+used_at       TIMESTAMPTZ
+target_email  TEXT DEFAULT NULL  -- For email change: the new email to switch to. NULL for standard verification.
 UNIQUE(user_id, code)
 ```
 
