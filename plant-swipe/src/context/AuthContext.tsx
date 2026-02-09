@@ -213,15 +213,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
       if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
     } catch {}
-    // Validate and normalize the display name (username)
+    // Validate the display name (username)
     const validationResult = validateUsername(displayName)
     if (!validationResult.valid) {
       return { error: validationResult.error || 'Invalid display name' }
     }
+    // original = user's chosen casing (for storage); normalized = lowercase (for uniqueness check)
+    const originalDisplayName = validationResult.original!
     const normalizedDisplayName = validationResult.normalized!
 
     // Ensure unique email handled by Supabase; ensure unique display_name in profiles
-    // First check display_name uniqueness (case-insensitive, using normalized lowercase)
+    // Check display_name uniqueness (case-insensitive, using normalized lowercase)
     const existing = await supabase.from('profiles').select('id').ilike('display_name', normalizedDisplayName).maybeSingle()
     if (existing.data?.id) return { error: 'Display name already taken' }
 
@@ -250,10 +252,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Create profile row with detected timezone, language, and GDPR consent tracking
     // Note: notify_push and notify_email columns will default to true once the migration is applied
-    // Use normalized (lowercase) display name for consistent uniqueness
+    // Save display name with user's original casing; uniqueness enforced via lower(display_name) index
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
-      display_name: normalizedDisplayName,
+      display_name: originalDisplayName,
       liked_plant_ids: [],
       timezone: detectedTimezone,
       language: detectedLanguage,
@@ -284,7 +286,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           triggerType: 'WELCOME_EMAIL',
           userId: uid,
           userEmail: email,
-          userDisplayName: normalizedDisplayName,
+          userDisplayName: originalDisplayName,
           userLanguage: detectedLanguage,
         }),
         credentials: 'same-origin',

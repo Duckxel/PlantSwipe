@@ -3,7 +3,8 @@
  * 
  * Usernames (display_name) must:
  * - Contain only URL-safe characters: letters, numbers, underscores, hyphens, and periods
- * - Be stored in lowercase to ensure case-insensitive uniqueness
+ * - Be unique on a case-insensitive basis (DB enforces via lower(display_name) unique index)
+ * - Be stored with the user's ORIGINAL casing (e.g. "FIVE" stays "FIVE")
  * - Be between 2 and 30 characters long
  */
 
@@ -19,6 +20,9 @@ const MAX_LENGTH = 30
 export type UsernameValidationResult = {
   valid: boolean
   error?: string
+  /** The original trimmed username preserving the user's casing (for storage). */
+  original?: string
+  /** Lowercase version of the username (for uniqueness comparisons only). */
   normalized?: string
 }
 
@@ -29,8 +33,11 @@ export type UsernameValidationResult = {
  * - Starts and ends with alphanumeric character
  * - No consecutive special characters (e.g., "..", "--", "__")
  * 
+ * Returns both `original` (preserving user casing, for storage) and
+ * `normalized` (lowercase, for uniqueness checks).
+ * 
  * @param username - The username to validate
- * @returns Object with valid boolean and optional error message
+ * @returns Object with valid boolean, optional error, original, and normalized
  */
 export function validateUsername(username: string): UsernameValidationResult {
   // Trim whitespace
@@ -67,15 +74,15 @@ export function validateUsername(username: string): UsernameValidationResult {
     return { valid: false, error: 'Username cannot contain consecutive special characters' }
   }
   
-  // Normalize to lowercase
-  const normalized = trimmed.toLowerCase()
-  
-  return { valid: true, normalized }
+  // Return both versions:
+  // - original: preserves user casing (for storage in DB)
+  // - normalized: lowercase (for uniqueness comparisons)
+  return { valid: true, original: trimmed, normalized: trimmed.toLowerCase() }
 }
 
 /**
  * Normalizes a username to lowercase.
- * Use this after validation to ensure consistent storage.
+ * Use this for comparison/lookup purposes only, NOT for storage.
  * 
  * @param username - The username to normalize
  * @returns Lowercase, trimmed username
@@ -86,10 +93,10 @@ export function normalizeUsername(username: string): string {
 
 /**
  * Validates and normalizes a username in one step.
- * Returns the normalized username if valid, throws an error if invalid.
+ * Returns the original (user-cased) username if valid, throws an error if invalid.
  * 
  * @param username - The username to validate and normalize
- * @returns The normalized (lowercase) username
+ * @returns The original (user-cased, trimmed) username
  * @throws Error if username is invalid
  */
 export function validateAndNormalizeUsername(username: string): string {
@@ -97,7 +104,7 @@ export function validateAndNormalizeUsername(username: string): string {
   if (!result.valid) {
     throw new Error(result.error)
   }
-  return result.normalized!
+  return result.original!
 }
 
 /**
