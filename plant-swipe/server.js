@@ -292,6 +292,7 @@ import { promisify } from 'util'
 import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
+import dns from 'dns'
 import net from 'net'
 import os from 'os'
 import OpenAI from 'openai'
@@ -301,6 +302,7 @@ import multer from 'multer'
 import sharp from 'sharp'
 import webpush from 'web-push'
 import cron from 'node-cron'
+import dns from 'dns'
 
 // Note: dotenv already loaded at top of file before Sentry init
 
@@ -1096,6 +1098,7 @@ const rateLimitStores = {
   translate: new Map(),      // Translation API
   imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
   bugReport: new Map(),      // Bug report submissions
+  emailValidate: new Map(),     // Email validation (DNS MX check)
   emailVerifySend: new Map(),   // Email verification code sending
   emailVerifyAttempt: new Map(), // Email verification code attempts (brute force protection)
   gardenActivity: new Map(), // Garden activity logging
@@ -1166,6 +1169,12 @@ const rateLimitConfig = {
     windowMs: 15 * 60 * 1000,  // 15 minutes
     maxAttempts: 10,
     perUser: false,  // Per IP to catch credential stuffing
+  },
+  // Email validation (DNS MX check): 20 per 15 minutes per IP (prevent abuse)
+  emailValidate: {
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    maxAttempts: 20,
+    perUser: false,  // Per IP since unauthenticated users can validate during signup
   },
   // Email verification code sending: 5 per 15 minutes per user (prevent email spam)
   emailVerifySend: {
@@ -10093,6 +10102,122 @@ app.post('/api/send-security-email', async (req, res) => {
 // EMAIL VERIFICATION - OTP-based email verification system
 // Codes are 6 alphanumeric characters and expire after 5 minutes
 // =============================================================================
+
+// ─── Email Validation ──────────────────────────────────────────────────────
+// Validates email addresses by checking DNS MX records for the domain.
+// This ensures the domain can actually receive emails before we attempt delivery.
+
+/**
+ * Validate an email address by checking DNS MX records for its domain.
+ * 
+ * SECURITY: Rate limited to 20 requests per 15 minutes per IP
+ * Does NOT require authentication (used during signup before account exists)
+ */
+app.post('/api/email/validate', async (req, res) => {
+  // Rate limiting: prevent abuse
+  if (await checkAndRecordRateLimit(req, res, 'emailValidate', null)) {
+    return // Response already sent by rate limiter
+  }
+
+  const { email } = req.body || {}
+
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ 
+      valid: false, 
+      errorKey: 'auth.emailErrors.required',
+      error: 'Email address is required' 
+    })
+  }
+
+  const normalized = email.trim().toLowerCase()
+  
+  // Basic format check server-side too
+  const atIndex = normalized.indexOf('@')
+  if (atIndex === -1 || atIndex !== normalized.lastIndexOf('@')) {
+    return res.json({ 
+      valid: false, 
+      errorKey: 'auth.emailErrors.invalidFormat',
+      error: 'Invalid email format' 
+    })
+  }
+
+  const domain = normalized.slice(atIndex + 1)
+  
+  if (!domain || !domain.includes('.')) {
+    return res.json({ 
+      valid: false, 
+      errorKey: 'auth.emailErrors.invalidDomain',
+      error: 'Invalid email domain' 
+    })
+  }
+
+  try {
+    // Check DNS MX records for the domain
+    const mxRecords = await new Promise((resolve, reject) => {
+      dns.resolveMx(domain, (err, addresses) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve(addresses)
+        }
+      })
+    })
+
+    if (!mxRecords || !Array.isArray(mxRecords) || mxRecords.length === 0) {
+      // No MX records - try A record as fallback (some domains use A record for mail)
+      try {
+        const aRecords = await new Promise((resolve, reject) => {
+          dns.resolve4(domain, (err, addresses) => {
+            if (err) reject(err)
+            else resolve(addresses)
+          })
+        })
+
+        if (!aRecords || !Array.isArray(aRecords) || aRecords.length === 0) {
+          return res.json({ 
+            valid: false, 
+            errorKey: 'auth.emailErrors.domainCannotReceiveEmail',
+            error: 'This email domain cannot receive emails. Please check the address.' 
+          })
+        }
+        
+        // A record exists - domain might accept mail (implicit MX)
+        return res.json({ valid: true })
+      } catch {
+        return res.json({ 
+          valid: false, 
+          errorKey: 'auth.emailErrors.domainCannotReceiveEmail',
+          error: 'This email domain cannot receive emails. Please check the address.' 
+        })
+      }
+    }
+
+    // MX records exist - domain can receive email
+    res.json({ valid: true })
+  } catch (err) {
+    // DNS lookup errors
+    const dnsError = err
+
+    if (dnsError.code === 'ENOTFOUND' || dnsError.code === 'ENODATA') {
+      // Domain does not exist or has no mail records
+      return res.json({ 
+        valid: false, 
+        errorKey: 'auth.emailErrors.domainNotFound',
+        error: 'This email domain does not exist. Please check the address.' 
+      })
+    }
+
+    if (dnsError.code === 'ETIMEOUT' || dnsError.code === 'ESERVFAIL') {
+      // DNS timeout or server failure - don't block the user
+      console.warn(`[email-validate] DNS lookup timeout/failure for domain: ${domain}`)
+      return res.json({ valid: true, warning: 'DNS check timed out, proceeding' })
+    }
+
+    // Unknown DNS error - don't block the user
+    console.warn(`[email-validate] DNS lookup error for domain ${domain}:`, dnsError.code || dnsError.message)
+    return res.json({ valid: true, warning: 'DNS check failed, proceeding' })
+  }
+})
 
 /**
  * Generate a 6-character alphanumeric verification code

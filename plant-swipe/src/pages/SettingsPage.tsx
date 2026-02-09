@@ -16,6 +16,7 @@ import usePushSubscription from "@/hooks/usePushSubscription"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
 import { SearchInput } from "@/components/ui/search-input"
 import { useDebounce } from "@/hooks/useDebounce"
+import { validateEmail } from "@/lib/emailValidation"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
 
@@ -419,8 +420,10 @@ export default function SettingsPage() {
       return
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      setError(t('settings.email.enterValidEmail'))
+    // Comprehensive email validation (format + DNS MX check)
+    const emailValidation = await validateEmail(newEmail)
+    if (!emailValidation.valid) {
+      setError(t(emailValidation.errorKey || 'settings.email.enterValidEmail', { defaultValue: emailValidation.error }))
       return
     }
 

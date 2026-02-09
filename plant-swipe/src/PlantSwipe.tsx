@@ -36,6 +36,7 @@ import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
+import { validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation";
 
 import { SwipePage } from "@/pages/SwipePage"
 import { FilterControls } from "@/components/plant/FilterControls"
@@ -247,7 +248,9 @@ export default function PlantSwipe() {
   const [authDisplayName, setAuthDisplayName] = useState("")
   const [authAcceptedTerms, setAuthAcceptedTerms] = useState(false)
   const [authMarketingConsent, setAuthMarketingConsent] = useState(false) // GDPR: Must be unchecked by default - pre-ticked boxes don't constitute valid consent (Recital 32)
-  
+  const [authEmailSuggestion, setAuthEmailSuggestion] = useState<string | null>(null) // Typo suggestion for email domain
+  const [authEmailValidating, setAuthEmailValidating] = useState(false) // Loading state for email validation
+
   // Track if cookie consent is needed for auth (reCAPTCHA requires cookies)
   const [authNeedsCookies, setAuthNeedsCookies] = useState(() => {
     const level = getConsentLevel()
@@ -1331,6 +1334,7 @@ export default function PlantSwipe() {
   const submitAuth = async () => {
     if (authSubmitting) return
     setAuthError(null)
+    setAuthEmailSuggestion(null)
     setAuthSubmitting(true)
     try {
       console.log('[auth] submit start', { mode: authMode })
@@ -1361,6 +1365,35 @@ export default function PlantSwipe() {
       }
       
       if (authMode === 'signup') {
+        // Validate email format and check for typos (client-side instant check)
+        const formatCheck = validateEmailFormat(authEmail)
+        if (!formatCheck.valid) {
+          console.warn('[auth] email format invalid')
+          setAuthError(t(formatCheck.errorKey || 'auth.emailErrors.invalidFormat', { defaultValue: formatCheck.error }))
+          setAuthSubmitting(false)
+          return
+        }
+        
+        // Show typo suggestion if detected (but don't block submission)
+        if (formatCheck.suggestion) {
+          setAuthEmailSuggestion(formatCheck.suggestion)
+        }
+        
+        // Validate email domain via server-side DNS MX check
+        setAuthEmailValidating(true)
+        try {
+          const domainCheck = await validateEmailDomain(authEmail)
+          if (!domainCheck.valid) {
+            console.warn('[auth] email domain validation failed')
+            setAuthError(t(domainCheck.errorKey || 'auth.emailErrors.domainCannotReceiveEmail', { defaultValue: domainCheck.error }))
+            setAuthSubmitting(false)
+            setAuthEmailValidating(false)
+            return
+          }
+        } finally {
+          setAuthEmailValidating(false)
+        }
+        
         if (authPassword !== authPassword2) {
           console.warn('[auth] password mismatch')
           setAuthError(t('auth.passwordsDontMatch'))
@@ -1440,6 +1473,8 @@ export default function PlantSwipe() {
       setShowPassword(false)
       setShowConfirmPassword(false)
       setAuthDisplayName("")
+      setAuthEmailSuggestion(null)
+      setAuthEmailValidating(false)
     }
   }, [authOpen])
 
@@ -1634,7 +1669,22 @@ export default function PlantSwipe() {
                 
                 <div className="grid gap-2">
                   <Label htmlFor="email">{t('auth.email')}</Label>
-                  <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
+                  <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setAuthEmail(e.target.value); setAuthEmailSuggestion(null) }} disabled={authSubmitting} />
+                  {authEmailSuggestion && authMode === 'signup' && (
+                    <button
+                      type="button"
+                      onClick={() => { setAuthEmail(authEmailSuggestion); setAuthEmailSuggestion(null) }}
+                      className="text-xs text-left text-amber-600 dark:text-amber-400 hover:underline"
+                    >
+                      {t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: authEmailSuggestion })}
+                    </button>
+                  )}
+                  {authEmailValidating && (
+                    <div className="flex items-center gap-1.5 text-xs text-stone-400">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      {t('auth.emailValidating', { defaultValue: 'Checking email...' })}
+                    </div>
+                  )}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="password">{t('auth.password')}</Label>
@@ -2367,7 +2417,22 @@ export default function PlantSwipe() {
             
             <div className="grid gap-2">
               <Label htmlFor="email">{t('auth.email')}</Label>
-              <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
+              <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setAuthEmail(e.target.value); setAuthEmailSuggestion(null) }} disabled={authSubmitting} />
+              {authEmailSuggestion && authMode === 'signup' && (
+                <button
+                  type="button"
+                  onClick={() => { setAuthEmail(authEmailSuggestion); setAuthEmailSuggestion(null) }}
+                  className="text-xs text-left text-amber-600 dark:text-amber-400 hover:underline"
+                >
+                  {t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: authEmailSuggestion })}
+                </button>
+              )}
+              {authEmailValidating && (
+                <div className="flex items-center gap-1.5 text-xs text-stone-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  {t('auth.emailValidating', { defaultValue: 'Checking email...' })}
+                </div>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">{t('auth.password')}</Label>
