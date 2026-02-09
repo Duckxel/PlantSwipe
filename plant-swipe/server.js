@@ -8262,6 +8262,12 @@ async function ensureDefaultAutomations() {
         description: 'Encourages users who wrote in their journal yesterday to continue',
         send_hour: 9,
       },
+      {
+        trigger_type: 'plant_request_fulfilled',
+        display_name: 'Plant Request Fulfilled',
+        description: 'Notifies users when a plant they requested has been added to the encyclopedia (triggered automatically after AI prefill or manual plant creation)',
+        send_hour: 9,
+      },
     ]
 
     // Valid automation types (cron-based only)
@@ -8410,6 +8416,20 @@ app.get('/api/admin/notification-automations', async (req, res) => {
           } catch (e) {
             // Table might not exist
             console.warn('[notification-automations] journal_continue_reminder count error:', e?.message)
+            recipientCount = 0
+          }
+        } else if (row.trigger_type === 'plant_request_fulfilled') {
+          try {
+            // Count distinct users who have pending (unfulfilled) plant requests
+            const countResult = await sql`
+              select count(distinct pru.user_id)::bigint as cnt
+              from public.plant_request_users pru
+              join public.requested_plants rp on rp.id = pru.requested_plant_id
+              where rp.completed_at is null
+            `
+            recipientCount = Number(countResult?.[0]?.cnt || 0)
+          } catch (e) {
+            console.warn('[notification-automations] plant_request_fulfilled count error:', e?.message)
             recipientCount = 0
           }
         }
@@ -8738,6 +8758,11 @@ async function runAutomation(automation) {
         and gal.occurred_at::date = current_date - interval '1 day'
       limit 5000
     `
+  } else if (triggerType === 'plant_request_fulfilled') {
+    // This automation is event-driven (triggered when a plant request is fulfilled).
+    // It cannot be run on a schedule or via the "Test Now" button since it requires
+    // a specific plant request context. Use the /api/admin/notify-plant-requesters endpoint instead.
+    return { recipients: 0, queued: 0, message: 'This automation is event-driven and triggers automatically when a plant request is fulfilled. It cannot be triggered manually.' }
   } else {
     return { error: 'Unknown trigger type' }
   }
@@ -8795,6 +8820,188 @@ async function runAutomation(automation) {
 
   return { recipients: recipients.length, queued: insertedCount }
 }
+
+// ---- Notify plant requesters when a plant request is fulfilled ----
+app.post('/api/admin/notify-plant-requesters', async (req, res) => {
+  const adminId = await ensureEditor(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+
+  const requestId = String(req.body?.requestId || '').trim()
+  const plantName = String(req.body?.plantName || '').trim()
+  const plantId = String(req.body?.plantId || '').trim()
+
+  if (!requestId) {
+    res.status(400).json({ error: 'Missing requestId' })
+    return
+  }
+  if (!plantName) {
+    res.status(400).json({ error: 'Missing plantName' })
+    return
+  }
+
+  try {
+    // 1. Find the automation config for plant_request_fulfilled
+    const automationRows = await sql`
+      select a.*, t.message_variants, t.randomize, t.title as template_title
+      from public.notification_automations a
+      left join public.notification_templates t on t.id = a.template_id
+      where a.trigger_type = 'plant_request_fulfilled'
+      limit 1
+    `
+    const automation = automationRows?.[0]
+
+    if (!automation) {
+      console.log('[notify-plant-requesters] No plant_request_fulfilled automation found')
+      res.json({ notified: false, reason: 'Automation not configured' })
+      return
+    }
+
+    if (!automation.is_enabled) {
+      console.log('[notify-plant-requesters] plant_request_fulfilled automation is disabled')
+      res.json({ notified: false, reason: 'Automation is disabled' })
+      return
+    }
+
+    if (!automation.template_id || !automation.message_variants?.length) {
+      console.log('[notify-plant-requesters] plant_request_fulfilled automation has no template')
+      res.json({ notified: false, reason: 'No template configured' })
+      return
+    }
+
+    // 2. Find users who requested this plant (from junction table)
+    let userIds = []
+    try {
+      const requestUsers = await sql`
+        select pru.user_id
+        from public.plant_request_users pru
+        where pru.requested_plant_id = ${requestId}
+      `
+      userIds = (requestUsers || []).map(r => r.user_id).filter(Boolean)
+    } catch (err) {
+      console.warn('[notify-plant-requesters] Error fetching from plant_request_users:', err?.message)
+    }
+
+    // Fallback: if no users in junction table, try the requested_by column
+    if (userIds.length === 0) {
+      try {
+        const reqRow = await sql`
+          select requested_by from public.requested_plants where id = ${requestId} limit 1
+        `
+        if (reqRow?.[0]?.requested_by) {
+          userIds = [reqRow[0].requested_by]
+        }
+      } catch (err) {
+        console.warn('[notify-plant-requesters] Error fetching requested_by:', err?.message)
+      }
+    }
+
+    if (userIds.length === 0) {
+      console.log('[notify-plant-requesters] No users found for request:', requestId)
+      res.json({ notified: false, reason: 'No users found for this request' })
+      return
+    }
+
+    // 3. Get user profiles (for language and display name)
+    const recipients = await sql`
+      select p.id as user_id, p.display_name, p.language
+      from public.profiles p
+      where p.id = any(${userIds})
+        and (p.notify_push is null or p.notify_push = true)
+    `
+
+    if (!recipients || recipients.length === 0) {
+      console.log('[notify-plant-requesters] No recipients with push enabled for request:', requestId)
+      res.json({ notified: false, reason: 'No recipients with push notifications enabled' })
+      return
+    }
+
+    // 4. Load template translations
+    const defaultVariants = toStringArray(automation.message_variants)
+    let translations = {}
+    if (automation.template_id) {
+      try {
+        const transRows = await sql`
+          select language, message_variants
+          from public.notification_template_translations
+          where template_id = ${automation.template_id}
+        `
+        for (const row of transRows || []) {
+          translations[row.language] = toStringArray(row.message_variants)
+        }
+      } catch (err) {
+        console.error('[notify-plant-requesters] Failed to load translations', err)
+      }
+    }
+    const normalizedTranslations = normalizeTranslationMap(translations)
+
+    const notificationTitle = automation.template_title || automation.display_name || 'Plant Request Fulfilled'
+    const ctaUrl = plantId
+      ? (automation.cta_url || `/encyclopedia/${plantId}`)
+      : (automation.cta_url || '/encyclopedia')
+
+    // 5. Create notifications for each user
+    let insertedCount = 0
+    for (const recipient of recipients) {
+      try {
+        const messageVariants = resolveMessageVariants(defaultVariants, normalizedTranslations, recipient.language)
+        const shouldRandomize = automation.randomize !== false
+        const messageIndex = shouldRandomize
+          ? Math.floor(Math.random() * messageVariants.length)
+          : 0
+        const message = messageVariants[messageIndex]
+          .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+          .replace(/\{\{plant\}\}/gi, plantName)
+          .replace(/\{\{plantName\}\}/gi, plantName)
+        const personalizedTitle = notificationTitle
+          .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+          .replace(/\{\{plant\}\}/gi, plantName)
+          .replace(/\{\{plantName\}\}/gi, plantName)
+
+        await sql`
+          insert into public.user_notifications (
+            automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status, payload
+          )
+          values (
+            ${automation.id},
+            ${recipient.user_id},
+            ${personalizedTitle},
+            ${message},
+            ${ctaUrl},
+            now(),
+            'pending',
+            ${sql.json({ plantName, plantId: plantId || null, requestId, triggerType: 'plant_request_fulfilled' })}
+          )
+        `
+        insertedCount++
+      } catch (insertErr) {
+        console.error('[notify-plant-requesters] Insert error for user', recipient.user_id, insertErr?.message)
+      }
+    }
+
+    // Update last_run_at on the automation
+    try {
+      const summary = { recipients: recipients.length, queued: insertedCount, plantName, requestId }
+      await sql`
+        update public.notification_automations
+        set last_run_at = now(),
+            last_run_summary = ${sql.json(summary)}
+        where id = ${automation.id}
+      `
+    } catch (err) {
+      console.warn('[notify-plant-requesters] Failed to update last_run_at:', err?.message)
+    }
+
+    console.log(`[notify-plant-requesters] Queued ${insertedCount} notifications for plant "${plantName}" (request: ${requestId})`)
+    res.json({ notified: true, recipients: recipients.length, queued: insertedCount })
+  } catch (err) {
+    console.error('[notify-plant-requesters] Error:', err?.message || err)
+    res.status(500).json({ error: err?.message || 'Failed to notify plant requesters' })
+  }
+})
 
 // ---- Admin email templates ----
 app.get('/api/admin/email-templates', async (req, res) => {

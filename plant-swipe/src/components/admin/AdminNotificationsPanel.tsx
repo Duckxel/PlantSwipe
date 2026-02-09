@@ -1335,15 +1335,16 @@ export function AdminNotificationsPanel() {
             <div className="space-y-4">
               <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4">
                 <p className="text-sm text-amber-800 dark:text-amber-200">
-                  <strong>💡 How it works:</strong> Automations run every hour. Daily task reminders respect each user's
-                  notification time preference, while other automations use the configured send hour. Configure a template
-                  and enable the trigger to start sending.
+                  <strong>💡 How it works:</strong> Scheduled automations run every hour. Daily task reminders respect each user's
+                  notification time preference. Event-driven automations (like Plant Request Fulfilled) trigger automatically
+                  when the corresponding action occurs. Configure a template and enable the trigger to start sending.
                 </p>
               </div>
 
               <div className="grid gap-4">
                 {automations.map((automation) => {
                   const isDailyTaskReminder = automation.triggerType === 'daily_task_reminder'
+                  const isEventDriven = automation.triggerType === 'plant_request_fulfilled'
 
                   return (
                     <div
@@ -1403,14 +1404,18 @@ export function AdminNotificationsPanel() {
                             <span className="flex items-center gap-1">
                               <Users className="h-3.5 w-3.5" />
                               <span className="font-medium text-amber-600 dark:text-amber-400">
-                                ~{automation.recipientCount.toLocaleString()} recipients
+                                {isEventDriven
+                                  ? `~${automation.recipientCount.toLocaleString()} users with pending requests`
+                                  : `~${automation.recipientCount.toLocaleString()} recipients`}
                               </span>
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5" />
-                              {isDailyTaskReminder
-                                ? "Uses each user's preferred notification time"
-                                : `Sends at ${automation.sendHour}:00 (user's local time)`}
+                              {isEventDriven
+                                ? "Triggered instantly when a plant request is fulfilled"
+                                : isDailyTaskReminder
+                                  ? "Uses each user's preferred notification time"
+                                  : `Sends at ${automation.sendHour}:00 (user's local time)`}
                             </span>
                           </div>
                         </div>
@@ -1451,7 +1456,8 @@ export function AdminNotificationsPanel() {
                           )}
                         </div>
 
-                        {/* Send Hour */}
+                        {/* Send Hour (hidden for event-driven automations) */}
+                        {!isEventDriven && (
                         <div className="space-y-1.5">
                           <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
                             Send Hour (User's Local Time)
@@ -1477,6 +1483,16 @@ export function AdminNotificationsPanel() {
                             </Select>
                           )}
                         </div>
+                        )}
+
+                        {/* Event-driven info */}
+                        {isEventDriven && (
+                          <div className="rounded-lg border border-dashed border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                            <strong>Event-driven:</strong> This notification is sent instantly when a plant request is fulfilled
+                            via AI Prefill or manual plant creation. Use <code className="bg-emerald-100 dark:bg-emerald-900/30 px-1 rounded">{'{{plant}}'}</code> in
+                            your template to include the plant name.
+                          </div>
+                        )}
 
                         {/* Enable/Disable Toggle + Trigger */}
                         <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
@@ -1506,6 +1522,7 @@ export function AdminNotificationsPanel() {
                               )}
                             </button>
                           </div>
+                          {!isEventDriven && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -1516,6 +1533,7 @@ export function AdminNotificationsPanel() {
                             <Play className="h-3 w-3 mr-1" />
                             Test Now
                           </Button>
+                          )}
                         </div>
                       </div>
                     </div>

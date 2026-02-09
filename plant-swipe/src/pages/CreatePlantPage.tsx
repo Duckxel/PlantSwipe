@@ -1595,6 +1595,31 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             setLoadedLanguages(prev => new Set(prev).add(saveLanguage))
           }
         if (isEnglish && !existingLoaded) setExistingLoaded(true)
+        
+        // Notify plant requesters if this plant was created from a request
+        if (requestId && isEnglish && !existingLoaded) {
+          try {
+            const session = (await supabase.auth.getSession()).data.session
+            const notifyHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+            if (session?.access_token) notifyHeaders['Authorization'] = `Bearer ${session.access_token}`
+            const resp = await fetch('/api/admin/notify-plant-requesters', {
+              method: 'POST',
+              headers: notifyHeaders,
+              credentials: 'same-origin',
+              body: JSON.stringify({ requestId, plantName: trimmedName, plantId: savedId }),
+            })
+            if (resp.ok) {
+              const notifyResult = await resp.json()
+              if (notifyResult.notified) {
+                console.log(`[savePlant] Notified ${notifyResult.queued} users about "${trimmedName}"`)
+              }
+            }
+          } catch (notifyErr) {
+            // Don't fail the save if notifications fail
+            console.warn('[savePlant] Error sending plant request notifications:', notifyErr)
+          }
+        }
+        
         // Only call onSaved if not explicitly skipped (e.g., during AI fill auto-save)
         if (!options?.skipOnSaved) {
           onSaved?.(savedId)
