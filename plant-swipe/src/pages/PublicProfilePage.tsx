@@ -1508,26 +1508,28 @@ export default function PublicProfilePage() {
                 setEditError(null)
                 setEditSubmitting(true)
                 try {
-                  // Validate and normalize display name (username)
+                  // Validate display name (username)
                   const validationResult = validateUsername(vals.display_name || '')
                   if (!validationResult.valid) {
                     setEditError(validationResult.error || t('profile.editProfile.invalidDisplayName'))
                     return
                   }
-                  const dn = validationResult.normalized!
+                  // original = user's chosen casing (for storage); normalized = lowercase (for uniqueness check)
+                  const originalDn = validationResult.original!
+                  const normalizedDn = validationResult.normalized!
                   
                   // Check display name uniqueness (case-insensitive, using normalized lowercase)
                   const nameCheck = await supabase
                     .from('profiles')
                     .select('id')
-                    .ilike('display_name', dn)
+                    .ilike('display_name', normalizedDn)
                     .neq('id', user.id)
                     .maybeSingle()
                   if (nameCheck.data?.id) { setEditError(t('profile.editProfile.displayNameTaken')); return }
 
                   const updates: Record<string, any> = {
                     id: user.id,
-                    display_name: dn,
+                    display_name: originalDn,
                     bio: vals.bio || null,
                     job: vals.job || null,
                     profile_link: vals.profile_link || null,
@@ -1549,8 +1551,8 @@ export default function PublicProfilePage() {
                   await refreshProfile().catch(() => {})
                   setEditOpen(false)
                   // Reload public profile data by navigating to new slug if changed
-                  if (dn && dn !== displayParam) {
-                    navigate(`/u/${encodeURIComponent(dn)}`, { replace: true })
+                  if (originalDn && originalDn !== displayParam) {
+                    navigate(`/u/${encodeURIComponent(originalDn)}`, { replace: true })
                   } else {
                     // Re-run effect by toggling param changes via navigation no-op
                     navigate(0)
