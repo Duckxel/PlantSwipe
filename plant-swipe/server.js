@@ -10534,6 +10534,11 @@ function generateVerificationCode() {
  * Creates a new code in the database and sends it via email
  * SECURITY: Rate limited to 5 requests per 15 minutes per user
  * SECURITY: CSRF protected
+ *
+ * Optional body.targetEmail: when provided (email change flow), the OTP is sent
+ * to the NEW email address and stored in email_verification_codes.target_email.
+ * The actual email change in Supabase Auth happens in the /verify endpoint after
+ * the user successfully enters the code.
  */
 app.post('/api/email-verification/send', requireCsrfToken, async (req, res) => {
   // Require authentication
@@ -10552,6 +10557,11 @@ app.post('/api/email-verification/send', requireCsrfToken, async (req, res) => {
   }
 
   try {
+    // Determine if this is an email-change flow (targetEmail provided)
+    const rawTargetEmail = req.body?.targetEmail
+    const isEmailChange = typeof rawTargetEmail === 'string' && rawTargetEmail.trim().length > 0
+    const targetEmail = isEmailChange ? rawTargetEmail.trim().toLowerCase() : null
+
     // Get user profile
     const profileRows = await sql`
       select id, display_name, email_verified 
@@ -10566,15 +10576,76 @@ app.post('/api/email-verification/send', requireCsrfToken, async (req, res) => {
 
     const profile = profileRows[0]
 
-    // Check if already verified
-    if (profile.email_verified) {
+    // For standard verification (no email change), check if already verified
+    if (!isEmailChange && profile.email_verified) {
       return res.json({ sent: false, reason: 'Email already verified', alreadyVerified: true })
     }
 
-    // Get user's email from auth
-    const userEmail = authUser.email
-    if (!userEmail) {
+    // Get user's current email from auth
+    const currentEmail = authUser.email
+    if (!currentEmail) {
       return res.status(400).json({ error: 'User has no email address' })
+    }
+
+    // The email to send the verification code to
+    let recipientEmail = currentEmail
+
+    if (isEmailChange) {
+      // Validate that targetEmail is different from current email
+      if (targetEmail === currentEmail.toLowerCase()) {
+        return res.status(400).json({ error: 'New email must be different from your current email', code: 'SAME_EMAIL' })
+      }
+
+      // Server-side email format validation
+      const atIdx = targetEmail.indexOf('@')
+      if (atIdx === -1 || atIdx !== targetEmail.lastIndexOf('@') || atIdx === 0) {
+        return res.status(400).json({ error: 'Invalid email format', code: 'INVALID_EMAIL' })
+      }
+      const emailDomain = targetEmail.slice(atIdx + 1)
+      if (!emailDomain || !emailDomain.includes('.')) {
+        return res.status(400).json({ error: 'Invalid email domain', code: 'INVALID_EMAIL' })
+      }
+
+      // DNS MX record validation (ensure domain can receive emails)
+      try {
+        const mxRecords = await new Promise((resolve, reject) => {
+          dns.resolveMx(emailDomain, (err, addresses) => {
+            if (err) reject(err)
+            else resolve(addresses)
+          })
+        })
+        if (!mxRecords || !Array.isArray(mxRecords) || mxRecords.length === 0) {
+          // Try A record fallback
+          try {
+            const aRecords = await new Promise((resolve, reject) => {
+              dns.resolve4(emailDomain, (err, addresses) => {
+                if (err) reject(err)
+                else resolve(addresses)
+              })
+            })
+            if (!aRecords || !Array.isArray(aRecords) || aRecords.length === 0) {
+              return res.status(400).json({ error: 'This email domain cannot receive emails.', code: 'INVALID_DOMAIN' })
+            }
+          } catch {
+            return res.status(400).json({ error: 'This email domain cannot receive emails.', code: 'INVALID_DOMAIN' })
+          }
+        }
+      } catch (dnsErr) {
+        if (dnsErr.code === 'ENOTFOUND' || dnsErr.code === 'ENODATA') {
+          return res.status(400).json({ error: 'This email domain does not exist.', code: 'INVALID_DOMAIN' })
+        }
+        // DNS timeout/failure - don't block, proceed
+        console.warn(`[email-verification/send] DNS check failed for ${emailDomain}:`, dnsErr.code || dnsErr.message)
+      }
+
+      // Check if target email is already in use by another user
+      const existingRows = await sql`SELECT id FROM auth.users WHERE lower(email) = ${targetEmail} AND id != ${authUser.id} LIMIT 1`
+      if (existingRows && existingRows.length > 0) {
+        return res.status(409).json({ error: 'This email is already in use by another account.', code: 'EMAIL_IN_USE' })
+      }
+
+      // Send OTP to the NEW email address
+      recipientEmail = targetEmail
     }
 
     // Delete any existing unused codes for this user
@@ -10588,24 +10659,24 @@ app.post('/api/email-verification/send', requireCsrfToken, async (req, res) => {
     const code = generateVerificationCode()
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes from now
 
-    // Insert the new code
+    // Insert the new code (with optional target_email for email change flow)
     await sql`
-      insert into email_verification_codes (user_id, code, expires_at)
-      values (${authUser.id}, ${code}, ${expiresAt.toISOString()})
+      insert into email_verification_codes (user_id, code, expires_at, target_email)
+      values (${authUser.id}, ${code}, ${expiresAt.toISOString()}, ${targetEmail})
     `
 
     // SECURITY: Do not log the actual code - only log that a code was generated
-    console.log(`[email-verification] Generated verification code for user ${authUser.id.slice(0, 8)}... (expires ${expiresAt.toISOString()})`)
+    console.log(`[email-verification] Generated verification code for user ${authUser.id.slice(0, 8)}...${isEmailChange ? ' (email change)' : ''} (expires ${expiresAt.toISOString()})`)
 
     // Send the verification email using the EMAIL_VERIFICATION trigger
     const result = await sendSecurityEmail('EMAIL_VERIFICATION', {
-      recipientEmail: userEmail,
+      recipientEmail: recipientEmail,
       userId: authUser.id,
       userDisplayName: profile.display_name || 'User',
       userLanguage: req.body?.language || 'en',
       extraContext: {
         code: code,
-        email: userEmail
+        email: recipientEmail
       }
     })
 
@@ -10628,7 +10699,10 @@ app.post('/api/email-verification/send', requireCsrfToken, async (req, res) => {
 
 /**
  * Verify email verification code
- * Checks if the code is valid, not expired, and not already used
+ * Checks if the code is valid, not expired, and not already used.
+ * If the code has a target_email (email change flow), the user's email
+ * is updated in Supabase Auth via the Admin API and a notification is
+ * sent to the old email address.
  * SECURITY: Rate limited to 10 attempts per 15 minutes per user (brute force protection)
  * SECURITY: CSRF protected
  */
@@ -10660,18 +10734,14 @@ app.post('/api/email-verification/verify', requireCsrfToken, async (req, res) =>
   }
 
   try {
-    // Check if user is already verified
+    // Check if user is already verified (only skip for non-email-change flows)
     const profileRows = await sql`
-      select email_verified from profiles where id = ${authUser.id} limit 1
+      select email_verified, display_name, language from profiles where id = ${authUser.id} limit 1
     `
 
-    if (profileRows?.[0]?.email_verified) {
-      return res.json({ verified: true, alreadyVerified: true })
-    }
-
-    // Look up the code
+    // Look up the code (include target_email to detect email-change flow)
     const codeRows = await sql`
-      select id, code, expires_at, used_at
+      select id, code, expires_at, used_at, target_email
       from email_verification_codes
       where user_id = ${authUser.id}
       and code = ${normalizedCode}
@@ -10685,6 +10755,12 @@ app.post('/api/email-verification/verify', requireCsrfToken, async (req, res) =>
     }
 
     const codeRecord = codeRows[0]
+    const isEmailChange = !!codeRecord.target_email
+
+    // For standard verification only, skip if already verified
+    if (!isEmailChange && profileRows?.[0]?.email_verified) {
+      return res.json({ verified: true, alreadyVerified: true })
+    }
 
     // Check if already used
     if (codeRecord.used_at) {
@@ -10705,6 +10781,55 @@ app.post('/api/email-verification/verify', requireCsrfToken, async (req, res) =>
       where id = ${codeRecord.id}
     `
 
+    // If this is an email-change flow, update the email in Supabase Auth
+    if (isEmailChange) {
+      const newEmail = codeRecord.target_email
+      const oldEmail = authUser.email
+
+      if (!supabaseServiceClient) {
+        console.error('[email-verification/verify] Cannot complete email change: Supabase service client not configured')
+        return res.status(500).json({ error: 'Email change service not available' })
+      }
+
+      // Final check: ensure the new email is still available
+      const existingRows = await sql`SELECT id FROM auth.users WHERE lower(email) = ${newEmail.toLowerCase()} AND id != ${authUser.id} LIMIT 1`
+      if (existingRows && existingRows.length > 0) {
+        console.warn(`[email-verification/verify] Email change blocked: ${newEmail} is now taken`)
+        return res.status(409).json({ verified: false, error: 'This email is now in use by another account. Please try a different email.' })
+      }
+
+      // Update email in Supabase Auth via Admin API (service role)
+      const { error: updateError } = await supabaseServiceClient.auth.admin.updateUserById(authUser.id, {
+        email: newEmail,
+        email_confirm: true, // Mark new email as confirmed since we verified via OTP
+      })
+
+      if (updateError) {
+        console.error(`[email-verification/verify] Failed to update email via Admin API:`, updateError.message)
+        return res.status(500).json({ error: 'Failed to update email address' })
+      }
+
+      console.log(`[email-verification/verify] Email changed for user ${authUser.id.slice(0, 8)}... from ${oldEmail} to ${newEmail}`)
+
+      // Send notification to OLD email about the change (security alert, non-blocking)
+      if (oldEmail) {
+        const profileData = profileRows?.[0]
+        sendSecurityEmail('EMAIL_CHANGE_NOTIFICATION', {
+          recipientEmail: oldEmail,
+          userId: authUser.id,
+          userDisplayName: profileData?.display_name || 'User',
+          userLanguage: profileData?.language || req.body?.language || 'en',
+          extraContext: {
+            old_email: oldEmail,
+            new_email: newEmail,
+            time: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
+          }
+        }).catch((err) => {
+          console.warn('[email-verification/verify] Failed to send change notification to old email:', err?.message)
+        })
+      }
+    }
+
     // Mark user's email as verified
     await sql`
       update profiles
@@ -10712,9 +10837,9 @@ app.post('/api/email-verification/verify', requireCsrfToken, async (req, res) =>
       where id = ${authUser.id}
     `
 
-    console.log(`[email-verification/verify] Email verified for user ${authUser.id.slice(0, 8)}...`)
+    console.log(`[email-verification/verify] Email verified for user ${authUser.id.slice(0, 8)}...${isEmailChange ? ' (email changed)' : ''}`)
 
-    res.json({ verified: true })
+    res.json({ verified: true, emailChanged: isEmailChange })
   } catch (err) {
     console.error('[email-verification/verify] Error:', err?.message)
     res.status(500).json({ error: 'Failed to verify code' })

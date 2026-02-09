@@ -508,44 +508,6 @@ export default function SettingsPage() {
       if (session?.access_token) {
         secureHeaders['Authorization'] = `Bearer ${session.access_token}`
       }
-      
-      // Check if email is already in use by another user (CSRF + Auth protected)
-      const checkResponse = await fetch('/api/security/check-email-available', {
-        method: 'POST',
-        headers: secureHeaders,
-        body: JSON.stringify({ 
-          email: newEmail,
-          currentUserId: user?.id 
-        }),
-        credentials: 'same-origin',
-      })
-      
-      // Handle security errors (CSRF, Auth)
-      if (checkResponse.status === 401 || checkResponse.status === 403) {
-        const errorData = await checkResponse.json().catch(() => ({}))
-        if (errorData.code === 'CSRF_INVALID') {
-          throw new Error(t('settings.security.csrfError', { defaultValue: 'Security validation failed. Please refresh the page and try again.' }))
-        }
-        if (errorData.code === 'AUTH_REQUIRED' || errorData.code === 'AUTH_MISMATCH') {
-          throw new Error(t('settings.security.authError', { defaultValue: 'Authentication failed. Please sign in again and retry.' }))
-        }
-        // Generic auth error
-        throw new Error(errorData.error || t('settings.security.authError', { defaultValue: 'Authentication failed. Please sign in again and retry.' }))
-      }
-      
-      const checkResult = await checkResponse.json().catch(() => ({ available: true }))
-      
-      if (!checkResult.available) {
-        throw new Error(t('settings.email.emailAlreadyInUse', { defaultValue: 'This email is already in use by another account.' }))
-      }
-
-      const oldEmailAddress = email // Store old email before change
-      
-      const { error: updateError } = await supabase.auth.updateUser({
-        email: newEmail
-      })
-
-      if (updateError) throw updateError
 
       // Reset email_verified to false since user is changing their email
       // They will need to verify the new email address via OTP
@@ -560,57 +522,40 @@ export default function SettingsPage() {
         }
       }
 
-      // Get fresh CSRF token and session for subsequent requests
-      const [freshCsrfToken, sessionRes] = await Promise.all([
-        getCsrfToken(), 
-        supabase.auth.getSession()
-      ])
-      
-      const secureApiHeaders: Record<string, string> = { 
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': freshCsrfToken,
-      }
-      if (sessionRes.data.session?.access_token) {
-        secureApiHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
-      }
-
-      // Send notification to OLD email about the change (security alert)
-      if (user?.id && oldEmailAddress) {
-        fetch('/api/security/email-changed-notification', {
-          method: 'POST',
-          headers: secureApiHeaders,
-          body: JSON.stringify({
-            userId: user.id,
-            oldEmail: oldEmailAddress,
-            newEmail: newEmail,
-            userDisplayName: profile?.display_name || 'User',
-            userLanguage: (profile as any)?.language || currentLang || 'en',
-          }),
-          credentials: 'same-origin',
-        }).catch((err) => {
-          console.warn('[email-change] Failed to send notification to old email:', err)
-        })
-      }
-
       // Send OTP verification code to the NEW email address
-      // User will need to verify their new email before continuing
-      try {
-        await fetch('/api/email-verification/send', {
-          method: 'POST',
-          headers: secureApiHeaders,
-          body: JSON.stringify({
-            language: (profile as any)?.language || currentLang || 'en',
-          }),
-          credentials: 'same-origin',
-        })
-      } catch (err) {
-        console.warn('[email-change] Failed to send verification code to new email:', err)
+      // The server will validate the email, check availability, store the target email,
+      // and send the verification code to the new address.
+      // The actual email change in Supabase Auth happens server-side AFTER OTP verification.
+      const sendResponse = await fetch('/api/email-verification/send', {
+        method: 'POST',
+        headers: secureHeaders,
+        body: JSON.stringify({
+          language: (profile as any)?.language || currentLang || 'en',
+          targetEmail: newEmail,
+        }),
+        credentials: 'same-origin',
+      })
+
+      if (!sendResponse.ok) {
+        const errorData = await sendResponse.json().catch(() => ({}))
+        if (errorData.code === 'CSRF_INVALID') {
+          throw new Error(t('settings.security.csrfError', { defaultValue: 'Security validation failed. Please refresh the page and try again.' }))
+        }
+        if (errorData.code === 'AUTH_REQUIRED' || errorData.code === 'AUTH_MISMATCH') {
+          throw new Error(t('settings.security.authError', { defaultValue: 'Authentication failed. Please sign in again and retry.' }))
+        }
+        if (errorData.code === 'EMAIL_IN_USE') {
+          throw new Error(t('settings.email.emailAlreadyInUse', { defaultValue: 'This email is already in use by another account.' }))
+        }
+        throw new Error(errorData.error || errorData.reason || t('settings.email.failedToUpdate'))
       }
 
       // Refresh profile to get the updated email_verified status
       await refreshProfile()
       
       // Redirect to email verification page for OTP verification
+      // The email change notification to the old email will be sent by the server
+      // after the user successfully verifies the OTP code.
       navigate('/verify-email')
     } catch (e: any) {
       setError(e?.message || t('settings.email.failedToUpdate'))

@@ -90,6 +90,10 @@ COMMENT ON COLUMN public.email_verification_codes.created_at IS 'When the code w
 COMMENT ON COLUMN public.email_verification_codes.expires_at IS 'When the code expires (5 minutes after creation)';
 COMMENT ON COLUMN public.email_verification_codes.used_at IS 'When the code was successfully used (null if not used yet)';
 
+-- Add target_email column for email change flow (stores the new email the user wants to change to)
+ALTER TABLE public.email_verification_codes ADD COLUMN IF NOT EXISTS target_email TEXT DEFAULT NULL;
+COMMENT ON COLUMN public.email_verification_codes.target_email IS 'For email change: the new email address the user wants to change to. NULL for standard email verification.';
+
 -- Function to clean up expired verification codes (to be called by daily job)
 CREATE OR REPLACE FUNCTION cleanup_expired_verification_codes()
 RETURNS INTEGER AS $$
