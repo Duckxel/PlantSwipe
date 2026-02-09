@@ -79,61 +79,63 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
           : ""
 
     return (
-      <div className={cn("relative w-full", wrapperClassName)}>
-        {/* The input */}
-        <input
-          ref={ref}
-          type={effectiveType}
-          className={cn(
-            "flex h-10 w-full rounded-xl border border-input bg-white dark:bg-[#2d2d30] px-4 py-2 text-base shadow-sm transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:h-9 md:rounded-md md:px-3 md:py-1 md:text-sm",
-            ringClass,
-            rightPadding,
-            className,
-          )}
-          {...props}
-        />
+      <div className={cn("w-full", wrapperClassName)}>
+        {/* Input row – icons are positioned relative to this container only */}
+        <div className="relative">
+          <input
+            ref={ref}
+            type={effectiveType}
+            className={cn(
+              "flex h-10 w-full rounded-xl border border-input bg-white dark:bg-[#2d2d30] px-4 py-2 text-base shadow-sm transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:h-9 md:rounded-md md:px-3 md:py-1 md:text-sm",
+              ringClass,
+              rightPadding,
+              className,
+            )}
+            {...props}
+          />
 
-        {/* Right-side icons container */}
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-          {/* Validation status icon */}
-          {status === "validating" && (
-            <Loader2
-              className="h-4 w-4 animate-spin text-stone-400 dark:text-stone-500"
-              aria-hidden="true"
-            />
-          )}
-          {status === "valid" && (
-            <Check
-              className="h-4 w-4 text-emerald-500 dark:text-emerald-400 animate-in fade-in zoom-in-50 duration-200"
-              aria-hidden="true"
-            />
-          )}
-          {status === "error" && (
-            <AlertCircle
-              className="h-4 w-4 text-red-500 dark:text-red-400 animate-in fade-in zoom-in-50 duration-200"
-              aria-hidden="true"
-            />
-          )}
+          {/* Right-side icons – centred within the input row */}
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            {/* Validation status icon */}
+            {status === "validating" && (
+              <Loader2
+                className="h-4 w-4 animate-spin text-stone-400 dark:text-stone-500"
+                aria-hidden="true"
+              />
+            )}
+            {status === "valid" && (
+              <Check
+                className="h-4 w-4 text-emerald-500 dark:text-emerald-400 animate-in fade-in zoom-in-50 duration-200"
+                aria-hidden="true"
+              />
+            )}
+            {status === "error" && (
+              <AlertCircle
+                className="h-4 w-4 text-red-500 dark:text-red-400 animate-in fade-in zoom-in-50 duration-200"
+                aria-hidden="true"
+              />
+            )}
 
-          {/* Password visibility toggle */}
-          {isPassword && (
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => setShowPassword((v) => !v)}
-              className="text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </button>
-          )}
+            {/* Password visibility toggle */}
+            {isPassword && (
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPassword((v) => !v)}
+                className="text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Error message */}
+        {/* Error message – outside the relative container so it doesn't shift icons */}
         {status === "error" && error && (
           <p className="mt-1 text-xs text-red-500 dark:text-red-400 animate-in fade-in slide-in-from-top-1 duration-150">
             {error}
