@@ -748,7 +748,7 @@ export const ScanPage: React.FC = () => {
                         {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
                       </Button>
                     ) : (
-                      <div className="rounded-2xl border border-sky-400/50 dark:border-sky-500/45 bg-transparent p-3 space-y-3 ring-1 ring-sky-400/20 dark:ring-sky-500/20 shadow-[0_0_18px_-10px_rgba(56,189,248,0.7)] dark:shadow-[0_0_22px_-10px_rgba(14,165,233,0.75)]">
+                      <div className="rounded-2xl border border-stone-200 bg-stone-50/80 dark:border-stone-700 dark:bg-stone-900/40 p-3 space-y-3">
                         <div>
                           <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
                             {t('scan.notInDatabaseYet', { defaultValue: 'This plant is not in our database yet' })}
@@ -759,7 +759,8 @@ export const ScanPage: React.FC = () => {
                         </div>
                         <Button
                           onClick={() => handleRequestPlant(currentResult.topMatchName!)}
-                          className="w-full rounded-full bg-amber-600 hover:bg-amber-700 text-white gap-2 font-semibold shadow-sm"
+                          variant="outline"
+                          className="w-full rounded-full border border-amber-500/70 bg-transparent text-amber-700 dark:text-amber-300 hover:bg-amber-50/50 dark:hover:bg-amber-900/15 gap-2 font-semibold ring-1 ring-amber-500/20 shadow-[0_0_20px_-12px_rgba(245,158,11,0.95)]"
                         >
                           <Plus className="h-4 w-4" />
                           {t('scan.requestPlant', { defaultValue: 'Request This Plant' })}
