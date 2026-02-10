@@ -12041,7 +12041,8 @@ app.get('/api/admin/member', async (req, res) => {
     if (!sql) return await lookupViaRest()
 
     // SQL path (preferred when server DB connection is configured)
-    let user
+    let user = null
+    let targetUserId = null
     try {
       let users
       if (email) {
@@ -12055,20 +12056,99 @@ app.get('/api/admin/member', async (req, res) => {
           limit 1
         `
       }
-      if (!Array.isArray(users) || users.length === 0) {
-        // Try REST fallback if not found in DB
-        return await lookupViaRest()
+      if (Array.isArray(users) && users[0]?.id) {
+        user = users[0]
+        targetUserId = users[0].id
       }
-      user = users[0]
-    } catch (e) {
-      // DB failure: fallback to REST path
+    } catch { }
+
+    // If direct auth.users access is unavailable, resolve user id through existing
+    // security-definer helpers (same access strategy used by other admin tooling).
+    if (!targetUserId) {
+      try {
+        if (emailParam) {
+          const rows = await sql`select public.get_user_id_by_email(${emailParam}) as id`
+          if (Array.isArray(rows) && rows[0]?.id) targetUserId = rows[0].id
+        } else if (displayParam) {
+          const rows = await sql`select public.get_user_id_by_display_name(${displayParam}) as id`
+          if (Array.isArray(rows) && rows[0]?.id) targetUserId = rows[0].id
+        }
+      } catch { }
+    }
+
+    // Additional fallback: resolve target id via REST RPC helpers if available.
+    if (!targetUserId && supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const bearer = getBearerTokenFromRequest(req)
+        const rpcHeaders = {
+          apikey: supabaseAnonKey,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        }
+        if (bearer) rpcHeaders.Authorization = `Bearer ${bearer}`
+        if (emailParam) {
+          const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_email`, {
+            method: 'POST',
+            headers: rpcHeaders,
+            body: JSON.stringify({ _email: emailParam }),
+          })
+          if (rpc.ok) {
+            const val = await rpc.json().catch(() => null)
+            if (val) targetUserId = String(val)
+          }
+        } else if (displayParam) {
+          const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_display_name`, {
+            method: 'POST',
+            headers: rpcHeaders,
+            body: JSON.stringify({ _name: displayParam }),
+          })
+          if (rpc.ok) {
+            const val = await rpc.json().catch(() => null)
+            if (val) targetUserId = String(val)
+          }
+        }
+      } catch { }
+    }
+
+    if (!targetUserId) {
+      // Try REST fallback if not found in DB
       return await lookupViaRest()
+    }
+
+    if (!user) {
+      try {
+        const rows = await sql`
+          select id, email, created_at, email_confirmed_at, last_sign_in_at
+          from auth.users
+          where id = ${targetUserId}
+          limit 1
+        `
+        if (Array.isArray(rows) && rows[0]) {
+          user = rows[0]
+        }
+      } catch { }
+    }
+
+    if (!user) {
+      let resolvedEmail = emailParam || null
+      if (!resolvedEmail && displayParam) {
+        try {
+          const rows = await sql`select public.get_email_by_display_name(${displayParam}) as email`
+          if (Array.isArray(rows) && rows[0]?.email) resolvedEmail = String(rows[0].email)
+        } catch { }
+      }
+      user = {
+        id: targetUserId,
+        email: resolvedEmail,
+        created_at: null,
+        email_confirmed_at: null,
+        last_sign_in_at: null,
+      }
     }
     let profile = null
     try {
       const rows = await sql`select id, display_name, is_admin, roles, threat_level, bug_points from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
-      threatLevel = profile?.threat_level ?? null
     } catch { }
     // Load latest admin notes for this profile (DB or REST)
     let adminNotes = []
