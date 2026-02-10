@@ -5953,6 +5953,7 @@ const notificationTemplateInputSchema = z.object({
     .string()
     .max(2000)
     .optional()
+    .nullable()
     .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   messageVariants: z.array(z.string().min(1).max(400)).min(1),
   randomize: z.boolean().optional(),
@@ -7949,7 +7950,11 @@ app.post('/api/admin/notification-templates', async (req, res) => {
   try {
     parsed = notificationTemplateInputSchema.parse(req.body || {})
   } catch (err) {
-    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    const firstError = err?.errors?.[0]
+    const fieldPath = firstError?.path?.length ? firstError.path.join('.') + ': ' : ''
+    const errorMsg = fieldPath + (firstError?.message || 'Invalid payload')
+    console.error('[notification-templates] Validation error:', err?.errors)
+    res.status(400).json({ error: errorMsg })
     return
   }
   const messageVariants = (parsed.messageVariants || [])
@@ -8003,7 +8008,11 @@ app.put('/api/admin/notification-templates/:id', async (req, res) => {
   try {
     parsed = notificationTemplateInputSchema.parse(req.body || {})
   } catch (err) {
-    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    const firstError = err?.errors?.[0]
+    const fieldPath = firstError?.path?.length ? firstError.path.join('.') + ': ' : ''
+    const errorMsg = fieldPath + (firstError?.message || 'Invalid payload')
+    console.error('[notification-templates] Validation error:', err?.errors)
+    res.status(400).json({ error: errorMsg })
     return
   }
   const messageVariants = (parsed.messageVariants || [])

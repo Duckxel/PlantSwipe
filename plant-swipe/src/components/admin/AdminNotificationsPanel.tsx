@@ -712,10 +712,19 @@ export function AdminNotificationsPanel() {
     setTemplateSaving(true)
     try {
       const headers = await buildAdminHeaders()
+      // Filter out empty variants before sending to avoid Zod validation errors
+      const cleanedVariants = templateForm.messageVariants
+        .map(v => v.trim())
+        .filter(v => v.length > 0)
+      if (!cleanedVariants.length) {
+        alert('Add at least one non-empty message variant.')
+        setTemplateSaving(false)
+        return
+      }
       const payload = {
         title: templateForm.title.trim(),
-        description: templateForm.description.trim() || null,
-        messageVariants: templateForm.messageVariants,
+        description: templateForm.description.trim() || undefined,
+        messageVariants: cleanedVariants,
         randomize: templateForm.randomize,
         isActive: templateForm.isActive,
       }
