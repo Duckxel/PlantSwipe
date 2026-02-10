@@ -6629,10 +6629,17 @@ app.post('/api/admin/upload-mockup', async (req, res) => {
 
 // ========== Impressions (Page View Tracking) ==========
 
-// Server-side cooldown: 5 seconds per IP + entity to prevent reload-spam.
-// Map key = "ip|type|entityId", value = last-tracked timestamp (ms).
+// Server-side cooldown: 5 seconds per visitor + entity to prevent reload-spam.
+// GDPR-compliant: IPs are never stored. We hash them with a per-boot random
+// salt so the map keys are irreversible and carry no personal data.
 const _impressionCooldowns = new Map()
 const IMPRESSION_COOLDOWN_MS = 5_000
+const _impressionSalt = crypto.randomBytes(16).toString('hex')
+function _impressionKey(req, type, entityId) {
+  const raw = getClientIp(req) || 'unknown'
+  const hash = crypto.createHash('sha256').update(_impressionSalt + raw).digest('hex').slice(0, 16)
+  return `${hash}|${type}|${entityId}`
+}
 // Prune stale entries every 60 s so the map doesn't grow unbounded.
 setInterval(() => {
   const now = Date.now()
@@ -6659,9 +6666,8 @@ app.post('/api/impressions/track', async (req, res) => {
       return res.status(400).json({ error: 'Invalid id' })
     }
 
-    // Server-side cooldown check (IP + entity)
-    const ip = getClientIp(req) || 'unknown'
-    const cooldownKey = `${ip}|${type}|${entityId}`
+    // Server-side cooldown check (anonymous hash — no PII stored)
+    const cooldownKey = _impressionKey(req, type, entityId)
     const lastTracked = _impressionCooldowns.get(cooldownKey)
     if (lastTracked && Date.now() - lastTracked < IMPRESSION_COOLDOWN_MS) {
       // Still within cooldown — silently accept but don't increment
