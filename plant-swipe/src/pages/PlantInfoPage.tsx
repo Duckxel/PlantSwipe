@@ -36,9 +36,6 @@ import {
   Palette,
   Info,
   Image as ImageIcon,
-  X,
-  ZoomIn,
-  ZoomOut,
   RefreshCw,
   Utensils,
   Plus,
@@ -68,6 +65,7 @@ import {
   Tooltip as RechartsTooltip,
 } from 'recharts'
 import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
+import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
   expandCompositionFromDb,
   expandFoliagePersistanceFromDb,
@@ -2623,12 +2621,12 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
   const [canScrollLeft, setCanScrollLeft] = React.useState(false)
   const [canScrollRight, setCanScrollRight] = React.useState(false)
   const [needsScrolling, setNeedsScrolling] = React.useState(true)
-  const [viewerOpen, setViewerOpen] = React.useState(false)
-  const [selectedImage, setSelectedImage] = React.useState<PlantImage | null>(null)
-  const [viewerZoom, setViewerZoom] = React.useState(1)
-  const [viewerOffset, setViewerOffset] = React.useState({ x: 0, y: 0 })
-  const [isPanning, setIsPanning] = React.useState(false)
-  const panStartRef = React.useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const imageViewer = useImageViewer()
+
+  const viewerImages = React.useMemo(
+    () => validImages.map((img, idx) => ({ src: img.link, alt: `${plantName} - Image ${idx + 1}` })),
+    [validImages, plantName],
+  )
 
   const checkScrollability = React.useCallback(() => {
     if (!scrollContainerRef.current) return
@@ -2668,80 +2666,6 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
     container.scrollTo({ left: targetScroll, behavior: 'smooth' })
   }, [])
 
-  const openViewer = React.useCallback((img: PlantImage) => {
-    setSelectedImage(img)
-    setViewerOpen(true)
-  }, [])
-
-  const closeViewer = React.useCallback(() => {
-    setViewerOpen(false)
-    setViewerZoom(1)
-    setViewerOffset({ x: 0, y: 0 })
-    setIsPanning(false)
-  }, [])
-
-  const adjustZoom = React.useCallback((delta: number) => {
-    setViewerZoom((prev) => Math.min(4, Math.max(1, parseFloat((prev + delta).toFixed(2)))))
-  }, [])
-
-  const resetViewer = React.useCallback(() => {
-    setViewerZoom(1)
-    setViewerOffset({ x: 0, y: 0 })
-  }, [])
-
-  const handleViewerWheel = React.useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      adjustZoom(event.deltaY < 0 ? 0.15 : -0.15)
-    },
-    [adjustZoom],
-  )
-
-  const handleViewerPointerDown = React.useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      setIsPanning(true)
-      event.currentTarget.setPointerCapture(event.pointerId)
-      panStartRef.current = { x: event.clientX - viewerOffset.x, y: event.clientY - viewerOffset.y }
-    },
-    [viewerOffset.x, viewerOffset.y],
-  )
-
-  const handleViewerPointerMove = React.useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!isPanning) return
-      setViewerOffset({
-        x: event.clientX - panStartRef.current.x,
-        y: event.clientY - panStartRef.current.y,
-      })
-    },
-    [isPanning],
-  )
-
-  const handleViewerPointerUp = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    setIsPanning(false)
-  }, [])
-
-  React.useEffect(() => {
-    if (!viewerOpen) {
-      setViewerZoom(1)
-      setViewerOffset({ x: 0, y: 0 })
-      setIsPanning(false)
-      return
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        closeViewer()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [viewerOpen, closeViewer])
-
   if (validImages.length === 0) return null
 
   return (
@@ -2777,7 +2701,7 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
                   className="h-full w-full object-contain transition-transform duration-300 hover:scale-105"
                   loading="lazy"
                   draggable={false}
-                  onClick={() => openViewer(img)}
+                  onClick={() => imageViewer.openGallery(viewerImages, idx)}
                   style={{ maxHeight: '400px' }}
                 />
               </div>
@@ -2796,84 +2720,7 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
         )}
       </div>
 
-      {viewerOpen && selectedImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={closeViewer}>
-          <button
-            type="button"
-            className="absolute top-6 right-6 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
-            onClick={(event) => {
-              event.stopPropagation()
-              closeViewer()
-            }}
-            aria-label="Close image viewer"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          <div
-            className="flex h-full w-full max-w-5xl flex-col items-center justify-center px-4"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div
-              className="relative max-h-[80vh] w-full overflow-hidden rounded-2xl border border-white/10 bg-black/60"
-              onWheel={handleViewerWheel}
-              onPointerDown={handleViewerPointerDown}
-              onPointerMove={handleViewerPointerMove}
-              onPointerUp={handleViewerPointerUp}
-              onPointerLeave={handleViewerPointerUp}
-            >
-              <img
-                src={selectedImage.link}
-                alt={plantName}
-                draggable={false}
-                className="h-full w-full select-none object-contain"
-                style={{
-                  transform: `translate(${viewerOffset.x}px, ${viewerOffset.y}px) scale(${viewerZoom})`,
-                  cursor: isPanning ? 'grabbing' : viewerZoom > 1 ? 'grab' : 'zoom-in',
-                  transition: isPanning ? 'none' : 'transform 0.2s ease-out',
-                }}
-              />
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-3 text-white">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  adjustZoom(0.2)
-                }}
-              >
-                <ZoomIn className="mr-1 h-4 w-4" />
-                Zoom in
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  adjustZoom(-0.2)
-                }}
-              >
-                <ZoomOut className="mr-1 h-4 w-4" />
-                Zoom out
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  resetViewer()
-                }}
-              >
-                <RefreshCw className="mr-1 h-4 w-4" />
-                Reset
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ImageViewer {...imageViewer.props} enableZoom />
     </>
   )
 }

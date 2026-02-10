@@ -70,7 +70,7 @@ const MAX_ZOOM = 4
 const ZOOM_STEP = 0.25
 const SWIPE_THRESHOLD = 50
 const SWIPE_MAX_TIME = 400
-const CONTROLS_HIDE_DELAY = 3500
+const CONTROLS_HIDE_DELAY = 4000
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -100,6 +100,10 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const imageContainerRef = useRef<HTMLDivElement>(null)
+  // Stable refs for callbacks used in native event listeners
+  const zoomRef = useRef(zoom)
+  const enableZoomRef = useRef(enableZoom)
+  const adjustZoomRef = useRef<(delta: number) => void>(() => {})
 
   /* ---- derived ---- */
   const hasMultiple = images.length > 1
@@ -129,21 +133,26 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   }, [open, initialIndex])
 
   /* ---- Auto-hide controls ---- */
-  const resetControlsTimer = useCallback(() => {
+  const scheduleHideControls = useCallback(() => {
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current)
-    setShowControls(true)
     controlsTimerRef.current = setTimeout(() => {
       setShowControls(false)
     }, CONTROLS_HIDE_DELAY)
   }, [])
 
+  const revealControls = useCallback(() => {
+    setShowControls(true)
+    scheduleHideControls()
+  }, [scheduleHideControls])
+
   useEffect(() => {
     if (!open) return
-    resetControlsTimer()
+    // Show controls and start auto-hide timer when opening or changing image
+    revealControls()
     return () => {
       if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current)
     }
-  }, [open, activeIndex, resetControlsTimer])
+  }, [open, activeIndex, revealControls])
 
   /* ---- Navigation ---- */
   const goToNext = useCallback(() => {
@@ -151,18 +160,16 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       setActiveIndex((i) => i + 1)
       setZoom(MIN_ZOOM)
       setOffset({ x: 0, y: 0 })
-      resetControlsTimer()
     }
-  }, [activeIndex, images.length, resetControlsTimer])
+  }, [activeIndex, images.length])
 
   const goToPrev = useCallback(() => {
     if (activeIndex > 0) {
       setActiveIndex((i) => i - 1)
       setZoom(MIN_ZOOM)
       setOffset({ x: 0, y: 0 })
-      resetControlsTimer()
     }
-  }, [activeIndex, resetControlsTimer])
+  }, [activeIndex])
 
   /* ---- Zoom helpers ---- */
   const adjustZoom = useCallback((delta: number) => {
@@ -172,6 +179,11 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       return next
     })
   }, [])
+
+  // Keep ref in sync for native event listener
+  useEffect(() => { zoomRef.current = zoom }, [zoom])
+  useEffect(() => { enableZoomRef.current = enableZoom }, [enableZoom])
+  useEffect(() => { adjustZoomRef.current = adjustZoom }, [adjustZoom])
 
   const resetView = useCallback(() => {
     setZoom(MIN_ZOOM)
@@ -257,15 +269,24 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     [],
   )
 
-  /* ---- Wheel zoom ---- */
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLDivElement>) => {
-      if (!enableZoom) return
+  /* ---- Wheel zoom (native non-passive listener to prevent page scroll) ---- */
+  useEffect(() => {
+    const container = imageContainerRef.current
+    if (!container || !open) return
+
+    const handleWheelNative = (e: WheelEvent) => {
+      if (!enableZoomRef.current) return
       e.preventDefault()
-      adjustZoom(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)
-    },
-    [enableZoom, adjustZoom],
-  )
+      e.stopPropagation()
+      adjustZoomRef.current(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)
+    }
+
+    // Use { passive: false } so preventDefault() actually works
+    container.addEventListener("wheel", handleWheelNative, { passive: false })
+    return () => {
+      container.removeEventListener("wheel", handleWheelNative)
+    }
+  }, [open])
 
   /* ---- Touch swipe (when zoom === 1) ---- */
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -303,13 +324,23 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   /* ---- Tap to toggle controls ---- */
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
-      // Ignore clicks on buttons / controls
+      // Ignore clicks on buttons / interactive elements
       if ((e.target as HTMLElement).closest("button")) return
-      if (zoom > MIN_ZOOM) return // don't toggle when zoomed
-      setShowControls((prev) => !prev)
-      resetControlsTimer()
+      if (zoom > MIN_ZOOM) return // don't toggle when zoomed — panning takes priority
+      // Toggle: if controls are visible, hide them (and cancel timer);
+      // if hidden, show them (and restart timer).
+      setShowControls((prev) => {
+        if (prev) {
+          // Currently showing -> hide now
+          if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current)
+          return false
+        }
+        // Currently hidden -> show and schedule auto-hide
+        scheduleHideControls()
+        return true
+      })
     },
-    [zoom, resetControlsTimer],
+    [zoom, scheduleHideControls],
   )
 
   /* ---- Double-click to zoom ---- */
@@ -322,8 +353,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       } else {
         setZoom(2)
       }
+      revealControls()
     },
-    [enableZoom, zoom, resetView],
+    [enableZoom, zoom, resetView, revealControls],
   )
 
   /* ---- Download ---- */
@@ -427,7 +459,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       <div
         ref={imageContainerRef}
         className="relative flex-1 flex items-center justify-center overflow-hidden"
-        onWheel={handleWheel}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
