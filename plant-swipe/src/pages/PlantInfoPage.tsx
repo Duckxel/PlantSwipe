@@ -885,28 +885,26 @@ const PlantInfoPage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
       <div className="flex items-center gap-2 justify-between">
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="rounded-full border border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
-            onClick={handleGoBack}
-            aria-label={t('common.back', { defaultValue: 'Back' })}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="rounded-full border border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#1d1d1f] dark:bg-[#141417]"
+          onClick={handleGoBack}
+          aria-label={t('common.back', { defaultValue: 'Back' })}
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+        {/* Impression count badge (Admin only) — sits between back and actions */}
+        {profile?.is_admin && impressionCount !== null && (
+          <Badge
+            variant="secondary"
+            className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-1.5 mr-auto"
           >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          {/* Impression count badge (Admin only) */}
-          {profile?.is_admin && impressionCount !== null && (
-            <Badge
-              variant="secondary"
-              className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-1.5"
-            >
-              <ChartNoAxesColumn className="h-3.5 w-3.5" />
-              {impressionCount.toLocaleString()}
-            </Badge>
-          )}
-        </div>
+            <ChartNoAxesColumn className="h-3.5 w-3.5" />
+            {impressionCount.toLocaleString()}
+          </Badge>
+        )}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Share Button */}
           <div className="relative">
