@@ -29,10 +29,10 @@ import {
   Image as ImageIcon,
   Search,
   FlaskConical,
-  X,
   ZoomIn
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
 import { RequestPlantDialog } from '@/components/plant/RequestPlantDialog'
 import { 
@@ -86,7 +86,7 @@ export const ScanPage: React.FC = () => {
   const [requestPlantName, setRequestPlantName] = React.useState<string>('')
   
   // Fullscreen image viewer
-  const [fullscreenImage, setFullscreenImage] = React.useState<string | null>(null)
+  const imageViewer = useImageViewer()
   
   // Load user's scans (initial load)
   const loadScans = React.useCallback(async () => {
@@ -621,7 +621,7 @@ export const ScanPage: React.FC = () => {
               {currentResult.imageUrl && (
                 <div 
                   className="relative rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group"
-                  onClick={() => setFullscreenImage(currentResult.imageUrl!)}
+                  onClick={() => imageViewer.open(currentResult.imageUrl!)}
                 >
                   <img 
                     src={currentResult.imageUrl}
@@ -833,7 +833,7 @@ export const ScanPage: React.FC = () => {
                       <div 
                         key={img.id || idx}
                         className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group relative"
-                        onClick={() => setFullscreenImage(img.url)}
+                        onClick={() => imageViewer.open(img.url)}
                       >
                         <img 
                           src={img.urlSmall || img.url}
@@ -920,28 +920,11 @@ export const ScanPage: React.FC = () => {
       />
       
       {/* Fullscreen Image Viewer */}
-      <Dialog open={!!fullscreenImage} onOpenChange={(open) => !open && setFullscreenImage(null)}>
-        <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none rounded-2xl overflow-hidden">
-          <DialogTitle className="sr-only">
-            {t('scan.fullscreenImageTitle', { defaultValue: 'Fullscreen image view' })}
-          </DialogTitle>
-          <button
-            onClick={() => setFullscreenImage(null)}
-            className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
-          >
-            <X className="h-6 w-6" />
-          </button>
-          {fullscreenImage && (
-            <div className="flex items-center justify-center w-full h-full min-h-[50vh]">
-              <img 
-                src={fullscreenImage}
-                alt="Fullscreen view"
-                className="max-w-full max-h-[90vh] object-contain"
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ImageViewer
+        {...imageViewer.props}
+        enableZoom
+        title={t('scan.fullscreenImageTitle', { defaultValue: 'Fullscreen image view' })}
+      />
     </div>
   )
 }
