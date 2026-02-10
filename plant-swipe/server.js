@@ -6629,10 +6629,23 @@ app.post('/api/admin/upload-mockup', async (req, res) => {
 
 // ========== Impressions (Page View Tracking) ==========
 
+// Server-side cooldown: 5 seconds per IP + entity to prevent reload-spam.
+// Map key = "ip|type|entityId", value = last-tracked timestamp (ms).
+const _impressionCooldowns = new Map()
+const IMPRESSION_COOLDOWN_MS = 5_000
+// Prune stale entries every 60 s so the map doesn't grow unbounded.
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, ts] of _impressionCooldowns) {
+    if (now - ts > IMPRESSION_COOLDOWN_MS * 2) _impressionCooldowns.delete(key)
+  }
+}, 60_000)
+
 /**
  * POST /api/impressions/track
  * Public endpoint: anyone loading a plant info page or blog post increments the counter.
  * Body: { type: 'plant' | 'blog', id: string }
+ * A 5-second per-IP per-entity cooldown prevents reload-spam inflation.
  */
 app.post('/api/impressions/track', async (req, res) => {
   if (!sql) return res.status(503).json({ error: 'Database not configured' })
@@ -6645,6 +6658,17 @@ app.post('/api/impressions/track', async (req, res) => {
     if (!entityId || entityId.length > 200) {
       return res.status(400).json({ error: 'Invalid id' })
     }
+
+    // Server-side cooldown check (IP + entity)
+    const ip = getClientIp(req) || 'unknown'
+    const cooldownKey = `${ip}|${type}|${entityId}`
+    const lastTracked = _impressionCooldowns.get(cooldownKey)
+    if (lastTracked && Date.now() - lastTracked < IMPRESSION_COOLDOWN_MS) {
+      // Still within cooldown — silently accept but don't increment
+      return res.json({ ok: true, cooldown: true })
+    }
+    _impressionCooldowns.set(cooldownKey, Date.now())
+
     // Atomic upsert: increment or create
     await sql`
       INSERT INTO public.impressions (entity_type, entity_id, count, last_viewed_at)
