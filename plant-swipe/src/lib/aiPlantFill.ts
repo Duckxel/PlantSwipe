@@ -7,7 +7,11 @@ const INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT = 3000 // 3 seconds for gateway timeou
 
 // Parallel processing configuration
 // Number of fields to process simultaneously (balance between speed and API rate limits)
-const PARALLEL_BATCH_SIZE = 4
+const DEFAULT_PARALLEL_BATCH_SIZE = 4
+// Reduced batch size when rate limiting is detected
+const RATE_LIMITED_BATCH_SIZE = 1
+// Delay between fields when rate limiting is detected (ms)
+const RATE_LIMIT_FIELD_DELAY = 3000
 
 // Helper to delay execution (abortable)
 const delay = (ms: number, signal?: AbortSignal | null) => new Promise<void>((resolve, reject) => {
@@ -36,8 +40,26 @@ const isAbortError = (err: unknown): boolean => {
   return false
 }
 
+// Helper to detect quota exceeded errors from response body or error messages
+// Quota exceeded is different from transient rate limits - it means the billing quota is exhausted
+const isQuotaExceededFromPayload = (payload: Record<string, unknown> | null): boolean => {
+  if (!payload) return false
+  if (payload.isQuotaError === true) return true
+  const errMsg = typeof payload.error === 'string' ? payload.error : ''
+  return errMsg.includes('exceeded your current quota') || errMsg.includes('insufficient_quota')
+}
+
+// Helper to detect rate limit errors from response or payload
+const isRateLimitFromPayload = (payload: Record<string, unknown> | null): boolean => {
+  if (!payload) return false
+  if (payload.isRateLimit === true) return true
+  const errMsg = typeof payload.error === 'string' ? payload.error : ''
+  return errMsg.includes('429') || errMsg.includes('rate limit') || errMsg.includes('Rate limit')
+}
+
 // Fetch with retry logic and exponential backoff
 // For 504 gateway timeouts, uses more retries and longer delays to give server time to complete
+// For 429 quota exceeded, does NOT retry - the user needs to fix billing
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
@@ -48,7 +70,7 @@ async function fetchWithRetry(
   const signal = options.signal
   
   // Start with base retries, but allow escalation for gateway timeouts
-  let maxRetries = baseMaxRetries
+  const maxRetries = baseMaxRetries
   let initialDelay = INITIAL_RETRY_DELAY
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -59,6 +81,30 @@ async function fetchWithRetry(
     
     try {
       const response = await fetch(url, options)
+      
+      // For 429 responses, check if it's a quota error (non-retryable) vs transient rate limit
+      if (response.status === 429) {
+        // Try to read the body to check for quota errors
+        const clonedResponse = response.clone()
+        let payload: Record<string, unknown> | null = null
+        try { payload = await clonedResponse.json() } catch { /* ignore parse errors */ }
+        
+        if (isQuotaExceededFromPayload(payload)) {
+          // Quota exceeded - don't retry, return immediately so caller gets the error
+          console.error('[AI Fill] OpenAI quota exceeded - please check your billing plan')
+          return response
+        }
+        
+        // Transient rate limit - retry with longer delay
+        if (attempt < maxRetries) {
+          lastStatus = response.status
+          const retryDelay = (initialDelay * 2) * Math.pow(2, attempt) // Extra delay for rate limits
+          console.log(`[AI Fill] Rate limited (429), retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries})`)
+          await delay(retryDelay, signal)
+          continue
+        }
+        return response
+      }
       
       // If it's a retryable error and we have retries left, retry
       if (isRetryableStatus(response.status) && attempt < maxRetries) {
@@ -102,6 +148,9 @@ async function fetchWithRetry(
   // Provide more informative error message
   if (lastStatus === 504) {
     throw new Error(`Gateway timeout after ${maxRetries + 1} attempts. The AI backend is taking too long to respond.`)
+  }
+  if (lastStatus === 429) {
+    throw new Error('OpenAI rate limit exceeded. Please wait a few minutes and try again, or check your OpenAI billing plan.')
   }
   throw lastError || new Error('Request failed after retries')
 }
@@ -210,27 +259,48 @@ export async function fetchAiPlantFill({
   let completedFields = 0
   onProgress?.({ field: 'init', completed: completedFields, total: totalFields })
 
-  // Process fields in parallel batches for faster completion
-  // Split fields into batches of PARALLEL_BATCH_SIZE
-  const batches: string[][] = []
-  for (let i = 0; i < fieldEntries.length; i += PARALLEL_BATCH_SIZE) {
-    batches.push(fieldEntries.slice(i, i + PARALLEL_BATCH_SIZE))
-  }
+  // Track whether we've detected rate limiting to reduce parallelism dynamically
+  let rateLimitDetected = false
+  let quotaExceeded = false
 
-  // Process each batch using the batch endpoint for better performance
-  // This reduces HTTP round-trips by processing multiple fields per request
-  for (const batch of batches) {
+  // Helper to get current batch size (reduces when rate limiting detected)
+  const getCurrentBatchSize = () => rateLimitDetected ? RATE_LIMITED_BATCH_SIZE : DEFAULT_PARALLEL_BATCH_SIZE
+
+  // Process fields in parallel batches for faster completion
+  // Re-batch dynamically based on rate limit detection
+  let fieldIndex = 0
+  while (fieldIndex < fieldEntries.length) {
     if (signal?.aborted) {
       throw new DOMException('AI fill was cancelled', 'AbortError')
     }
+
+    // If quota is exceeded, fail fast for remaining fields
+    if (quotaExceeded) {
+      const remainingFields = fieldEntries.slice(fieldIndex)
+      for (const fieldKey of remainingFields) {
+        onFieldError?.({ field: fieldKey, error: 'OpenAI quota exceeded - please check your billing plan' })
+        completedFields += 1
+        onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
+      }
+      break
+    }
+
+    // Add delay between batches when rate limited
+    if (rateLimitDetected && fieldIndex > 0) {
+      await delay(RATE_LIMIT_FIELD_DELAY, signal)
+    }
+
+    const batchSize = getCurrentBatchSize()
+    const batch = fieldEntries.slice(fieldIndex, fieldIndex + batchSize)
+    fieldIndex += batch.length
 
     // Notify progress for each field in the batch that we're starting
     for (const fieldKey of batch) {
       onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
     }
 
-    // Use batch endpoint when available (>1 field), otherwise use single field endpoint
-    if (batch.length > 1) {
+    // Use batch endpoint when available (>1 field and not rate limited), otherwise use single field endpoint
+    if (batch.length > 1 && !rateLimitDetected) {
       // Try batch endpoint first for better performance
       try {
         const response = await fetchWithRetry('/api/admin/ai/plant-fill/batch', {
@@ -258,6 +328,20 @@ export async function fetchAiPlantFill({
           payload = await response.json()
         } catch {}
 
+        // Check for quota/rate limit issues
+        if (response.status === 429 || isRateLimitFromPayload(payload)) {
+          rateLimitDetected = true
+          if (isQuotaExceededFromPayload(payload)) {
+            quotaExceeded = true
+            console.error('[AI Fill] OpenAI quota exceeded - stopping batch processing')
+          } else {
+            console.warn('[AI Fill] Rate limited on batch endpoint, switching to sequential processing with delays')
+          }
+          // Put the fields back to be processed individually
+          fieldIndex -= batch.length
+          continue
+        }
+
         if (response.ok && payload?.success) {
           // Process successful batch response
           const batchData = payload.data || {}
@@ -265,6 +349,14 @@ export async function fetchAiPlantFill({
 
           for (const fieldKey of batch) {
             if (batchErrors[fieldKey]) {
+              // Check if individual field error is a rate limit
+              const errorMsg = String(batchErrors[fieldKey])
+              if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit')) {
+                rateLimitDetected = true
+                if (errorMsg.includes('quota') || errorMsg.includes('billing')) {
+                  quotaExceeded = true
+                }
+              }
               // Handle field error
               if (!continueOnFieldError) {
                 throw new Error(batchErrors[fieldKey])
@@ -287,12 +379,13 @@ export async function fetchAiPlantFill({
         // If batch endpoint failed, fall through to individual requests
         console.warn('[AI Fill] Batch endpoint failed, falling back to individual requests')
       } catch (batchErr) {
+        if (isAbortError(batchErr)) throw batchErr
         // Fall through to individual requests
         console.warn('[AI Fill] Batch endpoint error, falling back to individual requests:', batchErr)
       }
     }
 
-    // Fallback: Process fields individually in parallel
+    // Fallback: Process fields individually (in parallel when not rate limited, sequential when rate limited)
     const batchResults = await Promise.allSettled(
       batch.map(async (fieldKey) => {
         if (signal?.aborted) {
@@ -321,6 +414,14 @@ export async function fetchAiPlantFill({
         } catch {}
 
         if (!response.ok) {
+          // Detect quota/rate limit from response
+          if (response.status === 429 || isRateLimitFromPayload(payload)) {
+            rateLimitDetected = true
+            if (isQuotaExceededFromPayload(payload)) {
+              quotaExceeded = true
+            }
+          }
+          
           let message: string
           if (response.status === 504) {
             message = `Gateway timeout for "${fieldKey}" - AI backend took too long to respond`
@@ -329,9 +430,20 @@ export async function fetchAiPlantFill({
           } else if (response.status === 502) {
             message = `Bad gateway for "${fieldKey}" - proxy error communicating with AI backend`
           } else if (response.status === 429) {
-            message = `Rate limited for "${fieldKey}" - too many AI requests`
+            if (isQuotaExceededFromPayload(payload)) {
+              message = `OpenAI quota exceeded - please check your billing plan`
+            } else {
+              message = `Rate limited for "${fieldKey}" - too many AI requests, will retry with delays`
+            }
           } else {
             message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+            // Also check error message for rate limit indicators
+            if (message.includes('429') || message.includes('quota') || message.includes('rate limit')) {
+              rateLimitDetected = true
+              if (message.includes('quota') || message.includes('billing')) {
+                quotaExceeded = true
+              }
+            }
           }
           throw new Error(message)
         }
@@ -495,6 +607,13 @@ export async function getEnglishPlantName(
 
   if (!response.ok) {
     const message = payload?.error || 'Failed to get English plant name'
+    // Include quota/rate limit context in the error
+    if (response.status === 429 || isQuotaExceededFromPayload(payload)) {
+      const quotaMsg = isQuotaExceededFromPayload(payload)
+        ? 'OpenAI quota exceeded - please check your billing plan'
+        : 'OpenAI rate limited - too many requests'
+      throw new Error(quotaMsg)
+    }
     throw new Error(message)
   }
 

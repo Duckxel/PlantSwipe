@@ -2877,6 +2877,66 @@ const COMPLEX_FIELDS = new Set([
   'miscellaneous',
 ])
 
+// Helper to extract HTTP status from OpenAI SDK errors
+function getOpenAIErrorStatus(err) {
+  if (!err) return null
+  // OpenAI SDK errors have a .status property
+  if (typeof err.status === 'number') return err.status
+  // Some errors store it in .response?.status
+  if (typeof err.response?.status === 'number') return err.response.status
+  // Check error code property
+  if (typeof err.code === 'string' && err.code === 'rate_limit_exceeded') return 429
+  // Check the error message for status codes
+  if (typeof err.message === 'string') {
+    const match = err.message.match(/^(\d{3})\s/)
+    if (match) return parseInt(match[1], 10)
+  }
+  return null
+}
+
+// Helper to check if an OpenAI error is a quota/billing error (not just transient rate limit)
+function isQuotaExceededError(err) {
+  if (!err) return false
+  const msg = typeof err.message === 'string' ? err.message : ''
+  return msg.includes('exceeded your current quota') || 
+         msg.includes('billing') || 
+         msg.includes('insufficient_quota')
+}
+
+// Helper to check if an OpenAI error is a transient rate limit (retryable)
+function isTransientRateLimit(err) {
+  const status = getOpenAIErrorStatus(err)
+  if (status !== 429) return false
+  // Quota exceeded is NOT transient - it requires billing changes
+  return !isQuotaExceededError(err)
+}
+
+// Retry wrapper for OpenAI calls with exponential backoff for transient rate limits
+const OPENAI_MAX_RETRIES = 3
+const OPENAI_RETRY_BASE_DELAY = 2000 // 2 seconds
+
+async function withOpenAIRetry(fn, label = 'OpenAI call') {
+  for (let attempt = 0; attempt <= OPENAI_MAX_RETRIES; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      // Never retry quota exceeded errors - they need billing fixes
+      if (isQuotaExceededError(err)) {
+        throw err
+      }
+      // Retry transient rate limits with backoff
+      if (isTransientRateLimit(err) && attempt < OPENAI_MAX_RETRIES) {
+        const delayMs = OPENAI_RETRY_BASE_DELAY * Math.pow(2, attempt)
+        console.log(`[server] ${label}: rate limited (attempt ${attempt + 1}/${OPENAI_MAX_RETRIES}), retrying in ${delayMs}ms`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+        continue
+      }
+      // Not retryable or out of retries
+      throw err
+    }
+  }
+}
+
 async function generateFieldData(options) {
   const { plantName, fieldKey, fieldSchema, existingField } = options || {}
   if (!openaiClient) {
@@ -2923,14 +2983,17 @@ async function generateFieldData(options) {
   const defaultTimeout = SIMPLE_ENUM_FIELDS.has(fieldKey) ? 120000 : 600000
   const timeout = Number(process.env.OPENAI_TIMEOUT_MS) || defaultTimeout
 
-  const response = await openaiClient.responses.create(
-    {
-      model: openaiModel,
-      reasoning: { effort: reasoningEffort },
-      instructions: commonInstructions,
-      input: promptSections.join('\n\n'),
-    },
-    { timeout }
+  const response = await withOpenAIRetry(
+    () => openaiClient.responses.create(
+      {
+        model: openaiModel,
+        reasoning: { effort: reasoningEffort },
+        instructions: commonInstructions,
+        input: promptSections.join('\n\n'),
+      },
+      { timeout }
+    ),
+    `generateFieldData("${fieldKey}")`
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -2985,14 +3048,17 @@ async function verifyPlantNameCandidate(plantName) {
 
   const prompt = [`Name to classify: ${plantName}`].join('\n')
 
-  const response = await openaiClient.responses.create(
-    {
-      model: openaiModelNano,
-      reasoning: { effort: 'low' },
-      instructions,
-      input: prompt,
-    },
-    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
+  const response = await withOpenAIRetry(
+    () => openaiClient.responses.create(
+      {
+        model: openaiModelNano,
+        reasoning: { effort: 'low' },
+        instructions,
+        input: prompt,
+      },
+      { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
+    ),
+    `verifyPlantName("${plantName}")`
   )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
@@ -4227,7 +4293,13 @@ app.post('/api/admin/ai/plant-fill/verify-name', async (req, res) => {
   } catch (err) {
     console.error('[server] AI plant name verification failed:', err)
     if (!res.headersSent) {
-      res.status(500).json({ error: err?.message || 'Failed to verify plant name' })
+      const status = getOpenAIErrorStatus(err)
+      const httpStatus = status === 429 ? 429 : 500
+      res.status(httpStatus).json({ 
+        error: err?.message || 'Failed to verify plant name',
+        isQuotaError: isQuotaExceededError(err),
+        isRateLimit: status === 429,
+      })
     }
   }
 })
@@ -4279,12 +4351,15 @@ Examples:
 
     const prompt = `What is the English name for this plant, preserving any cultivar or variety specificity: "${plantName}"?`
     
-    const response = await openaiClient.responses.create({
-      model: openaiModelNano,
-      reasoning: { effort: 'low' },
-      instructions,
-      input: prompt,
-    })
+    const response = await withOpenAIRetry(
+      () => openaiClient.responses.create({
+        model: openaiModelNano,
+        reasoning: { effort: 'low' },
+        instructions,
+        input: prompt,
+      }),
+      `englishName("${plantName}")`
+    )
     
     const englishName = (response.output_text || plantName).trim()
     
@@ -4305,7 +4380,13 @@ Examples:
   } catch (err) {
     console.error('[server] AI English name lookup failed:', err)
     if (!res.headersSent) {
-      res.status(500).json({ error: err?.message || 'Failed to get English plant name' })
+      const status = getOpenAIErrorStatus(err)
+      const httpStatus = status === 429 ? 429 : 500
+      res.status(httpStatus).json({ 
+        error: err?.message || 'Failed to get English plant name',
+        isQuotaError: isQuotaExceededError(err),
+        isRateLimit: status === 429,
+      })
     }
   }
 })
@@ -4415,7 +4496,13 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
   } catch (err) {
     console.error('[server] AI plant fill failed:', err)
     if (!res.headersSent) {
-      res.status(500).json({ error: err?.message || 'Failed to fill plant data' })
+      const status = getOpenAIErrorStatus(err)
+      const httpStatus = status === 429 ? 429 : 500
+      res.status(httpStatus).json({ 
+        error: err?.message || 'Failed to fill plant data',
+        isQuotaError: isQuotaExceededError(err),
+        isRateLimit: status === 429,
+      })
     }
   }
 })
@@ -4492,7 +4579,13 @@ app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
   } catch (err) {
     console.error('[server] AI plant field fill failed:', err)
     if (!res.headersSent) {
-      res.status(500).json({ error: err?.message || 'Failed to fill field' })
+      const status = getOpenAIErrorStatus(err)
+      const httpStatus = status === 429 ? 429 : 500
+      res.status(httpStatus).json({ 
+        error: err?.message || 'Failed to fill field',
+        isQuotaError: isQuotaExceededError(err),
+        isRateLimit: status === 429,
+      })
     }
   }
 })
@@ -4600,7 +4693,13 @@ app.post('/api/admin/ai/plant-fill/batch', async (req, res) => {
   } catch (err) {
     console.error('[server] AI plant batch fill failed:', err)
     if (!res.headersSent) {
-      res.status(500).json({ error: err?.message || 'Failed to fill fields' })
+      const status = getOpenAIErrorStatus(err)
+      const httpStatus = status === 429 ? 429 : 500
+      res.status(httpStatus).json({ 
+        error: err?.message || 'Failed to fill fields',
+        isQuotaError: isQuotaExceededError(err),
+        isRateLimit: status === 429,
+      })
     }
   }
 })

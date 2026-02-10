@@ -54,6 +54,17 @@ function isCancellationError(err: unknown): boolean {
   return false
 }
 
+// Helper to check if an error is an OpenAI quota/billing error
+function isQuotaError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  const msg = err.message.toLowerCase()
+  return msg.includes('quota exceeded') || 
+         msg.includes('billing') || 
+         msg.includes('insufficient_quota') ||
+         msg.includes('exceeded your current quota')
+}
+
+
 // AI field order for consistent filling
 const aiFieldOrder = [
   'plantType',
@@ -419,8 +430,12 @@ export async function processPlantRequest(
         console.log(`[aiPrefillService] Translated plant name: "${plantName}" -> "${englishPlantName}"`)
       }
     } catch (err) {
+      // If it's a quota error, fail immediately with a clear message
+      if (isQuotaError(err)) {
+        throw new Error('OpenAI quota exceeded. Please check your OpenAI billing plan and ensure you have sufficient credits.')
+      }
       console.warn(`[aiPrefillService] Failed to get English name for "${plantName}", using original:`, err)
-      // Continue with original name if translation fails
+      // Continue with original name if other translation failures occur
     }
     
     // Ensure we have a valid plant name
@@ -561,6 +576,25 @@ export async function processPlantRequest(
     if (fieldErrors.length > 0) {
       console.warn(`[aiPrefillService] ${fieldErrors.length} field(s) failed for "${englishPlantName}":`, 
         fieldErrors.map(e => `${e.field}: ${e.error}`).join(', '))
+      
+      // Check if field errors are quota-related - if so, fail fast with a clear message
+      const quotaErrors = fieldErrors.filter(e => 
+        e.error.includes('quota exceeded') || 
+        e.error.includes('billing') || 
+        e.error.includes('insufficient_quota') ||
+        e.error.includes('exceeded your current quota')
+      )
+      if (quotaErrors.length > 0) {
+        throw new Error('OpenAI quota exceeded. Please check your OpenAI billing plan and ensure you have sufficient credits.')
+      }
+      
+      // Check if field errors are all rate limit errors (not quota) - provide specific message
+      const rateLimitErrors = fieldErrors.filter(e => 
+        e.error.includes('429') || e.error.includes('rate limit') || e.error.includes('Rate limit')
+      )
+      if (rateLimitErrors.length > 0 && rateLimitErrors.length === fieldErrors.length) {
+        throw new Error(`OpenAI rate limit reached for all fields. Please wait a few minutes and try again.`)
+      }
       
       // If more than half of the fields failed, consider this a critical failure
       const criticalFailureThreshold = Math.ceil(aiFieldOrder.length / 2)
@@ -1015,6 +1049,33 @@ export async function processAllPlantRequests(
       processed++
     } else {
       failed++
+      
+      // If the error is a quota error, stop processing remaining plants immediately
+      // No point in trying more plants if the OpenAI account has no credits
+      if (result.error && (
+        result.error.includes('quota exceeded') || 
+        result.error.includes('billing') ||
+        result.error.includes('insufficient_quota')
+      )) {
+        console.error(`[aiPrefillService] OpenAI quota exceeded - stopping batch processing after "${request.plant_name}"`)
+        onPlantComplete?.({
+          plantName: request.plant_name,
+          requestId: request.id,
+          success: false,
+          error: result.error,
+        })
+        // Report remaining plants as errors
+        for (let j = i + 1; j < requests.length; j++) {
+          onPlantComplete?.({
+            plantName: requests[j].plant_name,
+            requestId: requests[j].id,
+            success: false,
+            error: 'Skipped: OpenAI quota exceeded',
+          })
+          failed++
+        }
+        return { processed, failed, cancelled: false }
+      }
     }
     
     // Only call onPlantComplete if not cancelled (cancellation is handled by the caller)
