@@ -11212,14 +11212,6 @@ export const AdminPage: React.FC = () => {
                                                       In database
                                                     </Badge>
                                                   )}
-                                                  {scan.classificationLevel && (
-                                                    <Badge
-                                                      variant="outline"
-                                                      className="text-[10px]"
-                                                    >
-                                                      {scan.classificationLevel}
-                                                    </Badge>
-                                                  )}
                                                 </div>
                                                 <div className="mt-2 text-[11px] text-stone-500 dark:text-stone-400 space-y-0.5">
                                                   <div>

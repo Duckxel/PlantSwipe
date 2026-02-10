@@ -11722,20 +11722,32 @@ app.get('/api/admin/member', async (req, res) => {
           if (supabaseServiceClient) {
             const { data: plantRows } = await supabaseServiceClient
               .from('plants')
-              .select('id,name,scientific_name,image')
+              .select('id,name,scientific_name')
               .in('id', matchedPlantIds)
             for (const row of Array.isArray(plantRows) ? plantRows : []) {
               if (!row?.id) continue
               plantMetaById.set(String(row.id), {
                 name: row?.name || null,
                 scientificName: row?.scientific_name || null,
-                image: row?.image || null,
+                image: null,
               })
             }
+            // Fetch primary images from plant_images table
+            try {
+              const { data: imgRows } = await supabaseServiceClient
+                .from('plant_images')
+                .select('plant_id,link')
+                .in('plant_id', matchedPlantIds)
+                .eq('use', 'primary')
+              for (const img of Array.isArray(imgRows) ? imgRows : []) {
+                const meta = plantMetaById.get(String(img.plant_id))
+                if (meta) meta.image = img.link || null
+              }
+            } catch { }
           } else {
             const inClause = matchedPlantIds.map((id) => encodeURIComponent(id)).join(',')
             const plantsResp = await fetch(
-              `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inClause})&select=id,name,scientific_name,image`,
+              `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inClause})&select=id,name,scientific_name`,
               { headers: baseHeaders },
             )
             if (plantsResp.ok) {
@@ -11745,10 +11757,24 @@ app.get('/api/admin/member', async (req, res) => {
                 plantMetaById.set(String(row.id), {
                   name: row?.name || null,
                   scientificName: row?.scientific_name || null,
-                  image: row?.image || null,
+                  image: null,
                 })
               }
             }
+            // Fetch primary images from plant_images table via REST
+            try {
+              const imgResp = await fetch(
+                `${supabaseUrlEnv}/rest/v1/plant_images?plant_id=in.(${inClause})&use=eq.primary&select=plant_id,link`,
+                { headers: baseHeaders },
+              )
+              if (imgResp.ok) {
+                const imgRows = await imgResp.json().catch(() => [])
+                for (const img of Array.isArray(imgRows) ? imgRows : []) {
+                  const meta = plantMetaById.get(String(img.plant_id))
+                  if (meta) meta.image = img.link || null
+                }
+              }
+            } catch { }
           }
         }
 
@@ -11785,7 +11811,9 @@ app.get('/api/admin/member', async (req, res) => {
             createdAt: row?.created_at || null,
           }
         })
-      } catch { }
+      } catch (scanErr) {
+        console.error('[member-lookup REST] failed to fetch plant scans', scanErr)
+      }
 
       try {
         const fr = await fetch(`${supabaseUrlEnv}/rest/v1/garden_plant_images?uploaded_by=eq.${encodeURIComponent(targetId)}&select=id,image_url,caption,uploaded_at,garden_plant_id,garden_plants(plant_id,plants(name,admin_commentary))&order=uploaded_at.desc&limit=25`, {
@@ -12312,7 +12340,7 @@ app.get('/api/admin/member', async (req, res) => {
             ps.*,
             p.name as matched_plant_name,
             p.scientific_name as matched_plant_scientific_name,
-            p.image as matched_plant_image
+            (select pi.link from public.plant_images pi where pi.plant_id = p.id and pi.use = 'primary' limit 1) as matched_plant_image
           from public.plant_scans ps
           left join public.plants p on p.id = ps.matched_plant_id
           where ps.user_id = ${user.id}
@@ -12353,7 +12381,9 @@ app.get('/api/admin/member', async (req, res) => {
             createdAt: r.created_at || null,
           }))
         : []
-    } catch { }
+    } catch (scanErr) {
+      console.error('[member-lookup] failed to fetch plant scans', scanErr)
+    }
     // Aggregates (SQL path)
     let topReferrers = []
     let topCountries = []
