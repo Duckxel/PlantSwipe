@@ -11653,9 +11653,8 @@ app.get('/api/admin/member', async (req, res) => {
         if (supabaseServiceClient) {
           const { data: svcScans, error: svcScanErr } = await supabaseServiceClient
             .from('plant_scans')
-            .select('id,image_url,image_path,image_bucket,api_status,is_plant,is_plant_probability,top_match_name,top_match_scientific_name,top_match_probability,classification_level,matched_plant_id,user_notes,created_at')
+            .select('*')
             .eq('user_id', targetId)
-            .is('deleted_at', null)
             .order('created_at', { ascending: false })
             .limit(50)
 
@@ -11667,20 +11666,18 @@ app.get('/api/admin/member', async (req, res) => {
             supabaseServiceClient
               .from('plant_scans')
               .select('*', { head: true, count: 'exact' })
-              .eq('user_id', targetId)
-              .is('deleted_at', null),
+              .eq('user_id', targetId),
             supabaseServiceClient
               .from('plant_scans')
               .select('*', { head: true, count: 'exact' })
               .eq('user_id', targetId)
-              .is('deleted_at', null)
               .gte('created_at', monthStartIso),
           ])
           scansTotal = typeof totalCount === 'number' ? totalCount : 0
           scansThisMonth = typeof monthCount === 'number' ? monthCount : 0
         } else {
           const scansResp = await fetch(
-            `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&select=id,image_url,image_path,image_bucket,api_status,is_plant,is_plant_probability,top_match_name,top_match_scientific_name,top_match_probability,classification_level,matched_plant_id,user_notes,created_at&order=created_at.desc&limit=50`,
+            `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&select=*&order=created_at.desc&limit=50`,
             { headers: baseHeaders },
           )
           const rawScans = scansResp.ok ? await scansResp.json().catch(() => []) : []
@@ -11688,13 +11685,13 @@ app.get('/api/admin/member', async (req, res) => {
 
           const [scanTotalResp, scanMonthResp] = await Promise.all([
             fetch(
-              `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&select=id`,
+              `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&select=id`,
               {
                 headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
               },
             ),
             fetch(
-              `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&created_at=gte.${encodeURIComponent(monthStartIso)}&select=id`,
+              `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&created_at=gte.${encodeURIComponent(monthStartIso)}&select=id`,
               {
                 headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
               },
@@ -12229,31 +12226,16 @@ app.get('/api/admin/member', async (req, res) => {
             )::int as this_month
           from public.plant_scans
           where user_id = ${user.id}
-            and deleted_at is null
         `,
         sql`
           select
-            ps.id,
-            ps.image_url,
-            ps.image_path,
-            ps.image_bucket,
-            ps.api_status,
-            ps.is_plant,
-            ps.is_plant_probability,
-            ps.top_match_name,
-            ps.top_match_scientific_name,
-            ps.top_match_probability,
-            ps.classification_level,
-            ps.matched_plant_id,
-            ps.user_notes,
-            ps.created_at,
+            ps.*,
             p.name as matched_plant_name,
             p.scientific_name as matched_plant_scientific_name,
             p.image as matched_plant_image
           from public.plant_scans ps
           left join public.plants p on p.id = ps.matched_plant_id
           where ps.user_id = ${user.id}
-            and ps.deleted_at is null
           order by ps.created_at desc
           limit 50
         `,
