@@ -205,6 +205,78 @@ Multi-layered email validation:
 
 ---
 
+## Media Components
+
+### `ImageViewer`
+
+**File:** `src/components/ui/image-viewer.tsx`
+
+A unified fullscreen image viewer/lightbox that supports single images and multi-image galleries. Features zoom & pan, keyboard navigation, touch swipe, optional download, smooth animations, and auto-hiding controls.
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `open` | `boolean` | — | Whether the viewer is open |
+| `onClose` | `() => void` | — | Callback when the viewer should close |
+| `images` | `ImageViewerImage[]` | — | Array of `{ src, alt? }` objects |
+| `initialIndex` | `number` | `0` | Index of the initially active image |
+| `enableZoom` | `boolean` | `true` | Show zoom controls and enable zoom/pan |
+| `enableDownload` | `boolean` | `false` | Show download button |
+| `title` | `string` | — | Accessible title (sr-only) |
+| `className` | `string` | — | Additional class on the root overlay |
+
+**Companion Hook: `useImageViewer`**
+
+Manages open/close state and selected image(s) for the `ImageViewer` component.
+
+**Returns:** `{ isOpen, open, openGallery, close, props }`
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `open` | `(src: string, alt?: string) => void` | Open viewer with a single image |
+| `openGallery` | `(images: ImageViewerImage[], startIndex?: number) => void` | Open viewer with multiple images |
+| `close` | `() => void` | Close the viewer |
+| `props` | `object` | Spread onto `<ImageViewer>` (`open`, `onClose`, `images`, `initialIndex`) |
+
+**Features:**
+- Single image or multi-image gallery mode
+- Zoom & pan (scroll wheel, drag, double-click, +/- keys)
+- Keyboard navigation (Escape, Arrow keys)
+- Touch swipe to navigate between images
+- Auto-hiding controls with tap-to-toggle
+- Dot indicators for gallery mode
+- Portal-based rendering (appended to `document.body`)
+
+**Example (single image):**
+
+```tsx
+import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer"
+
+const viewer = useImageViewer()
+
+<img
+  src={imageUrl}
+  onClick={() => viewer.open(imageUrl, "My image")}
+  className="cursor-zoom-in"
+/>
+<ImageViewer {...viewer.props} enableZoom />
+```
+
+**Example (gallery):**
+
+```tsx
+const viewer = useImageViewer()
+const images = photos.map(p => ({ src: p.url, alt: p.name }))
+
+<img onClick={() => viewer.openGallery(images, 0)} />
+<ImageViewer {...viewer.props} enableZoom enableDownload />
+```
+
+**Used in:** BlogPostPage, ScanPage, PlantDetails, MessageBubble
+
+---
+
 ## Layout Components
 
 ### `TopBar` / `BottomBar` / `MobileNavBar` / `Footer`
