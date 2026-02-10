@@ -748,15 +748,23 @@ export const ScanPage: React.FC = () => {
                         {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
                       </Button>
                     ) : (
-                      /* Subtle request plant button when NOT in database */
-                      <Button 
-                        onClick={() => handleRequestPlant(currentResult.topMatchName!)}
-                        variant="ghost"
-                        className="w-full rounded-full text-stone-500 dark:text-stone-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 gap-2"
-                      >
-                        <Plus className="h-4 w-4" />
-                        {t('scan.notInDatabaseRequest', { defaultValue: "Not in our database? Request it" })}
-                      </Button>
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-950/20 p-3 space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                            {t('scan.notInDatabaseYet', { defaultValue: 'This plant is not in our database yet' })}
+                          </p>
+                          <p className="text-xs text-amber-700 dark:text-amber-300/90 mt-1">
+                            {t('scan.notInDatabaseHint', { defaultValue: 'Tap the button below to request this plant and we will review adding it.' })}
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => handleRequestPlant(currentResult.topMatchName!)}
+                          className="w-full rounded-full bg-amber-600 hover:bg-amber-700 text-white gap-2 font-semibold shadow-sm"
+                        >
+                          <Plus className="h-4 w-4" />
+                          {t('scan.requestPlant', { defaultValue: 'Request This Plant' })}
+                        </Button>
+                      </div>
                     )}
                     
                     {/* Search in encyclopedia */}

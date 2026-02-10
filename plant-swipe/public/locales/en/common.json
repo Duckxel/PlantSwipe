@@ -2979,6 +2979,7 @@
       "requestPlant": "Request This Plant",
       "notInDatabase": "Not in our database yet",
       "notInDatabaseYet": "This plant is not in our database yet",
+      "notInDatabaseHint": "Tap the button below to request this plant and we will review adding it.",
       "notInDatabaseRequest": "Not in our database? Request it",
       "loadMore": "Load More",
       "errors": {
