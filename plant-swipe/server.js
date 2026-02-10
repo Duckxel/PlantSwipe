@@ -6627,6 +6627,69 @@ app.post('/api/admin/upload-mockup', async (req, res) => {
   })
 })
 
+// ========== Impressions (Page View Tracking) ==========
+
+/**
+ * POST /api/impressions/track
+ * Public endpoint: anyone loading a plant info page or blog post increments the counter.
+ * Body: { type: 'plant' | 'blog', id: string }
+ */
+app.post('/api/impressions/track', async (req, res) => {
+  if (!sql) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    const { type, id } = req.body || {}
+    if (!type || !id || !['plant', 'blog'].includes(type)) {
+      return res.status(400).json({ error: 'Missing or invalid type/id. type must be "plant" or "blog".' })
+    }
+    const entityId = String(id).trim()
+    if (!entityId || entityId.length > 200) {
+      return res.status(400).json({ error: 'Invalid id' })
+    }
+    // Atomic upsert: increment or create
+    await sql`
+      INSERT INTO public.impressions (entity_type, entity_id, count, last_viewed_at)
+      VALUES (${type}, ${entityId}, 1, now())
+      ON CONFLICT (entity_type, entity_id)
+      DO UPDATE SET count = impressions.count + 1, last_viewed_at = now()
+    `
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[impressions/track] Error:', err?.message || err)
+    res.status(500).json({ error: 'Failed to track impression' })
+  }
+})
+
+/**
+ * GET /api/impressions/:type/:id
+ * Admin-only endpoint: returns the impression count for a specific entity.
+ */
+app.get('/api/impressions/:type/:id', async (req, res) => {
+  if (!sql) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) return res.status(401).json({ error: 'Not authenticated' })
+    const isAdmin = await isAdminUserId(user.id)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin access required' })
+
+    const { type, id } = req.params
+    if (!type || !id || !['plant', 'blog'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid type or id' })
+    }
+    const rows = await sql`
+      SELECT count, last_viewed_at FROM public.impressions
+      WHERE entity_type = ${type} AND entity_id = ${String(id).trim()}
+      LIMIT 1
+    `
+    if (rows.length === 0) {
+      return res.json({ count: 0, lastViewedAt: null })
+    }
+    res.json({ count: Number(rows[0].count), lastViewedAt: rows[0].last_viewed_at })
+  } catch (err) {
+    console.error('[impressions/get] Error:', err?.message || err)
+    res.status(500).json({ error: 'Failed to fetch impression' })
+  }
+})
+
 app.post('/api/blog/upload-image', async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })

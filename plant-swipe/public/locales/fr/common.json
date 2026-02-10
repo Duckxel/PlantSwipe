@@ -3249,5 +3249,8 @@
     "successDescription": "Redirection vers votre jardin...",
     "invalidCode": "Code de vérification invalide. Veuillez vérifier et réessayer.",
     "expiredCode": "Ce code a expiré. Veuillez en demander un nouveau."
+  },
+  "admin": {
+    "impressions": "impressions"
   }
 }

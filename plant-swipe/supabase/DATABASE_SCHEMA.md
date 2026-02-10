@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates
+- **Feb 10, 2026:** Added `impressions` table to track page view counts for plant info pages and blog posts. Admin-only read access. Includes `increment_impression` RPC function.
 - **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type to `notification_automations` for event-driven notifications when a plant request is fulfilled via AI prefill or manual creation. Added `/api/admin/notify-plant-requesters` endpoint.
 - **Feb 8, 2026:** Added `job`, `profile_link`, `show_country` columns to `profiles` table for public profile display. Updated `get_profile_public_by_display_name` RPC to return `experience_level`, `job`, `profile_link`, `show_country`.
 - **Feb 5, 2026:** Restricted `plant_contributors` RLS write policy to admins/editors only (was previously open to all authenticated users).
@@ -185,6 +186,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `garden_journal_photos` | Journal photos |
 | `garden_task_audit_log` | Task change audit |
 | `gdpr_audit_log` | GDPR compliance audit |
+| `impressions` | Page view impressions for plants and blog posts (admin read-only) |
 
 ### Bug Catcher System
 
@@ -384,6 +386,20 @@ updated_at                  TIMESTAMPTZ DEFAULT NOW()
 deleted_at                  TIMESTAMPTZ      -- Soft delete
 ```
 
+### `impressions`
+
+Tracks page view counts (impressions) for plant info pages and blog posts. Only admins can read the counts; the server increments via service role.
+
+```sql
+id              UUID PRIMARY KEY
+entity_type     TEXT NOT NULL CHECK (entity_type IN ('plant', 'blog'))
+entity_id       TEXT NOT NULL
+count           BIGINT NOT NULL DEFAULT 0
+last_viewed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+UNIQUE (entity_type, entity_id)
+```
+
 ---
 
 ## Row Level Security (RLS)
@@ -444,6 +460,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `plant_contributors` | Anyone can SELECT; only admins/editors can INSERT/UPDATE/DELETE |
 | `plant_pro_advices` | Anyone can SELECT; author or admin/editor can UPDATE/DELETE; admin/editor/pro can INSERT |
 | `plant_scans` | Users can manage own scans |
+| `impressions` | Admin SELECT only; server writes via service role |
 
 ---
 

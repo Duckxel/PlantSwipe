@@ -12,6 +12,7 @@ import { checkEditorAccess, hasAnyRole, USER_ROLES } from '@/constants/userRoles
 import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
 import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
 import { supabase } from '@/lib/supabaseClient'
+import { trackImpression, fetchImpression } from '@/lib/impressions'
 import { getUserBookmarks } from '@/lib/bookmarks'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
@@ -54,6 +55,7 @@ import {
   CalendarDays,
   FileText,
   Wrench,
+  Eye,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -598,6 +600,30 @@ const PlantInfoPage: React.FC = () => {
     return () => { ignore = true }
   }, [id, currentLang, profile?.is_admin, profile?.roles])
 
+  // --- Impression tracking (page views) ---
+  const [impressionCount, setImpressionCount] = React.useState<number | null>(null)
+
+  // Track impression on every page load/reload (fire-and-forget)
+  React.useEffect(() => {
+    if (!id) return
+    // Only track when the plant actually exists (loaded or limited info available)
+    if (!plant && !limitedPlantInfo) return
+    trackImpression('plant', id)
+  }, [id, plant, limitedPlantInfo])
+
+  // Fetch impression count for admins
+  React.useEffect(() => {
+    if (!id || !profile?.is_admin) {
+      setImpressionCount(null)
+      return
+    }
+    let ignore = false
+    fetchImpression('plant', id).then((data) => {
+      if (!ignore && data) setImpressionCount(data.count)
+    })
+    return () => { ignore = true }
+  }, [id, profile?.is_admin])
+
   const toggleLiked = async () => {
     if (!user?.id || !id) return
     setLikedIds((prev) => {
@@ -942,6 +968,16 @@ const PlantInfoPage: React.FC = () => {
             >
               <Pencil className="h-5 w-5" />
             </Button>
+          )}
+          {/* Impression count badge (Admin only) */}
+          {profile?.is_admin && impressionCount !== null && (
+            <Badge
+              variant="secondary"
+              className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-1.5"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              {impressionCount.toLocaleString()} {t('admin.impressions', { defaultValue: 'impressions' })}
+            </Badge>
           )}
         </div>
       </div>

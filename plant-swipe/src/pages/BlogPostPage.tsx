@@ -1,7 +1,7 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import DOMPurify from 'dompurify'
-import { ArrowLeft, CalendarClock, CalendarDays, Clock, UserRound, X, ZoomIn } from 'lucide-react'
+import { ArrowLeft, CalendarClock, CalendarDays, Clock, Eye, UserRound, X, ZoomIn } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,7 @@ import { extractFirstImageFromHtml } from '@/types/blog'
 import { fetchBlogPost } from '@/lib/blogs'
 import { useAuth } from '@/context/AuthContext'
 import { checkEditorAccess } from '@/constants/userRoles'
+import { trackImpression, fetchImpression } from '@/lib/impressions'
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return ''
@@ -135,6 +136,28 @@ export default function BlogPostPage() {
     url: slug ? `/blog/${slug}` : '/blog',
   })
 
+  // --- Impression tracking (page views) ---
+  const [impressionCount, setImpressionCount] = React.useState<number | null>(null)
+
+  // Track impression on every page load/reload (fire-and-forget)
+  React.useEffect(() => {
+    if (!post?.id) return
+    trackImpression('blog', post.id)
+  }, [post?.id])
+
+  // Fetch impression count for admins
+  React.useEffect(() => {
+    if (!post?.id || !profile?.is_admin) {
+      setImpressionCount(null)
+      return
+    }
+    let ignore = false
+    fetchImpression('blog', post.id).then((data) => {
+      if (!ignore && data) setImpressionCount(data.count)
+    })
+    return () => { ignore = true }
+  }, [post?.id, profile?.is_admin])
+
   // Display tags if present
   const displayTags = post?.tags ?? []
 
@@ -192,6 +215,16 @@ export default function BlogPostPage() {
                     {isDraft
                       ? t('blogPage.card.draftBadge', { defaultValue: 'Draft' })
                       : t('blogPage.card.scheduledBadge', { defaultValue: 'Scheduled' })}
+                  </Badge>
+                )}
+                {/* Impression count badge (Admin only) */}
+                {profile?.is_admin && impressionCount !== null && (
+                  <Badge
+                    variant="secondary"
+                    className="rounded-2xl px-3 py-1 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] inline-flex items-center gap-1.5"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    {impressionCount.toLocaleString()} {t('admin.impressions', { defaultValue: 'impressions' })}
                   </Badge>
                 )}
               </div>
