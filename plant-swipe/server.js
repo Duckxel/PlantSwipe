@@ -11648,12 +11648,70 @@ app.get('/api/admin/member', async (req, res) => {
         monthStart.setUTCHours(0, 0, 0, 0)
         const monthStartIso = monthStart.toISOString()
 
-        const scansResp = await fetch(
-          `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&select=id,image_url,image_path,image_bucket,api_status,is_plant,is_plant_probability,top_match_name,top_match_scientific_name,top_match_probability,classification_level,matched_plant_id,user_notes,created_at&order=created_at.desc&limit=50`,
-          { headers: baseHeaders },
-        )
-        const rawScans = scansResp.ok ? await scansResp.json().catch(() => []) : []
-        const scanRows = Array.isArray(rawScans) ? rawScans : []
+        let scanRows = []
+
+        if (supabaseServiceClient) {
+          const { data: svcScans, error: svcScanErr } = await supabaseServiceClient
+            .from('plant_scans')
+            .select('id,image_url,image_path,image_bucket,api_status,is_plant,is_plant_probability,top_match_name,top_match_scientific_name,top_match_probability,classification_level,matched_plant_id,user_notes,created_at')
+            .eq('user_id', targetId)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(50)
+
+          if (!svcScanErr && Array.isArray(svcScans)) {
+            scanRows = svcScans
+          }
+
+          const [{ count: totalCount }, { count: monthCount }] = await Promise.all([
+            supabaseServiceClient
+              .from('plant_scans')
+              .select('*', { head: true, count: 'exact' })
+              .eq('user_id', targetId)
+              .is('deleted_at', null),
+            supabaseServiceClient
+              .from('plant_scans')
+              .select('*', { head: true, count: 'exact' })
+              .eq('user_id', targetId)
+              .is('deleted_at', null)
+              .gte('created_at', monthStartIso),
+          ])
+          scansTotal = typeof totalCount === 'number' ? totalCount : 0
+          scansThisMonth = typeof monthCount === 'number' ? monthCount : 0
+        } else {
+          const scansResp = await fetch(
+            `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&select=id,image_url,image_path,image_bucket,api_status,is_plant,is_plant_probability,top_match_name,top_match_scientific_name,top_match_probability,classification_level,matched_plant_id,user_notes,created_at&order=created_at.desc&limit=50`,
+            { headers: baseHeaders },
+          )
+          const rawScans = scansResp.ok ? await scansResp.json().catch(() => []) : []
+          scanRows = Array.isArray(rawScans) ? rawScans : []
+
+          const [scanTotalResp, scanMonthResp] = await Promise.all([
+            fetch(
+              `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&select=id`,
+              {
+                headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
+              },
+            ),
+            fetch(
+              `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&created_at=gte.${encodeURIComponent(monthStartIso)}&select=id`,
+              {
+                headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
+              },
+            ),
+          ])
+
+          if (scanTotalResp.ok) {
+            const cr = scanTotalResp.headers.get('content-range') || ''
+            const m = cr.match(/\/(\d+)$/)
+            if (m) scansTotal = Number(m[1])
+          }
+          if (scanMonthResp.ok) {
+            const cr = scanMonthResp.headers.get('content-range') || ''
+            const m = cr.match(/\/(\d+)$/)
+            if (m) scansThisMonth = Number(m[1])
+          }
+        }
 
         const matchedPlantIds = Array.from(
           new Set(
@@ -11664,13 +11722,11 @@ app.get('/api/admin/member', async (req, res) => {
         )
         const plantMetaById = new Map()
         if (matchedPlantIds.length > 0) {
-          const inClause = matchedPlantIds.map((id) => encodeURIComponent(id)).join(',')
-          const plantsResp = await fetch(
-            `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inClause})&select=id,name,scientific_name,image`,
-            { headers: baseHeaders },
-          )
-          if (plantsResp.ok) {
-            const plantRows = await plantsResp.json().catch(() => [])
+          if (supabaseServiceClient) {
+            const { data: plantRows } = await supabaseServiceClient
+              .from('plants')
+              .select('id,name,scientific_name,image')
+              .in('id', matchedPlantIds)
             for (const row of Array.isArray(plantRows) ? plantRows : []) {
               if (!row?.id) continue
               plantMetaById.set(String(row.id), {
@@ -11678,6 +11734,23 @@ app.get('/api/admin/member', async (req, res) => {
                 scientificName: row?.scientific_name || null,
                 image: row?.image || null,
               })
+            }
+          } else {
+            const inClause = matchedPlantIds.map((id) => encodeURIComponent(id)).join(',')
+            const plantsResp = await fetch(
+              `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inClause})&select=id,name,scientific_name,image`,
+              { headers: baseHeaders },
+            )
+            if (plantsResp.ok) {
+              const plantRows = await plantsResp.json().catch(() => [])
+              for (const row of Array.isArray(plantRows) ? plantRows : []) {
+                if (!row?.id) continue
+                plantMetaById.set(String(row.id), {
+                  name: row?.name || null,
+                  scientificName: row?.scientific_name || null,
+                  image: row?.image || null,
+                })
+              }
             }
           }
         }
@@ -11715,32 +11788,6 @@ app.get('/api/admin/member', async (req, res) => {
             createdAt: row?.created_at || null,
           }
         })
-
-        const [scanTotalResp, scanMonthResp] = await Promise.all([
-          fetch(
-            `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&select=id`,
-            {
-              headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
-            },
-          ),
-          fetch(
-            `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&created_at=gte.${encodeURIComponent(monthStartIso)}&select=id`,
-            {
-              headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
-            },
-          ),
-        ])
-
-        if (scanTotalResp.ok) {
-          const cr = scanTotalResp.headers.get('content-range') || ''
-          const m = cr.match(/\/(\d+)$/)
-          if (m) scansTotal = Number(m[1])
-        }
-        if (scanMonthResp.ok) {
-          const cr = scanMonthResp.headers.get('content-range') || ''
-          const m = cr.match(/\/(\d+)$/)
-          if (m) scansThisMonth = Number(m[1])
-        }
       } catch { }
 
       try {
