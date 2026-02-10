@@ -65,8 +65,12 @@ def _scrub_pii_from_string(value: str) -> str:
         return value
     # Scrub email addresses
     value = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL_REDACTED]', value)
-    # Scrub potential passwords in URLs or logs
-    value = re.sub(r'password[=:][^\s&"\']+', 'password=[REDACTED]', value, flags=re.IGNORECASE)
+    # Scrub potential passwords in URLs, logs, or JSON bodies
+    # Matches "password" or password, optional quotes
+    # Matches : or = with optional whitespace
+    # Matches either a quoted string "..." (non-greedy) OR a non-quoted token
+    pattern = r'("?password"?\s*[:=]\s*)(".*?"|[^&"\s]+)'
+    value = re.sub(pattern, r'\1[REDACTED]', value, flags=re.IGNORECASE)
     # Scrub bearer tokens
     value = re.sub(r'Bearer\s+[A-Za-z0-9\-_\.]+', 'Bearer [REDACTED]', value)
     return value
@@ -259,6 +263,18 @@ _load_repo_env()
 
 # Now read config variables AFTER env files are loaded
 APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
+
+# FAIL SECURE: Prevent starting with default secret in production
+if APP_SECRET == "change-me":
+    # Default to production if not specified (safe default)
+    current_env = os.environ.get("FLASK_ENV", "production")
+    if current_env not in ("development", "testing"):
+        import sys
+        print("CRITICAL SECURITY ERROR: ADMIN_BUTTON_SECRET is set to default 'change-me' in production!")
+        sys.exit(1)
+    else:
+        print("WARNING: ADMIN_BUTTON_SECRET is set to default 'change-me'. This is insecure!")
+
 ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
 # Allow nginx, node app, and admin api by default; can be overridden via env
 ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
