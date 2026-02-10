@@ -844,11 +844,20 @@ export default function PlantSwipe() {
 
     return plants.map((p) => {
       // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors)
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
+      // ⚡ Bolt: Optimize array construction to avoid map/spread overhead
+      const colors: string[] = []
+      if (Array.isArray(p.colors)) {
+        for (let i = 0; i < p.colors.length; i++) {
+          colors.push(String(p.colors[i]))
+        }
+      }
+      if (p.identity?.colors && Array.isArray(p.identity.colors)) {
+        for (let i = 0; i < p.identity.colors.length; i++) {
+          const c = p.identity.colors[i]
+          const val = (typeof c === 'object' && c?.name) ? c.name : String(c)
+          colors.push(val)
+        }
+      }
       const normalizedColors = colors.map(c => c.toLowerCase().trim())
       
       // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
@@ -865,10 +874,18 @@ export default function PlantSwipe() {
 
       // Search string - includes name, scientific name, meaning, colors, common names and synonyms
       // This allows users to search by any name they might know the plant by
-      const commonNames = (p.identity?.commonNames || []).join(' ')
-      const synonyms = (p.identity?.synonyms || []).join(' ')
-      const givenNames = (p.identity?.givenNames || []).join(' ')
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+      // ⚡ Bolt: Imperative concatenation avoids allocating intermediate arrays and strings for empty fields
+      let searchString = p.name || ""
+      if (p.scientificName) searchString += " " + p.scientificName
+      if (p.meaning) searchString += " " + p.meaning
+
+      if (colors.length > 0) searchString += " " + colors.join(" ")
+
+      if (p.identity?.commonNames?.length) searchString += " " + p.identity.commonNames.join(" ")
+      if (p.identity?.synonyms?.length) searchString += " " + p.identity.synonyms.join(" ")
+      if (p.identity?.givenNames?.length) searchString += " " + p.identity.givenNames.join(" ")
+
+      searchString = searchString.toLowerCase()
 
       // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
