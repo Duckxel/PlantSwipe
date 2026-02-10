@@ -181,7 +181,9 @@ do $$ declare
     'email_verification_codes',
     -- GDPR Compliance
     'gdpr_audit_log',
-    'user_cookie_consent'
+    'user_cookie_consent',
+    -- Analytics: Page Impressions
+    'impressions'
   ];
   rec record;
 begin

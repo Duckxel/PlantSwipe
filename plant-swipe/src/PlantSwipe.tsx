@@ -1,4 +1,4 @@
-import React, { useMemo, useState, lazy, Suspense } from "react";
+import React, { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useSearchParams } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
@@ -38,6 +38,7 @@ import { useTranslation } from "react-i18next";
 import { validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation";
 import { validateUsername } from "@/lib/username";
 import { validatePassword } from "@/lib/passwordValidation";
+import { fetchAllImpressions } from "@/lib/impressions";
 import { ValidatedInput } from "@/components/ui/validated-input";
 import { PasswordRules } from "@/components/ui/password-rules";
 import { useFieldValidation } from "@/hooks/useFieldValidation";
@@ -80,7 +81,7 @@ const EmailVerificationPageLazy = lazy(() => import("@/pages/EmailVerificationPa
 const ForgotPasswordPageLazy = lazy(() => import("@/pages/ForgotPasswordPage").then(module => ({ default: module.ForgotPasswordPage })))
 const PasswordChangePageLazy = lazy(() => import("@/pages/PasswordChangePage").then(module => ({ default: module.PasswordChangePage })))
 
-type SearchSortMode = "default" | "newest" | "popular" | "favorites"
+type SearchSortMode = "default" | "newest" | "popular" | "favorites" | "impressions"
 
 type PreparedPlant = Plant & {
   _searchString: string
@@ -200,6 +201,25 @@ export default function PlantSwipe() {
   const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
   const [searchBarVisible, setSearchBarVisible] = useState(true)
   const lastScrollY = React.useRef(0)
+
+  // Admin-only: impression counts for plants, used for "impressions" sort
+  const [plantImpressions, setPlantImpressions] = useState<Record<string, number> | null>(null)
+
+  // Fetch impressions when admin selects the "impressions" sort
+  useEffect(() => {
+    if (searchSort !== "impressions" || !profile?.is_admin) {
+      return
+    }
+    // Already loaded
+    if (plantImpressions) return
+    let ignore = false
+    fetchAllImpressions("plant").then((data) => {
+      if (!ignore) {
+        setPlantImpressions(data ?? {})
+      }
+    }).catch(() => {})
+    return () => { ignore = true }
+  }, [searchSort, profile?.is_admin, plantImpressions])
 
   // Search shortcut
   const searchInputRef = React.useRef<HTMLInputElement>(null)
@@ -1208,9 +1228,17 @@ export default function PlantSwipe() {
         if (diff !== 0) return diff
         return a.name.localeCompare(b.name)
       })
+    } else if (searchSort === "impressions" && plantImpressions) {
+      // Admin-only: sort by page view impressions (highest first)
+      arr.sort((a, b) => {
+        const ia = plantImpressions[a.id] ?? 0
+        const ib = plantImpressions[b.id] ?? 0
+        if (ia !== ib) return ib - ia
+        return a.name.localeCompare(b.name)
+      })
     }
     return arr
-  }, [filtered, searchSort, likedSet])
+  }, [filtered, searchSort, likedSet, plantImpressions])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
   const heroImageCandidate = current ? getDiscoveryPageImageUrl(current) : ""
@@ -1974,6 +2002,7 @@ export default function PlantSwipe() {
                   <FilterControls
                     searchSort={searchSort}
                     setSearchSort={setSearchSort}
+                    isAdmin={profile?.is_admin === true}
                     seasonFilter={seasonFilter}
                     setSeasonFilter={setSeasonFilter}
                     colorFilter={colorFilter}
@@ -2083,6 +2112,7 @@ export default function PlantSwipe() {
                       <FilterControls
                         searchSort={searchSort}
                         setSearchSort={setSearchSort}
+                        isAdmin={profile?.is_admin === true}
                         seasonFilter={seasonFilter}
                         setSeasonFilter={setSeasonFilter}
                         colorFilter={colorFilter}
