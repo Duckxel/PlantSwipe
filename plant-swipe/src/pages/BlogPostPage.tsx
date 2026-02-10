@@ -139,24 +139,25 @@ export default function BlogPostPage() {
   // --- Impression tracking (page views) ---
   const [impressionCount, setImpressionCount] = React.useState<number | null>(null)
 
-  // Track impression on every page load/reload (fire-and-forget)
+  // Track impression on every page load/reload (fire-and-forget).
+  // Fires immediately based on URL slug — no auth or data load required.
   React.useEffect(() => {
-    if (!post?.id) return
-    trackImpression('blog', post.id)
-  }, [post?.id])
+    if (!slug) return
+    trackImpression('blog', slug)
+  }, [slug])
 
-  // Fetch impression count for admins
+  // Fetch impression count for admins (uses slug as the entity_id)
   React.useEffect(() => {
-    if (!post?.id || !profile?.is_admin) {
+    if (!slug || !profile?.is_admin) {
       setImpressionCount(null)
       return
     }
     let ignore = false
-    fetchImpression('blog', post.id).then((data) => {
+    fetchImpression('blog', slug).then((data) => {
       if (!ignore && data) setImpressionCount(data.count)
     })
     return () => { ignore = true }
-  }, [post?.id, profile?.is_admin])
+  }, [slug, profile?.is_admin])
 
   // Display tags if present
   const displayTags = post?.tags ?? []

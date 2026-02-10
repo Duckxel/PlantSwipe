@@ -603,13 +603,12 @@ const PlantInfoPage: React.FC = () => {
   // --- Impression tracking (page views) ---
   const [impressionCount, setImpressionCount] = React.useState<number | null>(null)
 
-  // Track impression on every page load/reload (fire-and-forget)
+  // Track impression on every page load/reload (fire-and-forget).
+  // Fires immediately based on URL param — no auth or data load required.
   React.useEffect(() => {
     if (!id) return
-    // Only track when the plant actually exists (loaded or limited info available)
-    if (!plant && !limitedPlantInfo) return
     trackImpression('plant', id)
-  }, [id, plant, limitedPlantInfo])
+  }, [id])
 
   // Fetch impression count for admins
   React.useEffect(() => {
