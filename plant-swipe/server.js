@@ -8386,9 +8386,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
               join public.garden_members gm on gm.user_id = p.id
               join public.garden_plant_tasks t on t.garden_id = gm.garden_id
               join public.garden_plant_task_occurrences occ on occ.task_id = t.id
-              where (p.notify_push is null or p.notify_push = true)
-                and (p.push_task_reminders is null or p.push_task_reminders = true)
-                and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+              where (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                 and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
                 and not exists (
                   select 1 from public.user_notifications un
@@ -8750,9 +8748,7 @@ async function runAutomation(automation) {
       join public.garden_members gm on gm.user_id = p.id
       join public.garden_plant_tasks t on t.garden_id = gm.garden_id
       join public.garden_plant_task_occurrences occ on occ.task_id = t.id
-      where (p.notify_push is null or p.notify_push = true)
-        and (p.push_task_reminders is null or p.push_task_reminders = true)
-        and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+      where (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
         and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
       limit 5000
     `
@@ -26393,9 +26389,7 @@ async function processDueAutomations() {
             join public.garden_members gm on gm.user_id = p.id
             join public.garden_plant_tasks t on t.garden_id = gm.garden_id
             join public.garden_plant_task_occurrences occ on occ.task_id = t.id
-            where (p.notify_push is null or p.notify_push = true)
-              and (p.push_task_reminders is null or p.push_task_reminders = true)
-              and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+            where (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
               and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
                 between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
@@ -26459,9 +26453,7 @@ async function processDueAutomations() {
                   join public.garden_members gm on gm.user_id = p.id
                   join public.garden_plant_tasks t on t.garden_id = gm.garden_id
                   join public.garden_plant_task_occurrences occ on occ.task_id = t.id
-                  where (p.notify_push is null or p.notify_push = true)
-                    and (p.push_task_reminders is null or p.push_task_reminders = true)
-                    and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+                  where (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
                     and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
                 `
                 const totalWithTasks = Number(debugCount?.[0]?.total_with_tasks || 0)
