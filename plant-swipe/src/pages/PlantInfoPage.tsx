@@ -12,7 +12,7 @@ import { checkEditorAccess, hasAnyRole, USER_ROLES } from '@/constants/userRoles
 import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
 import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
 import { supabase } from '@/lib/supabaseClient'
-import { trackImpression, fetchImpression } from '@/lib/impressions'
+import { trackImpression, fetchImpression, formatCount } from '@/lib/impressions'
 import { getUserBookmarks } from '@/lib/bookmarks'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
@@ -919,13 +919,13 @@ const PlantInfoPage: React.FC = () => {
               {impressionCount !== null && (
                 <span className="flex items-center gap-1">
                   <ChartNoAxesColumn className="h-3.5 w-3.5" />
-                  {impressionCount.toLocaleString()}
+                  {formatCount(impressionCount)}
                 </span>
               )}
               {likesCount !== null && (
                 <span className="flex items-center gap-1">
                   <Heart className="h-3.5 w-3.5" />
-                  {likesCount.toLocaleString()}
+                  {formatCount(likesCount)}
                 </span>
               )}
             </Badge>

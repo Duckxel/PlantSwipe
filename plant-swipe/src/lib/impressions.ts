@@ -11,6 +11,17 @@ import { supabase } from '@/lib/supabaseClient'
 
 export type ImpressionType = 'plant' | 'blog'
 
+/**
+ * Format a large number into a compact human-readable string.
+ * 0–999 → as-is, 1 000+ → 1K, 999 999+ → 1M, etc.
+ */
+export function formatCount(n: number): string {
+  if (n < 1_000) return String(n)
+  if (n < 1_000_000) return `${Math.floor(n / 1_000)}K`
+  if (n < 1_000_000_000) return `${Math.floor(n / 1_000_000)}M`
+  return `${Math.floor(n / 1_000_000_000)}B`
+}
+
 /** Cooldown duration in milliseconds */
 const IMPRESSION_COOLDOWN_MS = 5_000
 

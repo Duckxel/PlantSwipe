@@ -13,7 +13,7 @@ import { extractFirstImageFromHtml } from '@/types/blog'
 import { fetchBlogPost } from '@/lib/blogs'
 import { useAuth } from '@/context/AuthContext'
 import { checkEditorAccess } from '@/constants/userRoles'
-import { trackImpression, fetchImpression } from '@/lib/impressions'
+import { trackImpression, fetchImpression, formatCount } from '@/lib/impressions'
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return ''
@@ -225,7 +225,7 @@ export default function BlogPostPage() {
                     className="rounded-2xl px-3 py-1 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] inline-flex items-center gap-1.5"
                   >
                     <ChartNoAxesColumn className="h-3.5 w-3.5" />
-                    {impressionCount.toLocaleString()}
+                    {formatCount(impressionCount)}
                   </Badge>
                 )}
               </div>
