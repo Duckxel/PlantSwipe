@@ -14,16 +14,51 @@ export type ImpressionType = 'plant' | 'blog'
 /** Cooldown duration in milliseconds */
 const IMPRESSION_COOLDOWN_MS = 5_000
 
+/** Prefix used for all cooldown keys in localStorage */
+const COOLDOWN_PREFIX = 'imp_cd_'
+
+/**
+ * Purge expired cooldown keys from localStorage.
+ * Runs once per page load so stale entries don't accumulate.
+ */
+let _purged = false
+function purgeExpiredCooldowns(): void {
+  if (_purged) return
+  _purged = true
+  try {
+    const now = Date.now()
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key || !key.startsWith(COOLDOWN_PREFIX)) continue
+      const ts = Number(localStorage.getItem(key))
+      if (!ts || now - ts >= IMPRESSION_COOLDOWN_MS) {
+        keysToRemove.push(key)
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key)
+    }
+  } catch {
+    // localStorage unavailable — nothing to clean
+  }
+}
+
 /**
  * Returns true if this entity was tracked less than IMPRESSION_COOLDOWN_MS ago.
  * Uses localStorage so the cooldown survives page reloads.
  */
 function isOnCooldown(type: ImpressionType, id: string): boolean {
   try {
-    const key = `imp_cd_${type}_${id}`
+    const key = `${COOLDOWN_PREFIX}${type}_${id}`
     const ts = localStorage.getItem(key)
     if (!ts) return false
-    return Date.now() - Number(ts) < IMPRESSION_COOLDOWN_MS
+    if (Date.now() - Number(ts) >= IMPRESSION_COOLDOWN_MS) {
+      // Expired — remove it right away
+      localStorage.removeItem(key)
+      return false
+    }
+    return true
   } catch {
     return false
   }
@@ -32,7 +67,7 @@ function isOnCooldown(type: ImpressionType, id: string): boolean {
 /** Mark the entity as just tracked (starts the cooldown window). */
 function setCooldown(type: ImpressionType, id: string): void {
   try {
-    const key = `imp_cd_${type}_${id}`
+    const key = `${COOLDOWN_PREFIX}${type}_${id}`
     localStorage.setItem(key, String(Date.now()))
   } catch {
     // localStorage unavailable — cooldown won't persist across reloads
@@ -46,6 +81,7 @@ function setCooldown(type: ImpressionType, id: string): void {
  */
 export function trackImpression(type: ImpressionType, id: string): void {
   if (!id) return
+  purgeExpiredCooldowns()
   if (isOnCooldown(type, id)) return
   setCooldown(type, id)
   fetch('/api/impressions/track', {
