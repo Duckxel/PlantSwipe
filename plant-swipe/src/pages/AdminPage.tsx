@@ -4676,6 +4676,27 @@ export const AdminPage: React.FC = () => {
       plantName: string | null;
       adminCommentary: string | null;
     }>;
+    scansTotal?: number;
+    scansThisMonth?: number;
+    scans?: Array<{
+      id: string;
+      imageUrl: string | null;
+      imagePath: string | null;
+      imageBucket: string | null;
+      apiStatus: string | null;
+      isPlant: boolean | null;
+      isPlantProbability: number | null;
+      topMatchName: string | null;
+      topMatchScientificName: string | null;
+      topMatchProbability: number | null;
+      classificationLevel: string | null;
+      matchedPlantId: string | null;
+      matchedPlantName: string | null;
+      matchedPlantScientificName: string | null;
+      matchedPlantImage: string | null;
+      userNotes: string | null;
+      createdAt: string | null;
+    }>;
     mediaUploads?: Array<{
       id: string;
       url: string | null;
@@ -5157,6 +5178,58 @@ export const AdminPage: React.FC = () => {
                 gardenPlantId: file?.gardenPlantId || file?.garden_plant_id || null,
                 plantName: file?.plantName || file?.plant_name || null,
                 adminCommentary: file?.adminCommentary || file?.admin_commentary || null,
+              }))
+            : [],
+          scansTotal:
+            typeof data?.scansTotal === "number" ? data.scansTotal : 0,
+          scansThisMonth:
+            typeof data?.scansThisMonth === "number"
+              ? data.scansThisMonth
+              : 0,
+          scans: Array.isArray(data?.scans)
+            ? data.scans.map((scan: any) => ({
+                id: String(scan?.id || ""),
+                imageUrl: scan?.imageUrl || scan?.image_url || null,
+                imagePath: scan?.imagePath || scan?.image_path || null,
+                imageBucket: scan?.imageBucket || scan?.image_bucket || null,
+                apiStatus: scan?.apiStatus || scan?.api_status || null,
+                isPlant:
+                  typeof scan?.isPlant === "boolean"
+                    ? scan.isPlant
+                    : typeof scan?.is_plant === "boolean"
+                      ? scan.is_plant
+                      : null,
+                isPlantProbability:
+                  typeof scan?.isPlantProbability === "number"
+                    ? scan.isPlantProbability
+                    : typeof scan?.is_plant_probability === "number"
+                      ? scan.is_plant_probability
+                      : null,
+                topMatchName: scan?.topMatchName || scan?.top_match_name || null,
+                topMatchScientificName:
+                  scan?.topMatchScientificName ||
+                  scan?.top_match_scientific_name ||
+                  null,
+                topMatchProbability:
+                  typeof scan?.topMatchProbability === "number"
+                    ? scan.topMatchProbability
+                    : typeof scan?.top_match_probability === "number"
+                      ? scan.top_match_probability
+                      : null,
+                classificationLevel:
+                  scan?.classificationLevel || scan?.classification_level || null,
+                matchedPlantId:
+                  scan?.matchedPlantId || scan?.matched_plant_id || null,
+                matchedPlantName:
+                  scan?.matchedPlantName || scan?.matched_plant_name || null,
+                matchedPlantScientificName:
+                  scan?.matchedPlantScientificName ||
+                  scan?.matched_plant_scientific_name ||
+                  null,
+                matchedPlantImage:
+                  scan?.matchedPlantImage || scan?.matched_plant_image || null,
+                userNotes: scan?.userNotes || scan?.user_notes || null,
+                createdAt: scan?.createdAt || scan?.created_at || null,
               }))
             : [],
           mediaUploads: Array.isArray(data?.mediaUploads)
@@ -10603,6 +10676,22 @@ export const AdminPage: React.FC = () => {
                               </div>
                               <div className="rounded-xl border p-3 text-center">
                                 <div className="text-[11px] opacity-60">
+                                  Scans total
+                                </div>
+                                <div className="text-base font-semibold tabular-nums">
+                                  {memberData.scansTotal ?? "-"}
+                                </div>
+                              </div>
+                              <div className="rounded-xl border p-3 text-center">
+                                <div className="text-[11px] opacity-60">
+                                  Scans this month
+                                </div>
+                                <div className="text-base font-semibold tabular-nums">
+                                  {memberData.scansThisMonth ?? "-"}
+                                </div>
+                              </div>
+                              <div className="rounded-xl border p-3 text-center">
+                                <div className="text-[11px] opacity-60">
                                   Last IP
                                 </div>
                                 <div
@@ -11005,6 +11094,164 @@ export const AdminPage: React.FC = () => {
                                 )}
                             </CardContent>
                           </Card>
+
+                            {/* Plant Scans Section */}
+                            <Card className="rounded-2xl overflow-hidden">
+                              <CardContent className="p-0">
+                                <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-b border-amber-200 dark:border-amber-800/50">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Leaf className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                      <span className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                                        Plant Scans
+                                      </span>
+                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-200">
+                                        {memberData.scansTotal || 0}
+                                      </span>
+                                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-200 dark:bg-orange-800 text-orange-700 dark:text-orange-200">
+                                        {memberData.scansThisMonth || 0} this month
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                                    Shows recent scan results with uploaded image previews.
+                                  </p>
+                                </div>
+                                <div className="p-4">
+                                  {(!memberData.scans || memberData.scans.length === 0) ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                      <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-3">
+                                        <Leaf className="h-6 w-6 text-amber-400" />
+                                      </div>
+                                      <p className="text-sm text-stone-500 dark:text-stone-400">
+                                        No scans recorded for this user
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
+                                      {memberData.scans.map((scan) => {
+                                        const probabilityPct =
+                                          typeof scan.topMatchProbability === "number"
+                                            ? `${(scan.topMatchProbability * 100).toFixed(1)}%`
+                                            : null;
+                                        const statusLabel = (scan.apiStatus || "unknown").toLowerCase();
+                                        const statusClasses =
+                                          statusLabel === "completed"
+                                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                                            : statusLabel === "failed"
+                                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                                              : "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300";
+                                        return (
+                                          <div
+                                            key={scan.id}
+                                            className="rounded-xl border border-stone-200 dark:border-stone-700 p-3 bg-white dark:bg-[#252526]"
+                                          >
+                                            <div className="flex gap-3">
+                                              <div className="w-20 h-20 rounded-lg overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 flex items-center justify-center shrink-0">
+                                                {scan.imageUrl ? (
+                                                  <a
+                                                    href={scan.imageUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="block w-full h-full"
+                                                    title="Open scan image"
+                                                  >
+                                                    <img
+                                                      src={scan.imageUrl}
+                                                      alt={scan.topMatchName || "Plant scan"}
+                                                      className="w-full h-full object-cover"
+                                                      loading="lazy"
+                                                    />
+                                                  </a>
+                                                ) : (
+                                                  <FileImage className="h-6 w-6 text-stone-400" />
+                                                )}
+                                              </div>
+                                              <div className="min-w-0 flex-1">
+                                                <div className="flex items-start justify-between gap-2">
+                                                  <div className="min-w-0">
+                                                    <div className="text-sm font-semibold truncate">
+                                                      {scan.topMatchName || "Unknown result"}
+                                                    </div>
+                                                    {scan.topMatchScientificName &&
+                                                      scan.topMatchScientificName !== scan.topMatchName && (
+                                                        <div className="text-xs italic text-stone-500 dark:text-stone-400 truncate">
+                                                          {scan.topMatchScientificName}
+                                                        </div>
+                                                      )}
+                                                  </div>
+                                                  {scan.imageUrl && (
+                                                    <a
+                                                      href={scan.imageUrl}
+                                                      target="_blank"
+                                                      rel="noreferrer"
+                                                      className="text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+                                                      title="Open image"
+                                                    >
+                                                      <ExternalLink className="h-4 w-4" />
+                                                    </a>
+                                                  )}
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                                  <Badge className={cn("text-[10px] font-medium", statusClasses)}>
+                                                    {statusLabel}
+                                                  </Badge>
+                                                  {probabilityPct && (
+                                                    <Badge
+                                                      variant="outline"
+                                                      className="text-[10px] tabular-nums"
+                                                    >
+                                                      {probabilityPct}
+                                                    </Badge>
+                                                  )}
+                                                  {scan.matchedPlantId && (
+                                                    <Badge
+                                                      variant="outline"
+                                                      className="text-[10px] border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300"
+                                                    >
+                                                      In database
+                                                    </Badge>
+                                                  )}
+                                                  {scan.classificationLevel && (
+                                                    <Badge
+                                                      variant="outline"
+                                                      className="text-[10px]"
+                                                    >
+                                                      {scan.classificationLevel}
+                                                    </Badge>
+                                                  )}
+                                                </div>
+                                                <div className="mt-2 text-[11px] text-stone-500 dark:text-stone-400 space-y-0.5">
+                                                  <div>
+                                                    Scanned:{" "}
+                                                    {scan.createdAt
+                                                      ? new Date(scan.createdAt).toLocaleString()
+                                                      : "-"}
+                                                  </div>
+                                                  {scan.matchedPlantName && (
+                                                    <div className="truncate">
+                                                      Matched plant:{" "}
+                                                      <span className="font-medium text-stone-700 dark:text-stone-300">
+                                                        {scan.matchedPlantName}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                  {scan.userNotes && (
+                                                    <div className="truncate">
+                                                      Notes: {scan.userNotes}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
 
                             {/* Uploaded Media Files Section - Global Image Database */}
                             <Card className="rounded-2xl overflow-hidden">

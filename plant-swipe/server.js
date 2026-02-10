@@ -11610,6 +11610,9 @@ app.get('/api/admin/member', async (req, res) => {
       // Plants count only (drop garden counts)
       // Plants count only (drop garden counts)
       let plantsTotal = undefined
+      let scansTotal = 0
+      let scansThisMonth = 0
+      let scans = []
       try {
         // Gather gardens user can access to compute plants total
         let gardenIds = []
@@ -11636,6 +11639,107 @@ app.get('/api/admin/member', async (req, res) => {
             const arr = await gpResp.json().catch(() => [])
             plantsTotal = Array.isArray(arr) ? arr.reduce((acc, r) => acc + Number(r?.plants_on_hand ?? 0), 0) : undefined
           }
+        }
+      } catch { }
+
+      try {
+        const monthStart = new Date()
+        monthStart.setUTCDate(1)
+        monthStart.setUTCHours(0, 0, 0, 0)
+        const monthStartIso = monthStart.toISOString()
+
+        const scansResp = await fetch(
+          `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&select=id,image_url,image_path,image_bucket,api_status,is_plant,is_plant_probability,top_match_name,top_match_scientific_name,top_match_probability,classification_level,matched_plant_id,user_notes,created_at&order=created_at.desc&limit=50`,
+          { headers: baseHeaders },
+        )
+        const rawScans = scansResp.ok ? await scansResp.json().catch(() => []) : []
+        const scanRows = Array.isArray(rawScans) ? rawScans : []
+
+        const matchedPlantIds = Array.from(
+          new Set(
+            scanRows
+              .map((row) => (row?.matched_plant_id ? String(row.matched_plant_id) : ''))
+              .filter(Boolean),
+          ),
+        )
+        const plantMetaById = new Map()
+        if (matchedPlantIds.length > 0) {
+          const inClause = matchedPlantIds.map((id) => encodeURIComponent(id)).join(',')
+          const plantsResp = await fetch(
+            `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inClause})&select=id,name,scientific_name,image`,
+            { headers: baseHeaders },
+          )
+          if (plantsResp.ok) {
+            const plantRows = await plantsResp.json().catch(() => [])
+            for (const row of Array.isArray(plantRows) ? plantRows : []) {
+              if (!row?.id) continue
+              plantMetaById.set(String(row.id), {
+                name: row?.name || null,
+                scientificName: row?.scientific_name || null,
+                image: row?.image || null,
+              })
+            }
+          }
+        }
+
+        scans = scanRows.map((row) => {
+          const matchedPlantId = row?.matched_plant_id ? String(row.matched_plant_id) : null
+          const matchedMeta = matchedPlantId ? plantMetaById.get(matchedPlantId) : null
+          return {
+            id: String(row?.id || ''),
+            imageUrl: row?.image_url || null,
+            imagePath: row?.image_path || null,
+            imageBucket: row?.image_bucket || null,
+            apiStatus: row?.api_status || null,
+            isPlant: typeof row?.is_plant === 'boolean' ? row.is_plant : null,
+            isPlantProbability:
+              typeof row?.is_plant_probability === 'number'
+                ? row.is_plant_probability
+                : row?.is_plant_probability != null
+                  ? Number(row.is_plant_probability)
+                  : null,
+            topMatchName: row?.top_match_name || null,
+            topMatchScientificName: row?.top_match_scientific_name || null,
+            topMatchProbability:
+              typeof row?.top_match_probability === 'number'
+                ? row.top_match_probability
+                : row?.top_match_probability != null
+                  ? Number(row.top_match_probability)
+                  : null,
+            classificationLevel: row?.classification_level || null,
+            matchedPlantId,
+            matchedPlantName: matchedMeta?.name || null,
+            matchedPlantScientificName: matchedMeta?.scientificName || null,
+            matchedPlantImage: matchedMeta?.image || null,
+            userNotes: row?.user_notes || null,
+            createdAt: row?.created_at || null,
+          }
+        })
+
+        const [scanTotalResp, scanMonthResp] = await Promise.all([
+          fetch(
+            `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&select=id`,
+            {
+              headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
+            },
+          ),
+          fetch(
+            `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&deleted_at=is.null&created_at=gte.${encodeURIComponent(monthStartIso)}&select=id`,
+            {
+              headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
+            },
+          ),
+        ])
+
+        if (scanTotalResp.ok) {
+          const cr = scanTotalResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) scansTotal = Number(m[1])
+        }
+        if (scanMonthResp.ok) {
+          const cr = scanMonthResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) scansThisMonth = Number(m[1])
         }
       } catch { }
 
@@ -11868,6 +11972,9 @@ app.get('/api/admin/member', async (req, res) => {
         bannedIps,
         threatLevel,
         files: userFiles,
+        scansTotal,
+        scansThisMonth,
+        scans,
         mediaUploads,
         mediaTotalCount,
         mediaTotalSize,
@@ -11956,6 +12063,9 @@ app.get('/api/admin/member', async (req, res) => {
     let threatLevel = profile?.threat_level ?? null
     let userFiles = []
     let plantsTotal = 0
+    let scansTotal = 0
+    let scansThisMonth = 0
+    let scans = []
     try {
       const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null order by ip asc`, [user.id])
       ips = (ipRows || []).map(r => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean)
@@ -12059,6 +12169,79 @@ app.get('/api/admin/member', async (req, res) => {
             gardenPlantId: r.garden_plant_id || null,
             plantName: r.plant_name || null,
             adminCommentary: r.admin_commentary || null,
+          }))
+        : []
+    } catch { }
+    try {
+      const [scanCountRows, scanRows] = await Promise.all([
+        sql`
+          select
+            count(*)::int as total,
+            count(*) filter (
+              where created_at >= date_trunc('month', now())
+            )::int as this_month
+          from public.plant_scans
+          where user_id = ${user.id}
+            and deleted_at is null
+        `,
+        sql`
+          select
+            ps.id,
+            ps.image_url,
+            ps.image_path,
+            ps.image_bucket,
+            ps.api_status,
+            ps.is_plant,
+            ps.is_plant_probability,
+            ps.top_match_name,
+            ps.top_match_scientific_name,
+            ps.top_match_probability,
+            ps.classification_level,
+            ps.matched_plant_id,
+            ps.user_notes,
+            ps.created_at,
+            p.name as matched_plant_name,
+            p.scientific_name as matched_plant_scientific_name,
+            p.image as matched_plant_image
+          from public.plant_scans ps
+          left join public.plants p on p.id = ps.matched_plant_id
+          where ps.user_id = ${user.id}
+            and ps.deleted_at is null
+          order by ps.created_at desc
+          limit 50
+        `,
+      ])
+      scansTotal = Number(scanCountRows?.[0]?.total ?? 0)
+      scansThisMonth = Number(scanCountRows?.[0]?.this_month ?? 0)
+      scans = Array.isArray(scanRows)
+        ? scanRows.map((r) => ({
+            id: String(r.id),
+            imageUrl: r.image_url || null,
+            imagePath: r.image_path || null,
+            imageBucket: r.image_bucket || null,
+            apiStatus: r.api_status || null,
+            isPlant: typeof r.is_plant === 'boolean' ? r.is_plant : null,
+            isPlantProbability:
+              typeof r.is_plant_probability === 'number'
+                ? r.is_plant_probability
+                : r.is_plant_probability != null
+                  ? Number(r.is_plant_probability)
+                  : null,
+            topMatchName: r.top_match_name || null,
+            topMatchScientificName: r.top_match_scientific_name || null,
+            topMatchProbability:
+              typeof r.top_match_probability === 'number'
+                ? r.top_match_probability
+                : r.top_match_probability != null
+                  ? Number(r.top_match_probability)
+                  : null,
+            classificationLevel: r.classification_level || null,
+            matchedPlantId: r.matched_plant_id || null,
+            matchedPlantName: r.matched_plant_name || null,
+            matchedPlantScientificName: r.matched_plant_scientific_name || null,
+            matchedPlantImage: r.matched_plant_image || null,
+            userNotes: r.user_notes || null,
+            createdAt: r.created_at || null,
           }))
         : []
     } catch { }
@@ -12395,6 +12578,9 @@ app.get('/api/admin/member', async (req, res) => {
       bannedIps,
       threatLevel: currentThreatLevel,
       files: userFiles,
+      scansTotal,
+      scansThisMonth,
+      scans,
       mediaUploads,
       mediaTotalCount,
       mediaTotalSize,
