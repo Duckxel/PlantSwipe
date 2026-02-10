@@ -910,23 +910,24 @@ const PlantInfoPage: React.FC = () => {
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Admin stats badges — next to Share */}
-          {profile?.is_admin && impressionCount !== null && (
+          {/* Admin stats badge — next to Share */}
+          {profile?.is_admin && (impressionCount !== null || likesCount !== null) && (
             <Badge
               variant="secondary"
-              className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-1.5"
+              className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-3"
             >
-              <ChartNoAxesColumn className="h-3.5 w-3.5" />
-              {impressionCount.toLocaleString()}
-            </Badge>
-          )}
-          {profile?.is_admin && likesCount !== null && (
-            <Badge
-              variant="secondary"
-              className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-1.5"
-            >
-              <Heart className="h-3.5 w-3.5" />
-              {likesCount.toLocaleString()}
+              {impressionCount !== null && (
+                <span className="flex items-center gap-1">
+                  <ChartNoAxesColumn className="h-3.5 w-3.5" />
+                  {impressionCount.toLocaleString()}
+                </span>
+              )}
+              {likesCount !== null && (
+                <span className="flex items-center gap-1">
+                  <Heart className="h-3.5 w-3.5" />
+                  {likesCount.toLocaleString()}
+                </span>
+              )}
             </Badge>
           )}
           {/* Share Button */}
