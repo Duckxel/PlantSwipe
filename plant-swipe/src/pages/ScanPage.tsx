@@ -748,12 +748,12 @@ export const ScanPage: React.FC = () => {
                         {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
                       </Button>
                     ) : (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-950/20 p-3 space-y-3">
+                      <div className="rounded-2xl border border-stone-200 bg-stone-50/80 dark:border-stone-700 dark:bg-stone-900/40 p-3 space-y-3">
                         <div>
-                          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                          <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
                             {t('scan.notInDatabaseYet', { defaultValue: 'This plant is not in our database yet' })}
                           </p>
-                          <p className="text-xs text-amber-700 dark:text-amber-300/90 mt-1">
+                          <p className="text-xs text-stone-600 dark:text-stone-300/90 mt-1">
                             {t('scan.notInDatabaseHint', { defaultValue: 'Tap the button below to request this plant and we will review adding it.' })}
                           </p>
                         </div>
