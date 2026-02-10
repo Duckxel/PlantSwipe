@@ -6720,6 +6720,39 @@ app.get('/api/impressions/:type/:id', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/impressions/all/:type
+ * Admin-only endpoint: returns all impression counts for a given entity type.
+ * Response: { [entityId]: count }
+ */
+app.get('/api/impressions/all/:type', async (req, res) => {
+  if (!sql) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) return res.status(401).json({ error: 'Not authenticated' })
+    const isAdmin = await isAdminUserId(user.id)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin access required' })
+
+    const { type } = req.params
+    if (!type || !['plant', 'blog'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid type' })
+    }
+    const rows = await sql`
+      SELECT entity_id, count FROM public.impressions
+      WHERE entity_type = ${type}
+      ORDER BY count DESC
+    `
+    const result = {}
+    for (const row of rows) {
+      result[row.entity_id] = Number(row.count)
+    }
+    res.json(result)
+  } catch (err) {
+    console.error('[impressions/all] Error:', err?.message || err)
+    res.status(500).json({ error: 'Failed to fetch impressions' })
+  }
+})
+
 app.post('/api/blog/upload-image', async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })

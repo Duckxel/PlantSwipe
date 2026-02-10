@@ -7,12 +7,14 @@ import { useLanguage } from '@/lib/i18nRouting'
 import { FilterSectionHeader } from './FilterSectionHeader'
 import type { ColorOption } from '@/types/plant'
 
-export type SearchSortMode = "default" | "newest" | "popular" | "favorites"
+export type SearchSortMode = "default" | "newest" | "popular" | "favorites" | "impressions"
 
 interface FilterControlsProps {
   // Sort
   searchSort: SearchSortMode
   setSearchSort: (val: SearchSortMode) => void
+  /** When true, shows admin-only sort options like "impressions" */
+  isAdmin?: boolean
 
   // Filter State
   seasonFilter: string | null
@@ -49,6 +51,7 @@ interface FilterControlsProps {
 const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   searchSort,
   setSearchSort,
+  isAdmin = false,
   seasonFilter,
   setSeasonFilter,
   colorFilter,
@@ -201,6 +204,9 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
           <option value="newest">{t("plant.sortNewest")}</option>
           <option value="popular">{t("plant.sortPopular")}</option>
           <option value="favorites">{t("plant.sortFavorites")}</option>
+          {isAdmin && (
+            <option value="impressions">{t("plant.sortImpressions", { defaultValue: "Most viewed" })}</option>
+          )}
         </select>
       </div>
 

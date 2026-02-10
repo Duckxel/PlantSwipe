@@ -119,3 +119,26 @@ export async function fetchImpression(
     return null
   }
 }
+
+/**
+ * Fetch all impression counts for a given entity type (admin-only).
+ * Returns a map of entityId -> count, or null if not admin.
+ */
+export async function fetchAllImpressions(
+  type: ImpressionType
+): Promise<Record<string, number> | null> {
+  try {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+    if (!token) return null
+
+    const res = await fetch(`/api/impressions/all/${type}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'same-origin',
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
