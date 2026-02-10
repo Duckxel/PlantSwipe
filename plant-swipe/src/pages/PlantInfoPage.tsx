@@ -895,17 +895,17 @@ const PlantInfoPage: React.FC = () => {
         >
           <ChevronLeft className="h-5 w-5" />
         </Button>
-        {/* Impression count badge (Admin only) — sits between back and actions */}
-        {profile?.is_admin && impressionCount !== null && (
-          <Badge
-            variant="secondary"
-            className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-1.5 mr-auto"
-          >
-            <ChartNoAxesColumn className="h-3.5 w-3.5" />
-            {impressionCount.toLocaleString()}
-          </Badge>
-        )}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Impression count badge (Admin only) — next to Share */}
+          {profile?.is_admin && impressionCount !== null && (
+            <Badge
+              variant="secondary"
+              className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-1.5"
+            >
+              <ChartNoAxesColumn className="h-3.5 w-3.5" />
+              {impressionCount.toLocaleString()}
+            </Badge>
+          )}
           {/* Share Button */}
           <div className="relative">
             <Button
