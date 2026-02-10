@@ -8885,11 +8885,12 @@ app.post('/api/admin/notify-plant-requesters', async (req, res) => {
     let userIds = []
     try {
       const requestUsers = await sql`
-        select pru.user_id
+        select pru.user_id::text as user_id
         from public.plant_request_users pru
-        where pru.requested_plant_id = ${requestId}
+        where pru.requested_plant_id = ${requestId}::uuid
       `
       userIds = (requestUsers || []).map(r => r.user_id).filter(Boolean)
+      console.log(`[notify-plant-requesters] Found ${userIds.length} user(s) in plant_request_users for request ${requestId}`)
     } catch (err) {
       console.warn('[notify-plant-requesters] Error fetching from plant_request_users:', err?.message)
     }
@@ -8898,10 +8899,11 @@ app.post('/api/admin/notify-plant-requesters', async (req, res) => {
     if (userIds.length === 0) {
       try {
         const reqRow = await sql`
-          select requested_by from public.requested_plants where id = ${requestId} limit 1
+          select requested_by::text as requested_by from public.requested_plants where id = ${requestId}::uuid limit 1
         `
         if (reqRow?.[0]?.requested_by) {
           userIds = [reqRow[0].requested_by]
+          console.log(`[notify-plant-requesters] Fallback: found requested_by user ${userIds[0]}`)
         }
       } catch (err) {
         console.warn('[notify-plant-requesters] Error fetching requested_by:', err?.message)
@@ -8916,11 +8918,12 @@ app.post('/api/admin/notify-plant-requesters', async (req, res) => {
 
     // 3. Get user profiles (for language and display name)
     const recipients = await sql`
-      select p.id as user_id, p.display_name, p.language
+      select p.id::text as user_id, p.display_name, p.language
       from public.profiles p
-      where p.id = any(${userIds})
+      where p.id = any(${sql.array(userIds)}::uuid[])
         and (p.notify_push is null or p.notify_push = true)
     `
+    console.log(`[notify-plant-requesters] Found ${recipients?.length || 0} recipient(s) with push enabled`)
 
     if (!recipients || recipients.length === 0) {
       console.log('[notify-plant-requesters] No recipients with push enabled for request:', requestId)
@@ -8949,8 +8952,8 @@ app.post('/api/admin/notify-plant-requesters', async (req, res) => {
 
     const notificationTitle = automation.template_title || automation.display_name || 'Plant Request Fulfilled'
     const ctaUrl = plantId
-      ? (automation.cta_url || `/encyclopedia/${plantId}`)
-      : (automation.cta_url || '/encyclopedia')
+      ? (automation.cta_url || `/plants/${plantId}`)
+      : (automation.cta_url || '/search')
 
     // 5. Create notifications for each user
     let insertedCount = 0
@@ -8975,8 +8978,8 @@ app.post('/api/admin/notify-plant-requesters', async (req, res) => {
             automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status, payload
           )
           values (
-            ${automation.id},
-            ${recipient.user_id},
+            ${automation.id}::uuid,
+            ${recipient.user_id}::uuid,
             ${personalizedTitle},
             ${message},
             ${ctaUrl},
@@ -8986,6 +8989,7 @@ app.post('/api/admin/notify-plant-requesters', async (req, res) => {
           )
         `
         insertedCount++
+        console.log(`[notify-plant-requesters] Queued notification for user ${recipient.user_id} (${recipient.display_name})`)
       } catch (insertErr) {
         console.error('[notify-plant-requesters] Insert error for user', recipient.user_id, insertErr?.message)
       }
