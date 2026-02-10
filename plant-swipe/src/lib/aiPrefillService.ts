@@ -923,6 +923,32 @@ export async function processPlantRequest(
       throw new DOMException('Operation cancelled', 'AbortError')
     }
     
+    // Notify users who requested this plant (before deleting the request)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const notifyHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (session?.access_token) notifyHeaders['Authorization'] = `Bearer ${session.access_token}`
+      const resp = await fetch('/api/admin/notify-plant-requesters', {
+        method: 'POST',
+        headers: notifyHeaders,
+        credentials: 'same-origin',
+        body: JSON.stringify({ requestId, plantName: trimmedName, plantId }),
+      })
+      if (resp.ok) {
+        const notifyResult = await resp.json()
+        if (notifyResult.notified) {
+          console.log(`[aiPrefillService] Notified ${notifyResult.queued} users about "${trimmedName}"`)
+        } else {
+          console.log(`[aiPrefillService] Skipped notifications for "${trimmedName}": ${notifyResult.reason}`)
+        }
+      } else {
+        console.warn(`[aiPrefillService] Failed to notify plant requesters: ${resp.status}`)
+      }
+    } catch (notifyErr) {
+      // Don't fail the plant creation if notifications fail
+      console.warn('[aiPrefillService] Error sending plant request notifications:', notifyErr)
+    }
+    
     // Mark the request as complete (delete it)
     const { error: deleteError } = await supabase
       .from('requested_plants')

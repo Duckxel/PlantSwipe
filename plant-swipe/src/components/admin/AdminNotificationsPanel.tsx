@@ -712,10 +712,19 @@ export function AdminNotificationsPanel() {
     setTemplateSaving(true)
     try {
       const headers = await buildAdminHeaders()
+      // Filter out empty variants before sending to avoid Zod validation errors
+      const cleanedVariants = templateForm.messageVariants
+        .map(v => v.trim())
+        .filter(v => v.length > 0)
+      if (!cleanedVariants.length) {
+        alert('Add at least one non-empty message variant.')
+        setTemplateSaving(false)
+        return
+      }
       const payload = {
         title: templateForm.title.trim(),
-        description: templateForm.description.trim() || null,
-        messageVariants: templateForm.messageVariants,
+        description: templateForm.description.trim() || undefined,
+        messageVariants: cleanedVariants,
         randomize: templateForm.randomize,
         isActive: templateForm.isActive,
       }
@@ -1335,189 +1344,277 @@ export function AdminNotificationsPanel() {
             <div className="space-y-4">
               <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4">
                 <p className="text-sm text-amber-800 dark:text-amber-200">
-                  <strong>💡 How it works:</strong> Automations run every hour. Daily task reminders respect each user's
-                  notification time preference, while other automations use the configured send hour. Configure a template
-                  and enable the trigger to start sending.
+                  <strong>💡 How it works:</strong> Scheduled automations run every hour. Daily task reminders respect each user's
+                  notification time preference. Event-driven automations (like Plant Request Fulfilled) trigger automatically
+                  when the corresponding action occurs. Configure a template and enable the trigger to start sending.
                 </p>
               </div>
 
               <div className="grid gap-4">
                 {automations.map((automation) => {
                   const isDailyTaskReminder = automation.triggerType === 'daily_task_reminder'
+                  const isEventDriven = automation.triggerType === 'plant_request_fulfilled'
 
                   return (
                     <div
                       key={automation.id}
                       className={cn(
-                        "rounded-xl sm:rounded-2xl border p-5 sm:p-6 transition-all",
-                        automation.sentTodayCount > 0
-                          ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
-                          : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
+                        "rounded-xl sm:rounded-2xl border bg-white dark:bg-[#1e1e20] p-5 sm:p-6 transition-all",
+                        isEventDriven
+                          ? "border-emerald-200 dark:border-emerald-900/50"
+                          : automation.sentTodayCount > 0
+                            ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
+                            : "border-stone-200 dark:border-[#3e3e42]"
                       )}
                     >
-                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                      {/* Icon and Info */}
-                      <div className="flex items-start gap-4 flex-1">
-                        <div className={cn(
-                          "flex-shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center",
-                          automation.isEnabled
-                            ? "bg-amber-100 dark:bg-amber-900/30"
-                            : "bg-stone-100 dark:bg-[#2a2a2d]"
-                        )}>
-                          <Zap className={cn(
-                            "h-5 w-5 sm:h-6 sm:w-6",
-                            automation.isEnabled
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-stone-400"
-                          )} />
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <h3 className="font-semibold text-stone-900 dark:text-white text-base sm:text-lg">
-                              {automation.displayName}
-                            </h3>
-                            <span className={cn(
-                              "px-2 py-0.5 rounded-full text-xs font-medium",
-                              automation.isEnabled
-                                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-                                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-500"
-                            )}>
-                              {automation.isEnabled ? "Active" : "Disabled"}
-                            </span>
-                            {automation.sentTodayCount > 0 && (
-                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                                <CheckCircle2 className="h-3 w-3" />
-                                {automation.sentTodayCount} sent today
-                              </span>
+                    <div className="flex flex-col gap-4">
+                      {/* Header Row */}
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                        {/* Icon and Info */}
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className={cn(
+                            "flex-shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center",
+                            isEventDriven
+                              ? automation.isEnabled
+                                ? "bg-emerald-100 dark:bg-emerald-900/30"
+                                : "bg-stone-100 dark:bg-[#2a2a2d]"
+                              : automation.isEnabled
+                                ? "bg-amber-100 dark:bg-amber-900/30"
+                                : "bg-stone-100 dark:bg-[#2a2a2d]"
+                          )}>
+                            {isEventDriven ? (
+                              <Sparkles className={cn(
+                                "h-5 w-5 sm:h-6 sm:w-6",
+                                automation.isEnabled
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-stone-400"
+                              )} />
+                            ) : (
+                              <Zap className={cn(
+                                "h-5 w-5 sm:h-6 sm:w-6",
+                                automation.isEnabled
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-stone-400"
+                              )} />
                             )}
                           </div>
 
-                          {automation.description && (
-                            <p className="text-sm text-stone-500 dark:text-stone-400 mb-3">
-                              {automation.description}
-                            </p>
-                          )}
-
-                          <div className="flex flex-wrap gap-3 text-xs text-stone-500">
-                            <span className="flex items-center gap-1">
-                              <Users className="h-3.5 w-3.5" />
-                              <span className="font-medium text-amber-600 dark:text-amber-400">
-                                ~{automation.recipientCount.toLocaleString()} recipients
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <h3 className="font-semibold text-stone-900 dark:text-white text-base sm:text-lg">
+                                {automation.displayName}
+                              </h3>
+                              {/* Type Badge */}
+                              {isEventDriven && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                                  ⚡ Event-driven
+                                </span>
+                              )}
+                              {/* Status Badge */}
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-full text-xs font-medium",
+                                automation.isEnabled
+                                  ? isEventDriven
+                                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                                    : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-500"
+                              )}>
+                                {automation.isEnabled ? "Active" : "Disabled"}
                               </span>
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3.5 w-3.5" />
-                              {isDailyTaskReminder
-                                ? "Uses each user's preferred notification time"
-                                : `Sends at ${automation.sendHour}:00 (user's local time)`}
-                            </span>
+                              {automation.sentTodayCount > 0 && (
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  {automation.sentTodayCount} sent today
+                                </span>
+                              )}
+                            </div>
+
+                            {automation.description && (
+                              <p className="text-sm text-stone-500 dark:text-stone-400 mb-2">
+                                {automation.description}
+                              </p>
+                            )}
+
+                            <div className="flex flex-wrap gap-3 text-xs text-stone-500">
+                              <span className="flex items-center gap-1">
+                                <Users className="h-3.5 w-3.5" />
+                                <span className={cn(
+                                  "font-medium",
+                                  isEventDriven
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : "text-amber-600 dark:text-amber-400"
+                                )}>
+                                  {isEventDriven
+                                    ? `~${automation.recipientCount.toLocaleString()} users with pending requests`
+                                    : `~${automation.recipientCount.toLocaleString()} recipients`}
+                                </span>
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5" />
+                                {isEventDriven
+                                  ? "Triggered instantly"
+                                  : isDailyTaskReminder
+                                    ? "Uses each user's preferred notification time"
+                                    : `Sends at ${automation.sendHour}:00 (user's local time)`}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Controls */}
-                      <div className="flex flex-col gap-3 sm:min-w-[280px]">
-                        {/* Template Selection */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                            Notification Template
-                          </Label>
-                          <Select
-                            value={automation.templateId || ""}
-                            onChange={(e) => {
-                              const newTemplateId = e.target.value || null
-                              handleUpdateAutomation(automation, { templateId: newTemplateId })
-                            }}
-                            disabled={savingAutomation === automation.id}
-                            className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-                          >
-                            <option value="">No template (disabled)</option>
-                            {templates.map((tpl) => (
-                              <option key={tpl.id} value={tpl.id}>
-                                {tpl.title} ({tpl.messageVariants.length} variants)
-                              </option>
-                            ))}
-                          </Select>
-                          {automation.templateId && automation.templateTitle && (
-                            <p className="text-xs text-stone-500">
-                              Using: <span className="font-medium">{automation.templateTitle}</span>
-                            </p>
-                          )}
-                          {!automation.templateId && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400">
-                              ⚠️ Select a template to enable this automation
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Send Hour */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                            Send Hour (User's Local Time)
-                          </Label>
-                          {isDailyTaskReminder ? (
-                            <div className="rounded-lg border border-dashed border-stone-200 dark:border-[#3e3e42] px-3 py-2 text-xs text-stone-500 dark:text-stone-400">
-                              Uses each user's notification time preference.
-                            </div>
-                          ) : (
+                        {/* Controls */}
+                        <div className="flex flex-col gap-3 sm:min-w-[280px]">
+                          {/* Template Selection */}
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                              Notification Template
+                            </Label>
                             <Select
-                              value={String(automation.sendHour)}
+                              value={automation.templateId || ""}
                               onChange={(e) => {
-                                handleUpdateAutomation(automation, { sendHour: parseInt(e.target.value) })
+                                const newTemplateId = e.target.value || null
+                                handleUpdateAutomation(automation, { templateId: newTemplateId })
                               }}
                               disabled={savingAutomation === automation.id}
                               className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
                             >
-                              {Array.from({ length: 24 }, (_, i) => (
-                                <option key={i} value={i}>
-                                  {i.toString().padStart(2, '0')}:00
+                              <option value="">No template (disabled)</option>
+                              {templates.map((tpl) => (
+                                <option key={tpl.id} value={tpl.id}>
+                                  {tpl.title} ({tpl.messageVariants.length} variants)
                                 </option>
                               ))}
                             </Select>
-                          )}
-                        </div>
-
-                        {/* Enable/Disable Toggle + Trigger */}
-                        <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
-                              Send Automatically
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateAutomation(automation, { isEnabled: !automation.isEnabled })}
-                              disabled={savingAutomation === automation.id || !automation.templateId}
-                              className={cn(
-                                "relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                                automation.isEnabled ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
-                              )}
-                              title={!automation.templateId ? "Select a template first" : automation.isEnabled ? "Disable" : "Enable"}
-                            >
-                              {savingAutomation === automation.id ? (
-                                <Loader2 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-white" />
-                              ) : (
-                                <span
-                                  className={cn(
-                                    "absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
-                                    automation.isEnabled ? "left-6" : "left-1"
-                                  )}
-                                />
-                              )}
-                            </button>
+                            {automation.templateId && automation.templateTitle && (
+                              <p className="text-xs text-stone-500">
+                                Using: <span className="font-medium">{automation.templateTitle}</span>
+                              </p>
+                            )}
+                            {!automation.templateId && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400">
+                                ⚠️ Select a template to enable this automation
+                              </p>
+                            )}
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleTriggerAutomation(automation)}
-                            disabled={savingAutomation === automation.id || !automation.templateId}
-                            className="rounded-lg h-8 text-xs"
-                          >
-                            <Play className="h-3 w-3 mr-1" />
-                            Test Now
-                          </Button>
+
+                          {/* Send Hour (cron-based only) */}
+                          {!isEventDriven && (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                              Send Hour (User's Local Time)
+                            </Label>
+                            {isDailyTaskReminder ? (
+                              <div className="rounded-lg border border-dashed border-stone-200 dark:border-[#3e3e42] px-3 py-2 text-xs text-stone-500 dark:text-stone-400">
+                                Uses each user's notification time preference.
+                              </div>
+                            ) : (
+                              <Select
+                                value={String(automation.sendHour)}
+                                onChange={(e) => {
+                                  handleUpdateAutomation(automation, { sendHour: parseInt(e.target.value) })
+                                }}
+                                disabled={savingAutomation === automation.id}
+                                className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                              >
+                                {Array.from({ length: 24 }, (_, i) => (
+                                  <option key={i} value={i}>
+                                    {i.toString().padStart(2, '0')}:00
+                                  </option>
+                                ))}
+                              </Select>
+                            )}
+                          </div>
+                          )}
+
+                          {/* Enable/Disable Toggle + Trigger */}
+                          <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                                Send Automatically
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateAutomation(automation, { isEnabled: !automation.isEnabled })}
+                                disabled={savingAutomation === automation.id || !automation.templateId}
+                                className={cn(
+                                  "relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                                  automation.isEnabled
+                                    ? isEventDriven ? "bg-emerald-500" : "bg-amber-500"
+                                    : "bg-stone-300 dark:bg-stone-600"
+                                )}
+                                title={!automation.templateId ? "Select a template first" : automation.isEnabled ? "Disable" : "Enable"}
+                              >
+                                {savingAutomation === automation.id ? (
+                                  <Loader2 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-white" />
+                                ) : (
+                                  <span
+                                    className={cn(
+                                      "absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+                                      automation.isEnabled ? "left-6" : "left-1"
+                                    )}
+                                  />
+                                )}
+                              </button>
+                            </div>
+                            {!isEventDriven && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTriggerAutomation(automation)}
+                              disabled={savingAutomation === automation.id || !automation.templateId}
+                              className="rounded-lg h-8 text-xs"
+                            >
+                              <Play className="h-3 w-3 mr-1" />
+                              Test Now
+                            </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
+
+                      {/* Template Variables Section - Event-driven automations */}
+                      {isEventDriven && (
+                        <div className="rounded-xl p-4 border bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200/50 dark:border-emerald-900/30">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+                              📋 Template Variables
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-200/60 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300">
+                              Use these in your notification template
+                            </span>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {[
+                              { token: '{{plant}}', description: 'Name of the plant that was added', required: true },
+                              { token: '{{user}}', description: "Recipient's display name", required: true },
+                              { token: '{{plantName}}', description: 'Alias for {{plant}}' },
+                            ].map((v) => (
+                              <div
+                                key={v.token}
+                                className={cn(
+                                  "flex items-start gap-2 p-2 rounded-lg cursor-pointer transition-colors",
+                                  v.required
+                                    ? "bg-white dark:bg-[#1e1e20] border border-emerald-300 dark:border-emerald-700"
+                                    : "bg-white/50 dark:bg-[#1e1e20]/50 hover:bg-white dark:hover:bg-[#1e1e20]"
+                                )}
+                                onClick={() => { navigator.clipboard?.writeText(v.token) }}
+                                title="Click to copy"
+                              >
+                                <code className={cn(
+                                  "px-2 py-0.5 rounded text-xs font-mono shrink-0",
+                                  v.required
+                                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-bold"
+                                    : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-400"
+                                )}>
+                                  {v.token}
+                                </code>
+                                <p className="text-[11px] text-stone-600 dark:text-stone-400 leading-tight">
+                                  {v.description}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                   )

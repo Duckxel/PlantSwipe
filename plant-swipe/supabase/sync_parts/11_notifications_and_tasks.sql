@@ -104,7 +104,7 @@ alter table public.notification_campaigns add column if not exists template_id u
 -- ========== Notification Automations (recurring automated notifications) ==========
 create table if not exists public.notification_automations (
   id uuid primary key default gen_random_uuid(),
-  trigger_type text not null unique check (trigger_type in ('weekly_inactive_reminder', 'daily_task_reminder', 'journal_continue_reminder')),
+  trigger_type text not null unique check (trigger_type in ('weekly_inactive_reminder', 'daily_task_reminder', 'journal_continue_reminder', 'plant_request_fulfilled')),
   display_name text not null,
   description text,
   is_enabled boolean not null default false,
@@ -135,6 +135,27 @@ do $$ begin
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- Update trigger_type CHECK constraint to include plant_request_fulfilled (for existing tables)
+-- This MUST run BEFORE the seed block so that new trigger types can be inserted
+do $$
+begin
+  -- Drop old constraint that may not include plant_request_fulfilled
+  if exists (
+    select 1 from pg_constraint
+    where conname = 'notification_automations_trigger_type_check'
+    and conrelid = 'public.notification_automations'::regclass
+  ) then
+    alter table public.notification_automations drop constraint notification_automations_trigger_type_check;
+  end if;
+  
+  -- Add updated constraint with all valid trigger types
+  alter table public.notification_automations
+    add constraint notification_automations_trigger_type_check
+    check (trigger_type in ('weekly_inactive_reminder', 'daily_task_reminder', 'journal_continue_reminder', 'plant_request_fulfilled'));
+exception when others then
+  null; -- Constraint might already be correct or table structure differs
+end $$;
+
 -- Seed default automation triggers (only insert if they don't exist - never overwrite user settings)
 do $$
 begin
@@ -151,6 +172,11 @@ begin
   -- Journal Continue Reminder
   insert into public.notification_automations (trigger_type, display_name, description, send_hour)
   values ('journal_continue_reminder', 'Journal Continue Reminder', 'Encourages users who wrote in their journal yesterday to continue', 9)
+  on conflict (trigger_type) do nothing;
+
+  -- Plant Request Fulfilled (event-driven, not cron-based)
+  insert into public.notification_automations (trigger_type, display_name, description, send_hour)
+  values ('plant_request_fulfilled', 'Plant Request Fulfilled', 'Notifies users when a plant they requested has been added to the encyclopedia (triggered automatically after AI prefill or manual plant creation)', 9)
   on conflict (trigger_type) do nothing;
 end $$;
 
