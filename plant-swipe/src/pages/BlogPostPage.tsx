@@ -1,7 +1,7 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import DOMPurify from 'dompurify'
-import { ArrowLeft, CalendarClock, CalendarDays, Clock, Eye, UserRound, X, ZoomIn } from 'lucide-react'
+import { ArrowLeft, CalendarClock, CalendarDays, ChartNoAxesColumn, Clock, UserRound, X, ZoomIn } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -224,8 +224,8 @@ export default function BlogPostPage() {
                     variant="secondary"
                     className="rounded-2xl px-3 py-1 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] inline-flex items-center gap-1.5"
                   >
-                    <Eye className="h-3.5 w-3.5" />
-                    {impressionCount.toLocaleString()} {t('admin.impressions', { defaultValue: 'impressions' })}
+                    <ChartNoAxesColumn className="h-3.5 w-3.5" />
+                    {impressionCount.toLocaleString()}
                   </Badge>
                 )}
               </div>

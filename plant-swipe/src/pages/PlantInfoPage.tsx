@@ -55,7 +55,7 @@ import {
   CalendarDays,
   FileText,
   Wrench,
-  Eye,
+  ChartNoAxesColumn,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -974,8 +974,8 @@ const PlantInfoPage: React.FC = () => {
               variant="secondary"
               className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-1.5"
             >
-              <Eye className="h-3.5 w-3.5" />
-              {impressionCount.toLocaleString()} {t('admin.impressions', { defaultValue: 'impressions' })}
+              <ChartNoAxesColumn className="h-3.5 w-3.5" />
+              {impressionCount.toLocaleString()}
             </Badge>
           )}
         </div>
