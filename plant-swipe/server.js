@@ -6627,6 +6627,33 @@ app.post('/api/admin/upload-mockup', async (req, res) => {
   })
 })
 
+/**
+ * GET /api/plants/:id/likes-count
+ * Admin-only endpoint: returns the number of users who have liked a specific plant.
+ */
+app.get('/api/plants/:id/likes-count', async (req, res) => {
+  if (!sql) return res.status(503).json({ error: 'Database not configured' })
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) return res.status(401).json({ error: 'Not authenticated' })
+    const isAdmin = await isAdminUserId(user.id)
+    if (!isAdmin) return res.status(403).json({ error: 'Admin access required' })
+
+    const plantId = String(req.params.id).trim()
+    if (!plantId) return res.status(400).json({ error: 'Missing plant id' })
+
+    const rows = await sql`
+      SELECT count(*)::integer AS likes
+      FROM public.profiles
+      WHERE ${plantId} = ANY(liked_plant_ids)
+    `
+    res.json({ likes: rows[0]?.likes ?? 0 })
+  } catch (err) {
+    console.error('[plants/likes-count] Error:', err?.message || err)
+    res.status(500).json({ error: 'Failed to fetch likes count' })
+  }
+})
+
 // ========== Impressions (Page View Tracking) ==========
 
 // Server-side cooldown: 5 seconds per visitor + entity to prevent reload-spam.

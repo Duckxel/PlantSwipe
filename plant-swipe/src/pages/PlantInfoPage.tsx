@@ -602,6 +602,7 @@ const PlantInfoPage: React.FC = () => {
 
   // --- Impression tracking (page views) ---
   const [impressionCount, setImpressionCount] = React.useState<number | null>(null)
+  const [likesCount, setLikesCount] = React.useState<number | null>(null)
 
   // Track impression on every page load/reload (fire-and-forget).
   // Fires immediately based on URL param — no auth or data load required.
@@ -610,15 +611,28 @@ const PlantInfoPage: React.FC = () => {
     trackImpression('plant', id)
   }, [id])
 
-  // Fetch impression count for admins
+  // Fetch impression count + likes count for admins
   React.useEffect(() => {
     if (!id || !profile?.is_admin) {
       setImpressionCount(null)
+      setLikesCount(null)
       return
     }
     let ignore = false
     fetchImpression('plant', id).then((data) => {
       if (!ignore && data) setImpressionCount(data.count)
+    })
+    // Fetch total likes for this plant (admin only)
+    supabase.auth.getSession().then(({ data: sessionData }) => {
+      const token = sessionData.session?.access_token
+      if (!token || ignore) return
+      fetch(`/api/plants/${encodeURIComponent(id)}/likes-count`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'same-origin',
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (!ignore && data) setLikesCount(data.likes ?? 0) })
+        .catch(() => {})
     })
     return () => { ignore = true }
   }, [id, profile?.is_admin])
@@ -896,7 +910,7 @@ const PlantInfoPage: React.FC = () => {
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Impression count badge (Admin only) — next to Share */}
+          {/* Admin stats badges — next to Share */}
           {profile?.is_admin && impressionCount !== null && (
             <Badge
               variant="secondary"
@@ -904,6 +918,15 @@ const PlantInfoPage: React.FC = () => {
             >
               <ChartNoAxesColumn className="h-3.5 w-3.5" />
               {impressionCount.toLocaleString()}
+            </Badge>
+          )}
+          {profile?.is_admin && likesCount !== null && (
+            <Badge
+              variant="secondary"
+              className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-1.5"
+            >
+              <Heart className="h-3.5 w-3.5" />
+              {likesCount.toLocaleString()}
             </Badge>
           )}
           {/* Share Button */}
