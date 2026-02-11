@@ -815,6 +815,75 @@ do $$ begin
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- ========== Page Impressions Tracking ==========
+-- Tracks page view counts (impressions) for plants and blog posts.
+-- Only admins can read the counts; the server increments via service role.
+
+CREATE TABLE IF NOT EXISTS public.impressions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_type text NOT NULL CHECK (entity_type IN ('plant', 'blog')),
+  entity_id text NOT NULL,
+  count bigint NOT NULL DEFAULT 0,
+  last_viewed_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (entity_type, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS impressions_entity_idx ON public.impressions (entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS impressions_count_idx ON public.impressions (entity_type, count DESC);
+
+COMMENT ON TABLE public.impressions IS 'Tracks page view impressions for plant info pages and blog posts. Admin-only read access.';
+COMMENT ON COLUMN public.impressions.entity_type IS 'Type of entity: plant or blog';
+COMMENT ON COLUMN public.impressions.entity_id IS 'ID of the plant or blog post';
+COMMENT ON COLUMN public.impressions.count IS 'Number of page views';
+
+ALTER TABLE public.impressions ENABLE ROW LEVEL SECURITY;
+
+-- Only admins can SELECT impression data
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='impressions' AND policyname='impressions_admin_select') THEN
+    DROP POLICY impressions_admin_select ON public.impressions;
+  END IF;
+  CREATE POLICY impressions_admin_select ON public.impressions FOR SELECT TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = (SELECT auth.uid()) AND p.is_admin = true));
+END $$;
+
+-- Only admins can manage impressions (insert/update handled by server via service role)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='impressions' AND policyname='impressions_admin_write') THEN
+    DROP POLICY impressions_admin_write ON public.impressions;
+  END IF;
+  CREATE POLICY impressions_admin_write ON public.impressions FOR ALL TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = (SELECT auth.uid()) AND p.is_admin = true))
+    WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = (SELECT auth.uid()) AND p.is_admin = true));
+END $$;
+
+-- Function to atomically increment impression count (used by server via service role)
+CREATE OR REPLACE FUNCTION public.increment_impression(
+  _entity_type text,
+  _entity_id text
+)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_count bigint;
+BEGIN
+  INSERT INTO public.impressions (entity_type, entity_id, count, last_viewed_at)
+  VALUES (_entity_type, _entity_id, 1, now())
+  ON CONFLICT (entity_type, entity_id)
+  DO UPDATE SET
+    count = impressions.count + 1,
+    last_viewed_at = now()
+  RETURNING count INTO v_count;
+  RETURN v_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.increment_impression(text, text) TO authenticated;
+
 -- ========== Messaging System ==========
 -- This adds a complete messaging system with:
 -- - Conversations (1:1 between friends)
