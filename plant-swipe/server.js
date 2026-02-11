@@ -28349,32 +28349,32 @@ async function generateCrawlerHtml(req, pagePath) {
           // Generate image tag if we have an image from media.aphylia.app
           const plantImageTag = generateImageTag(image, `${plant.name} - Plant photo on Aphylia`)
 
-          // Build JSON-LD structured data
+          // Build JSON-LD structured data — Article (care guide), NOT Product
+          // Plants are informational content, not items for sale
           const jsonLd = {
             '@context': 'https://schema.org',
-            '@type': 'Product',
+            '@type': 'Article',
+            'headline': `${plant.name} - ${tr.plantCareGuide}`,
             'name': plant.name,
             'description': plant.overview || description,
             'url': canonicalUrl,
-            'brand': { '@type': 'Brand', 'name': 'Aphylia' },
-            'category': plant.plant_type || 'Plant',
+            'mainEntityOfPage': { '@type': 'WebPage', '@id': canonicalUrl },
+            'publisher': {
+              '@type': 'Organization',
+              'name': 'Aphylia',
+              'url': siteUrl,
+              'logo': { '@type': 'ImageObject', 'url': `${siteUrl}/icons/icon-512x512.png` }
+            },
+            'about': {
+              '@type': 'Thing',
+              'name': plant.name,
+              'alternateName': plant.scientific_name || undefined,
+              'description': plant.overview || undefined,
+            }
           }
-          if (plant.scientific_name) jsonLd.alternateName = plant.scientific_name
+          if (plant.scientific_name) jsonLd.alternativeHeadline = plant.scientific_name
           if (image) jsonLd.image = image
-          // Add FAQ-like structured data via additionalProperty
-          const props = []
-          if (plant.family) props.push({ '@type': 'PropertyValue', 'name': 'Family', 'value': plant.family })
-          if (plant.level_sun) props.push({ '@type': 'PropertyValue', 'name': 'Sunlight', 'value': plant.level_sun })
-          if (plant.maintenance_level) props.push({ '@type': 'PropertyValue', 'name': 'Difficulty', 'value': plant.maintenance_level })
-          if (plant.living_space) props.push({ '@type': 'PropertyValue', 'name': 'Growing Space', 'value': plant.living_space })
-          if (plant.height_cm) props.push({ '@type': 'PropertyValue', 'name': 'Height', 'value': `${plant.height_cm} cm`, 'unitCode': 'CMT' })
-          if (plant.temperature_min != null) props.push({ '@type': 'PropertyValue', 'name': 'Min Temperature', 'value': `${plant.temperature_min}°C` })
-          if (plant.temperature_max != null) props.push({ '@type': 'PropertyValue', 'name': 'Max Temperature', 'value': `${plant.temperature_max}°C` })
-          if (plant.watering_type?.length) props.push({ '@type': 'PropertyValue', 'name': 'Watering', 'value': plant.watering_type.join(', ') })
-          if (plant.life_cycle) props.push({ '@type': 'PropertyValue', 'name': 'Life Cycle', 'value': plant.life_cycle })
-          if (plant.toxicity_human) props.push({ '@type': 'PropertyValue', 'name': 'Toxicity (Humans)', 'value': plant.toxicity_human })
-          if (plant.toxicity_pets) props.push({ '@type': 'PropertyValue', 'name': 'Toxicity (Pets)', 'value': plant.toxicity_pets })
-          if (props.length > 0) jsonLd.additionalProperty = props
+          if (plant.tags?.length) jsonLd.keywords = plant.tags.join(', ')
 
           // BreadcrumbList for plant pages
           const breadcrumbLd = {
@@ -28389,8 +28389,8 @@ async function generateCrawlerHtml(req, pagePath) {
 
           pageContent = `
             <script type="application/ld+json">${JSON.stringify([jsonLd, breadcrumbLd])}</script>
-            <article itemscope itemtype="https://schema.org/Product">
-              <h1 itemprop="name">${emoji} ${escapeHtml(plant.name)}</h1>
+            <article itemscope itemtype="https://schema.org/Article">
+              <h1 itemprop="headline">${emoji} ${escapeHtml(plant.name)}</h1>
               ${plant.scientific_name ? `<p style="font-style: italic; color: #065f46; margin-top: -10px;"><em>${escapeHtml(plant.scientific_name)}</em></p>` : ''}
               ${quickFacts.length ? `<div class="plant-meta">${quickFacts.join(' · ')}</div>` : ''}
               
