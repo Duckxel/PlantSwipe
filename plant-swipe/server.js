@@ -29690,36 +29690,47 @@ async function generateCrawlerHtml(req, pagePath) {
             if (owner) ownerName = owner.display_name
           }
 
-          // Get plant count (with timeout) - using correct table 'bookmark_items'
-          const { count } = await ssrQuery(
+          // Get all bookmark plants with details
+          const { data: bookmarkPlants } = await ssrQuery(
             supabaseServer
               .from('bookmark_items')
-              .select('id', { count: 'exact', head: true })
-              .eq('bookmark_id', listId),
-            'bookmark_plant_count'
-          )
-          plantCount = count || 0
-
-          // Get first plant image (with timeout)
-          const { data: listPlants } = await ssrQuery(
-            supabaseServer
-              .from('bookmark_items')
-              .select('plant_id')
+              .select('plant_id, added_at')
               .eq('bookmark_id', listId)
-              .limit(1),
-            'bookmark_plants_for_img'
+              .order('added_at', { ascending: false })
+              .limit(50),
+            'bookmark_plants'
           )
-          if (listPlants?.[0]?.plant_id) {
-            const { data: plantImg } = await ssrQuery(
-              supabaseServer
-                .from('plant_images')
-                .select('link')
-                .eq('plant_id', listPlants[0].plant_id)
-                .eq('use', 'primary')
-                .maybeSingle(),
-              'bookmark_plant_img'
-            )
-            if (plantImg?.link) listImage = ensureAbsoluteUrl(plantImg.link)
+          
+          let bookmarkPlantDetails = []
+          if (bookmarkPlants?.length) {
+            plantCount = bookmarkPlants.length
+            const plantIds = bookmarkPlants.map(bp => bp.plant_id).filter(Boolean)
+            
+            // Get plant details
+            if (plantIds.length > 0) {
+              const { data: plantDetails } = await ssrQuery(
+                supabaseServer
+                  .from('plants')
+                  .select('id, name, plant_type, scientific_name')
+                  .in('id', plantIds),
+                'bookmark_plant_details'
+              )
+              if (plantDetails) {
+                bookmarkPlantDetails = plantDetails
+                
+                // Get first plant image for bookmark cover
+                const { data: plantImg } = await ssrQuery(
+                  supabaseServer
+                    .from('plant_images')
+                    .select('link')
+                    .eq('plant_id', plantDetails[0].id)
+                    .eq('use', 'primary')
+                    .maybeSingle(),
+                  'bookmark_plant_img'
+                )
+                if (plantImg?.link) listImage = ensureAbsoluteUrl(plantImg.link)
+              }
+            }
           }
         } catch { }
 
@@ -29746,24 +29757,58 @@ async function generateCrawlerHtml(req, pagePath) {
         // Generate bookmark image tag if from media.aphylia.app
         const bookmarkImageTag = generateImageTag(listImage, `${bookmarkName} - Plant Collection on Aphylia`)
 
+        // Plant type emojis for visual appeal
+        const plantTypeEmojis = {
+          'vegetable': '🥬', 'fruit': '🍎', 'herb': '🌿', 'flower': '🌸',
+          'tree': '🌳', 'shrub': '🌲', 'succulent': '🌵', 'cactus': '🌵',
+          'vine': '🍇', 'grass': '🌾', 'fern': '🌿', 'aquatic': '🪷',
+          'bulb': '🌷', 'palm': '🌴', 'bamboo': '🎋'
+        }
+        
         pageContent = `
-          <article>
-            <h1>🔖 ${escapeHtml(bookmarkName)} - ${tr.bookmarkTitle}</h1>
+          <article itemscope itemtype="https://schema.org/Collection">
+            <h1 itemprop="name">🔖 ${escapeHtml(bookmarkName)}</h1>
             <div class="plant-meta">
               🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved}
               ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a>` : ''}
             </div>
             
-            ${bookmarkImageTag ? `<figure itemscope itemtype="https://schema.org/ImageObject">
+            ${bookmarkImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
               ${bookmarkImageTag}
               <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(bookmarkName)}</figcaption>
             </figure>` : ''}
             
-            <p>${tr.bookmarksCarefully} 🌱</p>
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
+            <p itemprop="description">${tr.bookmarksCarefully} 🌱</p>
+            
+            ${bookmarkPlantDetails.length > 0 ? `
+              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans cette collection' : 'Plants in this Collection'}</h2>
+              <div style="display: grid; gap: 12px; margin: 20px 0;">
+                ${bookmarkPlantDetails.map(plant => {
+                  const emoji = plantTypeEmojis[plant.plant_type?.toLowerCase()] || '🌱'
+                  return `
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #10b981;">
+                      <a href="/plants/${encodeURIComponent(plant.id)}" style="text-decoration: none; color: #065f46; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 20px;">${emoji}</span>
+                        <div>
+                          <div>${escapeHtml(plant.name)}</div>
+                          ${plant.scientific_name ? `<div style="font-size: 12px; color: #6b7280; font-style: italic; font-weight: normal;">${escapeHtml(plant.scientific_name)}</div>` : ''}
+                        </div>
+                      </a>
+                    </div>
+                  `
+                }).join('')}
+              </div>
+            ` : `<p style="color: #6b7280;">${detectedLang === 'fr' ? 'Cette collection est vide.' : 'This collection is empty.'}</p>`}
+            
+            <div style="margin: 32px 0; padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
+              <strong>🔖 ${detectedLang === 'fr' ? 'Voir la collection complète' : 'View Full Collection'}</strong><br>
+              ${detectedLang === 'fr' ? 'Pour créer vos propres collections et sauvegarder vos plantes préférées' : 'To create your own collections and save your favorite plants'}:<br>
+              <a href="${escapeHtml(canonicalUrl)}" style="color: #059669; font-weight: 600;">${detectedLang === 'fr' ? 'Visiter Aphylia →' : 'Visit Aphylia →'}</a>
+            </div>
             
             <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
             <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              ${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">👤 ${escapeHtml(ownerName)}</a>` : ''}
               <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
               <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
               <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
