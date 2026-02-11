@@ -3569,60 +3569,8 @@ app.use((req, res, next) => {
 // llms.txt is the emerging standard for AI agent discovery (like robots.txt for LLMs)
 // See: https://llmstxt.org/
 
-app.get('/llms.txt', (_req, res) => {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-  res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800')
-  res.send(`# Aphylia - Plant Care & Gardening Knowledge Platform
-# https://aphylia.app
-
-> Aphylia is a free plant care application that helps gardeners discover, identify, and care for plants. It provides comprehensive growing guides, care instructions, and gardening knowledge for thousands of plant species.
-
-## About Aphylia
-
-Aphylia is a web-based gardening companion app serving the European Union. It features:
-- Comprehensive plant database with detailed care guides for thousands of species
-- Garden management and tracking tools
-- Smart care reminders (watering, fertilizing, pruning schedules)
-- Plant identification
-- Community features (public gardens, profiles, plant collections)
-- Blog with expert gardening advice and seasonal guides
-- Available in English and French
-
-## Key Pages
-
-- [Plant Search](https://aphylia.app/search): Search plants by name, care level, light needs, or growing conditions
-- [Plant Discovery](https://aphylia.app/discovery): Swipe-based plant discovery to find your perfect matches
-- [Community Gardens](https://aphylia.app/gardens): Explore gardens from the community
-- [Blog](https://aphylia.app/blog): Gardening tips, seasonal guides, and plant care articles
-- [About](https://aphylia.app/about): Learn more about Aphylia
-- [Download](https://aphylia.app/download): Get the app (PWA, web, mobile)
-- [Pricing](https://aphylia.app/pricing): Free to use with premium features coming soon
-
-## Plant Information
-
-Each plant page (e.g. https://aphylia.app/plants/{id}) includes:
-- Common and scientific names
-- Complete care guide (watering, sunlight, soil, temperature)
-- Growing calendar (sowing, flowering, fruiting months)
-- Toxicity information for humans and pets
-- Companion plants
-- Propagation methods
-- Pest and disease information
-- Habitat and origin details
-- Nutritional and medicinal information where applicable
-
-## API for AI Agents
-
-- Sitemap: https://aphylia.app/sitemap.xml
-- Full AI context: https://aphylia.app/llms-full.txt
-
-## Contact
-
-- Website: https://aphylia.app
-- Contact: https://aphylia.app/contact
-- Business inquiries: https://aphylia.app/contact/business
-`)
-})
+// /llms.txt is a static file in public/llms.txt (served by express.static / nginx)
+// Only /llms-full.txt is dynamic because it queries the database for live stats
 
 app.get('/llms-full.txt', async (_req, res) => {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
