@@ -27537,7 +27537,6 @@ app.get('/llms-full.txt', async (req, res) => {
       if (batch.length < batchSize) break
     }
 
-    lines.push(`Total: ${allPlants.length} plants`)
     lines.push('')
 
     for (const p of allPlants) {
@@ -27613,7 +27612,6 @@ app.get('/llms-full.txt', async (req, res) => {
       .limit(200)
 
     if (posts?.length) {
-      lines.push(`Total: ${posts.length} published articles`)
       lines.push('')
       for (const post of posts) {
         const pubDate = post.published_at ? new Date(post.published_at).toISOString().slice(0, 10) : ''
@@ -27649,7 +27647,6 @@ app.get('/llms-full.txt', async (req, res) => {
       .limit(500)
 
     if (gardens?.length) {
-      lines.push(`Total: ${gardens.length} public gardens`)
       lines.push('')
       for (const g of gardens) {
         lines.push(`### ${g.name || 'Unnamed Garden'}`)
@@ -27685,7 +27682,6 @@ app.get('/llms-full.txt', async (req, res) => {
       .limit(500)
 
     if (profiles?.length) {
-      lines.push(`Total: ${profiles.length} public profiles`)
       lines.push('')
       for (const p of profiles) {
         const name = p.display_name || p.username
@@ -27759,7 +27755,6 @@ app.get('/llms-full.txt', async (req, res) => {
         }
       }
 
-      lines.push(`Total: ${bookmarks.length} public collections`)
       lines.push('')
       for (const b of bookmarks) {
         lines.push(`### ${b.name || 'Unnamed Collection'}`)

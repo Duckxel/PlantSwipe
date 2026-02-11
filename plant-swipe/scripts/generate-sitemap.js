@@ -710,8 +710,6 @@ async function generateLlmsTxt(counts) {
   // Fetch additional data for the llms.txt if DB is available
   let samplePlants = []
   let recentBlogPosts = []
-  let plantTypeDistribution = []
-  let totalPlantCount = counts.plantCount || 0
 
   if (client) {
     try {
@@ -758,24 +756,6 @@ async function generateLlmsTxt(counts) {
       if (posts) recentBlogPosts = posts
     } catch { }
 
-    try {
-      // Get plant type distribution (approximate, from sample)
-      const { data: allTypes } = await client
-        .from('plants')
-        .select('plant_type')
-      if (allTypes) {
-        const typeCount = {}
-        for (const p of allTypes) {
-          const t = p.plant_type || 'other'
-          typeCount[t] = (typeCount[t] || 0) + 1
-        }
-        plantTypeDistribution = Object.entries(typeCount)
-          .sort((a, b) => b[1] - a[1])
-          .map(([type, count]) => ({ type, count }))
-        // Use actual total from DB since we fetched all
-        totalPlantCount = allTypes.length
-      }
-    } catch { }
   }
 
   // Build the llms.txt content
@@ -791,7 +771,7 @@ async function generateLlmsTxt(counts) {
   lines.push(``)
   lines.push(`### Core Features`)
   lines.push(``)
-  lines.push(`- **Plant Encyclopedia**: Searchable database of ${totalPlantCount.toLocaleString()} plant species with detailed botanical data, care guides, growing calendars, companion planting, toxicity information, propagation methods, and high-quality photos.`)
+  lines.push(`- **Plant Encyclopedia**: Searchable database of thousands of plant species with detailed botanical data, care guides, growing calendars, companion planting, toxicity information, propagation methods, and high-quality photos.`)
   lines.push(`- **Plant Discovery**: Swipe-based plant matching (swipe right to save, left to skip) to build a personalized garden wishlist.`)
   lines.push(`- **Garden Management**: Create and manage multiple gardens, track plants, monitor care tasks, and log progress with streaks.`)
   lines.push(`- **Smart Care Reminders**: Automated reminders for watering, fertilizing, pruning, and seasonal tasks based on each plant's needs.`)
@@ -805,25 +785,6 @@ async function generateLlmsTxt(counts) {
   lines.push(`- English (default, no URL prefix)`)
   lines.push(`- French (URL prefix \`/fr/\`)`)
   lines.push(``)
-
-  // ── Live Database Stats ──────────────────────────────────────
-  lines.push(`### Database Stats (as of ${now})`)
-  lines.push(``)
-  lines.push(`- Plants: ${totalPlantCount.toLocaleString()}`)
-  lines.push(`- Blog posts: ${counts.blogCount}`)
-  lines.push(`- Public gardens: ${counts.gardenCount}`)
-  lines.push(`- Public profiles: ${counts.profileCount}`)
-  lines.push(`- Public bookmark collections: ${counts.bookmarkCount}`)
-  lines.push(``)
-
-  if (plantTypeDistribution.length > 0) {
-    lines.push(`### Plant Type Distribution`)
-    lines.push(``)
-    for (const { type, count } of plantTypeDistribution) {
-      lines.push(`- ${type}: ${count}`)
-    }
-    lines.push(``)
-  }
 
   // ── Docs ─────────────────────────────────────────────────────
   lines.push(`## Docs`)
@@ -1028,5 +989,5 @@ async function generateLlmsTxt(counts) {
 
   await fs.writeFile(llmsPath, lines.join('\n'), 'utf8')
   const llmsRelPath = path.relative(appRoot, llmsPath)
-  console.log(`[sitemap] Generated llms.txt (${totalPlantCount} plants, ${counts.blogCount} blogs, ${counts.gardenCount} gardens, ${counts.profileCount} profiles) → ${llmsRelPath}`)
+  console.log(`[sitemap] Generated llms.txt → ${llmsRelPath}`)
 }
