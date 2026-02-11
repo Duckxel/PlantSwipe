@@ -28013,23 +28013,22 @@ async function generateCrawlerHtml(req, pagePath) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
         resourceFound = false
       } else {
-        // Query base plant data (non-translatable fields now include scientific_name, family, level_sun, maintenance_level, season)
+        // Query base plant data with ALL available fields for rich SEO content
         const { data: basePlant, error: plantError } = await ssrQuery(
           supabaseServer
             .from('plants')
-            .select('id, name, plant_type, utility, watering_type, flowering_month, scientific_name, family, level_sun, maintenance_level, season')
+            .select('id, name, plant_type, utility, watering_type, flowering_month, scientific_name, family, level_sun, maintenance_level, season, comestible_part, fruit_type, spiked, scent, multicolor, bicolor, temperature_max, temperature_min, temperature_ideal, hygrometry, division, soil, sowing_month, fruiting_month, height_cm, wingspan_cm, tutoring, sow_type, separation_cm, transplanting, infusion, aromatherapy, melliferous, polenizer, be_fertilizer, conservation_status, companions, pests, diseases, status')
             .eq('id', plantId)
             .maybeSingle(),
           'plant_lookup'
         )
 
-        // Query translated fields from plant_translations for the detected language
-        // Note: scientific_name, family, level_sun, maintenance_level, season were migrated to plants table
+        // Query ALL translated fields from plant_translations for the detected language
         const ssrLang = detectedLang || 'en'
         const { data: translation } = await ssrQuery(
           supabaseServer
             .from('plant_translations')
-            .select('name, overview, tags, origin')
+            .select('name, overview, tags, origin, given_names, scientific_name, family, life_cycle, season, foliage_persistance, toxicity_human, toxicity_pets, allergens, symbolism, living_space, composition, maintenance_level, habitat, level_sun, advice_soil, advice_mulching, advice_fertilizer, advice_tutoring, advice_sowing, cut, advice_medicinal, advice_infusion, nutritional_intake, recipes_ideas, ground_effect, pests, diseases')
             .eq('plant_id', plantId)
             .eq('language', ssrLang)
             .maybeSingle(),
@@ -28042,7 +28041,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: enData } = await ssrQuery(
             supabaseServer
               .from('plant_translations')
-              .select('name, overview, tags, origin')
+              .select('name, overview, tags, origin, given_names, scientific_name, family, life_cycle, season, foliage_persistance, toxicity_human, toxicity_pets, allergens, symbolism, living_space, composition, maintenance_level, habitat, level_sun, advice_soil, advice_mulching, advice_fertilizer, advice_tutoring, advice_sowing, cut, advice_medicinal, advice_infusion, nutritional_intake, recipes_ideas, ground_effect, pests, diseases')
               .eq('plant_id', plantId)
               .eq('language', 'en')
               .maybeSingle(),
@@ -28054,21 +28053,48 @@ async function generateCrawlerHtml(req, pagePath) {
         // Use target language translation, falling back to English for empty fields
         const finalTranslation = translation || enTranslation
 
+        // Helper to pick first non-empty array or value between translated and English fallback
+        const pickArr = (field) => {
+          const tv = translation?.[field]
+          const ev = enTranslation?.[field]
+          return (Array.isArray(tv) && tv.length > 0) ? tv : (Array.isArray(ev) && ev.length > 0) ? ev : null
+        }
+        const pickStr = (field) => translation?.[field] || enTranslation?.[field] || null
+
         // Merge base plant with translations, with field-level fallback to English
-        // Non-translatable fields (scientific_name, family, level_sun, maintenance_level, season) come from basePlant
         const plant = basePlant ? {
           ...basePlant,
           name: translation?.name || enTranslation?.name || basePlant.name,
           // Non-translatable fields come from plants table
-          scientific_name: basePlant.scientific_name,
-          family: basePlant.family,
-          level_sun: basePlant.level_sun,
-          maintenance_level: basePlant.maintenance_level,
-          season: basePlant.season,
+          scientific_name: pickStr('scientific_name') || basePlant.scientific_name,
+          family: pickStr('family') || basePlant.family,
+          level_sun: pickStr('level_sun') || basePlant.level_sun,
+          maintenance_level: pickStr('maintenance_level') || basePlant.maintenance_level,
+          season: pickArr('season') || basePlant.season,
           // Translatable fields come from plant_translations with fallback
           overview: translation?.overview || enTranslation?.overview,
-          tags: (translation?.tags?.length ? translation.tags : null) || enTranslation?.tags,
-          origin: (translation?.origin?.length ? translation.origin : null) || enTranslation?.origin,
+          tags: pickArr('tags'),
+          origin: pickArr('origin'),
+          // Additional translated fields for rich SEO content
+          given_names: pickArr('given_names'),
+          life_cycle: pickStr('life_cycle'),
+          foliage_persistance: pickStr('foliage_persistance'),
+          toxicity_human: pickStr('toxicity_human'),
+          toxicity_pets: pickStr('toxicity_pets'),
+          allergens: pickArr('allergens'),
+          symbolism: pickArr('symbolism'),
+          living_space: pickStr('living_space'),
+          composition: pickArr('composition'),
+          habitat: pickArr('habitat'),
+          advice_soil: pickStr('advice_soil'),
+          advice_fertilizer: pickStr('advice_fertilizer'),
+          advice_sowing: pickStr('advice_sowing'),
+          advice_medicinal: pickStr('advice_medicinal'),
+          nutritional_intake: pickArr('nutritional_intake'),
+          recipes_ideas: pickArr('recipes_ideas'),
+          ground_effect: pickStr('ground_effect'),
+          tr_pests: pickArr('pests'),
+          tr_diseases: pickArr('diseases'),
         } : null
 
         ssrDebug('plant_query_result', {
@@ -28184,31 +28210,125 @@ async function generateCrawlerHtml(req, pagePath) {
           }
           // If no image found, image stays null - no fallback to banner
 
-          // Build structured content for the page
+          // Fetch companion plant names for internal linking
+          let companionPlantNames = []
+          if (plant.companions?.length && supabaseServer) {
+            try {
+              const companionIds = plant.companions.slice(0, 8)
+              const { data: companionData } = await ssrQuery(
+                supabaseServer
+                  .from('plants')
+                  .select('id, name')
+                  .in('id', companionIds),
+                'plant_companions'
+              )
+              if (companionData) companionPlantNames = companionData
+            } catch { }
+          }
+
+          // Build structured content for the page - COMPREHENSIVE for unique SEO
           const quickFacts = []
           if (plant.scientific_name) quickFacts.push(`🔬 <em>${escapeHtml(plant.scientific_name)}</em>`)
           if (plant.family) quickFacts.push(`👨‍👩‍👧 ${tr.family}: ${escapeHtml(plant.family)}`)
           if (plant.plant_type) quickFacts.push(`${emoji} ${escapeHtml(plant.plant_type)}`)
-          if (plant.origin?.length) quickFacts.push(`🌍 ${tr.origin}: ${plant.origin.slice(0, 2).map(o => escapeHtml(o)).join(', ')}`)
+          if (plant.origin?.length) quickFacts.push(`🌍 ${tr.origin}: ${plant.origin.map(o => escapeHtml(o)).join(', ')}`)
+          if (plant.life_cycle) quickFacts.push(`🔄 ${escapeHtml(plant.life_cycle)}`)
+          if (plant.living_space) quickFacts.push(`🏠 ${escapeHtml(plant.living_space)}`)
+          if (plant.conservation_status && plant.conservation_status !== 'safe') quickFacts.push(`⚠️ ${escapeHtml(plant.conservation_status)}`)
 
           const careInfo = []
           if (light) careInfo.push(light)
           if (plant.watering_type?.length) careInfo.push(`💧 ${plant.watering_type.map(w => escapeHtml(w)).join(', ')}`)
           if (difficulty) careInfo.push(difficulty)
           if (plant.season?.length) careInfo.push(`🌿 ${plant.season.map(s => escapeHtml(s)).join(', ')}`)
+          if (plant.foliage_persistance) careInfo.push(`🍃 ${escapeHtml(plant.foliage_persistance)}`)
+
+          // Temperature info
+          const tempInfo = []
+          if (plant.temperature_min != null && plant.temperature_max != null) {
+            tempInfo.push(`🌡️ ${plant.temperature_min}°C - ${plant.temperature_max}°C`)
+          } else if (plant.temperature_ideal != null) {
+            tempInfo.push(`🌡️ ${detectedLang === 'fr' ? 'Idéal' : 'Ideal'}: ${plant.temperature_ideal}°C`)
+          }
+          if (plant.hygrometry) tempInfo.push(`💦 ${detectedLang === 'fr' ? 'Humidité' : 'Humidity'}: ${plant.hygrometry}%`)
+
+          // Size info
+          const sizeInfo = []
+          if (plant.height_cm) sizeInfo.push(`📏 ${detectedLang === 'fr' ? 'Hauteur' : 'Height'}: ${plant.height_cm >= 100 ? (plant.height_cm / 100).toFixed(1) + 'm' : plant.height_cm + 'cm'}`)
+          if (plant.wingspan_cm) sizeInfo.push(`↔️ ${detectedLang === 'fr' ? 'Envergure' : 'Spread'}: ${plant.wingspan_cm >= 100 ? (plant.wingspan_cm / 100).toFixed(1) + 'm' : plant.wingspan_cm + 'cm'}`)
+          if (plant.separation_cm) sizeInfo.push(`📐 ${detectedLang === 'fr' ? 'Espacement' : 'Spacing'}: ${plant.separation_cm}cm`)
+
+          // Toxicity info
+          const toxInfo = []
+          if (plant.toxicity_human) toxInfo.push(`🧑 ${detectedLang === 'fr' ? 'Humains' : 'Humans'}: ${escapeHtml(plant.toxicity_human)}`)
+          if (plant.toxicity_pets) toxInfo.push(`🐾 ${detectedLang === 'fr' ? 'Animaux' : 'Pets'}: ${escapeHtml(plant.toxicity_pets)}`)
+
+          // Month formatting helper
+          const monthNames = detectedLang === 'fr'
+            ? ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+            : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+          const formatMonths = (monthArr) => {
+            if (!monthArr?.length) return ''
+            return monthArr.map(m => {
+              const idx = monthNames.findIndex(n => n.toLowerCase() === m.toLowerCase())
+              return idx >= 0 ? monthNames[idx] : m.charAt(0).toUpperCase() + m.slice(1)
+            }).join(', ')
+          }
 
           // Generate image tag if we have an image from media.aphylia.app
           const plantImageTag = generateImageTag(image, `${plant.name} - Plant photo on Aphylia`)
 
+          // Build JSON-LD structured data
+          const jsonLd = {
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            'name': plant.name,
+            'description': plant.overview || description,
+            'url': canonicalUrl,
+            'brand': { '@type': 'Brand', 'name': 'Aphylia' },
+            'category': plant.plant_type || 'Plant',
+          }
+          if (plant.scientific_name) jsonLd.alternateName = plant.scientific_name
+          if (image) jsonLd.image = image
+          // Add FAQ-like structured data via additionalProperty
+          const props = []
+          if (plant.family) props.push({ '@type': 'PropertyValue', 'name': 'Family', 'value': plant.family })
+          if (plant.level_sun) props.push({ '@type': 'PropertyValue', 'name': 'Sunlight', 'value': plant.level_sun })
+          if (plant.maintenance_level) props.push({ '@type': 'PropertyValue', 'name': 'Difficulty', 'value': plant.maintenance_level })
+          if (plant.living_space) props.push({ '@type': 'PropertyValue', 'name': 'Growing Space', 'value': plant.living_space })
+          if (plant.height_cm) props.push({ '@type': 'PropertyValue', 'name': 'Height', 'value': `${plant.height_cm} cm`, 'unitCode': 'CMT' })
+          if (plant.temperature_min != null) props.push({ '@type': 'PropertyValue', 'name': 'Min Temperature', 'value': `${plant.temperature_min}°C` })
+          if (plant.temperature_max != null) props.push({ '@type': 'PropertyValue', 'name': 'Max Temperature', 'value': `${plant.temperature_max}°C` })
+          if (plant.watering_type?.length) props.push({ '@type': 'PropertyValue', 'name': 'Watering', 'value': plant.watering_type.join(', ') })
+          if (plant.life_cycle) props.push({ '@type': 'PropertyValue', 'name': 'Life Cycle', 'value': plant.life_cycle })
+          if (plant.toxicity_human) props.push({ '@type': 'PropertyValue', 'name': 'Toxicity (Humans)', 'value': plant.toxicity_human })
+          if (plant.toxicity_pets) props.push({ '@type': 'PropertyValue', 'name': 'Toxicity (Pets)', 'value': plant.toxicity_pets })
+          if (props.length > 0) jsonLd.additionalProperty = props
+
+          // BreadcrumbList for plant pages
+          const breadcrumbLd = {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            'itemListElement': [
+              { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': siteUrl },
+              { '@type': 'ListItem', 'position': 2, 'name': detectedLang === 'fr' ? 'Recherche' : 'Search', 'item': `${siteUrl}/search` },
+              { '@type': 'ListItem', 'position': 3, 'name': plant.name, 'item': canonicalUrl },
+            ]
+          }
+
           pageContent = `
+            <script type="application/ld+json">${JSON.stringify([jsonLd, breadcrumbLd])}</script>
             <article itemscope itemtype="https://schema.org/Product">
               <h1 itemprop="name">${emoji} ${escapeHtml(plant.name)}</h1>
+              ${plant.scientific_name ? `<p style="font-style: italic; color: #065f46; margin-top: -10px;"><em>${escapeHtml(plant.scientific_name)}</em></p>` : ''}
               ${quickFacts.length ? `<div class="plant-meta">${quickFacts.join(' · ')}</div>` : ''}
               
               ${plantImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
                 ${plantImageTag}
-                <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(plant.name)}</figcaption>
+                <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(plant.name)}${plant.scientific_name ? ` (${escapeHtml(plant.scientific_name)})` : ''}</figcaption>
               </figure>` : ''}
+              
+              ${plant.given_names?.length ? `<p><strong>${detectedLang === 'fr' ? 'Autres noms' : 'Also known as'}:</strong> ${plant.given_names.map(n => escapeHtml(n)).join(', ')}</p>` : ''}
               
               ${plant.overview ? `
                 <div itemprop="description">
@@ -28222,12 +28342,62 @@ async function generateCrawlerHtml(req, pagePath) {
                 <div class="plant-meta">${careInfo.join(' · ')}</div>
               ` : ''}
               
-              ${plant.utility?.length ? `
-                <h2>✨ ${tr.plantGreatFor}</h2>
-                <ul>${plant.utility.slice(0, 5).map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
+              ${tempInfo.length || sizeInfo.length ? `
+                <h2>📊 ${detectedLang === 'fr' ? 'Caractéristiques' : 'Characteristics'}</h2>
+                <ul>
+                  ${tempInfo.map(t => `<li>${t}</li>`).join('')}
+                  ${sizeInfo.map(s => `<li>${s}</li>`).join('')}
+                </ul>
               ` : ''}
               
-              ${plant.tags?.length ? `<p><strong>${tr.tags}:</strong> ${plant.tags.slice(0, 8).map(t => `#${escapeHtml(t)}`).join(' ')}</p>` : ''}
+              ${plant.flowering_month?.length ? `<p>🌸 ${tr.blooms || 'Blooms'}: ${formatMonths(plant.flowering_month)}</p>` : ''}
+              ${plant.sowing_month?.length ? `<p>🌱 ${detectedLang === 'fr' ? 'Semis' : 'Sowing'}: ${formatMonths(plant.sowing_month)}</p>` : ''}
+              ${plant.fruiting_month?.length ? `<p>🍎 ${detectedLang === 'fr' ? 'Fructification' : 'Fruiting'}: ${formatMonths(plant.fruiting_month)}</p>` : ''}
+              
+              ${plant.soil?.length ? `<p>🪴 ${detectedLang === 'fr' ? 'Sol' : 'Soil'}: ${plant.soil.map(s => escapeHtml(s)).join(', ')}</p>` : ''}
+              ${plant.advice_soil ? `<p>${escapeHtml(plant.advice_soil)}</p>` : ''}
+              
+              ${plant.division?.length ? `<p>✂️ ${detectedLang === 'fr' ? 'Multiplication' : 'Propagation'}: ${plant.division.map(d => escapeHtml(d)).join(', ')}</p>` : ''}
+              ${plant.advice_sowing ? `<p>📝 ${escapeHtml(plant.advice_sowing)}</p>` : ''}
+              
+              ${plant.advice_fertilizer ? `<p>🧪 ${detectedLang === 'fr' ? 'Engrais' : 'Fertilizing'}: ${escapeHtml(plant.advice_fertilizer)}</p>` : ''}
+              
+              ${plant.utility?.length ? `
+                <h2>✨ ${tr.plantGreatFor}</h2>
+                <ul>${plant.utility.map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
+              ` : ''}
+              
+              ${toxInfo.length ? `
+                <h2>⚠️ ${detectedLang === 'fr' ? 'Toxicité' : 'Toxicity'}</h2>
+                <ul>${toxInfo.map(t => `<li>${t}</li>`).join('')}</ul>
+              ` : ''}
+              
+              ${plant.habitat?.length ? `<p>🌍 ${detectedLang === 'fr' ? 'Habitat' : 'Habitat'}: ${plant.habitat.map(h => escapeHtml(h)).join(', ')}</p>` : ''}
+              
+              ${(plant.tr_pests?.length || plant.pests?.length) ? `
+                <h2>🐛 ${detectedLang === 'fr' ? 'Parasites & Maladies' : 'Pests & Diseases'}</h2>
+                ${(plant.tr_pests?.length || plant.pests?.length) ? `<p><strong>${detectedLang === 'fr' ? 'Parasites' : 'Pests'}:</strong> ${(plant.tr_pests || plant.pests).map(p => escapeHtml(p)).join(', ')}</p>` : ''}
+                ${(plant.tr_diseases?.length || plant.diseases?.length) ? `<p><strong>${detectedLang === 'fr' ? 'Maladies' : 'Diseases'}:</strong> ${(plant.tr_diseases || plant.diseases).map(d => escapeHtml(d)).join(', ')}</p>` : ''}
+              ` : ''}
+              
+              ${plant.advice_medicinal ? `<p>💊 ${detectedLang === 'fr' ? 'Usage médicinal' : 'Medicinal use'}: ${escapeHtml(plant.advice_medicinal)}</p>` : ''}
+              ${plant.nutritional_intake?.length ? `<p>🥗 ${detectedLang === 'fr' ? 'Apports nutritionnels' : 'Nutritional value'}: ${plant.nutritional_intake.map(n => escapeHtml(n)).join(', ')}</p>` : ''}
+              ${plant.recipes_ideas?.length ? `<p>🍳 ${detectedLang === 'fr' ? 'Idées recettes' : 'Recipe ideas'}: ${plant.recipes_ideas.map(r => escapeHtml(r)).join(', ')}</p>` : ''}
+              
+              ${plant.symbolism?.length ? `<p>🎭 ${detectedLang === 'fr' ? 'Symbolisme' : 'Symbolism'}: ${plant.symbolism.map(s => escapeHtml(s)).join(', ')}</p>` : ''}
+              ${plant.composition?.length ? `<p>🏡 ${detectedLang === 'fr' ? 'Utilisation' : 'Usage'}: ${plant.composition.map(c => escapeHtml(c)).join(', ')}</p>` : ''}
+              
+              ${plant.melliferous ? `<p>🐝 ${detectedLang === 'fr' ? 'Plante mellifère - attire les pollinisateurs' : 'Melliferous plant - attracts pollinators'}</p>` : ''}
+              ${plant.polenizer?.length ? `<p>🦋 ${detectedLang === 'fr' ? 'Pollinisateurs' : 'Pollinators'}: ${plant.polenizer.map(p => escapeHtml(p)).join(', ')}</p>` : ''}
+              
+              ${companionPlantNames.length > 0 ? `
+                <h2>🤝 ${detectedLang === 'fr' ? 'Plantes compagnes' : 'Companion Plants'}</h2>
+                <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+                  ${companionPlantNames.map(cp => `<li><a href="/plants/${encodeURIComponent(cp.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(cp.name)}</a></li>`).join('')}
+                </ul>
+              ` : ''}
+              
+              ${plant.tags?.length ? `<p><strong>${tr.tags}:</strong> ${plant.tags.map(t => `#${escapeHtml(t)}`).join(' ')}</p>` : ''}
               
               <p style="margin-top: 20px;">
                 <a href="${escapeHtml(canonicalUrl)}">📖 ${tr.plantViewFull} →</a>
@@ -28264,11 +28434,11 @@ async function generateCrawlerHtml(req, pagePath) {
       let post = null
       let postError = null
 
-      // First try by slug
+      // First try by slug - fetch ALL content including body for rich SEO
       const { data: postBySlug, error: slugError } = await ssrQuery(
         supabaseServer
           .from('blog_posts')
-          .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
+          .select('id, title, slug, excerpt, body_html, cover_image_url, author_name, published_at, updated_at, seo_title, seo_description, tags')
           .eq('slug', slugOrId)
           .eq('is_published', true)
           .maybeSingle(),
@@ -28283,7 +28453,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: postById, error: idError } = await ssrQuery(
           supabaseServer
             .from('blog_posts')
-            .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
+            .select('id, title, slug, excerpt, body_html, cover_image_url, author_name, published_at, updated_at, seo_title, seo_description, tags')
             .eq('id', slugOrId)
             .eq('is_published', true)
             .maybeSingle(),
@@ -28307,30 +28477,33 @@ async function generateCrawlerHtml(req, pagePath) {
         console.log(`[ssr] ✓ Found blog post: ${post.title}`)
 
         // Estimate read time from body_html content
-        const readTime = post.body_html ? Math.ceil(post.body_html.replace(/<[^>]*>/g, '').split(/\s+/).length / 200) : 5
+        const bodyPlainText = post.body_html ? post.body_html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : ''
+        const wordCount = bodyPlainText ? bodyPlainText.split(/\s+/).length : 0
+        const readTime = wordCount > 0 ? Math.ceil(wordCount / 200) : 5
 
-        // Create engaging title
-        title = `${post.title} | ${tr.blogTitle} 📖`
+        // Use SEO title if available, otherwise create engaging title
+        title = post.seo_title || `${post.title} | ${tr.blogTitle}`
 
-        // Create compelling description with read time
-        const descParts = []
-        if (post.excerpt) {
-          descParts.push(post.excerpt.slice(0, 150))
-        } else if (post.body_html) {
-          const plainText = post.body_html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-          descParts.push(plainText.slice(0, 150))
+        // Use SEO description if available, otherwise build one
+        if (post.seo_description) {
+          description = post.seo_description
+        } else {
+          const descParts = []
+          if (post.excerpt) {
+            descParts.push(post.excerpt.slice(0, 150))
+          } else if (bodyPlainText) {
+            descParts.push(bodyPlainText.slice(0, 150))
+          }
+          if (readTime > 0) descParts.push(`${readTime} ${tr.blogMinRead}`)
+          if (post.author_name) descParts.push(`${tr.blogBy} ${post.author_name}`)
+          description = descParts.length > 0 ? descParts.join(' - ') : tr.blogDesc
         }
-        if (readTime > 0) descParts.push(`📚 ${readTime} ${tr.blogMinRead}`)
-        if (post.author_name) descParts.push(`✍️ ${tr.blogBy} ${post.author_name}`)
-
-        description = descParts.length > 0 ? descParts.join(' • ') : tr.blogDesc
 
         // Blog cover images - don't force dimensions
         if (post.cover_image_url) {
           image = ensureAbsoluteUrl(post.cover_image_url)
           imageAlt = `${post.title} - Aphylia Blog`
         }
-        // If no cover image, image stays null - no fallback
 
         // Use locale-specific date format
         const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
@@ -28343,14 +28516,74 @@ async function generateCrawlerHtml(req, pagePath) {
         // Generate blog cover image tag if from media.aphylia.app
         const blogImageTag = generateImageTag(image, `${post.title} - Aphylia Blog`)
 
+        // Fetch related blog posts for internal linking
+        let relatedPosts = []
+        try {
+          const { data: related } = await ssrQuery(
+            supabaseServer
+              .from('blog_posts')
+              .select('title, slug')
+              .eq('is_published', true)
+              .neq('id', post.id)
+              .order('published_at', { ascending: false })
+              .limit(5),
+            'blog_related_posts'
+          )
+          if (related) relatedPosts = related
+        } catch { }
+
+        // Build Article JSON-LD structured data
+        const articleJsonLd = {
+          '@context': 'https://schema.org',
+          '@type': 'Article',
+          'headline': post.title,
+          'description': post.excerpt || bodyPlainText.slice(0, 200),
+          'url': canonicalUrl,
+          'mainEntityOfPage': { '@type': 'WebPage', '@id': canonicalUrl },
+          'datePublished': post.published_at || undefined,
+          'dateModified': post.updated_at || post.published_at || undefined,
+          'wordCount': wordCount,
+          'publisher': {
+            '@type': 'Organization',
+            'name': 'Aphylia',
+            'url': siteUrl,
+            'logo': { '@type': 'ImageObject', 'url': `${siteUrl}/icons/icon-512x512.png` }
+          }
+        }
+        if (post.author_name) articleJsonLd.author = { '@type': 'Person', 'name': post.author_name }
+        if (image) articleJsonLd.image = image
+        if (post.tags?.length) articleJsonLd.keywords = post.tags.join(', ')
+
+        const blogBreadcrumbLd = {
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          'itemListElement': [
+            { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': siteUrl },
+            { '@type': 'ListItem', 'position': 2, 'name': 'Blog', 'item': `${siteUrl}/blog` },
+            { '@type': 'ListItem', 'position': 3, 'name': post.title, 'item': canonicalUrl },
+          ]
+        }
+
+        // CRITICAL: Include full body_html for crawlers - this is the main SEO content!
+        // Sanitize body_html to remove script tags but keep all other HTML
+        const sanitizedBody = post.body_html
+          ? post.body_html
+              .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+              .replace(/on\w+="[^"]*"/gi, '')
+              .replace(/on\w+='[^']*'/gi, '')
+          : ''
+
         pageContent = `
+          <script type="application/ld+json">${JSON.stringify([articleJsonLd, blogBreadcrumbLd])}</script>
           <article itemscope itemtype="https://schema.org/BlogPosting">
-            <h1 itemprop="headline">📖 ${escapeHtml(post.title)}</h1>
+            <h1 itemprop="headline">${escapeHtml(post.title)}</h1>
             <div class="plant-meta">
               ${post.author_name ? `✍️ ${tr.blogBy} <span itemprop="author">${escapeHtml(post.author_name)}</span>` : ''}
               ${publishDate ? ` · 📅 <time itemprop="datePublished" datetime="${post.published_at}">${publishDate}</time>` : ''}
               ${readTime > 0 ? ` · 📚 ${readTime} ${tr.blogMinRead}` : ''}
+              ${wordCount > 0 ? ` · ${wordCount.toLocaleString()} ${detectedLang === 'fr' ? 'mots' : 'words'}` : ''}
             </div>
+            ${post.tags?.length ? `<div style="margin: 12px 0; display: flex; flex-wrap: wrap; gap: 6px;">${post.tags.map(t => `<span style="display: inline-block; padding: 3px 10px; background: #f0fdf4; border-radius: 12px; font-size: 13px; color: #065f46;">#${escapeHtml(t)}</span>`).join('')}</div>` : ''}
             
             ${blogImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
               ${blogImageTag}
@@ -28358,9 +28591,21 @@ async function generateCrawlerHtml(req, pagePath) {
             </figure>` : ''}
             
             ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadFull} →</a></p>
             
-            <h2>🔗 ${detectedLang === 'fr' ? 'Plus d\'articles' : 'More Articles'}</h2>
+            ${sanitizedBody ? `
+              <div itemprop="articleBody" class="blog-content" style="margin: 24px 0; line-height: 1.8;">
+                ${sanitizedBody}
+              </div>
+            ` : ''}
+            
+            ${relatedPosts.length > 0 ? `
+              <h2>📚 ${detectedLang === 'fr' ? 'Articles similaires' : 'Related Articles'}</h2>
+              <ul>
+                ${relatedPosts.map(rp => `<li><a href="/blog/${escapeHtml(rp.slug)}">${escapeHtml(rp.title)}</a></li>`).join('')}
+              </ul>
+            ` : ''}
+            
+            <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
             <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
               <a href="/blog">📚 ${detectedLang === 'fr' ? 'Tous les articles' : 'All Articles'}</a>
               <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
@@ -28370,7 +28615,7 @@ async function generateCrawlerHtml(req, pagePath) {
             </nav>
           </article>
         `
-        console.log(`[ssr] Blog image: ${image}`)
+        console.log(`[ssr] Blog image: ${image}, body length: ${sanitizedBody.length}, words: ${wordCount}`)
       }
     }
 
@@ -28599,6 +28844,21 @@ async function generateCrawlerHtml(req, pagePath) {
             month: 'long',
           }) : null
 
+          // Fetch user's public bookmark lists for additional content
+          let userBookmarks = []
+          try {
+            const { data: bookmarks } = await ssrQuery(
+              supabaseServer
+                .from('bookmarks')
+                .select('id, name')
+                .eq('user_id', profile.id)
+                .eq('visibility', 'public')
+                .limit(6),
+              'profile_user_bookmarks'
+            )
+            if (bookmarks) userBookmarks = bookmarks
+          } catch { }
+
           // Generate avatar image tag if from media.aphylia.app
           const profileImageTag = generateImageTag(image, `${displayName} - Profile on Aphylia`, { 
             width: 150, 
@@ -28606,7 +28866,29 @@ async function generateCrawlerHtml(req, pagePath) {
             style: 'border-radius: 50%; margin: 16px 0;' 
           })
 
+          // Build Person JSON-LD structured data
+          const personJsonLd = {
+            '@context': 'https://schema.org',
+            '@type': 'Person',
+            'name': displayName,
+            'url': canonicalUrl,
+            'description': profile.bio || tr.profilePlantEnthusiast,
+          }
+          if (image) personJsonLd.image = image
+          if (profile.country) personJsonLd.homeLocation = { '@type': 'Place', 'name': profile.country }
+
+          const profileBreadcrumbLd = {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            'itemListElement': [
+              { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': siteUrl },
+              { '@type': 'ListItem', 'position': 2, 'name': detectedLang === 'fr' ? 'Profils' : 'Profiles', 'item': siteUrl },
+              { '@type': 'ListItem', 'position': 3, 'name': displayName, 'item': canonicalUrl },
+            ]
+          }
+
           pageContent = `
+            <script type="application/ld+json">${JSON.stringify([personJsonLd, profileBreadcrumbLd])}</script>
             <article itemscope itemtype="https://schema.org/Person">
               <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
               ${roleBadges.length > 0 ? `<div style="margin-bottom: 12px;">${roleBadges.join(' ')}</div>` : ''}
@@ -28623,6 +28905,7 @@ async function generateCrawlerHtml(req, pagePath) {
               
               ${profile.bio ? `<p itemprop="description" style="font-style: italic; margin-bottom: 20px;">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
               
+              <h2>📊 ${detectedLang === 'fr' ? 'Statistiques' : 'Statistics'}</h2>
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 20px 0; padding: 16px; background: #f0fdf4; border-radius: 12px;">
                 <div style="text-align: center;">
                   <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCount}</div>
@@ -28654,6 +28937,13 @@ async function generateCrawlerHtml(req, pagePath) {
               <h2>🏡 ${detectedLang === 'fr' ? 'Jardins de' : 'Gardens by'} ${escapeHtml(displayName)}</h2>
               <ul>
                 ${userGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+              </ul>
+              ` : ''}
+              
+              ${userBookmarks.length > 0 ? `
+              <h2>🔖 ${detectedLang === 'fr' ? 'Collections de' : 'Collections by'} ${escapeHtml(displayName)}</h2>
+              <ul>
+                ${userBookmarks.map(b => `<li><a href="/bookmarks/${encodeURIComponent(b.id)}">${escapeHtml(b.name || 'Collection')}</a></li>`).join('')}
               </ul>
               ` : ''}
               
@@ -28902,7 +29192,30 @@ async function generateCrawlerHtml(req, pagePath) {
           // Generate garden image tag if from media.aphylia.app
           const gardenImageTag = generateImageTag(image, `${gardenName} - Garden on Aphylia`)
 
+          // Build Garden JSON-LD structured data
+          const gardenJsonLd = {
+            '@context': 'https://schema.org',
+            '@type': 'Place',
+            'name': gardenName,
+            'description': description,
+            'url': canonicalUrl,
+          }
+          if (image) gardenJsonLd.image = image
+          if (gardenLocation) gardenJsonLd.address = { '@type': 'PostalAddress', 'addressLocality': garden.location_city || '', 'addressCountry': garden.location_country || '' }
+          if (ownerName) gardenJsonLd.author = { '@type': 'Person', 'name': ownerName }
+
+          const gardenBreadcrumbLd = {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            'itemListElement': [
+              { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': siteUrl },
+              { '@type': 'ListItem', 'position': 2, 'name': detectedLang === 'fr' ? 'Jardins' : 'Gardens', 'item': `${siteUrl}/gardens` },
+              { '@type': 'ListItem', 'position': 3, 'name': gardenName, 'item': canonicalUrl },
+            ]
+          }
+
           pageContent = `
+            <script type="application/ld+json">${JSON.stringify([gardenJsonLd, gardenBreadcrumbLd])}</script>
             <article itemscope itemtype="https://schema.org/Place">
               <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
               
@@ -29067,21 +29380,54 @@ async function generateCrawlerHtml(req, pagePath) {
             image = ensureAbsoluteUrl(latestWithImage.cover_image_url)
             imageAlt = `${tr.blogTitle} - ${latestWithImage.title}`
           }
-          // If no image found, image stays null - no fallback
+
+          // Build ItemList JSON-LD for blog listing
+          const blogListJsonLd = {
+            '@context': 'https://schema.org',
+            '@type': 'CollectionPage',
+            'name': tr.blogTitle,
+            'description': tr.blogDesc,
+            'url': canonicalUrl,
+            'mainEntity': {
+              '@type': 'ItemList',
+              'numberOfItems': posts.length,
+              'itemListElement': posts.map((p, i) => ({
+                '@type': 'ListItem',
+                'position': i + 1,
+                'name': p.title,
+                'url': `${siteUrl}/blog/${p.slug}`
+              }))
+            }
+          }
+          const blogListBreadcrumb = {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            'itemListElement': [
+              { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': siteUrl },
+              { '@type': 'ListItem', 'position': 2, 'name': 'Blog', 'item': canonicalUrl },
+            ]
+          }
+
+          // Use locale-specific date format for blog listing
+          const blogDateLocales = { en: 'en-US', fr: 'fr-FR' }
 
           pageContent = `
+            <script type="application/ld+json">${JSON.stringify([blogListJsonLd, blogListBreadcrumb])}</script>
             <article>
               <h1>📚 ${tr.blogTitle}</h1>
               <p>${tr.blogDesc}</p>
               <h2>${tr.blogLatest}</h2>
-              <ul>
-                ${posts.map(p => `
-                  <li>
-                    <a href="/blog/${escapeHtml(p.slug)}"><strong>${escapeHtml(p.title)}</strong></a>
-                    ${p.excerpt ? `<br><em>${escapeHtml(p.excerpt.slice(0, 100))}...</em>` : ''}
-                  </li>
-                `).join('')}
-              </ul>
+              ${posts.map(p => {
+                const pubDate = p.published_at ? new Date(p.published_at).toLocaleDateString(blogDateLocales[detectedLang] || 'en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
+                return `
+                  <div style="margin-bottom: 20px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 12px;">
+                    <h3 style="margin: 0 0 8px 0;"><a href="/blog/${escapeHtml(p.slug)}" style="text-decoration: none; color: #065f46;">${escapeHtml(p.title)}</a></h3>
+                    ${pubDate ? `<div style="font-size: 13px; color: #6b7280; margin-bottom: 8px;">📅 ${pubDate}</div>` : ''}
+                    ${p.excerpt ? `<p style="margin: 0; color: #444;">${escapeHtml(p.excerpt)}</p>` : ''}
+                    <a href="/blog/${escapeHtml(p.slug)}" style="display: inline-block; margin-top: 8px; font-size: 14px; color: #059669;">${detectedLang === 'fr' ? 'Lire la suite' : 'Read more'} →</a>
+                  </div>
+                `
+              }).join('')}
               <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
               <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
                 <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
@@ -29384,10 +29730,11 @@ async function generateCrawlerHtml(req, pagePath) {
       if (bookmarkList) {
         console.log(`[ssr] ✓ Found bookmark list: ${bookmarkList.name}`)
 
-        // Get owner and plant count
+        // Get owner and plant count + actual plant details
         let ownerName = null
         let plantCount = 0
         let listImage = null
+        let bookmarkPlantDetails = []
 
         try {
           if (bookmarkList.user_id) {
@@ -29402,83 +29749,152 @@ async function generateCrawlerHtml(req, pagePath) {
             if (owner) ownerName = owner.display_name
           }
 
-          // Get plant count (with timeout) - using correct table 'bookmark_items'
-          const { count } = await ssrQuery(
-            supabaseServer
-              .from('bookmark_items')
-              .select('id', { count: 'exact', head: true })
-              .eq('bookmark_id', listId),
-            'bookmark_plant_count'
-          )
-          plantCount = count || 0
-
-          // Get first plant image (with timeout)
-          const { data: listPlants } = await ssrQuery(
+          // Get ALL bookmark items with plant IDs for listing
+          const { data: allBookmarkItems } = await ssrQuery(
             supabaseServer
               .from('bookmark_items')
               .select('plant_id')
               .eq('bookmark_id', listId)
-              .limit(1),
-            'bookmark_plants_for_img'
+              .limit(50),
+            'bookmark_all_items'
           )
-          if (listPlants?.[0]?.plant_id) {
-            const { data: plantImg } = await ssrQuery(
+          
+          if (allBookmarkItems?.length) {
+            plantCount = allBookmarkItems.length
+            
+            // Fetch plant names and IDs for internal linking
+            const plantIds = [...new Set(allBookmarkItems.map(bi => bi.plant_id).filter(Boolean))].slice(0, 30)
+            if (plantIds.length > 0) {
+              const { data: plantDetails } = await ssrQuery(
+                supabaseServer
+                  .from('plants')
+                  .select('id, name, plant_type')
+                  .in('id', plantIds),
+                'bookmark_plant_details'
+              )
+              if (plantDetails) bookmarkPlantDetails = plantDetails
+
+              // Get image from first plant
+              const { data: plantImg } = await ssrQuery(
+                supabaseServer
+                  .from('plant_images')
+                  .select('link')
+                  .eq('plant_id', plantIds[0])
+                  .in('use', ['primary', 'discovery'])
+                  .limit(1),
+                'bookmark_plant_img'
+              )
+              if (plantImg?.[0]?.link) listImage = ensureAbsoluteUrl(plantImg[0].link)
+            }
+          } else {
+            // Fallback: just get count
+            const { count } = await ssrQuery(
               supabaseServer
-                .from('plant_images')
-                .select('link')
-                .eq('plant_id', listPlants[0].plant_id)
-                .eq('use', 'primary')
-                .maybeSingle(),
-              'bookmark_plant_img'
+                .from('bookmark_items')
+                .select('id', { count: 'exact', head: true })
+                .eq('bookmark_id', listId),
+              'bookmark_plant_count'
             )
-            if (plantImg?.link) listImage = ensureAbsoluteUrl(plantImg.link)
+            plantCount = count || 0
           }
         } catch { }
 
-        // Title: "🔖 FAV_MTP - Plant Bookmark | Aphylia"
-        title = `🔖 ${bookmarkList.name || tr.bookmarksCollection} - ${tr.bookmarkTitle} | Aphylia`
-
-        // Description: "📌 Bookmark "FAV_MTP" made by Username 🌿 4 plants saved 🌱"
         const bookmarkName = bookmarkList.name || tr.bookmarksCollection
         const plantWord = plantCount === 1 ? tr.bookmarkPlant : tr.bookmarkPlants
 
-        if (ownerName) {
-          description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" ${tr.bookmarkMadeBy} ${ownerName} 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
+        // Title
+        title = `🔖 ${bookmarkName} - ${tr.bookmarkTitle} | Aphylia`
+
+        // Build a detailed description including plant names
+        const plantNamesList = bookmarkPlantDetails.slice(0, 5).map(p => p.name).join(', ')
+        if (ownerName && plantNamesList) {
+          description = `${bookmarkName} ${tr.bookmarkMadeBy} ${ownerName} - ${plantCount} ${plantWord}: ${plantNamesList}${bookmarkPlantDetails.length > 5 ? '...' : ''}`
+        } else if (ownerName) {
+          description = `${bookmarkName} ${tr.bookmarkMadeBy} ${ownerName} - ${plantCount} ${plantWord} ${tr.bookmarkSaved}`
+        } else if (plantNamesList) {
+          description = `${bookmarkName} - ${plantCount} ${plantWord}: ${plantNamesList}${bookmarkPlantDetails.length > 5 ? '...' : ''}`
         } else {
-          description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
+          description = `${bookmarkName} - ${plantCount} ${plantWord} ${tr.bookmarkSaved}`
         }
 
-        // Use plant image if found, otherwise no image
+        // Use plant image if found
         if (listImage) {
           image = listImage
           imageAlt = `${bookmarkName} - Plant Collection on Aphylia`
         }
-        // If no image found, image stays null - no fallback
 
         // Generate bookmark image tag if from media.aphylia.app
         const bookmarkImageTag = generateImageTag(listImage, `${bookmarkName} - Plant Collection on Aphylia`)
 
+        // Build CollectionPage JSON-LD
+        const collectionJsonLd = {
+          '@context': 'https://schema.org',
+          '@type': 'CollectionPage',
+          'name': bookmarkName,
+          'description': description,
+          'url': canonicalUrl,
+          'numberOfItems': plantCount,
+        }
+        if (ownerName) collectionJsonLd.author = { '@type': 'Person', 'name': ownerName }
+        if (image) collectionJsonLd.image = image
+        if (bookmarkPlantDetails.length > 0) {
+          collectionJsonLd.mainEntity = {
+            '@type': 'ItemList',
+            'numberOfItems': plantCount,
+            'itemListElement': bookmarkPlantDetails.slice(0, 20).map((p, i) => ({
+              '@type': 'ListItem',
+              'position': i + 1,
+              'name': p.name,
+              'url': `${siteUrl}/plants/${encodeURIComponent(p.id)}`
+            }))
+          }
+        }
+
+        const bookmarkBreadcrumbLd = {
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          'itemListElement': [
+            { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': siteUrl },
+            { '@type': 'ListItem', 'position': 2, 'name': detectedLang === 'fr' ? 'Collections' : 'Collections', 'item': siteUrl },
+            { '@type': 'ListItem', 'position': 3, 'name': bookmarkName, 'item': canonicalUrl },
+          ]
+        }
+
         pageContent = `
-          <article>
-            <h1>🔖 ${escapeHtml(bookmarkName)} - ${tr.bookmarkTitle}</h1>
+          <script type="application/ld+json">${JSON.stringify([collectionJsonLd, bookmarkBreadcrumbLd])}</script>
+          <article itemscope itemtype="https://schema.org/CollectionPage">
+            <h1 itemprop="name">🔖 ${escapeHtml(bookmarkName)}</h1>
             <div class="plant-meta">
               🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved}
               ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a>` : ''}
             </div>
             
-            ${bookmarkImageTag ? `<figure itemscope itemtype="https://schema.org/ImageObject">
+            ${bookmarkImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
               ${bookmarkImageTag}
               <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(bookmarkName)}</figcaption>
             </figure>` : ''}
             
-            <p>${tr.bookmarksCarefully} 🌱</p>
+            ${bookmarkPlantDetails.length > 0 ? `
+              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans cette collection' : 'Plants in this collection'}</h2>
+              <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+                ${bookmarkPlantDetails.map(p => {
+                  const plantEmoji2 = { 'vegetable': '🥬', 'fruit': '🍎', 'herb': '🌿', 'flower': '🌸', 'tree': '🌳', 'shrub': '🌲', 'succulent': '🌵', 'cactus': '🌵' }
+                  const em = plantEmoji2[(p.plant_type || '').toLowerCase()] || '🌱'
+                  return `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">${em} ${escapeHtml(p.name)}</a></li>`
+                }).join('')}
+              </ul>
+              ${plantCount > bookmarkPlantDetails.length ? `<p style="color: #6b7280; font-size: 14px;">${detectedLang === 'fr' ? `Et ${plantCount - bookmarkPlantDetails.length} autres plantes...` : `And ${plantCount - bookmarkPlantDetails.length} more plants...`}</p>` : ''}
+            ` : `<p>${tr.bookmarksCarefully} 🌱</p>`}
+            
             <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
             
             <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
             <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              ${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">👤 ${escapeHtml(ownerName)}</a>` : ''}
               <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
               <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
               <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+              <a href="/blog">📚 Blog</a>
               <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             </nav>
           </article>
@@ -29621,7 +30037,38 @@ async function generateCrawlerHtml(req, pagePath) {
         style: 'width: 100%; max-width: 600px; height: auto; border-radius: 16px; margin: 20px auto; display: block;'
       })
 
+      // Homepage JSON-LD: WebSite (for sitelinks search box) + Organization
+      const websiteJsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        'name': 'Aphylia',
+        'url': siteUrl,
+        'description': tr.siteDesc,
+        'potentialAction': {
+          '@type': 'SearchAction',
+          'target': { '@type': 'EntryPoint', 'urlTemplate': `${siteUrl}/search?q={search_term_string}` },
+          'query-input': 'required name=search_term_string'
+        }
+      }
+      const orgJsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        'name': 'Aphylia',
+        'url': siteUrl,
+        'logo': `${siteUrl}/icons/icon-512x512.png`,
+        'sameAs': [],
+        'description': tr.siteDesc
+      }
+      const homeBreadcrumbLd = {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        'itemListElement': [
+          { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': siteUrl }
+        ]
+      }
+
       pageContent = `
+        <script type="application/ld+json">${JSON.stringify([websiteJsonLd, orgJsonLd, homeBreadcrumbLd])}</script>
         <article itemscope itemtype="https://schema.org/WebApplication">
           <h1 itemprop="name">🌱 ${tr.homeWelcome}</h1>
           <p itemprop="description">${tr.homePersonal}</p>
@@ -29733,6 +30180,18 @@ async function generateCrawlerHtml(req, pagePath) {
     console.error('[ssr] Stack trace:', err?.stack || 'no stack')
   }
 
+  // Build hreflang alternate links for multilingual SEO
+  const supportedSsrLangs = ['en', 'fr']
+  const pathWithoutLang = '/' + effectivePath.join('/')
+  const hreflangLinks = supportedSsrLangs.map(lang => {
+    const href = lang === 'en' ? `${siteUrl}${pathWithoutLang}` : `${siteUrl}/${lang}${pathWithoutLang}`
+    return `<link rel="alternate" hreflang="${lang}" href="${escapeHtml(href)}">`
+  }).join('\n  ')
+  const xDefaultLink = `<link rel="alternate" hreflang="x-default" href="${siteUrl}${pathWithoutLang}">`
+
+  // Determine og:type based on page type
+  const ogType = isBlogRoute ? 'article' : isProfileRoute ? 'profile' : 'website'
+
   // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
   // This ensures web archives can display content without errors
   const html = `<!DOCTYPE html>
@@ -29745,8 +30204,12 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
+  <!-- Hreflang alternate links for multilingual SEO -->
+  ${hreflangLinks}
+  ${xDefaultLink}
+  
   <!-- Open Graph / Facebook / Discord / Telegram / LinkedIn -->
-  <meta property="og:type" content="website">
+  <meta property="og:type" content="${ogType}">
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
   <meta property="og:title" content="${escapeHtml(title)}">
   <meta property="og:description" content="${escapeHtml(description)}">
@@ -29754,6 +30217,7 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta property="og:image:alt" content="${escapeHtml(imageAlt)}">` : '<!-- No image for this page -->'}
   <meta property="og:site_name" content="Aphylia">
   <meta property="og:locale" content="${detectedLang === 'fr' ? 'fr_FR' : 'en_US'}">
+  ${detectedLang === 'fr' ? '<meta property="og:locale:alternate" content="en_US">' : '<meta property="og:locale:alternate" content="fr_FR">'}
   
   <!-- Twitter -->
   <meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">
@@ -29855,6 +30319,21 @@ async function generateCrawlerHtml(req, pagePath) {
     .plant-meta em { color: #065f46; }
     ul { padding-left: 20px; }
     li { margin: 8px 0; }
+    /* Blog content styles for full article rendering */
+    .blog-content h1, .blog-content h2, .blog-content h3, .blog-content h4 { color: #065f46; margin: 24px 0 12px 0; }
+    .blog-content h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+    .blog-content h3 { font-size: 1.25em; }
+    .blog-content p { margin: 12px 0; }
+    .blog-content img { max-width: 100%; height: auto; border-radius: 12px; margin: 16px 0; }
+    .blog-content blockquote { border-left: 4px solid #10b981; padding: 12px 20px; margin: 16px 0; background: #f0fdf4; border-radius: 0 8px 8px 0; font-style: italic; }
+    .blog-content pre { background: #1f2937; color: #e5e7eb; padding: 16px; border-radius: 12px; overflow-x: auto; font-size: 14px; }
+    .blog-content code { background: #f3f4f6; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+    .blog-content pre code { background: transparent; color: inherit; padding: 0; }
+    .blog-content table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .blog-content th, .blog-content td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
+    .blog-content th { background: #f0fdf4; font-weight: 600; }
+    .blog-content ul, .blog-content ol { margin: 12px 0; padding-left: 24px; }
+    .blog-content a { color: #059669; text-decoration: underline; }
     footer {
       margin-top: 60px;
       padding: 30px 0;
