@@ -28152,12 +28152,14 @@ async function generateCrawlerHtml(req, pagePath) {
         )
 
         // Query translated fields from plant_translations for the detected language
-        // Note: scientific_name, family, level_sun, maintenance_level, season were migrated to plants table
+        // Many fields (scientific_name, family, level_sun, maintenance_level, etc.) are translatable
+        // and stored primarily in plant_translations. The plants table may have stale/empty copies.
         const ssrLang = detectedLang || 'en'
+        const translationFields = 'name, overview, tags, origin, scientific_name, family, level_sun, maintenance_level, season, life_cycle, foliage_persistance, toxicity_human, toxicity_pets, allergens, living_space, composition, habitat, symbolism, advice_soil, advice_mulching, advice_fertilizer, advice_tutoring, advice_sowing, advice_medicinal, advice_infusion, cut, nutritional_intake, recipes_ideas, ground_effect, pests, diseases'
         const { data: translation } = await ssrQuery(
           supabaseServer
             .from('plant_translations')
-            .select('name, overview, tags, origin')
+            .select(translationFields)
             .eq('plant_id', plantId)
             .eq('language', ssrLang)
             .maybeSingle(),
@@ -28170,7 +28172,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: enData } = await ssrQuery(
             supabaseServer
               .from('plant_translations')
-              .select('name, overview, tags, origin')
+              .select(translationFields)
               .eq('plant_id', plantId)
               .eq('language', 'en')
               .maybeSingle(),
@@ -28182,21 +28184,49 @@ async function generateCrawlerHtml(req, pagePath) {
         // Use target language translation, falling back to English for empty fields
         const finalTranslation = translation || enTranslation
 
-        // Merge base plant with translations, with field-level fallback to English
-        // Non-translatable fields (scientific_name, family, level_sun, maintenance_level, season) come from basePlant
+        // Helper to pick first non-empty value from translation, English fallback, then base plant
+        const pickStr = (field) => translation?.[field] || enTranslation?.[field] || basePlant?.[field] || null
+        const pickArr = (field) => (translation?.[field]?.length ? translation[field] : null) || (enTranslation?.[field]?.length ? enTranslation[field] : null) || (basePlant?.[field]?.length ? basePlant[field] : null) || []
+
+        // Merge base plant with translations, with field-level fallback to English then base plant
+        // Translatable fields (scientific_name, family, level_sun, etc.) come from plant_translations
+        // with fallback to plants table (which may have migrated copies)
         const plant = basePlant ? {
           ...basePlant,
-          name: translation?.name || enTranslation?.name || basePlant.name,
-          // Non-translatable fields come from plants table
-          scientific_name: basePlant.scientific_name,
-          family: basePlant.family,
-          level_sun: basePlant.level_sun,
-          maintenance_level: basePlant.maintenance_level,
-          season: basePlant.season,
-          // Translatable fields come from plant_translations with fallback
-          overview: translation?.overview || enTranslation?.overview,
-          tags: (translation?.tags?.length ? translation.tags : null) || enTranslation?.tags,
-          origin: (translation?.origin?.length ? translation.origin : null) || enTranslation?.origin,
+          name: pickStr('name') || basePlant.name,
+          // Translatable fields - prefer translation, fallback to English, then base plant
+          scientific_name: pickStr('scientific_name'),
+          family: pickStr('family'),
+          level_sun: pickStr('level_sun'),
+          maintenance_level: pickStr('maintenance_level'),
+          life_cycle: pickStr('life_cycle'),
+          foliage_persistance: pickStr('foliage_persistance'),
+          toxicity_human: pickStr('toxicity_human'),
+          toxicity_pets: pickStr('toxicity_pets'),
+          living_space: pickStr('living_space'),
+          conservation_status: basePlant.conservation_status,
+          overview: pickStr('overview'),
+          advice_soil: pickStr('advice_soil'),
+          advice_mulching: pickStr('advice_mulching'),
+          advice_fertilizer: pickStr('advice_fertilizer'),
+          advice_tutoring: pickStr('advice_tutoring'),
+          advice_sowing: pickStr('advice_sowing'),
+          advice_medicinal: pickStr('advice_medicinal'),
+          advice_infusion: pickStr('advice_infusion'),
+          cut: pickStr('cut'),
+          ground_effect: pickStr('ground_effect'),
+          // Array translatable fields
+          season: pickArr('season'),
+          tags: pickArr('tags'),
+          origin: pickArr('origin'),
+          habitat: pickArr('habitat'),
+          allergens: pickArr('allergens'),
+          composition: pickArr('composition'),
+          symbolism: pickArr('symbolism'),
+          nutritional_intake: pickArr('nutritional_intake'),
+          recipes_ideas: pickArr('recipes_ideas'),
+          pests: pickArr('pests'),
+          diseases: pickArr('diseases'),
         } : null
 
         ssrDebug('plant_query_result', {
@@ -28296,7 +28326,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: plantColors } = await ssrQuery(
             supabaseServer
               .from('plant_colors')
-              .select('color_id, colors(name, hex)')
+              .select('color_id, colors(name, hex_code)')
               .eq('plant_id', plantId)
               .limit(10),
             'plant_colors'
@@ -28364,7 +28394,7 @@ async function generateCrawlerHtml(req, pagePath) {
                 <div style="display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0;">
                   ${colors.map(c => `
                     <div style="display: flex; align-items: center; gap: 8px;">
-                      <div style="width: 40px; height: 40px; border-radius: 8px; background-color: ${escapeHtml(c.hex || '#ccc')}; border: 1px solid #ddd;"></div>
+                      <div style="width: 40px; height: 40px; border-radius: 8px; background-color: ${escapeHtml(c.hex_code || '#ccc')}; border: 1px solid #ddd;"></div>
                       <span style="font-size: 14px;">${escapeHtml(c.name || '')}</span>
                     </div>
                   `).join('')}
@@ -28425,6 +28455,42 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plant.aromatherapy) usage.push(detectedLang === 'fr' ? 'Aromathérapie' : 'Aromatherapy')
           if (plant.comestible_part?.length) usage.push(`${detectedLang === 'fr' ? 'Parties comestibles' : 'Edible parts'}: ${plant.comestible_part.slice(0, 3).join(', ')}`)
 
+          // Expert advice sections (from translations)
+          let adviceSections = []
+          if (plant.advice_soil) adviceSections.push({ icon: '🌱', label: detectedLang === 'fr' ? 'Conseil Sol' : 'Soil Advice', text: plant.advice_soil })
+          if (plant.advice_sowing) adviceSections.push({ icon: '🌾', label: detectedLang === 'fr' ? 'Conseil Semis' : 'Sowing Advice', text: plant.advice_sowing })
+          if (plant.advice_fertilizer) adviceSections.push({ icon: '🧪', label: detectedLang === 'fr' ? 'Conseil Engrais' : 'Fertilizer Advice', text: plant.advice_fertilizer })
+          if (plant.advice_mulching) adviceSections.push({ icon: '🍂', label: detectedLang === 'fr' ? 'Conseil Paillage' : 'Mulching Advice', text: plant.advice_mulching })
+          if (plant.advice_tutoring) adviceSections.push({ icon: '🏗️', label: detectedLang === 'fr' ? 'Conseil Tuteurage' : 'Tutoring Advice', text: plant.advice_tutoring })
+          if (plant.advice_medicinal) adviceSections.push({ icon: '💊', label: detectedLang === 'fr' ? 'Usage Médicinal' : 'Medicinal Use', text: plant.advice_medicinal })
+          if (plant.advice_infusion) adviceSections.push({ icon: '🍵', label: detectedLang === 'fr' ? 'Conseil Infusion' : 'Infusion Advice', text: plant.advice_infusion })
+          if (plant.cut) adviceSections.push({ icon: '✂️', label: detectedLang === 'fr' ? 'Taille' : 'Pruning', text: plant.cut })
+
+          // Pests & Diseases
+          let problems = []
+          if (plant.pests?.length) problems.push(`🐛 <strong>${detectedLang === 'fr' ? 'Ravageurs' : 'Pests'}:</strong> ${plant.pests.slice(0, 5).map(p => escapeHtml(p)).join(', ')}`)
+          if (plant.diseases?.length) problems.push(`🦠 <strong>${detectedLang === 'fr' ? 'Maladies' : 'Diseases'}:</strong> ${plant.diseases.slice(0, 5).map(d => escapeHtml(d)).join(', ')}`)
+
+          // Additional details
+          let additionalInfo = []
+          if (plant.symbolism?.length) additionalInfo.push(`🎭 <strong>${detectedLang === 'fr' ? 'Symbolisme' : 'Symbolism'}:</strong> ${plant.symbolism.slice(0, 3).map(s => escapeHtml(s)).join(', ')}`)
+          if (plant.ground_effect) additionalInfo.push(`🌿 <strong>${detectedLang === 'fr' ? 'Effet au sol' : 'Ground Effect'}:</strong> ${escapeHtml(plant.ground_effect)}`)
+          if (plant.nutritional_intake?.length) additionalInfo.push(`🥗 <strong>${detectedLang === 'fr' ? 'Apport nutritionnel' : 'Nutritional Intake'}:</strong> ${plant.nutritional_intake.slice(0, 3).map(n => escapeHtml(n)).join(', ')}`)
+          if (plant.recipes_ideas?.length) additionalInfo.push(`🍳 <strong>${detectedLang === 'fr' ? 'Idées recettes' : 'Recipe Ideas'}:</strong> ${plant.recipes_ideas.slice(0, 3).map(r => escapeHtml(r)).join(', ')}`)
+
+          // Propagation info
+          let propagation = []
+          if (plant.division?.length) propagation.push(`🌱 <strong>${detectedLang === 'fr' ? 'Multiplication' : 'Propagation'}:</strong> ${plant.division.slice(0, 4).map(d => escapeHtml(d)).join(', ')}`)
+          if (plant.sow_type?.length) propagation.push(`🌰 <strong>${detectedLang === 'fr' ? 'Type de semis' : 'Sowing Type'}:</strong> ${plant.sow_type.slice(0, 3).map(s => escapeHtml(s)).join(', ')}`)
+          if (plant.transplanting !== null && plant.transplanting !== undefined) propagation.push(`🪴 <strong>${detectedLang === 'fr' ? 'Transplantation' : 'Transplanting'}:</strong> ${plant.transplanting ? '✅' : '❌'}`)
+          if (plant.tutoring) propagation.push(`🏗️ <strong>${detectedLang === 'fr' ? 'Tuteurage nécessaire' : 'Needs Tutoring'}:</strong> ✅`)
+
+          // Soil & Nutrition
+          let soilNutrition = []
+          if (plant.mulching?.length) soilNutrition.push(`🍂 <strong>${detectedLang === 'fr' ? 'Paillage' : 'Mulching'}:</strong> ${plant.mulching.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
+          if (plant.fertilizer?.length) soilNutrition.push(`🧪 <strong>${detectedLang === 'fr' ? 'Engrais' : 'Fertilizer'}:</strong> ${plant.fertilizer.slice(0, 3).map(f => escapeHtml(f)).join(', ')}`)
+          if (plant.nutrition_need?.length) soilNutrition.push(`⚡ <strong>${detectedLang === 'fr' ? 'Besoins nutritifs' : 'Nutrient Needs'}:</strong> ${plant.nutrition_need.slice(0, 4).map(n => escapeHtml(n)).join(', ')}`)
+
           pageContent = `
             <article itemscope itemtype="https://schema.org/Product">
               <h1 itemprop="name">${emoji} ${escapeHtml(plant.name)}</h1>
@@ -28481,6 +28547,46 @@ async function generateCrawlerHtml(req, pagePath) {
                 <h2>⚠️ ${detectedLang === 'fr' ? 'Sécurité & Caractéristiques' : 'Safety & Traits'}</h2>
                 <div style="display: grid; gap: 12px; margin: 16px 0;">
                   ${safety.map(s => `<div class="plant-meta">${s}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${propagation.length ? `
+                <h2>🌱 ${detectedLang === 'fr' ? 'Propagation' : 'Propagation'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${propagation.map(p => `<div class="plant-meta">${p}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${soilNutrition.length ? `
+                <h2>🧪 ${detectedLang === 'fr' ? 'Sol & Nutrition' : 'Soil & Nutrition'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${soilNutrition.map(s => `<div class="plant-meta">${s}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${problems.length ? `
+                <h2>🐛 ${detectedLang === 'fr' ? 'Ravageurs & Maladies' : 'Pests & Diseases'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${problems.map(p => `<div class="plant-meta">${p}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${adviceSections.length ? `
+                <h2>📝 ${detectedLang === 'fr' ? 'Conseils d\'Expert' : 'Expert Advice'}</h2>
+                <div style="display: grid; gap: 16px; margin: 16px 0;">
+                  ${adviceSections.map(a => `
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #10b981;">
+                      <strong>${a.icon} ${escapeHtml(a.label)}:</strong>
+                      <p style="margin: 8px 0 0 0; color: #374151;">${escapeHtml(a.text)}</p>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ''}
+              
+              ${additionalInfo.length ? `
+                <h2>📋 ${detectedLang === 'fr' ? 'Informations Complémentaires' : 'Additional Information'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${additionalInfo.map(i => `<div class="plant-meta">${i}</div>`).join('')}
                 </div>
               ` : ''}
               
@@ -28684,6 +28790,20 @@ async function generateCrawlerHtml(req, pagePath) {
       if (rpcResult) {
         // RPC returns array or single object
         profile = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
+        // RPC doesn't return favorite_plant - fetch it separately
+        if (profile?.id) {
+          const { data: extraProfile } = await ssrQuery(
+            supabaseServer
+              .from('profiles')
+              .select('favorite_plant')
+              .eq('id', profile.id)
+              .maybeSingle(),
+            'profile_favorite_plant'
+          )
+          if (extraProfile) {
+            profile.favorite_plant = extraProfile.favorite_plant
+          }
+        }
       }
 
       // Fallback: direct query if RPC fails or doesn't exist
@@ -28859,7 +28979,10 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
           if (currentStreak > 0) descParts.push(`🔥 ${currentStreak} ${detectedLang === 'fr' ? 'jours de série' : 'day streak'}`)
           if (friendsCount > 0) descParts.push(`👥 ${friendsCount} ${detectedLang === 'fr' ? 'amis' : 'friends'}`)
-          if (profile.country) descParts.push(`📍 ${profile.country}`)
+          // show_country from RPC: only show country if user allows it
+          if (profile.country && profile.show_country !== false) descParts.push(`📍 ${profile.country}`)
+          if (profile.experience_level) descParts.push(`🌱 ${profile.experience_level}`)
+          if (profile.job) descParts.push(`💼 ${profile.job}`)
 
           description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
 
@@ -28904,7 +29027,9 @@ async function generateCrawlerHtml(req, pagePath) {
               </figure>` : ''}
               
               <div class="profile-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
-                ${profile.country ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
+                ${profile.country && profile.show_country !== false ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
+                ${profile.job ? `<span>💼 ${escapeHtml(profile.job)}</span>` : ''}
+                ${profile.experience_level ? `<span>🌱 ${escapeHtml(profile.experience_level)}</span>` : ''}
                 ${isOnline ? `<span>🟢 ${detectedLang === 'fr' ? 'En ligne' : 'Online'}</span>` : ''}
                 ${joinedDateFormatted ? `<span>📅 ${detectedLang === 'fr' ? 'Membre depuis' : 'Member since'} ${joinedDateFormatted}</span>` : ''}
               </div>
@@ -28937,6 +29062,7 @@ async function generateCrawlerHtml(req, pagePath) {
               </div>
               
               ${profile.favorite_plant ? `<p>❤️ ${detectedLang === 'fr' ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
+              ${profile.profile_link ? `<p>🔗 <a href="${escapeHtml(profile.profile_link)}" rel="nofollow noopener" target="_blank">${escapeHtml(profile.profile_link)}</a></p>` : ''}
               
               ${userGardens.length > 0 ? `
               <h2>🏡 ${detectedLang === 'fr' ? 'Jardins de' : 'Gardens by'} ${escapeHtml(displayName)}</h2>
@@ -29090,17 +29216,17 @@ async function generateCrawlerHtml(req, pagePath) {
               }
             }
 
-            // Get garden streak
+            // Get garden streak (column is named 'streak' in gardens table)
             const { data: gardenData } = await ssrQuery(
               dbClient
                 .from('gardens')
-                .select('current_streak')
+                .select('streak')
                 .eq('id', gardenId)
                 .maybeSingle(),
               'garden_streak'
             )
-            if (gardenData?.current_streak) {
-              gardenStreak = gardenData.current_streak
+            if (gardenData?.streak) {
+              gardenStreak = gardenData.streak
             }
 
             // Get member count
@@ -29113,21 +29239,21 @@ async function generateCrawlerHtml(req, pagePath) {
             )
             memberCount = (mCount || 0) + 1 // +1 for owner
 
-            // Try to get today's task progress
+            // Try to get today's task progress from daily cache table
             try {
               const today = new Date().toISOString().slice(0, 10)
-              const { data: taskOccs } = await ssrQuery(
+              const { data: cacheRow } = await ssrQuery(
                 dbClient
-                  .from('task_occurrences')
-                  .select('required_count, completed_count')
+                  .from('garden_task_daily_cache')
+                  .select('due_count, completed_count')
                   .eq('garden_id', gardenId)
-                  .gte('due_at', today)
-                  .lt('due_at', today + 'T23:59:59'),
+                  .eq('cache_date', today)
+                  .maybeSingle(),
                 'garden_today_tasks'
               )
-              if (taskOccs?.length) {
-                todayProgress.due = taskOccs.reduce((sum, t) => sum + (t.required_count || 0), 0)
-                todayProgress.completed = taskOccs.reduce((sum, t) => sum + (t.completed_count || 0), 0)
+              if (cacheRow) {
+                todayProgress.due = cacheRow.due_count || 0
+                todayProgress.completed = cacheRow.completed_count || 0
               }
             } catch { }
 
@@ -29690,13 +29816,13 @@ async function generateCrawlerHtml(req, pagePath) {
             if (owner) ownerName = owner.display_name
           }
 
-          // Get all bookmark plants with details
+          // Get all bookmark plants with details (column is created_at, not added_at)
           const { data: bookmarkPlants } = await ssrQuery(
             supabaseServer
               .from('bookmark_items')
-              .select('plant_id, added_at')
+              .select('plant_id, created_at')
               .eq('bookmark_id', listId)
-              .order('added_at', { ascending: false })
+              .order('created_at', { ascending: false })
               .limit(50),
             'bookmark_plants'
           )
@@ -29706,17 +29832,36 @@ async function generateCrawlerHtml(req, pagePath) {
             plantCount = bookmarkPlants.length
             const plantIds = bookmarkPlants.map(bp => bp.plant_id).filter(Boolean)
             
-            // Get plant details
+            // Get plant details (name from plants table, scientific_name from translations)
             if (plantIds.length > 0) {
               const { data: plantDetails } = await ssrQuery(
                 supabaseServer
                   .from('plants')
-                  .select('id, name, plant_type, scientific_name')
+                  .select('id, name, plant_type')
                   .in('id', plantIds),
                 'bookmark_plant_details'
               )
               if (plantDetails) {
-                bookmarkPlantDetails = plantDetails
+                // Fetch scientific names from plant_translations (English) since
+                // scientific_name is a translatable field stored primarily there
+                const { data: plantTranslations } = await ssrQuery(
+                  supabaseServer
+                    .from('plant_translations')
+                    .select('plant_id, scientific_name')
+                    .in('plant_id', plantIds)
+                    .eq('language', 'en'),
+                  'bookmark_plant_sci_names'
+                )
+                const sciNameMap = {}
+                if (plantTranslations) {
+                  plantTranslations.forEach(pt => {
+                    if (pt.scientific_name) sciNameMap[pt.plant_id] = pt.scientific_name
+                  })
+                }
+                bookmarkPlantDetails = plantDetails.map(p => ({
+                  ...p,
+                  scientific_name: sciNameMap[p.id] || null
+                }))
                 
                 // Get first plant image for bookmark cover
                 const { data: plantImg } = await ssrQuery(
