@@ -438,11 +438,10 @@ async function loadBlogRoutes() {
     return []
   }
 
-  // Use slug for SEO-friendly URLs (slug is the canonical identifier for blog posts)
-  // Both the frontend and dynamic sitemap use slug-based URLs
+  // Use post ID for blog URLs (the frontend route is /blog/:id, slug is NOT a working route)
   const { data, error } = await client
     .from('blog_posts')
-    .select('id, slug, updated_at, created_at, published_at')
+    .select('id, updated_at, created_at, published_at')
     .eq('is_published', true)
     .order('published_at', { ascending: false })
 
@@ -458,12 +457,9 @@ async function loadBlogRoutes() {
   return data.map((post, index) => {
     if (!post.id) return null
     const isLatestPost = index === 0
-    // Prefer slug for SEO-friendly URLs, fall back to ID if slug is missing
-    const urlSegment = post.slug
-      ? encodeURIComponent(String(post.slug))
-      : encodeURIComponent(String(post.id))
+    const normalizedId = encodeURIComponent(String(post.id))
     return {
-      path: `/blog/${urlSegment}`,
+      path: `/blog/${normalizedId}`,
       changefreq: isLatestPost ? 'daily' : 'weekly',
       priority: isLatestPost ? 0.95 : 0.8,
       lastmod: pickLastmod(post),

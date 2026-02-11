@@ -32,8 +32,7 @@ export const BlogCard: React.FC<BlogCardProps> = ({ post, isAdmin, onEdit }) => 
   const isScheduled = post.isPublished && publishTime > now
   const statusBadge = !post.isPublished ? 'draft' : isScheduled ? 'scheduled' : null
 
-  // Use slug for SEO-friendly URLs (fall back to ID for backward compatibility)
-  const articleTarget = post.slug || post.id
+  const articleTarget = post.id
   const summaryText =
     post.excerpt ||
     t("blogPage.card.excerptFallback", { defaultValue: "Pull up the full article to explore every detail." })

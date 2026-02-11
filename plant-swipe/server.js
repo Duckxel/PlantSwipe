@@ -27184,10 +27184,10 @@ ${alternateLinks(page.loc)}
   const sitemapDb = supabaseServiceClient || supabaseServer
   if (sitemapDb) {
     try {
-      // Recent blog posts (with lastmod)
+      // Recent blog posts (with lastmod) - use ID for URL (slug is NOT a working route)
       const { data: posts } = await sitemapDb
         .from('blog_posts')
-        .select('slug, updated_at, published_at')
+        .select('id, updated_at, published_at')
         .eq('is_published', true)
         .order('published_at', { ascending: false })
         .limit(100)
@@ -27196,7 +27196,7 @@ ${alternateLinks(page.loc)}
         for (const lang of languages) {
           urls += posts.map(post => {
             const lastmod = post.updated_at || post.published_at
-            const path = `/blog/${post.slug}`
+            const path = `/blog/${post.id}`
             return `  <url>
     <loc>${langUrl(path, lang)}</loc>
     <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>
@@ -28537,13 +28537,11 @@ async function generateCrawlerHtml(req, pagePath) {
       if (post) {
         console.log(`[ssr] ✓ Found blog post: ${post.title}`)
 
-        // CRITICAL: Always use slug-based canonical URL for blog posts
-        // This prevents "Duplicate, Google chose different canonical" errors
-        // when both /blog/{uuid} and /blog/{slug} serve the same content
-        if (post.slug) {
-          const slugCanonicalPath = detectedLang === 'en' ? `/blog/${post.slug}` : `/${detectedLang}/blog/${post.slug}`
-          canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${slugCanonicalPath}`
-          console.log(`[ssr] Blog canonical overridden to slug: ${canonicalUrl}`)
+        // Ensure canonical always uses the post ID (the working route format)
+        // The frontend route is /blog/:id — slug-based URLs are NOT routable
+        if (post.id) {
+          const idCanonicalPath = detectedLang === 'en' ? `/blog/${post.id}` : `/${detectedLang}/blog/${post.id}`
+          canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${idCanonicalPath}`
         }
 
         // Estimate read time from body_html content
@@ -28592,7 +28590,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: related } = await ssrQuery(
             supabaseServer
               .from('blog_posts')
-              .select('title, slug')
+              .select('id, title')
               .eq('is_published', true)
               .neq('id', post.id)
               .order('published_at', { ascending: false })
@@ -28671,7 +28669,7 @@ async function generateCrawlerHtml(req, pagePath) {
             ${relatedPosts.length > 0 ? `
               <h2>📚 ${detectedLang === 'fr' ? 'Articles similaires' : 'Related Articles'}</h2>
               <ul>
-                ${relatedPosts.map(rp => `<li><a href="/blog/${escapeHtml(rp.slug)}">${escapeHtml(rp.title)}</a></li>`).join('')}
+                ${relatedPosts.map(rp => `<li><a href="/blog/${escapeHtml(rp.id)}">${escapeHtml(rp.title)}</a></li>`).join('')}
               </ul>
             ` : ''}
             
@@ -29436,7 +29434,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: posts } = await ssrQuery(
           supabaseServer
             .from('blog_posts')
-            .select('title, slug, excerpt, published_at, cover_image_url')
+            .select('id, title, excerpt, published_at, cover_image_url')
             .eq('is_published', true)
             .order('published_at', { ascending: false })
             .limit(10),
@@ -29465,7 +29463,7 @@ async function generateCrawlerHtml(req, pagePath) {
                 '@type': 'ListItem',
                 'position': i + 1,
                 'name': p.title,
-                'url': `${siteUrl}/blog/${p.slug}`
+                'url': `${siteUrl}/blog/${p.id}`
               }))
             }
           }
@@ -29491,10 +29489,10 @@ async function generateCrawlerHtml(req, pagePath) {
                 const pubDate = p.published_at ? new Date(p.published_at).toLocaleDateString(blogDateLocales[detectedLang] || 'en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
                 return `
                   <div style="margin-bottom: 20px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 12px;">
-                    <h3 style="margin: 0 0 8px 0;"><a href="/blog/${escapeHtml(p.slug)}" style="text-decoration: none; color: #065f46;">${escapeHtml(p.title)}</a></h3>
+                    <h3 style="margin: 0 0 8px 0;"><a href="/blog/${escapeHtml(p.id)}" style="text-decoration: none; color: #065f46;">${escapeHtml(p.title)}</a></h3>
                     ${pubDate ? `<div style="font-size: 13px; color: #6b7280; margin-bottom: 8px;">📅 ${pubDate}</div>` : ''}
                     ${p.excerpt ? `<p style="margin: 0; color: #444;">${escapeHtml(p.excerpt)}</p>` : ''}
-                    <a href="/blog/${escapeHtml(p.slug)}" style="display: inline-block; margin-top: 8px; font-size: 14px; color: #059669;">${detectedLang === 'fr' ? 'Lire la suite' : 'Read more'} →</a>
+                    <a href="/blog/${escapeHtml(p.id)}" style="display: inline-block; margin-top: 8px; font-size: 14px; color: #059669;">${detectedLang === 'fr' ? 'Lire la suite' : 'Read more'} →</a>
                   </div>
                 `
               }).join('')}
@@ -30127,7 +30125,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: posts } = await ssrQuery(
             supabaseServer
               .from('blog_posts')
-              .select('slug, title')
+              .select('id, title')
               .eq('is_published', true)
               .order('published_at', { ascending: false })
               .limit(6),
@@ -30249,7 +30247,7 @@ async function generateCrawlerHtml(req, pagePath) {
           ${recentBlogPosts.length > 0 ? `
           <h2>📚 ${detectedLang === 'fr' ? 'Articles Récents' : 'Recent Articles'}</h2>
           <ul>
-            ${recentBlogPosts.map(post => `<li><a href="/blog/${escapeHtml(post.slug)}">${escapeHtml(post.title)}</a></li>`).join('')}
+            ${recentBlogPosts.map(post => `<li><a href="/blog/${escapeHtml(post.id)}">${escapeHtml(post.title)}</a></li>`).join('')}
           </ul>
           <p><a href="/blog">📖 ${detectedLang === 'fr' ? 'Voir tous les articles' : 'View all articles'} →</a></p>
           ` : ''}
