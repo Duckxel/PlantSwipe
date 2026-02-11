@@ -137,7 +137,7 @@ export async function fetchExternalPlantImages(
   const { onSourceStart, onSourceDone } = options?.callbacks || {}
 
   // Hard cap: never add more than this many images total across all sources
-  const MAX_TOTAL_IMAGES = 15
+  const MAX_TOTAL_IMAGES = 20
 
   const allImages: ExternalImage[] = []
   const counts: Record<ExternalImageSource, number> = {
@@ -147,11 +147,11 @@ export async function fetchExternalPlantImages(
   }
   const errors: string[] = []
 
-  // Per-source limits (kept small to avoid flooding the page)
+  // Per-source limits: server fetches 100-150, filters, randomly selects this many
   const sourceLimits: Record<ExternalImageSource, number> = {
     serpapi: 5,
-    gbif: 8,
-    smithsonian: 5,
+    gbif: 10,
+    smithsonian: 10,
   }
 
   for (const { key, label } of IMAGE_SOURCES) {

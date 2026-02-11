@@ -4637,6 +4637,20 @@ app.options('/api/admin/ai/plant-fill/english-name', (_req, res) => {
  * If that fails, falls back to species/search with vernacular name lookup.
  * Returns { taxonKey, scientificName } or null if not found.
  */
+/**
+ * Randomly select up to `count` items from an array (Fisher-Yates shuffle then slice).
+ * Returns a new array without mutating the input.
+ */
+function randomSelect(arr, count) {
+  if (!arr || arr.length <= count) return [...arr]
+  const shuffled = [...arr]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled.slice(0, count)
+}
+
 /** Check if an image URL points to an allowed format (jpg, jpeg, png, webp) */
 function isAllowedImageUrl(url) {
   if (!url || typeof url !== 'string') return false
@@ -4720,7 +4734,7 @@ app.post('/api/admin/images/gbif', async (req, res) => {
       res.status(400).json({ error: 'Plant name is required' })
       return
     }
-    const limit = Math.min(Math.max(parseInt(body.limit) || 20, 1), 50)
+    const wantCount = Math.min(Math.max(parseInt(body.limit) || 10, 1), 20)
 
     // Step 1: Resolve plant name to taxonKey (handles both common and scientific names)
     const resolved = await resolveGbifTaxonKey(plantName)
@@ -4730,8 +4744,10 @@ app.post('/api/admin/images/gbif', async (req, res) => {
       return
     }
 
-    // Step 2: Fetch CC0-licensed occurrence images
-    const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${resolved.taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${limit}`
+    // Step 2: Fetch a large pool of CC0-licensed occurrence images for variety
+    // Request 150 occurrences to get a diverse pool from different observers
+    const fetchLimit = 150
+    const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${resolved.taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${fetchLimit}`
     const occResp = await fetch(occUrl)
     if (!occResp.ok) {
       res.status(502).json({ error: 'Failed to fetch occurrences from GBIF' })
@@ -4739,28 +4755,33 @@ app.post('/api/admin/images/gbif', async (req, res) => {
     }
     const occData = await occResp.json()
 
-    // Extract image URLs from occurrence media (capped to limit)
-    const images = []
+    // Extract ALL valid image URLs (one per occurrence for variety)
+    const allCandidates = []
     const seenUrls = new Set()
     for (const result of (occData.results || [])) {
-      if (images.length >= limit) break
-      for (const media of (result.media || [])) {
-        if (images.length >= limit) break
-        if (media.type !== 'StillImage') continue
-        const url = media.identifier
-        if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
+      // Take only the first image per occurrence to maximize variety across observers
+      const firstMedia = (result.media || []).find(m => {
+        if (m.type !== 'StillImage') return false
+        const url = m.identifier
+        return url && !seenUrls.has(url) && isAllowedImageUrl(url)
+      })
+      if (firstMedia) {
+        const url = firstMedia.identifier
         seenUrls.add(url)
-        images.push({
+        allCandidates.push({
           url,
-          license: media.license || 'CC0',
+          license: firstMedia.license || 'CC0',
           source: 'gbif',
-          creator: media.creator || media.rightsHolder || null,
-          references: media.references || null,
+          creator: firstMedia.creator || firstMedia.rightsHolder || null,
+          references: firstMedia.references || null,
         })
       }
     }
 
-    console.log(`[server] GBIF images for "${plantName}": found ${images.length} CC0 images (taxonKey=${resolved.taxonKey}, scientific=${resolved.scientificName})`)
+    // Randomly select from the pool for variety
+    const images = randomSelect(allCandidates, wantCount)
+
+    console.log(`[server] GBIF images for "${plantName}": ${allCandidates.length} candidates -> ${images.length} randomly selected (taxonKey=${resolved.taxonKey})`)
     res.json({
       success: true,
       images,
@@ -4792,13 +4813,11 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
       res.status(400).json({ error: 'Plant name is required' })
       return
     }
-    const rows = Math.min(Math.max(parseInt(body.limit) || 20, 1), 50)
+    const wantCount = Math.min(Math.max(parseInt(body.limit) || 10, 1), 20)
 
-    // The Smithsonian API key can be set via env var SMITHSONIAN_API_KEY
-    // Get a free key at https://api.data.gov/signup/
     const apiKey = process.env.SMITHSONIAN_API_KEY || ''
     if (!apiKey) {
-      res.status(503).json({ error: 'Smithsonian API key is not configured. Set SMITHSONIAN_API_KEY environment variable. Get a free key at https://api.data.gov/signup/' })
+      res.status(503).json({ error: 'Smithsonian API key is not configured. Set SMITHSONIAN_API_KEY environment variable.' })
       return
     }
 
@@ -4812,7 +4831,9 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
       }
     } catch { /* use original name */ }
 
-    const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(searchQuery)}&rows=${rows}&api_key=${encodeURIComponent(apiKey)}`
+    // Fetch a large pool of results for variety, then randomly pick
+    const fetchRows = 100
+    const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(searchQuery)}&rows=${fetchRows}&sort=random&api_key=${encodeURIComponent(apiKey)}`
     const searchResp = await fetch(searchUrl)
     if (!searchResp.ok) {
       const statusText = searchResp.statusText || searchResp.status
@@ -4822,11 +4843,10 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
     const searchData = await searchResp.json()
     const searchRows = searchData?.response?.rows || []
 
-    // Extract image URLs from Smithsonian results (capped to rows limit)
-    const images = []
+    // Extract ALL valid image URLs from the large pool
+    const allCandidates = []
     const seenUrls = new Set()
     for (const row of searchRows) {
-      if (images.length >= rows) break
       const content = row.content || {}
       const desc = content.descriptiveNonRepeating || {}
       const onlineMedia = desc.online_media || {}
@@ -4834,39 +4854,27 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
       const title = row.title || desc.title?.content || ''
 
       for (const media of mediaList) {
-        if (images.length >= rows) break
         if (media.type !== 'Images') continue
         const resources = media.resources || []
 
         // Prefer web-friendly sizes: Screen Image > JPEG > content URL > thumbnail
-        // Skip TIFF/RAW (50+ MB files that crash processing)
+        // Skip TIFF/RAW (50+ MB files)
         let bestUrl = null
         let jpegUrl = null
         for (const res of resources) {
           const label = (res.label || '').toLowerCase()
           const url = res.url || ''
           if (!url) continue
-          // Skip TIFF and other raw formats explicitly
           if (label.includes('tiff') || label.includes('tif') || url.toLowerCase().endsWith('.tif') || url.toLowerCase().endsWith('.tiff')) continue
-          if (label.includes('screen image')) {
-            bestUrl = url
-            break // Screen images are ideal (~200KB web-ready)
-          }
-          if ((label.includes('jpeg') || label.includes('jpg')) && !jpegUrl) {
-            jpegUrl = url
-          }
+          if (label.includes('screen image')) { bestUrl = url; break }
+          if ((label.includes('jpeg') || label.includes('jpg')) && !jpegUrl) jpegUrl = url
         }
         if (!bestUrl && jpegUrl) bestUrl = jpegUrl
-        // Fallback to content URL (delivery service) if no resource matches
-        if (!bestUrl && media.content) {
-          bestUrl = media.content
-        }
-        if (!bestUrl && media.thumbnail) {
-          bestUrl = media.thumbnail
-        }
+        if (!bestUrl && media.content) bestUrl = media.content
+        if (!bestUrl && media.thumbnail) bestUrl = media.thumbnail
         if (!bestUrl || seenUrls.has(bestUrl) || !isAllowedImageUrl(bestUrl)) continue
         seenUrls.add(bestUrl)
-        images.push({
+        allCandidates.push({
           url: bestUrl,
           license: 'CC0 (Smithsonian Open Access)',
           source: 'smithsonian',
@@ -4876,7 +4884,10 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
       }
     }
 
-    console.log(`[server] Smithsonian images for "${plantName}": found ${images.length} images`)
+    // Randomly select from the pool for variety
+    const images = randomSelect(allCandidates, wantCount)
+
+    console.log(`[server] Smithsonian images for "${plantName}": ${allCandidates.length} candidates -> ${images.length} randomly selected`)
     res.json({
       success: true,
       images,
@@ -4910,10 +4921,10 @@ app.post('/api/admin/images/serpapi', async (req, res) => {
     // Only top 5 images from SerpAPI (limited credits)
     const limit = Math.min(Math.max(parseInt(body.limit) || 5, 1), 10)
 
-    const apiKey = (process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || '').trim()
+    const apiKey = (process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || process.env.SERP_API || '').trim()
     if (!apiKey) {
-      console.warn('[server] SerpAPI: no key found. Checked env vars: SERPAPI_KEY, SERP_API_KEY, SERPAPI_API_KEY. Add one of these to .env or .env.server in the plant-swipe directory, then restart the server.')
-      res.status(503).json({ error: 'SerpAPI key not found. Add SERPAPI_KEY=your_key to the .env or .env.server file in the plant-swipe/ directory, then restart the server (sudo systemctl restart plantswipe).' })
+      console.warn('[server] SerpAPI: no key found. Checked env vars: SERPAPI_KEY, SERP_API_KEY, SERPAPI_API_KEY, SERP_API')
+      res.status(503).json({ error: 'SerpAPI key not found. Add SERPAPI_KEY=your_key to the .env or .env.server file in the plant-swipe/ directory, then restart the server.' })
       return
     }
 
@@ -5001,32 +5012,34 @@ app.post('/api/admin/images/external', async (req, res) => {
     // Resolve scientific name first (used by GBIF and Smithsonian)
     let resolvedScientificName = null
 
-    // Fetch GBIF images (resolves both common and scientific names)
+    // Fetch GBIF images (fetch large pool, one per occurrence for variety, then random select)
     try {
       const resolved = await resolveGbifTaxonKey(plantName)
       if (resolved) {
         resolvedScientificName = resolved.scientificName
-        const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${resolved.taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${limit}`
+        const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${resolved.taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=150`
         const occResp = await fetch(occUrl)
         if (occResp.ok) {
           const occData = await occResp.json()
+          const gbifCandidates = []
           const seenUrls = new Set()
           for (const result of (occData.results || [])) {
-            if (results.gbif.length >= limit) break
-            for (const media of (result.media || [])) {
-              if (results.gbif.length >= limit) break
-              if (media.type !== 'StillImage') continue
-              const url = media.identifier
-              if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
-              seenUrls.add(url)
-              results.gbif.push({
-                url,
-                license: media.license || 'CC0',
+            const firstMedia = (result.media || []).find(m => {
+              if (m.type !== 'StillImage') return false
+              const url = m.identifier
+              return url && !seenUrls.has(url) && isAllowedImageUrl(url)
+            })
+            if (firstMedia) {
+              seenUrls.add(firstMedia.identifier)
+              gbifCandidates.push({
+                url: firstMedia.identifier,
+                license: firstMedia.license || 'CC0',
                 source: 'gbif',
-                creator: media.creator || media.rightsHolder || null,
+                creator: firstMedia.creator || firstMedia.rightsHolder || null,
               })
             }
           }
+          results.gbif = randomSelect(gbifCandidates, limit)
         }
       }
     } catch (gbifErr) {
@@ -5034,41 +5047,41 @@ app.post('/api/admin/images/external', async (req, res) => {
       results.errors.push(`GBIF: ${gbifErr?.message || 'Unknown error'}`)
     }
 
-    // Fetch Smithsonian images (use scientific name if resolved, else common name)
+    // Fetch Smithsonian images (fetch large pool, filter formats, random select)
     const smithsonianApiKey = process.env.SMITHSONIAN_API_KEY || ''
     if (smithsonianApiKey) {
       try {
         const smithsonianQuery = resolvedScientificName || plantName
-        const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(smithsonianQuery)}&rows=${limit}&api_key=${encodeURIComponent(smithsonianApiKey)}`
+        const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(smithsonianQuery)}&rows=100&sort=random&api_key=${encodeURIComponent(smithsonianApiKey)}`
         const searchResp = await fetch(searchUrl)
         if (searchResp.ok) {
           const searchData = await searchResp.json()
           const searchRows = searchData?.response?.rows || []
+          const siCandidates = []
           const seenUrls = new Set()
           for (const row of searchRows) {
-            if (results.smithsonian.length >= limit) break
             const content = row.content || {}
             const desc = content.descriptiveNonRepeating || {}
             const onlineMedia = desc.online_media || {}
             const mediaList = onlineMedia.media || []
             for (const media of mediaList) {
-              if (results.smithsonian.length >= limit) break
               if (media.type !== 'Images') continue
               const resources = media.resources || []
               let bestUrl = null
+              let jpegUrl = null
               for (const r of resources) {
                 const label = (r.label || '').toLowerCase()
                 if (!r.url) continue
-                // Skip TIFF/RAW formats (50+ MB files)
-                if (label.includes('tiff') || label.includes('tif') || (r.url && (r.url.toLowerCase().endsWith('.tif') || r.url.toLowerCase().endsWith('.tiff')))) continue
+                if (label.includes('tiff') || label.includes('tif') || r.url.toLowerCase().endsWith('.tif') || r.url.toLowerCase().endsWith('.tiff')) continue
                 if (label.includes('screen image')) { bestUrl = r.url; break }
-                if ((label.includes('jpeg') || label.includes('jpg')) && !bestUrl) bestUrl = r.url
+                if ((label.includes('jpeg') || label.includes('jpg')) && !jpegUrl) jpegUrl = r.url
               }
+              if (!bestUrl && jpegUrl) bestUrl = jpegUrl
               if (!bestUrl && media.content) bestUrl = media.content
               if (!bestUrl && media.thumbnail) bestUrl = media.thumbnail
               if (!bestUrl || seenUrls.has(bestUrl) || !isAllowedImageUrl(bestUrl)) continue
               seenUrls.add(bestUrl)
-              results.smithsonian.push({
+              siCandidates.push({
                 url: bestUrl,
                 license: 'CC0 (Smithsonian Open Access)',
                 source: 'smithsonian',
@@ -5077,6 +5090,7 @@ app.post('/api/admin/images/external', async (req, res) => {
               })
             }
           }
+          results.smithsonian = randomSelect(siCandidates, limit)
         }
       } catch (siErr) {
         console.error('[server] Smithsonian fetch error in combined endpoint:', siErr)
@@ -5085,7 +5099,7 @@ app.post('/api/admin/images/external', async (req, res) => {
     }
 
     // Fetch SerpAPI Google Images (top 5 only, free-to-use license)
-    const serpApiKey = (process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || '').trim()
+    const serpApiKey = (process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || process.env.SERP_API || '').trim()
     if (serpApiKey) {
       try {
         const serpQuery = `${plantName} plant`
@@ -31126,7 +31140,7 @@ if (shouldListen) {
   const httpServer = app.listen(port, host, () => {
     console.log(`[server] listening on http://${host}:${port}`)
     // Log external image API key status
-    const serpKeyFound = process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY
+    const serpKeyFound = process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || process.env.SERP_API
     console.log(`[server] External image APIs: SerpAPI=${serpKeyFound ? 'configured (' + (serpKeyFound.trim().slice(0,4)) + '...)' : 'NOT SET (checked SERPAPI_KEY, SERP_API_KEY, SERPAPI_API_KEY)'}, Smithsonian=${process.env.SMITHSONIAN_API_KEY ? 'configured' : 'NOT SET'}, GBIF=no key needed`)
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => { })
