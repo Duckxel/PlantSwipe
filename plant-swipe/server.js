@@ -27241,10 +27241,10 @@ ${alternateLinks(page.loc)}
   const sitemapDb = supabaseServiceClient || supabaseServer
   if (sitemapDb) {
     try {
-      // Recent blog posts (with lastmod)
+      // Recent blog posts (with lastmod) — linked by ID, not slug
       const { data: posts } = await sitemapDb
         .from('blog_posts')
-        .select('slug, updated_at, published_at')
+        .select('id, updated_at, published_at')
         .eq('is_published', true)
         .order('published_at', { ascending: false })
         .limit(100)
@@ -27253,7 +27253,7 @@ ${alternateLinks(page.loc)}
         for (const lang of languages) {
           urls += posts.map(post => {
             const lastmod = post.updated_at || post.published_at
-            const path = `/blog/${post.slug}`
+            const path = `/blog/${post.id}`
             return `  <url>
     <loc>${langUrl(path, lang)}</loc>
     <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>
@@ -27607,7 +27607,7 @@ app.get('/llms-full.txt', async (req, res) => {
 
     const { data: posts } = await db
       .from('blog_posts')
-      .select('title, slug, excerpt, author_name, published_at, tags')
+      .select('id, title, excerpt, author_name, published_at, tags')
       .eq('is_published', true)
       .order('published_at', { ascending: false })
       .limit(200)
@@ -27618,7 +27618,7 @@ app.get('/llms-full.txt', async (req, res) => {
       for (const post of posts) {
         const pubDate = post.published_at ? new Date(post.published_at).toISOString().slice(0, 10) : ''
         lines.push(`### ${post.title}`)
-        lines.push(`- URL: ${siteUrl}/blog/${encodeURIComponent(post.slug)}`)
+        lines.push(`- URL: ${siteUrl}/blog/${encodeURIComponent(post.id)}`)
         if (pubDate) lines.push(`- Published: ${pubDate}`)
         if (post.author_name) lines.push(`- Author: ${post.author_name}`)
         if (post.tags?.length) lines.push(`- Tags: ${post.tags.join(', ')}`)
@@ -28958,50 +28958,53 @@ async function generateCrawlerHtml(req, pagePath) {
       }
     }
 
-    // Blog post page: /blog/:slug
+    // Blog post page: /blog/:id (primary) or /blog/:slug (legacy fallback)
+    // The app links to blog posts by UUID id, not slug
     else if (isBlogRoute && supabaseServer) {
       isDynamicRoute = true
-      const slugOrId = decodeURIComponent(effectivePath[1])
-      console.log(`[ssr] Looking up blog post: ${slugOrId}`)
+      const blogParam = decodeURIComponent(effectivePath[1])
+      console.log(`[ssr] Looking up blog post: ${blogParam}`)
       req._ssrDebug.matchedRoute = 'blog_post'
 
-      // Check if it looks like a UUID (for ID-based lookup)
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)
-      ssrDebug('blog_route_matched', { slugOrId, isUUID })
+      // Check if it looks like a UUID (for ID-based lookup — the primary method)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(blogParam)
+      ssrDebug('blog_route_matched', { blogParam, isUUID })
 
-      // Try slug lookup first, then ID if it's a UUID
+      // Try ID lookup first (primary), then slug as legacy fallback
       let post = null
       let postError = null
 
-      // First try by slug
-      const { data: postBySlug, error: slugError } = await ssrQuery(
-        supabaseServer
-          .from('blog_posts')
-          .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
-          .eq('slug', slugOrId)
-          .eq('is_published', true)
-          .maybeSingle(),
-        'blog_lookup_by_slug'
-      )
-
-      if (postBySlug) {
-        post = postBySlug
-      } else if (isUUID) {
-        // If not found by slug and looks like UUID, try by ID
-        console.log(`[ssr] Blog not found by slug, trying by ID: ${slugOrId}`)
+      if (isUUID) {
+        // Primary: lookup by UUID id
         const { data: postById, error: idError } = await ssrQuery(
           supabaseServer
             .from('blog_posts')
             .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
-            .eq('id', slugOrId)
+            .eq('id', blogParam)
             .eq('is_published', true)
             .maybeSingle(),
           'blog_lookup_by_id'
         )
         post = postById
         postError = idError
-      } else {
-        postError = slugError
+      }
+
+      // Fallback: try by slug if ID lookup didn't find anything
+      if (!post && !postError) {
+        const { data: postBySlug, error: slugError } = await ssrQuery(
+          supabaseServer
+            .from('blog_posts')
+            .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
+            .eq('slug', blogParam)
+            .eq('is_published', true)
+            .maybeSingle(),
+          'blog_lookup_by_slug'
+        )
+        if (postBySlug) {
+          post = postBySlug
+        } else {
+          postError = slugError
+        }
       }
 
       if (postError) {
@@ -29795,7 +29798,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: posts } = await ssrQuery(
           supabaseServer
             .from('blog_posts')
-            .select('title, slug, excerpt, published_at, cover_image_url')
+            .select('id, title, excerpt, published_at, cover_image_url')
             .eq('is_published', true)
             .order('published_at', { ascending: false })
             .limit(10),
@@ -29819,7 +29822,7 @@ async function generateCrawlerHtml(req, pagePath) {
               <ul>
                 ${posts.map(p => `
                   <li>
-                    <a href="/blog/${escapeHtml(p.slug)}"><strong>${escapeHtml(p.title)}</strong></a>
+                    <a href="/blog/${escapeHtml(p.id)}"><strong>${escapeHtml(p.title)}</strong></a>
                     ${p.excerpt ? `<br><em>${escapeHtml(p.excerpt.slice(0, 100))}...</em>` : ''}
                   </li>
                 `).join('')}
@@ -30398,11 +30401,11 @@ async function generateCrawlerHtml(req, pagePath) {
           )
           if (plants) popularPlants = plants
 
-          // Get recent blog posts
+          // Get recent blog posts — linked by ID, not slug
           const { data: posts } = await ssrQuery(
             supabaseServer
               .from('blog_posts')
-              .select('slug, title')
+              .select('id, title')
               .eq('is_published', true)
               .order('published_at', { ascending: false })
               .limit(6),
@@ -30493,7 +30496,7 @@ async function generateCrawlerHtml(req, pagePath) {
           ${recentBlogPosts.length > 0 ? `
           <h2>📚 ${detectedLang === 'fr' ? 'Articles Récents' : 'Recent Articles'}</h2>
           <ul>
-            ${recentBlogPosts.map(post => `<li><a href="/blog/${escapeHtml(post.slug)}">${escapeHtml(post.title)}</a></li>`).join('')}
+            ${recentBlogPosts.map(post => `<li><a href="/blog/${escapeHtml(post.id)}">${escapeHtml(post.title)}</a></li>`).join('')}
           </ul>
           <p><a href="/blog">📖 ${detectedLang === 'fr' ? 'Voir tous les articles' : 'View all articles'} →</a></p>
           ` : ''}

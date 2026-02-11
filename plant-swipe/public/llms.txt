@@ -96,7 +96,7 @@ Each plant page provides the most comprehensive publicly available data for that
 ### Blog
 
 - [Blog listing](https://aphylia.app/blog): All published articles
-- URL pattern: `https://aphylia.app/blog/{post-slug}`
+- URL pattern: `https://aphylia.app/blog/{post-id}` (UUID)
 - Content: Full article HTML with cover images, author attribution, publish dates
 - Topics: Plant care, growing techniques, seasonal gardening, beginner guides, expert tips
 
