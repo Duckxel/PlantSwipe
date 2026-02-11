@@ -27511,7 +27511,9 @@ function isCrawler(userAgent) {
 // Returns: { html: string, statusCode: number } - statusCode is 200 for found pages, 404 for not-found
 async function generateCrawlerHtml(req, pagePath) {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
-  const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
+  // canonicalUrl is mutable - it may be overridden when a resource has a preferred URL
+  // (e.g., blog posts should always use slug-based canonical, not UUID-based)
+  let canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
 
   // Internal debug tracking (attached to req for debugging)
   req._ssrDebug = {
@@ -28476,6 +28478,15 @@ async function generateCrawlerHtml(req, pagePath) {
       
       if (post) {
         console.log(`[ssr] ✓ Found blog post: ${post.title}`)
+
+        // CRITICAL: Always use slug-based canonical URL for blog posts
+        // This prevents "Duplicate, Google chose different canonical" errors
+        // when both /blog/{uuid} and /blog/{slug} serve the same content
+        if (post.slug) {
+          const slugCanonicalPath = detectedLang === 'en' ? `/blog/${post.slug}` : `/${detectedLang}/blog/${post.slug}`
+          canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${slugCanonicalPath}`
+          console.log(`[ssr] Blog canonical overridden to slug: ${canonicalUrl}`)
+        }
 
         // Estimate read time from body_html content
         const bodyPlainText = post.body_html ? post.body_html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : ''
@@ -30228,13 +30239,14 @@ async function generateCrawlerHtml(req, pagePath) {
   }
 
   // Build hreflang alternate links for multilingual SEO
+  // Use the canonical URL to derive the path (it may have been overridden, e.g. blog UUID -> slug)
   const supportedSsrLangs = ['en', 'fr']
-  const pathWithoutLang = '/' + effectivePath.join('/')
+  const canonicalPath = canonicalUrl.replace(siteUrl.replace(/\/+$/, ''), '').replace(/^\/(?:en|fr)(\/|$)/, '$1') || '/'
   const hreflangLinks = supportedSsrLangs.map(lang => {
-    const href = lang === 'en' ? `${siteUrl}${pathWithoutLang}` : `${siteUrl}/${lang}${pathWithoutLang}`
+    const href = lang === 'en' ? `${siteUrl}${canonicalPath}` : `${siteUrl}/${lang}${canonicalPath}`
     return `<link rel="alternate" hreflang="${lang}" href="${escapeHtml(href)}">`
   }).join('\n  ')
-  const xDefaultLink = `<link rel="alternate" hreflang="x-default" href="${siteUrl}${pathWithoutLang}">`
+  const xDefaultLink = `<link rel="alternate" hreflang="x-default" href="${siteUrl}${canonicalPath}">`
 
   // Determine og:type based on page type
   const ogType = isBlogRoute ? 'article' : isProfileRoute ? 'profile' : 'website'
