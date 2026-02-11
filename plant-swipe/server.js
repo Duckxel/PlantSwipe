@@ -28419,7 +28419,7 @@ async function generateCrawlerHtml(req, pagePath) {
           let companionPlantNames = []
           if (plant.companions?.length && supabaseServer) {
             try {
-              const companionIds = plant.companions.slice(0, 8)
+              const companionIds = plant.companions
               const { data: companionData } = await ssrQuery(
                 supabaseServer
                   .from('plants')
