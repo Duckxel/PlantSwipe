@@ -27469,6 +27469,331 @@ ${urls}
   res.send(sitemap)
 })
 
+// ─── llms-full.txt — comprehensive live data export for AI crawlers ───
+// Dynamically generated text file listing all plants, blog posts, gardens,
+// profiles, and bookmark collections with key metadata.
+// Analogous to sitemap.xml but optimized for LLM consumption.
+app.get('/llms-full.txt', async (req, res) => {
+  const siteUrl = (process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app').replace(/\/+$/, '')
+  const now = new Date().toISOString()
+  const db = supabaseServiceClient || supabaseServer
+
+  const lines = []
+  lines.push('# Aphylia — Complete Plant & Gardening Data Export')
+  lines.push(`# Generated: ${now}`)
+  lines.push(`# Website: ${siteUrl}`)
+  lines.push(`# Sitemap: ${siteUrl}/sitemap.xml`)
+  lines.push(`# LLM instructions: ${siteUrl}/llms.txt`)
+  lines.push('')
+  lines.push('> This file is dynamically generated from the Aphylia database.')
+  lines.push('> It lists every plant with key care data, all blog posts, public gardens, public profiles, and public bookmark collections.')
+  lines.push('> Use this for comprehensive AI indexing. For crawler instructions see /llms.txt.')
+  lines.push('')
+
+  if (!db) {
+    lines.push('## Error: Database not available')
+    lines.push('The database connection is not configured. Plant data cannot be exported at this time.')
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.setHeader('Cache-Control', 'public, max-age=300')
+    res.send(lines.join('\n'))
+    return
+  }
+
+  // ── Plants ──────────────────────────────────────────────────────────
+  try {
+    lines.push('## Plants')
+    lines.push('')
+
+    // Fetch all plants with key fields
+    let allPlants = []
+    let offset = 0
+    const batchSize = 500
+    while (true) {
+      const { data: batch, error } = await db
+        .from('plants')
+        .select('id, name, plant_type, temperature_min, temperature_max, temperature_ideal, height_cm, wingspan_cm, watering_type, soil, sowing_month, flowering_month, fruiting_month, melliferous, infusion, aromatherapy, conservation_status, companions, utility, comestible_part')
+        .order('name', { ascending: true })
+        .range(offset, offset + batchSize - 1)
+      if (error) { console.error('[llms-full] plants error:', error.message); break }
+      if (!batch || batch.length === 0) break
+      allPlants = allPlants.concat(batch)
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+
+    // Fetch English translations for all plants (scientific name, family, overview, tags, level_sun, maintenance_level, life_cycle, toxicity, habitat, origin)
+    let translationMap = {}
+    offset = 0
+    while (true) {
+      const { data: batch, error } = await db
+        .from('plant_translations')
+        .select('plant_id, scientific_name, family, overview, tags, level_sun, maintenance_level, life_cycle, toxicity_human, toxicity_pets, habitat, origin, living_space')
+        .eq('language', 'en')
+        .range(offset, offset + batchSize - 1)
+      if (error) { console.error('[llms-full] translations error:', error.message); break }
+      if (!batch || batch.length === 0) break
+      for (const t of batch) translationMap[t.plant_id] = t
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+
+    lines.push(`Total: ${allPlants.length} plants`)
+    lines.push('')
+
+    for (const p of allPlants) {
+      const t = translationMap[p.id] || {}
+      const scientificName = t.scientific_name || ''
+      const family = t.family || ''
+      const overview = (t.overview || '').replace(/\n/g, ' ').slice(0, 300)
+      const tags = (t.tags || []).join(', ')
+      const lightReq = t.level_sun || ''
+      const maintenance = t.maintenance_level || ''
+      const lifeCycle = t.life_cycle || ''
+      const toxHuman = t.toxicity_human || ''
+      const toxPets = t.toxicity_pets || ''
+      const habitat = (t.habitat || []).join(', ')
+      const origin = (t.origin || []).join(', ')
+      const livingSpace = t.living_space || ''
+
+      lines.push(`### ${p.name}`)
+      lines.push(`- URL: ${siteUrl}/plants/${encodeURIComponent(p.id)}`)
+      if (scientificName) lines.push(`- Scientific name: ${scientificName}`)
+      if (family) lines.push(`- Family: ${family}`)
+      if (p.plant_type) lines.push(`- Type: ${p.plant_type}`)
+      if (lightReq) lines.push(`- Light: ${lightReq}`)
+      if (p.watering_type?.length) lines.push(`- Watering: ${p.watering_type.join(', ')}`)
+      if (maintenance) lines.push(`- Maintenance: ${maintenance}`)
+      if (p.temperature_min || p.temperature_max || p.temperature_ideal) {
+        const temps = []
+        if (p.temperature_ideal) temps.push(`ideal ${p.temperature_ideal}°C`)
+        if (p.temperature_min) temps.push(`min ${p.temperature_min}°C`)
+        if (p.temperature_max) temps.push(`max ${p.temperature_max}°C`)
+        lines.push(`- Temperature: ${temps.join(', ')}`)
+      }
+      if (p.soil?.length) lines.push(`- Soil: ${p.soil.join(', ')}`)
+      if (p.height_cm) lines.push(`- Height: ${p.height_cm} cm`)
+      if (p.wingspan_cm) lines.push(`- Wingspan: ${p.wingspan_cm} cm`)
+      if (lifeCycle) lines.push(`- Life cycle: ${lifeCycle}`)
+      if (livingSpace) lines.push(`- Living space: ${livingSpace}`)
+      if (p.sowing_month?.length) lines.push(`- Sowing: ${p.sowing_month.join(', ')}`)
+      if (p.flowering_month?.length) lines.push(`- Flowering: ${p.flowering_month.join(', ')}`)
+      if (p.fruiting_month?.length) lines.push(`- Fruiting: ${p.fruiting_month.join(', ')}`)
+      if (p.utility?.length) lines.push(`- Uses: ${p.utility.join(', ')}`)
+      if (p.comestible_part?.length) lines.push(`- Edible parts: ${p.comestible_part.join(', ')}`)
+      if (p.infusion) lines.push(`- Infusion: yes`)
+      if (p.aromatherapy) lines.push(`- Aromatherapy: yes`)
+      if (p.melliferous) lines.push(`- Melliferous: yes`)
+      if (toxHuman) lines.push(`- Human toxicity: ${toxHuman}`)
+      if (toxPets) lines.push(`- Pet toxicity: ${toxPets}`)
+      if (habitat) lines.push(`- Habitat: ${habitat}`)
+      if (origin) lines.push(`- Origin: ${origin}`)
+      if (p.conservation_status) lines.push(`- Conservation: ${p.conservation_status}`)
+      if (p.companions?.length) lines.push(`- Companions: ${p.companions.slice(0, 10).join(', ')}`)
+      if (tags) lines.push(`- Tags: ${tags}`)
+      if (overview) lines.push(`- Overview: ${overview}`)
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Plants section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Blog Posts ──────────────────────────────────────────────────────
+  try {
+    lines.push('---')
+    lines.push('')
+    lines.push('## Blog Posts')
+    lines.push('')
+
+    const { data: posts } = await db
+      .from('blog_posts')
+      .select('title, slug, excerpt, author_name, published_at, tags')
+      .eq('is_published', true)
+      .order('published_at', { ascending: false })
+      .limit(200)
+
+    if (posts?.length) {
+      lines.push(`Total: ${posts.length} published articles`)
+      lines.push('')
+      for (const post of posts) {
+        const pubDate = post.published_at ? new Date(post.published_at).toISOString().slice(0, 10) : ''
+        lines.push(`### ${post.title}`)
+        lines.push(`- URL: ${siteUrl}/blog/${encodeURIComponent(post.slug)}`)
+        if (pubDate) lines.push(`- Published: ${pubDate}`)
+        if (post.author_name) lines.push(`- Author: ${post.author_name}`)
+        if (post.tags?.length) lines.push(`- Tags: ${post.tags.join(', ')}`)
+        if (post.excerpt) lines.push(`- Excerpt: ${post.excerpt.replace(/\n/g, ' ').slice(0, 200)}`)
+        lines.push('')
+      }
+    } else {
+      lines.push('No published blog posts.')
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Blog section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Public Gardens ─────────────────────────────────────────────────
+  try {
+    lines.push('---')
+    lines.push('')
+    lines.push('## Public Gardens')
+    lines.push('')
+
+    const { data: gardens } = await db
+      .from('gardens')
+      .select('id, name, created_at, location_city, location_country, streak, privacy')
+      .eq('privacy', 'public')
+      .order('created_at', { ascending: false })
+      .limit(500)
+
+    if (gardens?.length) {
+      lines.push(`Total: ${gardens.length} public gardens`)
+      lines.push('')
+      for (const g of gardens) {
+        lines.push(`### ${g.name || 'Unnamed Garden'}`)
+        lines.push(`- URL: ${siteUrl}/garden/${encodeURIComponent(g.id)}`)
+        const location = [g.location_city, g.location_country].filter(Boolean).join(', ')
+        if (location) lines.push(`- Location: ${location}`)
+        if (g.streak > 0) lines.push(`- Streak: ${g.streak} days`)
+        if (g.created_at) lines.push(`- Created: ${new Date(g.created_at).toISOString().slice(0, 10)}`)
+        lines.push('')
+      }
+    } else {
+      lines.push('No public gardens.')
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Gardens section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Public Profiles ────────────────────────────────────────────────
+  try {
+    lines.push('---')
+    lines.push('')
+    lines.push('## Public Profiles')
+    lines.push('')
+
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('display_name, username, bio, country, favorite_plant, experience_level, is_private')
+      .or('is_private.is.null,is_private.eq.false')
+      .not('display_name', 'is', null)
+      .order('display_name', { ascending: true })
+      .limit(500)
+
+    if (profiles?.length) {
+      lines.push(`Total: ${profiles.length} public profiles`)
+      lines.push('')
+      for (const p of profiles) {
+        const name = p.display_name || p.username
+        if (!name) continue
+        lines.push(`### ${name}`)
+        lines.push(`- URL: ${siteUrl}/u/${encodeURIComponent(name)}`)
+        if (p.bio) lines.push(`- Bio: ${p.bio.replace(/\n/g, ' ').slice(0, 150)}`)
+        if (p.country) lines.push(`- Country: ${p.country}`)
+        if (p.experience_level) lines.push(`- Experience: ${p.experience_level}`)
+        if (p.favorite_plant) lines.push(`- Favorite plant: ${p.favorite_plant}`)
+        lines.push('')
+      }
+    } else {
+      lines.push('No public profiles.')
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Profiles section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Public Bookmark Collections ────────────────────────────────────
+  try {
+    lines.push('---')
+    lines.push('')
+    lines.push('## Public Bookmark Collections')
+    lines.push('')
+
+    const { data: bookmarks } = await db
+      .from('bookmarks')
+      .select('id, name, user_id, created_at, visibility')
+      .eq('visibility', 'public')
+      .order('created_at', { ascending: false })
+      .limit(300)
+
+    if (bookmarks?.length) {
+      // Get owner names
+      const userIds = [...new Set(bookmarks.map(b => b.user_id).filter(Boolean))]
+      let ownerMap = {}
+      if (userIds.length > 0) {
+        const { data: owners } = await db
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', userIds)
+        if (owners) {
+          for (const o of owners) ownerMap[o.id] = o.display_name
+        }
+      }
+
+      // Get plant counts per bookmark (batch query instead of N+1)
+      const bookmarkIds = bookmarks.map(b => b.id)
+      let countMap = {}
+      if (bookmarkIds.length > 0) {
+        // Fetch all bookmark_items for these bookmarks and count client-side
+        let allItems = []
+        let itemOffset = 0
+        const itemBatch = 1000
+        while (true) {
+          const { data: items, error: itemErr } = await db
+            .from('bookmark_items')
+            .select('bookmark_id')
+            .in('bookmark_id', bookmarkIds)
+            .range(itemOffset, itemOffset + itemBatch - 1)
+          if (itemErr || !items || items.length === 0) break
+          allItems = allItems.concat(items)
+          itemOffset += itemBatch
+          if (items.length < itemBatch) break
+        }
+        for (const item of allItems) {
+          countMap[item.bookmark_id] = (countMap[item.bookmark_id] || 0) + 1
+        }
+      }
+
+      lines.push(`Total: ${bookmarks.length} public collections`)
+      lines.push('')
+      for (const b of bookmarks) {
+        lines.push(`### ${b.name || 'Unnamed Collection'}`)
+        lines.push(`- URL: ${siteUrl}/bookmarks/${encodeURIComponent(b.id)}`)
+        const owner = ownerMap[b.user_id]
+        if (owner) lines.push(`- Curator: ${owner}`)
+        const pCount = countMap[b.id]
+        if (pCount > 0) lines.push(`- Plants: ${pCount}`)
+        if (b.created_at) lines.push(`- Created: ${new Date(b.created_at).toISOString().slice(0, 10)}`)
+        lines.push('')
+      }
+    } else {
+      lines.push('No public bookmark collections.')
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Bookmarks section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Footer ─────────────────────────────────────────────────────────
+  lines.push('---')
+  lines.push('')
+  lines.push(`Generated: ${now}`)
+  lines.push(`Website: ${siteUrl}`)
+  lines.push(`Sitemap: ${siteUrl}/sitemap.xml`)
+  lines.push(`LLM instructions: ${siteUrl}/llms.txt`)
+  lines.push(`Contact: ${siteUrl}/contact`)
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  res.send(lines.join('\n'))
+})
+
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365

@@ -190,6 +190,7 @@ Sitemap: https://aphylia.app/sitemap.xml
 
 # LLM-specific information
 # See /llms.txt for AI crawler instructions
+# See /llms-full.txt for complete plant database export (dynamically generated)
 
 # ===========================================
 # Crawl Rate Limiting
