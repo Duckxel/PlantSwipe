@@ -7,6 +7,7 @@
 
 import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, getEnglishPlantName } from "@/lib/aiPlantFill"
+import { fetchExternalPlantImages } from "@/lib/externalImages"
 import { translateBatch } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
@@ -376,7 +377,7 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
 }
 
 export interface AiPrefillCallbacks {
-  onProgress?: (info: { stage: 'filling' | 'saving' | 'translating' | 'translating_name'; plantName: string }) => void
+  onProgress?: (info: { stage: 'filling' | 'saving' | 'translating' | 'translating_name' | 'fetching_images'; plantName: string }) => void
   onFieldComplete?: (info: { field: string; fieldsCompleted: number; totalFields: number }) => void
   onFieldStart?: (info: { field: string; fieldsCompleted: number; totalFields: number }) => void
   onError?: (error: string) => void
@@ -600,6 +601,50 @@ export async function processPlantRequest(
         fruitingMonth: (plant.growth?.fruitingMonth || []).length ? plant.growth?.fruitingMonth : [9],
       },
       meta: { ...(plant.meta || {}), status: IN_PROGRESS_STATUS },
+    }
+    
+    if (signal?.aborted) {
+      throw new DOMException('Operation cancelled', 'AbortError')
+    }
+    
+    // Stage 1.5: Fetch external images from GBIF & Smithsonian
+    onProgress?.({ stage: 'fetching_images', plantName: displayName })
+    
+    try {
+      const externalResult = await fetchExternalPlantImages(englishPlantName, {
+        limit: 20,
+        signal,
+      })
+      
+      if (externalResult.images.length > 0) {
+        const existingUrls = new Set(
+          (plant.images || [])
+            .map((img) => (img.link || img.url || '').toLowerCase())
+            .filter(Boolean)
+        )
+        const newImages = externalResult.images
+          .filter((img) => !existingUrls.has(img.url.toLowerCase()))
+          .map((img, idx) => ({
+            link: img.url,
+            use: ((plant.images || []).length === 0 && idx === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
+          }))
+        
+        if (newImages.length > 0) {
+          plant = {
+            ...plant,
+            images: [...(plant.images || []), ...newImages],
+          }
+          console.log(`[aiPrefillService] Added ${newImages.length} external images for "${englishPlantName}" (${externalResult.gbifCount} GBIF, ${externalResult.smithsonianCount} Smithsonian)`)
+        }
+      }
+      
+      if (externalResult.errors?.length) {
+        console.warn(`[aiPrefillService] External image fetch partial errors for "${englishPlantName}":`, externalResult.errors)
+      }
+    } catch (imgErr) {
+      // Don't fail the whole prefill for image fetch errors - just log and continue
+      if (isCancellationError(imgErr)) throw imgErr
+      console.warn(`[aiPrefillService] External image fetch failed for "${englishPlantName}":`, imgErr)
     }
     
     if (signal?.aborted) {

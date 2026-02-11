@@ -2064,7 +2064,7 @@ export const AdminPage: React.FC = () => {
   const [aiPrefillCurrentPlant, setAiPrefillCurrentPlant] = React.useState<string | null>(null);
   const [aiPrefillProgress, setAiPrefillProgress] = React.useState<{ current: number; total: number }>({ current: 0, total: 0 });
   const [aiPrefillError, setAiPrefillError] = React.useState<string | null>(null);
-  const [aiPrefillStatus, setAiPrefillStatus] = React.useState<'idle' | 'filling' | 'saving' | 'translating' | 'translating_name'>('idle');
+  const [aiPrefillStatus, setAiPrefillStatus] = React.useState<'idle' | 'filling' | 'saving' | 'translating' | 'translating_name' | 'fetching_images'>('idle');
   const [aiPrefillCurrentField, setAiPrefillCurrentField] = React.useState<string | null>(null);
   const [aiPrefillFieldProgress, setAiPrefillFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 });
   const [aiPrefillCategoryProgress, setAiPrefillCategoryProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress());
@@ -8696,11 +8696,14 @@ export const AdminPage: React.FC = () => {
                                         ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
                                         : aiPrefillStatus === 'translating' || aiPrefillStatus === 'translating_name'
                                           ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
-                                          : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300'
+                                          : aiPrefillStatus === 'fetching_images'
+                                            ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300'
+                                            : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300'
                                   }`}>
-                                    {aiPrefillStatus === 'filling' && <Loader2 className="h-3 w-3 animate-spin" />}
+                                    {(aiPrefillStatus === 'filling' || aiPrefillStatus === 'fetching_images') && <Loader2 className="h-3 w-3 animate-spin" />}
                                     {aiPrefillStatus === 'translating_name' ? 'Getting Name' : 
                                      aiPrefillStatus === 'filling' ? 'AI Filling' : 
+                                     aiPrefillStatus === 'fetching_images' ? 'Fetching Images' :
                                      aiPrefillStatus === 'saving' ? 'Saving' : 
                                      aiPrefillStatus === 'translating' ? 'Translating' : 'Processing'}
                                   </div>
