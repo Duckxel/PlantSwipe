@@ -1661,18 +1661,20 @@ const plantImageUploadBucket = process.env.PLANT_IMAGE_BUCKET || 'PLANTS'
 const plantImageUploadPrefix = (process.env.PLANT_IMAGE_PREFIX || 'plants/images').replace(/^\/+|\/+$/g, '')
 const plantImageMaxDimension = 1600 // Good quality for plant detail pages
 const plantImageWebpQuality = 80 // High quality for plant reference images
-const plantImageMaxFetchBytes = 10 * 1024 * 1024 // 10MB max download from external URL
+const plantImageMaxFetchBytes = 100 * 1024 * 1024 // 100MB max download - large originals are fine since we convert to WebP
+const plantImageContentLengthWarnBytes = 50 * 1024 * 1024 // Log a warning above 50MB
 
 /**
  * Fetch an external image URL, optimize it to WebP, upload to PLANTS bucket, and record in DB.
+ * Uses sharp streaming pipeline to avoid holding huge raw images in memory.
  * Returns { url, bucket, path, sizeBytes, originalSizeBytes } or throws.
  */
 async function uploadPlantImageFromUrl(imageUrl, { plantName, source, adminId, adminEmail, adminName } = {}) {
   if (!supabaseServiceClient) throw new Error('Supabase service role key not configured')
 
-  // Fetch the image
+  // Fetch the image with streaming
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15000) // 15s timeout
+  const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout (large files need more time)
   let resp
   try {
     resp = await fetch(imageUrl, {
@@ -1687,21 +1689,26 @@ async function uploadPlantImageFromUrl(imageUrl, { plantName, source, adminId, a
   if (!resp.ok) throw new Error(`Failed to fetch image: HTTP ${resp.status}`)
 
   const contentType = (resp.headers.get('content-type') || '').toLowerCase()
-  if (!contentType.startsWith('image/')) {
+  // Allow image/* and also application/octet-stream (some servers don't set correct content-type)
+  if (!contentType.startsWith('image/') && contentType !== 'application/octet-stream') {
     throw new Error(`URL did not return an image (got ${contentType})`)
   }
 
-  const arrayBuffer = await resp.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-  if (buffer.length === 0) throw new Error('Downloaded image is empty')
-  if (buffer.length > plantImageMaxFetchBytes) {
-    throw new Error(`Image too large (${(buffer.length / 1024 / 1024).toFixed(1)} MB)`)
+  // Check Content-Length header to reject absurdly large files before downloading
+  const contentLength = parseInt(resp.headers.get('content-length') || '0', 10)
+  if (contentLength > plantImageMaxFetchBytes) {
+    throw new Error(`Image too large (${(contentLength / 1024 / 1024).toFixed(0)} MB declared in header)`)
+  }
+  if (contentLength > plantImageContentLengthWarnBytes) {
+    console.warn(`[plant-image] Large image download: ${(contentLength / 1024 / 1024).toFixed(1)} MB from ${imageUrl.slice(0, 80)}`)
   }
 
-  // Optimize: resize + convert to WebP
+  // Stream the response body directly through sharp for memory-efficient processing
+  // This avoids holding the entire raw file (e.g. 55MB TIFF) in memory
   let optimizedBuffer
+  let originalSize = contentLength || 0
   try {
-    optimizedBuffer = await sharp(buffer)
+    const sharpPipeline = sharp({ failOn: 'none', limitInputPixels: 268402689 }) // ~16384x16384 max
       .rotate()
       .resize({
         width: plantImageMaxDimension,
@@ -1715,9 +1722,24 @@ async function uploadPlantImageFromUrl(imageUrl, { plantName, source, adminId, a
         effort: 5,
         smartSubsample: true,
       })
-      .toBuffer()
+
+    // Pipe the fetch response stream into sharp
+    const { Readable } = await import('stream')
+    const nodeStream = Readable.fromWeb(resp.body)
+    
+    // Track actual bytes downloaded
+    let downloadedBytes = 0
+    nodeStream.on('data', (chunk) => { downloadedBytes += chunk.length })
+    
+    optimizedBuffer = await nodeStream.pipe(sharpPipeline).toBuffer()
+    originalSize = downloadedBytes || contentLength || 0
   } catch (err) {
-    throw new Error(`Failed to optimize image: ${err?.message || 'sharp error'}`)
+    const msg = err?.message || 'sharp error'
+    // Common sharp errors for unsupported/corrupt images
+    if (msg.includes('Input buffer') || msg.includes('unsupported') || msg.includes('corrupt') || msg.includes('VipsJpeg')) {
+      throw new Error(`Unsupported or corrupt image format`)
+    }
+    throw new Error(`Failed to optimize image: ${msg}`)
   }
 
   // Build storage path
@@ -1743,8 +1765,8 @@ async function uploadPlantImageFromUrl(imageUrl, { plantName, source, adminId, a
   const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
 
   // Record in admin_media_uploads for tracking
-  const compressionPercent = buffer.length > 0
-    ? Math.max(0, Math.round(100 - (optimizedBuffer.length / buffer.length) * 100))
+  const compressionPercent = originalSize > 0
+    ? Math.max(0, Math.round(100 - (optimizedBuffer.length / originalSize) * 100))
     : 0
 
   try {
@@ -1758,7 +1780,7 @@ async function uploadPlantImageFromUrl(imageUrl, { plantName, source, adminId, a
       mimeType: 'image/webp',
       originalMimeType: contentType.split(';')[0].trim(),
       sizeBytes: optimizedBuffer.length,
-      originalSizeBytes: buffer.length,
+      originalSizeBytes: originalSize,
       quality: plantImageWebpQuality,
       compressionPercent,
       uploadSource: 'plant_image',
@@ -1778,7 +1800,7 @@ async function uploadPlantImageFromUrl(imageUrl, { plantName, source, adminId, a
     bucket: plantImageUploadBucket,
     path: objectPath,
     sizeBytes: optimizedBuffer.length,
-    originalSizeBytes: buffer.length,
+    originalSizeBytes: originalSize,
     compressionPercent,
   }
 }
