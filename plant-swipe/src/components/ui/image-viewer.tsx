@@ -9,7 +9,7 @@
  *  - Optional download button
  *  - Smooth open/close animations
  *  - Dark overlay with accessible controls
- *  - Auto-hiding controls with tap-to-toggle
+ *  - Controls always visible for reliable UX
  */
 
 import React, {
@@ -70,7 +70,6 @@ const MAX_ZOOM = 4
 const ZOOM_STEP = 0.25
 const SWIPE_THRESHOLD = 50
 const SWIPE_MAX_TIME = 400
-const CONTROLS_HIDE_DELAY = 4000
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -91,17 +90,14 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   const [zoom, setZoom] = useState(MIN_ZOOM)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
-  const [showControls, setShowControls] = useState(true)
   const [isVisible, setIsVisible] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
 
   /* ---- refs ---- */
   const panStartRef = useRef({ x: 0, y: 0 })
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
-  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const imageContainerRef = useRef<HTMLDivElement>(null)
   // Stable refs for callbacks used in native event listeners
-  const zoomRef = useRef(zoom)
   const enableZoomRef = useRef(enableZoom)
   const adjustZoomRef = useRef<(delta: number) => void>(() => {})
 
@@ -116,7 +112,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       setZoom(MIN_ZOOM)
       setOffset({ x: 0, y: 0 })
       setIsPanning(false)
-      setShowControls(true)
       setIsClosing(false)
       // Trigger enter animation
       requestAnimationFrame(() => setIsVisible(true))
@@ -131,28 +126,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       document.body.style.overflow = ""
     }
   }, [open, initialIndex])
-
-  /* ---- Auto-hide controls ---- */
-  const scheduleHideControls = useCallback(() => {
-    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current)
-    controlsTimerRef.current = setTimeout(() => {
-      setShowControls(false)
-    }, CONTROLS_HIDE_DELAY)
-  }, [])
-
-  const revealControls = useCallback(() => {
-    setShowControls(true)
-    scheduleHideControls()
-  }, [scheduleHideControls])
-
-  useEffect(() => {
-    if (!open) return
-    // Show controls and start auto-hide timer when opening or changing image
-    revealControls()
-    return () => {
-      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current)
-    }
-  }, [open, activeIndex, revealControls])
 
   /* ---- Navigation ---- */
   const goToNext = useCallback(() => {
@@ -180,8 +153,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     })
   }, [])
 
-  // Keep ref in sync for native event listener
-  useEffect(() => { zoomRef.current = zoom }, [zoom])
+  // Keep refs in sync for native event listener
   useEffect(() => { enableZoomRef.current = enableZoom }, [enableZoom])
   useEffect(() => { adjustZoomRef.current = adjustZoom }, [adjustZoom])
 
@@ -321,28 +293,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     [zoom, goToNext, goToPrev],
   )
 
-  /* ---- Tap to toggle controls ---- */
-  const handleOverlayClick = useCallback(
-    (e: React.MouseEvent) => {
-      // Ignore clicks on buttons / interactive elements
-      if ((e.target as HTMLElement).closest("button")) return
-      if (zoom > MIN_ZOOM) return // don't toggle when zoomed — panning takes priority
-      // Toggle: if controls are visible, hide them (and cancel timer);
-      // if hidden, show them (and restart timer).
-      setShowControls((prev) => {
-        if (prev) {
-          // Currently showing -> hide now
-          if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current)
-          return false
-        }
-        // Currently hidden -> show and schedule auto-hide
-        scheduleHideControls()
-        return true
-      })
-    },
-    [zoom, scheduleHideControls],
-  )
-
   /* ---- Double-click to zoom ---- */
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -353,9 +303,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       } else {
         setZoom(2)
       }
-      revealControls()
     },
-    [enableZoom, zoom, resetView, revealControls],
+    [enableZoom, zoom, resetView],
   )
 
   /* ---- Download ---- */
@@ -403,18 +352,12 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={title ?? "Image viewer"}
-      onClick={handleOverlayClick}
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/95 backdrop-blur-sm" />
 
-      {/* Top bar */}
-      <div
-        className={cn(
-          "absolute top-0 left-0 right-0 z-20 transition-opacity duration-200",
-          showControls ? "opacity-100" : "opacity-0 pointer-events-none",
-        )}
-      >
+      {/* Top bar — always visible */}
+      <div className="absolute top-0 left-0 right-0 z-20">
         <div className="flex items-center justify-between px-3 py-3 bg-gradient-to-b from-black/60 to-transparent sm:px-5 sm:py-4">
           {/* Left: close */}
           <button
@@ -479,14 +422,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
         )}
       </div>
 
-      {/* Bottom bar: zoom controls */}
+      {/* Bottom bar: zoom controls — always visible */}
       {enableZoom && (
-        <div
-          className={cn(
-            "absolute bottom-0 left-0 right-0 z-20 transition-opacity duration-200",
-            showControls ? "opacity-100" : "opacity-0 pointer-events-none",
-          )}
-        >
+        <div className="absolute bottom-0 left-0 right-0 z-20">
           <div className="flex items-center justify-center gap-2 px-4 pb-6 pt-8 bg-gradient-to-t from-black/60 to-transparent sm:pb-8">
             <button
               type="button"
@@ -535,15 +473,11 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
         </div>
       )}
 
-      {/* Navigation arrows */}
+      {/* Navigation arrows — always visible */}
       {hasMultiple && activeIndex > 0 && (
         <button
           type="button"
-          className={cn(
-            "absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-3 transition-opacity duration-200",
-            "text-white active:scale-95",
-            showControls ? "opacity-100" : "opacity-0 pointer-events-none",
-          )}
+          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95"
           onClick={(e) => {
             e.stopPropagation()
             goToPrev()
@@ -558,11 +492,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       {hasMultiple && activeIndex < images.length - 1 && (
         <button
           type="button"
-          className={cn(
-            "absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-3 transition-opacity duration-200",
-            "text-white active:scale-95",
-            showControls ? "opacity-100" : "opacity-0 pointer-events-none",
-          )}
+          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95"
           onClick={(e) => {
             e.stopPropagation()
             goToNext()
@@ -579,9 +509,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       {hasMultiple && images.length <= 20 && (
         <div
           className={cn(
-            "absolute bottom-16 sm:bottom-20 left-0 right-0 z-20 flex justify-center gap-1.5 transition-opacity duration-200",
-            enableZoom ? "" : "bottom-6 sm:bottom-8",
-            showControls ? "opacity-100" : "opacity-0",
+            "absolute left-0 right-0 z-20 flex justify-center gap-1.5",
+            enableZoom ? "bottom-16 sm:bottom-20" : "bottom-6 sm:bottom-8",
           )}
         >
           {images.map((_, idx) => (
