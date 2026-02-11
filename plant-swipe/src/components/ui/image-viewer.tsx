@@ -94,6 +94,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   const [isClosing, setIsClosing] = useState(false)
 
   /* ---- refs ---- */
+  const rootRef = useRef<HTMLDivElement>(null)
   const panStartRef = useRef({ x: 0, y: 0 })
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
   const imageContainerRef = useRef<HTMLDivElement>(null)
@@ -126,6 +127,26 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       document.body.style.overflow = ""
     }
   }, [open, initialIndex])
+
+  /* ---- Isolate from parent layers (e.g. Radix Dialog focus trap / dismissable layer) ---- */
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root || !open) return
+
+    // Stop pointer/mouse events from propagating to document so that
+    // Radix Dialog's DismissableLayer doesn't treat clicks inside the
+    // ImageViewer as "outside" clicks and steal focus or dismiss.
+    const stop = (e: Event) => e.stopPropagation()
+    root.addEventListener("pointerdown", stop, true)
+    root.addEventListener("mousedown", stop, true)
+    root.addEventListener("focusin", stop, true)
+
+    return () => {
+      root.removeEventListener("pointerdown", stop, true)
+      root.removeEventListener("mousedown", stop, true)
+      root.removeEventListener("focusin", stop, true)
+    }
+  }, [open])
 
   /* ---- Navigation ---- */
   const goToNext = useCallback(() => {
@@ -344,6 +365,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
 
   const content = (
     <div
+      ref={rootRef}
       className={cn(
         "fixed inset-0 z-[100] flex flex-col transition-opacity duration-200",
         isVisible ? "opacity-100" : "opacity-0",
