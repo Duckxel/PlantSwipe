@@ -111,6 +111,8 @@ export default defineConfig({
           'three': ['three'],
           'supabase': ['@supabase/supabase-js'],
           'ui-components': ['@radix-ui/react-dialog', '@radix-ui/react-label', '@radix-ui/react-slot'],
+          'framer-motion': ['framer-motion'],
+          'i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector', 'i18next-http-backend'],
         },
       },
       // Reduce memory pressure during build

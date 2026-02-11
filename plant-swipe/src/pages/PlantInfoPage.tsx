@@ -1,7 +1,8 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import { DimensionCube } from '@/components/plant/DimensionCube'
+// Lazy-load DimensionCube (Three.js is 482KB) — only loaded when the dimensions section is visible
+const DimensionCube = React.lazy(() => import('@/components/plant/DimensionCube').then(m => ({ default: m.DimensionCube })))
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { PlantInfoPageSkeleton } from '@/components/garden/GardenSkeletons'
 import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
@@ -744,6 +745,9 @@ const PlantInfoPage: React.FC = () => {
                   src={limitedPlantInfo.primaryImage} 
                   alt={limitedPlantInfo.name}
                   className="w-full h-full object-cover"
+                  fetchPriority="high"
+                  decoding="async"
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 80vw, 900px"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
                 <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
@@ -1601,7 +1605,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </div>
               <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
                 <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[260px]">
-                  <DimensionCube scale={cubeScale} className="h-full w-full" />
+                  <React.Suspense fallback={<div className="h-full w-full flex items-center justify-center text-stone-400"><Leaf className="h-8 w-8 animate-pulse" /></div>}>
+                    <DimensionCube scale={cubeScale} className="h-full w-full" />
+                  </React.Suspense>
                 </div>
                 <div className="flex flex-col gap-2 md:min-h-[260px]">
                   {dimensionLegend.map((item) => (
@@ -1692,8 +1698,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.habitatMap.title')}</span>
               </div>
               <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
-                <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />
-                <img src={worldMapDark} alt="" className="absolute inset-0 hidden h-full w-full object-cover opacity-75 dark:block" />
+                <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" loading="lazy" decoding="async" />
+                <img src={worldMapDark} alt="" className="absolute inset-0 hidden h-full w-full object-cover opacity-75 dark:block" loading="lazy" decoding="async" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_30%_40%,rgba(16,185,129,0.25),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(14,165,233,0.25),transparent_65%)]" />
                 <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:32px_32px] sm:bg-[size:48px_48px] dark:bg-[linear-gradient(90deg,rgba(3,37,65,0.5)_1px,transparent_1px),linear-gradient(0deg,rgba(3,37,65,0.5)_1px,transparent_1px)]" />
                 {activePins.map((pin) => (
@@ -2491,6 +2497,7 @@ const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ name, imageUrl,
             alt={name}
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-stone-400 dark:text-stone-600">
@@ -2776,6 +2783,7 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
                   alt={`${plantName} - Image ${idx + 1}`}
                   className="h-full w-full object-contain transition-transform duration-300 hover:scale-105"
                   loading="lazy"
+                  decoding="async"
                   draggable={false}
                   onClick={() => openViewer(img)}
                   style={{ maxHeight: '400px' }}
