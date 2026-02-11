@@ -3495,6 +3495,64 @@ function getVisitsTableIdentifierParts() {
 const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch { }
+
+// ========================================
+// SEO PROTECTION: Block non-production domains from search engine indexing
+// ========================================
+// The canonical production domain. All other domains get noindex.
+const PRODUCTION_HOSTS = ['aphylia.app', 'www.aphylia.app']
+
+/**
+ * Check if the current request is on the production domain.
+ * Returns false for dev/staging subdomains like dev01.aphylia.app
+ */
+function isProductionHost(req) {
+  const host = (req.hostname || req.get('host') || '').split(':')[0].toLowerCase()
+  return PRODUCTION_HOSTS.includes(host)
+}
+
+// Middleware: Add X-Robots-Tag: noindex for non-production domains
+// This prevents Google from indexing dev/staging servers
+app.use((req, res, next) => {
+  if (!isProductionHost(req)) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive')
+  }
+  next()
+})
+
+// Dynamic robots.txt: Block ALL crawlers on non-production domains
+// On production, serve the normal robots.txt from public/
+app.get('/robots.txt', (req, res, next) => {
+  if (!isProductionHost(req)) {
+    const host = req.get('host') || 'unknown'
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    return res.send(
+      `# robots.txt for NON-PRODUCTION environment (${host})\n` +
+      `# This is a dev/staging server - do NOT index.\n` +
+      `# Production site: https://aphylia.app\n\n` +
+      `User-agent: *\n` +
+      `Disallow: /\n`
+    )
+  }
+  // Production: fall through to serve public/robots.txt via express.static
+  next()
+})
+
+// Middleware: Redirect HTTP to HTTPS on production (for reverse proxies that pass x-forwarded-proto)
+app.use((req, res, next) => {
+  // Only redirect on production hosts
+  if (!isProductionHost(req)) return next()
+
+  const proto = (req.get('x-forwarded-proto') || req.protocol || '').toLowerCase()
+  if (proto === 'http') {
+    const host = req.get('host') || 'aphylia.app'
+    const redirectUrl = `https://${host}${req.originalUrl}`
+    return res.redirect(301, redirectUrl)
+  }
+  next()
+})
+
 // Limit JSON body size to 100kb to prevent DoS (large uploads use multer/multipart)
 // Was previously 15mb for legacy base64 uploads which are now deprecated
 app.use(express.json({ limit: '100kb' }))
@@ -30260,7 +30318,7 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(description)}">
-  <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
+  <meta name="robots" content="${!isProductionHost(req) ? 'noindex, nofollow, noarchive' : (isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
   <!-- Hreflang alternate links for multilingual SEO -->
