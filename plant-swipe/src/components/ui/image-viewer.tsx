@@ -133,18 +133,25 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     const root = rootRef.current
     if (!root || !open) return
 
-    // Stop pointer/mouse events from propagating to document so that
-    // Radix Dialog's DismissableLayer doesn't treat clicks inside the
-    // ImageViewer as "outside" clicks and steal focus or dismiss.
-    const stop = (e: Event) => e.stopPropagation()
-    root.addEventListener("pointerdown", stop, true)
-    root.addEventListener("mousedown", stop, true)
-    root.addEventListener("focusin", stop, true)
+    // Bubble-phase listeners: events reach child elements first (buttons,
+    // pan area, etc.) and only get stopped when they bubble back up to
+    // our root. This prevents Radix Dialog's document-level listeners
+    // from seeing them as "outside" clicks while keeping all internal
+    // interactions working.
+    const stopProp = (e: Event) => e.stopPropagation()
+    const stopWheel = (e: Event) => { e.preventDefault(); e.stopPropagation() }
+
+    root.addEventListener("pointerdown", stopProp)
+    root.addEventListener("mousedown", stopProp)
+    root.addEventListener("focusin", stopProp)
+    // Block wheel events from reaching the dialog scroll container underneath
+    root.addEventListener("wheel", stopWheel, { passive: false })
 
     return () => {
-      root.removeEventListener("pointerdown", stop, true)
-      root.removeEventListener("mousedown", stop, true)
-      root.removeEventListener("focusin", stop, true)
+      root.removeEventListener("pointerdown", stopProp)
+      root.removeEventListener("mousedown", stopProp)
+      root.removeEventListener("focusin", stopProp)
+      root.removeEventListener("wheel", stopWheel)
     }
   }, [open])
 
