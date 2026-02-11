@@ -5,7 +5,7 @@ import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, 
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
-import { fetchExternalPlantImages } from "@/lib/externalImages"
+import { fetchExternalPlantImages, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
@@ -894,7 +894,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
   const [fetchingExternalImages, setFetchingExternalImages] = React.useState(false)
-  const [externalImagesResult, setExternalImagesResult] = React.useState<{ gbif: number; smithsonian: number; serpapi: number } | null>(null)
+  const [externalImageSources, setExternalImageSources] = React.useState<Record<ExternalImageSource, SourceResult>>(() => {
+    const initial: Record<string, SourceResult> = {}
+    for (const s of IMAGE_SOURCES) {
+      initial[s.key] = { source: s.key, label: s.label, images: [], status: 'idle' }
+    }
+    return initial as Record<ExternalImageSource, SourceResult>
+  })
+  const [externalImagesTotal, setExternalImagesTotal] = React.useState<number | null>(null)
   const targetFields = React.useMemo(
     () =>
       [
@@ -1652,27 +1659,52 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       return
     }
     setFetchingExternalImages(true)
-    setExternalImagesResult(null)
+    setExternalImagesTotal(null)
     setError(null)
-    try {
-      const result = await fetchExternalPlantImages(trimmedName, { limit: 20 })
-      if (result.images.length === 0) {
-        setExternalImagesResult({ gbif: 0, smithsonian: 0, serpapi: 0 })
-        return
+    // Reset all sources to loading
+    setExternalImageSources((prev) => {
+      const next = { ...prev }
+      for (const s of IMAGE_SOURCES) {
+        next[s.key] = { source: s.key, label: s.label, images: [], status: 'loading' }
       }
-      // Add fetched images to the plant's images list, avoiding duplicates
-      setPlant((prev) => {
-        const existing = prev.images || []
-        const existingUrls = new Set(existing.map((img) => img.link?.toLowerCase() || img.url?.toLowerCase()).filter(Boolean))
-        const newImages = result.images
-          .filter((img) => !existingUrls.has(img.url.toLowerCase()))
-          .map((img, idx) => ({
-            link: img.url,
-            use: (existing.length === 0 && idx === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
-          }))
-        return { ...prev, images: [...existing, ...newImages] }
+      return next
+    })
+    try {
+      const result = await fetchExternalPlantImages(trimmedName, {
+        limit: 20,
+        callbacks: {
+          onSourceStart: (source) => {
+            setExternalImageSources((prev) => ({
+              ...prev,
+              [source]: { ...prev[source], status: 'loading', images: [], error: undefined },
+            }))
+          },
+          onSourceDone: (sourceResult) => {
+            setExternalImageSources((prev) => ({
+              ...prev,
+              [sourceResult.source]: sourceResult,
+            }))
+            // Add images from this source immediately
+            if (sourceResult.images.length > 0) {
+              setPlant((prev) => {
+                const existing = prev.images || []
+                const existingUrls = new Set(
+                  existing.map((img) => (img.link || img.url || '').toLowerCase()).filter(Boolean)
+                )
+                const newImages = sourceResult.images
+                  .filter((img) => !existingUrls.has(img.url.toLowerCase()))
+                  .map((img, idx) => ({
+                    link: img.url,
+                    use: (existing.length === 0 && idx === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
+                  }))
+                if (newImages.length === 0) return prev
+                return { ...prev, images: [...existing, ...newImages] }
+              })
+            }
+          },
+        },
       })
-      setExternalImagesResult({ gbif: result.gbifCount, smithsonian: result.smithsonianCount, serpapi: result.serpapiCount })
+      setExternalImagesTotal(result.images.length)
       if (result.errors?.length) {
         console.warn('[CreatePlantPage] External image fetch partial errors:', result.errors)
       }
@@ -2171,11 +2203,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 {fetchingExternalImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImagePlus className="mr-2 h-4 w-4" />}
                 {t('plantAdmin.fetchExternalImages', 'Fetch Images')}
               </Button>
-              {externalImagesResult && (
+              {externalImagesTotal !== null && !fetchingExternalImages && (
                 <span className="text-xs text-muted-foreground self-center">
-                  {externalImagesResult.gbif + externalImagesResult.smithsonian + externalImagesResult.serpapi === 0
-                    ? t('plantAdmin.noExternalImages', 'No free images found')
-                    : t('plantAdmin.externalImagesAdded', 'Added {{serpapi}} Google + {{gbif}} GBIF + {{smithsonian}} Smithsonian', { gbif: externalImagesResult.gbif, smithsonian: externalImagesResult.smithsonian, serpapi: externalImagesResult.serpapi })}
+                  {externalImagesTotal === 0
+                    ? 'No free images found'
+                    : `Added ${externalImagesTotal} images`}
                 </span>
               )}
               {!(plant.name && typeof plant.name === 'string' && plant.name.trim()) && (
@@ -2184,6 +2216,85 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             </div>
           )}
         </div>
+          {/* External Image Fetch Progress Card */}
+          {(fetchingExternalImages || externalImagesTotal !== null) && (
+            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 space-y-3 shadow-md shadow-stone-200/50 dark:shadow-black/20">
+              <div className="flex items-center gap-2">
+                <ImagePlus className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                <span className="text-sm font-semibold text-stone-800 dark:text-stone-100">
+                  {fetchingExternalImages ? 'Fetching Images...' : 'Image Fetch Complete'}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {IMAGE_SOURCES.map(({ key, label }) => {
+                  const src = externalImageSources[key]
+                  const isLoading = src.status === 'loading'
+                  const isDone = src.status === 'done'
+                  const isError = src.status === 'error'
+                  const isSkipped = src.status === 'skipped'
+                  const count = src.images.length
+                  return (
+                    <div key={key} className="flex items-center gap-3">
+                      <div className="w-28 shrink-0 text-xs font-medium text-stone-600 dark:text-stone-300">
+                        {label}
+                      </div>
+                      <div className="flex-1 h-2 rounded-full bg-stone-100 dark:bg-[#2a2a2d] overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ease-out ${
+                            isLoading
+                              ? 'bg-cyan-400 dark:bg-cyan-500 animate-pulse w-full'
+                              : isDone && count > 0
+                                ? 'bg-emerald-500 dark:bg-emerald-400'
+                                : isDone && count === 0
+                                  ? 'bg-stone-300 dark:bg-stone-600'
+                                  : isError
+                                    ? 'bg-red-400 dark:bg-red-500'
+                                    : isSkipped
+                                      ? 'bg-amber-300 dark:bg-amber-500'
+                                      : 'bg-stone-200 dark:bg-stone-700'
+                          }`}
+                          style={{ width: isLoading ? '100%' : (isDone || isError || isSkipped) ? '100%' : '0%' }}
+                        />
+                      </div>
+                      <div className="w-24 shrink-0 text-right">
+                        {isLoading && (
+                          <span className="text-xs text-cyan-600 dark:text-cyan-400 flex items-center justify-end gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Searching
+                          </span>
+                        )}
+                        {isDone && count > 0 && (
+                          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            {count} {count === 1 ? 'image' : 'images'}
+                          </span>
+                        )}
+                        {isDone && count === 0 && (
+                          <span className="text-xs text-stone-400 dark:text-stone-500">
+                            0 images
+                          </span>
+                        )}
+                        {isError && (
+                          <span className="text-xs text-red-500 dark:text-red-400" title={src.error}>
+                            Failed
+                          </span>
+                        )}
+                        {isSkipped && (
+                          <span className="text-xs text-amber-500 dark:text-amber-400" title={src.error}>
+                            Not configured
+                          </span>
+                        )}
+                        {src.status === 'idle' && (
+                          <span className="text-xs text-stone-300 dark:text-stone-600">
+                            Waiting
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           {showAiProgressCard && (
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 space-y-5 shadow-lg shadow-stone-200/50 dark:shadow-black/20">
             {/* Header */}
