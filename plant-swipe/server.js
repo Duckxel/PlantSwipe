@@ -28302,6 +28302,20 @@ async function generateCrawlerHtml(req, pagePath) {
             'plant_colors'
           )
 
+          // Fetch companion plants if any
+          let companionPlants = []
+          if (plant.companions?.length) {
+            const { data: companions } = await ssrQuery(
+              supabaseServer
+                .from('plants')
+                .select('id, name')
+                .in('id', plant.companions)
+                .limit(20),
+              'companion_plants'
+            )
+            companionPlants = companions || []
+          }
+
           // Fetch primary image, fallback to discovery image (with timeout)
           const { data: images } = await ssrQuery(
             supabaseServer
@@ -28470,6 +28484,18 @@ async function generateCrawlerHtml(req, pagePath) {
                 </div>
               ` : ''}
               
+              ${companionPlants.length ? `
+                <h2>🤝 ${detectedLang === 'fr' ? 'Plantes Compagnes' : 'Companion Plants'}</h2>
+                <p style="color: #6b7280; margin: 8px 0 16px 0;">${detectedLang === 'fr' ? 'Ces plantes poussent bien ensemble' : 'These plants grow well together'}:</p>
+                <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0;">
+                  ${companionPlants.map(c => `
+                    <a href="/plants/${encodeURIComponent(c.id)}" style="display: inline-block; padding: 8px 16px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; color: #065f46; text-decoration: none; font-weight: 500;">
+                      🌱 ${escapeHtml(c.name)}
+                    </a>
+                  `).join('')}
+                </div>
+              ` : ''}
+              
               ${plant.tags?.length ? `
                 <div style="margin: 24px 0;">
                   <strong>${tr.tags}:</strong> ${plant.tags.slice(0, 12).map(t => `<span style="display: inline-block; background: #e5e7eb; padding: 4px 12px; border-radius: 12px; margin: 4px; font-size: 13px;">#${escapeHtml(t)}</span>`).join('')}
@@ -28606,8 +28632,21 @@ async function generateCrawlerHtml(req, pagePath) {
               <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(post.title)}</figcaption>
             </figure>` : ''}
             
-            ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadFull} →</a></p>
+            ${post.excerpt ? `<div style="font-size: 1.15em; color: #374151; font-style: italic; padding: 20px; background: #f9fafb; border-left: 4px solid #10b981; margin: 24px 0; border-radius: 4px;">
+              <strong>${detectedLang === 'fr' ? 'Résumé' : 'Summary'}:</strong> ${escapeHtml(post.excerpt)}
+            </div>` : ''}
+            
+            ${post.body_html ? `
+              <div itemprop="articleBody" style="margin: 32px 0; line-height: 1.8; font-size: 16px;">
+                ${post.body_html}
+              </div>
+            ` : `<p style="color: #6b7280;">${detectedLang === 'fr' ? 'Contenu non disponible dans la version archivée.' : 'Content not available in archived version.'}</p>`}
+            
+            <div style="margin: 32px 0; padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
+              <strong>💬 ${detectedLang === 'fr' ? 'Rejoindre la discussion' : 'Join the Discussion'}</strong><br>
+              ${detectedLang === 'fr' ? 'Pour commenter, partager et découvrir plus d\'articles' : 'To comment, share, and discover more articles'}:<br>
+              <a href="${escapeHtml(canonicalUrl)}" style="color: #059669; font-weight: 600;">${detectedLang === 'fr' ? 'Visiter Aphylia →' : 'Visit Aphylia →'}</a>
+            </div>
             
             <h2>🔗 ${detectedLang === 'fr' ? 'Plus d\'articles' : 'More Articles'}</h2>
             <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
