@@ -3499,22 +3499,32 @@ try { app.set('trust proxy', true) } catch { }
 // ========================================
 // SEO PROTECTION: Block non-production domains from search engine indexing
 // ========================================
-// The canonical production domain. All other domains get noindex.
-const PRODUCTION_HOSTS = ['aphylia.app', 'www.aphylia.app']
+// Dev/staging subdomain patterns that should be blocked from indexing.
+// Only these get noindex — everything else (aphylia.app, media.aphylia.app, etc.) is allowed.
+const DEV_HOST_PATTERNS = [
+  /^dev\d*\.aphylia\.app$/i,      // dev01.aphylia.app, dev.aphylia.app, dev02.aphylia.app, ...
+  /^staging\d*\.aphylia\.app$/i,  // staging.aphylia.app, staging01.aphylia.app, ...
+  /^test\d*\.aphylia\.app$/i,     // test.aphylia.app, test01.aphylia.app, ...
+  /^preview\d*\.aphylia\.app$/i,  // preview.aphylia.app, ...
+  /^localhost$/i,                  // localhost
+  /^127\.0\.0\.1$/,               // loopback
+]
 
 /**
- * Check if the current request is on the production domain.
- * Returns false for dev/staging subdomains like dev01.aphylia.app
+ * Check if the current request is on a dev/staging host that should be blocked.
+ * Returns true for dev01.aphylia.app, staging.aphylia.app, etc.
+ * Returns false for aphylia.app, www.aphylia.app, media.aphylia.app, etc.
  */
-function isProductionHost(req) {
+function isDevHost(req) {
   const host = (req.hostname || req.get('host') || '').split(':')[0].toLowerCase()
-  return PRODUCTION_HOSTS.includes(host)
+  return DEV_HOST_PATTERNS.some(pattern => pattern.test(host))
 }
 
-// Middleware: Add X-Robots-Tag: noindex for non-production domains
+// Middleware: Add X-Robots-Tag: noindex for dev/staging domains
 // This prevents Google from indexing dev/staging servers
+// Does NOT affect media.aphylia.app or other non-dev subdomains
 app.use((req, res, next) => {
-  if (!isProductionHost(req)) {
+  if (isDevHost(req)) {
     res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive')
   }
   next()
@@ -3523,7 +3533,7 @@ app.use((req, res, next) => {
 // Dynamic robots.txt: Block ALL crawlers on non-production domains
 // On production, serve the normal robots.txt from public/
 app.get('/robots.txt', (req, res, next) => {
-  if (!isProductionHost(req)) {
+  if (isDevHost(req)) {
     const host = req.get('host') || 'unknown'
     res.setHeader('Content-Type', 'text/plain; charset=utf-8')
     res.setHeader('Cache-Control', 'public, max-age=86400')
@@ -3541,8 +3551,8 @@ app.get('/robots.txt', (req, res, next) => {
 
 // Middleware: Redirect HTTP to HTTPS on production (for reverse proxies that pass x-forwarded-proto)
 app.use((req, res, next) => {
-  // Only redirect on production hosts
-  if (!isProductionHost(req)) return next()
+  // Only redirect on non-dev hosts (don't redirect dev servers)
+  if (isDevHost(req)) return next()
 
   const proto = (req.get('x-forwarded-proto') || req.protocol || '').toLowerCase()
   if (proto === 'http') {
@@ -30316,7 +30326,7 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(description)}">
-  <meta name="robots" content="${!isProductionHost(req) ? 'noindex, nofollow, noarchive' : (isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
+  <meta name="robots" content="${isDevHost(req) ? 'noindex, nofollow, noarchive' : (isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
   <!-- Hreflang alternate links for multilingual SEO -->
