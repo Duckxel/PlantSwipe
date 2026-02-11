@@ -11880,6 +11880,9 @@ app.get('/api/admin/member', async (req, res) => {
       // Plants count only (drop garden counts)
       // Plants count only (drop garden counts)
       let plantsTotal = undefined
+      let scansTotal = 0
+      let scansThisMonth = 0
+      let scans = []
       try {
         // Gather gardens user can access to compute plants total
         let gardenIds = []
@@ -11908,6 +11911,179 @@ app.get('/api/admin/member', async (req, res) => {
           }
         }
       } catch { }
+
+      try {
+        const monthStart = new Date()
+        monthStart.setUTCDate(1)
+        monthStart.setUTCHours(0, 0, 0, 0)
+        const monthStartIso = monthStart.toISOString()
+
+        let scanRows = []
+
+        if (supabaseServiceClient) {
+          const { data: svcScans, error: svcScanErr } = await supabaseServiceClient
+            .from('plant_scans')
+            .select('*')
+            .eq('user_id', targetId)
+            .order('created_at', { ascending: false })
+            .limit(50)
+
+          if (!svcScanErr && Array.isArray(svcScans)) {
+            scanRows = svcScans
+          }
+
+          const [{ count: totalCount }, { count: monthCount }] = await Promise.all([
+            supabaseServiceClient
+              .from('plant_scans')
+              .select('*', { head: true, count: 'exact' })
+              .eq('user_id', targetId),
+            supabaseServiceClient
+              .from('plant_scans')
+              .select('*', { head: true, count: 'exact' })
+              .eq('user_id', targetId)
+              .gte('created_at', monthStartIso),
+          ])
+          scansTotal = typeof totalCount === 'number' ? totalCount : 0
+          scansThisMonth = typeof monthCount === 'number' ? monthCount : 0
+        } else {
+          const scansResp = await fetch(
+            `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&select=*&order=created_at.desc&limit=50`,
+            { headers: baseHeaders },
+          )
+          const rawScans = scansResp.ok ? await scansResp.json().catch(() => []) : []
+          scanRows = Array.isArray(rawScans) ? rawScans : []
+
+          const [scanTotalResp, scanMonthResp] = await Promise.all([
+            fetch(
+              `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&select=id`,
+              {
+                headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
+              },
+            ),
+            fetch(
+              `${supabaseUrlEnv}/rest/v1/plant_scans?user_id=eq.${encodeURIComponent(targetId)}&created_at=gte.${encodeURIComponent(monthStartIso)}&select=id`,
+              {
+                headers: { ...baseHeaders, Prefer: 'count=exact', Range: '0-0' },
+              },
+            ),
+          ])
+
+          if (scanTotalResp.ok) {
+            const cr = scanTotalResp.headers.get('content-range') || ''
+            const m = cr.match(/\/(\d+)$/)
+            if (m) scansTotal = Number(m[1])
+          }
+          if (scanMonthResp.ok) {
+            const cr = scanMonthResp.headers.get('content-range') || ''
+            const m = cr.match(/\/(\d+)$/)
+            if (m) scansThisMonth = Number(m[1])
+          }
+        }
+
+        const matchedPlantIds = Array.from(
+          new Set(
+            scanRows
+              .map((row) => (row?.matched_plant_id ? String(row.matched_plant_id) : ''))
+              .filter(Boolean),
+          ),
+        )
+        const plantMetaById = new Map()
+        if (matchedPlantIds.length > 0) {
+          if (supabaseServiceClient) {
+            const { data: plantRows } = await supabaseServiceClient
+              .from('plants')
+              .select('id,name,scientific_name')
+              .in('id', matchedPlantIds)
+            for (const row of Array.isArray(plantRows) ? plantRows : []) {
+              if (!row?.id) continue
+              plantMetaById.set(String(row.id), {
+                name: row?.name || null,
+                scientificName: row?.scientific_name || null,
+                image: null,
+              })
+            }
+            // Fetch primary images from plant_images table
+            try {
+              const { data: imgRows } = await supabaseServiceClient
+                .from('plant_images')
+                .select('plant_id,link')
+                .in('plant_id', matchedPlantIds)
+                .eq('use', 'primary')
+              for (const img of Array.isArray(imgRows) ? imgRows : []) {
+                const meta = plantMetaById.get(String(img.plant_id))
+                if (meta) meta.image = img.link || null
+              }
+            } catch { }
+          } else {
+            const inClause = matchedPlantIds.map((id) => encodeURIComponent(id)).join(',')
+            const plantsResp = await fetch(
+              `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inClause})&select=id,name,scientific_name`,
+              { headers: baseHeaders },
+            )
+            if (plantsResp.ok) {
+              const plantRows = await plantsResp.json().catch(() => [])
+              for (const row of Array.isArray(plantRows) ? plantRows : []) {
+                if (!row?.id) continue
+                plantMetaById.set(String(row.id), {
+                  name: row?.name || null,
+                  scientificName: row?.scientific_name || null,
+                  image: null,
+                })
+              }
+            }
+            // Fetch primary images from plant_images table via REST
+            try {
+              const imgResp = await fetch(
+                `${supabaseUrlEnv}/rest/v1/plant_images?plant_id=in.(${inClause})&use=eq.primary&select=plant_id,link`,
+                { headers: baseHeaders },
+              )
+              if (imgResp.ok) {
+                const imgRows = await imgResp.json().catch(() => [])
+                for (const img of Array.isArray(imgRows) ? imgRows : []) {
+                  const meta = plantMetaById.get(String(img.plant_id))
+                  if (meta) meta.image = img.link || null
+                }
+              }
+            } catch { }
+          }
+        }
+
+        scans = scanRows.map((row) => {
+          const matchedPlantId = row?.matched_plant_id ? String(row.matched_plant_id) : null
+          const matchedMeta = matchedPlantId ? plantMetaById.get(matchedPlantId) : null
+          return {
+            id: String(row?.id || ''),
+            imageUrl: row?.image_url || null,
+            imagePath: row?.image_path || null,
+            imageBucket: row?.image_bucket || null,
+            apiStatus: row?.api_status || null,
+            isPlant: typeof row?.is_plant === 'boolean' ? row.is_plant : null,
+            isPlantProbability:
+              typeof row?.is_plant_probability === 'number'
+                ? row.is_plant_probability
+                : row?.is_plant_probability != null
+                  ? Number(row.is_plant_probability)
+                  : null,
+            topMatchName: row?.top_match_name || null,
+            topMatchScientificName: row?.top_match_scientific_name || null,
+            topMatchProbability:
+              typeof row?.top_match_probability === 'number'
+                ? row.top_match_probability
+                : row?.top_match_probability != null
+                  ? Number(row.top_match_probability)
+                  : null,
+            classificationLevel: row?.classification_level || null,
+            matchedPlantId,
+            matchedPlantName: matchedMeta?.name || null,
+            matchedPlantScientificName: matchedMeta?.scientificName || null,
+            matchedPlantImage: matchedMeta?.image || null,
+            userNotes: row?.user_notes || null,
+            createdAt: row?.created_at || null,
+          }
+        })
+      } catch (scanErr) {
+        console.error('[member-lookup REST] failed to fetch plant scans', scanErr)
+      }
 
       try {
         const fr = await fetch(`${supabaseUrlEnv}/rest/v1/garden_plant_images?uploaded_by=eq.${encodeURIComponent(targetId)}&select=id,image_url,caption,uploaded_at,garden_plant_id,garden_plants(plant_id,plants(name,admin_commentary))&order=uploaded_at.desc&limit=25`, {
@@ -12138,6 +12314,9 @@ app.get('/api/admin/member', async (req, res) => {
         bannedIps,
         threatLevel,
         files: userFiles,
+        scansTotal,
+        scansThisMonth,
+        scans,
         mediaUploads,
         mediaTotalCount,
         mediaTotalSize,
@@ -12160,7 +12339,8 @@ app.get('/api/admin/member', async (req, res) => {
     if (!sql) return await lookupViaRest()
 
     // SQL path (preferred when server DB connection is configured)
-    let user
+    let user = null
+    let targetUserId = null
     try {
       let users
       if (email) {
@@ -12174,20 +12354,99 @@ app.get('/api/admin/member', async (req, res) => {
           limit 1
         `
       }
-      if (!Array.isArray(users) || users.length === 0) {
-        // Try REST fallback if not found in DB
-        return await lookupViaRest()
+      if (Array.isArray(users) && users[0]?.id) {
+        user = users[0]
+        targetUserId = users[0].id
       }
-      user = users[0]
-    } catch (e) {
-      // DB failure: fallback to REST path
+    } catch { }
+
+    // If direct auth.users access is unavailable, resolve user id through existing
+    // security-definer helpers (same access strategy used by other admin tooling).
+    if (!targetUserId) {
+      try {
+        if (emailParam) {
+          const rows = await sql`select public.get_user_id_by_email(${emailParam}) as id`
+          if (Array.isArray(rows) && rows[0]?.id) targetUserId = rows[0].id
+        } else if (displayParam) {
+          const rows = await sql`select public.get_user_id_by_display_name(${displayParam}) as id`
+          if (Array.isArray(rows) && rows[0]?.id) targetUserId = rows[0].id
+        }
+      } catch { }
+    }
+
+    // Additional fallback: resolve target id via REST RPC helpers if available.
+    if (!targetUserId && supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const bearer = getBearerTokenFromRequest(req)
+        const rpcHeaders = {
+          apikey: supabaseAnonKey,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        }
+        if (bearer) rpcHeaders.Authorization = `Bearer ${bearer}`
+        if (emailParam) {
+          const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_email`, {
+            method: 'POST',
+            headers: rpcHeaders,
+            body: JSON.stringify({ _email: emailParam }),
+          })
+          if (rpc.ok) {
+            const val = await rpc.json().catch(() => null)
+            if (val) targetUserId = String(val)
+          }
+        } else if (displayParam) {
+          const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_display_name`, {
+            method: 'POST',
+            headers: rpcHeaders,
+            body: JSON.stringify({ _name: displayParam }),
+          })
+          if (rpc.ok) {
+            const val = await rpc.json().catch(() => null)
+            if (val) targetUserId = String(val)
+          }
+        }
+      } catch { }
+    }
+
+    if (!targetUserId) {
+      // Try REST fallback if not found in DB
       return await lookupViaRest()
+    }
+
+    if (!user) {
+      try {
+        const rows = await sql`
+          select id, email, created_at, email_confirmed_at, last_sign_in_at
+          from auth.users
+          where id = ${targetUserId}
+          limit 1
+        `
+        if (Array.isArray(rows) && rows[0]) {
+          user = rows[0]
+        }
+      } catch { }
+    }
+
+    if (!user) {
+      let resolvedEmail = emailParam || null
+      if (!resolvedEmail && displayParam) {
+        try {
+          const rows = await sql`select public.get_email_by_display_name(${displayParam}) as email`
+          if (Array.isArray(rows) && rows[0]?.email) resolvedEmail = String(rows[0].email)
+        } catch { }
+      }
+      user = {
+        id: targetUserId,
+        email: resolvedEmail,
+        created_at: null,
+        email_confirmed_at: null,
+        last_sign_in_at: null,
+      }
     }
     let profile = null
     try {
       const rows = await sql`select id, display_name, is_admin, roles, threat_level, bug_points from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
-      threatLevel = profile?.threat_level ?? null
     } catch { }
     // Load latest admin notes for this profile (DB or REST)
     let adminNotes = []
@@ -12226,6 +12485,9 @@ app.get('/api/admin/member', async (req, res) => {
     let threatLevel = profile?.threat_level ?? null
     let userFiles = []
     let plantsTotal = 0
+    let scansTotal = 0
+    let scansThisMonth = 0
+    let scans = []
     try {
       const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null order by ip asc`, [user.id])
       ips = (ipRows || []).map(r => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean)
@@ -12332,6 +12594,66 @@ app.get('/api/admin/member', async (req, res) => {
           }))
         : []
     } catch { }
+    try {
+      const [scanCountRows, scanRows] = await Promise.all([
+        sql`
+          select
+            count(*)::int as total,
+            count(*) filter (
+              where created_at >= date_trunc('month', now())
+            )::int as this_month
+          from public.plant_scans
+          where user_id = ${user.id}
+        `,
+        sql`
+          select
+            ps.*,
+            p.name as matched_plant_name,
+            p.scientific_name as matched_plant_scientific_name,
+            (select pi.link from public.plant_images pi where pi.plant_id = p.id and pi.use = 'primary' limit 1) as matched_plant_image
+          from public.plant_scans ps
+          left join public.plants p on p.id = ps.matched_plant_id
+          where ps.user_id = ${user.id}
+          order by ps.created_at desc
+          limit 50
+        `,
+      ])
+      scansTotal = Number(scanCountRows?.[0]?.total ?? 0)
+      scansThisMonth = Number(scanCountRows?.[0]?.this_month ?? 0)
+      scans = Array.isArray(scanRows)
+        ? scanRows.map((r) => ({
+            id: String(r.id),
+            imageUrl: r.image_url || null,
+            imagePath: r.image_path || null,
+            imageBucket: r.image_bucket || null,
+            apiStatus: r.api_status || null,
+            isPlant: typeof r.is_plant === 'boolean' ? r.is_plant : null,
+            isPlantProbability:
+              typeof r.is_plant_probability === 'number'
+                ? r.is_plant_probability
+                : r.is_plant_probability != null
+                  ? Number(r.is_plant_probability)
+                  : null,
+            topMatchName: r.top_match_name || null,
+            topMatchScientificName: r.top_match_scientific_name || null,
+            topMatchProbability:
+              typeof r.top_match_probability === 'number'
+                ? r.top_match_probability
+                : r.top_match_probability != null
+                  ? Number(r.top_match_probability)
+                  : null,
+            classificationLevel: r.classification_level || null,
+            matchedPlantId: r.matched_plant_id || null,
+            matchedPlantName: r.matched_plant_name || null,
+            matchedPlantScientificName: r.matched_plant_scientific_name || null,
+            matchedPlantImage: r.matched_plant_image || null,
+            userNotes: r.user_notes || null,
+            createdAt: r.created_at || null,
+          }))
+        : []
+    } catch (scanErr) {
+      console.error('[member-lookup] failed to fetch plant scans', scanErr)
+    }
     // Aggregates (SQL path)
     let topReferrers = []
     let topCountries = []
@@ -12665,6 +12987,9 @@ app.get('/api/admin/member', async (req, res) => {
       bannedIps,
       threatLevel: currentThreatLevel,
       files: userFiles,
+      scansTotal,
+      scansThisMonth,
+      scans,
       mediaUploads,
       mediaTotalCount,
       mediaTotalSize,
