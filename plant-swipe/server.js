@@ -28454,22 +28454,25 @@ async function generateCrawlerHtml(req, pagePath) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
         resourceFound = false
       } else {
-        // Query comprehensive plant data - all available fields for rich content
+        // Query NON-TRANSLATABLE plant data from plants table only.
+        // Translatable fields (scientific_name, family, level_sun, maintenance_level,
+        // season, life_cycle, foliage_persistance, toxicity_human, toxicity_pets,
+        // allergens, living_space, composition, habitat, etc.) are fetched from
+        // plant_translations below — they may NOT exist as columns on the plants table.
         const { data: basePlant, error: plantError} = await ssrQuery(
           supabaseServer
             .from('plants')
             .select(`
-              id, name, plant_type, utility, watering_type, flowering_month, scientific_name, family, level_sun, maintenance_level, season,
+              id, name, plant_type, utility, comestible_part, fruit_type,
+              spiked, scent, multicolor, bicolor,
               temperature_max, temperature_min, temperature_ideal, hygrometry,
-              height_cm, wingspan_cm, separation_cm,
-              soil, mulching, fertilizer, nutrition_need,
-              sowing_month, fruiting_month, division, sow_type,
-              living_space, composition, habitat,
+              watering_type, division, soil, mulching, nutrition_need, fertilizer,
+              sowing_month, flowering_month, fruiting_month,
+              height_cm, wingspan_cm, sow_type, separation_cm,
+              tutoring, transplanting,
+              infusion, aromatherapy,
               melliferous, polenizer, be_fertilizer, conservation_status,
-              toxicity_human, toxicity_pets, allergens,
-              life_cycle, foliage_persistance, scent, spiked, multicolor, bicolor,
-              infusion, aromatherapy, comestible_part, fruit_type,
-              tutoring, transplanting, companions
+              companions
             `)
             .eq('id', plantId)
             .maybeSingle(),
