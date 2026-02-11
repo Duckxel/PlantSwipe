@@ -30064,6 +30064,72 @@ async function generateCrawlerHtml(req, pagePath) {
   } catch (err) {
     console.error('[ssr] Error generating crawler content:', err?.message || err)
     console.error('[ssr] Stack trace:', err?.stack || 'no stack')
+    req._ssrDebug.errors.push({ type: 'ssr_generation_error', error: err?.message || JSON.stringify(err) })
+  }
+
+  // If this is a dynamic route and the resource wasn't found, show a proper 404 page
+  if (isDynamicRoute && !resourceFound) {
+    const routeType = req._ssrDebug?.matchedRoute || 'page'
+    const routeTypeNames = {
+      plant: detectedLang === 'fr' ? 'Plante' : 'Plant',
+      blog_post: detectedLang === 'fr' ? 'Article' : 'Blog Post',
+      profile: detectedLang === 'fr' ? 'Profil' : 'Profile',
+      garden: detectedLang === 'fr' ? 'Jardin' : 'Garden',
+      bookmark: detectedLang === 'fr' ? 'Collection' : 'Collection',
+    }
+    const resourceType = routeTypeNames[routeType] || 'Page'
+    
+    title = `${detectedLang === 'fr' ? 'Non trouvé' : 'Not Found'} - ${resourceType} | Aphylia`
+    description = detectedLang === 'fr' 
+      ? `Cette ${resourceType.toLowerCase()} n'existe pas ou n'est pas disponible.`
+      : `This ${resourceType.toLowerCase()} does not exist or is not available.`
+    
+    // Check for specific error messages
+    const errors = req._ssrDebug?.errors || []
+    const errorDetails = errors.length > 0 ? errors.map(e => e.error).filter(Boolean).join(', ') : null
+    
+    pageContent = `
+      <article style="text-align: center; padding: 40px 20px;">
+        <h1 style="font-size: 48px; margin-bottom: 16px;">🔍</h1>
+        <h2>${resourceType} ${detectedLang === 'fr' ? 'Non Trouvé' : 'Not Found'}</h2>
+        <p style="color: #6b7280; margin: 20px 0;">
+          ${detectedLang === 'fr' 
+            ? `Désolé, cette ${resourceType.toLowerCase()} n'existe pas dans notre base de données.`
+            : `Sorry, this ${resourceType.toLowerCase()} does not exist in our database.`}
+        </p>
+        
+        ${!supabaseServer ? `
+          <div style="margin: 20px 0; padding: 16px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <strong>⚠️ ${detectedLang === 'fr' ? 'Avertissement' : 'Warning'}</strong><br>
+            ${detectedLang === 'fr' 
+              ? 'La connexion à la base de données n\'est pas configurée sur ce serveur.'
+              : 'Database connection is not configured on this server.'}
+          </div>
+        ` : ''}
+        
+        ${errorDetails ? `
+          <details style="margin: 20px auto; max-width: 600px; text-align: left; padding: 16px; background: #fef2f2; border-radius: 8px;">
+            <summary style="cursor: pointer; font-weight: 600; color: #dc2626;">${detectedLang === 'fr' ? 'Détails de l\'erreur' : 'Error Details'}</summary>
+            <pre style="margin-top: 12px; padding: 12px; background: white; border-radius: 4px; font-size: 12px; overflow-x: auto;">${escapeHtml(errorDetails)}</pre>
+          </details>
+        ` : ''}
+        
+        <h3 style="margin-top: 40px;">${detectedLang === 'fr' ? 'Que pouvez-vous faire ?' : 'What can you do?'}</h3>
+        <ul style="list-style: none; padding: 0; margin: 20px 0;">
+          <li style="margin: 12px 0;">🔍 <a href="/search">${detectedLang === 'fr' ? 'Rechercher des plantes' : 'Search for plants'}</a></li>
+          <li style="margin: 12px 0;">🎴 <a href="/discovery">${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover plants'}</a></li>
+          <li style="margin: 12px 0;">🏡 <a href="/gardens">${detectedLang === 'fr' ? 'Explorer les jardins' : 'Explore gardens'}</a></li>
+          <li style="margin: 12px 0;">📚 <a href="/blog">${detectedLang === 'fr' ? 'Lire le blog' : 'Read the blog'}</a></li>
+          <li style="margin: 12px 0;">🏠 <a href="/">${detectedLang === 'fr' ? 'Retour à l\'accueil' : 'Back to homepage'}</a></li>
+        </ul>
+        
+        <p style="margin-top: 40px;">
+          <a href="https://aphylia.app${escapeHtml(pagePath)}" style="display: inline-block; padding: 12px 24px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: 600;">
+            ${detectedLang === 'fr' ? '🌐 Essayer sur Aphylia Live' : '🌐 Try on Aphylia Live'}
+          </a>
+        </p>
+      </article>
+    `
   }
 
   // Build keywords from page content (moved before HTML generation)
