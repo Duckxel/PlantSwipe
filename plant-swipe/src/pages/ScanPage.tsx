@@ -604,7 +604,11 @@ export const ScanPage: React.FC = () => {
           resetScanFlow()
         }
       }}>
-        <DialogContent className="sm:max-w-[500px] rounded-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="sm:max-w-[500px] rounded-3xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => { if (imageViewer.isOpen) e.preventDefault() }}
+          onInteractOutside={(e) => { if (imageViewer.isOpen) e.preventDefault() }}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-emerald-600" />

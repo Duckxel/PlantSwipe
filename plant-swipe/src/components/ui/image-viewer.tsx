@@ -94,7 +94,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   const [isClosing, setIsClosing] = useState(false)
 
   /* ---- refs ---- */
-  const rootRef = useRef<HTMLDivElement>(null)
   const panStartRef = useRef({ x: 0, y: 0 })
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
   const imageContainerRef = useRef<HTMLDivElement>(null)
@@ -127,33 +126,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       document.body.style.overflow = ""
     }
   }, [open, initialIndex])
-
-  /* ---- Isolate from parent layers (e.g. Radix Dialog focus trap / dismissable layer) ---- */
-  useEffect(() => {
-    const root = rootRef.current
-    if (!root || !open) return
-
-    // Bubble-phase listeners: events reach child elements first (buttons,
-    // pan area, etc.) and only get stopped when they bubble back up to
-    // our root. This prevents Radix Dialog's document-level listeners
-    // from seeing them as "outside" clicks while keeping all internal
-    // interactions working.
-    const stopProp = (e: Event) => e.stopPropagation()
-    const stopWheel = (e: Event) => { e.preventDefault(); e.stopPropagation() }
-
-    root.addEventListener("pointerdown", stopProp)
-    root.addEventListener("mousedown", stopProp)
-    root.addEventListener("focusin", stopProp)
-    // Block wheel events from reaching the dialog scroll container underneath
-    root.addEventListener("wheel", stopWheel, { passive: false })
-
-    return () => {
-      root.removeEventListener("pointerdown", stopProp)
-      root.removeEventListener("mousedown", stopProp)
-      root.removeEventListener("focusin", stopProp)
-      root.removeEventListener("wheel", stopWheel)
-    }
-  }, [open])
 
   /* ---- Navigation ---- */
   const goToNext = useCallback(() => {
@@ -372,7 +344,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
 
   const content = (
     <div
-      ref={rootRef}
       className={cn(
         "fixed inset-0 z-[100] flex flex-col transition-opacity duration-200",
         isVisible ? "opacity-100" : "opacity-0",
