@@ -1,15 +1,17 @@
 /**
  * ImageViewer — Unified fullscreen image viewer component.
  *
+ * Built on Radix Dialog primitives so it correctly layers on top of
+ * other Radix Dialogs (e.g. the Scan result dialog) without focus-trap
+ * or event conflicts.
+ *
  * Supports:
  *  - Single image or multi-image gallery mode
- *  - Zoom & pan (scroll wheel + drag, or pinch on mobile)
+ *  - Zoom & pan (scroll wheel + drag, double-click)
  *  - Keyboard navigation (Escape, Arrow keys, +/- for zoom)
  *  - Touch swipe to navigate between images
  *  - Optional download button
- *  - Smooth open/close animations
- *  - Dark overlay with accessible controls
- *  - Controls always visible for reliable UX
+ *  - Controls always visible
  */
 
 import React, {
@@ -19,7 +21,7 @@ import React, {
   useRef,
   useState,
 } from "react"
-import { createPortal } from "react-dom"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
 import {
   X,
   ChevronLeft,
@@ -90,14 +92,11 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   const [zoom, setZoom] = useState(MIN_ZOOM)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
-  const [isVisible, setIsVisible] = useState(false)
-  const [isClosing, setIsClosing] = useState(false)
 
   /* ---- refs ---- */
   const panStartRef = useRef({ x: 0, y: 0 })
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
   const imageContainerRef = useRef<HTMLDivElement>(null)
-  // Stable refs for callbacks used in native event listeners
   const enableZoomRef = useRef(enableZoom)
   const adjustZoomRef = useRef<(delta: number) => void>(() => {})
 
@@ -105,25 +104,13 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   const hasMultiple = images.length > 1
   const activeImage = images[activeIndex] ?? images[0]
 
-  /* ---- Reset when opening/closing ---- */
+  /* ---- Reset when opening ---- */
   useEffect(() => {
     if (open) {
       setActiveIndex(initialIndex)
       setZoom(MIN_ZOOM)
       setOffset({ x: 0, y: 0 })
       setIsPanning(false)
-      setIsClosing(false)
-      // Trigger enter animation
-      requestAnimationFrame(() => setIsVisible(true))
-      // Prevent body scroll
-      document.body.style.overflow = "hidden"
-    } else {
-      setIsVisible(false)
-      setIsClosing(false)
-      document.body.style.overflow = ""
-    }
-    return () => {
-      document.body.style.overflow = ""
     }
   }, [open, initialIndex])
 
@@ -153,7 +140,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     })
   }, [])
 
-  // Keep refs in sync for native event listener
   useEffect(() => { enableZoomRef.current = enableZoom }, [enableZoom])
   useEffect(() => { adjustZoomRef.current = adjustZoom }, [adjustZoom])
 
@@ -162,25 +148,11 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     setOffset({ x: 0, y: 0 })
   }, [])
 
-  /* ---- Close with animation ---- */
-  const handleClose = useCallback(() => {
-    setIsClosing(true)
-    setIsVisible(false)
-    setTimeout(() => {
-      onClose()
-      setIsClosing(false)
-    }, 200)
-  }, [onClose])
-
-  /* ---- Keyboard ---- */
+  /* ---- Keyboard (arrow keys, zoom keys — Escape handled by Radix) ---- */
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
-        case "Escape":
-          e.preventDefault()
-          handleClose()
-          break
         case "ArrowLeft":
           e.preventDefault()
           goToPrev()
@@ -206,12 +178,12 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [open, handleClose, goToNext, goToPrev, adjustZoom, resetView])
+  }, [open, goToNext, goToPrev, adjustZoom, resetView])
 
   /* ---- Pointer (pan) handlers ---- */
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (zoom <= MIN_ZOOM) return // No panning at 1x
+      if (zoom <= MIN_ZOOM) return
       e.preventDefault()
       setIsPanning(true)
       e.currentTarget.setPointerCapture(e.pointerId)
@@ -241,7 +213,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     [],
   )
 
-  /* ---- Wheel zoom (native non-passive listener to prevent page scroll) ---- */
+  /* ---- Wheel zoom (native non-passive listener) ---- */
   useEffect(() => {
     const container = imageContainerRef.current
     if (!container || !open) return
@@ -249,11 +221,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     const handleWheelNative = (e: WheelEvent) => {
       if (!enableZoomRef.current) return
       e.preventDefault()
-      e.stopPropagation()
       adjustZoomRef.current(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)
     }
 
-    // Use { passive: false } so preventDefault() actually works
     container.addEventListener("wheel", handleWheelNative, { passive: false })
     return () => {
       container.removeEventListener("wheel", handleWheelNative)
@@ -264,11 +234,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0]
     if (!touch) return
-    touchStartRef.current = {
-      x: touch.clientX,
-      y: touch.clientY,
-      time: Date.now(),
-    }
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() }
   }, [])
 
   const handleTouchEnd = useCallback(
@@ -283,7 +249,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       const dy = touch.clientY - touchStartRef.current.y
       const dt = Date.now() - touchStartRef.current.time
       touchStartRef.current = null
-
       if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > SWIPE_THRESHOLD && dt < SWIPE_MAX_TIME) {
         if (dx > 0) goToPrev()
         else goToNext()
@@ -298,11 +263,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     (e: React.MouseEvent) => {
       if (!enableZoom) return
       e.stopPropagation()
-      if (zoom > MIN_ZOOM) {
-        resetView()
-      } else {
-        setZoom(2)
-      }
+      if (zoom > MIN_ZOOM) resetView()
+      else setZoom(2)
     },
     [enableZoom, zoom, resetView],
   )
@@ -324,7 +286,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch {
-      // Fallback: open in new tab
       window.open(activeImage.src, "_blank", "noopener,noreferrer")
     }
   }, [activeImage])
@@ -339,229 +300,190 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     [offset.x, offset.y, zoom, isPanning],
   )
 
-  /* ---- Don't render if not open and not closing ---- */
-  if (!open && !isClosing) return null
-
-  const content = (
-    <div
-      className={cn(
-        "fixed inset-0 z-[100] flex flex-col transition-opacity duration-200",
-        isVisible ? "opacity-100" : "opacity-0",
-        className,
-      )}
-      role="dialog"
-      aria-modal="true"
-      aria-label={title ?? "Image viewer"}
+  return (
+    <DialogPrimitive.Root
+      open={open}
+      onOpenChange={(o) => { if (!o) onClose() }}
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/95 backdrop-blur-sm" />
-
-      {/* Top bar — always visible */}
-      <div className="absolute top-0 left-0 right-0 z-20">
-        <div className="flex items-center justify-between px-3 py-3 bg-gradient-to-b from-black/60 to-transparent sm:px-5 sm:py-4">
-          {/* Left: close */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              handleClose()
-            }}
-            className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-
-          {/* Center: counter */}
-          {hasMultiple && (
-            <span className="text-sm text-white/80 font-medium tabular-nums px-3 py-1 rounded-full bg-black/30 backdrop-blur-sm">
-              {activeIndex + 1} / {images.length}
-            </span>
-          )}
-
-          {/* Right: actions */}
-          <div className="flex items-center gap-1.5">
-            {enableDownload && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleDownload()
-                }}
-                className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
-                aria-label="Download"
-              >
-                <Download className="h-5 w-5" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Image area */}
-      <div
-        ref={imageContainerRef}
-        className="relative flex-1 flex items-center justify-center overflow-hidden"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onDoubleClick={handleDoubleClick}
-      >
-        {activeImage && (
-          <img
-            key={activeImage.src}
-            src={activeImage.src}
-            alt={activeImage.alt ?? ""}
-            className="max-w-full max-h-full object-contain select-none pointer-events-none"
-            style={imageStyle}
-            draggable={false}
-          />
-        )}
-      </div>
-
-      {/* Bottom bar: zoom controls — always visible */}
-      {enableZoom && (
-        <div className="absolute bottom-0 left-0 right-0 z-20">
-          <div className="flex items-center justify-center gap-2 px-4 pb-6 pt-8 bg-gradient-to-t from-black/60 to-transparent sm:pb-8">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                adjustZoom(-ZOOM_STEP)
-              }}
-              disabled={zoom <= MIN_ZOOM}
-              className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm"
-              aria-label="Zoom out"
-            >
-              <ZoomOut className="h-5 w-5" />
-            </button>
-
-            <span className="text-xs text-white/70 font-medium tabular-nums w-12 text-center">
-              {Math.round(zoom * 100)}%
-            </span>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                adjustZoom(ZOOM_STEP)
-              }}
-              disabled={zoom >= MAX_ZOOM}
-              className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm"
-              aria-label="Zoom in"
-            >
-              <ZoomIn className="h-5 w-5" />
-            </button>
-
-            {zoom > MIN_ZOOM && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  resetView()
-                }}
-                className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm ml-1"
-                aria-label="Reset zoom"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Navigation arrows — always visible */}
-      {hasMultiple && activeIndex > 0 && (
-        <button
-          type="button"
-          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95"
-          onClick={(e) => {
-            e.stopPropagation()
-            goToPrev()
-          }}
-          aria-label="Previous image"
-        >
-          <div className="rounded-full p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-colors">
-            <ChevronLeft className="h-6 w-6" />
-          </div>
-        </button>
-      )}
-      {hasMultiple && activeIndex < images.length - 1 && (
-        <button
-          type="button"
-          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95"
-          onClick={(e) => {
-            e.stopPropagation()
-            goToNext()
-          }}
-          aria-label="Next image"
-        >
-          <div className="rounded-full p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-colors">
-            <ChevronRight className="h-6 w-6" />
-          </div>
-        </button>
-      )}
-
-      {/* Dot indicators for multiple images */}
-      {hasMultiple && images.length <= 20 && (
-        <div
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Content
           className={cn(
-            "absolute left-0 right-0 z-20 flex justify-center gap-1.5",
-            enableZoom ? "bottom-16 sm:bottom-20" : "bottom-6 sm:bottom-8",
+            "fixed inset-0 z-[201] flex flex-col outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            className,
           )}
+          // Prevent closing when clicking on our own UI (we close via X button / Escape)
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-label={title ?? "Image viewer"}
         >
-          {images.map((_, idx) => (
-            <button
-              key={idx}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                setActiveIndex(idx)
-                setZoom(MIN_ZOOM)
-                setOffset({ x: 0, y: 0 })
-              }}
-              className={cn(
-                "h-2 w-2 rounded-full transition-all",
-                idx === activeIndex
-                  ? "bg-white scale-110"
-                  : "bg-white/40 hover:bg-white/60",
-              )}
-              aria-label={`Go to image ${idx + 1}`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
+          <DialogPrimitive.Title className="sr-only">
+            {title ?? "Image viewer"}
+          </DialogPrimitive.Title>
 
-  return createPortal(content, document.body)
+          {/* Top bar */}
+          <div className="absolute top-0 left-0 right-0 z-20">
+            <div className="flex items-center justify-between px-3 py-3 bg-gradient-to-b from-black/60 to-transparent sm:px-5 sm:py-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              {hasMultiple && (
+                <span className="text-sm text-white/80 font-medium tabular-nums px-3 py-1 rounded-full bg-black/30 backdrop-blur-sm">
+                  {activeIndex + 1} / {images.length}
+                </span>
+              )}
+
+              <div className="flex items-center gap-1.5">
+                {enableDownload && (
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
+                    aria-label="Download"
+                  >
+                    <Download className="h-5 w-5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Image area */}
+          <div
+            ref={imageContainerRef}
+            className="relative flex-1 flex items-center justify-center overflow-hidden"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onDoubleClick={handleDoubleClick}
+          >
+            {activeImage && (
+              <img
+                key={activeImage.src}
+                src={activeImage.src}
+                alt={activeImage.alt ?? ""}
+                className="max-w-full max-h-full object-contain select-none pointer-events-none"
+                style={imageStyle}
+                draggable={false}
+              />
+            )}
+          </div>
+
+          {/* Bottom bar: zoom controls */}
+          {enableZoom && (
+            <div className="absolute bottom-0 left-0 right-0 z-20">
+              <div className="flex items-center justify-center gap-2 px-4 pb-6 pt-8 bg-gradient-to-t from-black/60 to-transparent sm:pb-8">
+                <button
+                  type="button"
+                  onClick={() => adjustZoom(-ZOOM_STEP)}
+                  disabled={zoom <= MIN_ZOOM}
+                  className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm"
+                  aria-label="Zoom out"
+                >
+                  <ZoomOut className="h-5 w-5" />
+                </button>
+
+                <span className="text-xs text-white/70 font-medium tabular-nums w-12 text-center">
+                  {Math.round(zoom * 100)}%
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => adjustZoom(ZOOM_STEP)}
+                  disabled={zoom >= MAX_ZOOM}
+                  className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm"
+                  aria-label="Zoom in"
+                >
+                  <ZoomIn className="h-5 w-5" />
+                </button>
+
+                {zoom > MIN_ZOOM && (
+                  <button
+                    type="button"
+                    onClick={resetView}
+                    className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm ml-1"
+                    aria-label="Reset zoom"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Navigation arrows */}
+          {hasMultiple && activeIndex > 0 && (
+            <button
+              type="button"
+              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95"
+              onClick={goToPrev}
+              aria-label="Previous image"
+            >
+              <div className="rounded-full p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-colors">
+                <ChevronLeft className="h-6 w-6" />
+              </div>
+            </button>
+          )}
+          {hasMultiple && activeIndex < images.length - 1 && (
+            <button
+              type="button"
+              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95"
+              onClick={goToNext}
+              aria-label="Next image"
+            >
+              <div className="rounded-full p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-colors">
+                <ChevronRight className="h-6 w-6" />
+              </div>
+            </button>
+          )}
+
+          {/* Dot indicators */}
+          {hasMultiple && images.length <= 20 && (
+            <div
+              className={cn(
+                "absolute left-0 right-0 z-20 flex justify-center gap-1.5",
+                enableZoom ? "bottom-16 sm:bottom-20" : "bottom-6 sm:bottom-8",
+              )}
+            >
+              {images.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setActiveIndex(idx)
+                    setZoom(MIN_ZOOM)
+                    setOffset({ x: 0, y: 0 })
+                  }}
+                  className={cn(
+                    "h-2 w-2 rounded-full transition-all",
+                    idx === activeIndex
+                      ? "bg-white scale-110"
+                      : "bg-white/40 hover:bg-white/60",
+                  )}
+                  aria-label={`Go to image ${idx + 1}`}
+                />
+              ))}
+            </div>
+          )}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  )
 }
 
 /* ------------------------------------------------------------------ */
 /*  Hook: useImageViewer                                               */
 /* ------------------------------------------------------------------ */
 
-/**
- * Convenience hook that manages open/close state and selected image(s)
- * for the ImageViewer component.
- *
- * Usage (single image):
- * ```tsx
- * const viewer = useImageViewer()
- * <img onClick={() => viewer.open("https://…")} />
- * <ImageViewer {...viewer.props} />
- * ```
- *
- * Usage (gallery):
- * ```tsx
- * const viewer = useImageViewer()
- * <img onClick={() => viewer.openGallery(images, 2)} />
- * <ImageViewer {...viewer.props} enableZoom />
- * ```
- */
 export function useImageViewer() {
   const [isOpen, setIsOpen] = useState(false)
   const [images, setImages] = useState<ImageViewerImage[]>([])
