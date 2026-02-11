@@ -57,6 +57,8 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
     ref,
   ) => {
     const [showPassword, setShowPassword] = React.useState(false)
+    const errorId = React.useId()
+    const suggestionId = React.useId()
     const isPassword = type === "password"
     const effectiveType = isPassword && showPassword ? "text" : type
 
@@ -78,6 +80,13 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
           ? "pr-10" // just status icon
           : ""
 
+    // Construct aria-describedby based on what's visible
+    const describedBy = [
+      status === "error" && error ? errorId : null,
+      suggestion ? suggestionId : null,
+      props["aria-describedby"]
+    ].filter(Boolean).join(" ") || undefined
+
     return (
       <div className={cn("w-full", wrapperClassName)}>
         {/* Input row – icons are positioned relative to this container only */}
@@ -85,6 +94,7 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
           <input
             ref={ref}
             type={effectiveType}
+            aria-describedby={describedBy}
             className={cn(
               "flex h-10 w-full rounded-xl border border-input bg-white dark:bg-[#2d2d30] px-4 py-2 text-base shadow-sm transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:h-9 md:rounded-md md:px-3 md:py-1 md:text-sm",
               ringClass,
@@ -120,9 +130,8 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
             {isPassword && (
               <button
                 type="button"
-                tabIndex={-1}
                 onClick={() => setShowPassword((v) => !v)}
-                className="text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
+                className="text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
@@ -137,7 +146,10 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
 
         {/* Error message – outside the relative container so it doesn't shift icons */}
         {status === "error" && error && (
-          <p className="mt-1 text-xs text-red-500 dark:text-red-400 animate-in fade-in slide-in-from-top-1 duration-150">
+          <p
+            id={errorId}
+            className="mt-1 text-xs text-red-500 dark:text-red-400 animate-in fade-in slide-in-from-top-1 duration-150"
+          >
             {error}
           </p>
         )}
@@ -146,6 +158,7 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
         {suggestion && onAcceptSuggestion && (
           <button
             type="button"
+            id={suggestionId}
             onClick={onAcceptSuggestion}
             className="mt-1 text-xs text-left text-amber-600 dark:text-amber-400 hover:underline animate-in fade-in slide-in-from-top-1 duration-150"
           >

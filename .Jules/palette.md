@@ -29,3 +29,7 @@
 ## 2025-05-26 - Search Keyboard Shortcut
 **Learning:** Adding a global search shortcut (⌘K/Ctrl+K) significantly improves navigation speed for power users. Visual hints in the search bar are essential for discoverability.
 **Action:** When implementing search, always include a keyboard shortcut and a visual badge (e.g., `<kbd>⌘K</kbd>`) when the input is empty.
+
+## 2025-05-27 - Input Validation Accessibility
+**Learning:** `ValidatedInput` components with associated error messages often fail accessibility checks because the error message isn't programmatically linked to the input via `aria-describedby`. Additionally, password toggle buttons are frequently excluded from the tab order (`tabIndex={-1}`), blocking keyboard users.
+**Action:** Always use `useId` to link error messages to inputs with `aria-describedby` and ensure helper buttons (like password toggle) are reachable via keyboard.
