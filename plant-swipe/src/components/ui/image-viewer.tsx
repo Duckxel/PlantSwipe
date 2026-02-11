@@ -96,7 +96,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   /* ---- refs ---- */
   const panStartRef = useRef({ x: 0, y: 0 })
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
-  const imageContainerRef = useRef<HTMLDivElement>(null)
+  const imageContainerRef = useRef<HTMLDivElement | null>(null)
+  const wheelCleanupRef = useRef<(() => void) | null>(null)
   const enableZoomRef = useRef(enableZoom)
   const adjustZoomRef = useRef<(delta: number) => void>(() => {})
 
@@ -213,10 +214,15 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     [],
   )
 
-  /* ---- Wheel zoom (native non-passive listener) ---- */
-  useEffect(() => {
-    const container = imageContainerRef.current
-    if (!container || !open) return
+  /* ---- Wheel zoom (callback ref to attach native non-passive listener) ---- */
+  const imageContainerCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    // Cleanup previous listener
+    if (wheelCleanupRef.current) {
+      wheelCleanupRef.current()
+      wheelCleanupRef.current = null
+    }
+    imageContainerRef.current = node
+    if (!node) return
 
     const handleWheelNative = (e: WheelEvent) => {
       if (!enableZoomRef.current) return
@@ -224,11 +230,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       adjustZoomRef.current(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)
     }
 
-    container.addEventListener("wheel", handleWheelNative, { passive: false })
-    return () => {
-      container.removeEventListener("wheel", handleWheelNative)
-    }
-  }, [open])
+    node.addEventListener("wheel", handleWheelNative, { passive: false })
+    wheelCleanupRef.current = () => node.removeEventListener("wheel", handleWheelNative)
+  }, [])
 
   /* ---- Touch swipe (when zoom === 1) ---- */
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -356,7 +360,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
 
           {/* Image area */}
           <div
-            ref={imageContainerRef}
+            ref={imageContainerCallbackRef}
             className="relative flex-1 flex items-center justify-center overflow-hidden"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
