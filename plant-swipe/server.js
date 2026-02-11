@@ -28193,7 +28193,15 @@ async function generateCrawlerHtml(req, pagePath) {
           plantName: plant?.name,
           errorMsg: plantError?.message
         })
-        req._ssrDebug.queryResults.plant = { found: !!plant, name: plant?.name, error: plantError?.message }
+        req._ssrDebug.queryResults.plant = {
+          found: !!plant,
+          name: plant?.name,
+          scientificName: plant?.scientific_name,
+          family: plant?.family,
+          plantType: plant?.plant_type,
+          tags: plant?.tags,
+          error: plantError?.message
+        }
         console.log(`[ssr] Plant query result: data=${plant ? 'found' : 'null'}, error=${plantError ? plantError.message || 'unknown error' : 'none'}`)
         if (plantError) {
           req._ssrDebug.errors.push({ type: 'plant_query', error: plantError.message || JSON.stringify(plantError) })
@@ -29849,6 +29857,86 @@ async function generateCrawlerHtml(req, pagePath) {
     console.error('[ssr] Stack trace:', err?.stack || 'no stack')
   }
 
+  // Build keywords from page content (moved before HTML generation)
+  let keywords = 'aphylia, plants, gardening, plant care, garden management'
+  if (req._ssrDebug?.matchedRoute === 'plant' && req._ssrDebug?.queryResults?.plant?.found) {
+    // Extract keywords from plant data stored in the debug object
+    const plantData = req._ssrDebug.queryResults.plant
+    const keywordParts = ['plants', 'plant care', 'gardening', 'aphylia']
+    if (plantData.name) keywordParts.push(plantData.name)
+    if (plantData.scientificName) keywordParts.push(plantData.scientificName)
+    if (plantData.family) keywordParts.push(plantData.family)
+    if (plantData.plantType) keywordParts.push(plantData.plantType)
+    if (plantData.tags && Array.isArray(plantData.tags)) {
+      plantData.tags.slice(0, 5).forEach(tag => keywordParts.push(tag))
+    }
+    keywords = keywordParts.join(', ')
+  }
+
+  // Build JSON-LD structured data for search engines
+  let jsonLdSchema = null
+  if (req._ssrDebug?.matchedRoute === 'plant' && req._ssrDebug?.queryResults?.plant?.found) {
+    const plantData = req._ssrDebug.queryResults.plant
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: plantData.name || 'Plant',
+      description: description,
+      image: image || undefined,
+      brand: {
+        '@type': 'Brand',
+        name: 'Aphylia'
+      },
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'USD',
+        availability: 'https://schema.org/InStock'
+      }
+    }
+    if (plantData.scientificName) {
+      jsonLdSchema.alternateName = plantData.scientificName
+    }
+  } else if (req._ssrDebug?.matchedRoute === 'blog_post') {
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'BlogPosting',
+      headline: title,
+      description: description,
+      image: image || undefined,
+      author: {
+        '@type': 'Organization',
+        name: 'Aphylia'
+      },
+      publisher: {
+        '@type': 'Organization',
+        name: 'Aphylia',
+        logo: {
+          '@type': 'ImageObject',
+          url: `${siteUrl}/icons/icon-512x512.png`
+        }
+      },
+      mainEntityOfPage: {
+        '@type': 'WebPage',
+        '@id': canonicalUrl
+      }
+    }
+  } else {
+    // Generic website schema
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: 'Aphylia',
+      url: siteUrl,
+      description: 'Discover, swipe and manage the perfect plants for every garden.',
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${siteUrl}/search?q={search_term_string}`,
+        'query-input': 'required name=search_term_string'
+      }
+    }
+  }
+
   // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
   // This ensures web archives can display content without errors
   const html = `<!DOCTYPE html>
@@ -29858,16 +29946,20 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(description)}">
-  <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
+  <meta name="keywords" content="${escapeHtml(keywords)}">
+  <meta name="author" content="Aphylia">
+  <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
   <!-- Open Graph / Facebook / Discord / Telegram / LinkedIn -->
-  <meta property="og:type" content="website">
+  <meta property="og:type" content="${req._ssrDebug?.matchedRoute === 'blog_post' ? 'article' : 'website'}">
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
   <meta property="og:title" content="${escapeHtml(title)}">
   <meta property="og:description" content="${escapeHtml(description)}">
   ${image ? `<meta property="og:image" content="${escapeHtml(image)}">
-  <meta property="og:image:alt" content="${escapeHtml(imageAlt)}">` : '<!-- No image for this page -->'}
+  <meta property="og:image:alt" content="${escapeHtml(imageAlt)}">
+  ${imageWidth ? `<meta property="og:image:width" content="${imageWidth}">` : ''}
+  ${imageHeight ? `<meta property="og:image:height" content="${imageHeight}">` : ''}` : '<!-- No image for this page -->'}
   <meta property="og:site_name" content="Aphylia">
   <meta property="og:locale" content="${detectedLang === 'fr' ? 'fr_FR' : 'en_US'}">
   
@@ -29879,6 +29971,13 @@ async function generateCrawlerHtml(req, pagePath) {
   ${image ? `<meta name="twitter:image" content="${escapeHtml(image)}">
   <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}">` : ''}
   
+  <!-- Additional SEO Meta Tags -->
+  <meta name="language" content="${detectedLang === 'fr' ? 'French' : 'English'}">
+  <meta name="revisit-after" content="7 days">
+  <meta name="rating" content="general">
+  <meta name="distribution" content="global">
+  <meta name="generator" content="Aphylia SSR">
+  
   <!-- Theme -->
   <meta name="theme-color" content="#052e16">
   <meta name="application-name" content="Aphylia">
@@ -29888,6 +29987,11 @@ async function generateCrawlerHtml(req, pagePath) {
   <link rel="icon" type="image/png" sizes="192x192" href="${siteUrl}/icons/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="${siteUrl}/icons/icon-512x512.png">
   <link rel="apple-touch-icon" href="${siteUrl}/icons/icon-192x192.png">
+  
+  <!-- JSON-LD Structured Data -->
+  ${jsonLdSchema ? `<script type="application/ld+json">
+${JSON.stringify(jsonLdSchema, null, 2)}
+  </script>` : ''}
   
   <style>
     * { box-sizing: border-box; }

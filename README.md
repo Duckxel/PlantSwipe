@@ -557,6 +557,21 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 | [**Admin API**](./admin_api/) | Admin endpoint documentation |
 | [**Supabase Functions**](./plant-swipe/supabase/functions/) | Edge function documentation |
 
+### SEO & Crawler Resources
+
+| Resource | Description |
+|----------|-------------|
+| [**robots.txt**](./plant-swipe/public/robots.txt) | Crawl directives for search engines and AI bots |
+| [**llms.txt**](./plant-swipe/public/llms.txt) | AI crawler instructions and website structure information |
+| **sitemap.xml** | Dynamically generated at `/sitemap.xml` |
+
+Aphylia provides comprehensive SEO and crawler support:
+- **Structured Data**: JSON-LD schemas for plants, blog posts, and pages
+- **Open Graph**: Rich social media previews for Discord, Twitter, LinkedIn
+- **Server-Side Rendering**: Pre-rendered HTML for crawlers and archives
+- **AI-Friendly**: Explicit instructions for GPT, Claude, Gemini, and other LLM crawlers
+- **Multi-language**: Language-specific content with proper hreflang tags
+
 ---
 
 ## 👉 Get Involved

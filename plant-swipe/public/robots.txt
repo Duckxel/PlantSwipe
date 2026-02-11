@@ -1,10 +1,30 @@
 # robots.txt for Aphylia
 # https://aphylia.app
+# Plant care application for discovering, managing, and growing beautiful gardens
 
+# ===========================================
+# Default Crawlers (Google, Bing, etc.)
+# ===========================================
 User-agent: *
 
 # Allow crawling of public content
 Allow: /
+Allow: /plants/
+Allow: /blog/
+Allow: /gardens/
+Allow: /search
+Allow: /discovery
+Allow: /about
+Allow: /contact
+Allow: /pricing
+Allow: /download
+Allow: /terms
+Allow: /*.css$
+Allow: /*.js$
+Allow: /*.png$
+Allow: /*.jpg$
+Allow: /*.svg$
+Allow: /*.webp$
 
 # Block admin and internal pages
 Disallow: /admin
@@ -25,11 +45,158 @@ Disallow: /*/edit
 # Block error pages
 Disallow: /error
 
-# Allow language-prefixed public pages (en, fr)
-# Note: Disallow rules above also block /<lang>/admin, /<lang>/settings, etc.
+# Block query parameters that don't change content
+Disallow: /*?_ssr=*
+Disallow: /*?utm_*
 
-# Sitemap location
+# ===========================================
+# AI Crawlers & LLM Bots
+# ===========================================
+
+# OpenAI GPTBot - Allow for training and research
+User-agent: GPTBot
+Allow: /
+Allow: /plants/
+Allow: /blog/
+Disallow: /admin
+Disallow: /api/
+Disallow: /settings
+Disallow: /messages
+Crawl-delay: 2
+
+# Google-Extended (for Bard/Gemini training)
+User-agent: Google-Extended
+Allow: /
+Allow: /plants/
+Allow: /blog/
+Disallow: /admin
+Disallow: /api/
+Crawl-delay: 2
+
+# Anthropic Claude Bot
+User-agent: anthropic-ai
+Allow: /
+Allow: /plants/
+Allow: /blog/
+Disallow: /admin
+Disallow: /api/
+Crawl-delay: 2
+
+# Common Crawl (archive)
+User-agent: CCBot
+Allow: /
+Allow: /plants/
+Allow: /blog/
+Crawl-delay: 3
+
+# Perplexity AI
+User-agent: PerplexityBot
+Allow: /
+Allow: /plants/
+Allow: /blog/
+Disallow: /admin
+Disallow: /api/
+Crawl-delay: 2
+
+# ===========================================
+# Social Media Crawlers
+# ===========================================
+
+# Facebook/Meta
+User-agent: facebookexternalhit
+User-agent: Facebot
+Allow: /
+Crawl-delay: 1
+
+# Twitter/X
+User-agent: Twitterbot
+Allow: /
+Crawl-delay: 1
+
+# LinkedIn
+User-agent: LinkedInBot
+Allow: /
+Crawl-delay: 1
+
+# Discord
+User-agent: Discordbot
+Allow: /
+Crawl-delay: 1
+
+# Telegram
+User-agent: TelegramBot
+Allow: /
+Crawl-delay: 1
+
+# Slack
+User-agent: Slackbot
+User-agent: Slackbot-LinkExpanding
+Allow: /
+Crawl-delay: 1
+
+# ===========================================
+# Search Engine Specific Rules
+# ===========================================
+
+# Google Images - allow all image indexing
+User-agent: Googlebot-Image
+Allow: /
+Allow: /icons/
+Allow: /images/
+
+# Bing Images
+User-agent: bingbot
+Allow: /
+Allow: /icons/
+Allow: /images/
+
+# DuckDuckGo
+User-agent: DuckDuckBot
+Allow: /
+Crawl-delay: 1
+
+# ===========================================
+# Archive & Research Bots
+# ===========================================
+
+# Internet Archive Wayback Machine
+User-agent: ia_archiver
+Allow: /
+Crawl-delay: 5
+
+# ===========================================
+# Blocked Bots (aggressive crawlers, scrapers)
+# ===========================================
+
+# Block aggressive scrapers
+User-agent: AhrefsBot
+User-agent: SemrushBot
+User-agent: MJ12bot
+User-agent: DotBot
+User-agent: BLEXBot
+User-agent: PetalBot
+Disallow: /
+
+# ===========================================
+# Sitemaps
+# ===========================================
+
+# Main sitemap
 Sitemap: https://aphylia.app/sitemap.xml
 
-# Crawl-delay for polite crawling (in seconds)
+# Language-specific sitemaps (if needed)
+# Sitemap: https://aphylia.app/sitemap-en.xml
+# Sitemap: https://aphylia.app/sitemap-fr.xml
+
+# LLM-specific information
+# See /llms.txt for AI crawler instructions
+
+# ===========================================
+# Crawl Rate Limiting
+# ===========================================
+
+# Default polite crawl delay
 Crawl-delay: 1
+
+# Host directive (optional, for search engines that support it)
+# Host: https://aphylia.app
