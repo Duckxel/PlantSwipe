@@ -29575,75 +29575,157 @@ async function generateCrawlerHtml(req, pagePath) {
     else if (effectivePath[0] === 'about' || pagePath === '/about') {
       title = `🌱 ${tr.aboutTitle}`
       description = tr.aboutDesc
+
+      // Fetch live stats for the about page
+      let aboutPlantCount = '5,000+'
+      let aboutUserCount = '10,000+'
+      let aboutBlogCount = '50+'
+      try {
+        if (supabaseServer) {
+          const { count: pc } = await ssrQuery(supabaseServer.from('plants').select('id', { count: 'exact', head: true }), 'about_plants')
+          if (pc) aboutPlantCount = pc.toLocaleString() + '+'
+          const { count: uc } = await ssrQuery(supabaseServer.from('profiles').select('id', { count: 'exact', head: true }), 'about_users')
+          if (uc) aboutUserCount = uc.toLocaleString() + '+'
+          const { count: bc } = await ssrQuery(supabaseServer.from('blog_posts').select('id', { count: 'exact', head: true }).eq('is_published', true), 'about_blogs')
+          if (bc) aboutBlogCount = String(bc) + '+'
+        }
+      } catch { }
+
       pageContent = `
         <article>
-          <h1>🌱 ${tr.siteName}</h1>
+          <h1>🌱 ${tr.aboutTitle}</h1>
           <p>${tr.aboutPersonal}</p>
+          
           <h2>${tr.aboutMission}</h2>
           <p>${tr.aboutBelieve}</p>
+          <p>${detectedLang === 'fr'
+            ? 'Aphylia est née de la conviction que tout le monde mérite un accès facile aux connaissances botaniques. Que vous cultiviez des tomates sur votre balcon ou que vous entreteniez un jardin botanique, notre base de données de plantes et nos outils de suivi vous accompagnent à chaque étape.'
+            : 'Aphylia was born from the belief that everyone deserves easy access to plant knowledge. Whether you\'re growing tomatoes on your balcony or maintaining a botanical garden, our plant database and tracking tools support you every step of the way.'}</p>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px; margin: 24px 0; padding: 20px; background: #f0fdf4; border-radius: 12px;">
+            <div style="text-align: center;"><div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${aboutPlantCount}</div><div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Plantes' : 'Plants'}</div></div>
+            <div style="text-align: center;"><div style="font-size: 24px; font-weight: bold; color: #059669;">👥 ${aboutUserCount}</div><div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Jardiniers' : 'Gardeners'}</div></div>
+            <div style="text-align: center;"><div style="font-size: 24px; font-weight: bold; color: #059669;">📚 ${aboutBlogCount}</div><div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Articles' : 'Articles'}</div></div>
+          </div>
+
           <h2>${tr.aboutOffer}</h2>
           <ul>
-            <li>🔍 <a href="/search">${tr.aboutDatabase}</a></li>
-            <li>🏡 <a href="/gardens">${tr.aboutGarden}</a></li>
-            <li>⏰ ${tr.aboutReminders}</li>
-            <li>👥 ${tr.aboutCommunity}</li>
+            <li>🔍 <a href="/search">${tr.aboutDatabase}</a> — ${detectedLang === 'fr' ? `${aboutPlantCount} espèces avec guides d'entretien complets` : `${aboutPlantCount} species with complete care guides`}</li>
+            <li>🏡 <a href="/gardens">${tr.aboutGarden}</a> — ${detectedLang === 'fr' ? 'Créez et suivez plusieurs jardins' : 'Create and track multiple gardens'}</li>
+            <li>⏰ ${tr.aboutReminders} — ${detectedLang === 'fr' ? 'Arrosage, fertilisation, taille automatisés' : 'Automated watering, fertilizing, pruning schedules'}</li>
+            <li>📸 ${detectedLang === 'fr' ? 'Identification de plantes par photo' : 'Plant identification by photo'}</li>
+            <li>🎴 <a href="/discovery">${detectedLang === 'fr' ? 'Découverte de plantes par swipe' : 'Swipe-based plant discovery'}</a></li>
+            <li>👥 ${tr.aboutCommunity} — <a href="/gardens">${detectedLang === 'fr' ? 'Partagez vos jardins' : 'Share your gardens'}</a></li>
+            <li>📚 <a href="/blog">${detectedLang === 'fr' ? 'Blog avec conseils d\'experts' : 'Blog with expert gardening advice'}</a></li>
+            <li>🐾 ${detectedLang === 'fr' ? 'Informations de toxicité pour les animaux de compagnie' : 'Pet toxicity safety information'}</li>
+            <li>🌍 ${detectedLang === 'fr' ? 'Disponible en anglais et français' : 'Available in English and French'}</li>
+            <li>🔒 ${detectedLang === 'fr' ? 'Conforme au RGPD — vos données sont protégées' : 'GDPR compliant — your data is protected'}</li>
           </ul>
-          <h2>🔗 ${detectedLang === 'fr' ? 'En savoir plus' : 'Learn More'}</h2>
+
+          <h2>🌱 ${detectedLang === 'fr' ? 'Pour qui est Aphylia ?' : 'Who is Aphylia for?'}</h2>
+          <ul>
+            <li>${detectedLang === 'fr' ? '🌱 Débutants qui veulent apprendre les bases du jardinage' : '🌱 Beginners who want to learn gardening basics'}</li>
+            <li>${detectedLang === 'fr' ? '🏡 Jardiniers amateurs qui veulent mieux organiser leurs jardins' : '🏡 Home gardeners who want to better organize their gardens'}</li>
+            <li>${detectedLang === 'fr' ? '🌿 Passionnés de plantes d\'intérieur' : '🌿 Houseplant enthusiasts'}</li>
+            <li>${detectedLang === 'fr' ? '👨‍🌾 Jardiniers expérimentés cherchant une base de données complète' : '👨‍🌾 Experienced gardeners looking for a comprehensive database'}</li>
+            <li>${detectedLang === 'fr' ? '👨‍👩‍👧 Familles qui veulent jardiner ensemble en toute sécurité' : '👨‍👩‍👧 Families who want to garden together safely'}</li>
+          </ul>
+
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher des plantes' : 'Search Plants'}</a>
             <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
             <a href="/blog">📚 Blog</a>
             <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
             <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
             <a href="/contact">💬 Contact</a>
+            <a href="/contact/business">🤝 ${detectedLang === 'fr' ? 'Partenariats' : 'Partnerships'}</a>
+            <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+            <a href="/privacy">🔒 ${detectedLang === 'fr' ? 'Confidentialité' : 'Privacy'}</a>
           </nav>
         </article>
       `
     }
 
     else if (effectivePath[0] === 'search' || pagePath === '/search') {
-      // Fetch some popular plants to link from search page
+      // Fetch popular plants by type for rich search page content
       let searchPopularPlants = []
+      let plantsByType = {}
+      let totalPlantCount = '5,000+'
       try {
         if (supabaseServer) {
           const { data: plants } = await ssrQuery(
             supabaseServer
               .from('plants')
-              .select('id, name')
-              .limit(10),
+              .select('id, name, plant_type')
+              .eq('status', 'approved')
+              .limit(40),
             'search_popular_plants'
           )
-          if (plants) searchPopularPlants = plants
+          if (plants) {
+            searchPopularPlants = plants
+            // Group by type
+            for (const p of plants) {
+              const type = p.plant_type || 'other'
+              if (!plantsByType[type]) plantsByType[type] = []
+              plantsByType[type].push(p)
+            }
+          }
+          const { count: pc } = await ssrQuery(supabaseServer.from('plants').select('id', { count: 'exact', head: true }), 'search_total')
+          if (pc) totalPlantCount = pc.toLocaleString() + '+'
         }
       } catch { }
       
       title = `🔍 ${tr.searchTitle} | Aphylia`
       description = tr.searchDesc
+
+      const typeEmojis = { flower: '🌸', vegetable: '🥬', herb: '🌿', tree: '🌳', shrub: '🌲', succulent: '🌵', cactus: '🌵', bamboo: '🎋', plant: '🌱' }
+      const typeLabels = detectedLang === 'fr'
+        ? { flower: 'Fleurs', vegetable: 'Légumes', herb: 'Herbes', tree: 'Arbres', shrub: 'Arbustes', succulent: 'Succulentes', cactus: 'Cactus', bamboo: 'Bambous', plant: 'Plantes' }
+        : { flower: 'Flowers', vegetable: 'Vegetables', herb: 'Herbs', tree: 'Trees', shrub: 'Shrubs', succulent: 'Succulents', cactus: 'Cacti', bamboo: 'Bamboo', plant: 'Plants' }
+
       pageContent = `
         <article>
           <h1>🔍 ${tr.searchPlant}</h1>
           <p>${tr.searchFind}</p>
-          <h2>${tr.searchBy}</h2>
+          <p>${detectedLang === 'fr' ? `Explorez notre base de données de ${totalPlantCount} plantes avec des guides d'entretien détaillés, des informations de toxicité et des calendriers de culture.` : `Explore our database of ${totalPlantCount} plants with detailed care guides, toxicity info, and growing calendars.`}</p>
+          
+          <h2>🔎 ${tr.searchBy}</h2>
           <ul>
             <li>🏷️ ${tr.searchName}</li>
-            <li>☀️ ${tr.searchLight}</li>
-            <li>💧 ${tr.searchWater}</li>
-            <li>🏠 ${tr.searchIndoor}</li>
-            <li>🌡️ ${tr.searchClimate}</li>
-            <li>🎯 ${tr.searchDifficulty}</li>
+            <li>☀️ ${tr.searchLight} — ${detectedLang === 'fr' ? 'plein soleil, mi-ombre, ombre' : 'full sun, partial shade, shade'}</li>
+            <li>💧 ${tr.searchWater} — ${detectedLang === 'fr' ? 'surface, goutte-à-goutte, arrosage profond' : 'surface, drip, deep watering'}</li>
+            <li>🏠 ${tr.searchIndoor} — ${detectedLang === 'fr' ? 'intérieur, extérieur ou les deux' : 'indoor, outdoor, or both'}</li>
+            <li>🌡️ ${tr.searchClimate} — ${detectedLang === 'fr' ? 'zones de rusticité' : 'hardiness zones'}</li>
+            <li>🎯 ${tr.searchDifficulty} — ${detectedLang === 'fr' ? 'débutant, modéré, expert' : 'beginner, moderate, expert'}</li>
+            <li>🐾 ${detectedLang === 'fr' ? 'Sûr pour les animaux — filtrez les plantes non toxiques' : 'Pet safe — filter non-toxic plants'}</li>
+            <li>🌸 ${detectedLang === 'fr' ? 'Période de floraison' : 'Bloom season'}</li>
           </ul>
-          ${searchPopularPlants.length > 0 ? `
+          
+          ${Object.keys(plantsByType).length > 0 ? Object.entries(plantsByType).map(([type, plants]) => `
+            <h2>${typeEmojis[type] || '🌱'} ${typeLabels[type] || type}</h2>
+            <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+              ${plants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+            </ul>
+          `).join('') : searchPopularPlants.length > 0 ? `
           <h2>🌿 ${detectedLang === 'fr' ? 'Plantes Populaires' : 'Popular Plants'}</h2>
           <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
             ${searchPopularPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
           </ul>
           ` : ''}
-          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
-            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
-            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
-            <a href="/blog">📚 Blog</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir par swipe' : 'Discover by Swiping'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins communautaires' : 'Community Gardens'}</a>
+            <a href="/blog">📚 ${detectedLang === 'fr' ? 'Conseils de jardinage' : 'Gardening Tips'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/contact">💬 Contact</a>
           </nav>
         </article>
       `
@@ -29751,19 +29833,35 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Gardens listing page
     else if (effectivePath[0] === 'gardens' && !effectivePath[1]) {
-      // Fetch some public gardens to list
+      // Fetch public gardens with owner names for richer content
       let listGardens = []
+      let gardenCount = 0
+      let featuredProfiles = []
       try {
         if (supabaseServer) {
-          const { data: gardens } = await ssrQuery(
+          const { data: gardens, count: gc } = await ssrQuery(
             supabaseServer
               .from('gardens')
-              .select('id, name')
+              .select('id, name, created_by, location_city, location_country', { count: 'exact' })
               .eq('privacy', 'public')
-              .limit(12),
+              .order('created_at', { ascending: false })
+              .limit(20),
             'gardens_list'
           )
           if (gardens) listGardens = gardens
+          if (gc) gardenCount = gc
+
+          // Fetch some active gardeners
+          const { data: profiles } = await ssrQuery(
+            supabaseServer
+              .from('profiles')
+              .select('display_name')
+              .eq('is_private', false)
+              .not('display_name', 'is', null)
+              .limit(10),
+            'gardens_profiles'
+          )
+          if (profiles) featuredProfiles = profiles
         }
       } catch { }
       
@@ -29773,25 +29871,45 @@ async function generateCrawlerHtml(req, pagePath) {
         <article>
           <h1>🏡 ${tr.gardensCommunity}</h1>
           <p>${tr.gardensExploreWorld}</p>
+          ${gardenCount > 0 ? `<p>${detectedLang === 'fr' ? `Découvrez ${gardenCount.toLocaleString()} jardins partagés par notre communauté.` : `Explore ${gardenCount.toLocaleString()} gardens shared by our community.`}</p>` : ''}
+          
           <h2>${tr.gardensInspired}</h2>
           <ul>
             <li>🌸 ${tr.gardensThrive}</li>
             <li>📍 ${tr.gardensClimate}</li>
             <li>💡 ${tr.gardensIdeas}</li>
             <li>🤝 ${tr.gardensConnect}</li>
+            <li>📊 ${detectedLang === 'fr' ? 'Suivez les progrès et les séries d\'entretien' : 'Track progress and care streaks'}</li>
+            <li>🌿 ${detectedLang === 'fr' ? 'Découvrez quelles plantes poussent dans chaque jardin' : 'See which plants grow in each garden'}</li>
           </ul>
+          
           ${listGardens.length > 0 ? `
           <h2>🌳 ${detectedLang === 'fr' ? 'Jardins de la Communauté' : 'Community Gardens'}</h2>
           <ul>
-            ${listGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+            ${listGardens.map(g => {
+              const loc = [g.location_city, g.location_country].filter(Boolean).join(', ')
+              return `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a>${loc ? ` — 📍 ${escapeHtml(loc)}` : ''}</li>`
+            }).join('')}
           </ul>
           ` : ''}
-          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          
+          ${featuredProfiles.length > 0 ? `
+          <h2>👤 ${detectedLang === 'fr' ? 'Jardiniers Actifs' : 'Active Gardeners'}</h2>
+          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+            ${featuredProfiles.map(p => `<li><a href="/u/${encodeURIComponent(p.display_name)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">👤 ${escapeHtml(p.display_name)}</a></li>`).join('')}
+          </ul>
+          ` : ''}
+          
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
-            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
             <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
             <a href="/blog">📚 Blog</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/contact">💬 Contact</a>
           </nav>
         </article>
       `
@@ -29799,18 +29917,15 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Discovery/Swipe page
     else if (effectivePath[0] === 'discovery') {
-      // Fetch some featured plants for discovery page
+      // Fetch featured plants grouped by type for richer content
       let discoveryPlants = []
+      let totalPlants = '5,000+'
       try {
         if (supabaseServer) {
-          const { data: plants } = await ssrQuery(
-            supabaseServer
-              .from('plants')
-              .select('id, name')
-              .limit(8),
-            'discovery_plants'
-          )
+          const { data: plants } = await ssrQuery(supabaseServer.from('plants').select('id, name, plant_type').eq('status', 'approved').limit(20), 'discovery_plants')
           if (plants) discoveryPlants = plants
+          const { count: pc } = await ssrQuery(supabaseServer.from('plants').select('id', { count: 'exact', head: true }), 'discovery_total')
+          if (pc) totalPlants = pc.toLocaleString() + '+'
         }
       } catch { }
       
@@ -29820,6 +29935,10 @@ async function generateCrawlerHtml(req, pagePath) {
         <article>
           <h1>🎴 ${tr.discoveryPlant}</h1>
           <p>${tr.discoveryFind}</p>
+          <p>${detectedLang === 'fr'
+            ? `Parcourez ${totalPlants} plantes et trouvez celles qui correspondent à votre espace, votre climat et votre niveau d'expérience. Notre système de découverte par swipe rend la recherche de plantes amusante et intuitive.`
+            : `Browse ${totalPlants} plants and find ones that match your space, climate, and experience level. Our swipe-based discovery system makes plant searching fun and intuitive.`}</p>
+          
           <h2>${tr.discoveryHow}</h2>
           <ul>
             <li>👉 ${tr.discoveryRight}</li>
@@ -29828,19 +29947,33 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>🔄 ${tr.discoveryKeep}</li>
           </ul>
           <p>${tr.discoveryStart} 🌿</p>
+          
+          <h2>🎯 ${detectedLang === 'fr' ? 'Filtrez par vos préférences' : 'Filter by your preferences'}</h2>
+          <ul>
+            <li>☀️ ${detectedLang === 'fr' ? 'Ensoleillement — plein soleil, mi-ombre, ombre' : 'Sunlight — full sun, partial shade, shade'}</li>
+            <li>💧 ${detectedLang === 'fr' ? 'Besoins en eau — faible à élevé' : 'Water needs — low to high'}</li>
+            <li>🏠 ${detectedLang === 'fr' ? 'Intérieur, extérieur ou les deux' : 'Indoor, outdoor, or both'}</li>
+            <li>🎯 ${detectedLang === 'fr' ? 'Niveau de difficulté' : 'Difficulty level'}</li>
+            <li>🐾 ${detectedLang === 'fr' ? 'Sans danger pour les animaux' : 'Pet-safe plants'}</li>
+          </ul>
+          
           ${discoveryPlants.length > 0 ? `
           <h2>🌿 ${detectedLang === 'fr' ? 'Plantes à Découvrir' : 'Plants to Discover'}</h2>
           <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
             ${discoveryPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
           </ul>
           ` : ''}
-          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
-            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Recherche avancée' : 'Advanced Search'}</a>
             <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
-            <a href="/blog">📚 Blog</a>
+            <a href="/blog">📚 ${detectedLang === 'fr' ? 'Conseils jardinage' : 'Gardening Tips'}</a>
             <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/contact">💬 Contact</a>
           </nav>
         </article>
       `
@@ -29853,29 +29986,56 @@ async function generateCrawlerHtml(req, pagePath) {
       pageContent = `
         <article>
           <h1>💎 ${tr.pricingPlans}</h1>
+          <p>${detectedLang === 'fr'
+            ? 'Aphylia est gratuit et le restera. Notre mission est de rendre les connaissances botaniques accessibles à tous.'
+            : 'Aphylia is free and always will be. Our mission is to make plant knowledge accessible to everyone.'}</p>
+          
           <h2>🆓 ${tr.pricingFree}</h2>
           <p>${tr.pricingEverything}</p>
           <ul>
-            <li>✅ <a href="/discovery">${tr.pricingDiscovery}</a></li>
-            <li>✅ <a href="/gardens">${tr.pricingTracking}</a></li>
-            <li>✅ ${tr.pricingCare}</li>
-            <li>✅ ${tr.pricingIdentify}</li>
-            <li>✅ ${tr.pricingAccess}</li>
+            <li>✅ <a href="/discovery">${tr.pricingDiscovery}</a> — ${detectedLang === 'fr' ? 'parcourez des milliers de plantes' : 'browse thousands of plants'}</li>
+            <li>✅ <a href="/gardens">${tr.pricingTracking}</a> — ${detectedLang === 'fr' ? 'créez et gérez plusieurs jardins' : 'create and manage multiple gardens'}</li>
+            <li>✅ ${tr.pricingCare} — ${detectedLang === 'fr' ? 'arrosage, fertilisation, taille' : 'watering, fertilizing, pruning'}</li>
+            <li>✅ ${tr.pricingIdentify} — ${detectedLang === 'fr' ? 'prenez une photo, trouvez la plante' : 'take a photo, find the plant'}</li>
+            <li>✅ ${tr.pricingAccess} — ${detectedLang === 'fr' ? 'partagez vos jardins, connectez-vous' : 'share gardens, connect with others'}</li>
+            <li>✅ <a href="/search">${detectedLang === 'fr' ? 'Recherche avancée de plantes' : 'Advanced plant search'}</a></li>
+            <li>✅ <a href="/blog">${detectedLang === 'fr' ? 'Articles et guides de jardinage' : 'Gardening articles and guides'}</a></li>
+            <li>✅ ${detectedLang === 'fr' ? 'Informations de toxicité pour les animaux' : 'Pet toxicity information'}</li>
+            <li>✅ ${detectedLang === 'fr' ? 'Plantes compagnes et associations' : 'Companion plants and associations'}</li>
+            <li>✅ ${detectedLang === 'fr' ? 'Calendriers de semis et floraison' : 'Sowing and flowering calendars'}</li>
           </ul>
+          
           <h2>✨ ${tr.pricingPremium}</h2>
           <p>${tr.pricingSerious}</p>
           <ul>
-            <li>🌟 ${tr.pricingAnalytics}</li>
-            <li>🌟 ${tr.pricingSupport}</li>
-            <li>🌟 ${tr.pricingExclusive}</li>
+            <li>🌟 ${tr.pricingAnalytics} — ${detectedLang === 'fr' ? 'statistiques détaillées de vos jardins' : 'detailed garden statistics'}</li>
+            <li>🌟 ${tr.pricingSupport} — ${detectedLang === 'fr' ? 'réponse rapide de notre équipe' : 'fast response from our team'}</li>
+            <li>🌟 ${tr.pricingExclusive} — ${detectedLang === 'fr' ? 'accès anticipé aux nouvelles fonctionnalités' : 'early access to new features'}</li>
           </ul>
+          
+          <h2>❓ ${detectedLang === 'fr' ? 'Questions Fréquentes' : 'FAQ'}</h2>
+          <dl>
+            <dt><strong>${detectedLang === 'fr' ? 'Aphylia est-il vraiment gratuit ?' : 'Is Aphylia really free?'}</strong></dt>
+            <dd>${detectedLang === 'fr' ? 'Oui ! Toutes les fonctionnalités essentielles sont gratuites et le resteront.' : 'Yes! All essential features are free and will remain so.'}</dd>
+            <dt><strong>${detectedLang === 'fr' ? 'Dois-je créer un compte ?' : 'Do I need to create an account?'}</strong></dt>
+            <dd>${detectedLang === 'fr' ? 'Vous pouvez parcourir les plantes sans compte. Un compte gratuit débloque le suivi de jardin et les rappels.' : 'You can browse plants without an account. A free account unlocks garden tracking and reminders.'}</dd>
+            <dt><strong>${detectedLang === 'fr' ? 'Mes données sont-elles protégées ?' : 'Is my data protected?'}</strong></dt>
+            <dd>${detectedLang === 'fr' ? 'Absolument. Aphylia est conforme au RGPD et à la CNIL.' : 'Absolutely. Aphylia is GDPR and CNIL compliant.'} <a href="/privacy">${detectedLang === 'fr' ? 'Lire notre politique de confidentialité' : 'Read our privacy policy'}</a></dd>
+          </dl>
+          
           <p style="margin-top: 20px;"><a href="/download" style="display: inline-block; padding: 12px 24px; background: #10b981; color: white; border-radius: 12px; text-decoration: none; font-weight: 600;">📲 ${detectedLang === 'fr' ? 'Commencer Gratuitement' : 'Get Started Free'}</a></p>
-          <h2>🔗 ${detectedLang === 'fr' ? 'En savoir plus' : 'Learn More'}</h2>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
             <a href="/contact">💬 Contact</a>
             <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+            <a href="/privacy">🔒 ${detectedLang === 'fr' ? 'Confidentialité' : 'Privacy'}</a>
           </nav>
         </article>
       `
@@ -29888,24 +30048,53 @@ async function generateCrawlerHtml(req, pagePath) {
       pageContent = `
         <article>
           <h1>📲 ${tr.downloadGet}</h1>
+          <p>${detectedLang === 'fr'
+            ? 'Aphylia est disponible partout — aucun téléchargement requis. Utilisez-le dans votre navigateur ou installez-le comme une application native.'
+            : 'Aphylia is available everywhere — no download required. Use it in your browser or install it as a native-like app.'}</p>
+          
           <h2>🌐 ${tr.downloadWeb}</h2>
           <p>${tr.downloadWebDesc}</p>
+          <p>${detectedLang === 'fr'
+            ? 'Fonctionne sur tous les navigateurs modernes : Chrome, Safari, Firefox, Edge. Aucune installation nécessaire.'
+            : 'Works on all modern browsers: Chrome, Safari, Firefox, Edge. No installation needed.'}</p>
           <p><a href="/discovery" style="display: inline-block; padding: 10px 20px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: 600;">🎴 ${detectedLang === 'fr' ? 'Lancer l\'App Web' : 'Launch Web App'}</a></p>
+          
           <h2>📱 ${tr.downloadPwa}</h2>
           <p>${tr.downloadPwaDesc}</p>
+          <p>${detectedLang === 'fr'
+            ? 'L\'application PWA fonctionne hors-ligne, envoie des notifications push et se lance comme une app native depuis votre écran d\'accueil.'
+            : 'The PWA works offline, sends push notifications, and launches like a native app from your home screen.'}</p>
           <ul>
-            <li>${tr.downloadIos}</li>
-            <li>${tr.downloadAndroid}</li>
+            <li>📱 ${tr.downloadIos}</li>
+            <li>🤖 ${tr.downloadAndroid}</li>
+            <li>💻 ${detectedLang === 'fr' ? 'Bureau : Chrome → Menu (⋮) → Installer Aphylia' : 'Desktop: Chrome → Menu (⋮) → Install Aphylia'}</li>
           </ul>
+          
           <h2>🚀 ${tr.downloadNative}</h2>
           <p>${tr.downloadNativeDesc}</p>
+          
+          <h2>✨ ${detectedLang === 'fr' ? 'Ce qui est inclus' : 'What\'s Included'}</h2>
+          <ul>
+            <li>🌿 <a href="/search">${detectedLang === 'fr' ? 'Base de données complète de plantes' : 'Complete plant database'}</a></li>
+            <li>🏡 <a href="/gardens">${detectedLang === 'fr' ? 'Gestion de jardins' : 'Garden management'}</a></li>
+            <li>⏰ ${detectedLang === 'fr' ? 'Rappels d\'entretien intelligents' : 'Smart care reminders'}</li>
+            <li>📸 ${detectedLang === 'fr' ? 'Identification de plantes' : 'Plant identification'}</li>
+            <li>🎴 <a href="/discovery">${detectedLang === 'fr' ? 'Découverte de plantes' : 'Plant discovery'}</a></li>
+            <li>📚 <a href="/blog">${detectedLang === 'fr' ? 'Articles de jardinage' : 'Gardening articles'}</a></li>
+            <li>👥 ${detectedLang === 'fr' ? 'Communauté de jardiniers' : 'Gardening community'}</li>
+            <li>🆓 ${detectedLang === 'fr' ? 'Tout est gratuit !' : 'Everything is free!'}</li>
+          </ul>
+          
           <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
-            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
             <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
             <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/contact">💬 Contact</a>
           </nav>
         </article>
       `
@@ -29921,6 +30110,7 @@ async function generateCrawlerHtml(req, pagePath) {
           <h1>📜 ${tr.termsTitle}</h1>
           <p>${tr.termsUpdated}: ${new Date().toLocaleDateString(dateLocales[detectedLang] || 'en-US', { month: 'long', year: 'numeric' })}</p>
           <p>${tr.termsWelcome}</p>
+          
           <h2>${tr.termsSimple}</h2>
           <ul>
             <li>✅ ${tr.termsRespect}</li>
@@ -29928,18 +30118,37 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>✅ ${tr.termsSecure}</li>
             <li>✅ ${tr.termsEnjoy}</li>
           </ul>
+          
+          <h2>📋 ${detectedLang === 'fr' ? 'Utilisation du Service' : 'Use of Service'}</h2>
+          <p>${detectedLang === 'fr'
+            ? 'Aphylia fournit des informations botaniques à titre éducatif. Nos guides d\'entretien sont basés sur des sources réputées mais ne remplacent pas les conseils d\'un professionnel.'
+            : 'Aphylia provides botanical information for educational purposes. Our care guides are based on reputable sources but do not replace professional advice.'}</p>
+          
+          <h2>👤 ${detectedLang === 'fr' ? 'Votre Compte' : 'Your Account'}</h2>
+          <p>${detectedLang === 'fr'
+            ? 'Vous êtes responsable de votre compte et de son contenu. Vos jardins et collections peuvent être publics ou privés selon vos préférences.'
+            : 'You are responsible for your account and its content. Your gardens and collections can be public or private according to your preferences.'}</p>
+          
+          <h2>🌍 ${detectedLang === 'fr' ? 'Contenu Communautaire' : 'Community Content'}</h2>
+          <p>${detectedLang === 'fr'
+            ? 'En partageant du contenu sur Aphylia (jardins publics, profils, collections), vous accordez à la communauté le droit de le consulter. Vous conservez la propriété de votre contenu.'
+            : 'By sharing content on Aphylia (public gardens, profiles, collections), you grant the community the right to view it. You retain ownership of your content.'}</p>
+          
           <h2>🔗 ${detectedLang === 'fr' ? 'Liens Utiles' : 'Useful Links'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/privacy">🔒 ${detectedLang === 'fr' ? 'Confidentialité' : 'Privacy Policy'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
             <a href="/contact">💬 Contact</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
             <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/blog">📚 Blog</a>
           </nav>
         </article>
       `
     }
 
-    // Contact page
+    // Contact business page
     else if (effectivePath[0] === 'contact' && effectivePath[1] === 'business') {
       title = `🤝 ${tr.businessTitle} | Aphylia`
       description = tr.businessDesc
@@ -29948,18 +30157,30 @@ async function generateCrawlerHtml(req, pagePath) {
           <h1>🤝 ${tr.businessTitle}</h1>
           <p>${tr.businessInterested}</p>
           <ul>
-            <li>🌿 ${tr.businessNurseries}</li>
-            <li>🏪 ${tr.businessShops}</li>
-            <li>🎯 ${tr.businessBrands}</li>
-            <li>📚 ${tr.businessCreators}</li>
+            <li>🌿 ${tr.businessNurseries} — ${detectedLang === 'fr' ? 'référencez vos plantes dans notre base de données' : 'list your plants in our database'}</li>
+            <li>🏪 ${tr.businessShops} — ${detectedLang === 'fr' ? 'atteignez des milliers de jardiniers passionnés' : 'reach thousands of passionate gardeners'}</li>
+            <li>🎯 ${tr.businessBrands} — ${detectedLang === 'fr' ? 'sponsorisez du contenu pertinent' : 'sponsor relevant content'}</li>
+            <li>📚 ${tr.businessCreators} — ${detectedLang === 'fr' ? 'collaborez sur des articles et guides' : 'collaborate on articles and guides'}</li>
           </ul>
           <p>${tr.businessExplore}</p>
-          <h2>🔗 ${detectedLang === 'fr' ? 'Liens Utiles' : 'Useful Links'}</h2>
+          
+          <h2>📊 ${detectedLang === 'fr' ? 'Pourquoi Aphylia ?' : 'Why Aphylia?'}</h2>
+          <ul>
+            <li>${detectedLang === 'fr' ? '🌍 Communauté croissante de jardiniers dans l\'UE' : '🌍 Growing community of gardeners across the EU'}</li>
+            <li>${detectedLang === 'fr' ? '📱 Application web moderne et responsive' : '📱 Modern, responsive web application'}</li>
+            <li>${detectedLang === 'fr' ? '🔒 Conforme au RGPD et respectueux de la vie privée' : '🔒 GDPR compliant and privacy-respecting'}</li>
+            <li>${detectedLang === 'fr' ? '📚 Contenu de qualité avec des guides d\'experts' : '📚 Quality content with expert guides'}</li>
+          </ul>
+          
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/contact">💬 ${detectedLang === 'fr' ? 'Contact Général' : 'General Contact'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
             <a href="/blog">📚 Blog</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
           </nav>
         </article>
       `
@@ -29972,6 +30193,7 @@ async function generateCrawlerHtml(req, pagePath) {
         <article>
           <h1>💬 ${tr.contactGet}</h1>
           <p>${tr.contactLove}</p>
+          
           <h2>${tr.contactReach}</h2>
           <ul>
             <li>❓ ${tr.contactQuestions}</li>
@@ -29981,13 +30203,31 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>👋 ${tr.contactHello}</li>
           </ul>
           <p>${tr.contactRespond} 🌱</p>
+          
+          <h2>💡 ${detectedLang === 'fr' ? 'Ressources Utiles' : 'Helpful Resources'}</h2>
+          <p>${detectedLang === 'fr'
+            ? 'Avant de nous contacter, vous trouverez peut-être votre réponse ici :'
+            : 'Before reaching out, you might find your answer here:'}</p>
+          <ul>
+            <li>🔍 <a href="/search">${detectedLang === 'fr' ? 'Recherchez une plante spécifique' : 'Search for a specific plant'}</a></li>
+            <li>📚 <a href="/blog">${detectedLang === 'fr' ? 'Lisez nos guides de jardinage' : 'Read our gardening guides'}</a></li>
+            <li>💎 <a href="/pricing">${detectedLang === 'fr' ? 'Consultez nos tarifs' : 'Check our pricing'}</a></li>
+            <li>🔒 <a href="/privacy">${detectedLang === 'fr' ? 'Politique de confidentialité' : 'Privacy policy'}</a></li>
+            <li>📜 <a href="/terms">${detectedLang === 'fr' ? 'Conditions d\'utilisation' : 'Terms of service'}</a></li>
+          </ul>
+          
           <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
             <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
             <a href="/blog">📚 Blog</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
+            <a href="/contact/business">🤝 ${detectedLang === 'fr' ? 'Partenariats' : 'Partnerships'}</a>
             <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+            <a href="/privacy">🔒 ${detectedLang === 'fr' ? 'Confidentialité' : 'Privacy'}</a>
           </nav>
         </article>
       `
@@ -30028,12 +30268,30 @@ async function generateCrawlerHtml(req, pagePath) {
             ? 'Pour toute question concernant vos données personnelles, contactez-nous.'
             : 'For any questions about your personal data, contact us.'}</p>
           <p><a href="/contact">💬 ${detectedLang === 'fr' ? 'Nous contacter' : 'Contact us'}</a></p>
+          <h2>🛡️ ${detectedLang === 'fr' ? 'Sécurité des données' : 'Data Security'}</h2>
+          <ul>
+            <li>🔐 ${detectedLang === 'fr' ? 'Connexion sécurisée HTTPS sur toutes les pages' : 'Secure HTTPS connection on all pages'}</li>
+            <li>🗄️ ${detectedLang === 'fr' ? 'Données stockées dans l\'UE (hébergement Supabase)' : 'Data stored in the EU (Supabase hosting)'}</li>
+            <li>🔑 ${detectedLang === 'fr' ? 'Mots de passe hashés — jamais stockés en clair' : 'Passwords hashed — never stored in plain text'}</li>
+            <li>📊 ${detectedLang === 'fr' ? 'Google Analytics uniquement avec consentement explicite' : 'Google Analytics only with explicit consent'}</li>
+            <li>🚫 ${detectedLang === 'fr' ? 'Aucune vente de données à des tiers' : 'No selling data to third parties'}</li>
+          </ul>
+          
+          <h2>⏰ ${detectedLang === 'fr' ? 'Conservation des données' : 'Data Retention'}</h2>
+          <p>${detectedLang === 'fr'
+            ? 'Nous ne conservons vos données que le temps nécessaire. Les visites web sont supprimées après 35 jours. Les comptes supprimés sont purgés définitivement.'
+            : 'We only retain your data as long as necessary. Web visits are deleted after 35 days. Deleted accounts are permanently purged.'}</p>
+          
           <h2>🔗 ${detectedLang === 'fr' ? 'Liens Utiles' : 'Useful Links'}</h2>
           <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
             <a href="/contact">💬 Contact</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
+            <a href="/blog">📚 Blog</a>
+            <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
+            <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
           </nav>
         </article>
       `
