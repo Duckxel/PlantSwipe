@@ -4883,15 +4883,17 @@ app.post('/api/admin/images/serpapi', async (req, res) => {
     // Only top 5 images from SerpAPI (limited credits)
     const limit = Math.min(Math.max(parseInt(body.limit) || 5, 1), 10)
 
-    const apiKey = process.env.SERPAPI_KEY || ''
+    const apiKey = (process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || '').trim()
     if (!apiKey) {
-      res.status(503).json({ error: 'SerpAPI key is not configured. Set SERPAPI_KEY environment variable.' })
+      console.warn('[server] SerpAPI: no key found. Checked: SERPAPI_KEY, SERP_API_KEY, SERPAPI_API_KEY')
+      res.status(503).json({ error: 'SerpAPI key is not configured. Set SERPAPI_KEY in .env or .env.server file.' })
       return
     }
 
-    // Search for "<plantName> plant" with free-to-use license filter
+    // Search for "<plantName> plant" with free-to-use Creative Commons license filter
     const query = `${plantName} plant`
     const searchUrl = `https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(query)}&google_domain=google.com&hl=en&gl=us&image_type=photo&tbs=il:cl&num=${limit}&api_key=${encodeURIComponent(apiKey)}`
+    console.log(`[server] SerpAPI: fetching images for "${query}" (key=${apiKey.slice(0, 4)}...${apiKey.slice(-4)})`)
     const searchResp = await fetch(searchUrl)
 
     if (!searchResp.ok) {
@@ -5054,7 +5056,7 @@ app.post('/api/admin/images/external', async (req, res) => {
     }
 
     // Fetch SerpAPI Google Images (top 5 only, free-to-use license)
-    const serpApiKey = process.env.SERPAPI_KEY || ''
+    const serpApiKey = (process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || '').trim()
     if (serpApiKey) {
       try {
         const serpQuery = `${plantName} plant`
@@ -31095,7 +31097,8 @@ if (shouldListen) {
   const httpServer = app.listen(port, host, () => {
     console.log(`[server] listening on http://${host}:${port}`)
     // Log external image API key status
-    console.log(`[server] External image APIs: SerpAPI=${process.env.SERPAPI_KEY ? 'configured' : 'NOT SET'}, Smithsonian=${process.env.SMITHSONIAN_API_KEY ? 'configured' : 'NOT SET'}, GBIF=no key needed`)
+    const serpKeyFound = process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY
+    console.log(`[server] External image APIs: SerpAPI=${serpKeyFound ? 'configured (' + (serpKeyFound.trim().slice(0,4)) + '...)' : 'NOT SET (checked SERPAPI_KEY, SERP_API_KEY, SERPAPI_API_KEY)'}, Smithsonian=${process.env.SMITHSONIAN_API_KEY ? 'configured' : 'NOT SET'}, GBIF=no key needed`)
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => { })
     ensureBroadcastTable().catch(() => { })
