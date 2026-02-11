@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabaseClient"
 export interface ExternalImage {
   url: string
   license: string
-  source: "gbif" | "smithsonian"
+  source: "gbif" | "smithsonian" | "serpapi"
   creator?: string | null
   title?: string | null
   thumbnail?: string | null
@@ -13,6 +13,7 @@ export interface ExternalImagesResult {
   images: ExternalImage[]
   gbifCount: number
   smithsonianCount: number
+  serpapiCount: number
   errors?: string[]
 }
 
@@ -47,7 +48,7 @@ async function buildAuthHeaders(): Promise<Record<string, string>> {
 }
 
 /**
- * Fetch CC0-licensed plant images from GBIF and Smithsonian Open Access.
+ * Fetch free-to-use plant images from GBIF, Smithsonian Open Access, and Google Images (SerpAPI).
  * Uses the combined `/api/admin/images/external` endpoint.
  */
 export async function fetchExternalPlantImages(
@@ -55,7 +56,7 @@ export async function fetchExternalPlantImages(
   options?: { limit?: number; signal?: AbortSignal }
 ): Promise<ExternalImagesResult> {
   if (!plantName.trim()) {
-    return { images: [], gbifCount: 0, smithsonianCount: 0 }
+    return { images: [], gbifCount: 0, smithsonianCount: 0, serpapiCount: 0 }
   }
 
   const headers = await buildAuthHeaders()
@@ -81,6 +82,7 @@ export async function fetchExternalPlantImages(
     images: data.images || [],
     gbifCount: data.gbifCount || 0,
     smithsonianCount: data.smithsonianCount || 0,
+    serpapiCount: data.serpapiCount || 0,
     errors: data.errors,
   }
 }

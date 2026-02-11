@@ -4611,7 +4611,93 @@ app.options('/api/admin/images/smithsonian', (_req, res) => {
   res.status(204).end()
 })
 
-// Admin/Editor: Fetch images from both GBIF and Smithsonian in one call
+// Admin/Editor: Fetch free-to-use plant images from Google Images via SerpAPI
+app.post('/api/admin/images/serpapi', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    // Only top 5 images from SerpAPI (limited credits)
+    const limit = Math.min(Math.max(parseInt(body.limit) || 5, 1), 10)
+
+    const apiKey = process.env.SERPAPI_KEY || ''
+    if (!apiKey) {
+      res.status(503).json({ error: 'SerpAPI key is not configured. Set SERPAPI_KEY environment variable.' })
+      return
+    }
+
+    // Search for "<plantName> plant" with free-to-use license filter
+    const query = `${plantName} plant`
+    const searchUrl = `https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(query)}&google_domain=google.com&hl=en&gl=us&image_type=photo&tbs=il:cl&num=${limit}&api_key=${encodeURIComponent(apiKey)}`
+    const searchResp = await fetch(searchUrl)
+
+    if (!searchResp.ok) {
+      const status = searchResp.status
+      // Handle rate limiting / credit exhaustion gracefully
+      if (status === 429 || status === 403) {
+        console.warn(`[server] SerpAPI rate limited or credits exhausted (${status}) for "${plantName}"`)
+        res.json({ success: true, images: [], skipped: true, reason: 'SerpAPI rate limit or credits exhausted' })
+        return
+      }
+      const text = await searchResp.text().catch(() => '')
+      res.status(502).json({ error: `SerpAPI returned ${status}: ${text.slice(0, 200)}` })
+      return
+    }
+
+    const searchData = await searchResp.json()
+
+    // Check for SerpAPI-level errors (e.g. invalid key, no credits)
+    if (searchData.error) {
+      console.warn(`[server] SerpAPI error for "${plantName}":`, searchData.error)
+      res.json({ success: true, images: [], skipped: true, reason: `SerpAPI: ${searchData.error}` })
+      return
+    }
+
+    const imagesResults = searchData.images_results || []
+    const images = []
+    const seenUrls = new Set()
+
+    for (const img of imagesResults) {
+      if (images.length >= limit) break
+      const url = img.original
+      if (!url || seenUrls.has(url)) continue
+      seenUrls.add(url)
+      images.push({
+        url,
+        license: 'Creative Commons (free to use)',
+        source: 'serpapi',
+        title: img.title || null,
+        thumbnail: img.thumbnail || null,
+      })
+    }
+
+    console.log(`[server] SerpAPI images for "${plantName}": found ${images.length} free-to-use images`)
+    res.json({
+      success: true,
+      images,
+      totalAvailable: imagesResults.length,
+    })
+  } catch (err) {
+    console.error('[server] SerpAPI image fetch failed:', err)
+    if (!res.headersSent) {
+      // Gracefully handle any unexpected errors - don't break the whole flow
+      res.json({ success: true, images: [], skipped: true, reason: err?.message || 'SerpAPI fetch failed' })
+    }
+  }
+})
+app.options('/api/admin/images/serpapi', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Fetch images from GBIF, Smithsonian, and SerpAPI in one call
 app.post('/api/admin/images/external', async (req, res) => {
   try {
     const caller = await ensureEditor(req, res)
@@ -4625,7 +4711,7 @@ app.post('/api/admin/images/external', async (req, res) => {
     }
     const limit = Math.min(Math.max(parseInt(body.limit) || 12, 1), 50)
 
-    const results = { gbif: [], smithsonian: [], errors: [] }
+    const results = { gbif: [], smithsonian: [], serpapi: [], errors: [] }
 
     // Fetch GBIF images
     try {
@@ -4707,13 +4793,63 @@ app.post('/api/admin/images/external', async (req, res) => {
       }
     }
 
-    const allImages = [...results.gbif, ...results.smithsonian]
-    console.log(`[server] External images for "${plantName}": ${results.gbif.length} GBIF + ${results.smithsonian.length} Smithsonian`)
+    // Fetch SerpAPI Google Images (top 5 only, free-to-use license)
+    const serpApiKey = process.env.SERPAPI_KEY || ''
+    if (serpApiKey) {
+      try {
+        const serpQuery = `${plantName} plant`
+        const serpLimit = 5
+        const serpUrl = `https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(serpQuery)}&google_domain=google.com&hl=en&gl=us&image_type=photo&tbs=il:cl&num=${serpLimit}&api_key=${encodeURIComponent(serpApiKey)}`
+        const serpResp = await fetch(serpUrl)
+        if (serpResp.ok) {
+          const serpData = await serpResp.json()
+          if (serpData.error) {
+            // SerpAPI returned an error (e.g. no credits) - skip gracefully
+            console.warn(`[server] SerpAPI error in combined endpoint for "${plantName}":`, serpData.error)
+            results.errors.push(`SerpAPI: ${serpData.error}`)
+          } else {
+            const serpImages = serpData.images_results || []
+            const seenUrls = new Set()
+            for (const img of serpImages) {
+              if (results.serpapi.length >= serpLimit) break
+              const url = img.original
+              if (!url || seenUrls.has(url)) continue
+              seenUrls.add(url)
+              results.serpapi.push({
+                url,
+                license: 'Creative Commons (free to use)',
+                source: 'serpapi',
+                title: img.title || null,
+                thumbnail: img.thumbnail || null,
+              })
+            }
+          }
+        } else {
+          const status = serpResp.status
+          if (status === 429 || status === 403) {
+            console.warn(`[server] SerpAPI rate limited/credits exhausted (${status}) in combined endpoint`)
+          } else {
+            console.warn(`[server] SerpAPI returned ${status} in combined endpoint`)
+          }
+          // Don't add to errors array for rate limiting - it's expected
+          if (status !== 429 && status !== 403) {
+            results.errors.push(`SerpAPI: HTTP ${status}`)
+          }
+        }
+      } catch (serpErr) {
+        console.error('[server] SerpAPI fetch error in combined endpoint:', serpErr)
+        results.errors.push(`SerpAPI: ${serpErr?.message || 'Unknown error'}`)
+      }
+    }
+
+    const allImages = [...results.serpapi, ...results.gbif, ...results.smithsonian]
+    console.log(`[server] External images for "${plantName}": ${results.serpapi.length} SerpAPI + ${results.gbif.length} GBIF + ${results.smithsonian.length} Smithsonian`)
     res.json({
       success: true,
       images: allImages,
       gbifCount: results.gbif.length,
       smithsonianCount: results.smithsonian.length,
+      serpapiCount: results.serpapi.length,
       errors: results.errors.length > 0 ? results.errors : undefined,
     })
   } catch (err) {

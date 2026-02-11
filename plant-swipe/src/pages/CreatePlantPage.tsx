@@ -894,7 +894,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
   const [fetchingExternalImages, setFetchingExternalImages] = React.useState(false)
-  const [externalImagesResult, setExternalImagesResult] = React.useState<{ gbif: number; smithsonian: number } | null>(null)
+  const [externalImagesResult, setExternalImagesResult] = React.useState<{ gbif: number; smithsonian: number; serpapi: number } | null>(null)
   const targetFields = React.useMemo(
     () =>
       [
@@ -1657,7 +1657,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     try {
       const result = await fetchExternalPlantImages(trimmedName, { limit: 20 })
       if (result.images.length === 0) {
-        setExternalImagesResult({ gbif: 0, smithsonian: 0 })
+        setExternalImagesResult({ gbif: 0, smithsonian: 0, serpapi: 0 })
         return
       }
       // Add fetched images to the plant's images list, avoiding duplicates
@@ -1672,7 +1672,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           }))
         return { ...prev, images: [...existing, ...newImages] }
       })
-      setExternalImagesResult({ gbif: result.gbifCount, smithsonian: result.smithsonianCount })
+      setExternalImagesResult({ gbif: result.gbifCount, smithsonian: result.smithsonianCount, serpapi: result.serpapiCount })
       if (result.errors?.length) {
         console.warn('[CreatePlantPage] External image fetch partial errors:', result.errors)
       }
@@ -2169,13 +2169,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 disabled={fetchingExternalImages || !(plant.name && typeof plant.name === 'string' && plant.name.trim())}
               >
                 {fetchingExternalImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImagePlus className="mr-2 h-4 w-4" />}
-                {t('plantAdmin.fetchExternalImages', 'GBIF & Smithsonian Images')}
+                {t('plantAdmin.fetchExternalImages', 'Fetch Images')}
               </Button>
               {externalImagesResult && (
                 <span className="text-xs text-muted-foreground self-center">
-                  {externalImagesResult.gbif + externalImagesResult.smithsonian === 0
-                    ? t('plantAdmin.noExternalImages', 'No CC0 images found')
-                    : t('plantAdmin.externalImagesAdded', 'Added {{gbif}} GBIF + {{smithsonian}} Smithsonian images', { gbif: externalImagesResult.gbif, smithsonian: externalImagesResult.smithsonian })}
+                  {externalImagesResult.gbif + externalImagesResult.smithsonian + externalImagesResult.serpapi === 0
+                    ? t('plantAdmin.noExternalImages', 'No free images found')
+                    : t('plantAdmin.externalImagesAdded', 'Added {{serpapi}} Google + {{gbif}} GBIF + {{smithsonian}} Smithsonian', { gbif: externalImagesResult.gbif, smithsonian: externalImagesResult.smithsonian, serpapi: externalImagesResult.serpapi })}
                 </span>
               )}
               {!(plant.name && typeof plant.name === 'string' && plant.name.trim()) && (

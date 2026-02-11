@@ -607,7 +607,7 @@ export async function processPlantRequest(
       throw new DOMException('Operation cancelled', 'AbortError')
     }
     
-    // Stage 1.5: Fetch external images from GBIF & Smithsonian
+    // Stage 1.5: Fetch external images from Google (SerpAPI), GBIF & Smithsonian
     onProgress?.({ stage: 'fetching_images', plantName: displayName })
     
     try {
@@ -634,7 +634,7 @@ export async function processPlantRequest(
             ...plant,
             images: [...(plant.images || []), ...newImages],
           }
-          console.log(`[aiPrefillService] Added ${newImages.length} external images for "${englishPlantName}" (${externalResult.gbifCount} GBIF, ${externalResult.smithsonianCount} Smithsonian)`)
+          console.log(`[aiPrefillService] Added ${newImages.length} external images for "${englishPlantName}" (${externalResult.serpapiCount} Google, ${externalResult.gbifCount} GBIF, ${externalResult.smithsonianCount} Smithsonian)`)
         }
       }
       
