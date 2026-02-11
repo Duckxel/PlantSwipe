@@ -768,8 +768,9 @@ export async function processPlantRequest(
     
     const targetLanguages = SUPPORTED_LANGUAGES.filter((lang) => lang !== 'en')
     
-    // Process languages sequentially to avoid overwhelming the translation API
+    // Process languages sequentially with delays to avoid DeepL rate limits
     const translatedRows: Array<Record<string, unknown>> = []
+    const INTER_LANGUAGE_DELAY_MS = 500 // Delay between languages to spread DeepL requests
     
     for (const target of targetLanguages) {
       if (signal?.aborted) {
@@ -815,6 +816,11 @@ export async function processPlantRequest(
           throw new DOMException('Operation cancelled', 'AbortError')
         }
         
+        // Small delay between string batch and array batch to avoid DeepL rate limits
+        if (stringTexts.length > 0) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+        }
+        
         // Collect all array fields for batch translation  
         // Flatten all arrays into one big batch, then split results back
         const arrayFields: Array<{ key: string; items: string[] }> = []
@@ -855,6 +861,10 @@ export async function processPlantRequest(
             const chunk = allArrayItems.slice(i, i + BATCH_SIZE)
             const translated = await translateBatch(chunk, target, 'en')
             translatedArrayItems.push(...translated)
+            // Small delay between array batch chunks to avoid DeepL rate limits
+            if (i + BATCH_SIZE < allArrayItems.length) {
+              await new Promise(resolve => setTimeout(resolve, 300))
+            }
           }
         }
         
@@ -896,6 +906,9 @@ export async function processPlantRequest(
         if (isCancellationError(err)) throw err
         console.error(`[aiPrefillService] Translation to ${target} failed for "${englishPlantName}":`, err)
       }
+      
+      // Delay between languages to spread DeepL API requests and avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, INTER_LANGUAGE_DELAY_MS))
     }
     
     if (signal?.aborted) {

@@ -77,13 +77,15 @@ function restoreTemplateVariables(text: string, variableMap: Map<string, string>
 }
 
 /**
- * Retry helper with exponential backoff for rate-limited (429) requests
+ * Retry helper with exponential backoff for rate-limited (429) requests.
+ * The server now also queues and retries DeepL calls, but this provides
+ * an additional safety net on the client side.
  */
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 3,
-  baseDelayMs = 1000
+  maxRetries = 5,
+  baseDelayMs = 1500
 ): Promise<Response> {
   let lastError: Error | null = null
   
@@ -93,7 +95,14 @@ async function fetchWithRetry(
       
       // If rate limited, wait and retry
       if (response.status === 429 && attempt < maxRetries) {
-        const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500
+        // Check for Retry-After header
+        const retryAfter = response.headers.get('retry-after')
+        let delay: number
+        if (retryAfter && !isNaN(Number(retryAfter))) {
+          delay = Number(retryAfter) * 1000
+        } else {
+          delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500
+        }
         console.warn(`[translate] Rate limited (429), retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`)
         await new Promise(resolve => setTimeout(resolve, delay))
         continue
@@ -224,8 +233,9 @@ async function translateArrayIndividual(
   if (!items || items.length === 0) return items
   if (sourceLang === targetLang) return items
   
-  // Process in chunks of 5 to limit concurrency
-  const CHUNK_SIZE = 5
+  // Process in chunks of 2 to limit concurrency and avoid DeepL rate limits
+  const CHUNK_SIZE = 2
+  const CHUNK_DELAY_MS = 300 // Small delay between chunks to spread requests
   const results: string[] = []
   
   for (let i = 0; i < items.length; i += CHUNK_SIZE) {
@@ -234,6 +244,11 @@ async function translateArrayIndividual(
       chunk.map(item => translateText(item, targetLang, sourceLang))
     )
     results.push(...chunkResults)
+    
+    // Add a small delay between chunks to avoid overwhelming DeepL
+    if (i + CHUNK_SIZE < items.length) {
+      await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS))
+    }
   }
   
   return results
@@ -550,7 +565,8 @@ async function translateHtmlContent(
   try {
     // For TipTap/rich text content, we translate the full HTML
     // DeepL preserves HTML tags when translating
-    const response = await fetch('/api/translate', {
+    // Use fetchWithRetry to handle 429 rate limiting from DeepL
+    const response = await fetchWithRetry('/api/translate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
