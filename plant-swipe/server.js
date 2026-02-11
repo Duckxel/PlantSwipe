@@ -30107,14 +30107,6 @@ ${JSON.stringify(jsonLdSchema, null, 2)}
       <a href="/contact">Contact</a>
     </nav>
     
-    <div class="archive-notice">
-      <strong>📚 Static Content Version</strong><br>
-      You're viewing a simplified version of this page optimized for web archives and search engines.
-      For the full interactive experience with search, gardens, and personalized features:
-      <br>
-      <a href="https://aphylia.app${escapeHtml(pagePath)}">Visit Aphylia Live →</a>
-    </div>
-    
     <main>
       <div class="plant-card">
         ${pageContent || `
@@ -30136,6 +30128,14 @@ ${JSON.stringify(jsonLdSchema, null, 2)}
         This is a pre-rendered version for web crawlers, archives, and accessibility.<br>
         Content archived on ${new Date().toISOString().split('T')[0]}
       </p>
+      
+      <div class="archive-notice" style="margin-top: 30px;">
+        <strong>📚 Static Content Version</strong><br>
+        You're viewing a simplified version of this page optimized for web archives and search engines.
+        For the full interactive experience with search, gardens, and personalized features:
+        <br>
+        <a href="https://aphylia.app${escapeHtml(pagePath)}">Visit Aphylia Live →</a>
+      </div>
     </footer>
   </div>
   
