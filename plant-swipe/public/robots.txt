@@ -10,11 +10,13 @@ Allow: /
 Disallow: /admin
 Disallow: /api/
 
-# Block authenticated/private user pages
+# Block authenticated/private user pages (require login, no public content)
+# NOTE: Public profiles are at /u/{username} and ARE allowed for crawling
 Disallow: /settings
 Disallow: /friends
 Disallow: /messages
 Disallow: /profile
+# ^ /profile is just a redirect to /u/{username} for logged-in users, not a real page
 Disallow: /scan
 Disallow: /bug-catcher
 
@@ -42,7 +44,6 @@ Disallow: /admin
 Disallow: /api/
 Disallow: /settings
 Disallow: /messages
-Disallow: /profile
 
 # OpenAI browsing
 User-agent: ChatGPT-User
@@ -78,7 +79,6 @@ Disallow: /admin
 Disallow: /api/
 Disallow: /settings
 Disallow: /messages
-Disallow: /profile
 
 # Cohere AI
 User-agent: cohere-ai
