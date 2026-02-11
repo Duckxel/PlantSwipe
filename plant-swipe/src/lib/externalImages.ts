@@ -228,3 +228,83 @@ export async function fetchExternalPlantImages(
     errors: errors.length > 0 ? errors : undefined,
   }
 }
+
+export interface PlantImageUploadResult {
+  url: string
+  bucket: string
+  path: string
+  sizeBytes: number
+  originalSizeBytes: number
+  compressionPercent: number
+}
+
+/**
+ * Upload an external image URL to the PLANTS bucket.
+ * The server fetches, optimizes to WebP, stores, and records in DB.
+ */
+export async function uploadPlantImageFromUrl(
+  imageUrl: string,
+  plantName: string,
+  source: string,
+  signal?: AbortSignal
+): Promise<PlantImageUploadResult> {
+  const headers = await buildAuthHeaders()
+  const response = await fetch("/api/admin/plant-images/upload-from-url", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ imageUrl, plantName, source }),
+    signal,
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.error || `Upload failed (${response.status})`)
+  }
+
+  const data = await response.json()
+  return {
+    url: data.url,
+    bucket: data.bucket,
+    path: data.path,
+    sizeBytes: data.sizeBytes,
+    originalSizeBytes: data.originalSizeBytes,
+    compressionPercent: data.compressionPercent,
+  }
+}
+
+/**
+ * Delete a plant image from storage and DB.
+ * Only deletes images hosted in the PLANTS bucket.
+ * External URLs (not managed) are silently skipped.
+ */
+export async function deletePlantImage(
+  imageUrl: string,
+  signal?: AbortSignal
+): Promise<{ deleted: boolean }> {
+  const headers = await buildAuthHeaders()
+  const response = await fetch("/api/admin/plant-images/delete", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ imageUrl }),
+    signal,
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.error || `Delete failed (${response.status})`)
+  }
+
+  const data = await response.json()
+  return { deleted: data.deleted ?? false }
+}
+
+/**
+ * Check if a URL points to a managed plant image (PLANTS bucket).
+ * Used to determine if removal should also delete from storage.
+ */
+export function isManagedPlantImageUrl(url: string): boolean {
+  if (!url) return false
+  // Check if URL goes through the media proxy or Supabase storage
+  // Managed URLs contain the PLANTS bucket path
+  return url.includes('/PLANTS/') || url.includes('/plants/')
+}

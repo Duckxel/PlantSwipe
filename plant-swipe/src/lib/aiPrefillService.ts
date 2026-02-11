@@ -7,7 +7,7 @@
 
 import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, getEnglishPlantName } from "@/lib/aiPlantFill"
-import { fetchExternalPlantImages, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
+import { fetchExternalPlantImages, uploadPlantImageFromUrl, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import { translateBatch } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
@@ -624,24 +624,28 @@ export async function processPlantRequest(
       })
       
       if (externalResult.images.length > 0) {
-        const existingUrls = new Set(
-          (plant.images || [])
-            .map((img) => (img.link || img.url || '').toLowerCase())
-            .filter(Boolean)
-        )
-        const newImages = externalResult.images
-          .filter((img) => !existingUrls.has(img.url.toLowerCase()))
-          .map((img, idx) => ({
-            link: img.url,
-            use: ((plant.images || []).length === 0 && idx === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
-          }))
+        // Upload each found image to the PLANTS storage bucket
+        const uploadedImages: Array<{ link: string; use: 'primary' | 'discovery' | 'other' }> = []
+        for (const img of externalResult.images) {
+          if (signal?.aborted) break
+          try {
+            const uploaded = await uploadPlantImageFromUrl(img.url, englishPlantName, img.source, signal)
+            uploadedImages.push({
+              link: uploaded.url,
+              use: ((plant.images || []).length === 0 && uploadedImages.length === 0 ? 'primary' : 'other'),
+            })
+          } catch (uploadErr) {
+            if (isCancellationError(uploadErr)) throw uploadErr
+            console.warn(`[aiPrefillService] Failed to upload image from ${img.source} for "${englishPlantName}":`, uploadErr)
+          }
+        }
         
-        if (newImages.length > 0) {
+        if (uploadedImages.length > 0) {
           plant = {
             ...plant,
-            images: [...(plant.images || []), ...newImages],
+            images: [...(plant.images || []), ...uploadedImages],
           }
-          console.log(`[aiPrefillService] Added ${newImages.length} external images for "${englishPlantName}" (${externalResult.serpapiCount} Google, ${externalResult.gbifCount} GBIF, ${externalResult.smithsonianCount} Smithsonian)`)
+          console.log(`[aiPrefillService] Uploaded ${uploadedImages.length} images to storage for "${englishPlantName}" (${externalResult.serpapiCount} Google, ${externalResult.gbifCount} GBIF, ${externalResult.smithsonianCount} Smithsonian)`)
         }
       }
       

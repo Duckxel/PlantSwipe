@@ -1655,6 +1655,180 @@ const gardenCoverMulter = multer({
 })
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
 
+// === Plant Image Upload Settings ===
+// Plant images are stored in the PLANTS bucket, converted to WebP, and tracked in admin_media_uploads
+const plantImageUploadBucket = process.env.PLANT_IMAGE_BUCKET || 'PLANTS'
+const plantImageUploadPrefix = (process.env.PLANT_IMAGE_PREFIX || 'plants/images').replace(/^\/+|\/+$/g, '')
+const plantImageMaxDimension = 1600 // Good quality for plant detail pages
+const plantImageWebpQuality = 80 // High quality for plant reference images
+const plantImageMaxFetchBytes = 10 * 1024 * 1024 // 10MB max download from external URL
+
+/**
+ * Fetch an external image URL, optimize it to WebP, upload to PLANTS bucket, and record in DB.
+ * Returns { url, bucket, path, sizeBytes, originalSizeBytes } or throws.
+ */
+async function uploadPlantImageFromUrl(imageUrl, { plantName, source, adminId, adminEmail, adminName } = {}) {
+  if (!supabaseServiceClient) throw new Error('Supabase service role key not configured')
+
+  // Fetch the image
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15000) // 15s timeout
+  let resp
+  try {
+    resp = await fetch(imageUrl, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Aphylia-PlantImageFetcher/1.0' },
+      redirect: 'follow',
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  if (!resp.ok) throw new Error(`Failed to fetch image: HTTP ${resp.status}`)
+
+  const contentType = (resp.headers.get('content-type') || '').toLowerCase()
+  if (!contentType.startsWith('image/')) {
+    throw new Error(`URL did not return an image (got ${contentType})`)
+  }
+
+  const arrayBuffer = await resp.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+  if (buffer.length === 0) throw new Error('Downloaded image is empty')
+  if (buffer.length > plantImageMaxFetchBytes) {
+    throw new Error(`Image too large (${(buffer.length / 1024 / 1024).toFixed(1)} MB)`)
+  }
+
+  // Optimize: resize + convert to WebP
+  let optimizedBuffer
+  try {
+    optimizedBuffer = await sharp(buffer)
+      .rotate()
+      .resize({
+        width: plantImageMaxDimension,
+        height: plantImageMaxDimension,
+        fit: 'inside',
+        withoutEnlargement: true,
+        fastShrinkOnLoad: true,
+      })
+      .webp({
+        quality: plantImageWebpQuality,
+        effort: 5,
+        smartSubsample: true,
+      })
+      .toBuffer()
+  } catch (err) {
+    throw new Error(`Failed to optimize image: ${err?.message || 'sharp error'}`)
+  }
+
+  // Build storage path
+  const safePlantName = (plantName || 'plant').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'plant'
+  const unique = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(10).toString('hex')
+  const objectPath = `${plantImageUploadPrefix}/${safePlantName}/${unique}.webp`
+
+  // Upload to storage
+  const { error: uploadError } = await supabaseServiceClient.storage
+    .from(plantImageUploadBucket)
+    .upload(objectPath, optimizedBuffer, {
+      cacheControl: '31536000',
+      contentType: 'image/webp',
+      upsert: false,
+    })
+  if (uploadError) throw new Error(uploadError.message || 'Storage upload failed')
+
+  // Get public URL and transform to media proxy
+  const { data: publicData } = supabaseServiceClient.storage
+    .from(plantImageUploadBucket)
+    .getPublicUrl(objectPath)
+  const publicUrl = publicData?.publicUrl || null
+  const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+
+  // Record in admin_media_uploads for tracking
+  const compressionPercent = buffer.length > 0
+    ? Math.max(0, Math.round(100 - (optimizedBuffer.length / buffer.length) * 100))
+    : 0
+
+  try {
+    await recordAdminMediaUpload({
+      adminId: adminId || null,
+      adminEmail: adminEmail || null,
+      adminName: adminName || null,
+      bucket: plantImageUploadBucket,
+      path: objectPath,
+      publicUrl: proxyUrl,
+      mimeType: 'image/webp',
+      originalMimeType: contentType.split(';')[0].trim(),
+      sizeBytes: optimizedBuffer.length,
+      originalSizeBytes: buffer.length,
+      quality: plantImageWebpQuality,
+      compressionPercent,
+      uploadSource: 'plant_image',
+      metadata: {
+        originalUrl: imageUrl,
+        source: source || 'external',
+        plantName: plantName || null,
+        optimized: true,
+      },
+    })
+  } catch (recordErr) {
+    console.error('[plant-image] Failed to record media upload (image was uploaded successfully):', recordErr)
+  }
+
+  return {
+    url: proxyUrl || publicUrl,
+    bucket: plantImageUploadBucket,
+    path: objectPath,
+    sizeBytes: optimizedBuffer.length,
+    originalSizeBytes: buffer.length,
+    compressionPercent,
+  }
+}
+
+/**
+ * Delete a plant image from storage and admin_media_uploads.
+ * Accepts either a storage URL or a bucket+path pair.
+ */
+async function deletePlantImage(imageUrl) {
+  if (!supabaseServiceClient) throw new Error('Supabase service role key not configured')
+
+  const info = parseStoragePublicUrl(imageUrl)
+  if (!info) return { deleted: false, reason: 'not_a_managed_url' }
+  if (info.bucket !== plantImageUploadBucket) return { deleted: false, reason: 'different_bucket' }
+  if (plantImageUploadPrefix && !info.path.startsWith(`${plantImageUploadPrefix}/`)) {
+    return { deleted: false, reason: 'different_prefix' }
+  }
+
+  // Delete from storage
+  let storageDeleted = false
+  try {
+    const { error } = await supabaseServiceClient.storage.from(info.bucket).remove([info.path])
+    if (error) throw error
+    storageDeleted = true
+  } catch (err) {
+    console.error('[plant-image] Failed to delete storage object:', err)
+  }
+
+  // Delete from admin_media_uploads
+  let dbDeleted = false
+  try {
+    if (sql) {
+      await sql`delete from public.admin_media_uploads where bucket = ${info.bucket} and path = ${info.path}`
+      dbDeleted = true
+    } else {
+      const { error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .delete()
+        .eq('bucket', info.bucket)
+        .eq('path', info.path)
+      if (error) throw error
+      dbDeleted = true
+    }
+  } catch (err) {
+    console.error('[plant-image] Failed to delete media record:', err)
+  }
+
+  return { deleted: storageDeleted || dbDeleted, storageDeleted, dbDeleted }
+}
+
 // === Messaging Image Upload Settings ===
 const messageImageUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
 const messageImageUploadPrefix = 'messages'
@@ -4946,6 +5120,93 @@ app.post('/api/admin/images/external', async (req, res) => {
   }
 })
 app.options('/api/admin/images/external', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Upload a plant image from an external URL (fetches, optimizes to WebP, stores in PLANTS bucket)
+app.post('/api/admin/plant-images/upload-from-url', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : ''
+    if (!imageUrl) {
+      res.status(400).json({ error: 'imageUrl is required' })
+      return
+    }
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const source = typeof body.source === 'string' ? body.source.trim() : 'external'
+
+    // Extract admin info from auth for tracking
+    let adminId = null, adminEmail = null, adminName = null
+    try {
+      const userId = await getUserIdFromRequest(req)
+      if (userId) {
+        adminId = userId
+        if (supabaseServiceClient) {
+          const { data: profile } = await supabaseServiceClient
+            .from('profiles')
+            .select('display_name, email')
+            .eq('id', userId)
+            .maybeSingle()
+          if (profile) {
+            adminEmail = profile.email || null
+            adminName = profile.display_name || null
+          }
+        }
+      }
+    } catch {}
+
+    const result = await uploadPlantImageFromUrl(imageUrl, {
+      plantName,
+      source,
+      adminId,
+      adminEmail,
+      adminName,
+    })
+
+    console.log(`[server] Plant image uploaded: "${plantName}" from ${source} -> ${result.path} (${(result.sizeBytes / 1024).toFixed(0)} KB, -${result.compressionPercent}%)`)
+    res.json({ success: true, ...result })
+  } catch (err) {
+    console.error('[server] Plant image upload-from-url failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to upload plant image' })
+    }
+  }
+})
+app.options('/api/admin/plant-images/upload-from-url', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Delete a plant image from storage and DB
+app.post('/api/admin/plant-images/delete', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : ''
+    if (!imageUrl) {
+      res.status(400).json({ error: 'imageUrl is required' })
+      return
+    }
+
+    const result = await deletePlantImage(imageUrl)
+    console.log(`[server] Plant image delete: ${imageUrl} -> ${JSON.stringify(result)}`)
+    res.json({ success: true, ...result })
+  } catch (err) {
+    console.error('[server] Plant image delete failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to delete plant image' })
+    }
+  }
+})
+app.options('/api/admin/plant-images/delete', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()

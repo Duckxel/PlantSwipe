@@ -5,7 +5,7 @@ import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, 
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
-import { fetchExternalPlantImages, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
+import { fetchExternalPlantImages, uploadPlantImageFromUrl, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
@@ -1669,6 +1669,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
       return next
     })
+
+    // Collect all found images, then upload them to storage
+    const allFoundImages: Array<{ url: string; source: string }> = []
+
     try {
       const result = await fetchExternalPlantImages(trimmedName, {
         callbacks: {
@@ -1683,30 +1687,45 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               ...prev,
               [sourceResult.source]: sourceResult,
             }))
-            // Add images from this source immediately
-            if (sourceResult.images.length > 0) {
-              setPlant((prev) => {
-                const existing = prev.images || []
-                const existingUrls = new Set(
-                  existing.map((img) => (img.link || img.url || '').toLowerCase()).filter(Boolean)
-                )
-                const newImages = sourceResult.images
-                  .filter((img) => !existingUrls.has(img.url.toLowerCase()))
-                  .map((img, idx) => ({
-                    link: img.url,
-                    use: (existing.length === 0 && idx === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
-                  }))
-                if (newImages.length === 0) return prev
-                return { ...prev, images: [...existing, ...newImages] }
-              })
+            // Collect images for uploading
+            for (const img of sourceResult.images) {
+              allFoundImages.push({ url: img.url, source: img.source })
             }
           },
         },
       })
-      setExternalImagesTotal(result.images.length)
+
       if (result.errors?.length) {
         console.warn('[CreatePlantPage] External image fetch partial errors:', result.errors)
       }
+
+      // Upload each found image to the PLANTS bucket
+      let uploadedCount = 0
+      for (const img of allFoundImages) {
+        try {
+          const uploaded = await uploadPlantImageFromUrl(img.url, trimmedName, img.source)
+          // Add the storage URL to the plant
+          setPlant((prev) => {
+            const existing = prev.images || []
+            const existingUrls = new Set(
+              existing.map((i) => (i.link || i.url || '').toLowerCase()).filter(Boolean)
+            )
+            if (existingUrls.has(uploaded.url.toLowerCase())) return prev
+            const newImage = {
+              link: uploaded.url,
+              use: (existing.length === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
+            }
+            return { ...prev, images: [...existing, newImage] }
+          })
+          uploadedCount++
+          console.log(`[CreatePlantPage] Uploaded plant image: ${img.source} -> ${uploaded.url} (${(uploaded.sizeBytes / 1024).toFixed(0)} KB, -${uploaded.compressionPercent}%)`)
+        } catch (uploadErr) {
+          console.warn(`[CreatePlantPage] Failed to upload image from ${img.source}:`, uploadErr)
+          // Don't fail the whole process for a single upload error
+        }
+      }
+
+      setExternalImagesTotal(uploadedCount)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to fetch external images'
       setError(message)
@@ -2467,6 +2486,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             companionSuggestions={companionSuggestions}
             categoryProgress={hasAiProgress ? aiProgress : undefined}
             language={language}
+            onImageRemove={(imageUrl) => {
+              if (isManagedPlantImageUrl(imageUrl)) {
+                deletePlantImage(imageUrl).then((result) => {
+                  if (result.deleted) {
+                    console.log(`[CreatePlantPage] Deleted plant image from storage: ${imageUrl}`)
+                  }
+                }).catch((err) => {
+                  console.warn(`[CreatePlantPage] Failed to delete plant image from storage:`, err)
+                })
+              }
+            }}
           />
         )}
     </div>
