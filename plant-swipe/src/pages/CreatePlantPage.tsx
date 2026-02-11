@@ -1,10 +1,11 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, Loader2, Sparkles, Leaf } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
+import { fetchExternalPlantImages } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
@@ -892,6 +893,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
+  const [fetchingExternalImages, setFetchingExternalImages] = React.useState(false)
+  const [externalImagesResult, setExternalImagesResult] = React.useState<{ gbif: number; smithsonian: number } | null>(null)
   const targetFields = React.useMemo(
     () =>
       [
@@ -1642,6 +1645,46 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
     }
 
+  const runExternalImageFetch = async () => {
+    const trimmedName = plant.name && typeof plant.name === 'string' ? plant.name.trim() : ''
+    if (!trimmedName) {
+      setError(t('plantAdmin.aiNameRequired', 'Please enter a name before fetching images.'))
+      return
+    }
+    setFetchingExternalImages(true)
+    setExternalImagesResult(null)
+    setError(null)
+    try {
+      const result = await fetchExternalPlantImages(trimmedName, { limit: 20 })
+      if (result.images.length === 0) {
+        setExternalImagesResult({ gbif: 0, smithsonian: 0 })
+        return
+      }
+      // Add fetched images to the plant's images list, avoiding duplicates
+      setPlant((prev) => {
+        const existing = prev.images || []
+        const existingUrls = new Set(existing.map((img) => img.link?.toLowerCase() || img.url?.toLowerCase()).filter(Boolean))
+        const newImages = result.images
+          .filter((img) => !existingUrls.has(img.url.toLowerCase()))
+          .map((img, idx) => ({
+            link: img.url,
+            use: (existing.length === 0 && idx === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
+          }))
+        return { ...prev, images: [...existing, ...newImages] }
+      })
+      setExternalImagesResult({ gbif: result.gbifCount, smithsonian: result.smithsonianCount })
+      if (result.errors?.length) {
+        console.warn('[CreatePlantPage] External image fetch partial errors:', result.errors)
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch external images'
+      setError(message)
+      console.error('[CreatePlantPage] External image fetch failed:', err)
+    } finally {
+      setFetchingExternalImages(false)
+    }
+  }
+
   const runAiFill = async () => {
     const trimmedName = plant.name && typeof plant.name === 'string' ? plant.name.trim() : ''
     if (!trimmedName) {
@@ -2110,7 +2153,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       <div className="flex flex-col gap-3">
         <div className="flex gap-3 flex-col sm:flex-row sm:items-center sm:justify-between">
           {language === 'en' && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap items-center">
               <Button
                 type="button"
                 onClick={aiCompleted ? undefined : runAiFill}
@@ -2119,6 +2162,22 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 {aiCompleted ? t('plantAdmin.aiFilled', 'AI Filled') : t('plantAdmin.aiFill', 'AI fill all fields')}
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={runExternalImageFetch}
+                disabled={fetchingExternalImages || !(plant.name && typeof plant.name === 'string' && plant.name.trim())}
+              >
+                {fetchingExternalImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImagePlus className="mr-2 h-4 w-4" />}
+                {t('plantAdmin.fetchExternalImages', 'GBIF & Smithsonian Images')}
+              </Button>
+              {externalImagesResult && (
+                <span className="text-xs text-muted-foreground self-center">
+                  {externalImagesResult.gbif + externalImagesResult.smithsonian === 0
+                    ? t('plantAdmin.noExternalImages', 'No CC0 images found')
+                    : t('plantAdmin.externalImagesAdded', 'Added {{gbif}} GBIF + {{smithsonian}} Smithsonian images', { gbif: externalImagesResult.gbif, smithsonian: externalImagesResult.smithsonian })}
+                </span>
+              )}
               {!(plant.name && typeof plant.name === 'string' && plant.name.trim()) && (
                 <span className="text-xs text-muted-foreground self-center">{t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')}</span>
               )}

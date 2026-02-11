@@ -4431,6 +4431,304 @@ app.options('/api/admin/ai/plant-fill/english-name', (_req, res) => {
   res.status(204).end()
 })
 
+// ========================================
+// External Image Sources (GBIF + Smithsonian)
+// ========================================
+
+// Admin/Editor: Fetch CC0-licensed images from GBIF for a plant name
+app.post('/api/admin/images/gbif', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    const limit = Math.min(Math.max(parseInt(body.limit) || 20, 1), 50)
+
+    // Step 1: Match species name to get taxonKey
+    const matchUrl = `https://api.gbif.org/v1/species/match?name=${encodeURIComponent(plantName)}`
+    const matchResp = await fetch(matchUrl)
+    if (!matchResp.ok) {
+      res.status(502).json({ error: 'Failed to match species on GBIF' })
+      return
+    }
+    const matchData = await matchResp.json()
+    const taxonKey = matchData.usageKey
+    if (!taxonKey) {
+      res.json({ success: true, images: [], scientificName: null, message: 'No matching species found on GBIF' })
+      return
+    }
+
+    // Step 2: Fetch CC0-licensed occurrence images
+    // GBIF license filter values: CC0_1_0, CC_BY_4_0, CC_BY_NC_4_0
+    // We only fetch CC0 (public domain) as requested
+    const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${limit}`
+    const occResp = await fetch(occUrl)
+    if (!occResp.ok) {
+      res.status(502).json({ error: 'Failed to fetch occurrences from GBIF' })
+      return
+    }
+    const occData = await occResp.json()
+
+    // Extract image URLs from occurrence media
+    const images = []
+    const seenUrls = new Set()
+    for (const result of (occData.results || [])) {
+      for (const media of (result.media || [])) {
+        if (media.type !== 'StillImage') continue
+        const url = media.identifier
+        if (!url || seenUrls.has(url)) continue
+        seenUrls.add(url)
+        images.push({
+          url,
+          license: media.license || 'CC0',
+          source: 'gbif',
+          creator: media.creator || media.rightsHolder || null,
+          references: media.references || null,
+        })
+      }
+    }
+
+    console.log(`[server] GBIF images for "${plantName}": found ${images.length} CC0 images (taxonKey=${taxonKey})`)
+    res.json({
+      success: true,
+      images,
+      scientificName: matchData.scientificName || matchData.canonicalName || null,
+      totalAvailable: occData.count || 0,
+    })
+  } catch (err) {
+    console.error('[server] GBIF image fetch failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch GBIF images' })
+    }
+  }
+})
+app.options('/api/admin/images/gbif', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Fetch images from Smithsonian Open Access API
+app.post('/api/admin/images/smithsonian', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    const rows = Math.min(Math.max(parseInt(body.limit) || 20, 1), 50)
+
+    // The Smithsonian API key can be set via env var SMITHSONIAN_API_KEY
+    // Get a free key at https://api.data.gov/signup/
+    const apiKey = process.env.SMITHSONIAN_API_KEY || ''
+    if (!apiKey) {
+      res.status(503).json({ error: 'Smithsonian API key is not configured. Set SMITHSONIAN_API_KEY environment variable. Get a free key at https://api.data.gov/signup/' })
+      return
+    }
+
+    const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(plantName)}&rows=${rows}&api_key=${encodeURIComponent(apiKey)}`
+    const searchResp = await fetch(searchUrl)
+    if (!searchResp.ok) {
+      const statusText = searchResp.statusText || searchResp.status
+      res.status(502).json({ error: `Smithsonian API returned ${statusText}` })
+      return
+    }
+    const searchData = await searchResp.json()
+    const searchRows = searchData?.response?.rows || []
+
+    // Extract image URLs from Smithsonian results
+    const images = []
+    const seenUrls = new Set()
+    for (const row of searchRows) {
+      const content = row.content || {}
+      const desc = content.descriptiveNonRepeating || {}
+      const onlineMedia = desc.online_media || {}
+      const mediaList = onlineMedia.media || []
+      const title = row.title || desc.title?.content || ''
+
+      for (const media of mediaList) {
+        if (media.type !== 'Images') continue
+        const resources = media.resources || []
+
+        // Prefer: High-resolution JPEG > Screen Image > content URL > thumbnail
+        let bestUrl = null
+        for (const res of resources) {
+          const label = (res.label || '').toLowerCase()
+          const url = res.url || ''
+          if (!url) continue
+          if (label.includes('high-resolution jpeg') || label.includes('high-resolution jpg')) {
+            bestUrl = url
+            break
+          }
+          if (label.includes('screen image') && !bestUrl) {
+            bestUrl = url
+          }
+        }
+        // Fallback to content URL (delivery service) if no resource matches
+        if (!bestUrl && media.content) {
+          bestUrl = media.content
+        }
+        if (!bestUrl && media.thumbnail) {
+          bestUrl = media.thumbnail
+        }
+        if (!bestUrl || seenUrls.has(bestUrl)) continue
+        seenUrls.add(bestUrl)
+        images.push({
+          url: bestUrl,
+          license: 'CC0 (Smithsonian Open Access)',
+          source: 'smithsonian',
+          title: title || null,
+          thumbnail: media.thumbnail || null,
+        })
+      }
+    }
+
+    console.log(`[server] Smithsonian images for "${plantName}": found ${images.length} images`)
+    res.json({
+      success: true,
+      images,
+      totalAvailable: searchData?.response?.rowCount || 0,
+    })
+  } catch (err) {
+    console.error('[server] Smithsonian image fetch failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch Smithsonian images' })
+    }
+  }
+})
+app.options('/api/admin/images/smithsonian', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Fetch images from both GBIF and Smithsonian in one call
+app.post('/api/admin/images/external', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    const limit = Math.min(Math.max(parseInt(body.limit) || 12, 1), 50)
+
+    const results = { gbif: [], smithsonian: [], errors: [] }
+
+    // Fetch GBIF images
+    try {
+      const matchUrl = `https://api.gbif.org/v1/species/match?name=${encodeURIComponent(plantName)}`
+      const matchResp = await fetch(matchUrl)
+      if (matchResp.ok) {
+        const matchData = await matchResp.json()
+        const taxonKey = matchData.usageKey
+        if (taxonKey) {
+          const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${limit}`
+          const occResp = await fetch(occUrl)
+          if (occResp.ok) {
+            const occData = await occResp.json()
+            const seenUrls = new Set()
+            for (const result of (occData.results || [])) {
+              for (const media of (result.media || [])) {
+                if (media.type !== 'StillImage') continue
+                const url = media.identifier
+                if (!url || seenUrls.has(url)) continue
+                seenUrls.add(url)
+                results.gbif.push({
+                  url,
+                  license: media.license || 'CC0',
+                  source: 'gbif',
+                  creator: media.creator || media.rightsHolder || null,
+                })
+              }
+            }
+          }
+        }
+      }
+    } catch (gbifErr) {
+      console.error('[server] GBIF fetch error in combined endpoint:', gbifErr)
+      results.errors.push(`GBIF: ${gbifErr?.message || 'Unknown error'}`)
+    }
+
+    // Fetch Smithsonian images
+    const smithsonianApiKey = process.env.SMITHSONIAN_API_KEY || ''
+    if (smithsonianApiKey) {
+      try {
+        const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(plantName)}&rows=${limit}&api_key=${encodeURIComponent(smithsonianApiKey)}`
+        const searchResp = await fetch(searchUrl)
+        if (searchResp.ok) {
+          const searchData = await searchResp.json()
+          const searchRows = searchData?.response?.rows || []
+          const seenUrls = new Set()
+          for (const row of searchRows) {
+            const content = row.content || {}
+            const desc = content.descriptiveNonRepeating || {}
+            const onlineMedia = desc.online_media || {}
+            const mediaList = onlineMedia.media || []
+            for (const media of mediaList) {
+              if (media.type !== 'Images') continue
+              const resources = media.resources || []
+              let bestUrl = null
+              for (const r of resources) {
+                const label = (r.label || '').toLowerCase()
+                if (!r.url) continue
+                if (label.includes('high-resolution jpeg') || label.includes('high-resolution jpg')) { bestUrl = r.url; break }
+                if (label.includes('screen image') && !bestUrl) bestUrl = r.url
+              }
+              if (!bestUrl && media.content) bestUrl = media.content
+              if (!bestUrl && media.thumbnail) bestUrl = media.thumbnail
+              if (!bestUrl || seenUrls.has(bestUrl)) continue
+              seenUrls.add(bestUrl)
+              results.smithsonian.push({
+                url: bestUrl,
+                license: 'CC0 (Smithsonian Open Access)',
+                source: 'smithsonian',
+                title: row.title || null,
+                thumbnail: media.thumbnail || null,
+              })
+            }
+          }
+        }
+      } catch (siErr) {
+        console.error('[server] Smithsonian fetch error in combined endpoint:', siErr)
+        results.errors.push(`Smithsonian: ${siErr?.message || 'Unknown error'}`)
+      }
+    }
+
+    const allImages = [...results.gbif, ...results.smithsonian]
+    console.log(`[server] External images for "${plantName}": ${results.gbif.length} GBIF + ${results.smithsonian.length} Smithsonian`)
+    res.json({
+      success: true,
+      images: allImages,
+      gbifCount: results.gbif.length,
+      smithsonianCount: results.smithsonian.length,
+      errors: results.errors.length > 0 ? results.errors : undefined,
+    })
+  } catch (err) {
+    console.error('[server] External image fetch failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch external images' })
+    }
+  }
+})
+app.options('/api/admin/images/external', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
 // Admin/Editor: AI-assisted plant data fill
 app.post('/api/admin/ai/plant-fill', async (req, res) => {
   try {
