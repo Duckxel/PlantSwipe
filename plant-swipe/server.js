@@ -28601,101 +28601,138 @@ async function generateCrawlerHtml(req, pagePath) {
           const allSchemas = [jsonLd, breadcrumbLd, speakableLd]
           if (faqLd) allSchemas.push(faqLd)
 
+          // Build page content mirroring the real PlantInfoPage sections
+          const isFr = detectedLang === 'fr'
+
+          // Collect all watering info
+          const wateringInfo = []
+          if (plant.watering_type?.length) wateringInfo.push(`${isFr ? 'Type' : 'Type'}: ${plant.watering_type.join(', ')}`)
+
+          // Collect comestible/usage info
+          const usageItems = []
+          if (plant.comestible_part?.length) usageItems.push(`${isFr ? 'Parties comestibles' : 'Edible parts'}: ${plant.comestible_part.join(', ')}`)
+          if (plant.fruit_type?.length) usageItems.push(`${isFr ? 'Type de fruit' : 'Fruit type'}: ${plant.fruit_type.join(', ')}`)
+          if (plant.infusion) usageItems.push(isFr ? 'Utilisable en infusion' : 'Can be used for infusion')
+          if (plant.aromatherapy) usageItems.push(isFr ? 'Utilisable en aromathérapie' : 'Can be used for aromatherapy')
+          if (plant.nutritional_intake?.length) usageItems.push(`${isFr ? 'Apports nutritionnels' : 'Nutritional value'}: ${plant.nutritional_intake.join(', ')}`)
+          if (plant.recipes_ideas?.length) usageItems.push(`${isFr ? 'Idées recettes' : 'Recipe ideas'}: ${plant.recipes_ideas.join(', ')}`)
+          if (plant.advice_medicinal) usageItems.push(`${isFr ? 'Usage médicinal' : 'Medicinal use'}: ${plant.advice_medicinal}`)
+
+          // Collect ecology info
+          const ecologyItems = []
+          if (plant.melliferous) ecologyItems.push(isFr ? 'Plante mellifère (attire les pollinisateurs)' : 'Melliferous (attracts pollinators)')
+          if (plant.polenizer?.length) ecologyItems.push(`${isFr ? 'Pollinisateurs' : 'Pollinators'}: ${plant.polenizer.join(', ')}`)
+          if (plant.be_fertilizer) ecologyItems.push(isFr ? 'Fertilisant naturel' : 'Natural fertilizer')
+          if (plant.conservation_status && plant.conservation_status !== 'safe') ecologyItems.push(`${isFr ? 'Statut de conservation' : 'Conservation status'}: ${plant.conservation_status}`)
+          if (plant.ground_effect) ecologyItems.push(`${isFr ? 'Effet au sol' : 'Ground effect'}: ${plant.ground_effect}`)
+
+          // Collect identity traits
+          const identityItems = []
+          if (plant.life_cycle) identityItems.push(`${isFr ? 'Cycle de vie' : 'Life cycle'}: ${plant.life_cycle}`)
+          if (plant.foliage_persistance) identityItems.push(`${isFr ? 'Feuillage' : 'Foliage'}: ${plant.foliage_persistance}`)
+          if (plant.scent) identityItems.push(isFr ? 'Parfumé' : 'Fragrant')
+          if (plant.spiked) identityItems.push(isFr ? 'Épineux' : 'Spiny')
+          if (plant.symbolism?.length) identityItems.push(`${isFr ? 'Symbolisme' : 'Symbolism'}: ${plant.symbolism.join(', ')}`)
+          if (plant.composition?.length) identityItems.push(`${isFr ? 'Composition' : 'Composition'}: ${plant.composition.join(', ')}`)
+
           pageContent = `
             <script type="application/ld+json">${JSON.stringify(allSchemas)}</script>
             <article itemscope itemtype="https://schema.org/Article">
               <h1 itemprop="headline">${emoji} ${escapeHtml(plant.name)}</h1>
-              ${plant.scientific_name ? `<p style="font-style: italic; color: #065f46; margin-top: -10px;"><em>${escapeHtml(plant.scientific_name)}</em></p>` : ''}
-              ${quickFacts.length ? `<div class="plant-meta">${quickFacts.join(' · ')}</div>` : ''}
+              ${plant.scientific_name ? `<p><em>${escapeHtml(plant.scientific_name)}</em></p>` : ''}
+              ${plant.given_names?.length ? `<p>${isFr ? 'Autres noms' : 'Also known as'}: ${plant.given_names.map(n => escapeHtml(n)).join(', ')}</p>` : ''}
               
-              ${plantImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
-                ${plantImageTag}
-                <figcaption>${escapeHtml(plant.name)}${plant.scientific_name ? ` (${escapeHtml(plant.scientific_name)})` : ''}</figcaption>
-              </figure>` : ''}
+              ${plant.overview ? `<div itemprop="description"><p>${escapeHtml(plant.overview)}</p></div>` : ''}
               
-              ${plant.given_names?.length ? `<p><strong>${detectedLang === 'fr' ? 'Autres noms' : 'Also known as'}:</strong> ${plant.given_names.map(n => escapeHtml(n)).join(', ')}</p>` : ''}
-              
-              ${plant.overview ? `
-                <div itemprop="description">
-                  <h2>${tr.plantAbout} ${escapeHtml(plant.name)}</h2>
-                  <p>${escapeHtml(plant.overview)}</p>
-                </div>
+              ${plantImageTag ? `<figure itemprop="image">${plantImageTag}<figcaption>${escapeHtml(plant.name)}</figcaption></figure>` : ''}
+
+              <h2>${isFr ? 'Fiche rapide' : 'Quick Facts'}</h2>
+              <ul>
+                ${plant.plant_type ? `<li>${isFr ? 'Type' : 'Type'}: ${escapeHtml(plant.plant_type)}</li>` : ''}
+                ${plant.family ? `<li>${isFr ? 'Famille' : 'Family'}: ${escapeHtml(plant.family)}</li>` : ''}
+                ${plant.origin?.length ? `<li>${isFr ? 'Origine' : 'Origin'}: ${plant.origin.map(o => escapeHtml(o)).join(', ')}</li>` : ''}
+                ${plant.level_sun ? `<li>${isFr ? 'Soleil' : 'Sunlight'}: ${escapeHtml(plant.level_sun)}</li>` : ''}
+                ${plant.maintenance_level ? `<li>${isFr ? 'Entretien' : 'Maintenance'}: ${escapeHtml(plant.maintenance_level)}</li>` : ''}
+                ${plant.living_space ? `<li>${isFr ? 'Espace' : 'Space'}: ${escapeHtml(plant.living_space)}</li>` : ''}
+                ${plant.season?.length ? `<li>${isFr ? 'Saisons' : 'Seasons'}: ${plant.season.map(s => escapeHtml(s)).join(', ')}</li>` : ''}
+                ${plant.utility?.length ? `<li>${isFr ? 'Usages' : 'Uses'}: ${plant.utility.map(u => escapeHtml(u)).join(', ')}</li>` : ''}
+              </ul>
+
+              ${plant.height_cm || plant.wingspan_cm || plant.separation_cm ? `
+              <h2>${isFr ? 'Dimensions' : 'Dimensions'}</h2>
+              <ul>
+                ${plant.height_cm ? `<li>${isFr ? 'Hauteur' : 'Height'}: ${plant.height_cm} cm</li>` : ''}
+                ${plant.wingspan_cm ? `<li>${isFr ? 'Envergure' : 'Spread'}: ${plant.wingspan_cm} cm</li>` : ''}
+                ${plant.separation_cm ? `<li>${isFr ? 'Espacement' : 'Spacing'}: ${plant.separation_cm} cm</li>` : ''}
+              </ul>
               ` : ''}
-              
-              ${careInfo.length ? `
-                <h2>🌱 ${tr.plantQuickCare}</h2>
-                <div class="plant-meta">${careInfo.join(' · ')}</div>
+
+              ${plant.sowing_month?.length || plant.flowering_month?.length || plant.fruiting_month?.length ? `
+              <h2>${isFr ? 'Calendrier' : 'Growing Calendar'}</h2>
+              <ul>
+                ${plant.sowing_month?.length ? `<li>${isFr ? 'Semis' : 'Sowing'}: ${formatMonths(plant.sowing_month)}</li>` : ''}
+                ${plant.flowering_month?.length ? `<li>${isFr ? 'Floraison' : 'Flowering'}: ${formatMonths(plant.flowering_month)}</li>` : ''}
+                ${plant.fruiting_month?.length ? `<li>${isFr ? 'Fructification' : 'Fruiting'}: ${formatMonths(plant.fruiting_month)}</li>` : ''}
+              </ul>
               ` : ''}
-              
-              ${tempInfo.length || sizeInfo.length ? `
-                <h2>📊 ${detectedLang === 'fr' ? 'Caractéristiques' : 'Characteristics'}</h2>
-                <ul>
-                  ${tempInfo.map(t => `<li>${t}</li>`).join('')}
-                  ${sizeInfo.map(s => `<li>${s}</li>`).join('')}
-                </ul>
-              ` : ''}
-              
-              ${plant.flowering_month?.length ? `<p>🌸 ${tr.blooms || 'Blooms'}: ${formatMonths(plant.flowering_month)}</p>` : ''}
-              ${plant.sowing_month?.length ? `<p>🌱 ${detectedLang === 'fr' ? 'Semis' : 'Sowing'}: ${formatMonths(plant.sowing_month)}</p>` : ''}
-              ${plant.fruiting_month?.length ? `<p>🍎 ${detectedLang === 'fr' ? 'Fructification' : 'Fruiting'}: ${formatMonths(plant.fruiting_month)}</p>` : ''}
-              
-              ${plant.soil?.length ? `<p>🪴 ${detectedLang === 'fr' ? 'Sol' : 'Soil'}: ${plant.soil.map(s => escapeHtml(s)).join(', ')}</p>` : ''}
-              ${plant.advice_soil ? `<p>${escapeHtml(plant.advice_soil)}</p>` : ''}
-              
-              ${plant.division?.length ? `<p>✂️ ${detectedLang === 'fr' ? 'Multiplication' : 'Propagation'}: ${plant.division.map(d => escapeHtml(d)).join(', ')}</p>` : ''}
-              ${plant.advice_sowing ? `<p>📝 ${escapeHtml(plant.advice_sowing)}</p>` : ''}
-              
-              ${plant.advice_fertilizer ? `<p>🧪 ${detectedLang === 'fr' ? 'Engrais' : 'Fertilizing'}: ${escapeHtml(plant.advice_fertilizer)}</p>` : ''}
-              
-              ${plant.utility?.length ? `
-                <h2>✨ ${tr.plantGreatFor}</h2>
-                <ul>${plant.utility.map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
-              ` : ''}
-              
+
+              <h2>${isFr ? 'Entretien' : 'Care Guide'}</h2>
+              <ul>
+                ${plant.level_sun ? `<li>${isFr ? 'Lumière' : 'Light'}: ${escapeHtml(plant.level_sun)}</li>` : ''}
+                ${wateringInfo.length ? wateringInfo.map(w => `<li>${escapeHtml(w)}</li>`).join('') : ''}
+                ${plant.soil?.length ? `<li>${isFr ? 'Sol' : 'Soil'}: ${plant.soil.map(s => escapeHtml(s)).join(', ')}</li>` : ''}
+                ${plant.advice_soil ? `<li>${escapeHtml(plant.advice_soil)}</li>` : ''}
+                ${plant.temperature_min != null && plant.temperature_max != null ? `<li>${isFr ? 'Température' : 'Temperature'}: ${plant.temperature_min}°C – ${plant.temperature_max}°C</li>` : ''}
+                ${plant.temperature_ideal != null ? `<li>${isFr ? 'Température idéale' : 'Ideal temperature'}: ${plant.temperature_ideal}°C</li>` : ''}
+                ${plant.hygrometry ? `<li>${isFr ? 'Humidité' : 'Humidity'}: ${plant.hygrometry}%</li>` : ''}
+                ${plant.advice_fertilizer ? `<li>${isFr ? 'Engrais' : 'Fertilizer'}: ${escapeHtml(plant.advice_fertilizer)}</li>` : ''}
+                ${plant.division?.length ? `<li>${isFr ? 'Multiplication' : 'Propagation'}: ${plant.division.map(d => escapeHtml(d)).join(', ')}</li>` : ''}
+                ${plant.sow_type?.length ? `<li>${isFr ? 'Type de semis' : 'Sowing type'}: ${plant.sow_type.map(s => escapeHtml(s)).join(', ')}</li>` : ''}
+                ${plant.tutoring ? `<li>${isFr ? 'Tuteurage nécessaire' : 'Staking required'}</li>` : ''}
+                ${plant.transplanting ? `<li>${isFr ? 'Repiquage possible' : 'Transplanting possible'}</li>` : ''}
+                ${plant.advice_sowing ? `<li>${isFr ? 'Conseil de semis' : 'Sowing advice'}: ${escapeHtml(plant.advice_sowing)}</li>` : ''}
+              </ul>
+
               ${toxInfo.length ? `
-                <h2>⚠️ ${detectedLang === 'fr' ? 'Toxicité' : 'Toxicity'}</h2>
-                <ul>${toxInfo.map(t => `<li>${t}</li>`).join('')}</ul>
+              <h2>${isFr ? 'Toxicité & Sécurité' : 'Toxicity & Safety'}</h2>
+              <ul>${toxInfo.map(t => `<li>${t}</li>`).join('')}
+                ${plant.allergens?.length ? `<li>${isFr ? 'Allergènes' : 'Allergens'}: ${plant.allergens.map(a => escapeHtml(a)).join(', ')}</li>` : ''}
+              </ul>
               ` : ''}
-              
-              ${plant.habitat?.length ? `<p>🌍 ${detectedLang === 'fr' ? 'Habitat' : 'Habitat'}: ${plant.habitat.map(h => escapeHtml(h)).join(', ')}</p>` : ''}
-              
-              ${(plant.tr_pests?.length || plant.pests?.length) ? `
-                <h2>🐛 ${detectedLang === 'fr' ? 'Parasites & Maladies' : 'Pests & Diseases'}</h2>
-                ${(plant.tr_pests?.length || plant.pests?.length) ? `<p><strong>${detectedLang === 'fr' ? 'Parasites' : 'Pests'}:</strong> ${(plant.tr_pests || plant.pests).map(p => escapeHtml(p)).join(', ')}</p>` : ''}
-                ${(plant.tr_diseases?.length || plant.diseases?.length) ? `<p><strong>${detectedLang === 'fr' ? 'Maladies' : 'Diseases'}:</strong> ${(plant.tr_diseases || plant.diseases).map(d => escapeHtml(d)).join(', ')}</p>` : ''}
+
+              ${usageItems.length ? `
+              <h2>${isFr ? 'Usages & Saveurs' : 'Usage & Flavor'}</h2>
+              <ul>${usageItems.map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
               ` : ''}
-              
-              ${plant.advice_medicinal ? `<p>💊 ${detectedLang === 'fr' ? 'Usage médicinal' : 'Medicinal use'}: ${escapeHtml(plant.advice_medicinal)}</p>` : ''}
-              ${plant.nutritional_intake?.length ? `<p>🥗 ${detectedLang === 'fr' ? 'Apports nutritionnels' : 'Nutritional value'}: ${plant.nutritional_intake.map(n => escapeHtml(n)).join(', ')}</p>` : ''}
-              ${plant.recipes_ideas?.length ? `<p>🍳 ${detectedLang === 'fr' ? 'Idées recettes' : 'Recipe ideas'}: ${plant.recipes_ideas.map(r => escapeHtml(r)).join(', ')}</p>` : ''}
-              
-              ${plant.symbolism?.length ? `<p>🎭 ${detectedLang === 'fr' ? 'Symbolisme' : 'Symbolism'}: ${plant.symbolism.map(s => escapeHtml(s)).join(', ')}</p>` : ''}
-              ${plant.composition?.length ? `<p>🏡 ${detectedLang === 'fr' ? 'Utilisation' : 'Usage'}: ${plant.composition.map(c => escapeHtml(c)).join(', ')}</p>` : ''}
-              
-              ${plant.melliferous ? `<p>🐝 ${detectedLang === 'fr' ? 'Plante mellifère - attire les pollinisateurs' : 'Melliferous plant - attracts pollinators'}</p>` : ''}
-              ${plant.polenizer?.length ? `<p>🦋 ${detectedLang === 'fr' ? 'Pollinisateurs' : 'Pollinators'}: ${plant.polenizer.map(p => escapeHtml(p)).join(', ')}</p>` : ''}
-              
+
+              ${ecologyItems.length ? `
+              <h2>${isFr ? 'Écologie' : 'Ecology'}</h2>
+              <ul>${ecologyItems.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul>
+              ${plant.habitat?.length ? `<p>${isFr ? 'Habitat' : 'Habitat'}: ${plant.habitat.map(h => escapeHtml(h)).join(', ')}</p>` : ''}
+              ` : ''}
+
+              ${identityItems.length ? `
+              <h2>${isFr ? 'Identité & Caractéristiques' : 'Identity & Traits'}</h2>
+              <ul>${identityItems.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+              ` : ''}
+
+              ${(plant.tr_pests?.length || plant.pests?.length || plant.tr_diseases?.length || plant.diseases?.length) ? `
+              <h2>${isFr ? 'Risques' : 'Risks'}</h2>
+              <ul>
+                ${(plant.tr_pests || plant.pests)?.length ? `<li>${isFr ? 'Parasites' : 'Pests'}: ${(plant.tr_pests || plant.pests).map(p => escapeHtml(p)).join(', ')}</li>` : ''}
+                ${(plant.tr_diseases || plant.diseases)?.length ? `<li>${isFr ? 'Maladies' : 'Diseases'}: ${(plant.tr_diseases || plant.diseases).map(d => escapeHtml(d)).join(', ')}</li>` : ''}
+              </ul>
+              ` : ''}
+
               ${companionPlantNames.length > 0 ? `
-                <h2>🤝 ${detectedLang === 'fr' ? 'Plantes compagnes' : 'Companion Plants'}</h2>
-                <ul>
-                  ${companionPlantNames.map(cp => `<li><a href="/plants/${encodeURIComponent(cp.id)}">🌱 ${escapeHtml(cp.name)}</a></li>`).join('')}
-                </ul>
+              <h2>${isFr ? 'Plantes compagnes' : 'Companion Plants'}</h2>
+              <ul>${companionPlantNames.map(cp => `<li><a href="/plants/${encodeURIComponent(cp.id)}">${escapeHtml(cp.name)}</a></li>`).join('')}</ul>
               ` : ''}
-              
+
               ${plant.tags?.length ? `<p><strong>${tr.tags}:</strong> ${plant.tags.map(t => `#${escapeHtml(t)}`).join(' ')}</p>` : ''}
-              
-              <p>
-                <a href="${escapeHtml(canonicalUrl)}">📖 ${tr.plantViewFull} →</a>
-              </p>
-              
-              <h2>🔗 ${detectedLang === 'fr' ? 'Découvrir plus' : 'Discover More'}</h2>
-              <nav>
-                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher des plantes' : 'Search Plants'}</a>
-                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
-                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
-                <a href="/blog">📚 Blog</a>
-                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
-              </nav>
+
+              <p><a href="${escapeHtml(canonicalUrl)}">📖 ${tr.plantViewFull} →</a></p>
+              <nav><a href="/search">${isFr ? 'Rechercher' : 'Search'}</a> · <a href="/discovery">${isFr ? 'Découvrir' : 'Discover'}</a> · <a href="/gardens">${isFr ? 'Jardins' : 'Gardens'}</a> · <a href="/blog">Blog</a></nav>
             </article>
           `
 
