@@ -28978,7 +28978,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: profileByDisplayName, error: err1 } = await ssrQuery(
           supabaseServer
             .from('profiles')
-            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
+            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin, experience_years, job, profile_link, show_country')
             .ilike('display_name', username)
             .maybeSingle(),
           'profile_lookup_by_display_name'
@@ -28991,7 +28991,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: profileByUsername, error: err2 } = await ssrQuery(
             supabaseServer
               .from('profiles')
-              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
+              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin, experience_years, job, profile_link, show_country')
               .ilike('username', username)
               .maybeSingle(),
             'profile_lookup_by_username'
@@ -29216,51 +29216,52 @@ async function generateCrawlerHtml(req, pagePath) {
             ]
           }
 
+          const isFr = detectedLang === 'fr'
+          const showCountry = profile.show_country !== false
+
           pageContent = `
             <script type="application/ld+json">${JSON.stringify([personJsonLd, profileBreadcrumbLd])}</script>
-            <article itemscope itemtype="https://schema.org/Person">
-              <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
-              ${roleBadges.length > 0 ? `<div style="margin-bottom: 12px;">${roleBadges.join(' ')}</div>` : ''}
-              
-              ${profileImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
-                ${profileImageTag}
-              </figure>` : ''}
+            <article>
+              <h1>${escapeHtml(displayName)}</h1>
+              ${roleBadges.length > 0 ? `<p>${roleBadges.join(' ')}</p>` : ''}
+              ${profileImageTag || ''}
               
               <p>
-                ${profile.country ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
-                ${isOnline ? `<span>🟢 ${detectedLang === 'fr' ? 'En ligne' : 'Online'}</span>` : ''}
-                ${joinedDateFormatted ? `<span>📅 ${detectedLang === 'fr' ? 'Membre depuis' : 'Member since'} ${joinedDateFormatted}</span>` : ''}
-              </div>
+                ${showCountry && profile.country ? `📍 ${escapeHtml(profile.country)}` : ''}
+                ${profile.job ? ` · 💼 ${escapeHtml(profile.job)}` : ''}
+                ${profile.experience_years ? ` · 🌱 ${profile.experience_years} ${isFr ? 'ans d\'expérience' : 'years experience'}` : ''}
+                ${joinedDateFormatted ? ` · 📅 ${isFr ? 'Membre depuis' : 'Member since'} ${joinedDateFormatted}` : ''}
+              </p>
               
-              ${profile.bio ? `<p itemprop="description" style="font-style: italic; margin-bottom: 20px;">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
+              ${profile.bio ? `<p><em>"${escapeHtml(profile.bio)}"</em></p>` : ''}
               
-              <h2>📊 ${detectedLang === 'fr' ? 'Statistiques' : 'Statistics'}</h2>
-              <p>🌿 ${plantCount} ${tr.profilePlants} · 🏡 ${gardenCount} ${tr.profileGardens} · 🔥 ${currentStreak} ${detectedLang === 'fr' ? 'jours' : 'day streak'} · 🏆 ${bestStreak} ${detectedLang === 'fr' ? 'record' : 'best'}${friendsCount > 0 ? ` · 👥 ${friendsCount} ${detectedLang === 'fr' ? 'amis' : 'friends'}` : ''}</p>
+              <h2>${isFr ? 'Statistiques' : 'Statistics'}</h2>
+              <ul>
+                <li>🌿 ${plantCount} ${tr.profilePlants}</li>
+                <li>🏡 ${gardenCount} ${tr.profileGardens}</li>
+                <li>🔥 ${currentStreak} ${isFr ? 'jours de série' : 'day streak'}</li>
+                <li>🏆 ${bestStreak} ${isFr ? 'meilleure série' : 'best streak'}</li>
+                ${friendsCount > 0 ? `<li>👥 ${friendsCount} ${isFr ? 'amis' : 'friends'}</li>` : ''}
+              </ul>
               
-              ${profile.favorite_plant ? `<p>❤️ ${detectedLang === 'fr' ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
+              ${profile.favorite_plant ? `<p>❤️ ${isFr ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
+              ${profile.profile_link ? `<p>🔗 <a href="${escapeHtml(profile.profile_link.startsWith('http') ? profile.profile_link : 'https://' + profile.profile_link)}">${isFr ? 'Site web' : 'Website'}</a></p>` : ''}
               
               ${userGardens.length > 0 ? `
-              <h2>🏡 ${detectedLang === 'fr' ? 'Jardins de' : 'Gardens by'} ${escapeHtml(displayName)}</h2>
+              <h2>🏡 ${isFr ? 'Jardins' : 'Gardens'}</h2>
               <ul>
                 ${userGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
               </ul>
               ` : ''}
               
               ${userBookmarks.length > 0 ? `
-              <h2>🔖 ${detectedLang === 'fr' ? 'Collections de' : 'Collections by'} ${escapeHtml(displayName)}</h2>
+              <h2>🔖 ${isFr ? 'Collections' : 'Collections'}</h2>
               <ul>
                 ${userBookmarks.map(b => `<li><a href="/bookmarks/${encodeURIComponent(b.id)}">${escapeHtml(b.name || 'Collection')}</a></li>`).join('')}
               </ul>
               ` : ''}
               
-              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
-              <nav>
-                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
-                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
-                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
-                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
-                <a href="/blog">📚 Blog</a>
-              </nav>
+              <nav><a href="/search">${isFr ? 'Rechercher' : 'Search'}</a> · <a href="/gardens">${isFr ? 'Jardins' : 'Gardens'}</a> · <a href="/blog">Blog</a></nav>
             </article>
           `
           console.log(`[ssr] Profile image: ${image}`)
@@ -29520,43 +29521,39 @@ async function generateCrawlerHtml(req, pagePath) {
             ]
           }
 
+          const isFr = detectedLang === 'fr'
           pageContent = `
             <script type="application/ld+json">${JSON.stringify([gardenJsonLd, gardenBreadcrumbLd])}</script>
-            <article itemscope itemtype="https://schema.org/Place">
-              <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
+            <article>
+              <h1>${gardenEmoji} ${escapeHtml(gardenName)}</h1>
               
               <p>
-                ${ownerName ? `<span>👤 ${tr.gardenBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a></span>` : ''}
-                ${gardenLocation ? `<span>📍 ${escapeHtml(gardenLocation)}</span>` : ''}
-                ${gardenAge ? `<span>🕐 ${gardenAge}</span>` : ''}
-                ${memberCount > 1 ? `<span>👥 ${memberCount} ${detectedLang === 'fr' ? 'membres' : 'members'}</span>` : ''}
-              </div>
+                ${ownerName ? `👤 ${tr.gardenBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a>` : ''}
+                ${gardenLocation ? ` · 📍 ${escapeHtml(gardenLocation)}` : ''}
+                ${gardenAge ? ` · 🕐 ${gardenAge}` : ''}
+                ${memberCount > 1 ? ` · 👥 ${memberCount} ${isFr ? 'membres' : 'members'}` : ''}
+              </p>
               
-              ${gardenImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
-                ${gardenImageTag}
-                <figcaption>${escapeHtml(gardenName)}</figcaption>
-              </figure>` : ''}
-              
-              <p>🌿 ${plantCount} ${tr.gardenPlantsGrowing}${speciesCount > 0 ? ` · 🌸 ${speciesCount} ${detectedLang === 'fr' ? 'espèces' : 'species'}` : ''} · 🔥 ${gardenStreak} ${detectedLang === 'fr' ? 'jours' : 'day streak'}${todayProgress.due > 0 ? ` · ✅ ${progressPercent}% ${detectedLang === 'fr' ? 'aujourd\'hui' : 'today'}` : ''}</p>
+              ${gardenImageTag || ''}
+
+              <h2>${isFr ? 'Statistiques' : 'Statistics'}</h2>
+              <ul>
+                <li>🌿 ${plantCount} ${tr.gardenPlantsGrowing}</li>
+                ${speciesCount > 0 ? `<li>🌸 ${speciesCount} ${isFr ? 'espèces' : 'species'}</li>` : ''}
+                <li>🔥 ${gardenStreak} ${isFr ? 'jours de série' : 'day streak'}</li>
+                ${todayProgress.due > 0 ? `<li>✅ ${progressPercent}% ${isFr ? 'complété aujourd\'hui' : 'completed today'} (${todayProgress.completed}/${todayProgress.due})</li>` : ''}
+                ${memberCount > 1 ? `<li>👥 ${memberCount} ${isFr ? 'membres' : 'members'}</li>` : ''}
+              </ul>
               
               ${gardenPlantDetails.length > 0 ? `
-              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans ce jardin' : 'Plants in this garden'}</h2>
+              <h2>🌿 ${isFr ? 'Plantes dans ce jardin' : 'Plants in this garden'}</h2>
               <ul>
-                ${gardenPlantDetails.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+                ${gardenPlantDetails.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}">${escapeHtml(p.name)}</a></li>`).join('')}
               </ul>
-              ${plantCount > gardenPlantDetails.length ? `<p>${detectedLang === 'fr' ? `Et ${plantCount - gardenPlantDetails.length} autres plantes...` : `And ${plantCount - gardenPlantDetails.length} more plants...`}</p>` : ''}
+              ${plantCount > gardenPlantDetails.length ? `<p>${isFr ? `Et ${plantCount - gardenPlantDetails.length} autres plantes...` : `And ${plantCount - gardenPlantDetails.length} more plants...`}</p>` : ''}
               ` : ''}
               
-              <p>${tr.gardenFilled} 🌸</p>
-              
-              <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
-              <nav>
-                ${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">👤 ${detectedLang === 'fr' ? 'Profil de' : 'Profile of'} ${escapeHtml(ownerName)}</a>` : ''}
-                <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Tous les jardins' : 'All Gardens'}</a>
-                <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
-                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
-                <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
-              </nav>
+              <nav>${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a> · ` : ''}<a href="/gardens">${isFr ? 'Jardins' : 'Gardens'}</a> · <a href="/search">${isFr ? 'Rechercher' : 'Search'}</a> · <a href="/blog">Blog</a></nav>
             </article>
           `
           console.log(`[ssr] Garden image: ${image}`)
@@ -29622,7 +29619,7 @@ async function generateCrawlerHtml(req, pagePath) {
       let searchPopularPlants = []
       try {
         if (supabaseServer) {
-          const { data: plants } = await ssrQuery(supabaseServer.from('plants').select('id, name').eq('status', 'approved').limit(15), 'search_popular_plants')
+          const { data: plants } = await ssrQuery(supabaseServer.from('plants').select('id, name').eq('status', 'approved').limit(20), 'search_popular_plants')
           if (plants) searchPopularPlants = plants
         }
       } catch { }
@@ -29763,7 +29760,7 @@ async function generateCrawlerHtml(req, pagePath) {
       let listGardens = []
       try {
         if (supabaseServer) {
-          const { data: gardens } = await ssrQuery(supabaseServer.from('gardens').select('id, name').eq('privacy', 'public').order('created_at', { ascending: false }).limit(15), 'gardens_list')
+          const { data: gardens } = await ssrQuery(supabaseServer.from('gardens').select('id, name, location_city, location_country').eq('privacy', 'public').order('created_at', { ascending: false }).limit(20), 'gardens_list')
           if (gardens) listGardens = gardens
         }
       } catch { }
@@ -29784,7 +29781,7 @@ async function generateCrawlerHtml(req, pagePath) {
           ${listGardens.length > 0 ? `
           <h2>🌳 ${detectedLang === 'fr' ? 'Jardins de la Communauté' : 'Community Gardens'}</h2>
           <ul>
-            ${listGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+            ${listGardens.map(g => { const loc = [g.location_city, g.location_country].filter(Boolean).join(', '); return `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a>${loc ? ` — ${escapeHtml(loc)}` : ''}</li>` }).join('')}
           </ul>
           ` : ''}
           <nav>
@@ -29802,7 +29799,7 @@ async function generateCrawlerHtml(req, pagePath) {
       let discoveryPlants = []
       try {
         if (supabaseServer) {
-          const { data: plants } = await ssrQuery(supabaseServer.from('plants').select('id, name').eq('status', 'approved').limit(10), 'discovery_plants')
+          const { data: plants } = await ssrQuery(supabaseServer.from('plants').select('id, name').eq('status', 'approved').limit(15), 'discovery_plants')
           if (plants) discoveryPlants = plants
         }
       } catch { }
@@ -30094,7 +30091,7 @@ async function generateCrawlerHtml(req, pagePath) {
               const { data: plantDetails } = await ssrQuery(
                 supabaseServer
                   .from('plants')
-                  .select('id, name, plant_type')
+                  .select('id, name, plant_type, scientific_name')
                   .in('id', plantIds),
                 'bookmark_plant_details'
               )
@@ -30328,7 +30325,8 @@ async function generateCrawlerHtml(req, pagePath) {
             supabaseServer
               .from('plants')
               .select('id, name')
-              .limit(12),
+              .eq('status', 'approved')
+              .limit(20),
             'home_popular_plants'
           )
           if (plants) popularPlants = plants
@@ -30340,7 +30338,7 @@ async function generateCrawlerHtml(req, pagePath) {
               .select('id, title')
               .eq('is_published', true)
               .order('published_at', { ascending: false })
-              .limit(6),
+              .limit(10),
             'home_recent_blog'
           )
           if (posts) recentBlogPosts = posts
@@ -30351,7 +30349,7 @@ async function generateCrawlerHtml(req, pagePath) {
               .from('gardens')
               .select('id, name')
               .eq('privacy', 'public')
-              .limit(6),
+              .limit(10),
             'home_public_gardens'
           )
           if (gardens) publicGardens = gardens
