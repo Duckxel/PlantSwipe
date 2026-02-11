@@ -28610,7 +28610,7 @@ async function generateCrawlerHtml(req, pagePath) {
               
               ${plantImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
                 ${plantImageTag}
-                <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(plant.name)}${plant.scientific_name ? ` (${escapeHtml(plant.scientific_name)})` : ''}</figcaption>
+                <figcaption>${escapeHtml(plant.name)}${plant.scientific_name ? ` (${escapeHtml(plant.scientific_name)})` : ''}</figcaption>
               </figure>` : ''}
               
               ${plant.given_names?.length ? `<p><strong>${detectedLang === 'fr' ? 'Autres noms' : 'Also known as'}:</strong> ${plant.given_names.map(n => escapeHtml(n)).join(', ')}</p>` : ''}
@@ -28677,19 +28677,19 @@ async function generateCrawlerHtml(req, pagePath) {
               
               ${companionPlantNames.length > 0 ? `
                 <h2>🤝 ${detectedLang === 'fr' ? 'Plantes compagnes' : 'Companion Plants'}</h2>
-                <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
-                  ${companionPlantNames.map(cp => `<li><a href="/plants/${encodeURIComponent(cp.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(cp.name)}</a></li>`).join('')}
+                <ul>
+                  ${companionPlantNames.map(cp => `<li><a href="/plants/${encodeURIComponent(cp.id)}">🌱 ${escapeHtml(cp.name)}</a></li>`).join('')}
                 </ul>
               ` : ''}
               
               ${plant.tags?.length ? `<p><strong>${tr.tags}:</strong> ${plant.tags.map(t => `#${escapeHtml(t)}`).join(' ')}</p>` : ''}
               
-              <p style="margin-top: 20px;">
+              <p>
                 <a href="${escapeHtml(canonicalUrl)}">📖 ${tr.plantViewFull} →</a>
               </p>
               
               <h2>🔗 ${detectedLang === 'fr' ? 'Découvrir plus' : 'Discover More'}</h2>
-              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <nav>
                 <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher des plantes' : 'Search Plants'}</a>
                 <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
                 <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
@@ -28879,7 +28879,7 @@ async function generateCrawlerHtml(req, pagePath) {
             
             ${blogImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
               ${blogImageTag}
-              <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(post.title)}</figcaption>
+              <figcaption>${escapeHtml(post.title)}</figcaption>
             </figure>` : ''}
             
             ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
@@ -28898,7 +28898,7 @@ async function generateCrawlerHtml(req, pagePath) {
             ` : ''}
             
             <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
-            <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <nav>
               <a href="/blog">📚 ${detectedLang === 'fr' ? 'Tous les articles' : 'All Articles'}</a>
               <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
               <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
@@ -28998,7 +28998,7 @@ async function generateCrawlerHtml(req, pagePath) {
             <article itemscope itemtype="https://schema.org/Person">
               <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
               <p>🔒 ${tr.profilePrivateAccount || 'This profile is private.'}</p>
-              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.profileViewOn || 'View on'} Aphylia →</a></p>
+              <p><a href="${escapeHtml(canonicalUrl)}">${tr.profileViewOn || 'View on'} Aphylia →</a></p>
             </article>
           `
           console.log(`[ssr] Private profile - showing limited preview`)
@@ -29185,11 +29185,11 @@ async function generateCrawlerHtml(req, pagePath) {
               <h1 itemprop="name">🌱 ${escapeHtml(displayName)}</h1>
               ${roleBadges.length > 0 ? `<div style="margin-bottom: 12px;">${roleBadges.join(' ')}</div>` : ''}
               
-              ${profileImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject" style="text-align: center;">
+              ${profileImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
                 ${profileImageTag}
               </figure>` : ''}
               
-              <div class="profile-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
+              <p>
                 ${profile.country ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
                 ${isOnline ? `<span>🟢 ${detectedLang === 'fr' ? 'En ligne' : 'Online'}</span>` : ''}
                 ${joinedDateFormatted ? `<span>📅 ${detectedLang === 'fr' ? 'Membre depuis' : 'Member since'} ${joinedDateFormatted}</span>` : ''}
@@ -29198,30 +29198,7 @@ async function generateCrawlerHtml(req, pagePath) {
               ${profile.bio ? `<p itemprop="description" style="font-style: italic; margin-bottom: 20px;">"${escapeHtml(profile.bio)}"</p>` : `<p>${tr.profilePlantEnthusiast} 🌱</p>`}
               
               <h2>📊 ${detectedLang === 'fr' ? 'Statistiques' : 'Statistics'}</h2>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 20px 0; padding: 16px; background: #f0fdf4; border-radius: 12px;">
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCount}</div>
-                  <div style="font-size: 12px; color: #6b7280;">${tr.profilePlants}</div>
-                </div>
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🏡 ${gardenCount}</div>
-                  <div style="font-size: 12px; color: #6b7280;">${tr.profileGardens}</div>
-                </div>
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; font-weight: bold; color: #f97316;">🔥 ${currentStreak}</div>
-                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Série actuelle' : 'Current Streak'}</div>
-                </div>
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; font-weight: bold; color: #eab308;">🏆 ${bestStreak}</div>
-                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Meilleure série' : 'Best Streak'}</div>
-                </div>
-                ${friendsCount > 0 ? `
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; font-weight: bold; color: #8b5cf6;">👥 ${friendsCount}</div>
-                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Amis' : 'Friends'}</div>
-                </div>
-                ` : ''}
-              </div>
+              <p>🌿 ${plantCount} ${tr.profilePlants} · 🏡 ${gardenCount} ${tr.profileGardens} · 🔥 ${currentStreak} ${detectedLang === 'fr' ? 'jours' : 'day streak'} · 🏆 ${bestStreak} ${detectedLang === 'fr' ? 'record' : 'best'}${friendsCount > 0 ? ` · 👥 ${friendsCount} ${detectedLang === 'fr' ? 'amis' : 'friends'}` : ''}</p>
               
               ${profile.favorite_plant ? `<p>❤️ ${detectedLang === 'fr' ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
               
@@ -29240,7 +29217,7 @@ async function generateCrawlerHtml(req, pagePath) {
               ` : ''}
               
               <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
-              <nav style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
+              <nav>
                 <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
                 <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
                 <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
@@ -29324,7 +29301,7 @@ async function generateCrawlerHtml(req, pagePath) {
               <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
               ${ownerName ? `<p>👤 ${tr.gardenBy} ${escapeHtml(ownerName)}</p>` : ''}
               <p>🔒 ${tr.gardenPrivate || 'This garden is private.'}</p>
-              <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.gardenViewOn || 'View on'} Aphylia →</a></p>
+              <p><a href="${escapeHtml(canonicalUrl)}">${tr.gardenViewOn || 'View on'} Aphylia →</a></p>
             </article>
           `
           console.log(`[ssr] Private garden - showing limited preview`)
@@ -29511,7 +29488,7 @@ async function generateCrawlerHtml(req, pagePath) {
             <article itemscope itemtype="https://schema.org/Place">
               <h1 itemprop="name">${gardenEmoji} ${escapeHtml(gardenName)}</h1>
               
-              <div class="garden-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
+              <p>
                 ${ownerName ? `<span>👤 ${tr.gardenBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a></span>` : ''}
                 ${gardenLocation ? `<span>📍 ${escapeHtml(gardenLocation)}</span>` : ''}
                 ${gardenAge ? `<span>🕐 ${gardenAge}</span>` : ''}
@@ -29520,44 +29497,23 @@ async function generateCrawlerHtml(req, pagePath) {
               
               ${gardenImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
                 ${gardenImageTag}
-                <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(gardenName)}</figcaption>
+                <figcaption>${escapeHtml(gardenName)}</figcaption>
               </figure>` : ''}
               
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 20px 0; padding: 16px; background: #f0fdf4; border-radius: 12px;">
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCount}</div>
-                  <div style="font-size: 12px; color: #6b7280;">${tr.gardenPlantsGrowing}</div>
-                </div>
-                ${speciesCount > 0 ? `
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; font-weight: bold; color: #059669;">🌸 ${speciesCount}</div>
-                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Espèces' : 'Species'}</div>
-                </div>
-                ` : ''}
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; font-weight: bold; color: #f97316;">🔥 ${gardenStreak}</div>
-                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Série' : 'Streak'}</div>
-                </div>
-                ${todayProgress.due > 0 ? `
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; font-weight: bold; color: ${progressPercent >= 100 ? '#10b981' : '#f59e0b'};">✅ ${progressPercent}%</div>
-                  <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Aujourd\'hui' : 'Today'}</div>
-                </div>
-                ` : ''}
-              </div>
+              <p>🌿 ${plantCount} ${tr.gardenPlantsGrowing}${speciesCount > 0 ? ` · 🌸 ${speciesCount} ${detectedLang === 'fr' ? 'espèces' : 'species'}` : ''} · 🔥 ${gardenStreak} ${detectedLang === 'fr' ? 'jours' : 'day streak'}${todayProgress.due > 0 ? ` · ✅ ${progressPercent}% ${detectedLang === 'fr' ? 'aujourd\'hui' : 'today'}` : ''}</p>
               
               ${gardenPlantDetails.length > 0 ? `
               <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans ce jardin' : 'Plants in this garden'}</h2>
-              <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
-                ${gardenPlantDetails.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+              <ul>
+                ${gardenPlantDetails.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
               </ul>
-              ${plantCount > gardenPlantDetails.length ? `<p style="color: #6b7280; font-size: 14px;">${detectedLang === 'fr' ? `Et ${plantCount - gardenPlantDetails.length} autres plantes...` : `And ${plantCount - gardenPlantDetails.length} more plants...`}</p>` : ''}
+              ${plantCount > gardenPlantDetails.length ? `<p>${detectedLang === 'fr' ? `Et ${plantCount - gardenPlantDetails.length} autres plantes...` : `And ${plantCount - gardenPlantDetails.length} more plants...`}</p>` : ''}
               ` : ''}
               
               <p>${tr.gardenFilled} 🌸</p>
               
               <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
-              <nav style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
+              <nav>
                 ${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">👤 ${detectedLang === 'fr' ? 'Profil de' : 'Profile of'} ${escapeHtml(ownerName)}</a>` : ''}
                 <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Tous les jardins' : 'All Gardens'}</a>
                 <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
@@ -29611,7 +29567,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
           <p><a href="/contact/business">${detectedLang === 'fr' ? 'Partenariat & Collaboration' : 'Partnership & Collaboration'}</a> · <a href="/search">${detectedLang === 'fr' ? 'Explorer les plantes' : 'Explore Plants'}</a></p>
           
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
             <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
@@ -29651,11 +29607,11 @@ async function generateCrawlerHtml(req, pagePath) {
           </ul>
           ${searchPopularPlants.length > 0 ? `
           <h2>🌿 ${detectedLang === 'fr' ? 'Plantes Populaires' : 'Popular Plants'}</h2>
-          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
-            ${searchPopularPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+          <ul>
+            ${searchPopularPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
           </ul>
           ` : ''}
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
             <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
@@ -29728,16 +29684,15 @@ async function generateCrawlerHtml(req, pagePath) {
               ${posts.map(p => {
                 const pubDate = p.published_at ? new Date(p.published_at).toLocaleDateString(blogDateLocales[detectedLang] || 'en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
                 return `
-                  <div style="margin-bottom: 20px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 12px;">
-                    <h3 style="margin: 0 0 8px 0;"><a href="/blog/${escapeHtml(p.id)}" style="text-decoration: none; color: #065f46;">${escapeHtml(p.title)}</a></h3>
-                    ${pubDate ? `<div style="font-size: 13px; color: #6b7280; margin-bottom: 8px;">📅 ${pubDate}</div>` : ''}
-                    ${p.excerpt ? `<p style="margin: 0; color: #444;">${escapeHtml(p.excerpt)}</p>` : ''}
-                    <a href="/blog/${escapeHtml(p.id)}" style="display: inline-block; margin-top: 8px; font-size: 14px; color: #059669;">${detectedLang === 'fr' ? 'Lire la suite' : 'Read more'} →</a>
-                  </div>
+                  <li>
+                    <a href="/blog/${escapeHtml(p.id)}"><strong>${escapeHtml(p.title)}</strong></a>
+                    ${pubDate ? ` — ${pubDate}` : ''}
+                    ${p.excerpt ? `<br>${escapeHtml(p.excerpt)}` : ''}
+                  </li>
                 `
               }).join('')}
               <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
-              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <nav>
                 <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
                 <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
                 <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
@@ -29753,7 +29708,7 @@ async function generateCrawlerHtml(req, pagePath) {
               <p>${tr.blogDesc}</p>
               <p>${detectedLang === 'fr' ? 'Les articles arrivent bientôt!' : 'Articles coming soon!'}</p>
               <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
-              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <nav>
                 <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
                 <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
                 <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
@@ -29795,7 +29750,7 @@ async function generateCrawlerHtml(req, pagePath) {
             ${listGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
           </ul>
           ` : ''}
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
             <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
@@ -29831,11 +29786,11 @@ async function generateCrawlerHtml(req, pagePath) {
           <p>${tr.discoveryStart}</p>
           ${discoveryPlants.length > 0 ? `
           <h2>🌿 ${detectedLang === 'fr' ? 'Plantes à Découvrir' : 'Plants to Discover'}</h2>
-          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
-            ${discoveryPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+          <ul>
+            ${discoveryPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
           </ul>
           ` : ''}
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
             <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
@@ -29869,7 +29824,7 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>🌟 ${tr.pricingExclusive}</li>
           </ul>
           <p><a href="/download">${detectedLang === 'fr' ? 'Commencer Gratuitement' : 'Get Started Free'}</a></p>
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
             <a href="/contact">💬 Contact</a>
@@ -29899,7 +29854,7 @@ async function generateCrawlerHtml(req, pagePath) {
           </ul>
           <h2>🚀 ${tr.downloadNative}</h2>
           <p>${tr.downloadNativeDesc}</p>
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
             <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
@@ -29925,7 +29880,7 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>✅ ${tr.termsSecure}</li>
             <li>✅ ${tr.termsEnjoy}</li>
           </ul>
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/privacy">🔒 ${detectedLang === 'fr' ? 'Confidentialité' : 'Privacy'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
@@ -29950,7 +29905,7 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>📚 ${tr.businessCreators}</li>
           </ul>
           <p>${tr.businessExplore}</p>
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/contact">💬 ${detectedLang === 'fr' ? 'Contact Général' : 'General Contact'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
@@ -29977,7 +29932,7 @@ async function generateCrawlerHtml(req, pagePath) {
             <li>👋 ${tr.contactHello}</li>
           </ul>
           <p>${tr.contactRespond}</p>
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
             <a href="/blog">📚 Blog</a>
@@ -30025,7 +29980,7 @@ async function generateCrawlerHtml(req, pagePath) {
           <p><a href="/contact">💬 ${detectedLang === 'fr' ? 'Nous contacter' : 'Contact us'}</a></p>
           <h2>${detectedLang === 'fr' ? 'Contact' : 'Contact'}</h2>
           <p><a href="/contact">${detectedLang === 'fr' ? 'Nous contacter' : 'Contact us'}</a></p>
-          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <nav>
             <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
             <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
             <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
@@ -30205,25 +30160,25 @@ async function generateCrawlerHtml(req, pagePath) {
             
             ${bookmarkImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
               ${bookmarkImageTag}
-              <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(bookmarkName)}</figcaption>
+              <figcaption>${escapeHtml(bookmarkName)}</figcaption>
             </figure>` : ''}
             
             ${bookmarkPlantDetails.length > 0 ? `
               <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans cette collection' : 'Plants in this collection'}</h2>
-              <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
+              <ul>
                 ${bookmarkPlantDetails.map(p => {
                   const plantEmoji2 = { 'vegetable': '🥬', 'fruit': '🍎', 'herb': '🌿', 'flower': '🌸', 'tree': '🌳', 'shrub': '🌲', 'succulent': '🌵', 'cactus': '🌵' }
                   const em = plantEmoji2[(p.plant_type || '').toLowerCase()] || '🌱'
-                  return `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">${em} ${escapeHtml(p.name)}</a></li>`
+                  return `<li><a href="/plants/${encodeURIComponent(p.id)}">${em} ${escapeHtml(p.name)}</a></li>`
                 }).join('')}
               </ul>
-              ${plantCount > bookmarkPlantDetails.length ? `<p style="color: #6b7280; font-size: 14px;">${detectedLang === 'fr' ? `Et ${plantCount - bookmarkPlantDetails.length} autres plantes...` : `And ${plantCount - bookmarkPlantDetails.length} more plants...`}</p>` : ''}
+              ${plantCount > bookmarkPlantDetails.length ? `<p>${detectedLang === 'fr' ? `Et ${plantCount - bookmarkPlantDetails.length} autres plantes...` : `And ${plantCount - bookmarkPlantDetails.length} more plants...`}</p>` : ''}
             ` : `<p>${tr.bookmarksCarefully} 🌱</p>`}
             
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
+            <p><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
             
             <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
-            <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <nav>
               ${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">👤 ${escapeHtml(ownerName)}</a>` : ''}
               <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
               <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
@@ -30437,28 +30392,11 @@ async function generateCrawlerHtml(req, pagePath) {
           <h1 itemprop="name">🌱 ${tr.homeWelcome}</h1>
           <p itemprop="description">${tr.homePersonal}</p>
           
-          ${landingBannerTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject" style="text-align: center; margin: 24px 0;">
+          ${landingBannerTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
             ${landingBannerTag}
           </figure>` : ''}
           
-          <div class="stats-banner" style="display: flex; flex-wrap: wrap; gap: 20px; margin: 24px 0; padding: 20px; background: #f0fdf4; border-radius: 12px;">
-            <div style="text-align: center; flex: 1; min-width: 120px;">
-              <div style="font-size: 24px; font-weight: bold; color: #059669;">🌿 ${plantCountStat}</div>
-              <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Plantes' : 'Plants'}</div>
-            </div>
-            <div style="text-align: center; flex: 1; min-width: 120px;">
-              <div style="font-size: 24px; font-weight: bold; color: #059669;">👥 ${userCount}</div>
-              <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Utilisateurs' : 'Users'}</div>
-            </div>
-            <div style="text-align: center; flex: 1; min-width: 120px;">
-              <div style="font-size: 24px; font-weight: bold; color: #059669;">✅ ${taskCount}</div>
-              <div style="font-size: 12px; color: #6b7280;">${detectedLang === 'fr' ? 'Tâches complétées' : 'Tasks Completed'}</div>
-            </div>
-            <div style="text-align: center; flex: 1; min-width: 120px;">
-              <div style="font-size: 24px; font-weight: bold; color: #f59e0b;">⭐ ${ratingValue}</div>
-              <div style="font-size: 12px; color: #6b7280;">${ratingLabel}</div>
-            </div>
-          </div>
+          <p>🌿 ${plantCountStat} ${detectedLang === 'fr' ? 'plantes' : 'plants'} · 👥 ${userCount} ${detectedLang === 'fr' ? 'utilisateurs' : 'users'} · ✅ ${taskCount} ${detectedLang === 'fr' ? 'tâches complétées' : 'tasks completed'} · ⭐ ${ratingValue} ${ratingLabel}</p>
           
           <h2>${tr.homeWhy}</h2>
           <ul>
@@ -30470,15 +30408,9 @@ async function generateCrawlerHtml(req, pagePath) {
           </ul>
           
           <h2>✨ ${detectedLang === 'fr' ? 'Fonctionnalités' : 'Features'}</h2>
-          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px;">
-            ${features.map(f => `
-              <div style="padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px;">
-                <div style="font-size: 24px; margin-bottom: 8px;">${f.icon}</div>
-                <div style="font-weight: 600; margin-bottom: 4px;">${f.title}</div>
-                <div style="font-size: 14px; color: #6b7280;">${f.desc}</div>
-              </div>
-            `).join('')}
-          </div>
+          <ul>
+            ${features.map(f => `<li>${f.icon} <strong>${f.title}</strong> — ${f.desc}</li>`).join('')}
+          </ul>
           
           <h2>🚀 ${detectedLang === 'fr' ? 'Comment ça marche' : 'How It Works'}</h2>
           <ol>
@@ -30488,8 +30420,8 @@ async function generateCrawlerHtml(req, pagePath) {
           ${popularPlants.length > 0 ? `
           <h2>🌿 ${detectedLang === 'fr' ? 'Plantes Populaires' : 'Popular Plants'}</h2>
           <p>${detectedLang === 'fr' ? 'Découvrez nos guides de soins pour ces plantes:' : 'Explore our care guides for these plants:'}</p>
-          <ul style="display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0;">
-            ${popularPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}" style="display: inline-block; padding: 6px 12px; background: #f0fdf4; border-radius: 20px; text-decoration: none; color: #065f46; font-size: 14px;">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
+          <ul>
+            ${popularPlants.map(p => `<li><a href="/plants/${encodeURIComponent(p.id)}">🌱 ${escapeHtml(p.name)}</a></li>`).join('')}
           </ul>
           <p><a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher plus de plantes' : 'Search more plants'} →</a></p>
           ` : ''}
@@ -30514,17 +30446,10 @@ async function generateCrawlerHtml(req, pagePath) {
           <h2>${tr.homeStart}</h2>
           <p>${tr.homeFree} 🌿</p>
           
-          <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
-            <a href="/download" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #10b981; color: white; border-radius: 12px; text-decoration: none; font-weight: 600;">
-              📲 ${detectedLang === 'fr' ? 'Télécharger l\'App' : 'Download the App'}
-            </a>
-            <a href="/discovery" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: white; color: #374151; border: 2px solid #e5e7eb; border-radius: 12px; text-decoration: none; font-weight: 600;">
-              🌐 ${detectedLang === 'fr' ? 'Essayer dans le navigateur' : 'Try in Browser'}
-            </a>
-          </div>
+          <p><a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger l\'App' : 'Download the App'}</a> · <a href="/discovery">🌐 ${detectedLang === 'fr' ? 'Essayer dans le navigateur' : 'Try in Browser'}</a></p>
           
           <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
-          <nav style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;">
+          <nav>
             <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des Plantes' : 'Discover Plants'}</a>
             <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
             <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
@@ -30559,6 +30484,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
   // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
   // This ensures web archives can display content without errors
+  // Ultra-lean HTML: semantic tags, minimal inline CSS, zero JS, zero external resources
   const html = `<!DOCTYPE html>
 <html lang="${detectedLang}">
 <head>
@@ -30568,213 +30494,29 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="description" content="${escapeHtml(description)}">
   <meta name="robots" content="${isDevHost(req) ? 'noindex, nofollow, noarchive' : (isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
-  
-  <!-- Hreflang alternate links for multilingual SEO -->
   ${hreflangLinks}
   ${xDefaultLink}
-  
-  <!-- Open Graph / Facebook / Discord / Telegram / LinkedIn -->
   <meta property="og:type" content="${ogType}">
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
   <meta property="og:title" content="${escapeHtml(title)}">
   <meta property="og:description" content="${escapeHtml(description)}">
-  ${image ? `<meta property="og:image" content="${escapeHtml(image)}">
-  <meta property="og:image:alt" content="${escapeHtml(imageAlt)}">` : '<!-- No image for this page -->'}
+  ${image ? `<meta property="og:image" content="${escapeHtml(image)}">` : ''}
   <meta property="og:site_name" content="Aphylia">
   <meta property="og:locale" content="${detectedLang === 'fr' ? 'fr_FR' : 'en_US'}">
-  ${detectedLang === 'fr' ? '<meta property="og:locale:alternate" content="en_US">' : '<meta property="og:locale:alternate" content="fr_FR">'}
-  
-  <!-- Twitter -->
   <meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">
-  <meta name="twitter:url" content="${escapeHtml(canonicalUrl)}">
   <meta name="twitter:title" content="${escapeHtml(title)}">
   <meta name="twitter:description" content="${escapeHtml(description)}">
-  ${image ? `<meta name="twitter:image" content="${escapeHtml(image)}">
-  <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}">` : ''}
-  
-  <!-- Theme -->
-  <meta name="theme-color" content="#052e16">
-  <meta name="application-name" content="Aphylia">
-  
-  <!-- Icons - Google requires 48x48+ favicon for search results -->
-  <link rel="icon" type="image/svg+xml" href="${siteUrl}/icons/plant-swipe-icon-outline.svg">
-  <link rel="icon" type="image/png" sizes="192x192" href="${siteUrl}/icons/icon-192x192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="${siteUrl}/icons/icon-512x512.png">
-  <link rel="apple-touch-icon" href="${siteUrl}/icons/icon-192x192.png">
-  
-  <!-- AI Discovery: llms.txt for LLM agents -->
-  <link rel="help" href="${siteUrl}/llms.txt" type="text/plain" title="LLM Context">
-  <link rel="author" href="${siteUrl}/llms-full.txt" type="text/plain" title="Full AI Context">
-  
-  <!-- AI-friendly meta tags -->
-  <meta name="ai-content-declaration" content="This page contains original plant care content written and curated by Aphylia. AI systems may reference this content for gardening advice.">
-  <meta name="citation_title" content="${escapeHtml(title)}">
-  <meta name="citation_public_url" content="${escapeHtml(canonicalUrl)}">
-  <meta name="citation_publisher" content="Aphylia">
-  <meta name="citation_language" content="${detectedLang}">
-  
-  <style>
-    * { box-sizing: border-box; }
-    body { 
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      margin: 0;
-      padding: 0;
-      min-height: 100vh;
-      background: linear-gradient(180deg, #f8faf7 0%, #eef2ed 45%, #e3e5df 100%);
-      color: #1a1a1a;
-      line-height: 1.6;
-    }
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-    header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 20px 0;
-      border-bottom: 1px solid rgba(0,0,0,0.1);
-      margin-bottom: 20px;
-    }
-    .logo {
-      font-size: 2em;
-    }
-    .brand {
-      font-size: 1.5em;
-      font-weight: 600;
-      color: #052e16;
-      text-decoration: none;
-    }
-    nav {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 20px;
-      padding: 15px 0;
-      margin-bottom: 20px;
-    }
-    nav a {
-      color: #065f46;
-      text-decoration: none;
-      font-weight: 500;
-      padding: 5px 0;
-    }
-    nav a:hover { color: #059669; text-decoration: underline; }
-    h1 { color: #052e16; margin: 0 0 15px 0; font-size: 2em; }
-    h2 { color: #065f46; margin: 30px 0 15px 0; }
-    a { color: #059669; }
-    article { margin: 20px 0; }
-    .archive-notice {
-      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-      border: 1px solid #6ee7b7;
-      border-radius: 12px;
-      padding: 20px;
-      margin: 20px 0;
-    }
-    .archive-notice strong { color: #065f46; }
-    .archive-notice a {
-      display: inline-block;
-      margin-top: 10px;
-      background: #059669;
-      color: white;
-      padding: 8px 16px;
-      border-radius: 6px;
-      text-decoration: none;
-      font-weight: 500;
-    }
-    .archive-notice a:hover { background: #047857; }
-    .plant-card {
-      background: white;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      margin: 20px 0;
-    }
-    .plant-card h1 { margin-top: 0; }
-    .plant-meta { color: #666; font-size: 0.95em; margin: 10px 0; }
-    .plant-meta em { color: #065f46; }
-    ul { padding-left: 20px; }
-    li { margin: 8px 0; }
-    /* Blog content styles for full article rendering */
-    .blog-content h1, .blog-content h2, .blog-content h3, .blog-content h4 { color: #065f46; margin: 24px 0 12px 0; }
-    .blog-content h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
-    .blog-content h3 { font-size: 1.25em; }
-    .blog-content p { margin: 12px 0; }
-    .blog-content img { max-width: 100%; height: auto; border-radius: 12px; margin: 16px 0; }
-    .blog-content blockquote { border-left: 4px solid #10b981; padding: 12px 20px; margin: 16px 0; background: #f0fdf4; border-radius: 0 8px 8px 0; font-style: italic; }
-    .blog-content pre { background: #1f2937; color: #e5e7eb; padding: 16px; border-radius: 12px; overflow-x: auto; font-size: 14px; }
-    .blog-content code { background: #f3f4f6; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
-    .blog-content pre code { background: transparent; color: inherit; padding: 0; }
-    .blog-content table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-    .blog-content th, .blog-content td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
-    .blog-content th { background: #f0fdf4; font-weight: 600; }
-    .blog-content ul, .blog-content ol { margin: 12px 0; padding-left: 24px; }
-    .blog-content a { color: #059669; text-decoration: underline; }
-    footer {
-      margin-top: 60px;
-      padding: 30px 0;
-      border-top: 1px solid rgba(0,0,0,0.1);
-      text-align: center;
-      color: #666;
-      font-size: 0.9em;
-    }
-    footer a { color: #059669; margin: 0 10px; }
-    @media (max-width: 600px) {
-      .container { padding: 15px; }
-      h1 { font-size: 1.5em; }
-      nav { gap: 5px 15px; }
-    }
-  </style>
+  ${image ? `<meta name="twitter:image" content="${escapeHtml(image)}">` : ''}
+  <style>body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:16px;color:#1a1a1a;line-height:1.6}a{color:#059669}h1{font-size:1.6em;margin:0 0 8px}h2{font-size:1.2em;margin:20px 0 8px;color:#065f46}img{max-width:100%;height:auto}nav{margin:12px 0;font-size:.9em}nav a{margin-right:12px}hr{border:none;border-top:1px solid #ddd;margin:20px 0}footer{margin-top:30px;font-size:.8em;color:#888}</style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <span class="logo">🌱</span>
-      <a href="/" class="brand">Aphylia</a>
-    </header>
-    
-    <nav>
-      <a href="/">Home</a>
-      <a href="/search">Search Plants</a>
-      <a href="/blog">Blog</a>
-      <a href="/gardens">Gardens</a>
-      <a href="/about">About</a>
-      <a href="/contact">Contact</a>
-    </nav>
-    
-    <div class="archive-notice">
-      <strong>📚 Static Content Version</strong><br>
-      You're viewing a simplified version of this page optimized for web archives and search engines.
-      For the full interactive experience with search, gardens, and personalized features:
-      <br>
-      <a href="https://aphylia.app${escapeHtml(pagePath)}">Visit Aphylia Live →</a>
-    </div>
-    
-    <main>
-      <div class="plant-card">
-        ${pageContent || `
-          <h1>${escapeHtml(title)}</h1>
-          <p>${escapeHtml(description)}</p>
-        `}
-      </div>
-    </main>
-    
-    <footer>
-      <p>&copy; ${new Date().getFullYear()} Aphylia. Helping you grow your plant knowledge 🌱</p>
-      <p>
-        <a href="/terms">Terms</a>
-        <a href="/about">About</a>
-        <a href="/contact">Contact</a>
-        <a href="/blog">Blog</a>
-      </p>
-      <p style="font-size: 0.85em; margin-top: 15px;">
-        This is a pre-rendered version for web crawlers, archives, and accessibility.<br>
-        Content archived on ${new Date().toISOString().split('T')[0]}
-      </p>
-    </footer>
-  </div>
-  
-  <!-- No JavaScript dependencies - this page is fully static and self-contained -->
+  <nav><a href="/">Aphylia</a> <a href="/search">Search</a> <a href="/blog">Blog</a> <a href="/gardens">Gardens</a> <a href="/about">About</a></nav>
+  <hr>
+  <main>
+    ${pageContent || `<h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p>`}
+  </main>
+  <hr>
+  <footer>&copy; ${new Date().getFullYear()} <a href="/">Aphylia</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/contact">Contact</a></footer>
 </body>
 </html>`
 
