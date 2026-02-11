@@ -11,6 +11,7 @@
  */
 
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from './i18n'
+import { supabase } from './supabaseClient'
 import type {
   PlantIdentifiers,
   PlantEcology,
@@ -173,8 +174,26 @@ export async function translateText(
 }
 
 /**
+ * Get the current auth headers for API requests.
+ * Returns Authorization header if user is logged in, empty object otherwise.
+ */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const { data } = await supabase.auth.getSession()
+    if (data?.session?.access_token) {
+      return { Authorization: `Bearer ${data.session.access_token}` }
+    }
+  } catch {
+    // Silently fail - auth header is optional (batch falls back to individual)
+  }
+  return {}
+}
+
+/**
  * Translate multiple texts in a single batch request (admin-only endpoint)
- * Falls back to individual requests if batch endpoint fails
+ * Falls back to individual requests if batch endpoint fails.
+ * Includes auth token so admin users actually hit the batch endpoint
+ * instead of always falling back to N individual requests.
  */
 export async function translateBatch(
   texts: string[],
@@ -189,10 +208,15 @@ export async function translateBatch(
   const protectedTexts = protected_.map(p => p.text.trim())
   
   try {
+    // Include auth headers so admin users can use the batch endpoint
+    // (previously missing, causing all batch calls to 403 and fall back to individual)
+    const authHeaders = await getAuthHeaders()
+    
     const response = await fetchWithRetry('/api/translate-batch', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders,
       },
       body: JSON.stringify({
         texts: protectedTexts,
