@@ -28448,9 +28448,9 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plant.scent) safety.push(`👃 ${detectedLang === 'fr' ? 'Parfumé' : 'Scented'}`)
           if (plant.spiked) safety.push(`🌵 ${detectedLang === 'fr' ? 'Épineux' : 'Spiked'}`)
 
-          // Usage & Benefits
+          // Usage & Benefits (store raw text, escape in template)
           let usage = []
-          if (plant.utility?.length) usage = plant.utility.map(u => escapeHtml(u))
+          if (plant.utility?.length) usage = [...plant.utility]
           if (plant.infusion) usage.push(detectedLang === 'fr' ? 'Infusion' : 'Infusion')
           if (plant.aromatherapy) usage.push(detectedLang === 'fr' ? 'Aromathérapie' : 'Aromatherapy')
           if (plant.comestible_part?.length) usage.push(`${detectedLang === 'fr' ? 'Parties comestibles' : 'Edible parts'}: ${plant.comestible_part.slice(0, 3).join(', ')}`)
@@ -29773,6 +29773,7 @@ async function generateCrawlerHtml(req, pagePath) {
     // Bookmark list page: /bookmarks/:id
     else if (isBookmarkRoute && supabaseServer) {
       isDynamicRoute = true
+      req._ssrDebug.matchedRoute = 'bookmark'
       const listId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
 
@@ -30291,6 +30292,14 @@ async function generateCrawlerHtml(req, pagePath) {
       plantData.tags.slice(0, 5).forEach(tag => keywordParts.push(tag))
     }
     keywords = keywordParts.join(', ')
+  } else if (req._ssrDebug?.matchedRoute === 'blog_post') {
+    keywords = 'aphylia, blog, gardening tips, plant care, gardening guide, ' + (title || '').replace(/[📖|]/g, '').trim()
+  } else if (req._ssrDebug?.matchedRoute === 'profile') {
+    keywords = 'aphylia, gardener, profile, plant collection, garden community'
+  } else if (req._ssrDebug?.matchedRoute === 'garden') {
+    keywords = 'aphylia, garden, plants, growing, gardening community, plant tracker'
+  } else if (req._ssrDebug?.matchedRoute === 'bookmark') {
+    keywords = 'aphylia, plant collection, bookmarks, saved plants, plant list'
   }
 
   // Build JSON-LD structured data for search engines
@@ -30340,6 +30349,36 @@ async function generateCrawlerHtml(req, pagePath) {
         '@type': 'WebPage',
         '@id': canonicalUrl
       }
+    }
+  } else if (req._ssrDebug?.matchedRoute === 'profile') {
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      mainEntity: {
+        '@type': 'Person',
+        name: title.replace(/🌱\s*/, '').split('|')[0].trim(),
+        description: description,
+        image: image || undefined,
+        url: canonicalUrl
+      }
+    }
+  } else if (req._ssrDebug?.matchedRoute === 'garden') {
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Place',
+      name: title.replace(/[🌳🌿🌱🏡]\s*/, '').split('-')[0].trim(),
+      description: description,
+      image: image || undefined,
+      url: canonicalUrl
+    }
+  } else if (req._ssrDebug?.matchedRoute === 'bookmark') {
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: title.replace(/🔖\s*/, '').split('-')[0].trim(),
+      description: description,
+      image: image || undefined,
+      url: canonicalUrl
     }
   } else {
     // Generic website schema
