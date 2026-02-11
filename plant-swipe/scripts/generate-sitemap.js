@@ -200,6 +200,17 @@ async function main() {
   const relPath = path.relative(appRoot, sitemapPath)
   const dynamicCount = dynamicRoutes.length + blogRoutes.length + profileRoutes.length + gardenRoutes.length + bookmarkRoutes.length
   console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicCount} dynamic: ${dynamicRoutes.length} plants, ${blogRoutes.length} blogs, ${profileRoutes.length} profiles, ${gardenRoutes.length} gardens, ${bookmarkRoutes.length} bookmarks) in ${Date.now() - startedAt}ms → ${relPath}`)
+
+  // Also regenerate llms.txt with live database stats
+  await generateLlmsTxt({
+    plantCount: dynamicRoutes.length,
+    blogCount: blogRoutes.length,
+    profileCount: profileRoutes.length,
+    gardenCount: gardenRoutes.length,
+    bookmarkCount: bookmarkRoutes.length,
+  }).catch((error) => {
+    console.warn(`[sitemap] Failed to generate llms.txt: ${error.message || error}`)
+  })
 }
 
 main().catch((error) => {
@@ -685,4 +696,337 @@ function loadEnvFiles(rootDir) {
       dotenv.config({ path: fullPath, override: candidate.override })
     }
   }
+}
+
+// ─── llms.txt generation ─────────────────────────────────────────────
+// Generates a comprehensive llms.txt enriched with live database stats,
+// sample plants, recent blog posts, and plant type distribution.
+// Called automatically after sitemap generation.
+async function generateLlmsTxt(counts) {
+  const llmsPath = path.join(publicDir, 'llms.txt')
+  const now = new Date().toISOString().slice(0, 10)
+  const client = getSupabaseClient()
+
+  // Fetch additional data for the llms.txt if DB is available
+  let samplePlants = []
+  let recentBlogPosts = []
+  let plantTypeDistribution = []
+  let totalPlantCount = counts.plantCount || 0
+
+  if (client) {
+    try {
+      // Get sample plants across different types for showcase
+      const { data: samples } = await client
+        .from('plants')
+        .select('id, name, plant_type')
+        .eq('status', 'approved')
+        .order('name', { ascending: true })
+        .limit(30)
+      if (samples) samplePlants = samples
+    } catch { }
+
+    try {
+      // Get English translations for sample plants (scientific names)
+      if (samplePlants.length > 0) {
+        const ids = samplePlants.map(p => p.id)
+        const { data: translations } = await client
+          .from('plant_translations')
+          .select('plant_id, scientific_name')
+          .in('plant_id', ids)
+          .eq('language', 'en')
+        if (translations) {
+          const sciMap = {}
+          for (const t of translations) {
+            if (t.scientific_name) sciMap[t.plant_id] = t.scientific_name
+          }
+          samplePlants = samplePlants.map(p => ({
+            ...p,
+            scientific_name: sciMap[p.id] || null,
+          }))
+        }
+      }
+    } catch { }
+
+    try {
+      // Get recent blog posts
+      const { data: posts } = await client
+        .from('blog_posts')
+        .select('id, title, published_at')
+        .eq('is_published', true)
+        .order('published_at', { ascending: false })
+        .limit(10)
+      if (posts) recentBlogPosts = posts
+    } catch { }
+
+    try {
+      // Get plant type distribution (approximate, from sample)
+      const { data: allTypes } = await client
+        .from('plants')
+        .select('plant_type')
+      if (allTypes) {
+        const typeCount = {}
+        for (const p of allTypes) {
+          const t = p.plant_type || 'other'
+          typeCount[t] = (typeCount[t] || 0) + 1
+        }
+        plantTypeDistribution = Object.entries(typeCount)
+          .sort((a, b) => b[1] - a[1])
+          .map(([type, count]) => ({ type, count }))
+        // Use actual total from DB since we fetched all
+        totalPlantCount = allTypes.length
+      }
+    } catch { }
+  }
+
+  // Build the llms.txt content
+  const lines = []
+
+  lines.push(`# Aphylia - Plant Care & Gardening Knowledge Platform`)
+  lines.push(``)
+  lines.push(`> Aphylia is a free, GDPR-compliant plant care application that helps gardeners discover, identify, and care for plants. It provides comprehensive growing guides, care instructions, and gardening knowledge for thousands of plant species. Serving the European Union.`)
+  lines.push(``)
+  lines.push(`## About Aphylia`)
+  lines.push(``)
+  lines.push(`Aphylia is a web-based gardening companion application. It is free to use, available in English and French, and designed for gardeners of all experience levels.`)
+  lines.push(``)
+  lines.push(`### Core Features`)
+  lines.push(``)
+  lines.push(`- **Plant Encyclopedia**: Searchable database of ${totalPlantCount.toLocaleString()} plant species with detailed botanical data, care guides, growing calendars, companion planting, toxicity information, propagation methods, and high-quality photos.`)
+  lines.push(`- **Plant Discovery**: Swipe-based plant matching (swipe right to save, left to skip) to build a personalized garden wishlist.`)
+  lines.push(`- **Garden Management**: Create and manage multiple gardens, track plants, monitor care tasks, and log progress with streaks.`)
+  lines.push(`- **Smart Care Reminders**: Automated reminders for watering, fertilizing, pruning, and seasonal tasks based on each plant's needs.`)
+  lines.push(`- **Plant Identification**: AI-powered plant identification from photos using your camera.`)
+  lines.push(`- **Community**: Public garden profiles, user profiles, plant bookmark collections, and a friends system.`)
+  lines.push(`- **Blog**: Expert gardening advice, seasonal tips, growing techniques, and plant care articles.`)
+  lines.push(`- **Progressive Web App**: Installable on mobile and desktop, works offline.`)
+  lines.push(``)
+  lines.push(`### Languages`)
+  lines.push(``)
+  lines.push(`- English (default, no URL prefix)`)
+  lines.push(`- French (URL prefix \`/fr/\`)`)
+  lines.push(``)
+
+  // ── Live Database Stats ──────────────────────────────────────
+  lines.push(`### Database Stats (as of ${now})`)
+  lines.push(``)
+  lines.push(`- Plants: ${totalPlantCount.toLocaleString()}`)
+  lines.push(`- Blog posts: ${counts.blogCount}`)
+  lines.push(`- Public gardens: ${counts.gardenCount}`)
+  lines.push(`- Public profiles: ${counts.profileCount}`)
+  lines.push(`- Public bookmark collections: ${counts.bookmarkCount}`)
+  lines.push(``)
+
+  if (plantTypeDistribution.length > 0) {
+    lines.push(`### Plant Type Distribution`)
+    lines.push(``)
+    for (const { type, count } of plantTypeDistribution) {
+      lines.push(`- ${type}: ${count}`)
+    }
+    lines.push(``)
+  }
+
+  // ── Docs ─────────────────────────────────────────────────────
+  lines.push(`## Docs`)
+  lines.push(``)
+  lines.push(`### Plant Information Pages`)
+  lines.push(``)
+  lines.push(`Each plant page provides the most comprehensive publicly available data for that species:`)
+  lines.push(``)
+  lines.push(`- [Plant Search](${siteUrlBase}/search): Search by name, care level, light, watering, climate zone, or difficulty`)
+  lines.push(`- [Plant Discovery](${siteUrlBase}/discovery): Swipe-based plant matching interface`)
+  lines.push(`- URL pattern: \`${siteUrlBase}/plants/{plant-id}\``)
+  lines.push(``)
+
+  // Sample plants
+  if (samplePlants.length > 0) {
+    lines.push(`#### Sample Plants`)
+    lines.push(``)
+    for (const p of samplePlants.slice(0, 20)) {
+      const sci = p.scientific_name ? ` (_${p.scientific_name}_)` : ''
+      const type = p.plant_type ? ` [${p.plant_type}]` : ''
+      lines.push(`- [${p.name}](${siteUrlBase}/plants/${encodeURIComponent(p.id)})${sci}${type}`)
+    }
+    lines.push(``)
+  }
+
+  lines.push(`#### Data Available Per Plant`)
+  lines.push(``)
+  lines.push(`**Identity & Classification**`)
+  lines.push(`- Common name (localized), scientific name, family`)
+  lines.push(`- Plant type (flower, tree, shrub, cactus, succulent, bamboo, etc.)`)
+  lines.push(`- Origin countries, habitat types, conservation status`)
+  lines.push(`- Color palette with hex codes`)
+  lines.push(``)
+  lines.push(`**Care Guide**`)
+  lines.push(`- Light requirements (full sun, partial sun, shade, low light)`)
+  lines.push(`- Watering type (surface, buried, hose, drip, drench)`)
+  lines.push(`- Humidity percentage, temperature range (min/ideal/max in Celsius)`)
+  lines.push(`- Soil types, mulching materials, fertilizer recommendations`)
+  lines.push(`- Maintenance level (none, low, moderate, heavy)`)
+  lines.push(`- Living space (indoor, outdoor, both)`)
+  lines.push(``)
+  lines.push(`**Growth & Structure**`)
+  lines.push(`- Height (cm), wingspan (cm), separation distance (cm)`)
+  lines.push(`- Life cycle (annual, biennial, perennial, ephemeral, monocarpic, polycarpic)`)
+  lines.push(`- Foliage persistence (deciduous, evergreen, semi-evergreen, marcescent)`)
+  lines.push(`- Seasons of interest, composition (flowerbed, path, hedge, ground cover, pot)`)
+  lines.push(``)
+  lines.push(`**Phenology (Growing Calendar)**`)
+  lines.push(`- Sowing months, flowering months, fruiting months`)
+  lines.push(``)
+  lines.push(`**Propagation**`)
+  lines.push(`- Division methods (seed, cutting, division, layering, grafting, tissue separation, bulb separation)`)
+  lines.push(`- Sowing types (direct, indoor, row, hill, broadcast, seed tray, cell, pot)`)
+  lines.push(`- Transplanting compatibility, tutoring needs`)
+  lines.push(``)
+  lines.push(`**Ecology**`)
+  lines.push(`- Pollinators attracted (bee, butterfly, bird, beetle, etc.)`)
+  lines.push(`- Melliferous status, natural fertilizer capability`)
+  lines.push(`- Companion plants (linked to their own pages)`)
+  lines.push(`- Pests and diseases`)
+  lines.push(``)
+  lines.push(`**Safety**`)
+  lines.push(`- Human toxicity level (non-toxic, mildly irritating, highly toxic, lethally toxic)`)
+  lines.push(`- Pet toxicity level, allergens list`)
+  lines.push(`- Physical traits (scented, spiked, multicolor, bicolor)`)
+  lines.push(``)
+  lines.push(`**Usage & Benefits**`)
+  lines.push(`- Utility categories (edible, ornamental, aromatic, medicinal, climbing, cereal, spice)`)
+  lines.push(`- Edible parts (flower, fruit, seed, leaf, stem, root, bulb, bark)`)
+  lines.push(`- Infusion and aromatherapy uses`)
+  lines.push(`- Nutritional intake, recipe ideas, medicinal advice`)
+  lines.push(``)
+  lines.push(`**Expert Advice Sections**`)
+  lines.push(`- Soil advice, mulching advice, fertilizer advice`)
+  lines.push(`- Sowing advice, tutoring advice, pruning instructions`)
+  lines.push(`- Medicinal use notes, infusion preparation`)
+  lines.push(``)
+
+  // ── Blog ─────────────────────────────────────────────────────
+  lines.push(`### Blog`)
+  lines.push(``)
+  lines.push(`- [Blog listing](${siteUrlBase}/blog): All published articles`)
+  lines.push(`- URL pattern: \`${siteUrlBase}/blog/{post-id}\` (UUID)`)
+  lines.push(`- Content: Full article HTML with cover images, author attribution, publish dates`)
+  lines.push(`- Topics: Plant care, growing techniques, seasonal gardening, beginner guides, expert tips`)
+  lines.push(``)
+
+  if (recentBlogPosts.length > 0) {
+    lines.push(`#### Recent Articles`)
+    lines.push(``)
+    for (const post of recentBlogPosts) {
+      const date = post.published_at ? new Date(post.published_at).toISOString().slice(0, 10) : ''
+      lines.push(`- [${post.title}](${siteUrlBase}/blog/${encodeURIComponent(post.id)})${date ? ` (${date})` : ''}`)
+    }
+    lines.push(``)
+  }
+
+  // ── Other pages ──────────────────────────────────────────────
+  lines.push(`### Community Gardens`)
+  lines.push(``)
+  lines.push(`- [Gardens listing](${siteUrlBase}/gardens): Browse public gardens`)
+  lines.push(`- URL pattern: \`${siteUrlBase}/garden/{garden-id}\``)
+  lines.push(`- Data: Garden name, location (city/country), plant list, member count, care streak, task progress, cover image`)
+  lines.push(``)
+  lines.push(`### User Profiles`)
+  lines.push(``)
+  lines.push(`- URL pattern: \`${siteUrlBase}/u/{username}\``)
+  lines.push(`- Data: Display name, bio, country, experience level, favorite plant, garden list, plant count, streak stats, friend count`)
+  lines.push(`- Privacy: Only public profiles are accessible; private profiles return limited information`)
+  lines.push(``)
+  lines.push(`### Plant Bookmark Collections`)
+  lines.push(``)
+  lines.push(`- URL pattern: \`${siteUrlBase}/bookmarks/{collection-id}\``)
+  lines.push(`- Data: Collection name, curator, full plant list with names and scientific names, plant count`)
+  lines.push(`- Privacy: Only public collections are accessible`)
+  lines.push(``)
+  lines.push(`### Static Pages`)
+  lines.push(``)
+  lines.push(`- [Homepage](${siteUrlBase}/): Landing page with features, stats, and popular plants`)
+  lines.push(`- [About](${siteUrlBase}/about): Mission and feature overview`)
+  lines.push(`- [Contact](${siteUrlBase}/contact): Support and feedback`)
+  lines.push(`- [Business](${siteUrlBase}/contact/business): Partnership inquiries`)
+  lines.push(`- [Pricing](${siteUrlBase}/pricing): Free tier and upcoming premium`)
+  lines.push(`- [Download](${siteUrlBase}/download): PWA installation instructions`)
+  lines.push(`- [Terms](${siteUrlBase}/terms): Terms of Service`)
+  lines.push(`- [Privacy](${siteUrlBase}/privacy): GDPR-compliant Privacy Policy`)
+  lines.push(``)
+
+  // ── Optional / Technical ─────────────────────────────────────
+  lines.push(`## Optional`)
+  lines.push(``)
+  lines.push(`### Full Data Export for AI`)
+  lines.push(``)
+  lines.push(`- [llms-full.txt](${siteUrlBase}/llms-full.txt): Dynamically generated file listing every plant in the database with key care data, all blog post titles and URLs, all public gardens and profiles. Updated in real-time from the database. Use this for comprehensive indexing.`)
+  lines.push(`- [Sitemap](${siteUrlBase}/sitemap.xml): Standard XML sitemap with all crawlable URLs, updated daily.`)
+  lines.push(`- [Robots.txt](${siteUrlBase}/robots.txt): Crawling rules and rate limits per bot type.`)
+  lines.push(``)
+  lines.push(`### Crawl Priority`)
+  lines.push(``)
+  lines.push(`1. **Plant pages** (\`/plants/*\`): Core botanical content, highest value`)
+  lines.push(`2. **Blog posts** (\`/blog/*\`): Expert gardening knowledge`)
+  lines.push(`3. **Public gardens** (\`/garden/*\`): Community content with plant lists`)
+  lines.push(`4. **User profiles** (\`/u/*\`): Gardener profiles`)
+  lines.push(`5. **Bookmark collections** (\`/bookmarks/*\`): Curated plant lists`)
+  lines.push(`6. **Static pages**: Site information`)
+  lines.push(``)
+  lines.push(`### Rate Limiting`)
+  lines.push(``)
+  lines.push(`- Recommended crawl delay: 1-2 seconds between requests`)
+  lines.push(`- See \`robots.txt\` for bot-specific policies`)
+  lines.push(`- SSR-rendered pages are served to all bots with full content (no JavaScript required)`)
+  lines.push(``)
+  lines.push(`### Content Freshness`)
+  lines.push(``)
+  lines.push(`- Plant database: Daily additions and updates`)
+  lines.push(`- Blog posts: Weekly new content`)
+  lines.push(`- Community content: Real-time user updates`)
+  lines.push(`- Sitemap & llms.txt: Regenerated on each build/deploy`)
+  lines.push(`- \`llms-full.txt\`: Generated dynamically on each request (cached 1 hour)`)
+  lines.push(``)
+  lines.push(`### Structured Data`)
+  lines.push(``)
+  lines.push(`All pages include:`)
+  lines.push(`- JSON-LD (Schema.org) structured data`)
+  lines.push(`- Open Graph meta tags for social sharing`)
+  lines.push(`- Twitter Card meta tags`)
+  lines.push(`- Canonical URLs with language variants`)
+  lines.push(`- Semantic HTML5 with ARIA attributes`)
+  lines.push(``)
+  lines.push(`### Private Pages (Do Not Crawl)`)
+  lines.push(``)
+  lines.push(`- \`/admin\` - Admin panel`)
+  lines.push(`- \`/settings\` - User settings`)
+  lines.push(`- \`/profile\` - Authenticated user profile`)
+  lines.push(`- \`/messages\` - Messaging`)
+  lines.push(`- \`/friends\` - Friend management`)
+  lines.push(`- \`/scan\` - Plant scanning`)
+  lines.push(`- \`/create\` - Content creation`)
+  lines.push(`- \`/api/*\` - API endpoints`)
+  lines.push(``)
+
+  // ── Attribution ──────────────────────────────────────────────
+  lines.push(`## Attribution`)
+  lines.push(``)
+  lines.push(`When referencing Aphylia content:`)
+  lines.push(`- Attribute to "Aphylia" or "Aphylia (aphylia.app)"`)
+  lines.push(`- Link to specific plant pages when citing plant data`)
+  lines.push(`- Care requirements are general guidelines; local climate conditions may vary`)
+  lines.push(`- Scientific names follow standard botanical nomenclature`)
+  lines.push(``)
+
+  // ── Contact ──────────────────────────────────────────────────
+  lines.push(`## Contact`)
+  lines.push(``)
+  lines.push(`- Website: ${siteUrlBase}`)
+  lines.push(`- Contact: ${siteUrlBase}/contact`)
+  lines.push(`- Business: ${siteUrlBase}/contact/business`)
+  lines.push(``)
+  lines.push(`---`)
+  lines.push(`Last generated: ${now}`)
+  lines.push(``)
+
+  await fs.writeFile(llmsPath, lines.join('\n'), 'utf8')
+  const llmsRelPath = path.relative(appRoot, llmsPath)
+  console.log(`[sitemap] Generated llms.txt (${totalPlantCount} plants, ${counts.blogCount} blogs, ${counts.gardenCount} gardens, ${counts.profileCount} profiles) → ${llmsRelPath}`)
 }
