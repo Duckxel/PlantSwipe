@@ -27107,6 +27107,7 @@ app.get('/sitemap.xml', async (req, res) => {
     { loc: '/search', priority: '0.7', changefreq: 'weekly' },
     { loc: '/contact/business', priority: '0.6', changefreq: 'monthly' },
     { loc: '/terms', priority: '0.3', changefreq: 'yearly' },
+    { loc: '/privacy', priority: '0.3', changefreq: 'yearly' },
   ]
 
   // Build sitemap XML - generate URLs for each language
@@ -29696,6 +29697,52 @@ async function generateCrawlerHtml(req, pagePath) {
             <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
             <a href="/blog">📚 Blog</a>
             <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+          </nav>
+        </article>
+      `
+    }
+
+    // Privacy Policy page
+    else if (effectivePath[0] === 'privacy') {
+      title = `🔒 ${detectedLang === 'fr' ? 'Politique de Confidentialité' : 'Privacy Policy'} | Aphylia`
+      description = detectedLang === 'fr'
+        ? 'Politique de confidentialité d\'Aphylia. Nous respectons votre vie privée et protégeons vos données conformément au RGPD.'
+        : 'Aphylia\'s Privacy Policy. We respect your privacy and protect your data in compliance with GDPR.'
+      pageContent = `
+        <article>
+          <h1>🔒 ${detectedLang === 'fr' ? 'Politique de Confidentialité' : 'Privacy Policy'}</h1>
+          <p>${detectedLang === 'fr'
+            ? 'Aphylia prend la protection de vos données personnelles très au sérieux. Notre politique de confidentialité est conforme au RGPD (Règlement Général sur la Protection des Données) et aux réglementations de la CNIL.'
+            : 'Aphylia takes the protection of your personal data very seriously. Our privacy policy complies with GDPR (General Data Protection Regulation) and CNIL regulations.'}</p>
+          <h2>${detectedLang === 'fr' ? 'Données que nous collectons' : 'Data We Collect'}</h2>
+          <ul>
+            <li>${detectedLang === 'fr' ? 'Informations de compte (email, nom d\'affichage)' : 'Account information (email, display name)'}</li>
+            <li>${detectedLang === 'fr' ? 'Données de jardin (plantes, jardins, tâches d\'entretien)' : 'Garden data (plants, gardens, care tasks)'}</li>
+            <li>${detectedLang === 'fr' ? 'Préférences d\'utilisation (langue, thème)' : 'Usage preferences (language, theme)'}</li>
+          </ul>
+          <h2>${detectedLang === 'fr' ? 'Vos droits' : 'Your Rights'}</h2>
+          <ul>
+            <li>✅ ${detectedLang === 'fr' ? 'Droit d\'accès à vos données' : 'Right to access your data'}</li>
+            <li>✅ ${detectedLang === 'fr' ? 'Droit de rectification' : 'Right to rectification'}</li>
+            <li>✅ ${detectedLang === 'fr' ? 'Droit à l\'effacement' : 'Right to erasure'}</li>
+            <li>✅ ${detectedLang === 'fr' ? 'Droit à la portabilité des données' : 'Right to data portability'}</li>
+            <li>✅ ${detectedLang === 'fr' ? 'Droit d\'opposition' : 'Right to object'}</li>
+          </ul>
+          <h2>${detectedLang === 'fr' ? 'Cookies' : 'Cookies'}</h2>
+          <p>${detectedLang === 'fr'
+            ? 'Nous utilisons uniquement les cookies essentiels par défaut. Les cookies d\'analyse ne sont activés qu\'après votre consentement explicite.'
+            : 'We only use essential cookies by default. Analytics cookies are only enabled after your explicit consent.'}</p>
+          <h2>${detectedLang === 'fr' ? 'Contact' : 'Contact'}</h2>
+          <p>${detectedLang === 'fr'
+            ? 'Pour toute question concernant vos données personnelles, contactez-nous.'
+            : 'For any questions about your personal data, contact us.'}</p>
+          <p><a href="/contact">💬 ${detectedLang === 'fr' ? 'Nous contacter' : 'Contact us'}</a></p>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Liens Utiles' : 'Useful Links'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/contact">💬 Contact</a>
           </nav>
         </article>
       `
