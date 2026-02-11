@@ -1671,7 +1671,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     })
     try {
       const result = await fetchExternalPlantImages(trimmedName, {
-        limit: 20,
         callbacks: {
           onSourceStart: (source) => {
             setExternalImageSources((prev) => ({

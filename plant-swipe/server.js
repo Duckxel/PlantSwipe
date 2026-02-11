@@ -4526,11 +4526,13 @@ app.post('/api/admin/images/gbif', async (req, res) => {
     }
     const occData = await occResp.json()
 
-    // Extract image URLs from occurrence media
+    // Extract image URLs from occurrence media (capped to limit)
     const images = []
     const seenUrls = new Set()
     for (const result of (occData.results || [])) {
+      if (images.length >= limit) break
       for (const media of (result.media || [])) {
+        if (images.length >= limit) break
         if (media.type !== 'StillImage') continue
         const url = media.identifier
         if (!url || seenUrls.has(url)) continue
@@ -4607,10 +4609,11 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
     const searchData = await searchResp.json()
     const searchRows = searchData?.response?.rows || []
 
-    // Extract image URLs from Smithsonian results
+    // Extract image URLs from Smithsonian results (capped to rows limit)
     const images = []
     const seenUrls = new Set()
     for (const row of searchRows) {
+      if (images.length >= rows) break
       const content = row.content || {}
       const desc = content.descriptiveNonRepeating || {}
       const onlineMedia = desc.online_media || {}
@@ -4618,6 +4621,7 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
       const title = row.title || desc.title?.content || ''
 
       for (const media of mediaList) {
+        if (images.length >= rows) break
         if (media.type !== 'Images') continue
         const resources = media.resources || []
 
@@ -4788,7 +4792,9 @@ app.post('/api/admin/images/external', async (req, res) => {
           const occData = await occResp.json()
           const seenUrls = new Set()
           for (const result of (occData.results || [])) {
+            if (results.gbif.length >= limit) break
             for (const media of (result.media || [])) {
+              if (results.gbif.length >= limit) break
               if (media.type !== 'StillImage') continue
               const url = media.identifier
               if (!url || seenUrls.has(url)) continue
@@ -4820,11 +4826,13 @@ app.post('/api/admin/images/external', async (req, res) => {
           const searchRows = searchData?.response?.rows || []
           const seenUrls = new Set()
           for (const row of searchRows) {
+            if (results.smithsonian.length >= limit) break
             const content = row.content || {}
             const desc = content.descriptiveNonRepeating || {}
             const onlineMedia = desc.online_media || {}
             const mediaList = onlineMedia.media || []
             for (const media of mediaList) {
+              if (results.smithsonian.length >= limit) break
               if (media.type !== 'Images') continue
               const resources = media.resources || []
               let bestUrl = null

@@ -133,9 +133,11 @@ export async function fetchExternalPlantImages(
   if (!plantName.trim()) return empty
 
   const headers = await buildAuthHeaders()
-  const limit = options?.limit ?? 12
   const signal = options?.signal
   const { onSourceStart, onSourceDone } = options?.callbacks || {}
+
+  // Hard cap: never add more than this many images total across all sources
+  const MAX_TOTAL_IMAGES = 15
 
   const allImages: ExternalImage[] = []
   const counts: Record<ExternalImageSource, number> = {
@@ -145,33 +147,48 @@ export async function fetchExternalPlantImages(
   }
   const errors: string[] = []
 
-  // Limits per source: SerpAPI gets 5, others get the full limit
+  // Per-source limits (kept small to avoid flooding the page)
   const sourceLimits: Record<ExternalImageSource, number> = {
     serpapi: 5,
-    gbif: limit,
-    smithsonian: limit,
+    gbif: 8,
+    smithsonian: 5,
   }
 
   for (const { key, label } of IMAGE_SOURCES) {
     if (signal?.aborted) break
+    // Stop if we already have enough images
+    if (allImages.length >= MAX_TOTAL_IMAGES) {
+      onSourceDone?.({
+        source: key,
+        label,
+        images: [],
+        status: "done",
+      })
+      continue
+    }
 
     onSourceStart?.(key)
 
     try {
+      // Ask the server for up to the source limit, but we may cap locally
+      const remaining = MAX_TOTAL_IMAGES - allImages.length
+      const askLimit = Math.min(sourceLimits[key], remaining)
       const images = await fetchFromSource(
         key,
         plantName,
-        sourceLimits[key],
+        askLimit,
         headers,
         signal
       )
-      counts[key] = images.length
-      allImages.push(...images)
+      // Cap locally in case server returns more than asked
+      const capped = images.slice(0, MAX_TOTAL_IMAGES - allImages.length)
+      counts[key] = capped.length
+      allImages.push(...capped)
 
       onSourceDone?.({
         source: key,
         label,
-        images,
+        images: capped,
         status: "done",
       })
 

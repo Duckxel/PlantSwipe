@@ -616,7 +616,6 @@ export async function processPlantRequest(
     
     try {
       const externalResult = await fetchExternalPlantImages(englishPlantName, {
-        limit: 20,
         signal,
         callbacks: {
           onSourceStart: onImageSourceStart,
