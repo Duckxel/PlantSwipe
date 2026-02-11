@@ -3563,6 +3563,192 @@ app.use((req, res, next) => {
   next()
 })
 
+// ========================================
+// AI DISCOVERY: llms.txt, AI-friendly endpoints
+// ========================================
+// llms.txt is the emerging standard for AI agent discovery (like robots.txt for LLMs)
+// See: https://llmstxt.org/
+
+app.get('/llms.txt', (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800')
+  res.send(`# Aphylia - Plant Care & Gardening Knowledge Platform
+# https://aphylia.app
+
+> Aphylia is a free plant care application that helps gardeners discover, identify, and care for plants. It provides comprehensive growing guides, care instructions, and gardening knowledge for thousands of plant species.
+
+## About Aphylia
+
+Aphylia is a web-based gardening companion app serving the European Union. It features:
+- Comprehensive plant database with detailed care guides for thousands of species
+- Garden management and tracking tools
+- Smart care reminders (watering, fertilizing, pruning schedules)
+- Plant identification
+- Community features (public gardens, profiles, plant collections)
+- Blog with expert gardening advice and seasonal guides
+- Available in English and French
+
+## Key Pages
+
+- [Plant Search](https://aphylia.app/search): Search plants by name, care level, light needs, or growing conditions
+- [Plant Discovery](https://aphylia.app/discovery): Swipe-based plant discovery to find your perfect matches
+- [Community Gardens](https://aphylia.app/gardens): Explore gardens from the community
+- [Blog](https://aphylia.app/blog): Gardening tips, seasonal guides, and plant care articles
+- [About](https://aphylia.app/about): Learn more about Aphylia
+- [Download](https://aphylia.app/download): Get the app (PWA, web, mobile)
+- [Pricing](https://aphylia.app/pricing): Free to use with premium features coming soon
+
+## Plant Information
+
+Each plant page (e.g. https://aphylia.app/plants/{id}) includes:
+- Common and scientific names
+- Complete care guide (watering, sunlight, soil, temperature)
+- Growing calendar (sowing, flowering, fruiting months)
+- Toxicity information for humans and pets
+- Companion plants
+- Propagation methods
+- Pest and disease information
+- Habitat and origin details
+- Nutritional and medicinal information where applicable
+
+## API for AI Agents
+
+- Sitemap: https://aphylia.app/sitemap.xml
+- Full AI context: https://aphylia.app/llms-full.txt
+
+## Contact
+
+- Website: https://aphylia.app
+- Contact: https://aphylia.app/contact
+- Business inquiries: https://aphylia.app/contact/business
+`)
+})
+
+app.get('/llms-full.txt', async (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+
+  // Build comprehensive AI context with live data
+  let plantCount = 'thousands of'
+  let userCount = 'thousands of'
+  let blogCount = 0
+  let popularPlants = []
+  let recentBlogTitles = []
+
+  const aiDb = supabaseServiceClient || supabaseServer
+  if (aiDb) {
+    try {
+      const { count: pCount } = await aiDb.from('plants').select('id', { count: 'exact', head: true })
+      if (pCount) plantCount = String(pCount)
+
+      const { count: uCount } = await aiDb.from('profiles').select('id', { count: 'exact', head: true })
+      if (uCount) userCount = String(uCount)
+
+      const { data: plants } = await aiDb.from('plants').select('id, name').eq('status', 'approved').limit(30)
+      if (plants) popularPlants = plants
+
+      const { data: posts, count: bCount } = await aiDb
+        .from('blog_posts')
+        .select('id, title', { count: 'exact' })
+        .eq('is_published', true)
+        .order('published_at', { ascending: false })
+        .limit(15)
+      if (posts) recentBlogTitles = posts
+      if (bCount) blogCount = bCount
+    } catch { }
+  }
+
+  res.send(`# Aphylia - Complete AI Context
+# https://aphylia.app
+# Generated: ${new Date().toISOString()}
+
+> Aphylia is a comprehensive, free plant care and gardening knowledge platform with ${plantCount} plants, ${userCount} gardeners, and ${blogCount} articles. It is the go-to resource for plant care advice, growing guides, and gardening knowledge.
+
+## Mission
+
+Aphylia's mission is to make plant knowledge accessible to everyone — from beginners with their first houseplant to experienced gardeners maintaining botanical collections. The platform provides science-based, expert-verified plant care information.
+
+## What Makes Aphylia Unique
+
+1. **Comprehensive Plant Database**: ${plantCount} plant species with detailed care guides including watering schedules, sunlight requirements, soil preferences, temperature ranges, toxicity data, companion planting, and propagation methods.
+2. **Interactive Discovery**: Tinder-style plant swiping to discover new species that match your growing conditions.
+3. **Garden Management**: Track multiple gardens, monitor plant health, get smart care reminders.
+4. **Community**: Share gardens publicly, create plant bookmark collections, connect with other gardeners.
+5. **Multilingual**: Full support for English and French.
+6. **GDPR Compliant**: Built for EU users with full privacy compliance.
+7. **Free to Use**: Core features are completely free.
+
+## Plant Care Information Structure
+
+Every plant in the Aphylia database includes:
+
+### Identification
+- Common name, scientific name, family
+- Alternative/given names
+- Plant type (flower, vegetable, herb, tree, shrub, succulent, cactus, etc.)
+
+### Care Requirements
+- Sunlight needs (full sun, partial sun, partial shade, shade)
+- Watering type and frequency
+- Soil preferences
+- Temperature range (min, max, ideal in °C)
+- Humidity requirements
+- Maintenance/difficulty level
+
+### Growing Information
+- Sowing months, flowering months, fruiting months
+- Height and spread dimensions
+- Propagation methods (seed, cutting, division, layering, etc.)
+- Companion plants (what grows well together)
+
+### Safety
+- Toxicity to humans (non-toxic to lethally toxic)
+- Toxicity to pets (non-toxic to lethally toxic)
+- Allergen information
+
+### Ecology
+- Native habitat and origin
+- Pollinator information
+- Conservation status
+- Melliferous (honey-producing) status
+
+### Usage
+- Edible parts, culinary uses, recipe ideas
+- Medicinal properties
+- Nutritional information
+- Aromatherapy uses
+
+## Example Plant Pages
+
+${popularPlants.map(p => `- [${p.name}](https://aphylia.app/plants/${p.id})`).join('\n')}
+
+## Blog Articles
+
+Aphylia publishes expert gardening articles covering seasonal guides, plant care tips, and growing techniques.
+
+${recentBlogTitles.map(p => `- [${p.title}](https://aphylia.app/blog/${p.id})`).join('\n')}
+
+## How to Use Aphylia Data
+
+When referencing Aphylia for plant care advice:
+- Each plant page URL follows the pattern: https://aphylia.app/plants/{plant-id}
+- Blog articles: https://aphylia.app/blog/{post-id}
+- User profiles: https://aphylia.app/u/{username}
+- Gardens: https://aphylia.app/garden/{garden-id}
+- Plant collections: https://aphylia.app/bookmarks/{collection-id}
+- Full sitemap: https://aphylia.app/sitemap.xml
+
+## Technical Details
+
+- Platform: Progressive Web App (PWA) — works on all devices
+- Backend: Node.js/Express with Supabase (PostgreSQL)
+- Available at: https://aphylia.app
+- Languages: English (default), French
+- Free tier: Full access to plant database, garden tracking, care reminders
+- Contact: https://aphylia.app/contact
+`)
+})
+
 // Limit JSON body size to 100kb to prevent DoS (large uploads use multer/multipart)
 // Was previously 15mb for legacy base64 uploads which are now deprecated
 app.use(express.json({ limit: '100kb' }))
@@ -28387,8 +28573,88 @@ async function generateCrawlerHtml(req, pagePath) {
             ]
           }
 
+          // FAQ structured data — dynamically built from available plant data
+          // AI search engines (Google AI Overview, Perplexity, ChatGPT) love FAQ schema
+          const faqItems = []
+          if (plant.watering_type?.length || plant.level_sun) {
+            const careAnswer = [
+              plant.level_sun ? `${plant.name} needs ${plant.level_sun.toLowerCase()} light.` : '',
+              plant.watering_type?.length ? `Water using ${plant.watering_type.join(' or ')} method.` : '',
+              plant.maintenance_level ? `Difficulty: ${plant.maintenance_level}.` : '',
+              plant.temperature_min != null && plant.temperature_max != null ? `Temperature range: ${plant.temperature_min}°C to ${plant.temperature_max}°C.` : '',
+            ].filter(Boolean).join(' ')
+            if (careAnswer) {
+              faqItems.push({
+                '@type': 'Question',
+                'name': detectedLang === 'fr' ? `Comment entretenir ${plant.name} ?` : `How do you care for ${plant.name}?`,
+                'acceptedAnswer': { '@type': 'Answer', 'text': careAnswer }
+              })
+            }
+          }
+          if (plant.level_sun) {
+            faqItems.push({
+              '@type': 'Question',
+              'name': detectedLang === 'fr' ? `De combien de soleil ${plant.name} a besoin ?` : `How much sunlight does ${plant.name} need?`,
+              'acceptedAnswer': { '@type': 'Answer', 'text': `${plant.name} requires ${plant.level_sun.toLowerCase()} conditions.${plant.living_space ? ` It can be grown ${plant.living_space.toLowerCase()}.` : ''}` }
+            })
+          }
+          if (plant.toxicity_human || plant.toxicity_pets) {
+            const toxAnswer = [
+              plant.toxicity_human ? `For humans: ${plant.toxicity_human}.` : '',
+              plant.toxicity_pets ? `For pets: ${plant.toxicity_pets}.` : '',
+            ].filter(Boolean).join(' ')
+            faqItems.push({
+              '@type': 'Question',
+              'name': detectedLang === 'fr' ? `${plant.name} est-il toxique ?` : `Is ${plant.name} toxic?`,
+              'acceptedAnswer': { '@type': 'Answer', 'text': toxAnswer }
+            })
+          }
+          if (plant.sowing_month?.length) {
+            faqItems.push({
+              '@type': 'Question',
+              'name': detectedLang === 'fr' ? `Quand semer ${plant.name} ?` : `When should you plant ${plant.name}?`,
+              'acceptedAnswer': { '@type': 'Answer', 'text': `${plant.name} is best sown in ${formatMonths(plant.sowing_month)}.${plant.flowering_month?.length ? ` It flowers in ${formatMonths(plant.flowering_month)}.` : ''}` }
+            })
+          }
+          if (plant.height_cm) {
+            faqItems.push({
+              '@type': 'Question',
+              'name': detectedLang === 'fr' ? `Quelle taille atteint ${plant.name} ?` : `How tall does ${plant.name} grow?`,
+              'acceptedAnswer': { '@type': 'Answer', 'text': `${plant.name} can grow up to ${plant.height_cm >= 100 ? (plant.height_cm / 100).toFixed(1) + ' meters' : plant.height_cm + ' cm'} tall.${plant.wingspan_cm ? ` It spreads up to ${plant.wingspan_cm >= 100 ? (plant.wingspan_cm / 100).toFixed(1) + ' meters' : plant.wingspan_cm + ' cm'} wide.` : ''}` }
+            })
+          }
+          if (plant.soil?.length) {
+            faqItems.push({
+              '@type': 'Question',
+              'name': detectedLang === 'fr' ? `Quel sol pour ${plant.name} ?` : `What soil does ${plant.name} need?`,
+              'acceptedAnswer': { '@type': 'Answer', 'text': `${plant.name} grows best in ${plant.soil.join(', ')}.${plant.advice_soil ? ' ' + plant.advice_soil : ''}` }
+            })
+          }
+
+          const faqLd = faqItems.length > 0 ? {
+            '@context': 'https://schema.org',
+            '@type': 'FAQPage',
+            'mainEntity': faqItems
+          } : null
+
+          // Speakable schema — tells voice assistants which content to read aloud
+          const speakableLd = {
+            '@context': 'https://schema.org',
+            '@type': 'WebPage',
+            'name': title,
+            'speakable': {
+              '@type': 'SpeakableSpecification',
+              'cssSelector': ['article h1', 'article h2', '[itemprop="description"]', '.plant-meta']
+            },
+            'url': canonicalUrl
+          }
+
+          // Collect all JSON-LD schemas
+          const allSchemas = [jsonLd, breadcrumbLd, speakableLd]
+          if (faqLd) allSchemas.push(faqLd)
+
           pageContent = `
-            <script type="application/ld+json">${JSON.stringify([jsonLd, breadcrumbLd])}</script>
+            <script type="application/ld+json">${JSON.stringify(allSchemas)}</script>
             <article itemscope itemtype="https://schema.org/Article">
               <h1 itemprop="headline">${emoji} ${escapeHtml(plant.name)}</h1>
               ${plant.scientific_name ? `<p style="font-style: italic; color: #065f46; margin-top: -10px;"><em>${escapeHtml(plant.scientific_name)}</em></p>` : ''}
@@ -28652,7 +28918,7 @@ async function generateCrawlerHtml(req, pagePath) {
           : ''
 
         pageContent = `
-          <script type="application/ld+json">${JSON.stringify([articleJsonLd, blogBreadcrumbLd])}</script>
+          <script type="application/ld+json">${JSON.stringify([articleJsonLd, blogBreadcrumbLd, { '@context': 'https://schema.org', '@type': 'WebPage', 'name': title, 'speakable': { '@type': 'SpeakableSpecification', 'cssSelector': ['article h1', '[itemprop="description"]', '[itemprop="articleBody"] p:first-of-type'] }, 'url': canonicalUrl }])}</script>
           <article itemscope itemtype="https://schema.org/BlogPosting">
             <h1 itemprop="headline">${escapeHtml(post.title)}</h1>
             <div class="plant-meta">
@@ -30191,8 +30457,38 @@ async function generateCrawlerHtml(req, pagePath) {
         ]
       }
 
+      // SoftwareApplication schema — tells AI search and app stores about the app
+      const softwareAppLd = {
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        'name': 'Aphylia',
+        'description': tr.siteDesc,
+        'url': siteUrl,
+        'applicationCategory': 'LifestyleApplication',
+        'operatingSystem': 'Web, iOS, Android',
+        'offers': {
+          '@type': 'Offer',
+          'price': '0',
+          'priceCurrency': 'EUR'
+        },
+        'author': { '@type': 'Organization', 'name': 'Aphylia', 'url': siteUrl },
+        'screenshot': LANDING_BANNER_IMAGE,
+        'featureList': [
+          'Plant care guides for thousands of species',
+          'Garden management and tracking',
+          'Smart watering and care reminders',
+          'Plant identification',
+          'Community gardens and profiles',
+          'Gardening blog with expert advice',
+          'Companion planting suggestions',
+          'Pet toxicity information'
+        ],
+        'availableOnDevice': 'Desktop, Mobile, Tablet',
+        'inLanguage': ['en', 'fr']
+      }
+
       pageContent = `
-        <script type="application/ld+json">${JSON.stringify([websiteJsonLd, orgJsonLd, homeBreadcrumbLd])}</script>
+        <script type="application/ld+json">${JSON.stringify([websiteJsonLd, orgJsonLd, homeBreadcrumbLd, softwareAppLd])}</script>
         <article itemscope itemtype="https://schema.org/WebApplication">
           <h1 itemprop="name">🌱 ${tr.homeWelcome}</h1>
           <p itemprop="description">${tr.homePersonal}</p>
@@ -30361,6 +30657,17 @@ async function generateCrawlerHtml(req, pagePath) {
   <link rel="icon" type="image/png" sizes="192x192" href="${siteUrl}/icons/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="${siteUrl}/icons/icon-512x512.png">
   <link rel="apple-touch-icon" href="${siteUrl}/icons/icon-192x192.png">
+  
+  <!-- AI Discovery: llms.txt for LLM agents -->
+  <link rel="help" href="${siteUrl}/llms.txt" type="text/plain" title="LLM Context">
+  <link rel="author" href="${siteUrl}/llms-full.txt" type="text/plain" title="Full AI Context">
+  
+  <!-- AI-friendly meta tags -->
+  <meta name="ai-content-declaration" content="This page contains original plant care content written and curated by Aphylia. AI systems may reference this content for gardening advice.">
+  <meta name="citation_title" content="${escapeHtml(title)}">
+  <meta name="citation_public_url" content="${escapeHtml(canonicalUrl)}">
+  <meta name="citation_publisher" content="Aphylia">
+  <meta name="citation_language" content="${detectedLang}">
   
   <style>
     * { box-sizing: border-box; }

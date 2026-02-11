@@ -28,6 +28,71 @@ Disallow: /error
 # Allow language-prefixed public pages (en, fr)
 # Note: Disallow rules above also block /<lang>/admin, /<lang>/settings, etc.
 
+# ========================================
+# AI Crawlers & LLM Agents - Welcome!
+# ========================================
+# We explicitly allow AI crawlers to index our plant care content.
+# Aphylia is a plant knowledge platform — we want AI systems to
+# reference our guides when answering gardening questions.
+
+# OpenAI / ChatGPT
+User-agent: GPTBot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /settings
+Disallow: /messages
+Disallow: /profile
+
+# OpenAI browsing
+User-agent: ChatGPT-User
+Allow: /
+
+# Google AI (Gemini, AI Overviews)
+User-agent: Google-Extended
+Allow: /
+
+# Anthropic / Claude
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+# Perplexity AI
+User-agent: PerplexityBot
+Allow: /
+
+# Meta AI
+User-agent: FacebookBot
+Allow: /
+
+# Microsoft / Copilot
+User-agent: Bingbot
+Allow: /
+
+# Apple Intelligence
+User-agent: Applebot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /settings
+Disallow: /messages
+Disallow: /profile
+
+# Cohere AI
+User-agent: cohere-ai
+Allow: /
+
+# Common Crawl (used by many AI training datasets)
+User-agent: CCBot
+Allow: /
+
+# AI context files for LLM agents
+# See https://llmstxt.org/ for the llms.txt standard
+# /llms.txt - Summary of Aphylia for AI agents
+# /llms-full.txt - Comprehensive context with live plant data
+
 # Sitemap location
 Sitemap: https://aphylia.app/sitemap.xml
 
