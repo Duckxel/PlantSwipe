@@ -21,9 +21,9 @@ import {
   Leaf,
   Home,
   Bookmark,
-  Download
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import type { Message } from '@/types/messaging'
 import { COMMON_REACTIONS } from '@/types/messaging'
 import { isImageMessage, parseImageMessage, extractInternalLinks } from '@/lib/messaging'
@@ -66,7 +66,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [isEditing, setIsEditing] = React.useState(false)
   const [editContent, setEditContent] = React.useState(message.content)
   const [imageLoaded, setImageLoaded] = React.useState(false)
-  const [imageFullscreen, setImageFullscreen] = React.useState(false)
+  const imageViewer = useImageViewer()
   
   const menuRef = React.useRef<HTMLDivElement>(null)
   const reactionsRef = React.useRef<HTMLDivElement>(null)
@@ -289,7 +289,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   ? 'bg-blue-500 rounded-br-md'
                   : 'bg-stone-100 dark:bg-[#2a2a2d] rounded-bl-md'
               )}
-              onClick={() => setImageFullscreen(true)}
+              onClick={() => imageViewer.open(imageData.imageUrl, imageData.caption || undefined)}
             >
               <img
                 src={imageData.imageUrl}
@@ -530,37 +530,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       </div>
       
       {/* Fullscreen image viewer */}
-      {imageFullscreen && imageData && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
-          onClick={() => setImageFullscreen(false)}
-        >
-          <button
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-            onClick={() => setImageFullscreen(false)}
-          >
-            <X className="h-6 w-6" />
-          </button>
-          <button
-            className="absolute top-4 left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-            onClick={(e) => {
-              e.stopPropagation()
-              const link = document.createElement('a')
-              link.href = imageData.imageUrl
-              link.download = 'image.jpg'
-              link.click()
-            }}
-          >
-            <Download className="h-6 w-6" />
-          </button>
-          <img
-            src={imageData.imageUrl}
-            alt=""
-            className="max-w-full max-h-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ImageViewer
+        {...imageViewer.props}
+        enableZoom
+        enableDownload
+      />
     </>
   )
 }

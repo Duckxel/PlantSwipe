@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import type { Plant, PlantWateringSchedule } from "@/types/plant"
 import { useTranslation } from "react-i18next"
 import {
@@ -10,13 +9,10 @@ import {
     Thermometer,
     ChevronLeft,
     ChevronRight,
-    X,
-    ZoomIn,
-    ZoomOut,
-    RefreshCw,
     Droplet,
     Wrench,
   } from "lucide-react"
+import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer"
 
 interface PlantDetailsProps {
   plant: Plant
@@ -35,11 +31,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   const images = (plant.images || []).filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const activeImage = images[activeImageIndex] || null
-  const [viewerOpen, setViewerOpen] = useState(false)
-  const [viewerZoom, setViewerZoom] = useState(1)
-  const [viewerOffset, setViewerOffset] = useState({ x: 0, y: 0 })
-  const [isPanning, setIsPanning] = useState(false)
-  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const imageViewer = useImageViewer()
   const touchStartRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -89,75 +81,10 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   )
 
   const openViewer = useCallback(() => {
-    if (!activeImage) return
-    setViewerOpen(true)
-  }, [activeImage])
-
-  const closeViewer = useCallback(() => {
-    setViewerOpen(false)
-  }, [])
-
-  const adjustZoom = useCallback((delta: number) => {
-    setViewerZoom((prev) => Math.min(4, Math.max(1, parseFloat((prev + delta).toFixed(2)))))
-  }, [])
-
-  const resetViewer = useCallback(() => {
-    setViewerZoom(1)
-    setViewerOffset({ x: 0, y: 0 })
-  }, [])
-
-  const handleViewerWheel = useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      adjustZoom(event.deltaY < 0 ? 0.15 : -0.15)
-    },
-    [adjustZoom],
-  )
-
-  const handleViewerPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      setIsPanning(true)
-      event.currentTarget.setPointerCapture(event.pointerId)
-      panStartRef.current = { x: event.clientX - viewerOffset.x, y: event.clientY - viewerOffset.y }
-    },
-    [viewerOffset.x, viewerOffset.y],
-  )
-
-  const handleViewerPointerMove = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!isPanning) return
-      setViewerOffset({
-        x: event.clientX - panStartRef.current.x,
-        y: event.clientY - panStartRef.current.y,
-      })
-    },
-    [isPanning],
-  )
-
-  const handleViewerPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    setIsPanning(false)
-  }, [])
-
-  useEffect(() => {
-    if (!viewerOpen) {
-      setViewerZoom(1)
-      setViewerOffset({ x: 0, y: 0 })
-      setIsPanning(false)
-      return
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        setViewerOpen(false)
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [viewerOpen])
+    if (!images.length) return
+    const viewerImages = images.map((img) => ({ src: img.link, alt: plant.name }))
+    imageViewer.openGallery(viewerImages, activeImageIndex)
+  }, [images, activeImageIndex, plant.name, imageViewer])
 
   const utilityBadges = plant.utility?.length ? plant.utility : []
   const seasons = plant.identity?.season || plant.seasons || []
@@ -385,32 +312,11 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
           </div>
         )}
 
-      {viewerOpen && activeImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={closeViewer}>
-          <button type="button" className="absolute top-6 right-6 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" onClick={(event) => { event.stopPropagation(); closeViewer() }} aria-label="Close image viewer">
-            <X className="h-5 w-5" />
-          </button>
-          <div className="flex h-full w-full max-w-5xl flex-col items-center justify-center px-4" onClick={(event) => event.stopPropagation()}>
-            <div className="relative max-h-[80vh] w-full overflow-hidden rounded-2xl border border-white/10 bg-black/60" onWheel={handleViewerWheel} onPointerDown={handleViewerPointerDown} onPointerMove={handleViewerPointerMove} onPointerUp={handleViewerPointerUp} onPointerLeave={handleViewerPointerUp}>
-              <img src={activeImage.link} alt={plant.name} draggable={false} className="h-full w-full select-none object-contain" style={{ transform: `translate(${viewerOffset.x}px, ${viewerOffset.y}px) scale(${viewerZoom})`, cursor: isPanning ? "grabbing" : viewerZoom > 1 ? "grab" : "zoom-in", transition: isPanning ? "none" : "transform 0.2s ease-out" }} />
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-3 text-white">
-              <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); adjustZoom(0.2) }}>
-                <ZoomIn className="mr-1 h-4 w-4" />
-                {t('plantDetails.viewer.zoomIn')}
-              </Button>
-              <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); adjustZoom(-0.2) }}>
-                <ZoomOut className="mr-1 h-4 w-4" />
-                {t('plantDetails.viewer.zoomOut')}
-              </Button>
-              <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); resetViewer() }}>
-                <RefreshCw className="mr-1 h-4 w-4" />
-                {t('plantDetails.viewer.reset')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ImageViewer
+        {...imageViewer.props}
+        enableZoom
+        title={t('plantDetails.viewer.title', { defaultValue: 'Plant image viewer' })}
+      />
     </div>
   )
 }

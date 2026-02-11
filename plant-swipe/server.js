@@ -1411,6 +1411,122 @@ setInterval(() => {
 // END RATE LIMITING SYSTEM
 // =============================================================================
 
+// =============================================================================
+// DEEPL API CONCURRENCY QUEUE & RETRY
+// =============================================================================
+// DeepL Pro still enforces rate limits on concurrent requests.
+// This queue ensures we never send more than N concurrent requests to DeepL
+// and retries with exponential backoff when DeepL returns 429.
+// =============================================================================
+
+/**
+ * DeepL request queue – limits concurrency and retries on 429
+ */
+const DEEPL_MAX_CONCURRENT = 3        // Max concurrent requests to DeepL
+const DEEPL_MAX_RETRIES = 5           // Max retries on 429
+const DEEPL_BASE_DELAY_MS = 1500      // Initial backoff delay (ms)
+const DEEPL_MIN_REQUEST_GAP_MS = 200  // Minimum gap between requests to DeepL
+
+let deeplActiveRequests = 0
+let deeplLastRequestTime = 0
+const deeplQueue = []                 // Queue of { resolve, reject, fn }
+
+/**
+ * Process the next item in the DeepL queue if we have capacity
+ */
+function processDeeplQueue() {
+  while (deeplQueue.length > 0 && deeplActiveRequests < DEEPL_MAX_CONCURRENT) {
+    const item = deeplQueue.shift()
+    if (!item) break
+    
+    deeplActiveRequests++
+    
+    // Ensure minimum gap between requests
+    const now = Date.now()
+    const timeSinceLast = now - deeplLastRequestTime
+    const delay = Math.max(0, DEEPL_MIN_REQUEST_GAP_MS - timeSinceLast)
+    
+    const execute = async () => {
+      if (delay > 0) {
+        await new Promise(r => setTimeout(r, delay))
+      }
+      deeplLastRequestTime = Date.now()
+      try {
+        const result = await item.fn()
+        item.resolve(result)
+      } catch (err) {
+        item.reject(err)
+      } finally {
+        deeplActiveRequests--
+        processDeeplQueue()
+      }
+    }
+    
+    execute()
+  }
+}
+
+/**
+ * Enqueue a DeepL API call with concurrency control
+ * @param {Function} fn - Async function that makes the actual DeepL fetch
+ * @returns {Promise} - Resolves with the fetch Response
+ */
+function enqueueDeeplRequest(fn) {
+  return new Promise((resolve, reject) => {
+    deeplQueue.push({ resolve, reject, fn })
+    processDeeplQueue()
+  })
+}
+
+/**
+ * Make a DeepL API request with automatic retry on 429 and concurrency control.
+ * @param {string} deeplUrl - The DeepL API URL
+ * @param {object} fetchOptions - Options for fetch (method, headers, body)
+ * @param {string} logPrefix - Logging prefix for this request type
+ * @returns {Promise<Response>} - The successful DeepL response
+ */
+async function deeplFetchWithRetry(deeplUrl, fetchOptions, logPrefix = '[deepl]') {
+  let lastError = null
+  
+  for (let attempt = 0; attempt <= DEEPL_MAX_RETRIES; attempt++) {
+    try {
+      // Enqueue the actual fetch call to respect concurrency limits
+      const response = await enqueueDeeplRequest(() => fetch(deeplUrl, fetchOptions))
+      
+      // If rate limited by DeepL, wait and retry
+      if (response.status === 429 && attempt < DEEPL_MAX_RETRIES) {
+        // Check for Retry-After header from DeepL
+        const retryAfter = response.headers.get('retry-after')
+        let delay
+        if (retryAfter && !isNaN(Number(retryAfter))) {
+          delay = Number(retryAfter) * 1000 // Retry-After is in seconds
+        } else {
+          delay = DEEPL_BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500
+        }
+        console.warn(`${logPrefix} DeepL 429 rate limited, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${DEEPL_MAX_RETRIES})`)
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+      
+      return response
+    } catch (err) {
+      lastError = err
+      if (attempt < DEEPL_MAX_RETRIES) {
+        const delay = DEEPL_BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500
+        console.warn(`${logPrefix} Network error, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${DEEPL_MAX_RETRIES}):`, err.message)
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+    }
+  }
+  
+  throw lastError || new Error('DeepL request failed after retries')
+}
+
+// =============================================================================
+// END DEEPL CONCURRENCY QUEUE
+// =============================================================================
+
 const vapidPublicKey =
   process.env.VAPID_PUBLIC_KEY ||
   process.env.WEB_PUSH_PUBLIC_KEY ||
@@ -15451,7 +15567,7 @@ app.post('/api/translate', async (req, res) => {
     // Use DeepL API (Pro: https://api.deepl.com)
     const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
 
-    const response = await fetch(deeplUrl, {
+    const response = await deeplFetchWithRetry(deeplUrl, {
       method: 'POST',
       headers: {
         'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
@@ -15462,7 +15578,7 @@ app.post('/api/translate', async (req, res) => {
         source_lang: source_lang.toUpperCase(),
         target_lang: target_lang.toUpperCase(),
       }),
-    })
+    }, '[translate]')
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -15537,14 +15653,14 @@ app.post('/api/translate-batch', async (req, res) => {
     params.append('source_lang', source_lang.toUpperCase())
     params.append('target_lang', target_lang.toUpperCase())
 
-    const response = await fetch(deeplUrl, {
+    const response = await deeplFetchWithRetry(deeplUrl, {
       method: 'POST',
       headers: {
         'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: params,
-    })
+    }, '[translate-batch]')
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -15596,7 +15712,7 @@ app.post('/api/detect-language', async (req, res) => {
 
     // DeepL detects source language when source_lang is omitted
     // We translate to EN as a dummy target just to get the detection
-    const response = await fetch(deeplUrl, {
+    const response = await deeplFetchWithRetry(deeplUrl, {
       method: 'POST',
       headers: {
         'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
@@ -15606,7 +15722,7 @@ app.post('/api/detect-language', async (req, res) => {
         text: text.substring(0, 500), // Use first 500 chars for detection efficiency
         target_lang: 'EN', // Dummy target, we just want the detection
       }),
-    })
+    }, '[detect-language]')
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -15656,7 +15772,7 @@ app.post('/api/translate-detect', async (req, res) => {
     const deeplUrl = process.env.DEEPL_API_URL || 'https://api.deepl.com/v2/translate'
 
     // Omit source_lang to let DeepL auto-detect
-    const response = await fetch(deeplUrl, {
+    const response = await deeplFetchWithRetry(deeplUrl, {
       method: 'POST',
       headers: {
         'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
@@ -15666,7 +15782,7 @@ app.post('/api/translate-detect', async (req, res) => {
         text: text,
         target_lang: target_lang.toUpperCase(),
       }),
-    })
+    }, '[translate-detect]')
 
     if (!response.ok) {
       const errorText = await response.text()
