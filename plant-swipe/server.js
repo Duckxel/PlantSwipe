@@ -27241,10 +27241,10 @@ ${alternateLinks(page.loc)}
   const sitemapDb = supabaseServiceClient || supabaseServer
   if (sitemapDb) {
     try {
-      // Recent blog posts (with lastmod)
+      // Recent blog posts (with lastmod) — linked by ID, not slug
       const { data: posts } = await sitemapDb
         .from('blog_posts')
-        .select('slug, updated_at, published_at')
+        .select('id, updated_at, published_at')
         .eq('is_published', true)
         .order('published_at', { ascending: false })
         .limit(100)
@@ -27253,7 +27253,7 @@ ${alternateLinks(page.loc)}
         for (const lang of languages) {
           urls += posts.map(post => {
             const lastmod = post.updated_at || post.published_at
-            const path = `/blog/${post.slug}`
+            const path = `/blog/${post.id}`
             return `  <url>
     <loc>${langUrl(path, lang)}</loc>
     <lastmod>${new Date(lastmod).toISOString().split('T')[0]}</lastmod>
@@ -27467,6 +27467,326 @@ ${urls}
   res.setHeader('Content-Type', 'application/xml; charset=utf-8')
   res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
   res.send(sitemap)
+})
+
+// ─── llms-full.txt — comprehensive live data export for AI crawlers ───
+// Dynamically generated text file listing all plants, blog posts, gardens,
+// profiles, and bookmark collections with key metadata.
+// Analogous to sitemap.xml but optimized for LLM consumption.
+app.get('/llms-full.txt', async (req, res) => {
+  const siteUrl = (process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app').replace(/\/+$/, '')
+  const now = new Date().toISOString()
+  const db = supabaseServiceClient || supabaseServer
+
+  const lines = []
+  lines.push('# Aphylia — Complete Plant & Gardening Data Export')
+  lines.push(`# Generated: ${now}`)
+  lines.push(`# Website: ${siteUrl}`)
+  lines.push(`# Sitemap: ${siteUrl}/sitemap.xml`)
+  lines.push(`# LLM instructions: ${siteUrl}/llms.txt`)
+  lines.push('')
+  lines.push('> This file is dynamically generated from the Aphylia database.')
+  lines.push('> It lists every plant with key care data, all blog posts, public gardens, public profiles, and public bookmark collections.')
+  lines.push('> Use this for comprehensive AI indexing. For crawler instructions see /llms.txt.')
+  lines.push('')
+
+  if (!db) {
+    lines.push('## Error: Database not available')
+    lines.push('The database connection is not configured. Plant data cannot be exported at this time.')
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.setHeader('Cache-Control', 'public, max-age=300')
+    res.send(lines.join('\n'))
+    return
+  }
+
+  // ── Plants ──────────────────────────────────────────────────────────
+  try {
+    lines.push('## Plants')
+    lines.push('')
+
+    // Fetch all plants with key fields
+    let allPlants = []
+    let offset = 0
+    const batchSize = 500
+    while (true) {
+      const { data: batch, error } = await db
+        .from('plants')
+        .select('id, name, plant_type, temperature_min, temperature_max, temperature_ideal, height_cm, wingspan_cm, watering_type, soil, sowing_month, flowering_month, fruiting_month, melliferous, infusion, aromatherapy, conservation_status, companions, utility, comestible_part')
+        .order('name', { ascending: true })
+        .range(offset, offset + batchSize - 1)
+      if (error) { console.error('[llms-full] plants error:', error.message); break }
+      if (!batch || batch.length === 0) break
+      allPlants = allPlants.concat(batch)
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+
+    // Fetch English translations for all plants (scientific name, family, overview, tags, level_sun, maintenance_level, life_cycle, toxicity, habitat, origin)
+    let translationMap = {}
+    offset = 0
+    while (true) {
+      const { data: batch, error } = await db
+        .from('plant_translations')
+        .select('plant_id, scientific_name, family, overview, tags, level_sun, maintenance_level, life_cycle, toxicity_human, toxicity_pets, habitat, origin, living_space')
+        .eq('language', 'en')
+        .range(offset, offset + batchSize - 1)
+      if (error) { console.error('[llms-full] translations error:', error.message); break }
+      if (!batch || batch.length === 0) break
+      for (const t of batch) translationMap[t.plant_id] = t
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+
+    lines.push('')
+
+    for (const p of allPlants) {
+      const t = translationMap[p.id] || {}
+      const scientificName = t.scientific_name || ''
+      const family = t.family || ''
+      const overview = (t.overview || '').replace(/\n/g, ' ').slice(0, 300)
+      const tags = (t.tags || []).join(', ')
+      const lightReq = t.level_sun || ''
+      const maintenance = t.maintenance_level || ''
+      const lifeCycle = t.life_cycle || ''
+      const toxHuman = t.toxicity_human || ''
+      const toxPets = t.toxicity_pets || ''
+      const habitat = (t.habitat || []).join(', ')
+      const origin = (t.origin || []).join(', ')
+      const livingSpace = t.living_space || ''
+
+      lines.push(`### ${p.name}`)
+      lines.push(`- URL: ${siteUrl}/plants/${encodeURIComponent(p.id)}`)
+      if (scientificName) lines.push(`- Scientific name: ${scientificName}`)
+      if (family) lines.push(`- Family: ${family}`)
+      if (p.plant_type) lines.push(`- Type: ${p.plant_type}`)
+      if (lightReq) lines.push(`- Light: ${lightReq}`)
+      if (p.watering_type?.length) lines.push(`- Watering: ${p.watering_type.join(', ')}`)
+      if (maintenance) lines.push(`- Maintenance: ${maintenance}`)
+      if (p.temperature_min || p.temperature_max || p.temperature_ideal) {
+        const temps = []
+        if (p.temperature_ideal) temps.push(`ideal ${p.temperature_ideal}°C`)
+        if (p.temperature_min) temps.push(`min ${p.temperature_min}°C`)
+        if (p.temperature_max) temps.push(`max ${p.temperature_max}°C`)
+        lines.push(`- Temperature: ${temps.join(', ')}`)
+      }
+      if (p.soil?.length) lines.push(`- Soil: ${p.soil.join(', ')}`)
+      if (p.height_cm) lines.push(`- Height: ${p.height_cm} cm`)
+      if (p.wingspan_cm) lines.push(`- Wingspan: ${p.wingspan_cm} cm`)
+      if (lifeCycle) lines.push(`- Life cycle: ${lifeCycle}`)
+      if (livingSpace) lines.push(`- Living space: ${livingSpace}`)
+      if (p.sowing_month?.length) lines.push(`- Sowing: ${p.sowing_month.join(', ')}`)
+      if (p.flowering_month?.length) lines.push(`- Flowering: ${p.flowering_month.join(', ')}`)
+      if (p.fruiting_month?.length) lines.push(`- Fruiting: ${p.fruiting_month.join(', ')}`)
+      if (p.utility?.length) lines.push(`- Uses: ${p.utility.join(', ')}`)
+      if (p.comestible_part?.length) lines.push(`- Edible parts: ${p.comestible_part.join(', ')}`)
+      if (p.infusion) lines.push(`- Infusion: yes`)
+      if (p.aromatherapy) lines.push(`- Aromatherapy: yes`)
+      if (p.melliferous) lines.push(`- Melliferous: yes`)
+      if (toxHuman) lines.push(`- Human toxicity: ${toxHuman}`)
+      if (toxPets) lines.push(`- Pet toxicity: ${toxPets}`)
+      if (habitat) lines.push(`- Habitat: ${habitat}`)
+      if (origin) lines.push(`- Origin: ${origin}`)
+      if (p.conservation_status) lines.push(`- Conservation: ${p.conservation_status}`)
+      if (p.companions?.length) lines.push(`- Companions: ${p.companions.slice(0, 10).join(', ')}`)
+      if (tags) lines.push(`- Tags: ${tags}`)
+      if (overview) lines.push(`- Overview: ${overview}`)
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Plants section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Blog Posts ──────────────────────────────────────────────────────
+  try {
+    lines.push('---')
+    lines.push('')
+    lines.push('## Blog Posts')
+    lines.push('')
+
+    const { data: posts } = await db
+      .from('blog_posts')
+      .select('id, title, excerpt, author_name, published_at, tags')
+      .eq('is_published', true)
+      .order('published_at', { ascending: false })
+      .limit(200)
+
+    if (posts?.length) {
+      lines.push('')
+      for (const post of posts) {
+        const pubDate = post.published_at ? new Date(post.published_at).toISOString().slice(0, 10) : ''
+        lines.push(`### ${post.title}`)
+        lines.push(`- URL: ${siteUrl}/blog/${encodeURIComponent(post.id)}`)
+        if (pubDate) lines.push(`- Published: ${pubDate}`)
+        if (post.author_name) lines.push(`- Author: ${post.author_name}`)
+        if (post.tags?.length) lines.push(`- Tags: ${post.tags.join(', ')}`)
+        if (post.excerpt) lines.push(`- Excerpt: ${post.excerpt.replace(/\n/g, ' ').slice(0, 200)}`)
+        lines.push('')
+      }
+    } else {
+      lines.push('No published blog posts.')
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Blog section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Public Gardens ─────────────────────────────────────────────────
+  try {
+    lines.push('---')
+    lines.push('')
+    lines.push('## Public Gardens')
+    lines.push('')
+
+    const { data: gardens } = await db
+      .from('gardens')
+      .select('id, name, created_at, location_city, location_country, streak, privacy')
+      .eq('privacy', 'public')
+      .order('created_at', { ascending: false })
+      .limit(500)
+
+    if (gardens?.length) {
+      lines.push('')
+      for (const g of gardens) {
+        lines.push(`### ${g.name || 'Unnamed Garden'}`)
+        lines.push(`- URL: ${siteUrl}/garden/${encodeURIComponent(g.id)}`)
+        const location = [g.location_city, g.location_country].filter(Boolean).join(', ')
+        if (location) lines.push(`- Location: ${location}`)
+        if (g.streak > 0) lines.push(`- Streak: ${g.streak} days`)
+        if (g.created_at) lines.push(`- Created: ${new Date(g.created_at).toISOString().slice(0, 10)}`)
+        lines.push('')
+      }
+    } else {
+      lines.push('No public gardens.')
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Gardens section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Public Profiles ────────────────────────────────────────────────
+  try {
+    lines.push('---')
+    lines.push('')
+    lines.push('## Public Profiles')
+    lines.push('')
+
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('display_name, username, bio, country, favorite_plant, experience_level, is_private')
+      .or('is_private.is.null,is_private.eq.false')
+      .not('display_name', 'is', null)
+      .order('display_name', { ascending: true })
+      .limit(500)
+
+    if (profiles?.length) {
+      lines.push('')
+      for (const p of profiles) {
+        const name = p.display_name || p.username
+        if (!name) continue
+        lines.push(`### ${name}`)
+        lines.push(`- URL: ${siteUrl}/u/${encodeURIComponent(name)}`)
+        if (p.bio) lines.push(`- Bio: ${p.bio.replace(/\n/g, ' ').slice(0, 150)}`)
+        if (p.country) lines.push(`- Country: ${p.country}`)
+        if (p.experience_level) lines.push(`- Experience: ${p.experience_level}`)
+        if (p.favorite_plant) lines.push(`- Favorite plant: ${p.favorite_plant}`)
+        lines.push('')
+      }
+    } else {
+      lines.push('No public profiles.')
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Profiles section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Public Bookmark Collections ────────────────────────────────────
+  try {
+    lines.push('---')
+    lines.push('')
+    lines.push('## Public Bookmark Collections')
+    lines.push('')
+
+    const { data: bookmarks } = await db
+      .from('bookmarks')
+      .select('id, name, user_id, created_at, visibility')
+      .eq('visibility', 'public')
+      .order('created_at', { ascending: false })
+      .limit(300)
+
+    if (bookmarks?.length) {
+      // Get owner names
+      const userIds = [...new Set(bookmarks.map(b => b.user_id).filter(Boolean))]
+      let ownerMap = {}
+      if (userIds.length > 0) {
+        const { data: owners } = await db
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', userIds)
+        if (owners) {
+          for (const o of owners) ownerMap[o.id] = o.display_name
+        }
+      }
+
+      // Get plant counts per bookmark (batch query instead of N+1)
+      const bookmarkIds = bookmarks.map(b => b.id)
+      let countMap = {}
+      if (bookmarkIds.length > 0) {
+        // Fetch all bookmark_items for these bookmarks and count client-side
+        let allItems = []
+        let itemOffset = 0
+        const itemBatch = 1000
+        while (true) {
+          const { data: items, error: itemErr } = await db
+            .from('bookmark_items')
+            .select('bookmark_id')
+            .in('bookmark_id', bookmarkIds)
+            .range(itemOffset, itemOffset + itemBatch - 1)
+          if (itemErr || !items || items.length === 0) break
+          allItems = allItems.concat(items)
+          itemOffset += itemBatch
+          if (items.length < itemBatch) break
+        }
+        for (const item of allItems) {
+          countMap[item.bookmark_id] = (countMap[item.bookmark_id] || 0) + 1
+        }
+      }
+
+      lines.push('')
+      for (const b of bookmarks) {
+        lines.push(`### ${b.name || 'Unnamed Collection'}`)
+        lines.push(`- URL: ${siteUrl}/bookmarks/${encodeURIComponent(b.id)}`)
+        const owner = ownerMap[b.user_id]
+        if (owner) lines.push(`- Curator: ${owner}`)
+        const pCount = countMap[b.id]
+        if (pCount > 0) lines.push(`- Plants: ${pCount}`)
+        if (b.created_at) lines.push(`- Created: ${new Date(b.created_at).toISOString().slice(0, 10)}`)
+        lines.push('')
+      }
+    } else {
+      lines.push('No public bookmark collections.')
+      lines.push('')
+    }
+  } catch (err) {
+    lines.push(`Bookmarks section error: ${err?.message || 'unknown'}`)
+    lines.push('')
+  }
+
+  // ── Footer ─────────────────────────────────────────────────────────
+  lines.push('---')
+  lines.push('')
+  lines.push(`Generated: ${now}`)
+  lines.push(`Website: ${siteUrl}`)
+  lines.push(`Sitemap: ${siteUrl}/sitemap.xml`)
+  lines.push(`LLM instructions: ${siteUrl}/llms.txt`)
+  lines.push(`Contact: ${siteUrl}/contact`)
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  res.send(lines.join('\n'))
 })
 
 // Static assets
@@ -28129,23 +28449,40 @@ async function generateCrawlerHtml(req, pagePath) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
         resourceFound = false
       } else {
-        // Query base plant data (non-translatable fields now include scientific_name, family, level_sun, maintenance_level, season)
-        const { data: basePlant, error: plantError } = await ssrQuery(
+        // Query NON-TRANSLATABLE plant data from plants table only.
+        // Translatable fields (scientific_name, family, level_sun, maintenance_level,
+        // season, life_cycle, foliage_persistance, toxicity_human, toxicity_pets,
+        // allergens, living_space, composition, habitat, etc.) are fetched from
+        // plant_translations below — they may NOT exist as columns on the plants table.
+        const { data: basePlant, error: plantError} = await ssrQuery(
           supabaseServer
             .from('plants')
-            .select('id, name, plant_type, utility, watering_type, flowering_month, scientific_name, family, level_sun, maintenance_level, season')
+            .select(`
+              id, name, plant_type, utility, comestible_part, fruit_type,
+              spiked, scent, multicolor, bicolor,
+              temperature_max, temperature_min, temperature_ideal, hygrometry,
+              watering_type, division, soil, mulching, nutrition_need, fertilizer,
+              sowing_month, flowering_month, fruiting_month,
+              height_cm, wingspan_cm, sow_type, separation_cm,
+              tutoring, transplanting,
+              infusion, aromatherapy,
+              melliferous, polenizer, be_fertilizer, conservation_status,
+              companions
+            `)
             .eq('id', plantId)
             .maybeSingle(),
           'plant_lookup'
         )
 
         // Query translated fields from plant_translations for the detected language
-        // Note: scientific_name, family, level_sun, maintenance_level, season were migrated to plants table
+        // Many fields (scientific_name, family, level_sun, maintenance_level, etc.) are translatable
+        // and stored primarily in plant_translations. The plants table may have stale/empty copies.
         const ssrLang = detectedLang || 'en'
+        const translationFields = 'name, overview, tags, origin, scientific_name, family, level_sun, maintenance_level, season, life_cycle, foliage_persistance, toxicity_human, toxicity_pets, allergens, living_space, composition, habitat, symbolism, advice_soil, advice_mulching, advice_fertilizer, advice_tutoring, advice_sowing, advice_medicinal, advice_infusion, cut, nutritional_intake, recipes_ideas, ground_effect, pests, diseases'
         const { data: translation } = await ssrQuery(
           supabaseServer
             .from('plant_translations')
-            .select('name, overview, tags, origin')
+            .select(translationFields)
             .eq('plant_id', plantId)
             .eq('language', ssrLang)
             .maybeSingle(),
@@ -28158,7 +28495,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: enData } = await ssrQuery(
             supabaseServer
               .from('plant_translations')
-              .select('name, overview, tags, origin')
+              .select(translationFields)
               .eq('plant_id', plantId)
               .eq('language', 'en')
               .maybeSingle(),
@@ -28170,21 +28507,49 @@ async function generateCrawlerHtml(req, pagePath) {
         // Use target language translation, falling back to English for empty fields
         const finalTranslation = translation || enTranslation
 
-        // Merge base plant with translations, with field-level fallback to English
-        // Non-translatable fields (scientific_name, family, level_sun, maintenance_level, season) come from basePlant
+        // Helper to pick first non-empty value from translation, English fallback, then base plant
+        const pickStr = (field) => translation?.[field] || enTranslation?.[field] || basePlant?.[field] || null
+        const pickArr = (field) => (translation?.[field]?.length ? translation[field] : null) || (enTranslation?.[field]?.length ? enTranslation[field] : null) || (basePlant?.[field]?.length ? basePlant[field] : null) || []
+
+        // Merge base plant with translations, with field-level fallback to English then base plant
+        // Translatable fields (scientific_name, family, level_sun, etc.) come from plant_translations
+        // with fallback to plants table (which may have migrated copies)
         const plant = basePlant ? {
           ...basePlant,
-          name: translation?.name || enTranslation?.name || basePlant.name,
-          // Non-translatable fields come from plants table
-          scientific_name: basePlant.scientific_name,
-          family: basePlant.family,
-          level_sun: basePlant.level_sun,
-          maintenance_level: basePlant.maintenance_level,
-          season: basePlant.season,
-          // Translatable fields come from plant_translations with fallback
-          overview: translation?.overview || enTranslation?.overview,
-          tags: (translation?.tags?.length ? translation.tags : null) || enTranslation?.tags,
-          origin: (translation?.origin?.length ? translation.origin : null) || enTranslation?.origin,
+          name: pickStr('name') || basePlant.name,
+          // Translatable fields - prefer translation, fallback to English, then base plant
+          scientific_name: pickStr('scientific_name'),
+          family: pickStr('family'),
+          level_sun: pickStr('level_sun'),
+          maintenance_level: pickStr('maintenance_level'),
+          life_cycle: pickStr('life_cycle'),
+          foliage_persistance: pickStr('foliage_persistance'),
+          toxicity_human: pickStr('toxicity_human'),
+          toxicity_pets: pickStr('toxicity_pets'),
+          living_space: pickStr('living_space'),
+          conservation_status: basePlant.conservation_status,
+          overview: pickStr('overview'),
+          advice_soil: pickStr('advice_soil'),
+          advice_mulching: pickStr('advice_mulching'),
+          advice_fertilizer: pickStr('advice_fertilizer'),
+          advice_tutoring: pickStr('advice_tutoring'),
+          advice_sowing: pickStr('advice_sowing'),
+          advice_medicinal: pickStr('advice_medicinal'),
+          advice_infusion: pickStr('advice_infusion'),
+          cut: pickStr('cut'),
+          ground_effect: pickStr('ground_effect'),
+          // Array translatable fields
+          season: pickArr('season'),
+          tags: pickArr('tags'),
+          origin: pickArr('origin'),
+          habitat: pickArr('habitat'),
+          allergens: pickArr('allergens'),
+          composition: pickArr('composition'),
+          symbolism: pickArr('symbolism'),
+          nutritional_intake: pickArr('nutritional_intake'),
+          recipes_ideas: pickArr('recipes_ideas'),
+          pests: pickArr('pests'),
+          diseases: pickArr('diseases'),
         } : null
 
         ssrDebug('plant_query_result', {
@@ -28193,7 +28558,15 @@ async function generateCrawlerHtml(req, pagePath) {
           plantName: plant?.name,
           errorMsg: plantError?.message
         })
-        req._ssrDebug.queryResults.plant = { found: !!plant, name: plant?.name, error: plantError?.message }
+        req._ssrDebug.queryResults.plant = {
+          found: !!plant,
+          name: plant?.name,
+          scientificName: plant?.scientific_name,
+          family: plant?.family,
+          plantType: plant?.plant_type,
+          tags: plant?.tags,
+          error: plantError?.message
+        }
         console.log(`[ssr] Plant query result: data=${plant ? 'found' : 'null'}, error=${plantError ? plantError.message || 'unknown error' : 'none'}`)
         if (plantError) {
           req._ssrDebug.errors.push({ type: 'plant_query', error: plantError.message || JSON.stringify(plantError) })
@@ -28272,6 +28645,30 @@ async function generateCrawlerHtml(req, pagePath) {
           // Light requirement indicator - use translations (for pageContent)
           const light = tr.light[(plant.level_sun || '').toLowerCase()] || ''
 
+          // Fetch plant colors for palette display
+          const { data: plantColors } = await ssrQuery(
+            supabaseServer
+              .from('plant_colors')
+              .select('color_id, colors(name, hex_code)')
+              .eq('plant_id', plantId)
+              .limit(10),
+            'plant_colors'
+          )
+
+          // Fetch companion plants if any
+          let companionPlants = []
+          if (plant.companions?.length) {
+            const { data: companions } = await ssrQuery(
+              supabaseServer
+                .from('plants')
+                .select('id, name')
+                .in('id', plant.companions)
+                .limit(20),
+              'companion_plants'
+            )
+            companionPlants = companions || []
+          }
+
           // Fetch primary image, fallback to discovery image (with timeout)
           const { data: images } = await ssrQuery(
             supabaseServer
@@ -28300,21 +28697,122 @@ async function generateCrawlerHtml(req, pagePath) {
           }
           // If no image found, image stays null - no fallback to banner
 
-          // Build structured content for the page
+          // Build comprehensive structured content for the page
           const quickFacts = []
           if (plant.scientific_name) quickFacts.push(`🔬 <em>${escapeHtml(plant.scientific_name)}</em>`)
           if (plant.family) quickFacts.push(`👨‍👩‍👧 ${tr.family}: ${escapeHtml(plant.family)}`)
           if (plant.plant_type) quickFacts.push(`${emoji} ${escapeHtml(plant.plant_type)}`)
           if (plant.origin?.length) quickFacts.push(`🌍 ${tr.origin}: ${plant.origin.slice(0, 2).map(o => escapeHtml(o)).join(', ')}`)
 
-          const careInfo = []
-          if (light) careInfo.push(light)
-          if (plant.watering_type?.length) careInfo.push(`💧 ${plant.watering_type.map(w => escapeHtml(w)).join(', ')}`)
-          if (difficulty) careInfo.push(difficulty)
-          if (plant.season?.length) careInfo.push(`🌿 ${plant.season.map(s => escapeHtml(s)).join(', ')}`)
-
           // Generate image tag if we have an image from media.aphylia.app
           const plantImageTag = generateImageTag(image, `${plant.name} - Plant photo on Aphylia`)
+
+          // Color palette section
+          let colorPalette = ''
+          if (plantColors?.length) {
+            const colors = plantColors.map(pc => pc.colors).filter(Boolean)
+            if (colors.length) {
+              colorPalette = `
+                <h2>🎨 ${detectedLang === 'fr' ? 'Palette de Couleurs' : 'Color Palette'}</h2>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0;">
+                  ${colors.map(c => `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <div style="width: 40px; height: 40px; border-radius: 8px; background-color: ${escapeHtml(c.hex_code || '#ccc')}; border: 1px solid #ddd;"></div>
+                      <span style="font-size: 14px;">${escapeHtml(c.name || '')}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              `
+            }
+          }
+
+          // Detailed care information
+          let detailedCare = []
+          if (light) detailedCare.push(`☀️ <strong>${detectedLang === 'fr' ? 'Lumière' : 'Light'}:</strong> ${light}`)
+          if (plant.watering_type?.length) detailedCare.push(`💧 <strong>${detectedLang === 'fr' ? 'Arrosage' : 'Watering'}:</strong> ${plant.watering_type.map(w => escapeHtml(w)).join(', ')}`)
+          if (plant.hygrometry) detailedCare.push(`💦 <strong>${detectedLang === 'fr' ? 'Humidité' : 'Humidity'}:</strong> ${plant.hygrometry}%`)
+          if (plant.temperature_min || plant.temperature_max || plant.temperature_ideal) {
+            const temps = []
+            if (plant.temperature_ideal) temps.push(`${detectedLang === 'fr' ? 'Idéale' : 'Ideal'}: ${plant.temperature_ideal}°C`)
+            if (plant.temperature_min) temps.push(`Min: ${plant.temperature_min}°C`)
+            if (plant.temperature_max) temps.push(`Max: ${plant.temperature_max}°C`)
+            detailedCare.push(`🌡️ <strong>${detectedLang === 'fr' ? 'Température' : 'Temperature'}:</strong> ${temps.join(' • ')}`)
+          }
+          if (difficulty) detailedCare.push(`⚙️ <strong>${detectedLang === 'fr' ? 'Entretien' : 'Maintenance'}:</strong> ${difficulty}`)
+          if (plant.soil?.length) detailedCare.push(`🌱 <strong>${detectedLang === 'fr' ? 'Sol' : 'Soil'}:</strong> ${plant.soil.slice(0, 3).map(s => escapeHtml(s)).join(', ')}`)
+          
+          // Growth & Structure information
+          let growthInfo = []
+          if (plant.height_cm) growthInfo.push(`📏 <strong>${detectedLang === 'fr' ? 'Hauteur' : 'Height'}:</strong> ${plant.height_cm} cm`)
+          if (plant.wingspan_cm) growthInfo.push(`↔️ <strong>${detectedLang === 'fr' ? 'Envergure' : 'Wingspan'}:</strong> ${plant.wingspan_cm} cm`)
+          if (plant.life_cycle) growthInfo.push(`🔄 <strong>${detectedLang === 'fr' ? 'Cycle de vie' : 'Life Cycle'}:</strong> ${escapeHtml(plant.life_cycle)}`)
+          if (plant.foliage_persistance) growthInfo.push(`🍃 <strong>${detectedLang === 'fr' ? 'Feuillage' : 'Foliage'}:</strong> ${escapeHtml(plant.foliage_persistance)}`)
+          if (plant.season?.length) growthInfo.push(`🌿 <strong>${detectedLang === 'fr' ? 'Saisons' : 'Seasons'}:</strong> ${plant.season.map(s => escapeHtml(s)).join(', ')}`)
+
+          // Phenology (flowering, sowing, fruiting)
+          let phenology = []
+          if (plant.sowing_month?.length) phenology.push(`🌱 <strong>${detectedLang === 'fr' ? 'Semis' : 'Sowing'}:</strong> ${plant.sowing_month.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
+          if (plant.flowering_month?.length) phenology.push(`🌸 <strong>${detectedLang === 'fr' ? 'Floraison' : 'Flowering'}:</strong> ${plant.flowering_month.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
+          if (plant.fruiting_month?.length) phenology.push(`🍎 <strong>${detectedLang === 'fr' ? 'Fructification' : 'Fruiting'}:</strong> ${plant.fruiting_month.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
+
+          // Ecology information
+          let ecology = []
+          if (plant.melliferous) ecology.push(`🐝 ${detectedLang === 'fr' ? 'Mellifère' : 'Melliferous'}`)
+          if (plant.polenizer?.length) ecology.push(`🦋 <strong>${detectedLang === 'fr' ? 'Pollinisateurs' : 'Pollinators'}:</strong> ${plant.polenizer.slice(0, 3).map(p => escapeHtml(p)).join(', ')}`)
+          if (plant.be_fertilizer) ecology.push(`🌿 ${detectedLang === 'fr' ? 'Engrais naturel' : 'Natural fertilizer'}`)
+          if (plant.conservation_status) ecology.push(`🌍 <strong>${detectedLang === 'fr' ? 'Conservation' : 'Conservation'}:</strong> ${escapeHtml(plant.conservation_status)}`)
+          if (plant.habitat?.length) ecology.push(`🏞️ <strong>Habitat:</strong> ${plant.habitat.slice(0, 3).map(h => escapeHtml(h)).join(', ')}`)
+
+          // Safety & Traits
+          let safety = []
+          if (plant.toxicity_human) safety.push(`👤 <strong>${detectedLang === 'fr' ? 'Toxicité humaine' : 'Human Toxicity'}:</strong> ${escapeHtml(plant.toxicity_human)}`)
+          if (plant.toxicity_pets) safety.push(`🐾 <strong>${detectedLang === 'fr' ? 'Toxicité animaux' : 'Pet Toxicity'}:</strong> ${escapeHtml(plant.toxicity_pets)}`)
+          if (plant.allergens?.length) safety.push(`⚠️ <strong>${detectedLang === 'fr' ? 'Allergènes' : 'Allergens'}:</strong> ${plant.allergens.slice(0, 3).map(a => escapeHtml(a)).join(', ')}`)
+          if (plant.scent) safety.push(`👃 ${detectedLang === 'fr' ? 'Parfumé' : 'Scented'}`)
+          if (plant.spiked) safety.push(`🌵 ${detectedLang === 'fr' ? 'Épineux' : 'Spiked'}`)
+
+          // Usage & Benefits (store raw text, escape in template)
+          let usage = []
+          if (plant.utility?.length) usage = [...plant.utility]
+          if (plant.infusion) usage.push(detectedLang === 'fr' ? 'Infusion' : 'Infusion')
+          if (plant.aromatherapy) usage.push(detectedLang === 'fr' ? 'Aromathérapie' : 'Aromatherapy')
+          if (plant.comestible_part?.length) usage.push(`${detectedLang === 'fr' ? 'Parties comestibles' : 'Edible parts'}: ${plant.comestible_part.slice(0, 3).join(', ')}`)
+
+          // Expert advice sections (from translations)
+          let adviceSections = []
+          if (plant.advice_soil) adviceSections.push({ icon: '🌱', label: detectedLang === 'fr' ? 'Conseil Sol' : 'Soil Advice', text: plant.advice_soil })
+          if (plant.advice_sowing) adviceSections.push({ icon: '🌾', label: detectedLang === 'fr' ? 'Conseil Semis' : 'Sowing Advice', text: plant.advice_sowing })
+          if (plant.advice_fertilizer) adviceSections.push({ icon: '🧪', label: detectedLang === 'fr' ? 'Conseil Engrais' : 'Fertilizer Advice', text: plant.advice_fertilizer })
+          if (plant.advice_mulching) adviceSections.push({ icon: '🍂', label: detectedLang === 'fr' ? 'Conseil Paillage' : 'Mulching Advice', text: plant.advice_mulching })
+          if (plant.advice_tutoring) adviceSections.push({ icon: '🏗️', label: detectedLang === 'fr' ? 'Conseil Tuteurage' : 'Tutoring Advice', text: plant.advice_tutoring })
+          if (plant.advice_medicinal) adviceSections.push({ icon: '💊', label: detectedLang === 'fr' ? 'Usage Médicinal' : 'Medicinal Use', text: plant.advice_medicinal })
+          if (plant.advice_infusion) adviceSections.push({ icon: '🍵', label: detectedLang === 'fr' ? 'Conseil Infusion' : 'Infusion Advice', text: plant.advice_infusion })
+          if (plant.cut) adviceSections.push({ icon: '✂️', label: detectedLang === 'fr' ? 'Taille' : 'Pruning', text: plant.cut })
+
+          // Pests & Diseases
+          let problems = []
+          if (plant.pests?.length) problems.push(`🐛 <strong>${detectedLang === 'fr' ? 'Ravageurs' : 'Pests'}:</strong> ${plant.pests.slice(0, 5).map(p => escapeHtml(p)).join(', ')}`)
+          if (plant.diseases?.length) problems.push(`🦠 <strong>${detectedLang === 'fr' ? 'Maladies' : 'Diseases'}:</strong> ${plant.diseases.slice(0, 5).map(d => escapeHtml(d)).join(', ')}`)
+
+          // Additional details
+          let additionalInfo = []
+          if (plant.symbolism?.length) additionalInfo.push(`🎭 <strong>${detectedLang === 'fr' ? 'Symbolisme' : 'Symbolism'}:</strong> ${plant.symbolism.slice(0, 3).map(s => escapeHtml(s)).join(', ')}`)
+          if (plant.ground_effect) additionalInfo.push(`🌿 <strong>${detectedLang === 'fr' ? 'Effet au sol' : 'Ground Effect'}:</strong> ${escapeHtml(plant.ground_effect)}`)
+          if (plant.nutritional_intake?.length) additionalInfo.push(`🥗 <strong>${detectedLang === 'fr' ? 'Apport nutritionnel' : 'Nutritional Intake'}:</strong> ${plant.nutritional_intake.slice(0, 3).map(n => escapeHtml(n)).join(', ')}`)
+          if (plant.recipes_ideas?.length) additionalInfo.push(`🍳 <strong>${detectedLang === 'fr' ? 'Idées recettes' : 'Recipe Ideas'}:</strong> ${plant.recipes_ideas.slice(0, 3).map(r => escapeHtml(r)).join(', ')}`)
+
+          // Propagation info
+          let propagation = []
+          if (plant.division?.length) propagation.push(`🌱 <strong>${detectedLang === 'fr' ? 'Multiplication' : 'Propagation'}:</strong> ${plant.division.slice(0, 4).map(d => escapeHtml(d)).join(', ')}`)
+          if (plant.sow_type?.length) propagation.push(`🌰 <strong>${detectedLang === 'fr' ? 'Type de semis' : 'Sowing Type'}:</strong> ${plant.sow_type.slice(0, 3).map(s => escapeHtml(s)).join(', ')}`)
+          if (plant.transplanting !== null && plant.transplanting !== undefined) propagation.push(`🪴 <strong>${detectedLang === 'fr' ? 'Transplantation' : 'Transplanting'}:</strong> ${plant.transplanting ? '✅' : '❌'}`)
+          if (plant.tutoring) propagation.push(`🏗️ <strong>${detectedLang === 'fr' ? 'Tuteurage nécessaire' : 'Needs Tutoring'}:</strong> ✅`)
+
+          // Soil & Nutrition
+          let soilNutrition = []
+          if (plant.mulching?.length) soilNutrition.push(`🍂 <strong>${detectedLang === 'fr' ? 'Paillage' : 'Mulching'}:</strong> ${plant.mulching.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
+          if (plant.fertilizer?.length) soilNutrition.push(`🧪 <strong>${detectedLang === 'fr' ? 'Engrais' : 'Fertilizer'}:</strong> ${plant.fertilizer.slice(0, 3).map(f => escapeHtml(f)).join(', ')}`)
+          if (plant.nutrition_need?.length) soilNutrition.push(`⚡ <strong>${detectedLang === 'fr' ? 'Besoins nutritifs' : 'Nutrient Needs'}:</strong> ${plant.nutrition_need.slice(0, 4).map(n => escapeHtml(n)).join(', ')}`)
 
           pageContent = `
             <article itemscope itemtype="https://schema.org/Product">
@@ -28326,6 +28824,8 @@ async function generateCrawlerHtml(req, pagePath) {
                 <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(plant.name)}</figcaption>
               </figure>` : ''}
               
+              ${colorPalette}
+              
               ${plant.overview ? `
                 <div itemprop="description">
                   <h2>${tr.plantAbout} ${escapeHtml(plant.name)}</h2>
@@ -28333,25 +28833,113 @@ async function generateCrawlerHtml(req, pagePath) {
                 </div>
               ` : ''}
               
-              ${careInfo.length ? `
-                <h2>🌱 ${tr.plantQuickCare}</h2>
-                <div class="plant-meta">${careInfo.join(' · ')}</div>
+              ${detailedCare.length ? `
+                <h2>🌱 ${detectedLang === 'fr' ? 'Guide d\'Entretien Détaillé' : 'Detailed Care Guide'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${detailedCare.map(c => `<div class="plant-meta">${c}</div>`).join('')}
+                </div>
               ` : ''}
               
-              ${plant.utility?.length ? `
-                <h2>✨ ${tr.plantGreatFor}</h2>
-                <ul>${plant.utility.slice(0, 5).map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
+              ${growthInfo.length ? `
+                <h2>📐 ${detectedLang === 'fr' ? 'Croissance & Structure' : 'Growth & Structure'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${growthInfo.map(g => `<div class="plant-meta">${g}</div>`).join('')}
+                </div>
               ` : ''}
               
-              ${plant.tags?.length ? `<p><strong>${tr.tags}:</strong> ${plant.tags.slice(0, 8).map(t => `#${escapeHtml(t)}`).join(' ')}</p>` : ''}
+              ${phenology.length ? `
+                <h2>📅 ${detectedLang === 'fr' ? 'Phénologie' : 'Phenology'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${phenology.map(p => `<div class="plant-meta">${p}</div>`).join('')}
+                </div>
+              ` : ''}
               
-              <p style="margin-top: 20px;">
-                <a href="${escapeHtml(canonicalUrl)}">📖 ${tr.plantViewFull} →</a>
+              ${ecology.length ? `
+                <h2>🌍 ${detectedLang === 'fr' ? 'Écologie' : 'Ecology'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${ecology.map(e => `<div class="plant-meta">${e}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${usage.length ? `
+                <h2>✨ ${detectedLang === 'fr' ? 'Utilisations & Avantages' : 'Usage & Benefits'}</h2>
+                <ul style="margin: 16px 0;">${usage.map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
+              ` : ''}
+              
+              ${safety.length ? `
+                <h2>⚠️ ${detectedLang === 'fr' ? 'Sécurité & Caractéristiques' : 'Safety & Traits'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${safety.map(s => `<div class="plant-meta">${s}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${propagation.length ? `
+                <h2>🌱 ${detectedLang === 'fr' ? 'Propagation' : 'Propagation'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${propagation.map(p => `<div class="plant-meta">${p}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${soilNutrition.length ? `
+                <h2>🧪 ${detectedLang === 'fr' ? 'Sol & Nutrition' : 'Soil & Nutrition'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${soilNutrition.map(s => `<div class="plant-meta">${s}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${problems.length ? `
+                <h2>🐛 ${detectedLang === 'fr' ? 'Ravageurs & Maladies' : 'Pests & Diseases'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${problems.map(p => `<div class="plant-meta">${p}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${adviceSections.length ? `
+                <h2>📝 ${detectedLang === 'fr' ? 'Conseils d\'Expert' : 'Expert Advice'}</h2>
+                <div style="display: grid; gap: 16px; margin: 16px 0;">
+                  ${adviceSections.map(a => `
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px; border-left: 3px solid #10b981;">
+                      <strong>${a.icon} ${escapeHtml(a.label)}:</strong>
+                      <p style="margin: 8px 0 0 0; color: #374151;">${escapeHtml(a.text)}</p>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ''}
+              
+              ${additionalInfo.length ? `
+                <h2>📋 ${detectedLang === 'fr' ? 'Informations Complémentaires' : 'Additional Information'}</h2>
+                <div style="display: grid; gap: 12px; margin: 16px 0;">
+                  ${additionalInfo.map(i => `<div class="plant-meta">${i}</div>`).join('')}
+                </div>
+              ` : ''}
+              
+              ${companionPlants.length ? `
+                <h2>🤝 ${detectedLang === 'fr' ? 'Plantes Compagnes' : 'Companion Plants'}</h2>
+                <p style="color: #6b7280; margin: 8px 0 16px 0;">${detectedLang === 'fr' ? 'Ces plantes poussent bien ensemble' : 'These plants grow well together'}:</p>
+                <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0;">
+                  ${companionPlants.map(c => `
+                    <a href="/plants/${encodeURIComponent(c.id)}" style="display: inline-block; padding: 8px 16px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; color: #065f46; text-decoration: none; font-weight: 500;">
+                      🌱 ${escapeHtml(c.name)}
+                    </a>
+                  `).join('')}
+                </div>
+              ` : ''}
+              
+              ${plant.tags?.length ? `
+                <div style="margin: 24px 0;">
+                  <strong>${tr.tags}:</strong> ${plant.tags.slice(0, 12).map(t => `<span style="display: inline-block; background: #e5e7eb; padding: 4px 12px; border-radius: 12px; margin: 4px; font-size: 13px;">#${escapeHtml(t)}</span>`).join('')}
+                </div>
+              ` : ''}
+              
+              <p style="margin-top: 24px; padding: 16px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
+                <strong>📖 ${detectedLang === 'fr' ? 'Voir le guide complet' : 'View Complete Guide'}</strong><br>
+                ${detectedLang === 'fr' ? 'Pour une expérience interactive complète avec des photos supplémentaires, des conseils personnalisés et des outils de jardinage' : 'For the full interactive experience with additional photos, personalized advice, and gardening tools'}:<br>
+                <a href="${escapeHtml(canonicalUrl)}" style="color: #059669; font-weight: 600;">${detectedLang === 'fr' ? 'Visiter Aphylia →' : 'Visit Aphylia →'}</a>
               </p>
               
-              <h2>🔗 ${detectedLang === 'fr' ? 'Découvrir plus' : 'Discover More'}</h2>
-              <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
-                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher des plantes' : 'Search Plants'}</a>
+              <h2>🔗 ${detectedLang === 'fr' ? 'Découvrir Plus' : 'Discover More'}</h2>
+              <nav style="display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0;">
+                <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher des Plantes' : 'Search Plants'}</a>
                 <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
                 <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
                 <a href="/blog">📚 Blog</a>
@@ -28365,50 +28953,53 @@ async function generateCrawlerHtml(req, pagePath) {
       }
     }
 
-    // Blog post page: /blog/:slug
+    // Blog post page: /blog/:id (primary) or /blog/:slug (legacy fallback)
+    // The app links to blog posts by UUID id, not slug
     else if (isBlogRoute && supabaseServer) {
       isDynamicRoute = true
-      const slugOrId = decodeURIComponent(effectivePath[1])
-      console.log(`[ssr] Looking up blog post: ${slugOrId}`)
+      const blogParam = decodeURIComponent(effectivePath[1])
+      console.log(`[ssr] Looking up blog post: ${blogParam}`)
       req._ssrDebug.matchedRoute = 'blog_post'
 
-      // Check if it looks like a UUID (for ID-based lookup)
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)
-      ssrDebug('blog_route_matched', { slugOrId, isUUID })
+      // Check if it looks like a UUID (for ID-based lookup — the primary method)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(blogParam)
+      ssrDebug('blog_route_matched', { blogParam, isUUID })
 
-      // Try slug lookup first, then ID if it's a UUID
+      // Try ID lookup first (primary), then slug as legacy fallback
       let post = null
       let postError = null
 
-      // First try by slug
-      const { data: postBySlug, error: slugError } = await ssrQuery(
-        supabaseServer
-          .from('blog_posts')
-          .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
-          .eq('slug', slugOrId)
-          .eq('is_published', true)
-          .maybeSingle(),
-        'blog_lookup_by_slug'
-      )
-
-      if (postBySlug) {
-        post = postBySlug
-      } else if (isUUID) {
-        // If not found by slug and looks like UUID, try by ID
-        console.log(`[ssr] Blog not found by slug, trying by ID: ${slugOrId}`)
+      if (isUUID) {
+        // Primary: lookup by UUID id
         const { data: postById, error: idError } = await ssrQuery(
           supabaseServer
             .from('blog_posts')
             .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
-            .eq('id', slugOrId)
+            .eq('id', blogParam)
             .eq('is_published', true)
             .maybeSingle(),
           'blog_lookup_by_id'
         )
         post = postById
         postError = idError
-      } else {
-        postError = slugError
+      }
+
+      // Fallback: try by slug if ID lookup didn't find anything
+      if (!post && !postError) {
+        const { data: postBySlug, error: slugError } = await ssrQuery(
+          supabaseServer
+            .from('blog_posts')
+            .select('id, title, excerpt, body_html, cover_image_url, author_name, published_at')
+            .eq('slug', blogParam)
+            .eq('is_published', true)
+            .maybeSingle(),
+          'blog_lookup_by_slug'
+        )
+        if (postBySlug) {
+          post = postBySlug
+        } else {
+          postError = slugError
+        }
       }
 
       if (postError) {
@@ -28473,8 +29064,21 @@ async function generateCrawlerHtml(req, pagePath) {
               <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(post.title)}</figcaption>
             </figure>` : ''}
             
-            ${post.excerpt ? `<p itemprop="description" style="font-size: 1.1em; color: #444; font-style: italic;">"${escapeHtml(post.excerpt)}"</p>` : ''}
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.blogReadFull} →</a></p>
+            ${post.excerpt ? `<div style="font-size: 1.15em; color: #374151; font-style: italic; padding: 20px; background: #f9fafb; border-left: 4px solid #10b981; margin: 24px 0; border-radius: 4px;">
+              <strong>${detectedLang === 'fr' ? 'Résumé' : 'Summary'}:</strong> ${escapeHtml(post.excerpt)}
+            </div>` : ''}
+            
+            ${post.body_html ? `
+              <div itemprop="articleBody" style="margin: 32px 0; line-height: 1.8; font-size: 16px;">
+                ${post.body_html}
+              </div>
+            ` : `<p style="color: #6b7280;">${detectedLang === 'fr' ? 'Contenu non disponible dans la version archivée.' : 'Content not available in archived version.'}</p>`}
+            
+            <div style="margin: 32px 0; padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
+              <strong>💬 ${detectedLang === 'fr' ? 'Rejoindre la discussion' : 'Join the Discussion'}</strong><br>
+              ${detectedLang === 'fr' ? 'Pour commenter, partager et découvrir plus d\'articles' : 'To comment, share, and discover more articles'}:<br>
+              <a href="${escapeHtml(canonicalUrl)}" style="color: #059669; font-weight: 600;">${detectedLang === 'fr' ? 'Visiter Aphylia →' : 'Visit Aphylia →'}</a>
+            </div>
             
             <h2>🔗 ${detectedLang === 'fr' ? 'Plus d\'articles' : 'More Articles'}</h2>
             <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
@@ -28512,6 +29116,20 @@ async function generateCrawlerHtml(req, pagePath) {
       if (rpcResult) {
         // RPC returns array or single object
         profile = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
+        // RPC doesn't return favorite_plant - fetch it separately
+        if (profile?.id) {
+          const { data: extraProfile } = await ssrQuery(
+            supabaseServer
+              .from('profiles')
+              .select('favorite_plant')
+              .eq('id', profile.id)
+              .maybeSingle(),
+            'profile_favorite_plant'
+          )
+          if (extraProfile) {
+            profile.favorite_plant = extraProfile.favorite_plant
+          }
+        }
       }
 
       // Fallback: direct query if RPC fails or doesn't exist
@@ -28687,7 +29305,10 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plantCount > 0) descParts.push(`🌿 ${plantCount} ${tr.profilePlants}`)
           if (currentStreak > 0) descParts.push(`🔥 ${currentStreak} ${detectedLang === 'fr' ? 'jours de série' : 'day streak'}`)
           if (friendsCount > 0) descParts.push(`👥 ${friendsCount} ${detectedLang === 'fr' ? 'amis' : 'friends'}`)
-          if (profile.country) descParts.push(`📍 ${profile.country}`)
+          // show_country from RPC: only show country if user allows it
+          if (profile.country && profile.show_country !== false) descParts.push(`📍 ${profile.country}`)
+          if (profile.experience_level) descParts.push(`🌱 ${profile.experience_level}`)
+          if (profile.job) descParts.push(`💼 ${profile.job}`)
 
           description = descParts.length > 0 ? descParts.join(' • ') : tr.profilePlantEnthusiast
 
@@ -28732,7 +29353,9 @@ async function generateCrawlerHtml(req, pagePath) {
               </figure>` : ''}
               
               <div class="profile-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
-                ${profile.country ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
+                ${profile.country && profile.show_country !== false ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
+                ${profile.job ? `<span>💼 ${escapeHtml(profile.job)}</span>` : ''}
+                ${profile.experience_level ? `<span>🌱 ${escapeHtml(profile.experience_level)}</span>` : ''}
                 ${isOnline ? `<span>🟢 ${detectedLang === 'fr' ? 'En ligne' : 'Online'}</span>` : ''}
                 ${joinedDateFormatted ? `<span>📅 ${detectedLang === 'fr' ? 'Membre depuis' : 'Member since'} ${joinedDateFormatted}</span>` : ''}
               </div>
@@ -28765,6 +29388,7 @@ async function generateCrawlerHtml(req, pagePath) {
               </div>
               
               ${profile.favorite_plant ? `<p>❤️ ${detectedLang === 'fr' ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
+              ${profile.profile_link ? `<p>🔗 <a href="${escapeHtml(profile.profile_link)}" rel="nofollow noopener" target="_blank">${escapeHtml(profile.profile_link)}</a></p>` : ''}
               
               ${userGardens.length > 0 ? `
               <h2>🏡 ${detectedLang === 'fr' ? 'Jardins de' : 'Gardens by'} ${escapeHtml(displayName)}</h2>
@@ -28918,17 +29542,17 @@ async function generateCrawlerHtml(req, pagePath) {
               }
             }
 
-            // Get garden streak
+            // Get garden streak (column is named 'streak' in gardens table)
             const { data: gardenData } = await ssrQuery(
               dbClient
                 .from('gardens')
-                .select('current_streak')
+                .select('streak')
                 .eq('id', gardenId)
                 .maybeSingle(),
               'garden_streak'
             )
-            if (gardenData?.current_streak) {
-              gardenStreak = gardenData.current_streak
+            if (gardenData?.streak) {
+              gardenStreak = gardenData.streak
             }
 
             // Get member count
@@ -28941,21 +29565,21 @@ async function generateCrawlerHtml(req, pagePath) {
             )
             memberCount = (mCount || 0) + 1 // +1 for owner
 
-            // Try to get today's task progress
+            // Try to get today's task progress from daily cache table
             try {
               const today = new Date().toISOString().slice(0, 10)
-              const { data: taskOccs } = await ssrQuery(
+              const { data: cacheRow } = await ssrQuery(
                 dbClient
-                  .from('task_occurrences')
-                  .select('required_count, completed_count')
+                  .from('garden_task_daily_cache')
+                  .select('due_count, completed_count')
                   .eq('garden_id', gardenId)
-                  .gte('due_at', today)
-                  .lt('due_at', today + 'T23:59:59'),
+                  .eq('cache_date', today)
+                  .maybeSingle(),
                 'garden_today_tasks'
               )
-              if (taskOccs?.length) {
-                todayProgress.due = taskOccs.reduce((sum, t) => sum + (t.required_count || 0), 0)
-                todayProgress.completed = taskOccs.reduce((sum, t) => sum + (t.completed_count || 0), 0)
+              if (cacheRow) {
+                todayProgress.due = cacheRow.due_count || 0
+                todayProgress.completed = cacheRow.completed_count || 0
               }
             } catch { }
 
@@ -29169,7 +29793,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: posts } = await ssrQuery(
           supabaseServer
             .from('blog_posts')
-            .select('title, slug, excerpt, published_at, cover_image_url')
+            .select('id, title, excerpt, published_at, cover_image_url')
             .eq('is_published', true)
             .order('published_at', { ascending: false })
             .limit(10),
@@ -29193,7 +29817,7 @@ async function generateCrawlerHtml(req, pagePath) {
               <ul>
                 ${posts.map(p => `
                   <li>
-                    <a href="/blog/${escapeHtml(p.slug)}"><strong>${escapeHtml(p.title)}</strong></a>
+                    <a href="/blog/${escapeHtml(p.id)}"><strong>${escapeHtml(p.title)}</strong></a>
                     ${p.excerpt ? `<br><em>${escapeHtml(p.excerpt.slice(0, 100))}...</em>` : ''}
                   </li>
                 `).join('')}
@@ -29475,6 +30099,7 @@ async function generateCrawlerHtml(req, pagePath) {
     // Bookmark list page: /bookmarks/:id
     else if (isBookmarkRoute && supabaseServer) {
       isDynamicRoute = true
+      req._ssrDebug.matchedRoute = 'bookmark'
       const listId = decodeURIComponent(effectivePath[1])
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
 
@@ -29518,36 +30143,66 @@ async function generateCrawlerHtml(req, pagePath) {
             if (owner) ownerName = owner.display_name
           }
 
-          // Get plant count (with timeout) - using correct table 'bookmark_items'
-          const { count } = await ssrQuery(
+          // Get all bookmark plants with details (column is created_at, not added_at)
+          const { data: bookmarkPlants } = await ssrQuery(
             supabaseServer
               .from('bookmark_items')
-              .select('id', { count: 'exact', head: true })
-              .eq('bookmark_id', listId),
-            'bookmark_plant_count'
-          )
-          plantCount = count || 0
-
-          // Get first plant image (with timeout)
-          const { data: listPlants } = await ssrQuery(
-            supabaseServer
-              .from('bookmark_items')
-              .select('plant_id')
+              .select('plant_id, created_at')
               .eq('bookmark_id', listId)
-              .limit(1),
-            'bookmark_plants_for_img'
+              .order('created_at', { ascending: false })
+              .limit(50),
+            'bookmark_plants'
           )
-          if (listPlants?.[0]?.plant_id) {
-            const { data: plantImg } = await ssrQuery(
-              supabaseServer
-                .from('plant_images')
-                .select('link')
-                .eq('plant_id', listPlants[0].plant_id)
-                .eq('use', 'primary')
-                .maybeSingle(),
-              'bookmark_plant_img'
-            )
-            if (plantImg?.link) listImage = ensureAbsoluteUrl(plantImg.link)
+          
+          let bookmarkPlantDetails = []
+          if (bookmarkPlants?.length) {
+            plantCount = bookmarkPlants.length
+            const plantIds = bookmarkPlants.map(bp => bp.plant_id).filter(Boolean)
+            
+            // Get plant details (name from plants table, scientific_name from translations)
+            if (plantIds.length > 0) {
+              const { data: plantDetails } = await ssrQuery(
+                supabaseServer
+                  .from('plants')
+                  .select('id, name, plant_type')
+                  .in('id', plantIds),
+                'bookmark_plant_details'
+              )
+              if (plantDetails) {
+                // Fetch scientific names from plant_translations (English) since
+                // scientific_name is a translatable field stored primarily there
+                const { data: plantTranslations } = await ssrQuery(
+                  supabaseServer
+                    .from('plant_translations')
+                    .select('plant_id, scientific_name')
+                    .in('plant_id', plantIds)
+                    .eq('language', 'en'),
+                  'bookmark_plant_sci_names'
+                )
+                const sciNameMap = {}
+                if (plantTranslations) {
+                  plantTranslations.forEach(pt => {
+                    if (pt.scientific_name) sciNameMap[pt.plant_id] = pt.scientific_name
+                  })
+                }
+                bookmarkPlantDetails = plantDetails.map(p => ({
+                  ...p,
+                  scientific_name: sciNameMap[p.id] || null
+                }))
+                
+                // Get first plant image for bookmark cover
+                const { data: plantImg } = await ssrQuery(
+                  supabaseServer
+                    .from('plant_images')
+                    .select('link')
+                    .eq('plant_id', plantDetails[0].id)
+                    .eq('use', 'primary')
+                    .maybeSingle(),
+                  'bookmark_plant_img'
+                )
+                if (plantImg?.link) listImage = ensureAbsoluteUrl(plantImg.link)
+              }
+            }
           }
         } catch { }
 
@@ -29574,24 +30229,58 @@ async function generateCrawlerHtml(req, pagePath) {
         // Generate bookmark image tag if from media.aphylia.app
         const bookmarkImageTag = generateImageTag(listImage, `${bookmarkName} - Plant Collection on Aphylia`)
 
+        // Plant type emojis for visual appeal
+        const plantTypeEmojis = {
+          'vegetable': '🥬', 'fruit': '🍎', 'herb': '🌿', 'flower': '🌸',
+          'tree': '🌳', 'shrub': '🌲', 'succulent': '🌵', 'cactus': '🌵',
+          'vine': '🍇', 'grass': '🌾', 'fern': '🌿', 'aquatic': '🪷',
+          'bulb': '🌷', 'palm': '🌴', 'bamboo': '🎋'
+        }
+        
         pageContent = `
-          <article>
-            <h1>🔖 ${escapeHtml(bookmarkName)} - ${tr.bookmarkTitle}</h1>
+          <article itemscope itemtype="https://schema.org/Collection">
+            <h1 itemprop="name">🔖 ${escapeHtml(bookmarkName)}</h1>
             <div class="plant-meta">
               🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved}
               ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a>` : ''}
             </div>
             
-            ${bookmarkImageTag ? `<figure itemscope itemtype="https://schema.org/ImageObject">
+            ${bookmarkImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
               ${bookmarkImageTag}
               <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(bookmarkName)}</figcaption>
             </figure>` : ''}
             
-            <p>${tr.bookmarksCarefully} 🌱</p>
-            <p style="margin-top: 20px;"><a href="${escapeHtml(canonicalUrl)}">${tr.bookmarksView} →</a></p>
+            <p itemprop="description">${tr.bookmarksCarefully} 🌱</p>
+            
+            ${bookmarkPlantDetails.length > 0 ? `
+              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans cette collection' : 'Plants in this Collection'}</h2>
+              <div style="display: grid; gap: 12px; margin: 20px 0;">
+                ${bookmarkPlantDetails.map(plant => {
+                  const emoji = plantTypeEmojis[plant.plant_type?.toLowerCase()] || '🌱'
+                  return `
+                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #10b981;">
+                      <a href="/plants/${encodeURIComponent(plant.id)}" style="text-decoration: none; color: #065f46; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 20px;">${emoji}</span>
+                        <div>
+                          <div>${escapeHtml(plant.name)}</div>
+                          ${plant.scientific_name ? `<div style="font-size: 12px; color: #6b7280; font-style: italic; font-weight: normal;">${escapeHtml(plant.scientific_name)}</div>` : ''}
+                        </div>
+                      </a>
+                    </div>
+                  `
+                }).join('')}
+              </div>
+            ` : `<p style="color: #6b7280;">${detectedLang === 'fr' ? 'Cette collection est vide.' : 'This collection is empty.'}</p>`}
+            
+            <div style="margin: 32px 0; padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
+              <strong>🔖 ${detectedLang === 'fr' ? 'Voir la collection complète' : 'View Full Collection'}</strong><br>
+              ${detectedLang === 'fr' ? 'Pour créer vos propres collections et sauvegarder vos plantes préférées' : 'To create your own collections and save your favorite plants'}:<br>
+              <a href="${escapeHtml(canonicalUrl)}" style="color: #059669; font-weight: 600;">${detectedLang === 'fr' ? 'Visiter Aphylia →' : 'Visit Aphylia →'}</a>
+            </div>
             
             <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
             <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+              ${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">👤 ${escapeHtml(ownerName)}</a>` : ''}
               <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover Plants'}</a>
               <a href="/search">🔍 ${detectedLang === 'fr' ? 'Rechercher' : 'Search'}</a>
               <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
@@ -29707,11 +30396,11 @@ async function generateCrawlerHtml(req, pagePath) {
           )
           if (plants) popularPlants = plants
 
-          // Get recent blog posts
+          // Get recent blog posts — linked by ID, not slug
           const { data: posts } = await ssrQuery(
             supabaseServer
               .from('blog_posts')
-              .select('slug, title')
+              .select('id, title')
               .eq('is_published', true)
               .order('published_at', { ascending: false })
               .limit(6),
@@ -29802,7 +30491,7 @@ async function generateCrawlerHtml(req, pagePath) {
           ${recentBlogPosts.length > 0 ? `
           <h2>📚 ${detectedLang === 'fr' ? 'Articles Récents' : 'Recent Articles'}</h2>
           <ul>
-            ${recentBlogPosts.map(post => `<li><a href="/blog/${escapeHtml(post.slug)}">${escapeHtml(post.title)}</a></li>`).join('')}
+            ${recentBlogPosts.map(post => `<li><a href="/blog/${escapeHtml(post.id)}">${escapeHtml(post.title)}</a></li>`).join('')}
           </ul>
           <p><a href="/blog">📖 ${detectedLang === 'fr' ? 'Voir tous les articles' : 'View all articles'} →</a></p>
           ` : ''}
@@ -29847,6 +30536,190 @@ async function generateCrawlerHtml(req, pagePath) {
   } catch (err) {
     console.error('[ssr] Error generating crawler content:', err?.message || err)
     console.error('[ssr] Stack trace:', err?.stack || 'no stack')
+    req._ssrDebug.errors.push({ type: 'ssr_generation_error', error: err?.message || JSON.stringify(err) })
+  }
+
+  // If this is a dynamic route and the resource wasn't found, show a proper 404 page
+  if (isDynamicRoute && !resourceFound) {
+    const routeType = req._ssrDebug?.matchedRoute || 'page'
+    const routeTypeNames = {
+      plant: detectedLang === 'fr' ? 'Plante' : 'Plant',
+      blog_post: detectedLang === 'fr' ? 'Article' : 'Blog Post',
+      profile: detectedLang === 'fr' ? 'Profil' : 'Profile',
+      garden: detectedLang === 'fr' ? 'Jardin' : 'Garden',
+      bookmark: detectedLang === 'fr' ? 'Collection' : 'Collection',
+    }
+    const resourceType = routeTypeNames[routeType] || 'Page'
+    
+    title = `${detectedLang === 'fr' ? 'Non trouvé' : 'Not Found'} - ${resourceType} | Aphylia`
+    description = detectedLang === 'fr' 
+      ? `Cette ${resourceType.toLowerCase()} n'existe pas ou n'est pas disponible.`
+      : `This ${resourceType.toLowerCase()} does not exist or is not available.`
+    
+    // Check for specific error messages
+    const errors = req._ssrDebug?.errors || []
+    const errorDetails = errors.length > 0 ? errors.map(e => e.error).filter(Boolean).join(', ') : null
+    
+    pageContent = `
+      <article style="text-align: center; padding: 40px 20px;">
+        <h1 style="font-size: 48px; margin-bottom: 16px;">🔍</h1>
+        <h2>${resourceType} ${detectedLang === 'fr' ? 'Non Trouvé' : 'Not Found'}</h2>
+        <p style="color: #6b7280; margin: 20px 0;">
+          ${detectedLang === 'fr' 
+            ? `Désolé, cette ${resourceType.toLowerCase()} n'existe pas dans notre base de données.`
+            : `Sorry, this ${resourceType.toLowerCase()} does not exist in our database.`}
+        </p>
+        
+        ${!supabaseServer ? `
+          <div style="margin: 20px 0; padding: 16px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <strong>⚠️ ${detectedLang === 'fr' ? 'Avertissement' : 'Warning'}</strong><br>
+            ${detectedLang === 'fr' 
+              ? 'La connexion à la base de données n\'est pas configurée sur ce serveur.'
+              : 'Database connection is not configured on this server.'}
+          </div>
+        ` : ''}
+        
+        ${errorDetails ? `
+          <details style="margin: 20px auto; max-width: 600px; text-align: left; padding: 16px; background: #fef2f2; border-radius: 8px;">
+            <summary style="cursor: pointer; font-weight: 600; color: #dc2626;">${detectedLang === 'fr' ? 'Détails de l\'erreur' : 'Error Details'}</summary>
+            <pre style="margin-top: 12px; padding: 12px; background: white; border-radius: 4px; font-size: 12px; overflow-x: auto;">${escapeHtml(errorDetails)}</pre>
+          </details>
+        ` : ''}
+        
+        <h3 style="margin-top: 40px;">${detectedLang === 'fr' ? 'Que pouvez-vous faire ?' : 'What can you do?'}</h3>
+        <ul style="list-style: none; padding: 0; margin: 20px 0;">
+          <li style="margin: 12px 0;">🔍 <a href="/search">${detectedLang === 'fr' ? 'Rechercher des plantes' : 'Search for plants'}</a></li>
+          <li style="margin: 12px 0;">🎴 <a href="/discovery">${detectedLang === 'fr' ? 'Découvrir des plantes' : 'Discover plants'}</a></li>
+          <li style="margin: 12px 0;">🏡 <a href="/gardens">${detectedLang === 'fr' ? 'Explorer les jardins' : 'Explore gardens'}</a></li>
+          <li style="margin: 12px 0;">📚 <a href="/blog">${detectedLang === 'fr' ? 'Lire le blog' : 'Read the blog'}</a></li>
+          <li style="margin: 12px 0;">🏠 <a href="/">${detectedLang === 'fr' ? 'Retour à l\'accueil' : 'Back to homepage'}</a></li>
+        </ul>
+        
+        <p style="margin-top: 40px;">
+          <a href="https://aphylia.app${escapeHtml(pagePath)}" style="display: inline-block; padding: 12px 24px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: 600;">
+            ${detectedLang === 'fr' ? '🌐 Essayer sur Aphylia Live' : '🌐 Try on Aphylia Live'}
+          </a>
+        </p>
+      </article>
+    `
+  }
+
+  // Build keywords from page content (moved before HTML generation)
+  let keywords = 'aphylia, plants, gardening, plant care, garden management'
+  if (req._ssrDebug?.matchedRoute === 'plant' && req._ssrDebug?.queryResults?.plant?.found) {
+    // Extract keywords from plant data stored in the debug object
+    const plantData = req._ssrDebug.queryResults.plant
+    const keywordParts = ['plants', 'plant care', 'gardening', 'aphylia']
+    if (plantData.name) keywordParts.push(plantData.name)
+    if (plantData.scientificName) keywordParts.push(plantData.scientificName)
+    if (plantData.family) keywordParts.push(plantData.family)
+    if (plantData.plantType) keywordParts.push(plantData.plantType)
+    if (plantData.tags && Array.isArray(plantData.tags)) {
+      plantData.tags.slice(0, 5).forEach(tag => keywordParts.push(tag))
+    }
+    keywords = keywordParts.join(', ')
+  } else if (req._ssrDebug?.matchedRoute === 'blog_post') {
+    keywords = 'aphylia, blog, gardening tips, plant care, gardening guide, ' + (title || '').replace(/[📖|]/g, '').trim()
+  } else if (req._ssrDebug?.matchedRoute === 'profile') {
+    keywords = 'aphylia, gardener, profile, plant collection, garden community'
+  } else if (req._ssrDebug?.matchedRoute === 'garden') {
+    keywords = 'aphylia, garden, plants, growing, gardening community, plant tracker'
+  } else if (req._ssrDebug?.matchedRoute === 'bookmark') {
+    keywords = 'aphylia, plant collection, bookmarks, saved plants, plant list'
+  }
+
+  // Build JSON-LD structured data for search engines
+  let jsonLdSchema = null
+  if (req._ssrDebug?.matchedRoute === 'plant' && req._ssrDebug?.queryResults?.plant?.found) {
+    const plantData = req._ssrDebug.queryResults.plant
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: plantData.name || 'Plant',
+      description: description,
+      image: image || undefined,
+      brand: {
+        '@type': 'Brand',
+        name: 'Aphylia'
+      },
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'USD',
+        availability: 'https://schema.org/InStock'
+      }
+    }
+    if (plantData.scientificName) {
+      jsonLdSchema.alternateName = plantData.scientificName
+    }
+  } else if (req._ssrDebug?.matchedRoute === 'blog_post') {
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'BlogPosting',
+      headline: title,
+      description: description,
+      image: image || undefined,
+      author: {
+        '@type': 'Organization',
+        name: 'Aphylia'
+      },
+      publisher: {
+        '@type': 'Organization',
+        name: 'Aphylia',
+        logo: {
+          '@type': 'ImageObject',
+          url: `${siteUrl}/icons/icon-512x512.png`
+        }
+      },
+      mainEntityOfPage: {
+        '@type': 'WebPage',
+        '@id': canonicalUrl
+      }
+    }
+  } else if (req._ssrDebug?.matchedRoute === 'profile') {
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      mainEntity: {
+        '@type': 'Person',
+        name: title.replace(/🌱\s*/, '').split('|')[0].trim(),
+        description: description,
+        image: image || undefined,
+        url: canonicalUrl
+      }
+    }
+  } else if (req._ssrDebug?.matchedRoute === 'garden') {
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Place',
+      name: title.replace(/[🌳🌿🌱🏡]\s*/, '').split('-')[0].trim(),
+      description: description,
+      image: image || undefined,
+      url: canonicalUrl
+    }
+  } else if (req._ssrDebug?.matchedRoute === 'bookmark') {
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: title.replace(/🔖\s*/, '').split('-')[0].trim(),
+      description: description,
+      image: image || undefined,
+      url: canonicalUrl
+    }
+  } else {
+    // Generic website schema
+    jsonLdSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: 'Aphylia',
+      url: siteUrl,
+      description: 'Discover, swipe and manage the perfect plants for every garden.',
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${siteUrl}/search?q={search_term_string}`,
+        'query-input': 'required name=search_term_string'
+      }
+    }
   }
 
   // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
@@ -29858,16 +30731,20 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(description)}">
-  <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow'}">
+  <meta name="keywords" content="${escapeHtml(keywords)}">
+  <meta name="author" content="Aphylia">
+  <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
   <!-- Open Graph / Facebook / Discord / Telegram / LinkedIn -->
-  <meta property="og:type" content="website">
+  <meta property="og:type" content="${req._ssrDebug?.matchedRoute === 'blog_post' ? 'article' : 'website'}">
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
   <meta property="og:title" content="${escapeHtml(title)}">
   <meta property="og:description" content="${escapeHtml(description)}">
   ${image ? `<meta property="og:image" content="${escapeHtml(image)}">
-  <meta property="og:image:alt" content="${escapeHtml(imageAlt)}">` : '<!-- No image for this page -->'}
+  <meta property="og:image:alt" content="${escapeHtml(imageAlt)}">
+  ${imageWidth ? `<meta property="og:image:width" content="${imageWidth}">` : ''}
+  ${imageHeight ? `<meta property="og:image:height" content="${imageHeight}">` : ''}` : '<!-- No image for this page -->'}
   <meta property="og:site_name" content="Aphylia">
   <meta property="og:locale" content="${detectedLang === 'fr' ? 'fr_FR' : 'en_US'}">
   
@@ -29879,6 +30756,13 @@ async function generateCrawlerHtml(req, pagePath) {
   ${image ? `<meta name="twitter:image" content="${escapeHtml(image)}">
   <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}">` : ''}
   
+  <!-- Additional SEO Meta Tags -->
+  <meta name="language" content="${detectedLang === 'fr' ? 'French' : 'English'}">
+  <meta name="revisit-after" content="7 days">
+  <meta name="rating" content="general">
+  <meta name="distribution" content="global">
+  <meta name="generator" content="Aphylia SSR">
+  
   <!-- Theme -->
   <meta name="theme-color" content="#052e16">
   <meta name="application-name" content="Aphylia">
@@ -29888,6 +30772,11 @@ async function generateCrawlerHtml(req, pagePath) {
   <link rel="icon" type="image/png" sizes="192x192" href="${siteUrl}/icons/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="${siteUrl}/icons/icon-512x512.png">
   <link rel="apple-touch-icon" href="${siteUrl}/icons/icon-192x192.png">
+  
+  <!-- JSON-LD Structured Data -->
+  ${jsonLdSchema ? `<script type="application/ld+json">
+${JSON.stringify(jsonLdSchema, null, 2)}
+  </script>` : ''}
   
   <style>
     * { box-sizing: border-box; }
@@ -30003,14 +30892,6 @@ async function generateCrawlerHtml(req, pagePath) {
       <a href="/contact">Contact</a>
     </nav>
     
-    <div class="archive-notice">
-      <strong>📚 Static Content Version</strong><br>
-      You're viewing a simplified version of this page optimized for web archives and search engines.
-      For the full interactive experience with search, gardens, and personalized features:
-      <br>
-      <a href="https://aphylia.app${escapeHtml(pagePath)}">Visit Aphylia Live →</a>
-    </div>
-    
     <main>
       <div class="plant-card">
         ${pageContent || `
@@ -30032,6 +30913,14 @@ async function generateCrawlerHtml(req, pagePath) {
         This is a pre-rendered version for web crawlers, archives, and accessibility.<br>
         Content archived on ${new Date().toISOString().split('T')[0]}
       </p>
+      
+      <div class="archive-notice" style="margin-top: 30px;">
+        <strong>📚 Static Content Version</strong><br>
+        You're viewing a simplified version of this page optimized for web archives and search engines.
+        For the full interactive experience with search, gardens, and personalized features:
+        <br>
+        <a href="https://aphylia.app${escapeHtml(pagePath)}">Visit Aphylia Live →</a>
+      </div>
     </footer>
   </div>
   
