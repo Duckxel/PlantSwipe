@@ -4435,6 +4435,66 @@ app.options('/api/admin/ai/plant-fill/english-name', (_req, res) => {
 // External Image Sources (GBIF + Smithsonian)
 // ========================================
 
+/**
+ * Resolve a plant name (common or scientific) to a GBIF taxonKey.
+ * First tries species/match (works for scientific names).
+ * If that fails, falls back to species/search with vernacular name lookup.
+ * Returns { taxonKey, scientificName } or null if not found.
+ */
+async function resolveGbifTaxonKey(plantName) {
+  // Step 1: Try exact species match (works well for scientific names)
+  const matchUrl = `https://api.gbif.org/v1/species/match?name=${encodeURIComponent(plantName)}`
+  const matchResp = await fetch(matchUrl)
+  if (matchResp.ok) {
+    const matchData = await matchResp.json()
+    if (matchData.usageKey && matchData.matchType !== 'NONE') {
+      return {
+        taxonKey: matchData.usageKey,
+        scientificName: matchData.scientificName || matchData.canonicalName || null,
+      }
+    }
+  }
+
+  // Step 2: Fallback - search by vernacular (common) name
+  const vernacularUrl = `https://api.gbif.org/v1/species/search?q=${encodeURIComponent(plantName)}&qField=VERNACULAR&rank=SPECIES&limit=5&status=ACCEPTED`
+  const vernacularResp = await fetch(vernacularUrl)
+  if (vernacularResp.ok) {
+    const vernacularData = await vernacularResp.json()
+    const results = vernacularData.results || []
+    // Prefer results that have a nubKey (backbone taxon key)
+    for (const r of results) {
+      const key = r.nubKey || r.key
+      if (key) {
+        console.log(`[server] GBIF resolved common name "${plantName}" -> "${r.canonicalName || r.scientificName}" (taxonKey=${key})`)
+        return {
+          taxonKey: key,
+          scientificName: r.canonicalName || r.scientificName || null,
+        }
+      }
+    }
+  }
+
+  // Step 3: Last resort - general species search
+  const searchUrl = `https://api.gbif.org/v1/species/search?q=${encodeURIComponent(plantName)}&rank=SPECIES&limit=3&status=ACCEPTED`
+  const searchResp = await fetch(searchUrl)
+  if (searchResp.ok) {
+    const searchData = await searchResp.json()
+    const results = searchData.results || []
+    for (const r of results) {
+      const key = r.nubKey || r.key
+      if (key && r.canonicalName) {
+        console.log(`[server] GBIF resolved "${plantName}" via search -> "${r.canonicalName}" (taxonKey=${key})`)
+        return {
+          taxonKey: key,
+          scientificName: r.canonicalName || r.scientificName || null,
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 // Admin/Editor: Fetch CC0-licensed images from GBIF for a plant name
 app.post('/api/admin/images/gbif', async (req, res) => {
   try {
@@ -4449,24 +4509,16 @@ app.post('/api/admin/images/gbif', async (req, res) => {
     }
     const limit = Math.min(Math.max(parseInt(body.limit) || 20, 1), 50)
 
-    // Step 1: Match species name to get taxonKey
-    const matchUrl = `https://api.gbif.org/v1/species/match?name=${encodeURIComponent(plantName)}`
-    const matchResp = await fetch(matchUrl)
-    if (!matchResp.ok) {
-      res.status(502).json({ error: 'Failed to match species on GBIF' })
-      return
-    }
-    const matchData = await matchResp.json()
-    const taxonKey = matchData.usageKey
-    if (!taxonKey) {
+    // Step 1: Resolve plant name to taxonKey (handles both common and scientific names)
+    const resolved = await resolveGbifTaxonKey(plantName)
+    if (!resolved) {
+      console.log(`[server] GBIF: no species match for "${plantName}"`)
       res.json({ success: true, images: [], scientificName: null, message: 'No matching species found on GBIF' })
       return
     }
 
     // Step 2: Fetch CC0-licensed occurrence images
-    // GBIF license filter values: CC0_1_0, CC_BY_4_0, CC_BY_NC_4_0
-    // We only fetch CC0 (public domain) as requested
-    const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${limit}`
+    const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${resolved.taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${limit}`
     const occResp = await fetch(occUrl)
     if (!occResp.ok) {
       res.status(502).json({ error: 'Failed to fetch occurrences from GBIF' })
@@ -4493,11 +4545,11 @@ app.post('/api/admin/images/gbif', async (req, res) => {
       }
     }
 
-    console.log(`[server] GBIF images for "${plantName}": found ${images.length} CC0 images (taxonKey=${taxonKey})`)
+    console.log(`[server] GBIF images for "${plantName}": found ${images.length} CC0 images (taxonKey=${resolved.taxonKey}, scientific=${resolved.scientificName})`)
     res.json({
       success: true,
       images,
-      scientificName: matchData.scientificName || matchData.canonicalName || null,
+      scientificName: resolved.scientificName,
       totalAvailable: occData.count || 0,
     })
   } catch (err) {
@@ -4535,7 +4587,17 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
       return
     }
 
-    const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(plantName)}&rows=${rows}&api_key=${encodeURIComponent(apiKey)}`
+    // Resolve scientific name via GBIF for better Smithsonian results
+    let searchQuery = plantName
+    try {
+      const resolved = await resolveGbifTaxonKey(plantName)
+      if (resolved?.scientificName) {
+        searchQuery = resolved.scientificName
+        console.log(`[server] Smithsonian: using scientific name "${searchQuery}" (from "${plantName}")`)
+      }
+    } catch { /* use original name */ }
+
+    const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(searchQuery)}&rows=${rows}&api_key=${encodeURIComponent(apiKey)}`
     const searchResp = await fetch(searchUrl)
     if (!searchResp.ok) {
       const statusText = searchResp.statusText || searchResp.status
@@ -4712,33 +4774,31 @@ app.post('/api/admin/images/external', async (req, res) => {
     const limit = Math.min(Math.max(parseInt(body.limit) || 12, 1), 50)
 
     const results = { gbif: [], smithsonian: [], serpapi: [], errors: [] }
+    // Resolve scientific name first (used by GBIF and Smithsonian)
+    let resolvedScientificName = null
 
-    // Fetch GBIF images
+    // Fetch GBIF images (resolves both common and scientific names)
     try {
-      const matchUrl = `https://api.gbif.org/v1/species/match?name=${encodeURIComponent(plantName)}`
-      const matchResp = await fetch(matchUrl)
-      if (matchResp.ok) {
-        const matchData = await matchResp.json()
-        const taxonKey = matchData.usageKey
-        if (taxonKey) {
-          const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${limit}`
-          const occResp = await fetch(occUrl)
-          if (occResp.ok) {
-            const occData = await occResp.json()
-            const seenUrls = new Set()
-            for (const result of (occData.results || [])) {
-              for (const media of (result.media || [])) {
-                if (media.type !== 'StillImage') continue
-                const url = media.identifier
-                if (!url || seenUrls.has(url)) continue
-                seenUrls.add(url)
-                results.gbif.push({
-                  url,
-                  license: media.license || 'CC0',
-                  source: 'gbif',
-                  creator: media.creator || media.rightsHolder || null,
-                })
-              }
+      const resolved = await resolveGbifTaxonKey(plantName)
+      if (resolved) {
+        resolvedScientificName = resolved.scientificName
+        const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${resolved.taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${limit}`
+        const occResp = await fetch(occUrl)
+        if (occResp.ok) {
+          const occData = await occResp.json()
+          const seenUrls = new Set()
+          for (const result of (occData.results || [])) {
+            for (const media of (result.media || [])) {
+              if (media.type !== 'StillImage') continue
+              const url = media.identifier
+              if (!url || seenUrls.has(url)) continue
+              seenUrls.add(url)
+              results.gbif.push({
+                url,
+                license: media.license || 'CC0',
+                source: 'gbif',
+                creator: media.creator || media.rightsHolder || null,
+              })
             }
           }
         }
@@ -4748,11 +4808,12 @@ app.post('/api/admin/images/external', async (req, res) => {
       results.errors.push(`GBIF: ${gbifErr?.message || 'Unknown error'}`)
     }
 
-    // Fetch Smithsonian images
+    // Fetch Smithsonian images (use scientific name if resolved, else common name)
     const smithsonianApiKey = process.env.SMITHSONIAN_API_KEY || ''
     if (smithsonianApiKey) {
       try {
-        const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(plantName)}&rows=${limit}&api_key=${encodeURIComponent(smithsonianApiKey)}`
+        const smithsonianQuery = resolvedScientificName || plantName
+        const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(smithsonianQuery)}&rows=${limit}&api_key=${encodeURIComponent(smithsonianApiKey)}`
         const searchResp = await fetch(searchUrl)
         if (searchResp.ok) {
           const searchData = await searchResp.json()
@@ -30747,6 +30808,8 @@ if (shouldListen) {
   const host = process.env.HOST || '127.0.0.1' // Bind to localhost only for security
   const httpServer = app.listen(port, host, () => {
     console.log(`[server] listening on http://${host}:${port}`)
+    // Log external image API key status
+    console.log(`[server] External image APIs: SerpAPI=${process.env.SERPAPI_KEY ? 'configured' : 'NOT SET'}, Smithsonian=${process.env.SMITHSONIAN_API_KEY ? 'configured' : 'NOT SET'}, GBIF=no key needed`)
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => { })
     ensureBroadcastTable().catch(() => { })
