@@ -4838,20 +4838,25 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
         if (media.type !== 'Images') continue
         const resources = media.resources || []
 
-        // Prefer: High-resolution JPEG > Screen Image > content URL > thumbnail
+        // Prefer web-friendly sizes: Screen Image > JPEG > content URL > thumbnail
+        // Skip TIFF/RAW (50+ MB files that crash processing)
         let bestUrl = null
+        let jpegUrl = null
         for (const res of resources) {
           const label = (res.label || '').toLowerCase()
           const url = res.url || ''
           if (!url) continue
-          if (label.includes('high-resolution jpeg') || label.includes('high-resolution jpg')) {
+          // Skip TIFF and other raw formats explicitly
+          if (label.includes('tiff') || label.includes('tif') || url.toLowerCase().endsWith('.tif') || url.toLowerCase().endsWith('.tiff')) continue
+          if (label.includes('screen image')) {
             bestUrl = url
-            break
+            break // Screen images are ideal (~200KB web-ready)
           }
-          if (label.includes('screen image') && !bestUrl) {
-            bestUrl = url
+          if ((label.includes('jpeg') || label.includes('jpg')) && !jpegUrl) {
+            jpegUrl = url
           }
         }
+        if (!bestUrl && jpegUrl) bestUrl = jpegUrl
         // Fallback to content URL (delivery service) if no resource matches
         if (!bestUrl && media.content) {
           bestUrl = media.content
@@ -4907,8 +4912,8 @@ app.post('/api/admin/images/serpapi', async (req, res) => {
 
     const apiKey = (process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || '').trim()
     if (!apiKey) {
-      console.warn('[server] SerpAPI: no key found. Checked: SERPAPI_KEY, SERP_API_KEY, SERPAPI_API_KEY')
-      res.status(503).json({ error: 'SerpAPI key is not configured. Set SERPAPI_KEY in .env or .env.server file.' })
+      console.warn('[server] SerpAPI: no key found. Checked env vars: SERPAPI_KEY, SERP_API_KEY, SERPAPI_API_KEY. Add one of these to .env or .env.server in the plant-swipe directory, then restart the server.')
+      res.status(503).json({ error: 'SerpAPI key not found. Add SERPAPI_KEY=your_key to the .env or .env.server file in the plant-swipe/ directory, then restart the server (sudo systemctl restart plantswipe).' })
       return
     }
 
@@ -5054,8 +5059,10 @@ app.post('/api/admin/images/external', async (req, res) => {
               for (const r of resources) {
                 const label = (r.label || '').toLowerCase()
                 if (!r.url) continue
-                if (label.includes('high-resolution jpeg') || label.includes('high-resolution jpg')) { bestUrl = r.url; break }
-                if (label.includes('screen image') && !bestUrl) bestUrl = r.url
+                // Skip TIFF/RAW formats (50+ MB files)
+                if (label.includes('tiff') || label.includes('tif') || (r.url && (r.url.toLowerCase().endsWith('.tif') || r.url.toLowerCase().endsWith('.tiff')))) continue
+                if (label.includes('screen image')) { bestUrl = r.url; break }
+                if ((label.includes('jpeg') || label.includes('jpg')) && !bestUrl) bestUrl = r.url
               }
               if (!bestUrl && media.content) bestUrl = media.content
               if (!bestUrl && media.thumbnail) bestUrl = media.thumbnail

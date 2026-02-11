@@ -89,9 +89,9 @@ async function fetchFromSource(
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
-    // For 503 (not configured) - skip silently
+    // For 503 (not configured) - skip with detailed message
     if (response.status === 503) {
-      console.log(`[externalImages] ${source}: not configured, skipping`)
+      console.warn(`[externalImages] ${source}: ${data.error || 'not configured'}`)
       return []
     }
     throw new Error(data.error || `${source} returned ${response.status}`)
