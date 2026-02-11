@@ -7,7 +7,7 @@
 
 import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, getEnglishPlantName } from "@/lib/aiPlantFill"
-import { fetchExternalPlantImages } from "@/lib/externalImages"
+import { fetchExternalPlantImages, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import { translateBatch } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
@@ -380,6 +380,10 @@ export interface AiPrefillCallbacks {
   onProgress?: (info: { stage: 'filling' | 'saving' | 'translating' | 'translating_name' | 'fetching_images'; plantName: string }) => void
   onFieldComplete?: (info: { field: string; fieldsCompleted: number; totalFields: number }) => void
   onFieldStart?: (info: { field: string; fieldsCompleted: number; totalFields: number }) => void
+  /** Called when an individual image source starts loading */
+  onImageSourceStart?: (source: ExternalImageSource) => void
+  /** Called when an individual image source finishes (success, error, or skipped) */
+  onImageSourceDone?: (result: SourceResult) => void
   onError?: (error: string) => void
   signal?: AbortSignal
 }
@@ -393,7 +397,7 @@ export async function processPlantRequest(
   createdBy: string | undefined,
   callbacks?: AiPrefillCallbacks
 ): Promise<{ success: boolean; plantId?: string; error?: string; cancelled?: boolean }> {
-  const { onProgress, onFieldComplete, onFieldStart, onError, signal } = callbacks || {}
+  const { onProgress, onFieldComplete, onFieldStart, onImageSourceStart, onImageSourceDone, onError, signal } = callbacks || {}
   
   const totalFields = aiFieldOrder.length
   let fieldsCompleted = 0
@@ -614,6 +618,10 @@ export async function processPlantRequest(
       const externalResult = await fetchExternalPlantImages(englishPlantName, {
         limit: 20,
         signal,
+        callbacks: {
+          onSourceStart: onImageSourceStart,
+          onSourceDone: onImageSourceDone,
+        },
       })
       
       if (externalResult.images.length > 0) {

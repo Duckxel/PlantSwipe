@@ -100,6 +100,7 @@ import {
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
 import { processAllPlantRequests } from "@/lib/aiPrefillService";
+import { IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
 import { Languages } from "lucide-react";
 import { 
@@ -2072,6 +2073,13 @@ export const AdminPage: React.FC = () => {
   const [aiPrefillStartTime, setAiPrefillStartTime] = React.useState<number | null>(null);
   const [aiPrefillElapsedTime, setAiPrefillElapsedTime] = React.useState<number>(0);
   const [aiPrefillPlantStartTime, setAiPrefillPlantStartTime] = React.useState<number | null>(null);
+  const [aiPrefillImageSources, setAiPrefillImageSources] = React.useState<Record<ExternalImageSource, SourceResult>>(() => {
+    const initial: Record<string, SourceResult> = {};
+    for (const s of IMAGE_SOURCES) {
+      initial[s.key] = { source: s.key, label: s.label, images: [], status: 'idle' };
+    }
+    return initial as Record<ExternalImageSource, SourceResult>;
+  });
 
   // Timer effect for elapsed time
   React.useEffect(() => {
@@ -3250,6 +3258,16 @@ export const AdminPage: React.FC = () => {
               setAiPrefillCurrentField(null);
               setAiPrefillFieldProgress({ completed: 0, total: 0 });
             }
+            // Reset image sources when entering fetching_images stage
+            if (stage === 'fetching_images') {
+              setAiPrefillImageSources((prev) => {
+                const next = { ...prev };
+                for (const s of IMAGE_SOURCES) {
+                  next[s.key] = { source: s.key, label: s.label, images: [], status: 'idle' };
+                }
+                return next;
+              });
+            }
           },
           onFieldStart: ({ field, fieldsCompleted, totalFields }) => {
             setAiPrefillCurrentField(field);
@@ -3258,6 +3276,18 @@ export const AdminPage: React.FC = () => {
           onFieldComplete: ({ field, fieldsCompleted, totalFields }) => {
             markAiPrefillFieldComplete(field);
             setAiPrefillFieldProgress({ completed: fieldsCompleted, total: totalFields });
+          },
+          onImageSourceStart: (source) => {
+            setAiPrefillImageSources((prev) => ({
+              ...prev,
+              [source]: { ...prev[source], status: 'loading', images: [], error: undefined },
+            }));
+          },
+          onImageSourceDone: (result) => {
+            setAiPrefillImageSources((prev) => ({
+              ...prev,
+              [result.source]: result,
+            }));
           },
           onPlantProgress: ({ current, total, plantName }) => {
             setAiPrefillProgress({ current, total });
@@ -8730,6 +8760,69 @@ export const AdminPage: React.FC = () => {
                                         }}
                                       />
                                     </div>
+                                  </div>
+                                )}
+
+                                {/* Per-source image fetch progress */}
+                                {aiPrefillStatus === 'fetching_images' && (
+                                  <div className="space-y-2">
+                                    {IMAGE_SOURCES.map(({ key, label }) => {
+                                      const src = aiPrefillImageSources[key];
+                                      const isLoading = src.status === 'loading';
+                                      const isDone = src.status === 'done';
+                                      const isError = src.status === 'error';
+                                      const isSkipped = src.status === 'skipped';
+                                      const count = src.images.length;
+                                      return (
+                                        <div key={key} className="flex items-center gap-3">
+                                          <div className="w-28 shrink-0 text-[11px] font-medium text-stone-600 dark:text-stone-300">
+                                            {label}
+                                          </div>
+                                          <div className="flex-1 h-1.5 rounded-full bg-stone-100 dark:bg-[#2a2a2d] overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full transition-all duration-500 ease-out ${
+                                                isLoading
+                                                  ? 'bg-cyan-400 dark:bg-cyan-500 animate-pulse'
+                                                  : isDone && count > 0
+                                                    ? 'bg-emerald-500 dark:bg-emerald-400'
+                                                    : isDone
+                                                      ? 'bg-stone-300 dark:bg-stone-600'
+                                                      : isError
+                                                        ? 'bg-red-400 dark:bg-red-500'
+                                                        : isSkipped
+                                                          ? 'bg-amber-300 dark:bg-amber-500'
+                                                          : 'bg-stone-200 dark:bg-stone-700'
+                                              }`}
+                                              style={{ width: (isLoading || isDone || isError || isSkipped) ? '100%' : '0%' }}
+                                            />
+                                          </div>
+                                          <div className="w-20 shrink-0 text-right">
+                                            {isLoading && (
+                                              <span className="text-[11px] text-cyan-600 dark:text-cyan-400 flex items-center justify-end gap-1">
+                                                <Loader2 className="h-3 w-3 animate-spin" /> Searching
+                                              </span>
+                                            )}
+                                            {isDone && count > 0 && (
+                                              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                                {count} {count === 1 ? 'image' : 'images'}
+                                              </span>
+                                            )}
+                                            {isDone && count === 0 && (
+                                              <span className="text-[11px] text-stone-400 dark:text-stone-500">0 images</span>
+                                            )}
+                                            {isError && (
+                                              <span className="text-[11px] text-red-500 dark:text-red-400" title={src.error}>Failed</span>
+                                            )}
+                                            {isSkipped && (
+                                              <span className="text-[11px] text-amber-500 dark:text-amber-400" title={src.error}>Skipped</span>
+                                            )}
+                                            {src.status === 'idle' && (
+                                              <span className="text-[11px] text-stone-300 dark:text-stone-600">Waiting</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 )}
 
