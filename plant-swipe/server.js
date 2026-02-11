@@ -4441,6 +4441,23 @@ app.options('/api/admin/ai/plant-fill/english-name', (_req, res) => {
  * If that fails, falls back to species/search with vernacular name lookup.
  * Returns { taxonKey, scientificName } or null if not found.
  */
+/** Check if an image URL points to an allowed format (jpg, jpeg, png, webp) */
+function isAllowedImageUrl(url) {
+  if (!url || typeof url !== 'string') return false
+  // Strip query string and fragment, then check extension
+  const clean = url.split('?')[0].split('#')[0].toLowerCase()
+  // Allow if URL ends with an allowed extension
+  if (/\.(jpe?g|png|webp)$/.test(clean)) return true
+  // Also allow URLs that contain format hints in query params (e.g. format=jpg)
+  const lower = url.toLowerCase()
+  if (/[?&]format=(jpe?g|png|webp)/i.test(lower)) return true
+  // Reject URLs that explicitly end in disallowed formats
+  if (/\.(tiff?|exr|bmp|gif|svg|raw|cr2|nef|dng|psd|eps|ai|pdf)$/.test(clean)) return false
+  // For URLs with no clear extension (e.g. delivery service URLs), allow them
+  // as they typically serve JPEG by default
+  return true
+}
+
 async function resolveGbifTaxonKey(plantName) {
   // Step 1: Try exact species match (works well for scientific names)
   const matchUrl = `https://api.gbif.org/v1/species/match?name=${encodeURIComponent(plantName)}`
@@ -4535,7 +4552,7 @@ app.post('/api/admin/images/gbif', async (req, res) => {
         if (images.length >= limit) break
         if (media.type !== 'StillImage') continue
         const url = media.identifier
-        if (!url || seenUrls.has(url)) continue
+        if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
         seenUrls.add(url)
         images.push({
           url,
@@ -4646,7 +4663,7 @@ app.post('/api/admin/images/smithsonian', async (req, res) => {
         if (!bestUrl && media.thumbnail) {
           bestUrl = media.thumbnail
         }
-        if (!bestUrl || seenUrls.has(bestUrl)) continue
+        if (!bestUrl || seenUrls.has(bestUrl) || !isAllowedImageUrl(bestUrl)) continue
         seenUrls.add(bestUrl)
         images.push({
           url: bestUrl,
@@ -4732,7 +4749,7 @@ app.post('/api/admin/images/serpapi', async (req, res) => {
     for (const img of imagesResults) {
       if (images.length >= limit) break
       const url = img.original
-      if (!url || seenUrls.has(url)) continue
+      if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
       seenUrls.add(url)
       images.push({
         url,
@@ -4797,7 +4814,7 @@ app.post('/api/admin/images/external', async (req, res) => {
               if (results.gbif.length >= limit) break
               if (media.type !== 'StillImage') continue
               const url = media.identifier
-              if (!url || seenUrls.has(url)) continue
+              if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
               seenUrls.add(url)
               results.gbif.push({
                 url,
@@ -4844,7 +4861,7 @@ app.post('/api/admin/images/external', async (req, res) => {
               }
               if (!bestUrl && media.content) bestUrl = media.content
               if (!bestUrl && media.thumbnail) bestUrl = media.thumbnail
-              if (!bestUrl || seenUrls.has(bestUrl)) continue
+              if (!bestUrl || seenUrls.has(bestUrl) || !isAllowedImageUrl(bestUrl)) continue
               seenUrls.add(bestUrl)
               results.smithsonian.push({
                 url: bestUrl,
@@ -4882,7 +4899,7 @@ app.post('/api/admin/images/external', async (req, res) => {
             for (const img of serpImages) {
               if (results.serpapi.length >= serpLimit) break
               const url = img.original
-              if (!url || seenUrls.has(url)) continue
+              if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
               seenUrls.add(url)
               results.serpapi.push({
                 url,
