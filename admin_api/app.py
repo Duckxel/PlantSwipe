@@ -2,6 +2,7 @@ import hmac
 import hashlib
 import os
 import subprocess
+import re
 from typing import Set, Optional
 
 from flask import Flask, request, abort, jsonify, Response
@@ -550,7 +551,21 @@ def list_branches():
         return jsonify({"error": str(e) or "Failed to list branches"}), 500
 
 
+def _validate_branch_name(name: str) -> bool:
+    """Validate branch name to prevent argument injection."""
+    if not name:
+        return True
+    # Explicitly reject starting with - to prevent flag injection
+    if name.startswith("-"):
+        return False
+    # Allow alphanumeric, underscore, dot, hyphen, forward slash
+    return bool(re.match(r'^[a-zA-Z0-9_./-]+$', name))
+
+
 def _run_refresh(branch: Optional[str], stream: bool):
+    if branch and not _validate_branch_name(branch):
+        abort(400, description="Invalid branch name")
+
     repo_root = _get_repo_root()
     script_path = _refresh_script_path(repo_root)
     if not os.path.isfile(script_path):
