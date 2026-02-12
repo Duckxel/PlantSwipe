@@ -30,50 +30,37 @@ const TIME_META: Record<string, { label: string; Icon: React.FC<{ className?: st
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Layout constants
+   Layout
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const OVERLAP      = 32
 const DIVIDER_BODY = 54
 const TAB_HEIGHT   = 32
-const TAB_GAP      = 6     // gap between consecutive tabs
-const TAB_PAD_X    = 28    // approximate horizontal padding inside a tab (px + icon + gaps)
-const CHAR_WIDTH   = 7.5   // approximate width per character in the label
-const TAB_START    = 10    // left margin for the first tab
+const TAB_GAP      = 6
+const TAB_PAD_X    = 28
+const CHAR_WIDTH   = 7.5
+const TAB_START    = 10
+/** How far the note card pops above the divider body */
+const NOTE_POP     = 14
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Compute tab positions — front (last index) starts left, wraps on overflow
+   Compute tab positions
    ═══════════════════════════════════════════════════════════════════════════ */
 
-interface TabLayout { left: number; width: number }
+interface TabLayout { left: number }
 
-function computeTabPositions(
-  labels: string[],
-  containerWidth: number,
-): TabLayout[] {
-  // Estimate each tab's width from its label
+function computeTabPositions(labels: string[], containerWidth: number): TabLayout[] {
   const widths = labels.map(label => Math.ceil(TAB_PAD_X + label.length * CHAR_WIDTH))
-
-  // We position in *visual order*: front tab (last index) first (leftmost),
-  // then progressively to the right for back tabs (lower indices).
-  // Build a visual-order array of { origIndex, width }.
-  const visualOrder = widths
-    .map((w, i) => ({ origIndex: i, width: w }))
-    .reverse() // front-most (highest index) comes first
-
+  const visualOrder = widths.map((w, i) => ({ origIndex: i, width: w })).reverse()
   const positions: TabLayout[] = new Array(labels.length)
   let cursor = TAB_START
   const maxRight = containerWidth - TAB_START
 
   for (const item of visualOrder) {
-    // Would this tab overflow? Wrap to next "row" (reset cursor)
-    if (cursor + item.width > maxRight && cursor > TAB_START) {
-      cursor = TAB_START
-    }
-    positions[item.origIndex] = { left: cursor, width: item.width }
+    if (cursor + item.width > maxRight && cursor > TAB_START) cursor = TAB_START
+    positions[item.origIndex] = { left: cursor }
     cursor += item.width + TAB_GAP
   }
-
   return positions
 }
 
@@ -100,7 +87,6 @@ export function RecipeBox({
   const cavityRef = useRef<HTMLDivElement>(null)
   const [cavityWidth, setCavityWidth] = useState(600)
 
-  // Measure cavity width for tab positioning
   useLayoutEffect(() => {
     const el = cavityRef.current
     if (!el) return
@@ -137,11 +123,6 @@ export function RecipeBox({
     [labels, cavityWidth],
   )
 
-  const openTab = useMemo(
-    () => (openKey ? tabs.find(t => t.key === openKey) : null) ?? null,
-    [openKey, tabs],
-  )
-
   if (!tabs.length) return null
 
   return (
@@ -156,27 +137,6 @@ export function RecipeBox({
           <p className="text-sm text-stone-500 dark:text-stone-400">{subtitle}</p>
         </div>
       </div>
-
-      {/* ── Recipe card — appears ABOVE the box ────────────────────────── */}
-      <AnimatePresence mode="wait">
-        {openTab && (
-          <motion.div
-            key={openTab.key}
-            initial={{ opacity: 0, y: 24, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 24, scale: 0.97 }}
-            transition={{ type: 'spring', stiffness: 360, damping: 30 }}
-            className="mb-4"
-          >
-            <RecipeCard
-              recipes={openTab.recipes}
-              categoryLabel={categoryLabels?.[openTab.key] || openTab.meta.label}
-              categoryIcon={openTab.meta.icon}
-              timeLabels={timeLabels}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ── Wooden box ─────────────────────────────────────────────────── */}
       <div
@@ -229,6 +189,7 @@ export function RecipeBox({
                 isFirst={index === 0}
                 tabLeft={tabPositions[index]?.left ?? 10}
                 categoryLabel={categoryLabels?.[tab.key]}
+                timeLabels={timeLabels}
                 onToggle={() => setOpenKey(prev => (prev === tab.key ? null : tab.key))}
               />
             ))}
@@ -245,7 +206,7 @@ export function RecipeBox({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   <Divider />
+   <Divider />  –  kraft file divider with note that pops UP between tabs
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function Divider({
@@ -255,6 +216,7 @@ function Divider({
   isFirst,
   tabLeft,
   categoryLabel,
+  timeLabels,
   onToggle,
 }: {
   tab: { key: string; meta: { label: string; icon: string }; recipes: PlantRecipe[] }
@@ -263,10 +225,10 @@ function Divider({
   isFirst: boolean
   tabLeft: number
   categoryLabel?: string
+  timeLabels?: Record<string, string>
   onToggle: () => void
 }) {
   const label = categoryLabel || tab.meta.label
-
   const lightness     = 76 - index * 1.8
   const darkLightness = 26 - index * 1.2
 
@@ -281,7 +243,7 @@ function Divider({
         zIndex: index + 1,
       }}
     >
-      {/* Tab */}
+      {/* ── Tab ─────────────────────────────────────────────────────────── */}
       <button
         type="button"
         onClick={onToggle}
@@ -294,9 +256,7 @@ function Divider({
             background: isActive
               ? `linear-gradient(180deg, hsl(32 40% ${lightness + 6}%) 0%, hsl(30 36% ${lightness + 2}%) 100%)`
               : `linear-gradient(180deg, hsl(32 36% ${lightness + 3}%) 0%, hsl(30 32% ${lightness}%) 100%)`,
-            boxShadow:
-              '0 -3px 8px -2px rgba(60,36,12,.22),' +
-              '0 1px 0 0 rgba(255,255,255,.14) inset',
+            boxShadow: '0 -3px 8px -2px rgba(60,36,12,.22), 0 1px 0 0 rgba(255,255,255,.14) inset',
             border: `1px solid hsl(30 24% ${lightness - 12}%)`,
             borderBottom: 'none',
           }}
@@ -316,20 +276,15 @@ function Divider({
             <span className="dark:hidden" style={{ color: `hsl(28 42% ${isActive ? 18 : 24}%)` }}>{label}</span>
             <span className="hidden dark:inline" style={{ color: `hsl(32 18% ${isActive ? 80 : 70}%)` }}>{label}</span>
           </span>
-          {isActive && (
-            <span className="relative w-1.5 h-1.5 rounded-full shrink-0" style={{ background: `hsl(32 50% ${lightness - 20}%)` }}>
-              <span className="absolute inset-0 rounded-full hidden dark:block" style={{ background: 'hsl(32 30% 60%)' }} />
-            </span>
-          )}
         </div>
       </button>
 
-      {/* Divider body */}
+      {/* ── Divider body ────────────────────────────────────────────────── */}
       <button
         type="button"
         onClick={onToggle}
         className="relative w-full text-left cursor-pointer group block"
-        style={{ height: DIVIDER_BODY }}
+        style={{ height: DIVIDER_BODY, overflow: 'visible' }}
       >
         <div
           className="absolute inset-0 rounded-lg sm:rounded-xl transition-all duration-150 group-hover:brightness-[1.04]"
@@ -352,6 +307,7 @@ function Divider({
               border: `1px solid hsl(30 10% ${darkLightness + 8}%)`,
             }}
           />
+          {/* Kraft texture */}
           <div
             className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl opacity-[.035] dark:opacity-[.05]"
             style={{
@@ -360,13 +316,40 @@ function Divider({
             }}
           />
         </div>
+
+        {/* ── Note card — absolute, pops UPWARD from this divider ───────── */}
+        {/*    Lives inside this divider's z-layer so dividers in front     */}
+        {/*    (higher z-index) naturally cover the bottom edge.            */}
+        <AnimatePresence>
+          {isActive && (
+            <motion.div
+              key="note"
+              initial={{ opacity: 0, y: 10, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 26 }}
+              className="absolute left-3 right-3 sm:left-4 sm:right-4"
+              style={{
+                bottom: DIVIDER_BODY + NOTE_POP,
+                zIndex: 1,          // below the tab header (z:2), but part of this divider's stacking context
+              }}
+            >
+              <RecipeCard
+                recipes={tab.recipes}
+                categoryLabel={label}
+                categoryIcon={tab.meta.icon}
+                timeLabels={timeLabels}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </button>
     </motion.div>
   )
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   <RecipeCard />
+   <RecipeCard />  –  ivory index card
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function RecipeCard({
@@ -488,7 +471,7 @@ function RecipeCard({
         </div>
       </div>
 
-      {/* Drop shadow */}
+      {/* Drop shadow under the note */}
       <div className="pointer-events-none absolute -bottom-2.5 left-5 right-5 h-4 rounded-full bg-black/10 dark:bg-black/22 blur-xl" />
     </div>
   )
