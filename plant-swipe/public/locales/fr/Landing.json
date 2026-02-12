@@ -37,7 +37,13 @@
     },
     "careReminders": {
       "title": "Rappels d'entretien",
-      "description": "N'oubliez plus jamais d'arroser, brumiser ou fertiliser. Recevez des notifications personnalisées selon les besoins de chaque plante."
+      "description": "N'oubliez plus jamais d'arroser, brumiser ou fertiliser. Recevez des notifications personnalisées selon les besoins de chaque plante.",
+      "notification1Title": "Arroser votre Monstera",
+      "notification1Time": "Aujourd'hui à 9h00",
+      "notification2Title": "Fertiliser la Sansevière",
+      "notification2Time": "Demain",
+      "notification3Title": "Brumiser votre Fougère",
+      "notification3Time": "Dans 2 jours"
     },
     "collections": {
       "title": "Collections et favoris",
@@ -233,7 +239,8 @@
     ],
     "supportTitle": "Nous sommes là pour répondre à vos questions",
     "supportSubtitle": "Faites-nous part de toutes vos questions",
-    "supportButton": "Contacter le support"
+    "supportButton": "Contacter le support",
+    "emailUs": "Nous écrire"
   },
   "finalCta": {
     "badge": "Aucune expérience requise",

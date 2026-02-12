@@ -36,7 +36,13 @@
     },
     "careReminders": {
       "title": "Care Reminders",
-      "description": "Never forget to water, mist, or fertilize. Get personalized notifications based on each plant's unique needs."
+      "description": "Never forget to water, mist, or fertilize. Get personalized notifications based on each plant's unique needs.",
+      "notification1Title": "Water your Monstera",
+      "notification1Time": "Today at 9:00 AM",
+      "notification2Title": "Fertilize Snake Plant",
+      "notification2Time": "Tomorrow",
+      "notification3Title": "Mist your Fern",
+      "notification3Time": "In 2 days"
     },
     "collections": {
       "title": "Collections & Bookmarks",
@@ -235,7 +241,8 @@
     ],
     "supportTitle": "We're here to answer your questions",
     "supportSubtitle": "Let us know any question you have",
-    "supportButton": "Contact Support"
+    "supportButton": "Contact Support",
+    "emailUs": "Email Us"
   },
   "finalCta": {
     "title": "Ready to grow happier plants?",

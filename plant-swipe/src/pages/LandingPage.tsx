@@ -1100,8 +1100,8 @@ const FeaturesSection: React.FC = () => {
                   <Droplets className="h-4 w-4 text-blue-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">Water your Monstera</p>
-                  <p className="text-[10px] text-stone-500">Today at 9:00 AM</p>
+                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">{t("features.careReminders.notification1Title")}</p>
+                  <p className="text-[10px] text-stone-500">{t("features.careReminders.notification1Time")}</p>
                 </div>
                 <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
               </div>
@@ -1112,8 +1112,8 @@ const FeaturesSection: React.FC = () => {
                   <Sun className="h-4 w-4 text-amber-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">Fertilize Snake Plant</p>
-                  <p className="text-[10px] text-stone-500">Tomorrow</p>
+                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">{t("features.careReminders.notification2Title")}</p>
+                  <p className="text-[10px] text-stone-500">{t("features.careReminders.notification2Time")}</p>
                 </div>
               </div>
               
@@ -1123,8 +1123,8 @@ const FeaturesSection: React.FC = () => {
                   <Leaf className="h-4 w-4 text-emerald-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">Mist your Fern</p>
-                  <p className="text-[10px] text-stone-500">In 2 days</p>
+                  <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">{t("features.careReminders.notification3Title")}</p>
+                  <p className="text-[10px] text-stone-500">{t("features.careReminders.notification3Time")}</p>
                 </div>
               </div>
             </div>
@@ -2023,7 +2023,7 @@ const FAQSection: React.FC = () => {
                     <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
                       <Mail className="h-5 w-5 text-white" />
                     </div>
-                    <span className="relative">Email Us</span>
+                    <span className="relative">{t("faq.emailUs", { defaultValue: "Email Us" })}</span>
                   </a>
                 </div>
 
