@@ -266,6 +266,19 @@ main() {
   # Ensure npm dependencies are installed
   check_npm_deps "$node_dir"
 
+  # Ensure public/ directory and generated files are writable by the current user
+  # This fixes EACCES errors when llms.txt or sitemap.xml are owned by root
+  for gen_file in "$node_dir/public/sitemap.xml" "$node_dir/public/llms.txt"; do
+    if [[ -f "$gen_file" && ! -w "$gen_file" ]]; then
+      log "[INFO] Fixing permissions on $gen_file (not writable by current user)"
+      chmod u+w "$gen_file" 2>/dev/null || sudo chown "$(whoami)" "$gen_file" 2>/dev/null || true
+    fi
+    # Create file if it doesn't exist (so write doesn't fail on first run)
+    if [[ ! -f "$gen_file" ]]; then
+      touch "$gen_file" 2>/dev/null || true
+    fi
+  done
+
   local started_at
   started_at="$(date +%s)"
 
