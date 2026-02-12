@@ -127,48 +127,48 @@ export function RecipeBox({
   if (!tabs.length) return null
 
   return (
-    <section>
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="rounded-xl bg-amber-600/15 p-2.5 dark:bg-amber-500/20">
-          <ChefHat className="h-6 w-6 sm:h-7 sm:w-7 text-amber-800 dark:text-amber-300" />
+    <section
+      className="relative rounded-2xl sm:rounded-3xl"
+      style={{
+        background: 'linear-gradient(176deg, #a37c52 0%, #8b6840 30%, #7a5c38 70%, #6b5030 100%)',
+        boxShadow:
+          '0 2px 0 0 #b8935f inset,' +
+          '0 -1px 0 0 #4a3520 inset,' +
+          '0 28px 50px -14px rgba(40,22,8,.55),' +
+          '0 8px 16px -4px rgba(40,22,8,.3)',
+      }}
+    >
+      {/* Wood grain texture */}
+      <div
+        className="pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl opacity-[.07]"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(95deg, transparent 0px, transparent 11px, rgba(0,0,0,.35) 11px, rgba(0,0,0,.35) 12px, transparent 12px, transparent 28px, rgba(0,0,0,.2) 28px, rgba(0,0,0,.2) 29px)',
+        }}
+      />
+      {/* Warm highlight */}
+      <div
+        className="pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl opacity-20"
+        style={{
+          backgroundImage: 'radial-gradient(ellipse 80% 50% at 30% 15%, rgba(255,220,160,.6), transparent 60%)',
+        }}
+      />
+      {/* Dark mode overlay */}
+      <div className="pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl bg-black/0 dark:bg-black/40" />
+
+      {/* ── Header — on the wood surface ──────────────────────────────── */}
+      <div className="relative flex items-center gap-3 px-5 sm:px-6 pt-5 sm:pt-6 pb-3">
+        <div className="rounded-xl bg-white/10 p-2 dark:bg-white/[.06]">
+          <ChefHat className="h-6 w-6 sm:h-7 sm:w-7 text-amber-100 dark:text-amber-300/80" />
         </div>
         <div>
-          <h3 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-stone-100">{title}</h3>
-          <p className="text-sm text-stone-500 dark:text-stone-400">{subtitle}</p>
+          <h3 className="text-xl sm:text-2xl font-bold text-amber-50 dark:text-amber-100/90 drop-shadow-[0_1px_2px_rgba(0,0,0,.3)]">{title}</h3>
+          <p className="text-sm text-amber-200/70 dark:text-amber-300/40">{subtitle}</p>
         </div>
       </div>
 
-      {/* ── Wooden box ─────────────────────────────────────────────────── */}
-      <div
-        className="relative rounded-2xl sm:rounded-3xl"
-        style={{
-          background: 'linear-gradient(176deg, #a37c52 0%, #8b6840 30%, #7a5c38 70%, #6b5030 100%)',
-          boxShadow:
-            '0 2px 0 0 #b8935f inset,' +
-            '0 -1px 0 0 #4a3520 inset,' +
-            '0 28px 50px -14px rgba(40,22,8,.55),' +
-            '0 8px 16px -4px rgba(40,22,8,.3)',
-          padding: '14px 14px 16px',
-        }}
-      >
-        {/* Wood grain */}
-        <div
-          className="pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl opacity-[.07]"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(95deg, transparent 0px, transparent 11px, rgba(0,0,0,.35) 11px, rgba(0,0,0,.35) 12px, transparent 12px, transparent 28px, rgba(0,0,0,.2) 28px, rgba(0,0,0,.2) 29px)',
-          }}
-        />
-        <div
-          className="pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl opacity-20"
-          style={{
-            backgroundImage: 'radial-gradient(ellipse 80% 50% at 30% 20%, rgba(255,220,160,.6), transparent 60%)',
-          }}
-        />
-        <div className="pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl bg-black/0 dark:bg-black/40" />
-
-        {/* Inner cavity */}
+      {/* ── Inner cavity ──────────────────────────────────────────────── */}
+      <div className="relative px-3 sm:px-4 pb-4 sm:pb-5">
         <div
           ref={cavityRef}
           className="relative rounded-xl sm:rounded-2xl"
@@ -196,12 +196,13 @@ export function RecipeBox({
             ))}
           </div>
         </div>
-
-        <div className="pointer-events-none absolute inset-x-4 bottom-4 h-6 rounded-b-xl bg-gradient-to-t from-black/12 to-transparent" />
       </div>
 
+      {/* Bottom inner shadow */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 rounded-b-2xl sm:rounded-b-3xl bg-gradient-to-t from-black/15 to-transparent" />
+
       {/* Ground shadow */}
-      <div className="pointer-events-none mx-auto mt-2 h-5 w-[85%] rounded-full bg-black/12 dark:bg-black/25 blur-xl" />
+      <div className="pointer-events-none absolute -bottom-4 left-[8%] right-[8%] h-5 rounded-full bg-black/12 dark:bg-black/25 blur-xl" />
     </section>
   )
 }
