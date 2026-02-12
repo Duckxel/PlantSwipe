@@ -16188,6 +16188,29 @@ app.post('/api/admin/threat-level', async (req, res) => {
       return
     }
 
+    // Shadow ban: when setting threat level to 3, apply shadow restrictions
+    // (private profile, private gardens, private bookmarks, no friend requests, no emails)
+    // When lowering from 3, revert the shadow ban and restore pre-ban settings
+    let shadowBanApplied = false
+    let shadowBanReverted = false
+    if (level === 3 && existingLevel !== 3) {
+      try {
+        await sql`select public.apply_shadow_ban(${uid})`
+        shadowBanApplied = true
+        console.log(`[threat-level] shadow ban applied for user ${uid}`)
+      } catch (sbErr) {
+        console.error('[threat-level] failed to apply shadow ban', sbErr)
+      }
+    } else if (level < 3 && existingLevel === 3) {
+      try {
+        await sql`select public.revert_shadow_ban(${uid})`
+        shadowBanReverted = true
+        console.log(`[threat-level] shadow ban reverted for user ${uid}`)
+      } catch (sbErr) {
+        console.error('[threat-level] failed to revert shadow ban', sbErr)
+      }
+    }
+
     let bannedIps = []
     let bannedAt = null
     let bannedByName = null
@@ -16275,6 +16298,8 @@ app.post('/api/admin/threat-level', async (req, res) => {
       bannedById: level === 3 ? adminUserId : null,
       bannedByName: level === 3 ? bannedByName : null,
       email: emailResult,
+      shadowBanApplied: shadowBanApplied || false,
+      shadowBanReverted: shadowBanReverted || false,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to update threat level' })

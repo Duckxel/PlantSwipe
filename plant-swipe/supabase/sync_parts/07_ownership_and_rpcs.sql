@@ -450,6 +450,7 @@ as $$
     select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.roles, '{}') as roles, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests, p.experience_level, p.job, p.profile_link, coalesce(p.show_country, true) as show_country
     from public.profiles p
     where lower(p.display_name) = lower(_name)
+      and coalesce(p.threat_level, 0) < 3  -- Exclude shadow-banned users from public profile lookups
     limit 1
   ),
   auth_meta as (
