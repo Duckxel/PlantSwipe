@@ -1655,6 +1655,202 @@ const gardenCoverMulter = multer({
 })
 const singleGardenCoverUpload = gardenCoverMulter.single('file')
 
+// === Plant Image Upload Settings ===
+// Plant images are stored in the PLANTS bucket, converted to WebP, and tracked in admin_media_uploads
+const plantImageUploadBucket = process.env.PLANT_IMAGE_BUCKET || 'PLANTS'
+const plantImageUploadPrefix = (process.env.PLANT_IMAGE_PREFIX || 'plants/images').replace(/^\/+|\/+$/g, '')
+const plantImageMaxDimension = 1600 // Good quality for plant detail pages
+const plantImageWebpQuality = 80 // High quality for plant reference images
+const plantImageMaxFetchBytes = 100 * 1024 * 1024 // 100MB max download - large originals are fine since we convert to WebP
+const plantImageContentLengthWarnBytes = 50 * 1024 * 1024 // Log a warning above 50MB
+
+/**
+ * Fetch an external image URL, optimize it to WebP, upload to PLANTS bucket, and record in DB.
+ * Uses sharp streaming pipeline to avoid holding huge raw images in memory.
+ * Returns { url, bucket, path, sizeBytes, originalSizeBytes } or throws.
+ */
+async function uploadPlantImageFromUrl(imageUrl, { plantName, source, adminId, adminEmail, adminName } = {}) {
+  if (!supabaseServiceClient) throw new Error('Supabase service role key not configured')
+
+  // Fetch the image with streaming
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout (large files need more time)
+  let resp
+  try {
+    resp = await fetch(imageUrl, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Aphylia-PlantImageFetcher/1.0' },
+      redirect: 'follow',
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  if (!resp.ok) throw new Error(`Failed to fetch image: HTTP ${resp.status}`)
+
+  const contentType = (resp.headers.get('content-type') || '').toLowerCase()
+  // Allow image/* and also application/octet-stream (some servers don't set correct content-type)
+  if (!contentType.startsWith('image/') && contentType !== 'application/octet-stream') {
+    throw new Error(`URL did not return an image (got ${contentType})`)
+  }
+
+  // Check Content-Length header to reject absurdly large files before downloading
+  const contentLength = parseInt(resp.headers.get('content-length') || '0', 10)
+  if (contentLength > plantImageMaxFetchBytes) {
+    throw new Error(`Image too large (${(contentLength / 1024 / 1024).toFixed(0)} MB declared in header)`)
+  }
+  if (contentLength > plantImageContentLengthWarnBytes) {
+    console.warn(`[plant-image] Large image download: ${(contentLength / 1024 / 1024).toFixed(1)} MB from ${imageUrl.slice(0, 80)}`)
+  }
+
+  // Stream the response body directly through sharp for memory-efficient processing
+  // This avoids holding the entire raw file (e.g. 55MB TIFF) in memory
+  let optimizedBuffer
+  let originalSize = contentLength || 0
+  try {
+    const sharpPipeline = sharp({ failOn: 'none', limitInputPixels: 268402689 }) // ~16384x16384 max
+      .rotate()
+      .resize({
+        width: plantImageMaxDimension,
+        height: plantImageMaxDimension,
+        fit: 'inside',
+        withoutEnlargement: true,
+        fastShrinkOnLoad: true,
+      })
+      .webp({
+        quality: plantImageWebpQuality,
+        effort: 5,
+        smartSubsample: true,
+      })
+
+    // Pipe the fetch response stream into sharp
+    const { Readable } = await import('stream')
+    const nodeStream = Readable.fromWeb(resp.body)
+    
+    // Track actual bytes downloaded
+    let downloadedBytes = 0
+    nodeStream.on('data', (chunk) => { downloadedBytes += chunk.length })
+    
+    optimizedBuffer = await nodeStream.pipe(sharpPipeline).toBuffer()
+    originalSize = downloadedBytes || contentLength || 0
+  } catch (err) {
+    const msg = err?.message || 'sharp error'
+    // Common sharp errors for unsupported/corrupt images
+    if (msg.includes('Input buffer') || msg.includes('unsupported') || msg.includes('corrupt') || msg.includes('VipsJpeg')) {
+      throw new Error(`Unsupported or corrupt image format`)
+    }
+    throw new Error(`Failed to optimize image: ${msg}`)
+  }
+
+  // Build storage path
+  const safePlantName = (plantName || 'plant').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'plant'
+  const unique = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(10).toString('hex')
+  const objectPath = `${plantImageUploadPrefix}/${safePlantName}/${unique}.webp`
+
+  // Upload to storage
+  const { error: uploadError } = await supabaseServiceClient.storage
+    .from(plantImageUploadBucket)
+    .upload(objectPath, optimizedBuffer, {
+      cacheControl: '31536000',
+      contentType: 'image/webp',
+      upsert: false,
+    })
+  if (uploadError) throw new Error(uploadError.message || 'Storage upload failed')
+
+  // Get public URL and transform to media proxy
+  const { data: publicData } = supabaseServiceClient.storage
+    .from(plantImageUploadBucket)
+    .getPublicUrl(objectPath)
+  const publicUrl = publicData?.publicUrl || null
+  const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+
+  // Record in admin_media_uploads for tracking
+  const compressionPercent = originalSize > 0
+    ? Math.max(0, Math.round(100 - (optimizedBuffer.length / originalSize) * 100))
+    : 0
+
+  try {
+    await recordAdminMediaUpload({
+      adminId: adminId || null,
+      adminEmail: adminEmail || null,
+      adminName: adminName || null,
+      bucket: plantImageUploadBucket,
+      path: objectPath,
+      publicUrl: proxyUrl,
+      mimeType: 'image/webp',
+      originalMimeType: contentType.split(';')[0].trim(),
+      sizeBytes: optimizedBuffer.length,
+      originalSizeBytes: originalSize,
+      quality: plantImageWebpQuality,
+      compressionPercent,
+      uploadSource: 'plant_image',
+      metadata: {
+        originalUrl: imageUrl,
+        source: source || 'external',
+        plantName: plantName || null,
+        optimized: true,
+      },
+    })
+  } catch (recordErr) {
+    console.error('[plant-image] Failed to record media upload (image was uploaded successfully):', recordErr)
+  }
+
+  return {
+    url: proxyUrl || publicUrl,
+    bucket: plantImageUploadBucket,
+    path: objectPath,
+    sizeBytes: optimizedBuffer.length,
+    originalSizeBytes: originalSize,
+    compressionPercent,
+  }
+}
+
+/**
+ * Delete a plant image from storage and admin_media_uploads.
+ * Accepts either a storage URL or a bucket+path pair.
+ */
+async function deletePlantImage(imageUrl) {
+  if (!supabaseServiceClient) throw new Error('Supabase service role key not configured')
+
+  const info = parseStoragePublicUrl(imageUrl)
+  if (!info) return { deleted: false, reason: 'not_a_managed_url' }
+  if (info.bucket !== plantImageUploadBucket) return { deleted: false, reason: 'different_bucket' }
+  if (plantImageUploadPrefix && !info.path.startsWith(`${plantImageUploadPrefix}/`)) {
+    return { deleted: false, reason: 'different_prefix' }
+  }
+
+  // Delete from storage
+  let storageDeleted = false
+  try {
+    const { error } = await supabaseServiceClient.storage.from(info.bucket).remove([info.path])
+    if (error) throw error
+    storageDeleted = true
+  } catch (err) {
+    console.error('[plant-image] Failed to delete storage object:', err)
+  }
+
+  // Delete from admin_media_uploads
+  let dbDeleted = false
+  try {
+    if (sql) {
+      await sql`delete from public.admin_media_uploads where bucket = ${info.bucket} and path = ${info.path}`
+      dbDeleted = true
+    } else {
+      const { error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .delete()
+        .eq('bucket', info.bucket)
+        .eq('path', info.path)
+      if (error) throw error
+      dbDeleted = true
+    }
+  } catch (err) {
+    console.error('[plant-image] Failed to delete media record:', err)
+  }
+
+  return { deleted: storageDeleted || dbDeleted, storageDeleted, dbDeleted }
+}
+
 // === Messaging Image Upload Settings ===
 const messageImageUploadBucket = 'PHOTOS' // All non-admin uploads go to PHOTOS
 const messageImageUploadPrefix = 'messages'
@@ -4426,6 +4622,630 @@ Examples:
   }
 })
 app.options('/api/admin/ai/plant-fill/english-name', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// ========================================
+// External Image Sources (GBIF + Smithsonian)
+// ========================================
+
+/**
+ * Resolve a plant name (common or scientific) to a GBIF taxonKey.
+ * First tries species/match (works for scientific names).
+ * If that fails, falls back to species/search with vernacular name lookup.
+ * Returns { taxonKey, scientificName } or null if not found.
+ */
+/**
+ * Randomly select up to `count` items from an array (Fisher-Yates shuffle then slice).
+ * Returns a new array without mutating the input.
+ */
+function randomSelect(arr, count) {
+  if (!arr || arr.length <= count) return [...arr]
+  const shuffled = [...arr]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled.slice(0, count)
+}
+
+/** Check if an image URL points to an allowed format (jpg, jpeg, png, webp) */
+function isAllowedImageUrl(url) {
+  if (!url || typeof url !== 'string') return false
+  // Strip query string and fragment, then check extension
+  const clean = url.split('?')[0].split('#')[0].toLowerCase()
+  // Allow if URL ends with an allowed extension
+  if (/\.(jpe?g|png|webp)$/.test(clean)) return true
+  // Also allow URLs that contain format hints in query params (e.g. format=jpg)
+  const lower = url.toLowerCase()
+  if (/[?&]format=(jpe?g|png|webp)/i.test(lower)) return true
+  // Reject URLs that explicitly end in disallowed formats
+  if (/\.(tiff?|exr|bmp|gif|svg|raw|cr2|nef|dng|psd|eps|ai|pdf)$/.test(clean)) return false
+  // For URLs with no clear extension (e.g. delivery service URLs), allow them
+  // as they typically serve JPEG by default
+  return true
+}
+
+async function resolveGbifTaxonKey(plantName) {
+  // Step 1: Try exact species match (works well for scientific names)
+  const matchUrl = `https://api.gbif.org/v1/species/match?name=${encodeURIComponent(plantName)}`
+  const matchResp = await fetch(matchUrl)
+  if (matchResp.ok) {
+    const matchData = await matchResp.json()
+    if (matchData.usageKey && matchData.matchType !== 'NONE') {
+      return {
+        taxonKey: matchData.usageKey,
+        scientificName: matchData.scientificName || matchData.canonicalName || null,
+      }
+    }
+  }
+
+  // Step 2: Fallback - search by vernacular (common) name
+  const vernacularUrl = `https://api.gbif.org/v1/species/search?q=${encodeURIComponent(plantName)}&qField=VERNACULAR&rank=SPECIES&limit=5&status=ACCEPTED`
+  const vernacularResp = await fetch(vernacularUrl)
+  if (vernacularResp.ok) {
+    const vernacularData = await vernacularResp.json()
+    const results = vernacularData.results || []
+    // Prefer results that have a nubKey (backbone taxon key)
+    for (const r of results) {
+      const key = r.nubKey || r.key
+      if (key) {
+        console.log(`[server] GBIF resolved common name "${plantName}" -> "${r.canonicalName || r.scientificName}" (taxonKey=${key})`)
+        return {
+          taxonKey: key,
+          scientificName: r.canonicalName || r.scientificName || null,
+        }
+      }
+    }
+  }
+
+  // Step 3: Last resort - general species search
+  const searchUrl = `https://api.gbif.org/v1/species/search?q=${encodeURIComponent(plantName)}&rank=SPECIES&limit=3&status=ACCEPTED`
+  const searchResp = await fetch(searchUrl)
+  if (searchResp.ok) {
+    const searchData = await searchResp.json()
+    const results = searchData.results || []
+    for (const r of results) {
+      const key = r.nubKey || r.key
+      if (key && r.canonicalName) {
+        console.log(`[server] GBIF resolved "${plantName}" via search -> "${r.canonicalName}" (taxonKey=${key})`)
+        return {
+          taxonKey: key,
+          scientificName: r.canonicalName || r.scientificName || null,
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+// Admin/Editor: Fetch CC0-licensed images from GBIF for a plant name
+app.post('/api/admin/images/gbif', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    const wantCount = Math.min(Math.max(parseInt(body.limit) || 10, 1), 20)
+
+    // Step 1: Resolve plant name to taxonKey (handles both common and scientific names)
+    const resolved = await resolveGbifTaxonKey(plantName)
+    if (!resolved) {
+      console.log(`[server] GBIF: no species match for "${plantName}"`)
+      res.json({ success: true, images: [], scientificName: null, message: 'No matching species found on GBIF' })
+      return
+    }
+
+    // Step 2: Fetch a large pool of CC0-licensed occurrence images for variety
+    // Request 150 occurrences to get a diverse pool from different observers
+    const fetchLimit = 150
+    const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${resolved.taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=${fetchLimit}`
+    const occResp = await fetch(occUrl)
+    if (!occResp.ok) {
+      res.status(502).json({ error: 'Failed to fetch occurrences from GBIF' })
+      return
+    }
+    const occData = await occResp.json()
+
+    // Extract ALL valid image URLs from all occurrences
+    const allCandidates = []
+    const seenUrls = new Set()
+    for (const result of (occData.results || [])) {
+      for (const media of (result.media || [])) {
+        if (media.type !== 'StillImage') continue
+        const url = media.identifier
+        if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
+        seenUrls.add(url)
+        allCandidates.push({
+          url,
+          license: media.license || 'CC0',
+          source: 'gbif',
+          creator: media.creator || media.rightsHolder || null,
+          references: media.references || null,
+        })
+      }
+    }
+
+    // Randomly select from the pool for variety
+    const images = randomSelect(allCandidates, wantCount)
+
+    console.log(`[server] GBIF images for "${plantName}": ${allCandidates.length} candidates -> ${images.length} randomly selected (taxonKey=${resolved.taxonKey})`)
+    res.json({
+      success: true,
+      images,
+      scientificName: resolved.scientificName,
+      totalAvailable: occData.count || 0,
+    })
+  } catch (err) {
+    console.error('[server] GBIF image fetch failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch GBIF images' })
+    }
+  }
+})
+app.options('/api/admin/images/gbif', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Fetch images from Smithsonian Open Access API
+app.post('/api/admin/images/smithsonian', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    const wantCount = Math.min(Math.max(parseInt(body.limit) || 10, 1), 20)
+
+    const apiKey = process.env.SMITHSONIAN_API_KEY || ''
+    if (!apiKey) {
+      res.status(503).json({ error: 'Smithsonian API key is not configured. Set SMITHSONIAN_API_KEY environment variable.' })
+      return
+    }
+
+    // Resolve scientific name via GBIF for better Smithsonian results
+    let searchQuery = plantName
+    try {
+      const resolved = await resolveGbifTaxonKey(plantName)
+      if (resolved?.scientificName) {
+        searchQuery = resolved.scientificName
+        console.log(`[server] Smithsonian: using scientific name "${searchQuery}" (from "${plantName}")`)
+      }
+    } catch { /* use original name */ }
+
+    // Fetch a large pool of results for variety, then randomly pick
+    const fetchRows = 100
+    const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(searchQuery)}&rows=${fetchRows}&sort=random&api_key=${encodeURIComponent(apiKey)}`
+    const searchResp = await fetch(searchUrl)
+    if (!searchResp.ok) {
+      const statusText = searchResp.statusText || searchResp.status
+      res.status(502).json({ error: `Smithsonian API returned ${statusText}` })
+      return
+    }
+    const searchData = await searchResp.json()
+    const searchRows = searchData?.response?.rows || []
+
+    // Extract ALL valid image URLs from the large pool
+    const allCandidates = []
+    const seenUrls = new Set()
+    for (const row of searchRows) {
+      const content = row.content || {}
+      const desc = content.descriptiveNonRepeating || {}
+      const onlineMedia = desc.online_media || {}
+      const mediaList = onlineMedia.media || []
+      const title = row.title || desc.title?.content || ''
+
+      for (const media of mediaList) {
+        if (media.type !== 'Images') continue
+        const resources = media.resources || []
+
+        // Prefer web-friendly sizes: Screen Image > JPEG > content URL > thumbnail
+        // Skip TIFF/RAW (50+ MB files)
+        let bestUrl = null
+        let jpegUrl = null
+        for (const res of resources) {
+          const label = (res.label || '').toLowerCase()
+          const url = res.url || ''
+          if (!url) continue
+          if (label.includes('tiff') || label.includes('tif') || url.toLowerCase().endsWith('.tif') || url.toLowerCase().endsWith('.tiff')) continue
+          if (label.includes('screen image')) { bestUrl = url; break }
+          if ((label.includes('jpeg') || label.includes('jpg')) && !jpegUrl) jpegUrl = url
+        }
+        if (!bestUrl && jpegUrl) bestUrl = jpegUrl
+        if (!bestUrl && media.content) bestUrl = media.content
+        if (!bestUrl && media.thumbnail) bestUrl = media.thumbnail
+        if (!bestUrl || seenUrls.has(bestUrl) || !isAllowedImageUrl(bestUrl)) continue
+        seenUrls.add(bestUrl)
+        allCandidates.push({
+          url: bestUrl,
+          license: 'CC0 (Smithsonian Open Access)',
+          source: 'smithsonian',
+          title: title || null,
+          thumbnail: media.thumbnail || null,
+        })
+      }
+    }
+
+    // Randomly select from the pool for variety
+    const images = randomSelect(allCandidates, wantCount)
+
+    console.log(`[server] Smithsonian images for "${plantName}": ${allCandidates.length} candidates -> ${images.length} randomly selected`)
+    res.json({
+      success: true,
+      images,
+      totalAvailable: searchData?.response?.rowCount || 0,
+    })
+  } catch (err) {
+    console.error('[server] Smithsonian image fetch failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch Smithsonian images' })
+    }
+  }
+})
+app.options('/api/admin/images/smithsonian', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Fetch free-to-use plant images from Google Images via SerpAPI
+app.post('/api/admin/images/serpapi', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    // Only top 5 images from SerpAPI (limited credits)
+    const limit = Math.min(Math.max(parseInt(body.limit) || 5, 1), 10)
+
+    const apiKey = (process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || process.env.SERP_API || '').trim()
+    if (!apiKey) {
+      console.warn('[server] SerpAPI: no key found. Checked env vars: SERPAPI_KEY, SERP_API_KEY, SERPAPI_API_KEY, SERP_API')
+      res.status(503).json({ error: 'SerpAPI key not found. Add SERPAPI_KEY=your_key to the .env or .env.server file in the plant-swipe/ directory, then restart the server.' })
+      return
+    }
+
+    // Search for "<plantName> plant" with free-to-use Creative Commons license filter
+    const query = `${plantName} plant`
+    const searchUrl = `https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(query)}&google_domain=google.com&hl=en&gl=us&image_type=photo&tbs=il:cl&num=${limit}&api_key=${encodeURIComponent(apiKey)}`
+    console.log(`[server] SerpAPI: fetching images for "${query}" (key=${apiKey.slice(0, 4)}...${apiKey.slice(-4)})`)
+    const searchResp = await fetch(searchUrl)
+
+    if (!searchResp.ok) {
+      const status = searchResp.status
+      // Handle rate limiting / credit exhaustion gracefully
+      if (status === 429 || status === 403) {
+        console.warn(`[server] SerpAPI rate limited or credits exhausted (${status}) for "${plantName}"`)
+        res.json({ success: true, images: [], skipped: true, reason: 'SerpAPI rate limit or credits exhausted' })
+        return
+      }
+      const text = await searchResp.text().catch(() => '')
+      res.status(502).json({ error: `SerpAPI returned ${status}: ${text.slice(0, 200)}` })
+      return
+    }
+
+    const searchData = await searchResp.json()
+
+    // Check for SerpAPI-level errors (e.g. invalid key, no credits)
+    if (searchData.error) {
+      console.warn(`[server] SerpAPI error for "${plantName}":`, searchData.error)
+      res.json({ success: true, images: [], skipped: true, reason: `SerpAPI: ${searchData.error}` })
+      return
+    }
+
+    const imagesResults = searchData.images_results || []
+    const images = []
+    const seenUrls = new Set()
+
+    for (const img of imagesResults) {
+      if (images.length >= limit) break
+      const url = img.original
+      if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
+      seenUrls.add(url)
+      images.push({
+        url,
+        license: 'Creative Commons (free to use)',
+        source: 'serpapi',
+        title: img.title || null,
+        thumbnail: img.thumbnail || null,
+      })
+    }
+
+    console.log(`[server] SerpAPI images for "${plantName}": found ${images.length} free-to-use images`)
+    res.json({
+      success: true,
+      images,
+      totalAvailable: imagesResults.length,
+    })
+  } catch (err) {
+    console.error('[server] SerpAPI image fetch failed:', err)
+    if (!res.headersSent) {
+      // Gracefully handle any unexpected errors - don't break the whole flow
+      res.json({ success: true, images: [], skipped: true, reason: err?.message || 'SerpAPI fetch failed' })
+    }
+  }
+})
+app.options('/api/admin/images/serpapi', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Fetch images from GBIF, Smithsonian, and SerpAPI in one call
+app.post('/api/admin/images/external', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    const limit = Math.min(Math.max(parseInt(body.limit) || 12, 1), 50)
+
+    const results = { gbif: [], smithsonian: [], serpapi: [], errors: [] }
+    // Resolve scientific name first (used by GBIF and Smithsonian)
+    let resolvedScientificName = null
+
+    // Fetch GBIF images (fetch large pool, one per occurrence for variety, then random select)
+    try {
+      const resolved = await resolveGbifTaxonKey(plantName)
+      if (resolved) {
+        resolvedScientificName = resolved.scientificName
+        const occUrl = `https://api.gbif.org/v1/occurrence/search?taxonKey=${resolved.taxonKey}&mediaType=StillImage&license=CC0_1_0&limit=150`
+        const occResp = await fetch(occUrl)
+        if (occResp.ok) {
+          const occData = await occResp.json()
+          const gbifCandidates = []
+          const seenUrls = new Set()
+          for (const result of (occData.results || [])) {
+            for (const media of (result.media || [])) {
+              if (media.type !== 'StillImage') continue
+              const url = media.identifier
+              if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
+              seenUrls.add(url)
+              gbifCandidates.push({
+                url,
+                license: media.license || 'CC0',
+                source: 'gbif',
+                creator: media.creator || media.rightsHolder || null,
+              })
+            }
+          }
+          results.gbif = randomSelect(gbifCandidates, limit)
+        }
+      }
+    } catch (gbifErr) {
+      console.error('[server] GBIF fetch error in combined endpoint:', gbifErr)
+      results.errors.push(`GBIF: ${gbifErr?.message || 'Unknown error'}`)
+    }
+
+    // Fetch Smithsonian images (fetch large pool, filter formats, random select)
+    const smithsonianApiKey = process.env.SMITHSONIAN_API_KEY || ''
+    if (smithsonianApiKey) {
+      try {
+        const smithsonianQuery = resolvedScientificName || plantName
+        const searchUrl = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(smithsonianQuery)}&rows=100&sort=random&api_key=${encodeURIComponent(smithsonianApiKey)}`
+        const searchResp = await fetch(searchUrl)
+        if (searchResp.ok) {
+          const searchData = await searchResp.json()
+          const searchRows = searchData?.response?.rows || []
+          const siCandidates = []
+          const seenUrls = new Set()
+          for (const row of searchRows) {
+            const content = row.content || {}
+            const desc = content.descriptiveNonRepeating || {}
+            const onlineMedia = desc.online_media || {}
+            const mediaList = onlineMedia.media || []
+            for (const media of mediaList) {
+              if (media.type !== 'Images') continue
+              const resources = media.resources || []
+              let bestUrl = null
+              let jpegUrl = null
+              for (const r of resources) {
+                const label = (r.label || '').toLowerCase()
+                if (!r.url) continue
+                if (label.includes('tiff') || label.includes('tif') || r.url.toLowerCase().endsWith('.tif') || r.url.toLowerCase().endsWith('.tiff')) continue
+                if (label.includes('screen image')) { bestUrl = r.url; break }
+                if ((label.includes('jpeg') || label.includes('jpg')) && !jpegUrl) jpegUrl = r.url
+              }
+              if (!bestUrl && jpegUrl) bestUrl = jpegUrl
+              if (!bestUrl && media.content) bestUrl = media.content
+              if (!bestUrl && media.thumbnail) bestUrl = media.thumbnail
+              if (!bestUrl || seenUrls.has(bestUrl) || !isAllowedImageUrl(bestUrl)) continue
+              seenUrls.add(bestUrl)
+              siCandidates.push({
+                url: bestUrl,
+                license: 'CC0 (Smithsonian Open Access)',
+                source: 'smithsonian',
+                title: row.title || null,
+                thumbnail: media.thumbnail || null,
+              })
+            }
+          }
+          results.smithsonian = randomSelect(siCandidates, limit)
+        }
+      } catch (siErr) {
+        console.error('[server] Smithsonian fetch error in combined endpoint:', siErr)
+        results.errors.push(`Smithsonian: ${siErr?.message || 'Unknown error'}`)
+      }
+    }
+
+    // Fetch SerpAPI Google Images (top 5 only, free-to-use license)
+    const serpApiKey = (process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || process.env.SERP_API || '').trim()
+    if (serpApiKey) {
+      try {
+        const serpQuery = `${plantName} plant`
+        const serpLimit = 5
+        const serpUrl = `https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(serpQuery)}&google_domain=google.com&hl=en&gl=us&image_type=photo&tbs=il:cl&num=${serpLimit}&api_key=${encodeURIComponent(serpApiKey)}`
+        const serpResp = await fetch(serpUrl)
+        if (serpResp.ok) {
+          const serpData = await serpResp.json()
+          if (serpData.error) {
+            // SerpAPI returned an error (e.g. no credits) - skip gracefully
+            console.warn(`[server] SerpAPI error in combined endpoint for "${plantName}":`, serpData.error)
+            results.errors.push(`SerpAPI: ${serpData.error}`)
+          } else {
+            const serpImages = serpData.images_results || []
+            const seenUrls = new Set()
+            for (const img of serpImages) {
+              if (results.serpapi.length >= serpLimit) break
+              const url = img.original
+              if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
+              seenUrls.add(url)
+              results.serpapi.push({
+                url,
+                license: 'Creative Commons (free to use)',
+                source: 'serpapi',
+                title: img.title || null,
+                thumbnail: img.thumbnail || null,
+              })
+            }
+          }
+        } else {
+          const status = serpResp.status
+          if (status === 429 || status === 403) {
+            console.warn(`[server] SerpAPI rate limited/credits exhausted (${status}) in combined endpoint`)
+          } else {
+            console.warn(`[server] SerpAPI returned ${status} in combined endpoint`)
+          }
+          // Don't add to errors array for rate limiting - it's expected
+          if (status !== 429 && status !== 403) {
+            results.errors.push(`SerpAPI: HTTP ${status}`)
+          }
+        }
+      } catch (serpErr) {
+        console.error('[server] SerpAPI fetch error in combined endpoint:', serpErr)
+        results.errors.push(`SerpAPI: ${serpErr?.message || 'Unknown error'}`)
+      }
+    }
+
+    const allImages = [...results.serpapi, ...results.gbif, ...results.smithsonian]
+    console.log(`[server] External images for "${plantName}": ${results.serpapi.length} SerpAPI + ${results.gbif.length} GBIF + ${results.smithsonian.length} Smithsonian`)
+    res.json({
+      success: true,
+      images: allImages,
+      gbifCount: results.gbif.length,
+      smithsonianCount: results.smithsonian.length,
+      serpapiCount: results.serpapi.length,
+      errors: results.errors.length > 0 ? results.errors : undefined,
+    })
+  } catch (err) {
+    console.error('[server] External image fetch failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fetch external images' })
+    }
+  }
+})
+app.options('/api/admin/images/external', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Upload a plant image from an external URL (fetches, optimizes to WebP, stores in PLANTS bucket)
+app.post('/api/admin/plant-images/upload-from-url', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : ''
+    if (!imageUrl) {
+      res.status(400).json({ error: 'imageUrl is required' })
+      return
+    }
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const source = typeof body.source === 'string' ? body.source.trim() : 'external'
+
+    // Extract admin info from auth for tracking
+    let adminId = null, adminEmail = null, adminName = null
+    try {
+      const userId = await getUserIdFromRequest(req)
+      if (userId) {
+        adminId = userId
+        if (supabaseServiceClient) {
+          const { data: profile } = await supabaseServiceClient
+            .from('profiles')
+            .select('display_name, email')
+            .eq('id', userId)
+            .maybeSingle()
+          if (profile) {
+            adminEmail = profile.email || null
+            adminName = profile.display_name || null
+          }
+        }
+      }
+    } catch {}
+
+    const result = await uploadPlantImageFromUrl(imageUrl, {
+      plantName,
+      source,
+      adminId,
+      adminEmail,
+      adminName,
+    })
+
+    console.log(`[server] Plant image uploaded: "${plantName}" from ${source} -> ${result.path} (${(result.sizeBytes / 1024).toFixed(0)} KB, -${result.compressionPercent}%)`)
+    res.json({ success: true, ...result })
+  } catch (err) {
+    console.error('[server] Plant image upload-from-url failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to upload plant image' })
+    }
+  }
+})
+app.options('/api/admin/plant-images/upload-from-url', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Delete a plant image from storage and DB
+app.post('/api/admin/plant-images/delete', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : ''
+    if (!imageUrl) {
+      res.status(400).json({ error: 'imageUrl is required' })
+      return
+    }
+
+    const result = await deletePlantImage(imageUrl)
+    console.log(`[server] Plant image delete: ${imageUrl} -> ${JSON.stringify(result)}`)
+    res.json({ success: true, ...result })
+  } catch (err) {
+    console.error('[server] Plant image delete failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to delete plant image' })
+    }
+  }
+})
+app.options('/api/admin/plant-images/delete', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
@@ -31202,6 +32022,9 @@ if (shouldListen) {
   const host = process.env.HOST || '127.0.0.1' // Bind to localhost only for security
   const httpServer = app.listen(port, host, () => {
     console.log(`[server] listening on http://${host}:${port}`)
+    // Log external image API key status
+    const serpKeyFound = process.env.SERPAPI_KEY || process.env.SERP_API_KEY || process.env.SERPAPI_API_KEY || process.env.SERP_API
+    console.log(`[server] External image APIs: SerpAPI=${serpKeyFound ? 'configured (' + (serpKeyFound.trim().slice(0,4)) + '...)' : 'NOT SET (checked SERPAPI_KEY, SERP_API_KEY, SERPAPI_API_KEY)'}, Smithsonian=${process.env.SMITHSONIAN_API_KEY ? 'configured' : 'NOT SET'}, GBIF=no key needed`)
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => { })
     ensureBroadcastTable().catch(() => { })

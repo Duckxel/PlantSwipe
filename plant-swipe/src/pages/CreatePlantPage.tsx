@@ -1,10 +1,11 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, Loader2, Sparkles, Leaf } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
+import { fetchExternalPlantImages, uploadPlantImageFromUrl, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
@@ -892,6 +893,22 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
+  const [fetchingExternalImages, setFetchingExternalImages] = React.useState(false)
+  const [externalImageSources, setExternalImageSources] = React.useState<Record<ExternalImageSource, SourceResult>>(() => {
+    const initial: Record<string, SourceResult> = {}
+    for (const s of IMAGE_SOURCES) {
+      initial[s.key] = { source: s.key, label: s.label, images: [], status: 'idle' }
+    }
+    return initial as Record<ExternalImageSource, SourceResult>
+  })
+  const [externalImagesTotal, setExternalImagesTotal] = React.useState<number | null>(null)
+  const [imageUploadProgress, setImageUploadProgress] = React.useState<{
+    phase: 'idle' | 'searching' | 'uploading'
+    current: number
+    total: number
+    uploaded: number
+    failed: number
+  }>({ phase: 'idle', current: 0, total: 0, uploaded: 0, failed: 0 })
   const targetFields = React.useMemo(
     () =>
       [
@@ -1642,6 +1659,99 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       }
     }
 
+  const runExternalImageFetch = async () => {
+    const trimmedName = plant.name && typeof plant.name === 'string' ? plant.name.trim() : ''
+    if (!trimmedName) {
+      setError(t('plantAdmin.aiNameRequired', 'Please enter a name before fetching images.'))
+      return
+    }
+    setFetchingExternalImages(true)
+    setExternalImagesTotal(null)
+    setImageUploadProgress({ phase: 'searching', current: 0, total: 0, uploaded: 0, failed: 0 })
+    setError(null)
+    // Reset all sources to loading
+    setExternalImageSources((prev) => {
+      const next = { ...prev }
+      for (const s of IMAGE_SOURCES) {
+        next[s.key] = { source: s.key, label: s.label, images: [], status: 'loading' }
+      }
+      return next
+    })
+
+    // Collect all found images, then upload them to storage
+    const allFoundImages: Array<{ url: string; source: string }> = []
+
+    try {
+      const result = await fetchExternalPlantImages(trimmedName, {
+        callbacks: {
+          onSourceStart: (source) => {
+            setExternalImageSources((prev) => ({
+              ...prev,
+              [source]: { ...prev[source], status: 'loading', images: [], error: undefined },
+            }))
+          },
+          onSourceDone: (sourceResult) => {
+            setExternalImageSources((prev) => ({
+              ...prev,
+              [sourceResult.source]: sourceResult,
+            }))
+            // Collect images for uploading
+            for (const img of sourceResult.images) {
+              allFoundImages.push({ url: img.url, source: img.source })
+            }
+          },
+        },
+      })
+
+      if (result.errors?.length) {
+        console.warn('[CreatePlantPage] External image fetch partial errors:', result.errors)
+      }
+
+      // Upload each found image to the PLANTS bucket
+      const totalToUpload = allFoundImages.length
+      let uploadedCount = 0
+      let failedCount = 0
+      setImageUploadProgress({ phase: 'uploading', current: 0, total: totalToUpload, uploaded: 0, failed: 0 })
+
+      for (let i = 0; i < allFoundImages.length; i++) {
+        const img = allFoundImages[i]
+        setImageUploadProgress((prev) => ({ ...prev, current: i + 1 }))
+        try {
+          const uploaded = await uploadPlantImageFromUrl(img.url, trimmedName, img.source)
+          // Add the storage URL to the plant
+          setPlant((prev) => {
+            const existing = prev.images || []
+            const existingUrls = new Set(
+              existing.map((im) => (im.link || im.url || '').toLowerCase()).filter(Boolean)
+            )
+            if (existingUrls.has(uploaded.url.toLowerCase())) return prev
+            const newImage = {
+              link: uploaded.url,
+              use: (existing.length === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
+            }
+            return { ...prev, images: [...existing, newImage] }
+          })
+          uploadedCount++
+          setImageUploadProgress((prev) => ({ ...prev, uploaded: uploadedCount }))
+          console.log(`[CreatePlantPage] Uploaded plant image: ${img.source} -> ${uploaded.url} (${(uploaded.sizeBytes / 1024).toFixed(0)} KB, -${uploaded.compressionPercent}%)`)
+        } catch (uploadErr) {
+          failedCount++
+          setImageUploadProgress((prev) => ({ ...prev, failed: failedCount }))
+          console.warn(`[CreatePlantPage] Failed to upload image from ${img.source}:`, uploadErr)
+        }
+      }
+
+      setImageUploadProgress({ phase: 'idle', current: totalToUpload, total: totalToUpload, uploaded: uploadedCount, failed: failedCount })
+      setExternalImagesTotal(uploadedCount)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch external images'
+      setError(message)
+      console.error('[CreatePlantPage] External image fetch failed:', err)
+    } finally {
+      setFetchingExternalImages(false)
+    }
+  }
+
   const runAiFill = async () => {
     const trimmedName = plant.name && typeof plant.name === 'string' ? plant.name.trim() : ''
     if (!trimmedName) {
@@ -2110,7 +2220,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       <div className="flex flex-col gap-3">
         <div className="flex gap-3 flex-col sm:flex-row sm:items-center sm:justify-between">
           {language === 'en' && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap items-center">
               <Button
                 type="button"
                 onClick={aiCompleted ? undefined : runAiFill}
@@ -2119,12 +2229,147 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 {aiCompleted ? t('plantAdmin.aiFilled', 'AI Filled') : t('plantAdmin.aiFill', 'AI fill all fields')}
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={runExternalImageFetch}
+                disabled={fetchingExternalImages || !(plant.name && typeof plant.name === 'string' && plant.name.trim())}
+              >
+                {fetchingExternalImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImagePlus className="mr-2 h-4 w-4" />}
+                {t('plantAdmin.fetchExternalImages', 'Fetch Images')}
+              </Button>
+              {externalImagesTotal !== null && !fetchingExternalImages && (
+                <span className="text-xs text-muted-foreground self-center">
+                  {externalImagesTotal === 0
+                    ? 'No free images found'
+                    : `Added ${externalImagesTotal} images`}
+                </span>
+              )}
               {!(plant.name && typeof plant.name === 'string' && plant.name.trim()) && (
                 <span className="text-xs text-muted-foreground self-center">{t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')}</span>
               )}
             </div>
           )}
         </div>
+          {/* External Image Fetch + Upload Progress Card */}
+          {(fetchingExternalImages || externalImagesTotal !== null) && (
+            <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 space-y-3 shadow-md shadow-stone-200/50 dark:shadow-black/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ImagePlus className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                  <span className="text-sm font-semibold text-stone-800 dark:text-stone-100">
+                    {imageUploadProgress.phase === 'searching'
+                      ? 'Searching for images...'
+                      : imageUploadProgress.phase === 'uploading'
+                        ? 'Uploading & optimizing...'
+                        : fetchingExternalImages
+                          ? 'Processing...'
+                          : 'Image Fetch Complete'}
+                  </span>
+                </div>
+                {imageUploadProgress.phase === 'uploading' && imageUploadProgress.total > 0 && (
+                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    {imageUploadProgress.current}/{imageUploadProgress.total}
+                  </span>
+                )}
+              </div>
+
+              {/* Source search progress */}
+              <div className="space-y-2">
+                {IMAGE_SOURCES.map(({ key, label }) => {
+                  const src = externalImageSources[key]
+                  const isLoading = src.status === 'loading'
+                  const isDone = src.status === 'done'
+                  const isError = src.status === 'error'
+                  const isSkipped = src.status === 'skipped'
+                  const count = src.images.length
+                  return (
+                    <div key={key} className="flex items-center gap-3">
+                      <div className="w-28 shrink-0 text-xs font-medium text-stone-600 dark:text-stone-300">
+                        {label}
+                      </div>
+                      <div className="flex-1 h-2 rounded-full bg-stone-100 dark:bg-[#2a2a2d] overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ease-out ${
+                            isLoading
+                              ? 'bg-cyan-400 dark:bg-cyan-500 animate-pulse w-full'
+                              : isDone && count > 0
+                                ? 'bg-emerald-500 dark:bg-emerald-400'
+                                : isDone && count === 0
+                                  ? 'bg-stone-300 dark:bg-stone-600'
+                                  : isError
+                                    ? 'bg-red-400 dark:bg-red-500'
+                                    : isSkipped
+                                      ? 'bg-amber-300 dark:bg-amber-500'
+                                      : 'bg-stone-200 dark:bg-stone-700'
+                          }`}
+                          style={{ width: isLoading ? '100%' : (isDone || isError || isSkipped) ? '100%' : '0%' }}
+                        />
+                      </div>
+                      <div className="w-24 shrink-0 text-right">
+                        {isLoading && (
+                          <span className="text-xs text-cyan-600 dark:text-cyan-400 flex items-center justify-end gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Searching
+                          </span>
+                        )}
+                        {isDone && count > 0 && (
+                          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            {count} found
+                          </span>
+                        )}
+                        {isDone && count === 0 && (
+                          <span className="text-xs text-stone-400 dark:text-stone-500">0 found</span>
+                        )}
+                        {isError && (
+                          <span className="text-xs text-red-500 dark:text-red-400" title={src.error}>Failed</span>
+                        )}
+                        {isSkipped && (
+                          <span className="text-xs text-amber-500 dark:text-amber-400" title={src.error}>Not configured</span>
+                        )}
+                        {src.status === 'idle' && (
+                          <span className="text-xs text-stone-300 dark:text-stone-600">Waiting</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Upload progress */}
+              {imageUploadProgress.phase === 'uploading' && imageUploadProgress.total > 0 && (
+                <div className="space-y-2 pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-500 dark:text-stone-400 flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Uploading image {imageUploadProgress.current} of {imageUploadProgress.total} to storage
+                    </span>
+                    <span className="font-medium text-stone-700 dark:text-stone-200">
+                      {imageUploadProgress.uploaded} saved{imageUploadProgress.failed > 0 ? `, ${imageUploadProgress.failed} failed` : ''}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-stone-100 dark:bg-[#2a2a2d] overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${Math.round((imageUploadProgress.current / imageUploadProgress.total) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Complete summary */}
+              {!fetchingExternalImages && externalImagesTotal !== null && (
+                <div className="pt-2 border-t border-stone-100 dark:border-[#2a2a2d]">
+                  <span className="text-xs text-stone-500 dark:text-stone-400">
+                    {externalImagesTotal === 0
+                      ? 'No images could be uploaded'
+                      : `${externalImagesTotal} ${externalImagesTotal === 1 ? 'image' : 'images'} uploaded to storage as WebP`}
+                    {imageUploadProgress.failed > 0 ? ` (${imageUploadProgress.failed} failed)` : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           {showAiProgressCard && (
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-5 space-y-5 shadow-lg shadow-stone-200/50 dark:shadow-black/20">
             {/* Header */}
@@ -2298,6 +2543,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             companionSuggestions={companionSuggestions}
             categoryProgress={hasAiProgress ? aiProgress : undefined}
             language={language}
+            onImageRemove={(imageUrl) => {
+              if (isManagedPlantImageUrl(imageUrl)) {
+                deletePlantImage(imageUrl).then((result) => {
+                  if (result.deleted) {
+                    console.log(`[CreatePlantPage] Deleted plant image from storage: ${imageUrl}`)
+                  }
+                }).catch((err) => {
+                  console.warn(`[CreatePlantPage] Failed to delete plant image from storage:`, err)
+                })
+              }
+            }}
           />
         )}
     </div>

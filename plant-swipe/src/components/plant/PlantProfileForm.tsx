@@ -22,6 +22,8 @@ export type PlantProfileFormProps = {
   categoryProgress?: CategoryProgress
   /** Current language for companion search (e.g., 'en', 'fr'). Defaults to 'en'. */
   language?: string
+  /** Called when an image is removed. Use to delete from storage if needed. */
+  onImageRemove?: (imageUrl: string) => void
 }
 
 const neuCardClass =
@@ -1298,7 +1300,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
   return <div key={field.key}>{body}</div>
 }
 
-function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void }) {
+function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void; onRemove?: (imageUrl: string) => void }) {
   const list = Array.isArray(images) ? images : []
   const [previewErrors, setPreviewErrors] = React.useState<Record<string, boolean>>({})
   const [isCollapsed, setIsCollapsed] = React.useState<boolean>(true)
@@ -1344,8 +1346,13 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
   }
 
   const removeImage = (idx: number) => {
+    const removed = list[idx]
     const next = list.filter((_, i) => i !== idx)
     onChange(next)
+    // Notify parent to delete from storage if it's a managed image
+    if (removed?.link && onRemove) {
+      onRemove(removed.link)
+    }
   }
 
   const moveImage = (idx: number, direction: -1 | 1) => {
@@ -2052,7 +2059,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en' }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
     basics: null,
@@ -2232,7 +2239,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                   </p>
               </div>
             )}
-            <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} />
+            <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} onRemove={onImageRemove} />
           </CardContent>
         </Card>
       </div>

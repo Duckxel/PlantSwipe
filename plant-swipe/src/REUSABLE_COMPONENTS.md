@@ -322,3 +322,68 @@ const validation = useFieldValidation(pw, async v => {
 <ValidatedInput type="password" status={validation.status} error={validation.error} ... />
 <PasswordRules rules={result.rules} visible={pw.length > 0} />
 ```
+
+---
+
+## Image Upload & Management
+
+### Plant Image Upload Service
+
+**File:** `src/lib/externalImages.ts`
+
+Reusable functions for fetching, uploading, and deleting plant images stored in the **PLANTS** Supabase storage bucket.
+
+#### `fetchExternalPlantImages(plantName, options?)`
+
+Fetches free-to-use images from 3 external sources (Google/SerpAPI, GBIF, Smithsonian). Returns raw image URLs with per-source progress callbacks.
+
+- **SerpAPI**: Top 5 Google Images with Creative Commons license (query: `"<name> plant"`)
+- **GBIF**: CC0-licensed occurrence images (resolves common names to scientific via species/match + vernacular search)
+- **Smithsonian**: Open Access collection images (uses scientific name for better results)
+- Hard cap: **15 images** total across all sources
+- Allowed formats: jpg, jpeg, png, webp only (tif, exr, etc. filtered server-side)
+
+#### `uploadPlantImageFromUrl(imageUrl, plantName, source, signal?)`
+
+Uploads an external image URL to the PLANTS storage bucket:
+1. Server fetches the image from the URL
+2. Optimizes with `sharp`: resize to max 1600px, convert to **WebP** at quality 80
+3. Stores in Supabase `PLANTS` bucket under `plants/images/<plant-name>/<uuid>.webp`
+4. Records in `admin_media_uploads` table with `upload_source: 'plant_image'`
+5. Returns the media proxy URL (not raw Supabase URL)
+
+#### `deletePlantImage(imageUrl, signal?)`
+
+Deletes a plant image from both storage and `admin_media_uploads`:
+- Only deletes images in the PLANTS bucket (external URLs are silently skipped)
+- Removes the storage object and the DB tracking record
+
+#### `isManagedPlantImageUrl(url)`
+
+Returns `true` if the URL points to a managed plant image (contains `/PLANTS/`). Use to decide whether removal should also trigger storage deletion.
+
+### Usage in PlantProfileForm
+
+The `PlantProfileForm` component accepts an `onImageRemove?: (imageUrl: string) => void` prop. When a user removes an image from the `ImageEditor`, this callback is fired with the image URL. The parent component should check `isManagedPlantImageUrl()` and call `deletePlantImage()` if needed.
+
+```tsx
+<PlantProfileForm
+  value={plant}
+  onChange={setPlant}
+  onImageRemove={(url) => {
+    if (isManagedPlantImageUrl(url)) {
+      deletePlantImage(url).catch(console.warn)
+    }
+  }}
+/>
+```
+
+### Storage Configuration (Server)
+
+| Setting | Value | Env Override |
+|---|---|---|
+| Bucket | `PLANTS` | `PLANT_IMAGE_BUCKET` |
+| Prefix | `plants/images` | `PLANT_IMAGE_PREFIX` |
+| Max dimension | 1600px | — |
+| WebP quality | 80 | — |
+| Max fetch size | 10 MB | — |
