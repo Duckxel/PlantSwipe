@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState, useLayoutEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ExternalLink, Utensils, Clock, Zap, Flame, ChefHat } from 'lucide-react'
 import type { PlantRecipe } from '@/types/plant'
@@ -30,12 +30,52 @@ const TIME_META: Record<string, { label: string; Icon: React.FC<{ className?: st
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Layout
+   Layout constants
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const OVERLAP      = 32
 const DIVIDER_BODY = 54
 const TAB_HEIGHT   = 32
+const TAB_GAP      = 6     // gap between consecutive tabs
+const TAB_PAD_X    = 28    // approximate horizontal padding inside a tab (px + icon + gaps)
+const CHAR_WIDTH   = 7.5   // approximate width per character in the label
+const TAB_START    = 10    // left margin for the first tab
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Compute tab positions — front (last index) starts left, wraps on overflow
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+interface TabLayout { left: number; width: number }
+
+function computeTabPositions(
+  labels: string[],
+  containerWidth: number,
+): TabLayout[] {
+  // Estimate each tab's width from its label
+  const widths = labels.map(label => Math.ceil(TAB_PAD_X + label.length * CHAR_WIDTH))
+
+  // We position in *visual order*: front tab (last index) first (leftmost),
+  // then progressively to the right for back tabs (lower indices).
+  // Build a visual-order array of { origIndex, width }.
+  const visualOrder = widths
+    .map((w, i) => ({ origIndex: i, width: w }))
+    .reverse() // front-most (highest index) comes first
+
+  const positions: TabLayout[] = new Array(labels.length)
+  let cursor = TAB_START
+  const maxRight = containerWidth - TAB_START
+
+  for (const item of visualOrder) {
+    // Would this tab overflow? Wrap to next "row" (reset cursor)
+    if (cursor + item.width > maxRight && cursor > TAB_START) {
+      cursor = TAB_START
+    }
+    positions[item.origIndex] = { left: cursor, width: item.width }
+    cursor += item.width + TAB_GAP
+  }
+
+  return positions
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    <RecipeBox />
@@ -57,6 +97,19 @@ export function RecipeBox({
   subtitle = 'Culinary inspiration for this plant',
 }: RecipeBoxProps) {
   const [openKey, setOpenKey] = useState<string | null>(null)
+  const cavityRef = useRef<HTMLDivElement>(null)
+  const [cavityWidth, setCavityWidth] = useState(600)
+
+  // Measure cavity width for tab positioning
+  useLayoutEffect(() => {
+    const el = cavityRef.current
+    if (!el) return
+    const update = () => setCavityWidth(el.offsetWidth)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const tabs = useMemo(() => {
     const grouped: Record<string, PlantRecipe[]> = {}
@@ -73,6 +126,16 @@ export function RecipeBox({
         recipes: grouped[cat],
       }))
   }, [recipes])
+
+  const labels = useMemo(
+    () => tabs.map(t => categoryLabels?.[t.key] || t.meta.label),
+    [tabs, categoryLabels],
+  )
+
+  const tabPositions = useMemo(
+    () => computeTabPositions(labels, cavityWidth),
+    [labels, cavityWidth],
+  )
 
   const openTab = useMemo(
     () => (openKey ? tabs.find(t => t.key === openKey) : null) ?? null,
@@ -146,6 +209,7 @@ export function RecipeBox({
 
         {/* Inner cavity */}
         <div
+          ref={cavityRef}
           className="relative rounded-xl sm:rounded-2xl"
           style={{
             background: 'linear-gradient(180deg, #9a7448 0%, #86633a 100%)',
@@ -161,9 +225,9 @@ export function RecipeBox({
                 key={tab.key}
                 tab={tab}
                 index={index}
-                total={tabs.length}
                 isActive={openKey === tab.key}
                 isFirst={index === 0}
+                tabLeft={tabPositions[index]?.left ?? 10}
                 categoryLabel={categoryLabels?.[tab.key]}
                 onToggle={() => setOpenKey(prev => (prev === tab.key ? null : tab.key))}
               />
@@ -187,17 +251,17 @@ export function RecipeBox({
 function Divider({
   tab,
   index,
-  total,
   isActive,
   isFirst,
+  tabLeft,
   categoryLabel,
   onToggle,
 }: {
   tab: { key: string; meta: { label: string; icon: string }; recipes: PlantRecipe[] }
   index: number
-  total: number
   isActive: boolean
   isFirst: boolean
+  tabLeft: number
   categoryLabel?: string
   onToggle: () => void
 }) {
@@ -205,12 +269,6 @@ function Divider({
 
   const lightness     = 76 - index * 1.8
   const darkLightness = 26 - index * 1.2
-
-  /*
-   * Tab offset: FRONT divider (highest index, bottom of stack) = leftmost.
-   * Back dividers progressively shift right.
-   */
-  const tabLeft = 14 + (total - 1 - index) * 32
 
   return (
     <motion.div
@@ -231,7 +289,7 @@ function Divider({
         style={{ left: tabLeft, top: -TAB_HEIGHT + 3, height: TAB_HEIGHT, zIndex: 2 }}
       >
         <div
-          className="relative h-full rounded-t-lg px-3 sm:px-4 flex items-center gap-2 select-none transition-all duration-150 group-hover:brightness-110"
+          className="relative h-full rounded-t-lg px-3 sm:px-4 flex items-center gap-2 select-none whitespace-nowrap transition-all duration-150 group-hover:brightness-110"
           style={{
             background: isActive
               ? `linear-gradient(180deg, hsl(32 40% ${lightness + 6}%) 0%, hsl(30 36% ${lightness + 2}%) 100%)`
@@ -254,13 +312,13 @@ function Divider({
             }}
           />
           <span className="relative text-sm sm:text-base leading-none">{tab.meta.icon}</span>
-          <span className="relative truncate text-xs sm:text-sm font-semibold tracking-wide max-w-[130px] sm:max-w-[170px]">
+          <span className="relative text-xs sm:text-sm font-semibold tracking-wide">
             <span className="dark:hidden" style={{ color: `hsl(28 42% ${isActive ? 18 : 24}%)` }}>{label}</span>
             <span className="hidden dark:inline" style={{ color: `hsl(32 18% ${isActive ? 80 : 70}%)` }}>{label}</span>
           </span>
           {isActive && (
             <span className="relative w-1.5 h-1.5 rounded-full shrink-0" style={{ background: `hsl(32 50% ${lightness - 20}%)` }}>
-              <span className="absolute inset-0 rounded-full hidden dark:block" style={{ background: `hsl(32 30% 60%)` }} />
+              <span className="absolute inset-0 rounded-full hidden dark:block" style={{ background: 'hsl(32 30% 60%)' }} />
             </span>
           )}
         </div>
@@ -294,7 +352,6 @@ function Divider({
               border: `1px solid hsl(30 10% ${darkLightness + 8}%)`,
             }}
           />
-          {/* Kraft texture */}
           <div
             className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl opacity-[.035] dark:opacity-[.05]"
             style={{
@@ -309,7 +366,7 @@ function Divider({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   <RecipeCard />  — the index card that appears above the box
+   <RecipeCard />
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function RecipeCard({
@@ -336,7 +393,7 @@ function RecipeCard({
           border: '1px solid #d8cab0',
         }}
       >
-        {/* Dark mode card */}
+        {/* Dark mode */}
         <div
           className="pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl hidden dark:block"
           style={{
@@ -363,7 +420,7 @@ function RecipeCard({
 
         {/* Light spot */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-25 dark:opacity-8"
+          className="pointer-events-none absolute inset-0 opacity-25 dark:opacity-[.08]"
           style={{
             backgroundImage: 'radial-gradient(ellipse 60% 40% at 12% 8%, rgba(255,255,255,.5), transparent 50%)',
           }}
