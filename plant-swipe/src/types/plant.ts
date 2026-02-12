@@ -231,6 +231,29 @@ export interface PlantGrowth {
   [key: string]: unknown
 }
 
+export type RecipeCategory =
+  | "Breakfast & Brunch"
+  | "Starters & Appetizers"
+  | "Soups & Salads"
+  | "Main Courses"
+  | "Side Dishes"
+  | "Desserts"
+  | "Drinks"
+  | "Other"
+
+export type RecipeTime =
+  | "Quick and Effortless"
+  | "30+ minutes Meals"
+  | "Slow Cooking"
+  | "Undefined"
+
+export interface PlantRecipe {
+  id?: string
+  name: string
+  category: RecipeCategory
+  time: RecipeTime
+}
+
 export interface PlantUsage {
   adviceMedicinal?: string
   nutritionalIntake?: string[]
@@ -238,6 +261,7 @@ export interface PlantUsage {
   adviceInfusion?: string
   infusionMix?: Record<string, string>
   recipesIdeas?: string[]
+  recipes?: PlantRecipe[]
   aromatherapy?: boolean
   spiceMixes?: string[]
   gardenUses?: string[]
