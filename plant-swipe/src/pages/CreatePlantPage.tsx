@@ -6,14 +6,14 @@ import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
-import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useNavigationHistory } from "@/hooks/useNavigationHistory"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
-import { translateArray, translateText } from "@/lib/deepl"
+import { translateArray, translateBatch, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
@@ -44,6 +44,8 @@ import {
   polenizerEnum,
   conservationStatusEnum,
   timePeriodEnum,
+  recipeCategoryEnum,
+  recipeTimeEnum,
 } from "@/lib/composition"
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
@@ -600,6 +602,73 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
   if (error) throw new Error(error.message)
 }
 
+async function upsertRecipes(plantId: string, recipes?: PlantRecipe[], saveLanguage: string = 'en') {
+  if (!recipes?.length) {
+    // If no recipes provided in English save, delete all
+    if (saveLanguage === 'en') {
+      await supabase.from('plant_recipes').delete().eq('plant_id', plantId)
+    }
+    return
+  }
+
+  if (saveLanguage === 'en') {
+    // English save: full replace. Preserve existing translations (name_fr etc.)
+    const { data: existingRows } = await supabase
+      .from('plant_recipes')
+      .select('id,name,name_fr')
+      .eq('plant_id', plantId)
+
+    // Build a lookup of existing translations by English name (case-insensitive)
+    const existingTranslations = new Map<string, Record<string, string | null>>()
+    for (const row of existingRows || []) {
+      const key = (row.name || '').trim().toLowerCase()
+      if (key) existingTranslations.set(key, { name_fr: row.name_fr || null })
+    }
+
+    await supabase.from('plant_recipes').delete().eq('plant_id', plantId)
+    const rows = recipes
+      .map((r) => {
+        const trimmedName = r.name && typeof r.name === 'string' ? r.name.trim() : null
+        if (!trimmedName) return null
+        const trimmedLink = r.link && typeof r.link === 'string' ? r.link.trim() : null
+        // Preserve existing French translation if the English name matches
+        const existing = existingTranslations.get(trimmedName.toLowerCase())
+        return {
+          plant_id: plantId,
+          name: trimmedName,
+          name_fr: r.name_fr?.trim() || existing?.name_fr || null,
+          category: recipeCategoryEnum.toDb(r.category) || 'other',
+          time: recipeTimeEnum.toDb(r.time) || 'undefined',
+          link: trimmedLink || null,
+        }
+      })
+      .filter(Boolean)
+    if (!rows.length) return
+    const { error } = await supabase.from('plant_recipes').insert(rows)
+    if (error) throw new Error(error.message)
+  } else {
+    // Non-English save: update the name_{lang} column on existing rows.
+    // Match by index position (recipes array order matches DB order).
+    const nameCol = `name_${saveLanguage}`
+    const { data: existingRows } = await supabase
+      .from('plant_recipes')
+      .select('id')
+      .eq('plant_id', plantId)
+      .order('created_at', { ascending: true })
+
+    if (!existingRows?.length) return
+    for (let i = 0; i < Math.min(recipes.length, existingRows.length); i++) {
+      const translatedName = recipes[i].name?.trim()
+      if (translatedName) {
+        await supabase
+          .from('plant_recipes')
+          .update({ [nameCol]: translatedName })
+          .eq('id', existingRows[i].id)
+      }
+    }
+  }
+}
+
 // Sync bidirectional companion relationships
 // When plant A adds plant B as companion, plant B should also have plant A
 // When plant A removes plant B as companion, plant B should also remove plant A
@@ -689,6 +758,10 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   const { data: contributorRows } = await supabase
     .from('plant_contributors')
     .select('contributor_name')
+    .eq('plant_id', id)
+  const { data: recipeRows } = await supabase
+    .from('plant_recipes')
+    .select('id,name,name_fr,category,time,link')
     .eq('plant_id', id)
   const infusionMix = await fetchInfusionMixes(id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
@@ -806,6 +879,20 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       adviceInfusion: translation?.advice_infusion || undefined,
       infusionMix,
       recipesIdeas: translation?.recipes_ideas || [],
+      // Structured recipes from plant_recipes table
+      recipes: (recipeRows || []).map((r: any) => {
+        // In the editor, show the name for the current editing language
+        const langCol = targetLanguage !== 'en' ? `name_${targetLanguage}` : null
+        const displayName = langCol && r[langCol] ? r[langCol] : r.name
+        return {
+          id: r.id,
+          name: displayName || r.name || '',
+          name_fr: r.name_fr || undefined,
+          category: recipeCategoryEnum.toUi(r.category) || 'Other',
+          time: recipeTimeEnum.toUi(r.time) || 'Undefined',
+          link: r.link || undefined,
+        }
+      }) as PlantRecipe[],
       // Non-translatable fields from plants table
       aromatherapy: data.aromatherapy || false,
       // Translatable field from plant_translations only
@@ -1516,6 +1603,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         await upsertSources(savedId, sources)
         await upsertContributors(savedId, contributorList)
         await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
+        await upsertRecipes(savedId, plantToSave.usage?.recipes, saveLanguage)
         
         // Sync bidirectional companion relationships
         const newCompanions = plantToSave.miscellaneous?.companions || []
@@ -1543,7 +1631,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           cut: plantToSave.growth?.cut || null,
           advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
           nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
-          recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+          recipes_ideas: (plantToSave.usage?.recipes?.length
+            ? plantToSave.usage.recipes.map(r => r.name).filter(Boolean)
+            : plantToSave.usage?.recipesIdeas || []),
           advice_infusion: plantToSave.usage?.adviceInfusion || null,
           ground_effect: plantToSave.ecology?.groundEffect || null,
           source_name: primarySource?.name || null,
@@ -2052,7 +2142,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ? await translateText(plant.usage.adviceMedicinal, target, sourceLang)
             : plant.usage?.adviceMedicinal || null,
           nutritional_intake: await translateArraySafe(plant.usage?.nutritionalIntake),
-          recipes_ideas: await translateArraySafe(plant.usage?.recipesIdeas),
+          recipes_ideas: await translateArraySafe(
+            plant.usage?.recipes?.length
+              ? plant.usage.recipes.map(r => r.name).filter(Boolean)
+              : plant.usage?.recipesIdeas
+          ),
           advice_infusion: plant.usage?.adviceInfusion
             ? await translateText(plant.usage.adviceInfusion, target, sourceLang)
             : plant.usage?.adviceInfusion || null,
@@ -2074,7 +2168,32 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           .from('plant_translations')
           .upsert(translatedRows, { onConflict: 'plant_id,language' })
         if (translateError) throw new Error(translateError.message)
-        
+      }
+
+      // Translate recipe names and update plant_recipes rows
+      if (plant.id) {
+        const { data: currentRecipeRows } = await supabase
+          .from('plant_recipes')
+          .select('id,name')
+          .eq('plant_id', plant.id)
+        if (currentRecipeRows?.length) {
+          const names = currentRecipeRows.map(r => r.name || '')
+          for (const target of targets) {
+            const colName = `name_${target}`
+            const translated = await translateBatch(names, target, sourceLang as any)
+            for (let i = 0; i < currentRecipeRows.length; i++) {
+              if (translated[i]) {
+                await supabase
+                  .from('plant_recipes')
+                  .update({ [colName]: translated[i] })
+                  .eq('id', currentRecipeRows[i].id)
+              }
+            }
+          }
+        }
+      }
+
+      if (translatedRows.length) {
         // Clear cache for translated languages so they reload fresh data
         setLoadedLanguages(prev => {
           const newSet = new Set(prev)

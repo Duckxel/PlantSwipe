@@ -5,7 +5,8 @@ import { DimensionCube } from '@/components/plant/DimensionCube'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { PlantInfoPageSkeleton } from '@/components/garden/GardenSkeletons'
 import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
-import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
+import { RecipeBox } from '@/components/plant/RecipeBox'
+import type { Plant, PlantImage, PlantRecipe, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
 import { checkEditorAccess, hasAnyRole, USER_ROLES } from '@/constants/userRoles'
@@ -218,6 +219,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     sourcesResult,
     infusionMixResult,
     contributorsResult,
+    recipesResult,
   ] = await Promise.all([
     supabase
       .from('plant_translations')
@@ -231,6 +233,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     supabase.from('plant_sources').select('id,name,url').eq('plant_id', id),
     supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id),
     supabase.from('plant_contributors').select('contributor_name').eq('plant_id', id),
+    supabase.from('plant_recipes').select('id,name,name_fr,category,time,link').eq('plant_id', id),
   ])
   
   const translation = translationResult.data || null
@@ -240,6 +243,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
   const sources = sourcesResult.data
   const infusionMixRows = infusionMixResult.data
   const contributorRows = contributorsResult.data
+  const recipeRows = recipesResult?.data
   
   // Fetch color translations for the target language (depends on colorLinks result)
   const colorIds = (colorLinks || []).map((c: any) => c.colors?.id).filter(Boolean)
@@ -371,6 +375,20 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
       adviceInfusion: translation?.advice_infusion || undefined,
       infusionMix,
       recipesIdeas: translation?.recipes_ideas || [],
+      // Structured recipes from plant_recipes table
+      recipes: (recipeRows || []).map((r: any) => {
+        const localizedName = targetLanguage !== 'en' && r[`name_${targetLanguage}`]
+          ? r[`name_${targetLanguage}`]
+          : r.name
+        return {
+          id: r.id,
+          name: localizedName || r.name || '',
+          name_fr: r.name_fr || undefined,
+          category: r.category || 'other',
+          time: r.time || 'undefined',
+          link: r.link || undefined,
+        }
+      }),
       // Non-translatable fields from plants table
       aromatherapy: data.aromatherapy || false,
       spiceMixes: data.spice_mixes || [],
@@ -1390,6 +1408,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const fragranceDescriptor = formatBooleanDescriptor(identity.scent, t('moreInfo.values.fragrant'), t('moreInfo.values.neutralScent'))
       const spikedDescriptor = formatBooleanDescriptor(identity.spiked, t('moreInfo.values.hasThorns'), t('moreInfo.values.smoothStems'))
       const recipesIdeasList = compactStrings(usage.recipesIdeas)
+      const structuredRecipes: PlantRecipe[] = Array.isArray(usage.recipes) ? usage.recipes.filter((r: any) => r?.name) : []
+      const hasStructuredRecipes = structuredRecipes.length > 0
       const habitatLabel = habitats.length ? habitats.join(' • ') : null
       const pollenizerLabel = pollenizerList.length ? pollenizerList.join(' • ') : null
       const nutrientLabel = nutritionNeeds.length ? nutritionNeeds.join(' • ') : null
@@ -1724,8 +1744,29 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </section>
         )}
 
-      {/* Recipes Ideas Section - Prominent display */}
-        {recipesIdeasList.length > 0 && (
+      {/* Recipes Section - Structured with categories and times */}
+        {hasStructuredRecipes ? (
+          <RecipeBox
+            recipes={structuredRecipes}
+            title={t('moreInfo.recipes.title')}
+            subtitle={t('moreInfo.recipes.subtitle')}
+            categoryLabels={{
+              breakfast_brunch: t('moreInfo.recipes.categories.breakfast_brunch', 'Breakfast & Brunch'),
+              starters_appetizers: t('moreInfo.recipes.categories.starters_appetizers', 'Starters & Appetizers'),
+              soups_salads: t('moreInfo.recipes.categories.soups_salads', 'Soups & Salads'),
+              main_courses: t('moreInfo.recipes.categories.main_courses', 'Main Courses'),
+              side_dishes: t('moreInfo.recipes.categories.side_dishes', 'Side Dishes'),
+              desserts: t('moreInfo.recipes.categories.desserts', 'Desserts'),
+              drinks: t('moreInfo.recipes.categories.drinks', 'Drinks'),
+              other: t('moreInfo.recipes.categories.other', 'Other'),
+            }}
+            timeLabels={{
+              quick: t('moreInfo.recipes.times.quick', 'Quick'),
+              '30_plus': t('moreInfo.recipes.times.30_plus', '30+ min'),
+              slow_cooking: t('moreInfo.recipes.times.slow_cooking', 'Slow'),
+            }}
+          />
+        ) : recipesIdeasList.length > 0 ? (
           <section
             className="rounded-2xl sm:rounded-3xl border-2 border-emerald-400/50 bg-gradient-to-br from-emerald-50/90 via-orange-50/60 to-amber-50/80 p-5 sm:p-6 dark:border-emerald-500/60 dark:from-emerald-500/15 dark:via-orange-500/10 dark:to-amber-500/10 shadow-lg"
           >
@@ -1752,7 +1793,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </div>
             </div>
           </section>
-        )}
+        ) : null}
 
       <ProAdviceSection plantId={plant.id} plantName={plant.name} />
 

@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** February 4, 2026  
+> **Last Updated:** February 12, 2026  
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates
+- **Feb 12, 2026:** Added `plant_recipes` table to store structured recipe ideas per plant, with `category` (breakfast_brunch, starters_appetizers, soups_salads, main_courses, side_dishes, desserts, drinks, other), `time` (quick, 30_plus, slow_cooking, undefined), and optional `link` (external recipe URL, admin-only, not AI-filled) columns. Includes migration from `recipes_ideas` in `plant_translations`. All existing recipes migrated with category='other' and time='undefined'.
 - **Feb 10, 2026:** Added `impressions` table to track page view counts for plant info pages and blog posts. Admin-only read access. Includes `increment_impression` RPC function.
 - **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type to `notification_automations` for event-driven notifications when a plant request is fulfilled via AI prefill or manual creation. Added `/api/admin/notify-plant-requesters` endpoint.
 - **Feb 8, 2026:** Added `job`, `profile_link`, `show_country` columns to `profiles` table for public profile display. Updated `get_profile_public_by_display_name` RPC to return `experience_level`, `job`, `profile_link`, `show_country`.
@@ -87,6 +88,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `plant_watering_schedules` | Watering frequency data |
 | `plant_sources` | Plant information sources |
 | `plant_infusion_mixes` | Infusion/tea recipes |
+| `plant_recipes` | Structured recipe ideas with category and time |
 | `plant_contributors` | Contributor names per plant (admin/editor write only) |
 | `plant_pro_advices` | Professional growing tips |
 | `plant_images` | Plant image gallery |
@@ -399,6 +401,25 @@ last_viewed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 UNIQUE (entity_type, entity_id)
 ```
+
+### `plant_recipes`
+
+Structured recipe ideas linked to plants, with meal category and preparation time.
+
+```sql
+id              UUID PRIMARY KEY
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+name            TEXT NOT NULL                     -- Recipe/dish name in English (canonical)
+name_fr         TEXT                              -- French translation (populated by DeepL)
+category        TEXT NOT NULL DEFAULT 'other'     -- Meal category
+time            TEXT NOT NULL DEFAULT 'undefined' -- Preparation time
+link            TEXT                              -- Optional external URL to a recipe page (not filled by AI)
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**Category values:** `breakfast_brunch`, `starters_appetizers`, `soups_salads`, `main_courses`, `side_dishes`, `desserts`, `drinks`, `other`
+
+**Time values:** `quick` (Quick and Effortless), `30_plus` (30+ minutes Meals), `slow_cooking` (Slow Cooking), `undefined`
 
 ---
 

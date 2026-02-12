@@ -427,3 +427,21 @@ export const timePeriodEnum = createEnumTools([
   { dbValue: 'month', uiValue: 'month', aliases: ['monthly', 'per month', 'per-month', 'months', 'mo', 'mos'] },
   { dbValue: 'year', uiValue: 'year', aliases: ['yearly', 'annual', 'annually', 'per year', 'per-year', 'years', 'yr', 'yrs'] },
 ])
+
+export const recipeCategoryEnum = createEnumTools([
+  { dbValue: 'breakfast_brunch', uiValue: 'Breakfast & Brunch', aliases: ['breakfast', 'brunch'] },
+  { dbValue: 'starters_appetizers', uiValue: 'Starters & Appetizers', aliases: ['starters', 'appetizers', 'appetizer', 'starter'] },
+  { dbValue: 'soups_salads', uiValue: 'Soups & Salads', aliases: ['soups', 'salads', 'soup', 'salad'] },
+  { dbValue: 'main_courses', uiValue: 'Main Courses', aliases: ['main course', 'main', 'mains', 'entree', 'entrees'] },
+  { dbValue: 'side_dishes', uiValue: 'Side Dishes', aliases: ['side dish', 'sides', 'side'] },
+  { dbValue: 'desserts', uiValue: 'Desserts', aliases: ['dessert', 'sweet', 'sweets'] },
+  { dbValue: 'drinks', uiValue: 'Drinks', aliases: ['drink', 'beverage', 'beverages'] },
+  { dbValue: 'other', uiValue: 'Other' },
+])
+
+export const recipeTimeEnum = createEnumTools([
+  { dbValue: 'quick', uiValue: 'Quick and Effortless', aliases: ['quick and effortless', 'fast', 'easy', 'quick & effortless'] },
+  { dbValue: '30_plus', uiValue: '30+ minutes Meals', aliases: ['30+ minutes', '30 plus', '30min', '30 minutes', 'medium'] },
+  { dbValue: 'slow_cooking', uiValue: 'Slow Cooking', aliases: ['slow', 'slow cook', 'long'] },
+  { dbValue: 'undefined', uiValue: 'Undefined', aliases: ['unknown', 'n/a', 'na'] },
+])
