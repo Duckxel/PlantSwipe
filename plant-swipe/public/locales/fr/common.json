@@ -2078,13 +2078,21 @@
       "title": "Ce profil est privé",
       "description": "Seuls les amis peuvent voir ce profil et cette activité."
     },
+    "bannedProfile": {
+      "title": "Cet utilisateur est banni",
+      "description": "Ce compte a été banni (niveau de menace 3). Son profil, ses jardins et ses favoris sont masqués de tous les utilisateurs. Seuls les administrateurs peuvent voir ce profil."
+    },
+    "bannedProfileViewedByAdmin": "Profil d'utilisateur banni consulté par un administrateur",
+    "bannedBadge": "BANNI",
     "searchUsers": {
       "label": "Rechercher des utilisateurs",
       "placeholder": "Recherchez par nom d'affichage ou pseudo...",
       "noResults": "Aucun utilisateur ne correspond à votre recherche.",
       "error": "Impossible de charger les suggestions. Réessayez bientôt.",
       "privateTooltip": "Profil privé — seuls les amis peuvent voir",
-      "privateHint": "Profil privé • seuls les amis peuvent voir"
+      "privateHint": "Profil privé • seuls les amis peuvent voir",
+      "bannedTooltip": "Utilisateur banni — banni de la plateforme",
+      "bannedHint": "Banni • banni de la plateforme"
     },
     "highlights": "Aperçu",
     "plantsOwned": "Plantes possédées",

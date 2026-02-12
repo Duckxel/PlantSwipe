@@ -879,6 +879,9 @@ do $$ begin
 end $$;
 
 -- Function to search user profiles with friend prioritization and privacy metadata
+-- Shadow-banned users (threat_level >= 3) are excluded from results UNLESS the viewer is an admin.
+-- Returns is_banned flag so the frontend can display a distinct icon for banned users.
+drop function if exists public.search_user_profiles(text, integer);
 create or replace function public.search_user_profiles(_term text, _limit integer default 3)
 returns table (
   id uuid,
@@ -889,7 +892,8 @@ returns table (
   is_private boolean,
   is_friend boolean,
   is_self boolean,
-  can_view boolean
+  can_view boolean,
+  is_banned boolean
   )
   language sql
   security definer
@@ -903,6 +907,13 @@ returns table (
     viewer as (
       select auth.uid() as viewer_id
     ),
+    viewer_admin as (
+      select exists (
+        select 1 from public.profiles p
+        where p.id = (select viewer_id from viewer)
+          and (p.is_admin = true or 'admin' = any(coalesce(p.roles, '{}')))
+      ) as is_admin
+    ),
     base as (
       select
         p.id,
@@ -911,6 +922,7 @@ returns table (
         p.country,
         p.avatar_url,
         coalesce(p.is_private, false) as is_private,
+        coalesce(p.threat_level, 0) >= 3 as is_banned,
         u.created_at,
         params.term,
         params.limit_value,
@@ -920,7 +932,11 @@ returns table (
       cross join params
       cross join viewer v
       where v.viewer_id is not null
-        and coalesce(p.threat_level, 0) < 3  -- Exclude shadow-banned users from search results
+        -- Exclude shadow-banned users from search results UNLESS viewer is admin
+        and (
+          coalesce(p.threat_level, 0) < 3
+          or (select is_admin from viewer_admin)
+        )
     ),
   relation as (
     select
@@ -973,7 +989,8 @@ returns table (
     m.is_private,
     m.is_friend,
     m.is_self,
-    m.can_view
+    m.can_view,
+    m.is_banned
   from matched m
   order by
     case when m.is_self then -1 else 0 end,

@@ -2078,13 +2078,21 @@
       "title": "This profile is private",
       "description": "Only friends can see this profile and activity."
     },
+    "bannedProfile": {
+      "title": "This user is shadow-banned",
+      "description": "This account has been shadow-banned (threat level 3). Their profile, gardens, and bookmarks are hidden from all users. Only admins can view this profile."
+    },
+    "bannedProfileViewedByAdmin": "Shadow-banned user profile viewed by admin",
+    "bannedBadge": "BANNED",
     "searchUsers": {
       "label": "Search users",
       "placeholder": "Search by display name or username...",
       "noResults": "No users match your search yet.",
       "error": "We couldn't load suggestions. Try again shortly.",
       "privateTooltip": "Private profile — only friends can view",
-      "privateHint": "Private profile • only friends can view"
+      "privateHint": "Private profile • only friends can view",
+      "bannedTooltip": "Banned user — shadow-banned from the platform",
+      "bannedHint": "Banned • shadow-banned from platform"
     },
     "highlights": "Highlights",
     "plantsOwned": "Plants owned",
