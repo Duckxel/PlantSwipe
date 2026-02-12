@@ -5,11 +5,35 @@
  */
 
 import type { SupportedLanguage } from './i18n'
+import DOMPurify from 'dompurify'
 import { getDividerHTML, type DividerStyle } from '@/components/tiptap-node/styled-divider-node/styled-divider-node-extension'
 
 // SVG logo URL that should be replaced with PNG for email compatibility
 const SVG_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'
 const PNG_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
+
+// Initialize DOMPurify - works in both Browser (instance) and Node/Test (factory) environments
+const getWindow = () => {
+  if (typeof window !== 'undefined') return window;
+  if (typeof globalThis !== 'undefined' && (globalThis as any).window) return (globalThis as any).window;
+  return null;
+}
+
+// Lazy initialization to handle import hoisting in tests/SSR
+let sanitizerInstance: any = null;
+const getSanitizer = () => {
+  if (sanitizerInstance) return sanitizerInstance;
+
+  // Check if DOMPurify is already an instance (browser) or factory (node)
+  if ((DOMPurify as any).sanitize) {
+    sanitizerInstance = DOMPurify;
+  } else {
+    // Factory pattern - pass window if available
+    const win = getWindow();
+    sanitizerInstance = (DOMPurify as any)(win);
+  }
+  return sanitizerInstance;
+}
 
 export interface EmailWrapperOptions {
   subject?: string
@@ -551,13 +575,28 @@ export function convertImageGridToEmailTable(html: string): string {
 
 /**
  * Sanitizes email HTML for web preview
+ * - Uses DOMPurify to prevent XSS attacks
  * - Replaces SVG logo URLs with PNG for Gmail compatibility
  * - Fixes escaped divider HTML from TipTap
  * - Removes filter:brightness(0) invert(1) that was used for SVG workaround
  * - Keeps div-based image grids (CSS grid works in browsers)
  */
 export function sanitizeEmailHtml(html: string): string {
-  let result = html
+  // 0. Sanitize HTML to prevent XSS (scripts, event handlers, etc.)
+  // We allow email-specific tags and attributes that might be stripped by default
+  const cleanHtml = getSanitizer().sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_TAGS: ['style', 'center', 'font'],
+    ADD_ATTR: [
+      'style', 'align', 'valign', 'bgcolor', 'width', 'height',
+      'border', 'cellpadding', 'cellspacing', 'target', 'color',
+      'face', 'size', 'background'
+    ],
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onmouseout', 'onfocus', 'onblur'],
+  })
+
+  let result = cleanHtml
 
   // For web preview, keep the div-based structure for both resizable images and image grids
   // CSS handles these properly in browsers. Only convert to tables when sending emails.
@@ -576,7 +615,7 @@ export function sanitizeEmailHtml(html: string): string {
   // Match dividers with escaped content like &lt;div style="..."&gt;&lt;/div&gt;
   result = result.replace(
     /<div[^>]*data-type="styled-divider"[^>]*data-style="([^"]*)"[^>]*data-color="([^"]*)"[^>]*>([^<]*(?:&lt;|&gt;|&#\d+;)[^<]*)<\/div>/gi,
-    (match, style, color, escapedContent) => {
+    (match: string, style: string, color: string, escapedContent: string) => {
       // Check if the content is escaped HTML
       if (escapedContent.includes('&lt;') || escapedContent.includes('&gt;')) {
         const dividerHtml = getDividerHTML(style as DividerStyle, color)
