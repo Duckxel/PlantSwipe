@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
-import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
@@ -44,6 +44,8 @@ import {
   polenizerEnum,
   conservationStatusEnum,
   timePeriodEnum,
+  recipeCategoryEnum,
+  recipeTimeEnum,
 } from "@/lib/composition"
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
@@ -600,6 +602,26 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
   if (error) throw new Error(error.message)
 }
 
+async function upsertRecipes(plantId: string, recipes?: PlantRecipe[]) {
+  await supabase.from('plant_recipes').delete().eq('plant_id', plantId)
+  if (!recipes?.length) return
+  const rows = recipes
+    .map((r) => {
+      const trimmedName = r.name && typeof r.name === 'string' ? r.name.trim() : null
+      if (!trimmedName) return null
+      return {
+        plant_id: plantId,
+        name: trimmedName,
+        category: recipeCategoryEnum.toDb(r.category) || 'other',
+        time: recipeTimeEnum.toDb(r.time) || 'undefined',
+      }
+    })
+    .filter((row): row is { plant_id: string; name: string; category: string; time: string } => Boolean(row))
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_recipes').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
 // Sync bidirectional companion relationships
 // When plant A adds plant B as companion, plant B should also have plant A
 // When plant A removes plant B as companion, plant B should also remove plant A
@@ -689,6 +711,10 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   const { data: contributorRows } = await supabase
     .from('plant_contributors')
     .select('contributor_name')
+    .eq('plant_id', id)
+  const { data: recipeRows } = await supabase
+    .from('plant_recipes')
+    .select('id,name,category,time')
     .eq('plant_id', id)
   const infusionMix = await fetchInfusionMixes(id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
@@ -806,6 +832,13 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       adviceInfusion: translation?.advice_infusion || undefined,
       infusionMix,
       recipesIdeas: translation?.recipes_ideas || [],
+      // Structured recipes from plant_recipes table
+      recipes: (recipeRows || []).map((r: any) => ({
+        id: r.id,
+        name: r.name || '',
+        category: recipeCategoryEnum.toUi(r.category) || 'Other',
+        time: recipeTimeEnum.toUi(r.time) || 'Undefined',
+      })) as PlantRecipe[],
       // Non-translatable fields from plants table
       aromatherapy: data.aromatherapy || false,
       // Translatable field from plant_translations only
@@ -1516,6 +1549,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         await upsertSources(savedId, sources)
         await upsertContributors(savedId, contributorList)
         await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
+        await upsertRecipes(savedId, plantToSave.usage?.recipes)
         
         // Sync bidirectional companion relationships
         const newCompanions = plantToSave.miscellaneous?.companions || []
@@ -1543,7 +1577,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           cut: plantToSave.growth?.cut || null,
           advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
           nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
-          recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+          recipes_ideas: (plantToSave.usage?.recipes?.length
+            ? plantToSave.usage.recipes.map(r => r.name).filter(Boolean)
+            : plantToSave.usage?.recipesIdeas || []),
           advice_infusion: plantToSave.usage?.adviceInfusion || null,
           ground_effect: plantToSave.ecology?.groundEffect || null,
           source_name: primarySource?.name || null,
@@ -2052,7 +2088,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ? await translateText(plant.usage.adviceMedicinal, target, sourceLang)
             : plant.usage?.adviceMedicinal || null,
           nutritional_intake: await translateArraySafe(plant.usage?.nutritionalIntake),
-          recipes_ideas: await translateArraySafe(plant.usage?.recipesIdeas),
+          recipes_ideas: await translateArraySafe(
+            plant.usage?.recipes?.length
+              ? plant.usage.recipes.map(r => r.name).filter(Boolean)
+              : plant.usage?.recipesIdeas
+          ),
           advice_infusion: plant.usage?.adviceInfusion
             ? await translateText(plant.usage.adviceInfusion, target, sourceLang)
             : plant.usage?.adviceInfusion || null,
