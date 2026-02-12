@@ -77,6 +77,7 @@ def _scrub_pii_from_string(value: str) -> str:
 # ========================================
 import json
 import time
+import re
 
 MAINTENANCE_MODE_FILE = "/tmp/plantswipe-maintenance.json"
 
@@ -325,6 +326,11 @@ def _log_admin_action(action: str, target: str = "", detail: dict | None = None)
 
 
 def _verify_request() -> None:
+    # FAIL SECURE: If APP_SECRET is the default "change-me", refuse all requests
+    if APP_SECRET == "change-me":
+        print("[SECURITY] Critical: Default APP_SECRET 'change-me' is in use. Request rejected.")
+        abort(500, description="Security misconfiguration: Default secret in use")
+
     # Option A: HMAC on raw body via X-Button-Token
     provided_sig = request.headers.get(HMAC_HEADER, "")
     if provided_sig:
@@ -501,6 +507,19 @@ def _psql_available() -> bool:
         return False
 
 
+# Strict allowlist for branch names to prevent argument injection
+# Alphanumeric, dot, underscore, slash, hyphen. NO leading hyphen.
+BRANCH_REGEX = re.compile(r'^[a-zA-Z0-9_./-]+$')
+
+def _validate_branch_name(branch: Optional[str]) -> None:
+    if not branch:
+        return
+    if branch.startswith("-"):
+        abort(400, description="Branch name cannot start with hyphen")
+    if not BRANCH_REGEX.match(branch):
+        abort(400, description="Invalid branch name format")
+
+
 @app.get("/admin/branches")
 def list_branches():
     _verify_request()
@@ -613,6 +632,8 @@ def _run_refresh(branch: Optional[str], stream: bool):
 def admin_refresh_stream():
     _verify_request()
     branch = (request.args.get("branch") or "").strip() or None
+    if branch:
+        _validate_branch_name(branch)
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
@@ -626,6 +647,8 @@ def admin_refresh():
     _verify_request()
     body = request.get_json(silent=True) or {}
     branch = (request.args.get("branch") or body.get("branch") or "").strip() or None
+    if branch:
+        _validate_branch_name(branch)
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
