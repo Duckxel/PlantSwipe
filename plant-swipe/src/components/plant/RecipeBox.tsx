@@ -239,21 +239,20 @@ function Divider({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04, duration: 0.3, ease: 'easeOut' }}
-      className="relative"
+      className="relative group cursor-pointer"
+      onClick={onToggle}
       style={{
         marginTop: isFirst ? 0 : -OVERLAP,
         zIndex: index + 1,
       }}
     >
       {/* ── Tab ─────────────────────────────────────────────────────────── */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className="absolute cursor-pointer group"
+      <div
+        className="absolute"
         style={{ left: tabLeft, top: -TAB_HEIGHT + 3, height: TAB_HEIGHT, zIndex: 3 }}
       >
         <div
-          className="relative h-full rounded-t-lg px-3 sm:px-4 flex items-center gap-2 select-none whitespace-nowrap transition-all duration-150 group-hover:brightness-110"
+          className="relative h-full rounded-t-lg px-3 sm:px-4 flex items-center gap-2 select-none whitespace-nowrap transition-[filter] duration-150 group-hover:brightness-110"
           style={{
             background: isActive
               ? `linear-gradient(180deg, hsl(32 40% ${lightness + 6}%) 0%, hsl(30 36% ${lightness + 2}%) 100%)`
@@ -279,7 +278,7 @@ function Divider({
             <span className="hidden dark:inline" style={{ color: `hsl(32 18% ${isActive ? 80 : 70}%)` }}>{label}</span>
           </span>
         </div>
-      </button>
+      </div>
 
       {/* ── Note card — pops UPWARD, sits BEHIND the divider body ──────── */}
       {/*    z-index 1 = behind the divider body (z:2) which covers the   */}
@@ -311,15 +310,11 @@ function Divider({
 
       {/* ── Divider body — z:2 so it paints ON TOP of the note ─────────── */}
       <div
-        onClick={onToggle}
-        role="button"
-        tabIndex={0}
-        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onToggle() }}
-        className="relative w-full text-left cursor-pointer group block"
+        className="relative w-full"
         style={{ height: DIVIDER_BODY, zIndex: 2 }}
       >
         <div
-          className="absolute inset-0 rounded-lg sm:rounded-xl transition-all duration-150 group-hover:brightness-[1.04]"
+          className="absolute inset-0 rounded-lg sm:rounded-xl transition-[filter] duration-150 group-hover:brightness-[1.04]"
           style={{
             background: isActive
               ? `linear-gradient(178deg, hsl(32 38% ${lightness + 4}%) 0%, hsl(30 34% ${lightness}%) 100%)`
