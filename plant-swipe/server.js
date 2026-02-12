@@ -11096,11 +11096,6 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       return { sent: false, reason: 'Trigger is disabled' }
     }
 
-    if (!trigger.template_id) {
-      console.log(`[sendAutomaticEmail] Trigger "${triggerType}" has no template configured`)
-      return { sent: false, reason: 'No template configured' }
-    }
-
     const existingSend = await sql`
       select id from public.admin_automatic_email_sends
       where trigger_type = ${triggerType} and user_id = ${userId}
@@ -11112,14 +11107,53 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       return { sent: false, reason: 'Already sent to this user' }
     }
 
-    const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
-    const translation = emailTranslations.get(lang)
-    const rawSubject = translation?.subject || trigger.subject
-    const rawBodyHtml = translation?.bodyHtml || trigger.body_html
+    let rawSubject = null
+    let rawBodyHtml = null
 
+    if (trigger.template_id) {
+      const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
+      const translation = emailTranslations.get(lang)
+      rawSubject = translation?.subject || trigger.subject
+      rawBodyHtml = translation?.bodyHtml || trigger.body_html
+    }
+
+    // Built-in fallback for BAN_USER when no template is configured
     if (!rawSubject || !rawBodyHtml) {
-      console.error(`[sendAutomaticEmail] Template "${trigger.template_id}" has no content`)
-      return { sent: false, reason: 'Template has no content' }
+      if (triggerType === 'BAN_USER') {
+        console.log(`[sendAutomaticEmail] Using built-in fallback template for BAN_USER`)
+        const isFr = lang === 'fr'
+        rawSubject = isFr
+          ? 'Votre compte Aphylia a été suspendu'
+          : 'Your Aphylia account has been suspended'
+        rawBodyHtml = isFr
+          ? `<p>Bonjour {{user}},</p>
+<p>Nous vous informons que votre compte sur Aphylia a été suspendu en raison d'une violation de nos règles communautaires.</p>
+<p><strong>Ce que cela signifie :</strong></p>
+<ul>
+<li>Votre profil a été rendu privé et n'est plus visible par les autres utilisateurs</li>
+<li>Vos jardins et favoris ont été rendus privés</li>
+<li>Les demandes d'amis et les invitations de jardin ont été désactivées</li>
+<li>Les notifications par e-mail et push ont été désactivées</li>
+<li>Vous ne pouvez plus vous connecter à votre compte</li>
+</ul>
+<p>Si vous pensez qu'il s'agit d'une erreur, veuillez contacter notre équipe de support en répondant à cet e-mail.</p>
+<p>Cordialement,<br>L'équipe Aphylia</p>`
+          : `<p>Hello {{user}},</p>
+<p>We are writing to inform you that your account on Aphylia has been suspended due to a violation of our community guidelines.</p>
+<p><strong>What this means:</strong></p>
+<ul>
+<li>Your profile has been made private and is no longer visible to other users</li>
+<li>Your gardens and bookmarks have been set to private</li>
+<li>Friend requests and garden invitations have been disabled</li>
+<li>Email and push notifications have been turned off</li>
+<li>You are no longer able to log in to your account</li>
+</ul>
+<p>If you believe this was a mistake, please contact our support team by replying to this email.</p>
+<p>Best regards,<br>The Aphylia Team</p>`
+      } else {
+        console.error(`[sendAutomaticEmail] Template "${trigger.template_id}" has no content`)
+        return { sent: false, reason: 'Template has no content' }
+      }
     }
 
     const userRaw = userDisplayName || 'User'
@@ -16209,6 +16243,13 @@ app.post('/api/admin/threat-level', async (req, res) => {
       } catch (sbErr) {
         console.error('[threat-level] failed to revert shadow ban', sbErr)
       }
+      // Clear previous BAN_USER email send record so the email fires again if re-banned
+      try {
+        await sql`delete from public.admin_automatic_email_sends where trigger_type = 'BAN_USER' and user_id = ${uid}`
+        console.log(`[threat-level] cleared BAN_USER email send record for user ${uid}`)
+      } catch (clearErr) {
+        console.warn('[threat-level] failed to clear BAN_USER email send record', clearErr)
+      }
     }
 
     let bannedIps = []
@@ -16276,12 +16317,22 @@ app.post('/api/admin/threat-level', async (req, res) => {
       }
 
       if (existingLevel !== 3 && normalizedEmail) {
+        console.log(`[threat-level] Sending ban notification email to ${normalizedEmail} (user ${uid})`)
         emailResult = await sendAutomaticEmail('BAN_USER', {
           userId: uid,
           userEmail: normalizedEmail,
           userDisplayName,
           userLanguage,
         })
+        if (emailResult?.sent) {
+          console.log(`[threat-level] Ban email sent successfully to ${normalizedEmail}`)
+        } else {
+          console.warn(`[threat-level] Ban email not sent: ${emailResult?.reason || emailResult?.error || 'unknown reason'}`)
+        }
+      } else if (existingLevel === 3) {
+        console.log(`[threat-level] User ${uid} was already banned — skipping ban email`)
+      } else if (!normalizedEmail) {
+        console.warn(`[threat-level] No email found for user ${uid} — cannot send ban notification`)
       }
     }
 
