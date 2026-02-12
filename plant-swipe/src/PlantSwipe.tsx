@@ -1067,6 +1067,9 @@ export default function PlantSwipe() {
       
       // Usage filter - O(k) where k is number of selected usages, using O(1) Set lookups
       if (usageSet.size > 0) {
+        // ⚡ Bolt: Early return if plant has fewer usages than required (AND logic)
+        if (p._usageSet.size < usageSet.size) return false
+
         for (const usage of usageSet) {
           if (!p._usageSet.has(usage)) return false
         }
@@ -1074,12 +1077,25 @@ export default function PlantSwipe() {
       
       // Habitat filter - OR logic: match if plant has ANY selected habitat
       // Using O(1) Set lookups instead of O(n) array includes
+      // ⚡ Bolt: Optimize intersection by iterating the smaller set (O(min(N, M)))
       if (habitatSet.size > 0) {
         let hasMatchingHabitat = false
-        for (const h of habitatSet) {
-          if (p._habitatSet.has(h)) {
-            hasMatchingHabitat = true
-            break
+        const filterSet = habitatSet
+        const plantSet = p._habitatSet
+
+        if (filterSet.size <= plantSet.size) {
+          for (const h of filterSet) {
+            if (plantSet.has(h)) {
+              hasMatchingHabitat = true
+              break
+            }
+          }
+        } else {
+          for (const h of plantSet) {
+            if (filterSet.has(h)) {
+              hasMatchingHabitat = true
+              break
+            }
           }
         }
         if (!hasMatchingHabitat) return false
@@ -1088,12 +1104,25 @@ export default function PlantSwipe() {
       // Color filter - using pre-computed color tokens for O(1) lookups
       // Optimized: Iterate over plant tokens (smaller set) instead of filter set (larger set)
       // Note: _colorTokens includes both full color strings (e.g. "red-orange") and split tokens (e.g. "red", "orange")
+      // ⚡ Bolt: Iterate smaller set for faster intersection check
       if (expandedColorFilterSet) {
         let hasMatchingColor = false
-        for (const plantToken of p._colorTokens) {
-          if (expandedColorFilterSet.has(plantToken)) {
-            hasMatchingColor = true
-            break
+        const filterSet = expandedColorFilterSet
+        const plantSet = p._colorTokens
+
+        if (filterSet.size <= plantSet.size) {
+          for (const token of filterSet) {
+            if (plantSet.has(token)) {
+              hasMatchingColor = true
+              break
+            }
+          }
+        } else {
+          for (const token of plantSet) {
+            if (filterSet.has(token)) {
+              hasMatchingColor = true
+              break
+            }
           }
         }
         if (!hasMatchingColor) return false
