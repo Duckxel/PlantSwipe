@@ -388,15 +388,41 @@ async function upsertRecipes(plantId: string, recipes?: PlantRecipe[]) {
       return {
         plant_id: plantId,
         name: trimmedName,
+        name_fr: r.name_fr && typeof r.name_fr === 'string' ? r.name_fr.trim() || null : null,
         category: recipeCategoryEnum.toDb(r.category) || 'other',
         time: recipeTimeEnum.toDb(r.time) || 'undefined',
         link: null, // AI does not fill the link field - admin only
       }
     })
-    .filter((row): row is { plant_id: string; name: string; category: string; time: string; link: null } => Boolean(row))
+    .filter(Boolean)
   if (!rows.length) return
   const { error } = await supabase.from('plant_recipes').insert(rows)
   if (error) throw new Error(error.message)
+}
+
+/** Translate recipe names for all target languages and update plant_recipes rows */
+async function translateRecipeNames(plantId: string, targetLanguages: string[]) {
+  const { data: recipeRows } = await supabase
+    .from('plant_recipes')
+    .select('id,name')
+    .eq('plant_id', plantId)
+  if (!recipeRows?.length) return
+  const names = recipeRows.map(r => r.name || '')
+  for (const target of targetLanguages) {
+    try {
+      const translated = await translateBatch(names, target as any, 'en')
+      for (let i = 0; i < recipeRows.length; i++) {
+        if (translated[i]) {
+          await supabase
+            .from('plant_recipes')
+            .update({ [`name_${target}`]: translated[i] })
+            .eq('id', recipeRows[i].id)
+        }
+      }
+    } catch (err) {
+      console.warn(`[aiPrefillService] Failed to translate recipe names to ${target}:`, err)
+    }
+  }
 }
 
 export interface AiPrefillCallbacks {
@@ -1022,6 +1048,16 @@ export async function processPlantRequest(
       if (translateError) {
         console.error('Failed to save translations:', translateError)
         // Don't fail the whole operation for translation errors
+      }
+    }
+    
+    // Translate recipe names to other languages
+    if (!signal?.aborted) {
+      try {
+        await translateRecipeNames(plantId, targetLanguages)
+      } catch (err) {
+        if (isCancellationError(err)) throw err
+        console.warn('[aiPrefillService] Recipe name translation failed:', err)
       }
     }
     

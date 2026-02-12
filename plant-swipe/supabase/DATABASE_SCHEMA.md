@@ -409,7 +409,8 @@ Structured recipe ideas linked to plants, with meal category and preparation tim
 ```sql
 id              UUID PRIMARY KEY
 plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
-name            TEXT NOT NULL                     -- Recipe/dish name (e.g., "Pesto", "Herbal Butter")
+name            TEXT NOT NULL                     -- Recipe/dish name in English (canonical)
+name_fr         TEXT                              -- French translation (populated by DeepL)
 category        TEXT NOT NULL DEFAULT 'other'     -- Meal category
 time            TEXT NOT NULL DEFAULT 'undefined' -- Preparation time
 link            TEXT                              -- Optional external URL to a recipe page (not filled by AI)

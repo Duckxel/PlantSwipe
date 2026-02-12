@@ -320,7 +320,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
       const [plantsResponse, topLikedResponse] = await Promise.all([
         supabase
           .from('plants')
-          .select('*, plant_images (link,use), plant_colors (colors (id,name,hex_code)), plant_watering_schedules (season,quantity,time_period), plant_sources (id,name,url), plant_infusion_mixes (mix_name,benefit), plant_recipes (id,name,category,time,link)')
+          .select('*, plant_images (link,use), plant_colors (colors (id,name,hex_code)), plant_watering_schedules (season,quantity,time_period), plant_sources (id,name,url), plant_infusion_mixes (mix_name,benefit), plant_recipes (id,name,name_fr,category,time,link)')
           .order('name', { ascending: true }),
         supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
       ])
@@ -515,13 +515,19 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
               infusionMix,
               recipesIdeas: translation.recipes_ideas || [],
               // Structured recipes from plant_recipes table
-              recipes: ((basePlant.plant_recipes as any[]) || []).map((r: any) => ({
-                id: r.id,
-                name: r.name || '',
-                category: r.category || 'other',
-                time: r.time || 'undefined',
-                link: r.link || undefined,
-              })),
+              recipes: ((basePlant.plant_recipes as any[]) || []).map((r: any) => {
+                const localizedName = language !== 'en' && r[`name_${language}`]
+                  ? r[`name_${language}`]
+                  : r.name
+                return {
+                  id: r.id,
+                  name: localizedName || r.name || '',
+                  name_fr: r.name_fr || undefined,
+                  category: r.category || 'other',
+                  time: r.time || 'undefined',
+                  link: r.link || undefined,
+                }
+              }),
               // Non-translatable fields from plants table
               aromatherapy: basePlant.aromatherapy || false,
               spiceMixes: basePlant.spice_mixes || [],

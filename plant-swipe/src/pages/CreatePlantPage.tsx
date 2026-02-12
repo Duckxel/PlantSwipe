@@ -13,7 +13,7 @@ import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useNavigationHistory } from "@/hooks/useNavigationHistory"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
-import { translateArray, translateText } from "@/lib/deepl"
+import { translateArray, translateBatch, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
@@ -613,12 +613,13 @@ async function upsertRecipes(plantId: string, recipes?: PlantRecipe[]) {
       return {
         plant_id: plantId,
         name: trimmedName,
+        name_fr: r.name_fr && typeof r.name_fr === 'string' ? r.name_fr.trim() || null : null,
         category: recipeCategoryEnum.toDb(r.category) || 'other',
         time: recipeTimeEnum.toDb(r.time) || 'undefined',
         link: trimmedLink || null,
       }
     })
-    .filter((row): row is { plant_id: string; name: string; category: string; time: string; link: string | null } => Boolean(row))
+    .filter(Boolean)
   if (!rows.length) return
   const { error } = await supabase.from('plant_recipes').insert(rows)
   if (error) throw new Error(error.message)
@@ -716,7 +717,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     .eq('plant_id', id)
   const { data: recipeRows } = await supabase
     .from('plant_recipes')
-    .select('id,name,category,time,link')
+    .select('id,name,name_fr,category,time,link')
     .eq('plant_id', id)
   const infusionMix = await fetchInfusionMixes(id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
@@ -838,6 +839,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       recipes: (recipeRows || []).map((r: any) => ({
         id: r.id,
         name: r.name || '',
+        name_fr: r.name_fr || undefined,
         category: recipeCategoryEnum.toUi(r.category) || 'Other',
         time: recipeTimeEnum.toUi(r.time) || 'Undefined',
         link: r.link || undefined,
@@ -2117,7 +2119,32 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           .from('plant_translations')
           .upsert(translatedRows, { onConflict: 'plant_id,language' })
         if (translateError) throw new Error(translateError.message)
-        
+      }
+
+      // Translate recipe names and update plant_recipes rows
+      if (plant.id) {
+        const { data: currentRecipeRows } = await supabase
+          .from('plant_recipes')
+          .select('id,name')
+          .eq('plant_id', plant.id)
+        if (currentRecipeRows?.length) {
+          const names = currentRecipeRows.map(r => r.name || '')
+          for (const target of targets) {
+            const colName = `name_${target}`
+            const translated = await translateBatch(names, target, sourceLang as any)
+            for (let i = 0; i < currentRecipeRows.length; i++) {
+              if (translated[i]) {
+                await supabase
+                  .from('plant_recipes')
+                  .update({ [colName]: translated[i] })
+                  .eq('id', currentRecipeRows[i].id)
+              }
+            }
+          }
+        }
+      }
+
+      if (translatedRows.length) {
         // Clear cache for translated languages so they reload fresh data
         setLoadedLanguages(prev => {
           const newSet = new Set(prev)

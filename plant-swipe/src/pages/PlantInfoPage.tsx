@@ -233,7 +233,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     supabase.from('plant_sources').select('id,name,url').eq('plant_id', id),
     supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id),
     supabase.from('plant_contributors').select('contributor_name').eq('plant_id', id),
-    supabase.from('plant_recipes').select('id,name,category,time,link').eq('plant_id', id),
+    supabase.from('plant_recipes').select('id,name,name_fr,category,time,link').eq('plant_id', id),
   ])
   
   const translation = translationResult.data || null
@@ -376,13 +376,19 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
       infusionMix,
       recipesIdeas: translation?.recipes_ideas || [],
       // Structured recipes from plant_recipes table
-      recipes: (recipeRows || []).map((r: any) => ({
-        id: r.id,
-        name: r.name || '',
-        category: r.category || 'other',
-        time: r.time || 'undefined',
-        link: r.link || undefined,
-      })),
+      recipes: (recipeRows || []).map((r: any) => {
+        const localizedName = targetLanguage !== 'en' && r[`name_${targetLanguage}`]
+          ? r[`name_${targetLanguage}`]
+          : r.name
+        return {
+          id: r.id,
+          name: localizedName || r.name || '',
+          name_fr: r.name_fr || undefined,
+          category: r.category || 'other',
+          time: r.time || 'undefined',
+          link: r.link || undefined,
+        }
+      }),
       // Non-translatable fields from plants table
       aromatherapy: data.aromatherapy || false,
       spiceMixes: data.spice_mixes || [],

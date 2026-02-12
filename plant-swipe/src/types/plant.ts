@@ -250,6 +250,7 @@ export type RecipeTime =
 export interface PlantRecipe {
   id?: string
   name: string
+  name_fr?: string
   category: RecipeCategory
   time: RecipeTime
   link?: string

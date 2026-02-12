@@ -550,21 +550,26 @@ create table if not exists public.plant_recipes (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
   name text not null,
+  name_fr text,
   category text not null default 'other' check (category in ('breakfast_brunch','starters_appetizers','soups_salads','main_courses','side_dishes','desserts','drinks','other')),
   time text not null default 'undefined' check (time in ('quick','30_plus','slow_cooking','undefined')),
   link text,
   created_at timestamptz not null default now()
 );
 
--- Add link column if it doesn't exist (for existing databases)
+-- Add columns if they don't exist (for existing databases)
 do $$ begin
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public'
-    and table_name = 'plant_recipes'
-    and column_name = 'link'
+    where table_schema = 'public' and table_name = 'plant_recipes' and column_name = 'link'
   ) then
     alter table public.plant_recipes add column link text;
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'plant_recipes' and column_name = 'name_fr'
+  ) then
+    alter table public.plant_recipes add column name_fr text;
   end if;
 end $$;
 create index if not exists plant_recipes_plant_id_idx on public.plant_recipes(plant_id);
@@ -586,6 +591,7 @@ comment on table public.plant_recipes is 'Structured recipe ideas linked to plan
 comment on column public.plant_recipes.category is 'Meal category: breakfast_brunch, starters_appetizers, soups_salads, main_courses, side_dishes, desserts, drinks, other';
 comment on column public.plant_recipes.time is 'Preparation time: quick (Quick and Effortless), 30_plus (30+ minutes), slow_cooking (Slow Cooking), undefined';
 comment on column public.plant_recipes.link is 'Optional external URL to a recipe page (not filled by AI)';
+comment on column public.plant_recipes.name_fr is 'French translation of recipe name (populated by DeepL during translate step)';
 
 -- Migrate existing recipes_ideas from plant_translations to plant_recipes
 -- Only migrate from English translations, set category='other' and time='undefined'
