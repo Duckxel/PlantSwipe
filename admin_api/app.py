@@ -1,6 +1,7 @@
 import hmac
 import hashlib
 import os
+import re
 import subprocess
 from typing import Set, Optional
 
@@ -550,6 +551,21 @@ def list_branches():
         return jsonify({"error": str(e) or "Failed to list branches"}), 500
 
 
+def _validate_branch_name(name: str) -> bool:
+    if not name:
+        return True
+    if name.startswith("-"):
+        return False
+    if ".." in name:
+        return False
+    if "//" in name:
+        return False
+    # Only allow safe characters
+    if not re.match(r"^[a-zA-Z0-9_./-]+$", name):
+        return False
+    return True
+
+
 def _run_refresh(branch: Optional[str], stream: bool):
     repo_root = _get_repo_root()
     script_path = _refresh_script_path(repo_root)
@@ -613,6 +629,10 @@ def _run_refresh(branch: Optional[str], stream: bool):
 def admin_refresh_stream():
     _verify_request()
     branch = (request.args.get("branch") or "").strip() or None
+
+    if branch and not _validate_branch_name(branch):
+        return jsonify({"ok": False, "error": "Invalid branch name"}), 400
+
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
@@ -626,6 +646,10 @@ def admin_refresh():
     _verify_request()
     body = request.get_json(silent=True) or {}
     branch = (request.args.get("branch") or body.get("branch") or "").strip() or None
+
+    if branch and not _validate_branch_name(branch):
+        return jsonify({"ok": False, "error": "Invalid branch name"}), 400
+
     try:
         _log_admin_action("pull_code", branch or "")
     except Exception:
