@@ -12,6 +12,7 @@ import {
   onNotificationRefresh
 } from '@/lib/notifications'
 import { getUnreadMessageCount } from '@/lib/messaging'
+import { getUserTasksTodayCached } from '@/lib/gardens'
 import type { GardenInvite, NotificationCounts } from '@/types/notification'
 
 type FriendRequest = {
@@ -78,7 +79,8 @@ export function useNotifications(
     unread: 0,
     friendRequests: 0,
     gardenInvites: 0,
-    unreadMessages: 0
+    unreadMessages: 0,
+    pendingTasks: 0
   })
   const [friendRequests, setFriendRequests] = React.useState<FriendRequest[]>([])
   const [gardenInvites, setGardenInvites] = React.useState<GardenInvite[]>([])
@@ -90,7 +92,7 @@ export function useNotifications(
 
   const refresh = React.useCallback(async (force?: boolean) => {
     if (!userId) {
-      setCounts({ total: 0, unread: 0, friendRequests: 0, gardenInvites: 0, unreadMessages: 0 })
+      setCounts({ total: 0, unread: 0, friendRequests: 0, gardenInvites: 0, unreadMessages: 0, pendingTasks: 0 })
       setFriendRequests([])
       setGardenInvites([])
       setLoading(false)
@@ -105,20 +107,27 @@ export function useNotifications(
     lastRefreshRef.current = now
 
     try {
+      const today = new Date().toISOString().slice(0, 10)
+
       // Fetch all data in parallel
-      const [countsData, friendRequestsData, gardenInvitesData, unreadMsgCount] = await Promise.all([
+      const [countsData, friendRequestsData, gardenInvitesData, unreadMsgCount, taskData] = await Promise.all([
         getNotificationCounts(userId),
         loadFriendRequests(userId),
         getPendingGardenInvites(userId).catch(() => []),
-        getUnreadMessageCount().catch(() => 0)
+        getUnreadMessageCount().catch(() => 0),
+        getUserTasksTodayCached(userId, today).catch(() => ({ gardensWithRemainingTasks: 0, totalDueCount: 0, totalCompletedCount: 0 }))
       ])
 
       if (!mountedRef.current) return
 
-      // Merge message count into countsData
+      // Calculate pending tasks count
+      const pendingTaskCount = Math.max(0, (taskData.totalDueCount || 0) - (taskData.totalCompletedCount || 0))
+
+      // Merge message count and task count into countsData
       const mergedCounts = {
         ...countsData,
         unreadMessages: unreadMsgCount,
+        pendingTasks: pendingTaskCount,
         total: countsData.total + unreadMsgCount
       }
 
@@ -244,7 +253,7 @@ export function useNotifications(
     }
   }, [userId, channelKey, refresh])
 
-  const totalCount = counts.friendRequests + counts.gardenInvites
+  const totalCount = counts.friendRequests + counts.gardenInvites + counts.pendingTasks
   const hasUnread = totalCount > 0
 
   return {

@@ -166,6 +166,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
               totalCount={totalCount}
               friendRequests={friendRequests}
               gardenInvites={gardenInvites}
+              pendingTaskCount={counts.pendingTasks}
               onRefresh={refreshNotifications}
             />
             <div className="relative" ref={anchorRef}>

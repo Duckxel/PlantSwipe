@@ -2798,7 +2798,10 @@
     "declinedYourRequest": "a refusé votre demande d'ami",
     "invitedYouToGarden": "vous a invité(e) à rejoindre",
     "acceptedGardenInvite": "a accepté votre invitation au jardin",
-    "declinedGardenInvite": "a refusé votre invitation au jardin"
+    "declinedGardenInvite": "a refusé votre invitation au jardin",
+    "gardenTasks": "Tâches du jardin",
+    "tasksRemaining": "{{count}} tâches restantes aujourd'hui",
+    "tapToViewTasks": "Appuyez pour voir vos tâches de jardin"
   },
   "gardenInvites": {
     "title": "Invitations de jardin",
