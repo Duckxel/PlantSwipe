@@ -4,7 +4,7 @@ import { ExternalLink, Utensils, Clock, Zap, Flame, ChefHat } from 'lucide-react
 import type { PlantRecipe } from '@/types/plant'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Category / time metadata
+   Category / time config
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const CATEGORY_ORDER = [
@@ -30,15 +30,12 @@ const TIME_META: Record<string, { label: string; Icon: React.FC<{ className?: st
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Layout constants
+   Layout
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** How much each divider overlaps the one behind it (negative margin) */
-const OVERLAP      = 28
-/** Height of the divider body */
-const DIVIDER_BODY = 48
-/** Height of the tab that sticks up */
-const TAB_HEIGHT   = 26
+const OVERLAP      = 32
+const DIVIDER_BODY = 54
+const TAB_HEIGHT   = 32
 
 /* ═══════════════════════════════════════════════════════════════════════════
    <RecipeBox />
@@ -77,20 +74,46 @@ export function RecipeBox({
       }))
   }, [recipes])
 
+  const openTab = useMemo(
+    () => (openKey ? tabs.find(t => t.key === openKey) : null) ?? null,
+    [openKey, tabs],
+  )
+
   if (!tabs.length) return null
 
   return (
     <section>
       {/* Header */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-5">
         <div className="rounded-xl bg-amber-600/15 p-2.5 dark:bg-amber-500/20">
-          <ChefHat className="h-5 w-5 sm:h-6 sm:w-6 text-amber-800 dark:text-amber-300" />
+          <ChefHat className="h-6 w-6 sm:h-7 sm:w-7 text-amber-800 dark:text-amber-300" />
         </div>
         <div>
-          <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100">{title}</h3>
-          <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">{subtitle}</p>
+          <h3 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-stone-100">{title}</h3>
+          <p className="text-sm text-stone-500 dark:text-stone-400">{subtitle}</p>
         </div>
       </div>
+
+      {/* ── Recipe card — appears ABOVE the box ────────────────────────── */}
+      <AnimatePresence mode="wait">
+        {openTab && (
+          <motion.div
+            key={openTab.key}
+            initial={{ opacity: 0, y: 24, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 24, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+            className="mb-4"
+          >
+            <RecipeCard
+              recipes={openTab.recipes}
+              categoryLabel={categoryLabels?.[openTab.key] || openTab.meta.label}
+              categoryIcon={openTab.meta.icon}
+              timeLabels={timeLabels}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Wooden box ─────────────────────────────────────────────────── */}
       <div
@@ -102,7 +125,7 @@ export function RecipeBox({
             '0 -1px 0 0 #4a3520 inset,' +
             '0 28px 50px -14px rgba(40,22,8,.55),' +
             '0 8px 16px -4px rgba(40,22,8,.3)',
-          padding: '12px 12px 14px',
+          padding: '14px 14px 16px',
         }}
       >
         {/* Wood grain */}
@@ -113,142 +136,137 @@ export function RecipeBox({
               'repeating-linear-gradient(95deg, transparent 0px, transparent 11px, rgba(0,0,0,.35) 11px, rgba(0,0,0,.35) 12px, transparent 12px, transparent 28px, rgba(0,0,0,.2) 28px, rgba(0,0,0,.2) 29px)',
           }}
         />
-        {/* Warm highlight */}
         <div
           className="pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl opacity-20"
           style={{
             backgroundImage: 'radial-gradient(ellipse 80% 50% at 30% 20%, rgba(255,220,160,.6), transparent 60%)',
           }}
         />
-        {/* Dark mode overlay on box */}
         <div className="pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl bg-black/0 dark:bg-black/40" />
 
-        {/* ── Inner cavity ──────────────────────────────────────────── */}
+        {/* Inner cavity */}
         <div
           className="relative rounded-xl sm:rounded-2xl"
           style={{
             background: 'linear-gradient(180deg, #9a7448 0%, #86633a 100%)',
-            boxShadow: '0 2px 6px 0 rgba(0,0,0,.35) inset, 0 -1px 0 0 rgba(255,255,255,.06) inset',
+            boxShadow: '0 3px 8px 0 rgba(0,0,0,.4) inset, 0 -1px 0 0 rgba(255,255,255,.06) inset',
           }}
         >
-          {/* Dark mode cavity */}
           <div className="pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl bg-black/0 dark:bg-black/45" />
 
-          {/* Padding inside cavity -- top needs extra room for the first tab */}
-          <div className="relative px-2 sm:px-3 pb-2 sm:pb-3" style={{ paddingTop: TAB_HEIGHT + 8 }}>
-            {/* ── Divider stack (normal flow, negative margins for overlap) ── */}
-            {tabs.map((tab, index) => {
-              const isOpen = openKey === tab.key
-              return (
-                <Divider
-                  key={tab.key}
-                  tab={tab}
-                  index={index}
-                  isOpen={isOpen}
-                  isFirst={index === 0}
-                  categoryLabel={categoryLabels?.[tab.key]}
-                  timeLabels={timeLabels}
-                  onToggle={() => setOpenKey(prev => (prev === tab.key ? null : tab.key))}
-                />
-              )
-            })}
+          {/* Divider stack */}
+          <div className="relative px-2.5 sm:px-3 pb-3" style={{ paddingTop: TAB_HEIGHT + 10 }}>
+            {tabs.map((tab, index) => (
+              <Divider
+                key={tab.key}
+                tab={tab}
+                index={index}
+                total={tabs.length}
+                isActive={openKey === tab.key}
+                isFirst={index === 0}
+                categoryLabel={categoryLabels?.[tab.key]}
+                onToggle={() => setOpenKey(prev => (prev === tab.key ? null : tab.key))}
+              />
+            ))}
           </div>
         </div>
 
-        {/* Bottom inner shadow */}
-        <div className="pointer-events-none absolute inset-x-3 bottom-3 h-6 rounded-b-xl bg-gradient-to-t from-black/15 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-4 bottom-4 h-6 rounded-b-xl bg-gradient-to-t from-black/12 to-transparent" />
       </div>
 
       {/* Ground shadow */}
-      <div className="pointer-events-none mx-auto mt-2 h-4 w-[85%] rounded-full bg-black/10 dark:bg-black/20 blur-xl" />
+      <div className="pointer-events-none mx-auto mt-2 h-5 w-[85%] rounded-full bg-black/12 dark:bg-black/25 blur-xl" />
     </section>
   )
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   <Divider />  –  one kraft-paper file divider (normal flow)
+   <Divider />
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function Divider({
   tab,
   index,
-  isOpen,
+  total,
+  isActive,
   isFirst,
   categoryLabel,
-  timeLabels,
   onToggle,
 }: {
   tab: { key: string; meta: { label: string; icon: string }; recipes: PlantRecipe[] }
   index: number
-  isOpen: boolean
+  total: number
+  isActive: boolean
   isFirst: boolean
   categoryLabel?: string
-  timeLabels?: Record<string, string>
   onToggle: () => void
 }) {
   const label = categoryLabel || tab.meta.label
 
-  /* Kraft lightness varies per layer -- back is lighter, front darker */
-  const lightness     = 74 - index * 1.5
-  const darkLightness = 24 - index * 1
+  const lightness     = 76 - index * 1.8
+  const darkLightness = 26 - index * 1.2
 
-  /* Stagger tab position horizontally */
-  const tabLeft = 12 + index * 28
+  /*
+   * Tab offset: FRONT divider (highest index, bottom of stack) = leftmost.
+   * Back dividers progressively shift right.
+   */
+  const tabLeft = 14 + (total - 1 - index) * 32
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04, duration: 0.3, ease: 'easeOut' }}
       className="relative"
       style={{
-        /* Overlap: each divider (except the first) pulls upward into the one behind it */
         marginTop: isFirst ? 0 : -OVERLAP,
-        /* Front dividers sit above back dividers */
         zIndex: index + 1,
       }}
     >
-      {/* ── Tab sticking up ────────────────────────────────────────────── */}
+      {/* Tab */}
       <button
         type="button"
         onClick={onToggle}
         className="absolute cursor-pointer group"
-        style={{
-          left: tabLeft,
-          top: -TAB_HEIGHT + 2,
-          height: TAB_HEIGHT,
-          zIndex: 2,
-        }}
+        style={{ left: tabLeft, top: -TAB_HEIGHT + 3, height: TAB_HEIGHT, zIndex: 2 }}
       >
         <div
-          className="relative h-full rounded-t-lg px-2.5 sm:px-3 flex items-center gap-1.5 select-none transition-[filter] duration-150 group-hover:brightness-110"
+          className="relative h-full rounded-t-lg px-3 sm:px-4 flex items-center gap-2 select-none transition-all duration-150 group-hover:brightness-110"
           style={{
-            background: `linear-gradient(180deg, hsl(32 36% ${lightness + 3}%) 0%, hsl(30 32% ${lightness}%) 100%)`,
+            background: isActive
+              ? `linear-gradient(180deg, hsl(32 40% ${lightness + 6}%) 0%, hsl(30 36% ${lightness + 2}%) 100%)`
+              : `linear-gradient(180deg, hsl(32 36% ${lightness + 3}%) 0%, hsl(30 32% ${lightness}%) 100%)`,
             boxShadow:
-              '0 -2px 5px -1px rgba(60,36,12,.2),' +
-              '0 1px 0 0 rgba(255,255,255,.12) inset',
+              '0 -3px 8px -2px rgba(60,36,12,.22),' +
+              '0 1px 0 0 rgba(255,255,255,.14) inset',
             border: `1px solid hsl(30 24% ${lightness - 12}%)`,
             borderBottom: 'none',
           }}
         >
-          {/* Dark mode tab overlay */}
           <div
             className="pointer-events-none absolute inset-0 rounded-t-lg hidden dark:block"
             style={{
-              background: `linear-gradient(180deg, hsl(32 16% ${darkLightness + 5}%) 0%, hsl(30 14% ${darkLightness}%) 100%)`,
+              background: isActive
+                ? `linear-gradient(180deg, hsl(32 18% ${darkLightness + 8}%) 0%, hsl(30 16% ${darkLightness + 3}%) 100%)`
+                : `linear-gradient(180deg, hsl(32 16% ${darkLightness + 5}%) 0%, hsl(30 14% ${darkLightness}%) 100%)`,
               border: `1px solid hsl(30 12% ${darkLightness + 10}%)`,
               borderBottom: 'none',
             }}
           />
-          <span className="relative text-xs sm:text-sm leading-none">{tab.meta.icon}</span>
-          <span className="relative truncate text-[11px] sm:text-xs font-semibold tracking-wide max-w-[110px] sm:max-w-[150px]">
-            <span className="dark:hidden" style={{ color: `hsl(28 42% 22%)` }}>{label}</span>
-            <span className="hidden dark:inline" style={{ color: `hsl(32 18% 72%)` }}>{label}</span>
+          <span className="relative text-sm sm:text-base leading-none">{tab.meta.icon}</span>
+          <span className="relative truncate text-xs sm:text-sm font-semibold tracking-wide max-w-[130px] sm:max-w-[170px]">
+            <span className="dark:hidden" style={{ color: `hsl(28 42% ${isActive ? 18 : 24}%)` }}>{label}</span>
+            <span className="hidden dark:inline" style={{ color: `hsl(32 18% ${isActive ? 80 : 70}%)` }}>{label}</span>
           </span>
+          {isActive && (
+            <span className="relative w-1.5 h-1.5 rounded-full shrink-0" style={{ background: `hsl(32 50% ${lightness - 20}%)` }}>
+              <span className="absolute inset-0 rounded-full hidden dark:block" style={{ background: `hsl(32 30% 60%)` }} />
+            </span>
+          )}
         </div>
       </button>
 
-      {/* ── Divider body ───────────────────────────────────────────────── */}
+      {/* Divider body */}
       <button
         type="button"
         onClick={onToggle}
@@ -256,26 +274,27 @@ function Divider({
         style={{ height: DIVIDER_BODY }}
       >
         <div
-          className="absolute inset-0 rounded-lg sm:rounded-xl transition-[filter] duration-150 group-hover:brightness-[1.04]"
+          className="absolute inset-0 rounded-lg sm:rounded-xl transition-all duration-150 group-hover:brightness-[1.04]"
           style={{
-            background: `linear-gradient(178deg, hsl(32 34% ${lightness + 1}%) 0%, hsl(30 30% ${lightness - 2}%) 100%)`,
+            background: isActive
+              ? `linear-gradient(178deg, hsl(32 38% ${lightness + 4}%) 0%, hsl(30 34% ${lightness}%) 100%)`
+              : `linear-gradient(178deg, hsl(32 34% ${lightness + 1}%) 0%, hsl(30 30% ${lightness - 2}%) 100%)`,
             border: `1px solid hsl(30 22% ${lightness - 14}%)`,
-            boxShadow:
-              '0 4px 12px -4px rgba(50,30,10,.35),' +
-              '0 1px 0 0 rgba(255,255,255,.1) inset,' +
-              '0 -1px 2px 0 rgba(0,0,0,.08) inset',
+            boxShadow: isActive
+              ? '0 6px 18px -4px rgba(50,30,10,.45), 0 1px 0 0 rgba(255,255,255,.12) inset, 0 -1px 2px 0 rgba(0,0,0,.08) inset'
+              : '0 4px 12px -4px rgba(50,30,10,.35), 0 1px 0 0 rgba(255,255,255,.1) inset, 0 -1px 2px 0 rgba(0,0,0,.08) inset',
           }}
         >
-          {/* Dark mode body overlay */}
           <div
             className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl hidden dark:block"
             style={{
-              background: `linear-gradient(178deg, hsl(32 14% ${darkLightness + 2}%) 0%, hsl(30 12% ${darkLightness - 1}%) 100%)`,
+              background: isActive
+                ? `linear-gradient(178deg, hsl(32 16% ${darkLightness + 5}%) 0%, hsl(30 14% ${darkLightness + 1}%) 100%)`
+                : `linear-gradient(178deg, hsl(32 14% ${darkLightness + 2}%) 0%, hsl(30 12% ${darkLightness - 1}%) 100%)`,
               border: `1px solid hsl(30 10% ${darkLightness + 8}%)`,
             }}
           />
-
-          {/* Kraft paper fibre texture */}
+          {/* Kraft texture */}
           <div
             className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl opacity-[.035] dark:opacity-[.05]"
             style={{
@@ -285,36 +304,12 @@ function Divider({
           />
         </div>
       </button>
-
-      {/* ── Recipe card slides out below ────────────────────────────────── */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            key="card"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            className="overflow-hidden relative"
-            style={{ zIndex: 50 }}
-          >
-            <div className="pt-1.5 pb-1">
-              <RecipeCard
-                recipes={tab.recipes}
-                categoryLabel={label}
-                categoryIcon={tab.meta.icon}
-                timeLabels={timeLabels}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   )
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   <RecipeCard />  –  ivory index card
+   <RecipeCard />  — the index card that appears above the box
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function RecipeCard({
@@ -331,60 +326,60 @@ function RecipeCard({
   return (
     <div className="relative">
       <div
-        className="relative overflow-hidden rounded-lg sm:rounded-xl"
+        className="relative overflow-hidden rounded-xl sm:rounded-2xl"
         style={{
-          background: 'linear-gradient(174deg, #f5edde 0%, #ede3d0 60%, #e8dcc8 100%)',
+          background: 'linear-gradient(174deg, #f7f0e2 0%, #efe6d4 60%, #eae0cc 100%)',
           boxShadow:
-            '0 8px 20px -4px rgba(40,24,8,.25),' +
-            '0 2px 4px rgba(40,24,8,.1),' +
-            '0 1px 0 0 rgba(255,248,235,.5) inset',
-          border: '1px solid #d4c4a8',
+            '0 12px 28px -6px rgba(40,24,8,.22),' +
+            '0 3px 6px rgba(40,24,8,.08),' +
+            '0 1px 0 0 rgba(255,250,240,.6) inset',
+          border: '1px solid #d8cab0',
         }}
       >
         {/* Dark mode card */}
         <div
-          className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl hidden dark:block"
+          className="pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl hidden dark:block"
           style={{
-            background: 'linear-gradient(174deg, hsl(38 14% 17%) 0%, hsl(34 12% 14%) 100%)',
-            border: '1px solid hsl(34 10% 24%)',
+            background: 'linear-gradient(174deg, hsl(38 14% 18%) 0%, hsl(34 12% 15%) 100%)',
+            border: '1px solid hsl(34 10% 26%)',
           }}
         />
 
         {/* Ruled lines */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-[.1] dark:opacity-[.06]"
+          className="pointer-events-none absolute inset-0 opacity-[.09] dark:opacity-[.05]"
           style={{
             backgroundImage:
-              'repeating-linear-gradient(180deg, transparent, transparent 27px, #a08060 27px, #a08060 28px)',
-            backgroundPositionY: '13px',
+              'repeating-linear-gradient(180deg, transparent, transparent 31px, #a08060 31px, #a08060 32px)',
+            backgroundPositionY: '15px',
           }}
         />
 
         {/* Red margin line */}
         <div
           className="pointer-events-none absolute top-0 bottom-0 opacity-[.12] dark:opacity-[.06]"
-          style={{ left: 36, width: 1, background: '#c44' }}
+          style={{ left: 42, width: 1, background: '#c44' }}
         />
 
-        {/* Subtle light spot */}
+        {/* Light spot */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-20 dark:opacity-8"
+          className="pointer-events-none absolute inset-0 opacity-25 dark:opacity-8"
           style={{
-            backgroundImage: 'radial-gradient(ellipse 60% 40% at 15% 10%, rgba(255,255,255,.5), transparent 50%)',
+            backgroundImage: 'radial-gradient(ellipse 60% 40% at 12% 8%, rgba(255,255,255,.5), transparent 50%)',
           }}
         />
 
-        <div className="relative px-4 sm:px-5 py-3 sm:py-3.5">
+        <div className="relative px-5 sm:px-7 py-4 sm:py-5">
           {/* Category heading */}
-          <div className="flex items-center gap-2 mb-2 pl-6">
-            <span className="text-sm sm:text-base">{categoryIcon}</span>
-            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[.12em] text-amber-800/70 dark:text-amber-300/60">
+          <div className="flex items-center gap-2.5 mb-3 pl-4">
+            <span className="text-lg sm:text-xl">{categoryIcon}</span>
+            <span className="text-sm sm:text-base font-bold uppercase tracking-[.1em] text-amber-900/60 dark:text-amber-300/50">
               {categoryLabel}
             </span>
           </div>
 
           {/* Recipe list */}
-          <div className="space-y-px">
+          <div className="space-y-0.5">
             {recipes.map((recipe, idx) => {
               const timeMeta = TIME_META[recipe.time]
               const resolvedTimeLabel = timeLabels?.[recipe.time] || timeMeta?.label
@@ -393,28 +388,28 @@ function RecipeCard({
               return (
                 <div
                   key={`${recipe.name}-${idx}`}
-                  className="group flex items-center gap-2 rounded-md px-2 py-[6px] pl-6 -mx-0.5 transition-colors hover:bg-amber-900/[.04] dark:hover:bg-white/[.04]"
+                  className="group flex items-center gap-3 rounded-lg px-3 py-2 pl-5 -mx-1 transition-colors hover:bg-amber-900/[.04] dark:hover:bg-white/[.05]"
                 >
-                  <Utensils className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-amber-700/40 dark:text-amber-400/30" />
+                  <Utensils className="h-4 w-4 shrink-0 text-amber-700/35 dark:text-amber-400/25" />
 
                   {recipe.link ? (
                     <a
                       href={recipe.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 min-w-0 text-[13px] sm:text-sm font-medium text-stone-800 dark:text-stone-200 underline decoration-stone-300/60 dark:decoration-stone-600 underline-offset-2 hover:decoration-amber-600 dark:hover:decoration-amber-400 transition-colors truncate"
+                      className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-800 dark:text-stone-200 underline decoration-stone-300/50 dark:decoration-stone-600 underline-offset-4 hover:decoration-amber-600 dark:hover:decoration-amber-400 transition-colors truncate"
                     >
                       {recipe.name}
                     </a>
                   ) : (
-                    <span className="flex-1 min-w-0 text-[13px] sm:text-sm font-medium text-stone-800 dark:text-stone-200 truncate">
+                    <span className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-800 dark:text-stone-200 truncate">
                       {recipe.name}
                     </span>
                   )}
 
                   {resolvedTimeLabel && (
-                    <span className="inline-flex items-center gap-0.5 shrink-0 text-[10px] font-semibold rounded px-1.5 py-0.5 bg-amber-900/[.06] dark:bg-white/[.07] text-stone-500 dark:text-stone-400">
-                      {TimeIcon && <TimeIcon className="h-2.5 w-2.5" />}
+                    <span className="inline-flex items-center gap-1 shrink-0 text-xs font-semibold rounded-md px-2 py-1 bg-amber-900/[.06] dark:bg-white/[.07] text-stone-500 dark:text-stone-400">
+                      {TimeIcon && <TimeIcon className="h-3 w-3" />}
                       {resolvedTimeLabel}
                     </span>
                   )}
@@ -426,7 +421,7 @@ function RecipeCard({
                       rel="noopener noreferrer"
                       className="shrink-0 text-stone-400 hover:text-amber-700 dark:text-stone-500 dark:hover:text-amber-300 transition-colors"
                     >
-                      <ExternalLink className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                      <ExternalLink className="h-4 w-4" />
                     </a>
                   )}
                 </div>
@@ -436,8 +431,8 @@ function RecipeCard({
         </div>
       </div>
 
-      {/* Card drop shadow */}
-      <div className="pointer-events-none absolute -bottom-2 left-4 right-4 h-3 rounded-full bg-black/10 dark:bg-black/20 blur-lg" />
+      {/* Drop shadow */}
+      <div className="pointer-events-none absolute -bottom-2.5 left-5 right-5 h-4 rounded-full bg-black/10 dark:bg-black/22 blur-xl" />
     </div>
   )
 }
