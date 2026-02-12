@@ -40,9 +40,9 @@ const TAB_GAP      = 6
 const TAB_PAD_X    = 28
 const CHAR_WIDTH   = 7.5
 const TAB_START    = 10
-/** How many px of the note card's bottom edge are hidden behind the divider body.
- *  Bigger = more of the card tucked in, looks less "pulled out". */
-const NOTE_TUCK    = 20
+/** How many px of the note card overlap behind the divider body.
+ *  Bigger = more of the card tucked behind the divider. */
+const NOTE_TUCK    = 16
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Compute tab positions
@@ -250,7 +250,7 @@ function Divider({
         type="button"
         onClick={onToggle}
         className="absolute cursor-pointer group"
-        style={{ left: tabLeft, top: -TAB_HEIGHT + 3, height: TAB_HEIGHT, zIndex: 2 }}
+        style={{ left: tabLeft, top: -TAB_HEIGHT + 3, height: TAB_HEIGHT, zIndex: 3 }}
       >
         <div
           className="relative h-full rounded-t-lg px-3 sm:px-4 flex items-center gap-2 select-none whitespace-nowrap transition-all duration-150 group-hover:brightness-110"
@@ -281,12 +281,42 @@ function Divider({
         </div>
       </button>
 
-      {/* ── Divider body ────────────────────────────────────────────────── */}
-      <button
-        type="button"
+      {/* ── Note card — pops UPWARD, sits BEHIND the divider body ──────── */}
+      {/*    z-index 1 = behind the divider body (z:2) which covers the   */}
+      {/*    note's bottom portion. Also behind dividers in front          */}
+      {/*    (higher motion.div z-index).                                  */}
+      <AnimatePresence>
+        {isActive && (
+          <motion.div
+            key="note"
+            initial={{ opacity: 0, y: 10, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 340, damping: 26 }}
+            className="absolute left-3 right-3 sm:left-4 sm:right-4"
+            style={{
+              bottom: NOTE_TUCK,
+              zIndex: 1,
+            }}
+          >
+            <RecipeCard
+              recipes={tab.recipes}
+              categoryLabel={label}
+              categoryIcon={tab.meta.icon}
+              timeLabels={timeLabels}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Divider body — z:2 so it paints ON TOP of the note ─────────── */}
+      <div
         onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onToggle() }}
         className="relative w-full text-left cursor-pointer group block"
-        style={{ height: DIVIDER_BODY, overflow: 'visible' }}
+        style={{ height: DIVIDER_BODY, zIndex: 2 }}
       >
         <div
           className="absolute inset-0 rounded-lg sm:rounded-xl transition-all duration-150 group-hover:brightness-[1.04]"
@@ -318,34 +348,7 @@ function Divider({
             }}
           />
         </div>
-
-        {/* ── Note card — absolute, pops UPWARD from this divider ───────── */}
-        {/*    Lives inside this divider's z-layer so dividers in front     */}
-        {/*    (higher z-index) naturally cover the bottom edge.            */}
-        <AnimatePresence>
-          {isActive && (
-            <motion.div
-              key="note"
-              initial={{ opacity: 0, y: 10, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 340, damping: 26 }}
-              className="absolute left-3 right-3 sm:left-4 sm:right-4"
-              style={{
-                bottom: DIVIDER_BODY - NOTE_TUCK,
-                zIndex: 1,
-              }}
-            >
-              <RecipeCard
-                recipes={tab.recipes}
-                categoryLabel={label}
-                categoryIcon={tab.meta.icon}
-                timeLabels={timeLabels}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </button>
+      </div>
     </motion.div>
   )
 }
