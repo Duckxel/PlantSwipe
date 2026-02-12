@@ -12,7 +12,7 @@ import { translateBatch } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
-import type { Plant, PlantColor, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
+import type { Plant, PlantColor, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import {
   normalizeCompositionForDb,
   normalizeFoliagePersistanceForDb,
@@ -37,6 +37,8 @@ import {
   polenizerEnum,
   conservationStatusEnum,
   timePeriodEnum,
+  recipeCategoryEnum,
+  recipeTimeEnum,
 } from "@/lib/composition"
 import { monthNumberToSlug, monthNumbersToSlugs } from "@/lib/months"
 
@@ -373,6 +375,26 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
     .filter((row): row is { plant_id: string; mix_name: string; benefit: string | null } => Boolean(row))
   if (!rows.length) return
   const { error } = await supabase.from('plant_infusion_mixes').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
+async function upsertRecipes(plantId: string, recipes?: PlantRecipe[]) {
+  await supabase.from('plant_recipes').delete().eq('plant_id', plantId)
+  if (!recipes?.length) return
+  const rows = recipes
+    .map((r) => {
+      const trimmedName = r.name && typeof r.name === 'string' ? r.name.trim() : null
+      if (!trimmedName) return null
+      return {
+        plant_id: plantId,
+        name: trimmedName,
+        category: recipeCategoryEnum.toDb(r.category) || 'other',
+        time: recipeTimeEnum.toDb(r.time) || 'undefined',
+      }
+    })
+    .filter((row): row is { plant_id: string; name: string; category: string; time: string } => Boolean(row))
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_recipes').insert(rows)
   if (error) throw new Error(error.message)
 }
 
@@ -785,6 +807,7 @@ export async function processPlantRequest(
     await upsertSources(plantId, sources)
     await upsertContributors(plantId, contributors)
     await upsertInfusionMixes(plantId, plant.usage?.infusionMix)
+    await upsertRecipes(plantId, plant.usage?.recipes)
     
     // Save English translation
     const translationPayload = {
@@ -804,7 +827,9 @@ export async function processPlantRequest(
       cut: plant.growth?.cut || null,
       advice_medicinal: plant.usage?.adviceMedicinal || null,
       nutritional_intake: plant.usage?.nutritionalIntake || [],
-      recipes_ideas: plant.usage?.recipesIdeas || [],
+      recipes_ideas: (plant.usage?.recipes?.length
+        ? plant.usage.recipes.map(r => r.name).filter(Boolean)
+        : plant.usage?.recipesIdeas || []),
       advice_infusion: plant.usage?.adviceInfusion || null,
       ground_effect: plant.ecology?.groundEffect || null,
       source_name: primarySource?.name || null,
@@ -904,7 +929,9 @@ export async function processPlantRequest(
         addArrayField('symbolism', plant.identity?.symbolism)
         addArrayField('origin', plant.plantCare?.origin)
         addArrayField('nutritional_intake', plant.usage?.nutritionalIntake)
-        addArrayField('recipes_ideas', plant.usage?.recipesIdeas)
+        addArrayField('recipes_ideas', plant.usage?.recipes?.length
+          ? plant.usage.recipes.map(r => r.name).filter(Boolean)
+          : plant.usage?.recipesIdeas)
         addArrayField('tags', plant.miscellaneous?.tags)
         addArrayField('spice_mixes', plant.usage?.spiceMixes)
         addArrayField('pests', plant.danger?.pests)
