@@ -12,7 +12,7 @@ import { translateBatch } from "@/lib/deepl"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
-import type { Plant, PlantColor, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
+import type { Plant, PlantColor, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import {
   normalizeCompositionForDb,
   normalizeFoliagePersistanceForDb,
@@ -37,6 +37,8 @@ import {
   polenizerEnum,
   conservationStatusEnum,
   timePeriodEnum,
+  recipeCategoryEnum,
+  recipeTimeEnum,
 } from "@/lib/composition"
 import { monthNumberToSlug, monthNumbersToSlugs } from "@/lib/months"
 
@@ -374,6 +376,53 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
   if (!rows.length) return
   const { error } = await supabase.from('plant_infusion_mixes').insert(rows)
   if (error) throw new Error(error.message)
+}
+
+async function upsertRecipes(plantId: string, recipes?: PlantRecipe[]) {
+  await supabase.from('plant_recipes').delete().eq('plant_id', plantId)
+  if (!recipes?.length) return
+  const rows = recipes
+    .map((r) => {
+      const trimmedName = r.name && typeof r.name === 'string' ? r.name.trim() : null
+      if (!trimmedName) return null
+      return {
+        plant_id: plantId,
+        name: trimmedName,
+        name_fr: r.name_fr && typeof r.name_fr === 'string' ? r.name_fr.trim() || null : null,
+        category: recipeCategoryEnum.toDb(r.category) || 'other',
+        time: recipeTimeEnum.toDb(r.time) || 'undefined',
+        link: null, // AI does not fill the link field - admin only
+      }
+    })
+    .filter(Boolean)
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_recipes').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
+/** Translate recipe names for all target languages and update plant_recipes rows */
+async function translateRecipeNames(plantId: string, targetLanguages: string[]) {
+  const { data: recipeRows } = await supabase
+    .from('plant_recipes')
+    .select('id,name')
+    .eq('plant_id', plantId)
+  if (!recipeRows?.length) return
+  const names = recipeRows.map(r => r.name || '')
+  for (const target of targetLanguages) {
+    try {
+      const translated = await translateBatch(names, target as any, 'en')
+      for (let i = 0; i < recipeRows.length; i++) {
+        if (translated[i]) {
+          await supabase
+            .from('plant_recipes')
+            .update({ [`name_${target}`]: translated[i] })
+            .eq('id', recipeRows[i].id)
+        }
+      }
+    } catch (err) {
+      console.warn(`[aiPrefillService] Failed to translate recipe names to ${target}:`, err)
+    }
+  }
 }
 
 export interface AiPrefillCallbacks {
@@ -785,6 +834,7 @@ export async function processPlantRequest(
     await upsertSources(plantId, sources)
     await upsertContributors(plantId, contributors)
     await upsertInfusionMixes(plantId, plant.usage?.infusionMix)
+    await upsertRecipes(plantId, plant.usage?.recipes)
     
     // Save English translation
     const translationPayload = {
@@ -804,7 +854,9 @@ export async function processPlantRequest(
       cut: plant.growth?.cut || null,
       advice_medicinal: plant.usage?.adviceMedicinal || null,
       nutritional_intake: plant.usage?.nutritionalIntake || [],
-      recipes_ideas: plant.usage?.recipesIdeas || [],
+      recipes_ideas: (plant.usage?.recipes?.length
+        ? plant.usage.recipes.map(r => r.name).filter(Boolean)
+        : plant.usage?.recipesIdeas || []),
       advice_infusion: plant.usage?.adviceInfusion || null,
       ground_effect: plant.ecology?.groundEffect || null,
       source_name: primarySource?.name || null,
@@ -904,7 +956,9 @@ export async function processPlantRequest(
         addArrayField('symbolism', plant.identity?.symbolism)
         addArrayField('origin', plant.plantCare?.origin)
         addArrayField('nutritional_intake', plant.usage?.nutritionalIntake)
-        addArrayField('recipes_ideas', plant.usage?.recipesIdeas)
+        addArrayField('recipes_ideas', plant.usage?.recipes?.length
+          ? plant.usage.recipes.map(r => r.name).filter(Boolean)
+          : plant.usage?.recipesIdeas)
         addArrayField('tags', plant.miscellaneous?.tags)
         addArrayField('spice_mixes', plant.usage?.spiceMixes)
         addArrayField('pests', plant.danger?.pests)
@@ -994,6 +1048,16 @@ export async function processPlantRequest(
       if (translateError) {
         console.error('Failed to save translations:', translateError)
         // Don't fail the whole operation for translation errors
+      }
+    }
+    
+    // Translate recipe names to other languages
+    if (!signal?.aborted) {
+      try {
+        await translateRecipeNames(plantId, targetLanguages)
+      } catch (err) {
+        if (isCancellationError(err)) throw err
+        console.warn('[aiPrefillService] Recipe name translation failed:', err)
       }
     }
     

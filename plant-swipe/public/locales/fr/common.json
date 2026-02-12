@@ -1209,7 +1209,23 @@
     },
     "recipes": {
       "title": "Idées de recettes",
-      "subtitle": "Inspiration culinaire pour cette plante"
+      "subtitle": "Inspiration culinaire pour cette plante",
+      "categories": {
+        "breakfast_brunch": "Petit-déjeuner & Brunch",
+        "starters_appetizers": "Entrées & Amuse-bouches",
+        "soups_salads": "Soupes & Salades",
+        "main_courses": "Plats principaux",
+        "side_dishes": "Accompagnements",
+        "desserts": "Desserts",
+        "drinks": "Boissons",
+        "other": "Autre"
+      },
+      "times": {
+        "quick": "Rapide",
+        "30_plus": "30+ min",
+        "slow_cooking": "Mijoté",
+        "undefined": ""
+      }
     },
     "gallery": {
       "title": "Galerie d'images"

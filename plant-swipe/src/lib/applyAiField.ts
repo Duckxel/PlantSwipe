@@ -24,6 +24,8 @@ import {
   sowTypeEnum,
   polenizerEnum,
   conservationStatusEnum,
+  recipeCategoryEnum,
+  recipeTimeEnum,
 } from "@/lib/composition"
 
 type EnumValueResult =
@@ -318,6 +320,21 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
           payload.infusionMix = normalized
         } else {
           payload.infusionMix = {}
+        }
+      }
+      // Normalize recipes - AI returns array of {name, category, time} objects
+      if ('recipes' in payload && Array.isArray(payload.recipes)) {
+        const normalizedRecipes = (payload.recipes as any[])
+          .filter((item: any) => item && typeof item === 'object' && item.name && typeof item.name === 'string' && item.name.trim())
+          .map((item: any) => ({
+            name: String(item.name).trim(),
+            category: recipeCategoryEnum.toUi(item.category) || 'Other',
+            time: recipeTimeEnum.toUi(item.time) || 'Undefined',
+          }))
+        payload.recipes = normalizedRecipes
+        // Also populate recipesIdeas from structured recipes for backward compatibility
+        if (normalizedRecipes.length > 0 && (!payload.recipesIdeas || (Array.isArray(payload.recipesIdeas) && payload.recipesIdeas.length === 0))) {
+          payload.recipesIdeas = normalizedRecipes.map((r: any) => r.name)
         }
       }
       return { ...next, usage: { ...(next.usage || {}), ...payload } }

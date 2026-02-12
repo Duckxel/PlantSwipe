@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** February 4, 2026  
+> **Last Updated:** February 12, 2026  
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -27,8 +27,9 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Custom functions/RPCs** for complex operations
 - **Real-time subscriptions** for live updates
 
-### Recent Updates
+### Recent Updates (Keep Less than 10)
 - **Feb 12, 2026:** Added **Shadow Ban system** for threat level 3 users. When a user's threat level is set to 3, `apply_shadow_ban()` is called to: make their profile private, make all their gardens private, make all their bookmarks private, disable friend requests, remove all email/push notification consent, cancel pending friend requests and garden invites. All pre-ban settings are stored in the new `shadow_ban_backup` JSONB column on `profiles` for full reversibility via `revert_shadow_ban()`. Updated `profiles_select_self` RLS policy, `search_user_profiles` RPC, `get_profile_public_by_display_name` RPC, and `friend_requests`/`garden_invites` insert policies to exclude shadow-banned users.
+- **Feb 12, 2026:** Added `plant_recipes` table to store structured recipe ideas per plant, with `category` (breakfast_brunch, starters_appetizers, soups_salads, main_courses, side_dishes, desserts, drinks, other), `time` (quick, 30_plus, slow_cooking, undefined), and optional `link` (external recipe URL, admin-only, not AI-filled) columns. Includes migration from `recipes_ideas` in `plant_translations`. All existing recipes migrated with category='other' and time='undefined'.
 - **Feb 10, 2026:** Added `impressions` table to track page view counts for plant info pages and blog posts. Admin-only read access. Includes `increment_impression` RPC function.
 - **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type to `notification_automations` for event-driven notifications when a plant request is fulfilled via AI prefill or manual creation. Added `/api/admin/notify-plant-requesters` endpoint.
 - **Feb 8, 2026:** Added `job`, `profile_link`, `show_country` columns to `profiles` table for public profile display. Updated `get_profile_public_by_display_name` RPC to return `experience_level`, `job`, `profile_link`, `show_country`.
@@ -88,6 +89,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `plant_watering_schedules` | Watering frequency data |
 | `plant_sources` | Plant information sources |
 | `plant_infusion_mixes` | Infusion/tea recipes |
+| `plant_recipes` | Structured recipe ideas with category and time |
 | `plant_contributors` | Contributor names per plant (admin/editor write only) |
 | `plant_pro_advices` | Professional growing tips |
 | `plant_images` | Plant image gallery |
@@ -401,6 +403,25 @@ last_viewed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 UNIQUE (entity_type, entity_id)
 ```
+
+### `plant_recipes`
+
+Structured recipe ideas linked to plants, with meal category and preparation time.
+
+```sql
+id              UUID PRIMARY KEY
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+name            TEXT NOT NULL                     -- Recipe/dish name in English (canonical)
+name_fr         TEXT                              -- French translation (populated by DeepL)
+category        TEXT NOT NULL DEFAULT 'other'     -- Meal category
+time            TEXT NOT NULL DEFAULT 'undefined' -- Preparation time
+link            TEXT                              -- Optional external URL to a recipe page (not filled by AI)
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**Category values:** `breakfast_brunch`, `starters_appetizers`, `soups_salads`, `main_courses`, `side_dishes`, `desserts`, `drinks`, `other`
+
+**Time values:** `quick` (Quick and Effortless), `30_plus` (30+ minutes Meals), `slow_cooking` (Slow Cooking), `undefined`
 
 ---
 

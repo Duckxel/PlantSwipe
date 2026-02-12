@@ -29,3 +29,7 @@
 ## 2025-05-26 - Search Keyboard Shortcut
 **Learning:** Adding a global search shortcut (⌘K/Ctrl+K) significantly improves navigation speed for power users. Visual hints in the search bar are essential for discoverability.
 **Action:** When implementing search, always include a keyboard shortcut and a visual badge (e.g., `<kbd>⌘K</kbd>`) when the input is empty.
+
+## 2025-05-27 - Form Validation Accessibility
+**Learning:** Screen readers do not automatically read error messages associated with an input unless they are programmatically linked. Visual proximity is not enough.
+**Action:** Use `aria-describedby` to link inputs to their error messages and `aria-invalid` to indicate error state. Generate unique IDs with `useId` to facilitate this linking.

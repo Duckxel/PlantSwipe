@@ -196,7 +196,24 @@ export const plantSchema = {
         type: 'dict[]', 
         description: 'Array of infusion mix objects with mix_name and benefit keys'
       },
-      recipesIdeas: { type: 'tag[]', description: 'Culinary recipe ideas' },
+      recipesIdeas: { type: 'tag[]', description: 'Culinary recipe ideas (legacy, prefer recipes)' },
+      recipes: {
+        type: 'array',
+        description: 'Structured recipe ideas with name, category, and time',
+        items: {
+          name: { type: 'text', description: 'Recipe or dish name (e.g., "Pesto", "Herbal Butter")' },
+          category: {
+            type: 'enum',
+            options: ['Breakfast & Brunch', 'Starters & Appetizers', 'Soups & Salads', 'Main Courses', 'Side Dishes', 'Desserts', 'Drinks', 'Other'],
+            description: 'Meal category',
+          },
+          time: {
+            type: 'enum',
+            options: ['Quick and Effortless', '30+ minutes Meals', 'Slow Cooking', 'Undefined'],
+            description: 'Preparation time estimate',
+          },
+        },
+      },
       aromatherapy: { type: 'boolean', description: 'Whether used in aromatherapy' },
       spiceMixes: { type: 'tag[]', description: 'Spice blend uses' },
     },

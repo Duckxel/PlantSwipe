@@ -1209,7 +1209,23 @@
     },
     "recipes": {
       "title": "Recipe Ideas",
-      "subtitle": "Culinary inspiration for this plant"
+      "subtitle": "Culinary inspiration for this plant",
+      "categories": {
+        "breakfast_brunch": "Breakfast & Brunch",
+        "starters_appetizers": "Starters & Appetizers",
+        "soups_salads": "Soups & Salads",
+        "main_courses": "Main Courses",
+        "side_dishes": "Side Dishes",
+        "desserts": "Desserts",
+        "drinks": "Drinks",
+        "other": "Other"
+      },
+      "times": {
+        "quick": "Quick",
+        "30_plus": "30+ min",
+        "slow_cooking": "Slow",
+        "undefined": ""
+      }
     },
     "gallery": {
       "title": "Image Gallery"

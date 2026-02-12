@@ -545,6 +545,94 @@ do $$ begin
   create policy plant_infusion_mixes_all on public.plant_infusion_mixes for all to authenticated using (true) with check (true);
 end $$;
 
+-- ========== Plant recipes (structured recipe ideas with category and time) ==========
+create table if not exists public.plant_recipes (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  name text not null,
+  name_fr text,
+  category text not null default 'other' check (category in ('breakfast_brunch','starters_appetizers','soups_salads','main_courses','side_dishes','desserts','drinks','other')),
+  time text not null default 'undefined' check (time in ('quick','30_plus','slow_cooking','undefined')),
+  link text,
+  created_at timestamptz not null default now()
+);
+
+-- Add columns if they don't exist (for existing databases)
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'plant_recipes' and column_name = 'link'
+  ) then
+    alter table public.plant_recipes add column link text;
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'plant_recipes' and column_name = 'name_fr'
+  ) then
+    alter table public.plant_recipes add column name_fr text;
+  end if;
+end $$;
+create index if not exists plant_recipes_plant_id_idx on public.plant_recipes(plant_id);
+alter table public.plant_recipes enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_recipes' and policyname='plant_recipes_select_all') then
+    drop policy plant_recipes_select_all on public.plant_recipes;
+  end if;
+  create policy plant_recipes_select_all on public.plant_recipes for select to authenticated, anon using (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_recipes' and policyname='plant_recipes_all') then
+    drop policy plant_recipes_all on public.plant_recipes;
+  end if;
+  create policy plant_recipes_all on public.plant_recipes for all to authenticated using (true) with check (true);
+end $$;
+
+comment on table public.plant_recipes is 'Structured recipe ideas linked to plants, with meal category and preparation time';
+comment on column public.plant_recipes.category is 'Meal category: breakfast_brunch, starters_appetizers, soups_salads, main_courses, side_dishes, desserts, drinks, other';
+comment on column public.plant_recipes.time is 'Preparation time: quick (Quick and Effortless), 30_plus (30+ minutes), slow_cooking (Slow Cooking), undefined';
+comment on column public.plant_recipes.link is 'Optional external URL to a recipe page (not filled by AI)';
+comment on column public.plant_recipes.name_fr is 'French translation of recipe name (populated by DeepL during translate step)';
+
+-- Migrate existing recipes_ideas from plant_translations to plant_recipes
+-- Only migrate from English translations, set category='other' and time='undefined'
+do $migrate_recipes$
+declare
+  migrated_count integer := 0;
+begin
+  -- Check if plant_translations has recipes_ideas column
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+    and table_name = 'plant_translations'
+    and column_name = 'recipes_ideas'
+  ) then
+    return;
+  end if;
+
+  -- Insert recipe entries from English translations where plant_recipes doesn't already have entries
+  with recipe_entries as (
+    select pt.plant_id, unnest(pt.recipes_ideas) as recipe_name
+    from public.plant_translations pt
+    where pt.language = 'en'
+      and array_length(pt.recipes_ideas, 1) > 0
+      and not exists (
+        select 1 from public.plant_recipes pr where pr.plant_id = pt.plant_id
+      )
+  ),
+  inserted as (
+    insert into public.plant_recipes (plant_id, name, category, time)
+    select plant_id, recipe_name, 'other', 'undefined'
+    from recipe_entries
+    where recipe_name is not null and trim(recipe_name) <> ''
+    returning 1
+  )
+  select count(*) into migrated_count from inserted;
+
+  if migrated_count > 0 then
+    raise notice '[plant_recipes] Migrated % recipe entries from plant_translations', migrated_count;
+  end if;
+end $migrate_recipes$;
+
 -- ========== Plant professional advice (Pro/Admin/Editor contributions) ==========
 create table if not exists public.plant_pro_advices (
   id uuid primary key default gen_random_uuid(),

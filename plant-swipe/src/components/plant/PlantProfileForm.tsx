@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
-import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantType, PlantWateringSchedule, RecipeCategory, RecipeTime } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2 } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 
@@ -956,7 +956,6 @@ const usageFields: FieldConfig[] = [
   { key: "usage.infusion", label: "Infusion", description: "Can be used for infusion", type: "boolean" },
   { key: "usage.adviceInfusion", label: "Advice Infusion", description: "Infusion notes", type: "textarea" },
   { key: "usage.infusionMix", label: "Infusion Mix", description: "Mix name to benefit", type: "dict" },
-  { key: "usage.recipesIdeas", label: "Recipes Ideas", description: "Recipe names", type: "tags" },
   { key: "usage.aromatherapy", label: "Aromatherapy", description: "Usable for essential oils", type: "boolean" },
   { key: "usage.spiceMixes", label: "Spice Mixes", description: "Spice mix names", type: "tags" },
 ]
@@ -1578,6 +1577,253 @@ function colorDistance(hex1: string, hex2: string): number {
   if (!rgb1 || !rgb2) return Infinity
   const dr = rgb1.r - rgb2.r, dg = rgb1.g - rgb2.g, db = rgb1.b - rgb2.b
   return Math.sqrt(dr * dr + dg * dg + db * db)
+}
+
+const RECIPE_CATEGORIES: { value: RecipeCategory; label: string }[] = [
+  { value: 'Breakfast & Brunch', label: 'Breakfast & Brunch' },
+  { value: 'Starters & Appetizers', label: 'Starters & Appetizers' },
+  { value: 'Soups & Salads', label: 'Soups & Salads' },
+  { value: 'Main Courses', label: 'Main Courses' },
+  { value: 'Side Dishes', label: 'Side Dishes' },
+  { value: 'Desserts', label: 'Desserts' },
+  { value: 'Drinks', label: 'Drinks' },
+  { value: 'Other', label: 'Other' },
+]
+
+const RECIPE_TIMES: { value: RecipeTime; label: string }[] = [
+  { value: 'Quick and Effortless', label: 'Quick and Effortless' },
+  { value: '30+ minutes Meals', label: '30+ minutes Meals' },
+  { value: 'Slow Cooking', label: 'Slow Cooking' },
+  { value: 'Undefined', label: 'Undefined' },
+]
+
+const CATEGORY_COLORS: Record<RecipeCategory, string> = {
+  'Breakfast & Brunch': 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-700',
+  'Starters & Appetizers': 'bg-lime-100 text-lime-800 border-lime-300 dark:bg-lime-900/30 dark:text-lime-200 dark:border-lime-700',
+  'Soups & Salads': 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-700',
+  'Main Courses': 'bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-200 dark:border-orange-700',
+  'Side Dishes': 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-200 dark:border-teal-700',
+  'Desserts': 'bg-pink-100 text-pink-800 border-pink-300 dark:bg-pink-900/30 dark:text-pink-200 dark:border-pink-700',
+  'Drinks': 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-900/30 dark:text-sky-200 dark:border-sky-700',
+  'Other': 'bg-stone-100 text-stone-800 border-stone-300 dark:bg-stone-900/30 dark:text-stone-200 dark:border-stone-700',
+}
+
+const TIME_ICONS: Record<RecipeTime, string> = {
+  'Quick and Effortless': '⚡',
+  '30+ minutes Meals': '⏱️',
+  'Slow Cooking': '🍲',
+  'Undefined': '❓',
+}
+
+function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange: (v: PlantRecipe[]) => void }) {
+  const [isCollapsed, setIsCollapsed] = React.useState(recipes.length > 3)
+  const [newName, setNewName] = React.useState('')
+  const [newCategory, setNewCategory] = React.useState<RecipeCategory>('Other')
+  const [newTime, setNewTime] = React.useState<RecipeTime>('Undefined')
+  const [newLink, setNewLink] = React.useState('')
+
+  const addRecipe = () => {
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    const trimmedLink = newLink.trim() || undefined
+    onChange([...recipes, { name: trimmed, category: newCategory, time: newTime, link: trimmedLink }])
+    setNewName('')
+    setNewCategory('Other')
+    setNewTime('Undefined')
+    setNewLink('')
+  }
+
+  const removeRecipe = (idx: number) => {
+    onChange(recipes.filter((_, i) => i !== idx))
+  }
+
+  const updateRecipe = (idx: number, patch: Partial<PlantRecipe>) => {
+    onChange(recipes.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
+  }
+
+  const categoryCounts = React.useMemo(() => {
+    const counts: Partial<Record<RecipeCategory, number>> = {}
+    recipes.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1 })
+    return counts
+  }, [recipes])
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="flex items-center gap-1 text-sm font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+          >
+            <Label className="font-semibold cursor-pointer">Recipe Ideas</Label>
+            {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </button>
+          {recipes.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              ({recipes.length} recipe{recipes.length !== 1 ? 's' : ''})
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Summary badges when collapsed */}
+      {isCollapsed && recipes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {recipes.map((r, idx) => (
+            <span
+              key={`${r.name}-${idx}`}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border ${CATEGORY_COLORS[r.category]}`}
+            >
+              <span>{TIME_ICONS[r.time]}</span>
+              <span>{r.name}</span>
+              {r.link && <ExternalLink className="h-3 w-3 opacity-50" />}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {!isCollapsed && (
+        <>
+          {/* Category filter summary */}
+          {recipes.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 text-xs">
+              {Object.entries(categoryCounts).map(([cat, count]) => (
+                <span key={cat} className={`px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[cat as RecipeCategory]}`}>
+                  {cat}: {count}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Existing recipes list */}
+          {recipes.length > 0 && (
+            <div className="space-y-2">
+              {recipes.map((recipe, idx) => (
+                <div key={`recipe-${idx}`} className="rounded-lg border bg-white/60 dark:bg-[#111611] p-2.5 space-y-2">
+                  <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                    <div className="flex-1 min-w-0">
+                      <Input
+                        value={recipe.name}
+                        onChange={(e) => updateRecipe(idx, { name: e.target.value })}
+                        className="h-8 text-sm"
+                        placeholder="Recipe name"
+                      />
+                    </div>
+                    <select
+                      className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+                      value={recipe.category}
+                      onChange={(e) => updateRecipe(idx, { category: e.target.value as RecipeCategory })}
+                    >
+                      {RECIPE_CATEGORIES.map(c => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+                      value={recipe.time}
+                      onChange={(e) => updateRecipe(idx, { time: e.target.value as RecipeTime })}
+                    >
+                      {RECIPE_TIMES.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => removeRecipe(idx)}
+                      className="text-red-500 hover:text-red-700 text-sm font-bold px-1.5 shrink-0"
+                      title="Remove recipe"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <Input
+                      value={recipe.link || ''}
+                      onChange={(e) => updateRecipe(idx, { link: e.target.value || undefined })}
+                      className="h-7 text-xs"
+                      placeholder="Recipe URL (optional, e.g., https://example.com/recipe)"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new recipe form */}
+          <div className="rounded-lg border-2 border-dashed border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">Add new recipe</div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 min-w-0">
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Recipe name (e.g., Basil Pesto)"
+                  className="h-8 text-sm"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addRecipe()
+                    }
+                  }}
+                />
+              </div>
+              <select
+                className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value as RecipeCategory)}
+              >
+                {RECIPE_CATEGORIES.map(c => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+              <select
+                className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+                value={newTime}
+                onChange={(e) => setNewTime(e.target.value as RecipeTime)}
+              >
+                {RECIPE_TIMES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                onClick={addRecipe}
+                disabled={!newName.trim()}
+                className="shrink-0 h-8"
+              >
+                Add
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <Input
+                value={newLink}
+                onChange={(e) => setNewLink(e.target.value)}
+                placeholder="Recipe URL (optional)"
+                className="h-7 text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addRecipe()
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          {recipes.length === 0 && (
+            <p className="text-xs text-muted-foreground italic">No recipes yet. Add recipe ideas above.</p>
+          )}
+        </>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Structured recipe ideas with meal category, preparation time, and optional external link.
+      </p>
+    </div>
+  )
 }
 
 function isValidHex(hex: string): boolean {
@@ -2317,6 +2563,14 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                         if (cat === 'miscellaneous' && f.key === 'miscellaneous.companions') return null
                         return renderField(value, setPath, f, t)
                       })}
+                    {cat === 'usage' && (
+                      <div className="md:col-span-2">
+                        <RecipeEditor
+                          recipes={Array.isArray(value.usage?.recipes) ? value.usage.recipes : []}
+                          onChange={(v) => setPath('usage.recipes', v)}
+                        />
+                      </div>
+                    )}
                     {cat === 'miscellaneous' && (
                       <div className="md:col-span-2">
                         <Label>{t('plantAdmin.fields.miscellaneous.companions.label', 'Companion & Related Plants')}</Label>
