@@ -377,13 +377,15 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
 }
 
 export interface AiPrefillCallbacks {
-  onProgress?: (info: { stage: 'filling' | 'saving' | 'translating' | 'translating_name' | 'fetching_images'; plantName: string }) => void
+  onProgress?: (info: { stage: 'filling' | 'saving' | 'translating' | 'translating_name' | 'fetching_images' | 'uploading_images'; plantName: string }) => void
   onFieldComplete?: (info: { field: string; fieldsCompleted: number; totalFields: number }) => void
   onFieldStart?: (info: { field: string; fieldsCompleted: number; totalFields: number }) => void
   /** Called when an individual image source starts loading */
   onImageSourceStart?: (source: ExternalImageSource) => void
   /** Called when an individual image source finishes (success, error, or skipped) */
   onImageSourceDone?: (result: SourceResult) => void
+  /** Called during image upload to storage with per-image progress */
+  onImageUploadProgress?: (info: { current: number; total: number; uploaded: number; failed: number }) => void
   onError?: (error: string) => void
   signal?: AbortSignal
 }
@@ -397,7 +399,7 @@ export async function processPlantRequest(
   createdBy: string | undefined,
   callbacks?: AiPrefillCallbacks
 ): Promise<{ success: boolean; plantId?: string; error?: string; cancelled?: boolean }> {
-  const { onProgress, onFieldComplete, onFieldStart, onImageSourceStart, onImageSourceDone, onError, signal } = callbacks || {}
+  const { onProgress, onFieldComplete, onFieldStart, onImageSourceStart, onImageSourceDone, onImageUploadProgress, onError, signal } = callbacks || {}
   
   const totalFields = aiFieldOrder.length
   let fieldsCompleted = 0
@@ -625,9 +627,16 @@ export async function processPlantRequest(
       
       if (externalResult.images.length > 0) {
         // Upload each found image to the PLANTS storage bucket
+        onProgress?.({ stage: 'uploading_images', plantName: displayName })
+        const totalToUpload = externalResult.images.length
         const uploadedImages: Array<{ link: string; use: 'primary' | 'discovery' | 'other' }> = []
-        for (const img of externalResult.images) {
+        let failedCount = 0
+        onImageUploadProgress?.({ current: 0, total: totalToUpload, uploaded: 0, failed: 0 })
+
+        for (let i = 0; i < externalResult.images.length; i++) {
           if (signal?.aborted) break
+          const img = externalResult.images[i]
+          onImageUploadProgress?.({ current: i + 1, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
           try {
             const uploaded = await uploadPlantImageFromUrl(img.url, englishPlantName, img.source, signal)
             uploadedImages.push({
@@ -636,16 +645,19 @@ export async function processPlantRequest(
             })
           } catch (uploadErr) {
             if (isCancellationError(uploadErr)) throw uploadErr
+            failedCount++
             console.warn(`[aiPrefillService] Failed to upload image from ${img.source} for "${englishPlantName}":`, uploadErr)
           }
         }
+
+        onImageUploadProgress?.({ current: totalToUpload, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
         
         if (uploadedImages.length > 0) {
           plant = {
             ...plant,
             images: [...(plant.images || []), ...uploadedImages],
           }
-          console.log(`[aiPrefillService] Uploaded ${uploadedImages.length} images to storage for "${englishPlantName}" (${externalResult.serpapiCount} Google, ${externalResult.gbifCount} GBIF, ${externalResult.smithsonianCount} Smithsonian)`)
+          console.log(`[aiPrefillService] Uploaded ${uploadedImages.length} images to storage for "${englishPlantName}" (${failedCount} failed)`)
         }
       }
       
