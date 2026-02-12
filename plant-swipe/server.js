@@ -11107,53 +11107,19 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       return { sent: false, reason: 'Already sent to this user' }
     }
 
-    let rawSubject = null
-    let rawBodyHtml = null
-
-    if (trigger.template_id) {
-      const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
-      const translation = emailTranslations.get(lang)
-      rawSubject = translation?.subject || trigger.subject
-      rawBodyHtml = translation?.bodyHtml || trigger.body_html
+    if (!trigger.template_id) {
+      console.log(`[sendAutomaticEmail] Trigger "${triggerType}" has no template configured`)
+      return { sent: false, reason: 'No template configured' }
     }
 
-    // Built-in fallback for BAN_USER when no template is configured
+    const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
+    const translation = emailTranslations.get(lang)
+    const rawSubject = translation?.subject || trigger.subject
+    const rawBodyHtml = translation?.bodyHtml || trigger.body_html
+
     if (!rawSubject || !rawBodyHtml) {
-      if (triggerType === 'BAN_USER') {
-        console.log(`[sendAutomaticEmail] Using built-in fallback template for BAN_USER`)
-        const isFr = lang === 'fr'
-        rawSubject = isFr
-          ? 'Votre compte Aphylia a été suspendu'
-          : 'Your Aphylia account has been suspended'
-        rawBodyHtml = isFr
-          ? `<p>Bonjour {{user}},</p>
-<p>Nous vous informons que votre compte sur Aphylia a été suspendu en raison d'une violation de nos règles communautaires.</p>
-<p><strong>Ce que cela signifie :</strong></p>
-<ul>
-<li>Votre profil a été rendu privé et n'est plus visible par les autres utilisateurs</li>
-<li>Vos jardins et favoris ont été rendus privés</li>
-<li>Les demandes d'amis et les invitations de jardin ont été désactivées</li>
-<li>Les notifications par e-mail et push ont été désactivées</li>
-<li>Vous ne pouvez plus vous connecter à votre compte</li>
-</ul>
-<p>Si vous pensez qu'il s'agit d'une erreur, veuillez nous contacter à <a href="mailto:support@aphylia.app">support@aphylia.app</a>.</p>
-<p>Cordialement,<br>L'équipe Aphylia</p>`
-          : `<p>Hello {{user}},</p>
-<p>We are writing to inform you that your account on Aphylia has been suspended due to a violation of our community guidelines.</p>
-<p><strong>What this means:</strong></p>
-<ul>
-<li>Your profile has been made private and is no longer visible to other users</li>
-<li>Your gardens and bookmarks have been set to private</li>
-<li>Friend requests and garden invitations have been disabled</li>
-<li>Email and push notifications have been turned off</li>
-<li>You are no longer able to log in to your account</li>
-</ul>
-<p>If you believe this was a mistake, please contact us at <a href="mailto:support@aphylia.app">support@aphylia.app</a>.</p>
-<p>Best regards,<br>The Aphylia Team</p>`
-      } else {
-        console.error(`[sendAutomaticEmail] Template "${trigger.template_id}" has no content`)
-        return { sent: false, reason: 'Template has no content' }
-      }
+      console.error(`[sendAutomaticEmail] Template "${trigger.template_id}" has no content`)
+      return { sent: false, reason: 'Template has no content' }
     }
 
     const userRaw = userDisplayName || 'User'
