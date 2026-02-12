@@ -22,6 +22,7 @@ import { MessageNotificationToast } from "@/components/messaging/MessageNotifica
 import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 import { CookieConsent, getConsentLevel } from "@/components/CookieConsent";
 import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
+import { BannedModal } from "@/components/moderation/BannedModal";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -145,7 +146,7 @@ const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
 
 // --- Main Component ---
 export default function PlantSwipe() {
-  const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
+  const { user, signIn, signUp, signOut, profile, refreshProfile, banned, acknowledgeBan } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
   
@@ -1520,7 +1521,7 @@ export default function PlantSwipe() {
         const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, recaptchaToken, marketingConsent: authMarketingConsent })
         if (error) {
           console.error('[auth] signup error', error)
-          setAuthError(error)
+          setAuthError(error === 'BAN_BLOCKED' ? t('ban.loginBlocked') : error)
           setAuthSubmitting(false)
           return
         }
@@ -1529,7 +1530,7 @@ export default function PlantSwipe() {
         const { error } = await signIn({ email: authEmail, password: authPassword, recaptchaToken })
         if (error) {
           console.error('[auth] login error', error)
-          setAuthError(error)
+          setAuthError(error === 'BAN_BLOCKED' ? t('ban.loginBlocked') : error)
           setAuthSubmitting(false)
           return
         }
@@ -1650,6 +1651,14 @@ export default function PlantSwipe() {
     const passwordChangeExcludedPaths = ['/password-change', '/admin']
     const isExcludedFromPasswordChange = passwordChangeExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToPasswordChange = needsPasswordChange && !needsLegalUpdate && !isExcludedFromPasswordChange
+
+    // ========== Banned Modal (overrides everything) ==========
+    // When a user is detected as banned mid-session, show a blocking modal
+    // that explains the ban and requires acknowledgement before sign-out.
+    // This takes priority over every other page/view.
+    if (banned) {
+      return <BannedModal open={banned} onAcknowledge={acknowledgeBan} />
+    }
 
     // Setup page - full screen wizard experience
     // Render directly without nested Routes since we've already determined the path

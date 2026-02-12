@@ -422,6 +422,20 @@
       "statusScheduledNotice": "Cet article est planifié. Il deviendra public à la date de publication."
     }
   },
+  "ban": {
+    "loginBlocked": "Votre compte a été suspendu. Vous ne pouvez pas vous connecter ni créer un nouveau compte. Si vous pensez qu'il s'agit d'une erreur, veuillez contacter le support.",
+    "modal": {
+      "title": "Compte suspendu",
+      "description": "Votre compte a été suspendu en raison d'une violation de nos règles communautaires. Vous allez être déconnecté.",
+      "whatHappened": "Ce que cela signifie",
+      "detail1": "Votre profil a été rendu privé et n'est plus visible par les autres utilisateurs",
+      "detail2": "Vos jardins et favoris ont été rendus privés",
+      "detail3": "Les demandes d'amis et les invitations de jardin ont été désactivées",
+      "detail4": "Les notifications par e-mail et push ont été désactivées",
+      "contact": "Si vous pensez qu'il s'agit d'une erreur, veuillez contacter notre équipe de support.",
+      "acknowledge": "Je comprends — me déconnecter"
+    }
+  },
   "auth": {
     "login": "Se connecter",
     "signup": "Créer votre compte",

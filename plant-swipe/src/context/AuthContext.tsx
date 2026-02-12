@@ -27,6 +27,11 @@ type AuthContextValue = {
   user: AuthUser | null
   profile: ProfileRow | null
   loading: boolean
+  /** True when the current user has been detected as banned (threat_level 3).
+   *  The UI should show a BannedModal and call acknowledgeBan() once the user acknowledges. */
+  banned: boolean
+  /** Call after the user acknowledges the ban modal to complete sign-out. */
+  acknowledgeBan: () => Promise<void>
   signUp: (opts: { 
     email: string; 
     password: string; 
@@ -54,6 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   })
   const [loading, setLoading] = React.useState(true)
+  const [banned, setBanned] = React.useState(false)
 
   const clearCachedAuth = React.useCallback(() => {
     try {
@@ -66,8 +72,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearCachedAuth()
     setUser(null)
     setProfile(null)
+    setBanned(false)
     await supabase.auth.signOut()
   }, [clearCachedAuth])
+
+  /** Called by the BannedModal after the user reads the ban message and clicks acknowledge. */
+  const acknowledgeBan = React.useCallback(async () => {
+    await forceSignOut()
+  }, [forceSignOut])
 
   const loadSession = React.useCallback(async () => {
     const { data } = await supabase.auth.getSession()
@@ -101,9 +113,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ;(data as any).force_password_change = pwData.force_password_change ?? false
       }
       // Check if user is banned (threat_level === 3)
+      // Instead of silently signing out, flag as banned so the UI can show a BannedModal
       if (data?.threat_level === 3) {
-        console.warn('[auth] User is banned, signing out')
-        await forceSignOut()
+        console.warn('[auth] User is banned — showing ban modal')
+        setBanned(true)
         return
       }
       
@@ -176,12 +189,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [forceSignOut])
 
-  // Immediately sign out if a cached profile shows a ban
+  // Immediately flag as banned if a cached profile shows a ban
   React.useEffect(() => {
     if (profile?.threat_level === 3) {
-      forceSignOut().catch(() => {})
+      setBanned(true)
     }
-  }, [forceSignOut, profile?.threat_level])
+  }, [profile?.threat_level])
 
   React.useEffect(() => {
     ;(async () => {
@@ -222,7 +235,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check ban by email and IP before attempting signup
     try {
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
-      if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
+      if (check?.banned) return { error: 'BAN_BLOCKED' }
     } catch {}
     // Validate email address (format + DNS MX record check)
     const emailValidation = await validateEmail(email)
@@ -338,7 +351,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Gate sign-in if email/IP banned, and show a clear message
     try {
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
-      if (check?.banned) return { error: 'Your account has been banned.' }
+      if (check?.banned) return { error: 'BAN_BLOCKED' }
     } catch {}
     // Allow login with display name (username) or email
     let loginEmail = email
@@ -362,7 +375,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .maybeSingle()
         if (threatRow?.threat_level === 3) {
           await forceSignOut()
-          return { error: 'Your account has been banned.' }
+          return { error: 'BAN_BLOCKED' }
         }
       } catch {}
     }
@@ -460,6 +473,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     profile,
     loading,
+    banned,
+    acknowledgeBan,
     signUp,
     signIn,
     signOut,

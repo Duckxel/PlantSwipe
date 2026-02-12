@@ -422,6 +422,20 @@
       "statusScheduledNotice": "This story is scheduled. Readers will see it when the publish date is reached."
     }
   },
+  "ban": {
+    "loginBlocked": "Your account has been suspended. You are unable to log in or create a new account. If you believe this is an error, please contact support.",
+    "modal": {
+      "title": "Account Suspended",
+      "description": "Your account has been suspended due to a violation of our community guidelines. You will be signed out.",
+      "whatHappened": "What this means",
+      "detail1": "Your profile has been made private and is no longer visible to other users",
+      "detail2": "Your gardens and bookmarks have been set to private",
+      "detail3": "Friend requests and garden invitations have been disabled",
+      "detail4": "Email and push notifications have been turned off",
+      "contact": "If you believe this was a mistake, please contact our support team.",
+      "acknowledge": "I understand — sign me out"
+    }
+  },
   "auth": {
     "login": "Log in",
     "signup": "Create your account",
