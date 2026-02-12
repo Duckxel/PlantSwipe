@@ -40,8 +40,9 @@ const TAB_GAP      = 6
 const TAB_PAD_X    = 28
 const CHAR_WIDTH   = 7.5
 const TAB_START    = 10
-/** How far the note card pops above the divider body */
-const NOTE_POP     = 14
+/** How far above the divider top-edge the note bottom sits.
+ *  Small value = card looks "not fully pulled out" (bottom hidden behind divider). */
+const NOTE_POP     = 6
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Compute tab positions
@@ -349,7 +350,7 @@ function Divider({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   <RecipeCard />  –  ivory index card
+   <RecipeCard />  –  white lined notebook paper
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function RecipeCard({
@@ -368,52 +369,44 @@ function RecipeCard({
       <div
         className="relative overflow-hidden rounded-xl sm:rounded-2xl"
         style={{
-          background: 'linear-gradient(174deg, #f7f0e2 0%, #efe6d4 60%, #eae0cc 100%)',
+          background: '#fafbfd',
           boxShadow:
-            '0 12px 28px -6px rgba(40,24,8,.22),' +
-            '0 3px 6px rgba(40,24,8,.08),' +
-            '0 1px 0 0 rgba(255,250,240,.6) inset',
-          border: '1px solid #d8cab0',
+            '0 10px 24px -6px rgba(0,0,0,.18),' +
+            '0 2px 5px rgba(0,0,0,.06),' +
+            '0 1px 0 0 rgba(255,255,255,.9) inset',
+          border: '1px solid #d0d4da',
         }}
       >
-        {/* Dark mode */}
+        {/* Dark mode paper */}
         <div
           className="pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl hidden dark:block"
           style={{
-            background: 'linear-gradient(174deg, hsl(38 14% 18%) 0%, hsl(34 12% 15%) 100%)',
-            border: '1px solid hsl(34 10% 26%)',
+            background: 'linear-gradient(174deg, hsl(210 8% 18%) 0%, hsl(210 6% 15%) 100%)',
+            border: '1px solid hsl(210 6% 26%)',
           }}
         />
 
-        {/* Ruled lines */}
+        {/* Blue ruled lines */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-[.09] dark:opacity-[.05]"
+          className="pointer-events-none absolute inset-0 opacity-30 dark:opacity-[.12]"
           style={{
             backgroundImage:
-              'repeating-linear-gradient(180deg, transparent, transparent 31px, #a08060 31px, #a08060 32px)',
+              'repeating-linear-gradient(180deg, transparent, transparent 31px, #9ec5d4 31px, #9ec5d4 32px)',
             backgroundPositionY: '15px',
           }}
         />
 
         {/* Red margin line */}
         <div
-          className="pointer-events-none absolute top-0 bottom-0 opacity-[.12] dark:opacity-[.06]"
-          style={{ left: 42, width: 1, background: '#c44' }}
+          className="pointer-events-none absolute top-0 bottom-0 opacity-30 dark:opacity-[.14]"
+          style={{ left: 48, width: 2, background: '#d66' }}
         />
 
-        {/* Light spot */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-25 dark:opacity-[.08]"
-          style={{
-            backgroundImage: 'radial-gradient(ellipse 60% 40% at 12% 8%, rgba(255,255,255,.5), transparent 50%)',
-          }}
-        />
-
-        <div className="relative px-5 sm:px-7 py-4 sm:py-5">
+        <div className="relative px-5 sm:px-7 py-4 sm:py-5" style={{ paddingLeft: 58 }}>
           {/* Category heading */}
-          <div className="flex items-center gap-2.5 mb-3 pl-4">
+          <div className="flex items-center gap-2.5 mb-3">
             <span className="text-lg sm:text-xl">{categoryIcon}</span>
-            <span className="text-sm sm:text-base font-bold uppercase tracking-[.1em] text-amber-900/60 dark:text-amber-300/50">
+            <span className="text-sm sm:text-base font-bold uppercase tracking-[.1em] text-sky-800/50 dark:text-sky-300/40">
               {categoryLabel}
             </span>
           </div>
@@ -428,27 +421,27 @@ function RecipeCard({
               return (
                 <div
                   key={`${recipe.name}-${idx}`}
-                  className="group flex items-center gap-3 rounded-lg px-3 py-2 pl-5 -mx-1 transition-colors hover:bg-amber-900/[.04] dark:hover:bg-white/[.05]"
+                  className="group flex items-center gap-3 rounded-lg px-3 py-2 -mx-1 transition-colors hover:bg-sky-50 dark:hover:bg-white/[.05]"
                 >
-                  <Utensils className="h-4 w-4 shrink-0 text-amber-700/35 dark:text-amber-400/25" />
+                  <Utensils className="h-4 w-4 shrink-0 text-stone-300 dark:text-stone-600" />
 
                   {recipe.link ? (
                     <a
                       href={recipe.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-800 dark:text-stone-200 underline decoration-stone-300/50 dark:decoration-stone-600 underline-offset-4 hover:decoration-amber-600 dark:hover:decoration-amber-400 transition-colors truncate"
+                      className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-700 dark:text-stone-200 underline decoration-stone-300 dark:decoration-stone-600 underline-offset-4 hover:decoration-sky-500 dark:hover:decoration-sky-400 transition-colors truncate"
                     >
                       {recipe.name}
                     </a>
                   ) : (
-                    <span className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-800 dark:text-stone-200 truncate">
+                    <span className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-700 dark:text-stone-200 truncate">
                       {recipe.name}
                     </span>
                   )}
 
                   {resolvedTimeLabel && (
-                    <span className="inline-flex items-center gap-1 shrink-0 text-xs font-semibold rounded-md px-2 py-1 bg-amber-900/[.06] dark:bg-white/[.07] text-stone-500 dark:text-stone-400">
+                    <span className="inline-flex items-center gap-1 shrink-0 text-xs font-semibold rounded-md px-2 py-1 bg-stone-100 dark:bg-white/[.07] text-stone-500 dark:text-stone-400">
                       {TimeIcon && <TimeIcon className="h-3 w-3" />}
                       {resolvedTimeLabel}
                     </span>
@@ -459,7 +452,7 @@ function RecipeCard({
                       href={recipe.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 text-stone-400 hover:text-amber-700 dark:text-stone-500 dark:hover:text-amber-300 transition-colors"
+                      className="shrink-0 text-stone-400 hover:text-sky-600 dark:text-stone-500 dark:hover:text-sky-300 transition-colors"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </a>
@@ -472,7 +465,7 @@ function RecipeCard({
       </div>
 
       {/* Drop shadow under the note */}
-      <div className="pointer-events-none absolute -bottom-2.5 left-5 right-5 h-4 rounded-full bg-black/10 dark:bg-black/22 blur-xl" />
+      <div className="pointer-events-none absolute -bottom-2.5 left-5 right-5 h-4 rounded-full bg-black/8 dark:bg-black/20 blur-xl" />
     </div>
   )
 }
