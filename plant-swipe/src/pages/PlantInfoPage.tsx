@@ -5,6 +5,7 @@ import { DimensionCube } from '@/components/plant/DimensionCube'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { PlantInfoPageSkeleton } from '@/components/garden/GardenSkeletons'
 import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
+import { RecipeBox } from '@/components/plant/RecipeBox'
 import type { Plant, PlantImage, PlantRecipe, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
@@ -53,7 +54,6 @@ import {
   FileText,
   Wrench,
   ChartNoAxesColumn,
-  ExternalLink,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -1739,7 +1739,28 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         )}
 
       {/* Recipes Section - Structured with categories and times */}
-        {(hasStructuredRecipes || recipesIdeasList.length > 0) && (
+        {hasStructuredRecipes ? (
+          <RecipeBox
+            recipes={structuredRecipes}
+            title={t('moreInfo.recipes.title')}
+            subtitle={t('moreInfo.recipes.subtitle')}
+            categoryLabels={{
+              breakfast_brunch: t('moreInfo.recipes.categories.breakfast_brunch', 'Breakfast & Brunch'),
+              starters_appetizers: t('moreInfo.recipes.categories.starters_appetizers', 'Starters & Appetizers'),
+              soups_salads: t('moreInfo.recipes.categories.soups_salads', 'Soups & Salads'),
+              main_courses: t('moreInfo.recipes.categories.main_courses', 'Main Courses'),
+              side_dishes: t('moreInfo.recipes.categories.side_dishes', 'Side Dishes'),
+              desserts: t('moreInfo.recipes.categories.desserts', 'Desserts'),
+              drinks: t('moreInfo.recipes.categories.drinks', 'Drinks'),
+              other: t('moreInfo.recipes.categories.other', 'Other'),
+            }}
+            timeLabels={{
+              quick: t('moreInfo.recipes.times.quick', 'Quick'),
+              '30_plus': t('moreInfo.recipes.times.30_plus', '30+ min'),
+              slow_cooking: t('moreInfo.recipes.times.slow_cooking', 'Slow'),
+            }}
+          />
+        ) : recipesIdeasList.length > 0 ? (
           <section
             className="rounded-2xl sm:rounded-3xl border-2 border-emerald-400/50 bg-gradient-to-br from-emerald-50/90 via-orange-50/60 to-amber-50/80 p-5 sm:p-6 dark:border-emerald-500/60 dark:from-emerald-500/15 dark:via-orange-500/10 dark:to-amber-500/10 shadow-lg"
           >
@@ -1753,103 +1774,20 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">{t('moreInfo.recipes.subtitle')}</p>
                 </div>
               </div>
-              {hasStructuredRecipes ? (
-                <div className="space-y-3">
-                  {/* Group recipes by category */}
-                  {(() => {
-                    const CATEGORY_DISPLAY: Record<string, { label: string; color: string; icon: string }> = {
-                      breakfast_brunch: { label: t('moreInfo.recipes.categories.breakfast_brunch', 'Breakfast & Brunch'), color: 'border-amber-300/70 bg-amber-50 dark:border-amber-600/50 dark:bg-amber-500/10', icon: '\u2615' },
-                      starters_appetizers: { label: t('moreInfo.recipes.categories.starters_appetizers', 'Starters & Appetizers'), color: 'border-lime-300/70 bg-lime-50 dark:border-lime-600/50 dark:bg-lime-500/10', icon: '\uD83E\uDD57' },
-                      soups_salads: { label: t('moreInfo.recipes.categories.soups_salads', 'Soups & Salads'), color: 'border-emerald-300/70 bg-emerald-50 dark:border-emerald-600/50 dark:bg-emerald-500/10', icon: '\uD83E\uDD63' },
-                      main_courses: { label: t('moreInfo.recipes.categories.main_courses', 'Main Courses'), color: 'border-orange-300/70 bg-orange-50 dark:border-orange-600/50 dark:bg-orange-500/10', icon: '\uD83C\uDF7D\uFE0F' },
-                      side_dishes: { label: t('moreInfo.recipes.categories.side_dishes', 'Side Dishes'), color: 'border-teal-300/70 bg-teal-50 dark:border-teal-600/50 dark:bg-teal-500/10', icon: '\uD83E\uDD66' },
-                      desserts: { label: t('moreInfo.recipes.categories.desserts', 'Desserts'), color: 'border-pink-300/70 bg-pink-50 dark:border-pink-600/50 dark:bg-pink-500/10', icon: '\uD83C\uDF70' },
-                      drinks: { label: t('moreInfo.recipes.categories.drinks', 'Drinks'), color: 'border-sky-300/70 bg-sky-50 dark:border-sky-600/50 dark:bg-sky-500/10', icon: '\uD83C\uDF79' },
-                      other: { label: t('moreInfo.recipes.categories.other', 'Other'), color: 'border-stone-300/70 bg-stone-50 dark:border-stone-600/50 dark:bg-stone-500/10', icon: '\uD83C\uDF74' },
-                    }
-                    const TIME_DISPLAY: Record<string, string> = {
-                      quick: t('moreInfo.recipes.times.quick', 'Quick'),
-                      '30_plus': t('moreInfo.recipes.times.30_plus', '30+ min'),
-                      slow_cooking: t('moreInfo.recipes.times.slow_cooking', 'Slow'),
-                      undefined: '',
-                    }
-                    const grouped = structuredRecipes.reduce((acc: Record<string, PlantRecipe[]>, r) => {
-                      const cat = r.category || 'other'
-                      if (!acc[cat]) acc[cat] = []
-                      acc[cat].push(r)
-                      return acc
-                    }, {})
-                    const categoryOrder = ['breakfast_brunch', 'starters_appetizers', 'soups_salads', 'main_courses', 'side_dishes', 'desserts', 'drinks', 'other']
-                    return categoryOrder
-                      .filter(cat => grouped[cat]?.length)
-                      .map(cat => {
-                        const info = CATEGORY_DISPLAY[cat] || CATEGORY_DISPLAY.other
-                        return (
-                          <div key={cat}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-base">{info.icon}</span>
-                              <span className="text-sm font-semibold text-stone-700 dark:text-stone-300">{info.label}</span>
-                            </div>
-                            <div className="flex flex-wrap gap-2 sm:gap-2.5">
-                              {grouped[cat].map((recipe, idx) => {
-                                const timeLabel = TIME_DISPLAY[recipe.time] || ''
-                                const badgeContent = (
-                                  <>
-                                    <Utensils className="mr-1.5 h-3.5 w-3.5 inline-block opacity-60" />
-                                    {recipe.name}
-                                    {timeLabel && (
-                                      <span className="ml-2 text-xs font-normal opacity-70 bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded-md">{timeLabel}</span>
-                                    )}
-                                    {recipe.link && (
-                                      <ExternalLink className="ml-1.5 h-3.5 w-3.5 inline-block opacity-50" />
-                                    )}
-                                  </>
-                                )
-                                return recipe.link ? (
-                                  <a
-                                    key={`recipe-${cat}-${idx}`}
-                                    href={recipe.link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="no-underline"
-                                  >
-                                    <Badge
-                                      className={`rounded-xl sm:rounded-2xl border-2 ${info.color} px-3.5 py-2 text-sm sm:text-base font-semibold text-stone-800 shadow-md transition-all hover:scale-105 hover:shadow-lg dark:text-stone-100 cursor-pointer`}
-                                    >
-                                      {badgeContent}
-                                    </Badge>
-                                  </a>
-                                ) : (
-                                  <Badge
-                                    key={`recipe-${cat}-${idx}`}
-                                    className={`rounded-xl sm:rounded-2xl border-2 ${info.color} px-3.5 py-2 text-sm sm:text-base font-semibold text-stone-800 shadow-md transition-all hover:scale-105 hover:shadow-lg dark:text-stone-100`}
-                                  >
-                                    {badgeContent}
-                                  </Badge>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )
-                      })
-                  })()}
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2.5 sm:gap-3">
-                  {recipesIdeasList.map((recipe, idx) => (
-                    <Badge
-                      key={`recipe-${idx}`}
-                      className="rounded-xl sm:rounded-2xl border-2 border-emerald-300/70 bg-white px-4 py-2.5 text-sm sm:text-base font-semibold text-emerald-800 shadow-md transition-all hover:scale-105 hover:shadow-lg dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-100 hover:border-emerald-400 dark:hover:border-emerald-400"
-                    >
-                      <Utensils className="mr-2 h-4 w-4 inline-block" />
-                      {recipe}
-                    </Badge>
-                  ))}
-                </div>
-              )}
+              <div className="flex flex-wrap gap-2.5 sm:gap-3">
+                {recipesIdeasList.map((recipe, idx) => (
+                  <Badge
+                    key={`recipe-${idx}`}
+                    className="rounded-xl sm:rounded-2xl border-2 border-emerald-300/70 bg-white px-4 py-2.5 text-sm sm:text-base font-semibold text-emerald-800 shadow-md transition-all hover:scale-105 hover:shadow-lg dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-100 hover:border-emerald-400 dark:hover:border-emerald-400"
+                  >
+                    <Utensils className="mr-2 h-4 w-4 inline-block" />
+                    {recipe}
+                  </Badge>
+                ))}
+              </div>
             </div>
           </section>
-        )}
+        ) : null}
 
       <ProAdviceSection plantId={plant.id} plantName={plant.name} />
 
