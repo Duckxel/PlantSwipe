@@ -56,6 +56,11 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
     },
     ref,
   ) => {
+    const generatedId = React.useId()
+    const id = props.id || generatedId
+    const errorId = `${id}-error`
+    const suggestionId = `${id}-suggestion`
+
     const [showPassword, setShowPassword] = React.useState(false)
     const isPassword = type === "password"
     const effectiveType = isPassword && showPassword ? "text" : type
@@ -78,20 +83,32 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
           ? "pr-10" // just status icon
           : ""
 
+    // Construct aria-describedby
+    const describedBy = [
+      props["aria-describedby"],
+      status === "error" && error ? errorId : null,
+      suggestion ? suggestionId : null,
+    ]
+      .filter(Boolean)
+      .join(" ")
+
     return (
       <div className={cn("w-full", wrapperClassName)}>
         {/* Input row – icons are positioned relative to this container only */}
         <div className="relative">
           <input
+            {...props}
+            id={id}
             ref={ref}
             type={effectiveType}
+            aria-invalid={status === "error" ? true : undefined}
+            aria-describedby={describedBy || undefined}
             className={cn(
               "flex h-10 w-full rounded-xl border border-input bg-white dark:bg-[#2d2d30] px-4 py-2 text-base shadow-sm transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:h-9 md:rounded-md md:px-3 md:py-1 md:text-sm",
               ringClass,
               rightPadding,
               className,
             )}
-            {...props}
           />
 
           {/* Right-side icons – centred within the input row */}
@@ -120,9 +137,8 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
             {isPassword && (
               <button
                 type="button"
-                tabIndex={-1}
                 onClick={() => setShowPassword((v) => !v)}
-                className="text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
+                className="text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
@@ -137,7 +153,10 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
 
         {/* Error message – outside the relative container so it doesn't shift icons */}
         {status === "error" && error && (
-          <p className="mt-1 text-xs text-red-500 dark:text-red-400 animate-in fade-in slide-in-from-top-1 duration-150">
+          <p
+            id={errorId}
+            className="mt-1 text-xs text-red-500 dark:text-red-400 animate-in fade-in slide-in-from-top-1 duration-150"
+          >
             {error}
           </p>
         )}
@@ -145,6 +164,7 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
         {/* Suggestion */}
         {suggestion && onAcceptSuggestion && (
           <button
+            id={suggestionId}
             type="button"
             onClick={onAcceptSuggestion}
             className="mt-1 text-xs text-left text-amber-600 dark:text-amber-400 hover:underline animate-in fade-in slide-in-from-top-1 duration-150"
