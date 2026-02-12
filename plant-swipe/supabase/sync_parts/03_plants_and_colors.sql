@@ -552,8 +552,21 @@ create table if not exists public.plant_recipes (
   name text not null,
   category text not null default 'other' check (category in ('breakfast_brunch','starters_appetizers','soups_salads','main_courses','side_dishes','desserts','drinks','other')),
   time text not null default 'undefined' check (time in ('quick','30_plus','slow_cooking','undefined')),
+  link text,
   created_at timestamptz not null default now()
 );
+
+-- Add link column if it doesn't exist (for existing databases)
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+    and table_name = 'plant_recipes'
+    and column_name = 'link'
+  ) then
+    alter table public.plant_recipes add column link text;
+  end if;
+end $$;
 create index if not exists plant_recipes_plant_id_idx on public.plant_recipes(plant_id);
 alter table public.plant_recipes enable row level security;
 do $$ begin
@@ -572,6 +585,7 @@ end $$;
 comment on table public.plant_recipes is 'Structured recipe ideas linked to plants, with meal category and preparation time';
 comment on column public.plant_recipes.category is 'Meal category: breakfast_brunch, starters_appetizers, soups_salads, main_courses, side_dishes, desserts, drinks, other';
 comment on column public.plant_recipes.time is 'Preparation time: quick (Quick and Effortless), 30_plus (30+ minutes), slow_cooking (Slow Cooking), undefined';
+comment on column public.plant_recipes.link is 'Optional external URL to a recipe page (not filled by AI)';
 
 -- Migrate existing recipes_ideas from plant_translations to plant_recipes
 -- Only migrate from English translations, set category='other' and time='undefined'

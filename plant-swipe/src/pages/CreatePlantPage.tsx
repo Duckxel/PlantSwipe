@@ -609,14 +609,16 @@ async function upsertRecipes(plantId: string, recipes?: PlantRecipe[]) {
     .map((r) => {
       const trimmedName = r.name && typeof r.name === 'string' ? r.name.trim() : null
       if (!trimmedName) return null
+      const trimmedLink = r.link && typeof r.link === 'string' ? r.link.trim() : null
       return {
         plant_id: plantId,
         name: trimmedName,
         category: recipeCategoryEnum.toDb(r.category) || 'other',
         time: recipeTimeEnum.toDb(r.time) || 'undefined',
+        link: trimmedLink || null,
       }
     })
-    .filter((row): row is { plant_id: string; name: string; category: string; time: string } => Boolean(row))
+    .filter((row): row is { plant_id: string; name: string; category: string; time: string; link: string | null } => Boolean(row))
   if (!rows.length) return
   const { error } = await supabase.from('plant_recipes').insert(rows)
   if (error) throw new Error(error.message)
@@ -714,7 +716,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     .eq('plant_id', id)
   const { data: recipeRows } = await supabase
     .from('plant_recipes')
-    .select('id,name,category,time')
+    .select('id,name,category,time,link')
     .eq('plant_id', id)
   const infusionMix = await fetchInfusionMixes(id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
@@ -838,6 +840,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
         name: r.name || '',
         category: recipeCategoryEnum.toUi(r.category) || 'Other',
         time: recipeTimeEnum.toUi(r.time) || 'Undefined',
+        link: r.link || undefined,
       })) as PlantRecipe[],
       // Non-translatable fields from plants table
       aromatherapy: data.aromatherapy || false,

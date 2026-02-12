@@ -252,6 +252,7 @@ export interface PlantRecipe {
   name: string
   category: RecipeCategory
   time: RecipeTime
+  link?: string
 }
 
 export interface PlantUsage {

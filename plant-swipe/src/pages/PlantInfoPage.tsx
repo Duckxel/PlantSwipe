@@ -53,6 +53,7 @@ import {
   FileText,
   Wrench,
   ChartNoAxesColumn,
+  ExternalLink,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -232,7 +233,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     supabase.from('plant_sources').select('id,name,url').eq('plant_id', id),
     supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id),
     supabase.from('plant_contributors').select('contributor_name').eq('plant_id', id),
-    supabase.from('plant_recipes').select('id,name,category,time').eq('plant_id', id),
+    supabase.from('plant_recipes').select('id,name,category,time,link').eq('plant_id', id),
   ])
   
   const translation = translationResult.data || null
@@ -380,6 +381,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
         name: r.name || '',
         category: r.category || 'other',
         time: r.time || 'undefined',
+        link: r.link || undefined,
       })),
       // Non-translatable fields from plants table
       aromatherapy: data.aromatherapy || false,
@@ -1791,16 +1793,38 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                             <div className="flex flex-wrap gap-2 sm:gap-2.5">
                               {grouped[cat].map((recipe, idx) => {
                                 const timeLabel = TIME_DISPLAY[recipe.time] || ''
-                                return (
-                                  <Badge
-                                    key={`recipe-${cat}-${idx}`}
-                                    className={`rounded-xl sm:rounded-2xl border-2 ${info.color} px-3.5 py-2 text-sm sm:text-base font-semibold text-stone-800 shadow-md transition-all hover:scale-105 hover:shadow-lg dark:text-stone-100`}
-                                  >
+                                const badgeContent = (
+                                  <>
                                     <Utensils className="mr-1.5 h-3.5 w-3.5 inline-block opacity-60" />
                                     {recipe.name}
                                     {timeLabel && (
                                       <span className="ml-2 text-xs font-normal opacity-70 bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded-md">{timeLabel}</span>
                                     )}
+                                    {recipe.link && (
+                                      <ExternalLink className="ml-1.5 h-3.5 w-3.5 inline-block opacity-50" />
+                                    )}
+                                  </>
+                                )
+                                return recipe.link ? (
+                                  <a
+                                    key={`recipe-${cat}-${idx}`}
+                                    href={recipe.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="no-underline"
+                                  >
+                                    <Badge
+                                      className={`rounded-xl sm:rounded-2xl border-2 ${info.color} px-3.5 py-2 text-sm sm:text-base font-semibold text-stone-800 shadow-md transition-all hover:scale-105 hover:shadow-lg dark:text-stone-100 cursor-pointer`}
+                                    >
+                                      {badgeContent}
+                                    </Badge>
+                                  </a>
+                                ) : (
+                                  <Badge
+                                    key={`recipe-${cat}-${idx}`}
+                                    className={`rounded-xl sm:rounded-2xl border-2 ${info.color} px-3.5 py-2 text-sm sm:text-base font-semibold text-stone-800 shadow-md transition-all hover:scale-105 hover:shadow-lg dark:text-stone-100`}
+                                  >
+                                    {badgeContent}
                                   </Badge>
                                 )
                               })}

@@ -10,7 +10,7 @@ import type { TFunction } from "i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantType, PlantWateringSchedule, RecipeCategory, RecipeTime } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2 } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 
@@ -1620,14 +1620,17 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
   const [newName, setNewName] = React.useState('')
   const [newCategory, setNewCategory] = React.useState<RecipeCategory>('Other')
   const [newTime, setNewTime] = React.useState<RecipeTime>('Undefined')
+  const [newLink, setNewLink] = React.useState('')
 
   const addRecipe = () => {
     const trimmed = newName.trim()
     if (!trimmed) return
-    onChange([...recipes, { name: trimmed, category: newCategory, time: newTime }])
+    const trimmedLink = newLink.trim() || undefined
+    onChange([...recipes, { name: trimmed, category: newCategory, time: newTime, link: trimmedLink }])
     setNewName('')
     setNewCategory('Other')
     setNewTime('Undefined')
+    setNewLink('')
   }
 
   const removeRecipe = (idx: number) => {
@@ -1674,6 +1677,7 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
             >
               <span>{TIME_ICONS[r.time]}</span>
               <span>{r.name}</span>
+              {r.link && <ExternalLink className="h-3 w-3 opacity-50" />}
             </span>
           ))}
         </div>
@@ -1696,41 +1700,52 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
           {recipes.length > 0 && (
             <div className="space-y-2">
               {recipes.map((recipe, idx) => (
-                <div key={`recipe-${idx}`} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center rounded-lg border bg-white/60 dark:bg-[#111611] p-2.5">
-                  <div className="flex-1 min-w-0">
+                <div key={`recipe-${idx}`} className="rounded-lg border bg-white/60 dark:bg-[#111611] p-2.5 space-y-2">
+                  <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                    <div className="flex-1 min-w-0">
+                      <Input
+                        value={recipe.name}
+                        onChange={(e) => updateRecipe(idx, { name: e.target.value })}
+                        className="h-8 text-sm"
+                        placeholder="Recipe name"
+                      />
+                    </div>
+                    <select
+                      className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+                      value={recipe.category}
+                      onChange={(e) => updateRecipe(idx, { category: e.target.value as RecipeCategory })}
+                    >
+                      {RECIPE_CATEGORIES.map(c => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+                      value={recipe.time}
+                      onChange={(e) => updateRecipe(idx, { time: e.target.value as RecipeTime })}
+                    >
+                      {RECIPE_TIMES.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => removeRecipe(idx)}
+                      className="text-red-500 hover:text-red-700 text-sm font-bold px-1.5 shrink-0"
+                      title="Remove recipe"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <Input
-                      value={recipe.name}
-                      onChange={(e) => updateRecipe(idx, { name: e.target.value })}
-                      className="h-8 text-sm"
-                      placeholder="Recipe name"
+                      value={recipe.link || ''}
+                      onChange={(e) => updateRecipe(idx, { link: e.target.value || undefined })}
+                      className="h-7 text-xs"
+                      placeholder="Recipe URL (optional, e.g., https://example.com/recipe)"
                     />
                   </div>
-                  <select
-                    className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
-                    value={recipe.category}
-                    onChange={(e) => updateRecipe(idx, { category: e.target.value as RecipeCategory })}
-                  >
-                    {RECIPE_CATEGORIES.map(c => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                  <select
-                    className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
-                    value={recipe.time}
-                    onChange={(e) => updateRecipe(idx, { time: e.target.value as RecipeTime })}
-                  >
-                    {RECIPE_TIMES.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => removeRecipe(idx)}
-                    className="text-red-500 hover:text-red-700 text-sm font-bold px-1.5 shrink-0"
-                    title="Remove recipe"
-                  >
-                    ×
-                  </button>
                 </div>
               ))}
             </div>
@@ -1782,6 +1797,21 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                 Add
               </Button>
             </div>
+            <div className="flex items-center gap-2">
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <Input
+                value={newLink}
+                onChange={(e) => setNewLink(e.target.value)}
+                placeholder="Recipe URL (optional)"
+                className="h-7 text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addRecipe()
+                  }
+                }}
+              />
+            </div>
           </div>
 
           {recipes.length === 0 && (
@@ -1790,7 +1820,7 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
         </>
       )}
       <p className="text-xs text-muted-foreground">
-        Structured recipe ideas with meal category and preparation time.
+        Structured recipe ideas with meal category, preparation time, and optional external link.
       </p>
     </div>
   )

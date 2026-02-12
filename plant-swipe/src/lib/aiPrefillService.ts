@@ -390,9 +390,10 @@ async function upsertRecipes(plantId: string, recipes?: PlantRecipe[]) {
         name: trimmedName,
         category: recipeCategoryEnum.toDb(r.category) || 'other',
         time: recipeTimeEnum.toDb(r.time) || 'undefined',
+        link: null, // AI does not fill the link field - admin only
       }
     })
-    .filter((row): row is { plant_id: string; name: string; category: string; time: string } => Boolean(row))
+    .filter((row): row is { plant_id: string; name: string; category: string; time: string; link: null } => Boolean(row))
   if (!rows.length) return
   const { error } = await supabase.from('plant_recipes').insert(rows)
   if (error) throw new Error(error.message)
