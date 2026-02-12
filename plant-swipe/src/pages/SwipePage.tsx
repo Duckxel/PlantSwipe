@@ -87,7 +87,7 @@ interface SwipePageProps {
   boostImagePriority?: boolean
 }
 
-export const SwipePage: React.FC<SwipePageProps> = ({
+export const SwipePage: React.FC<SwipePageProps> = React.memo(({
   current,
   index: _index,
   setIndex,
@@ -680,7 +680,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         </motion.section>
       </div>
     )
-}
+})
 
 const EmptyState = ({ onReset }: { onReset: () => void }) => {
   const { t } = useTranslation("common")

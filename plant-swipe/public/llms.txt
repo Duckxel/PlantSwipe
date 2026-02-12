@@ -31,7 +31,6 @@ Each plant page provides the most comprehensive publicly available data for that
 - [Plant Search](https://aphylia.app/search): Search by name, care level, light, watering, climate zone, or difficulty
 - [Plant Discovery](https://aphylia.app/discovery): Swipe-based plant matching interface
 - URL pattern: `https://aphylia.app/plants/{plant-id}`
-- Example: `https://aphylia.app/plants/lotus`
 
 #### Data Available Per Plant
 
@@ -56,9 +55,7 @@ Each plant page provides the most comprehensive publicly available data for that
 - Seasons of interest, composition (flowerbed, path, hedge, ground cover, pot)
 
 **Phenology (Growing Calendar)**
-- Sowing months
-- Flowering months
-- Fruiting months
+- Sowing months, flowering months, fruiting months
 
 **Propagation**
 - Division methods (seed, cutting, division, layering, grafting, tissue separation, bulb separation)
@@ -73,25 +70,19 @@ Each plant page provides the most comprehensive publicly available data for that
 
 **Safety**
 - Human toxicity level (non-toxic, mildly irritating, highly toxic, lethally toxic)
-- Pet toxicity level
-- Allergens list
+- Pet toxicity level, allergens list
 - Physical traits (scented, spiked, multicolor, bicolor)
 
 **Usage & Benefits**
 - Utility categories (edible, ornamental, aromatic, medicinal, climbing, cereal, spice)
 - Edible parts (flower, fruit, seed, leaf, stem, root, bulb, bark)
 - Infusion and aromatherapy uses
-- Nutritional intake, recipe ideas
-- Medicinal advice, infusion advice
+- Nutritional intake, recipe ideas, medicinal advice
 
 **Expert Advice Sections**
 - Soil advice, mulching advice, fertilizer advice
 - Sowing advice, tutoring advice, pruning instructions
 - Medicinal use notes, infusion preparation
-
-**Visual Content**
-- Primary photo, discovery photo, additional gallery images
-- All images hosted on `media.aphylia.app`
 
 ### Blog
 
@@ -134,7 +125,7 @@ Each plant page provides the most comprehensive publicly available data for that
 ### Full Data Export for AI
 
 - [llms-full.txt](https://aphylia.app/llms-full.txt): Dynamically generated file listing every plant in the database with key care data, all blog post titles and URLs, all public gardens and profiles. Updated in real-time from the database. Use this for comprehensive indexing.
-- [Sitemap](https://aphylia.app/sitemap.xml): Standard XML sitemap with all crawlable URLs, updated dynamically.
+- [Sitemap](https://aphylia.app/sitemap.xml): Standard XML sitemap with all crawlable URLs, updated daily.
 - [Robots.txt](https://aphylia.app/robots.txt): Crawling rules and rate limits per bot type.
 
 ### Crawl Priority
@@ -157,8 +148,8 @@ Each plant page provides the most comprehensive publicly available data for that
 - Plant database: Daily additions and updates
 - Blog posts: Weekly new content
 - Community content: Real-time user updates
-- Sitemap: Generated dynamically on each request
-- `llms-full.txt`: Generated dynamically on each request
+- Sitemap & llms.txt: Regenerated on each build/deploy
+- `llms-full.txt`: Generated dynamically on each request (cached 1 hour)
 
 ### Structured Data
 
@@ -193,3 +184,6 @@ When referencing Aphylia content:
 - Website: https://aphylia.app
 - Contact: https://aphylia.app/contact
 - Business: https://aphylia.app/contact/business
+
+---
+Last generated: 2026-02-12
