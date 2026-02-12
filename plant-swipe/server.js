@@ -4755,25 +4755,21 @@ app.post('/api/admin/images/gbif', async (req, res) => {
     }
     const occData = await occResp.json()
 
-    // Extract ALL valid image URLs (one per occurrence for variety)
+    // Extract ALL valid image URLs from all occurrences
     const allCandidates = []
     const seenUrls = new Set()
     for (const result of (occData.results || [])) {
-      // Take only the first image per occurrence to maximize variety across observers
-      const firstMedia = (result.media || []).find(m => {
-        if (m.type !== 'StillImage') return false
-        const url = m.identifier
-        return url && !seenUrls.has(url) && isAllowedImageUrl(url)
-      })
-      if (firstMedia) {
-        const url = firstMedia.identifier
+      for (const media of (result.media || [])) {
+        if (media.type !== 'StillImage') continue
+        const url = media.identifier
+        if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
         seenUrls.add(url)
         allCandidates.push({
           url,
-          license: firstMedia.license || 'CC0',
+          license: media.license || 'CC0',
           source: 'gbif',
-          creator: firstMedia.creator || firstMedia.rightsHolder || null,
-          references: firstMedia.references || null,
+          creator: media.creator || media.rightsHolder || null,
+          references: media.references || null,
         })
       }
     }
@@ -5024,18 +5020,16 @@ app.post('/api/admin/images/external', async (req, res) => {
           const gbifCandidates = []
           const seenUrls = new Set()
           for (const result of (occData.results || [])) {
-            const firstMedia = (result.media || []).find(m => {
-              if (m.type !== 'StillImage') return false
-              const url = m.identifier
-              return url && !seenUrls.has(url) && isAllowedImageUrl(url)
-            })
-            if (firstMedia) {
-              seenUrls.add(firstMedia.identifier)
+            for (const media of (result.media || [])) {
+              if (media.type !== 'StillImage') continue
+              const url = media.identifier
+              if (!url || seenUrls.has(url) || !isAllowedImageUrl(url)) continue
+              seenUrls.add(url)
               gbifCandidates.push({
-                url: firstMedia.identifier,
-                license: firstMedia.license || 'CC0',
+                url,
+                license: media.license || 'CC0',
                 source: 'gbif',
-                creator: firstMedia.creator || firstMedia.rightsHolder || null,
+                creator: media.creator || media.rightsHolder || null,
               })
             }
           }
