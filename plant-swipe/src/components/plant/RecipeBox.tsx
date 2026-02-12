@@ -40,9 +40,9 @@ const TAB_GAP      = 6
 const TAB_PAD_X    = 28
 const CHAR_WIDTH   = 7.5
 const TAB_START    = 10
-/** How far above the divider top-edge the note bottom sits.
- *  Small value = card looks "not fully pulled out" (bottom hidden behind divider). */
-const NOTE_POP     = 6
+/** How many px of the note card's bottom edge are hidden behind the divider body.
+ *  Bigger = more of the card tucked in, looks less "pulled out". */
+const NOTE_TUCK    = 20
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Compute tab positions
@@ -332,8 +332,8 @@ function Divider({
               transition={{ type: 'spring', stiffness: 340, damping: 26 }}
               className="absolute left-3 right-3 sm:left-4 sm:right-4"
               style={{
-                bottom: DIVIDER_BODY + NOTE_POP,
-                zIndex: 1,          // below the tab header (z:2), but part of this divider's stacking context
+                bottom: DIVIDER_BODY - NOTE_TUCK,
+                zIndex: 1,
               }}
             >
               <RecipeCard
