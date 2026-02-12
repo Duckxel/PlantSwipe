@@ -11136,7 +11136,7 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
 <li>Les notifications par e-mail et push ont été désactivées</li>
 <li>Vous ne pouvez plus vous connecter à votre compte</li>
 </ul>
-<p>Si vous pensez qu'il s'agit d'une erreur, veuillez contacter notre équipe de support en répondant à cet e-mail.</p>
+<p>Si vous pensez qu'il s'agit d'une erreur, veuillez nous contacter à <a href="mailto:support@aphylia.app">support@aphylia.app</a>.</p>
 <p>Cordialement,<br>L'équipe Aphylia</p>`
           : `<p>Hello {{user}},</p>
 <p>We are writing to inform you that your account on Aphylia has been suspended due to a violation of our community guidelines.</p>
@@ -11148,7 +11148,7 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
 <li>Email and push notifications have been turned off</li>
 <li>You are no longer able to log in to your account</li>
 </ul>
-<p>If you believe this was a mistake, please contact our support team by replying to this email.</p>
+<p>If you believe this was a mistake, please contact us at <a href="mailto:support@aphylia.app">support@aphylia.app</a>.</p>
 <p>Best regards,<br>The Aphylia Team</p>`
       } else {
         console.error(`[sendAutomaticEmail] Template "${trigger.template_id}" has no content`)

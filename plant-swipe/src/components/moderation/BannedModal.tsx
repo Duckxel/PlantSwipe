@@ -57,7 +57,13 @@ export const BannedModal: React.FC<BannedModalProps> = ({ open, onAcknowledge })
 
           {/* Contact info */}
           <p className="text-xs text-stone-500 dark:text-stone-500">
-            {t('ban.modal.contact')}
+            {t('ban.modal.contact')}{' '}
+            <a
+              href={`mailto:${t('ban.modal.contactEmail')}`}
+              className="font-medium text-emerald-600 dark:text-emerald-400 underline hover:text-emerald-700 dark:hover:text-emerald-300"
+            >
+              {t('ban.modal.contactEmail')}
+            </a>.
           </p>
 
           {/* Acknowledge button */}
