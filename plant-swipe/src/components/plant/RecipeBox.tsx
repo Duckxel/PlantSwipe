@@ -295,7 +295,7 @@ function Divider({
             transition={{ type: 'spring', stiffness: 340, damping: 26 }}
             className="absolute left-3 right-3 sm:left-4 sm:right-4"
             style={{
-              bottom: NOTE_TUCK,
+              bottom: DIVIDER_BODY - NOTE_TUCK,
               zIndex: 1,
             }}
           >
