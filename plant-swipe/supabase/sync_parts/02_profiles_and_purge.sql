@@ -45,6 +45,10 @@ COMMENT ON COLUMN public.profiles.profile_link IS 'Optional external URL display
 -- Show country: whether to display country on the public profile (default true)
 alter table if exists public.profiles add column if not exists show_country boolean default true;
 COMMENT ON COLUMN public.profiles.show_country IS 'Whether to display country on public profile. Editable from edit profile dialog.';
+-- Shadow ban backup: stores pre-ban profile/garden/bookmark settings so shadow ban is fully reversible
+alter table if exists public.profiles add column if not exists shadow_ban_backup jsonb;
+COMMENT ON COLUMN public.profiles.shadow_ban_backup IS 'Stores pre-shadow-ban settings (profile privacy, garden privacy, bookmark visibility, notification prefs) so that shadow ban applied at threat_level=3 is fully reversible.';
+
 -- Create GIN index for efficient role queries
 create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
 -- Create index for threat level queries
@@ -118,22 +122,28 @@ do $$ begin
     using (
       id = (select auth.uid())
       or public.is_admin_user((select auth.uid()))
-      or exists (
-        select 1 from public.friends f
-        where (f.user_id = (select auth.uid()) and f.friend_id = profiles.id)
-        or (f.friend_id = (select auth.uid()) and f.user_id = profiles.id)
-      )
-      or exists (
-        select 1 from public.friend_requests fr
-        where fr.requester_id = profiles.id
-        and fr.recipient_id = (select auth.uid())
-        and fr.status = 'pending'
-      )
-      or exists (
-        select 1 from public.friend_requests fr
-        where fr.recipient_id = profiles.id
-        and fr.requester_id = (select auth.uid())
-        and fr.status = 'pending'
+      or (
+        -- Shadow-banned users (threat_level >= 3) are only visible to themselves and admins
+        coalesce(threat_level, 0) < 3
+        and (
+          exists (
+            select 1 from public.friends f
+            where (f.user_id = (select auth.uid()) and f.friend_id = profiles.id)
+            or (f.friend_id = (select auth.uid()) and f.user_id = profiles.id)
+          )
+          or exists (
+            select 1 from public.friend_requests fr
+            where fr.requester_id = profiles.id
+            and fr.recipient_id = (select auth.uid())
+            and fr.status = 'pending'
+          )
+          or exists (
+            select 1 from public.friend_requests fr
+            where fr.recipient_id = profiles.id
+            and fr.requester_id = (select auth.uid())
+            and fr.status = 'pending'
+          )
+        )
       )
     );
 end $$;

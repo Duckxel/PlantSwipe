@@ -248,8 +248,8 @@ create table if not exists public.admin_email_triggers (
 insert into public.admin_email_triggers (trigger_type, display_name, description, is_enabled)
 values 
   ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false),
-  ('BAN_USER', 'User Ban Notification', 'Sent when a user is marked as threat level 3 (ban)', false)
-on conflict (trigger_type) do nothing;
+  ('BAN_USER', 'User Ban Notification', 'Sent when a user is marked as threat level 3 (ban)', true)
+on conflict (trigger_type) do update set is_enabled = true where admin_email_triggers.trigger_type = 'BAN_USER';
 
 alter table public.admin_email_triggers enable row level security;
 
@@ -585,8 +585,20 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='friend_requests' and policyname='friend_requests_insert_own') then
     drop policy friend_requests_insert_own on public.friend_requests;
   end if;
+  -- Users can send friend requests only from themselves, and CANNOT target shadow-banned users (threat_level = 3)
+  -- Also prevent shadow-banned users from sending friend requests themselves
   create policy friend_requests_insert_own on public.friend_requests for insert to authenticated
-    with check (requester_id = (select auth.uid()));
+    with check (
+      requester_id = (select auth.uid())
+      and not exists (
+        select 1 from public.profiles p
+        where p.id = recipient_id and coalesce(p.threat_level, 0) >= 3
+      )
+      and not exists (
+        select 1 from public.profiles p
+        where p.id = requester_id and coalesce(p.threat_level, 0) >= 3
+      )
+    );
 end $$;
 
 do $$ begin
@@ -653,6 +665,7 @@ do $$ begin
 end $$;
 
 -- Function to accept a friend request (creates bidirectional friendship)
+-- Prevents accepting requests involving shadow-banned users (threat_level = 3)
 create or replace function public.accept_friend_request(_request_id uuid)
 returns void
 language plpgsql
@@ -662,6 +675,8 @@ as $$
 declare
   v_requester uuid;
   v_recipient uuid;
+  v_requester_threat integer;
+  v_recipient_threat integer;
 begin
   -- Get request details
   select requester_id, recipient_id into v_requester, v_recipient
@@ -670,6 +685,15 @@ begin
   
   if v_requester is null or v_recipient is null then
     raise exception 'Friend request not found or not authorized';
+  end if;
+
+  -- Check if either user is shadow-banned
+  select coalesce(threat_level, 0) into v_requester_threat from public.profiles where id = v_requester;
+  select coalesce(threat_level, 0) into v_recipient_threat from public.profiles where id = v_recipient;
+  if v_requester_threat >= 3 or v_recipient_threat >= 3 then
+    -- Silently reject - delete the request instead of accepting
+    delete from public.friend_requests where id = _request_id;
+    return;
   end if;
   
   -- Create bidirectional friendship
@@ -804,6 +828,7 @@ do $$ begin
     drop policy garden_invites_insert_own on public.garden_invites;
   end if;
   -- Only garden owners/members can send invites
+  -- Cannot invite shadow-banned users (threat_level >= 3), and shadow-banned users cannot send invites
   create policy garden_invites_insert_own on public.garden_invites for insert to authenticated
     with check (
       inviter_id = (select auth.uid())
@@ -811,6 +836,14 @@ do $$ begin
         select 1 from public.garden_members gm
         where gm.garden_id = garden_invites.garden_id
         and gm.user_id = (select auth.uid())
+      )
+      and not exists (
+        select 1 from public.profiles p
+        where p.id = invitee_id and coalesce(p.threat_level, 0) >= 3
+      )
+      and not exists (
+        select 1 from public.profiles p
+        where p.id = inviter_id and coalesce(p.threat_level, 0) >= 3
       )
     );
 end $$;
@@ -846,6 +879,9 @@ do $$ begin
 end $$;
 
 -- Function to search user profiles with friend prioritization and privacy metadata
+-- Shadow-banned users (threat_level >= 3) are excluded from results UNLESS the viewer is an admin.
+-- Returns is_banned flag so the frontend can display a distinct icon for banned users.
+drop function if exists public.search_user_profiles(text, integer);
 create or replace function public.search_user_profiles(_term text, _limit integer default 3)
 returns table (
   id uuid,
@@ -856,7 +892,8 @@ returns table (
   is_private boolean,
   is_friend boolean,
   is_self boolean,
-  can_view boolean
+  can_view boolean,
+  is_banned boolean
   )
   language sql
   security definer
@@ -870,6 +907,13 @@ returns table (
     viewer as (
       select auth.uid() as viewer_id
     ),
+    viewer_admin as (
+      select exists (
+        select 1 from public.profiles p
+        where p.id = (select viewer_id from viewer)
+          and (p.is_admin = true or 'admin' = any(coalesce(p.roles, '{}')))
+      ) as is_admin
+    ),
     base as (
       select
         p.id,
@@ -878,6 +922,7 @@ returns table (
         p.country,
         p.avatar_url,
         coalesce(p.is_private, false) as is_private,
+        coalesce(p.threat_level, 0) >= 3 as is_banned,
         u.created_at,
         params.term,
         params.limit_value,
@@ -887,6 +932,11 @@ returns table (
       cross join params
       cross join viewer v
       where v.viewer_id is not null
+        -- Exclude shadow-banned users from search results UNLESS viewer is admin
+        and (
+          coalesce(p.threat_level, 0) < 3
+          or (select is_admin from viewer_admin)
+        )
     ),
   relation as (
     select
@@ -939,7 +989,8 @@ returns table (
     m.is_private,
     m.is_friend,
     m.is_self,
-    m.can_view
+    m.can_view,
+    m.is_banned
   from matched m
   order by
     case when m.is_self then -1 else 0 end,

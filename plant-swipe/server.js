@@ -11096,11 +11096,6 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       return { sent: false, reason: 'Trigger is disabled' }
     }
 
-    if (!trigger.template_id) {
-      console.log(`[sendAutomaticEmail] Trigger "${triggerType}" has no template configured`)
-      return { sent: false, reason: 'No template configured' }
-    }
-
     const existingSend = await sql`
       select id from public.admin_automatic_email_sends
       where trigger_type = ${triggerType} and user_id = ${userId}
@@ -11110,6 +11105,11 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
     if (existingSend && existingSend.length > 0) {
       console.log(`[sendAutomaticEmail] Already sent "${triggerType}" to user ${userId}`)
       return { sent: false, reason: 'Already sent to this user' }
+    }
+
+    if (!trigger.template_id) {
+      console.log(`[sendAutomaticEmail] Trigger "${triggerType}" has no template configured`)
+      return { sent: false, reason: 'No template configured' }
     }
 
     const emailTranslations = await fetchEmailTemplateTranslations(trigger.template_id)
@@ -16188,6 +16188,36 @@ app.post('/api/admin/threat-level', async (req, res) => {
       return
     }
 
+    // Shadow ban: when setting threat level to 3, apply shadow restrictions
+    // (private profile, private gardens, private bookmarks, no friend requests, no emails)
+    // When lowering from 3, revert the shadow ban and restore pre-ban settings
+    let shadowBanApplied = false
+    let shadowBanReverted = false
+    if (level === 3 && existingLevel !== 3) {
+      try {
+        await sql`select public.apply_shadow_ban(${uid})`
+        shadowBanApplied = true
+        console.log(`[threat-level] shadow ban applied for user ${uid}`)
+      } catch (sbErr) {
+        console.error('[threat-level] failed to apply shadow ban', sbErr)
+      }
+    } else if (level < 3 && existingLevel === 3) {
+      try {
+        await sql`select public.revert_shadow_ban(${uid})`
+        shadowBanReverted = true
+        console.log(`[threat-level] shadow ban reverted for user ${uid}`)
+      } catch (sbErr) {
+        console.error('[threat-level] failed to revert shadow ban', sbErr)
+      }
+      // Clear previous BAN_USER email send record so the email fires again if re-banned
+      try {
+        await sql`delete from public.admin_automatic_email_sends where trigger_type = 'BAN_USER' and user_id = ${uid}`
+        console.log(`[threat-level] cleared BAN_USER email send record for user ${uid}`)
+      } catch (clearErr) {
+        console.warn('[threat-level] failed to clear BAN_USER email send record', clearErr)
+      }
+    }
+
     let bannedIps = []
     let bannedAt = null
     let bannedByName = null
@@ -16253,12 +16283,22 @@ app.post('/api/admin/threat-level', async (req, res) => {
       }
 
       if (existingLevel !== 3 && normalizedEmail) {
+        console.log(`[threat-level] Sending ban notification email to ${normalizedEmail} (user ${uid})`)
         emailResult = await sendAutomaticEmail('BAN_USER', {
           userId: uid,
           userEmail: normalizedEmail,
           userDisplayName,
           userLanguage,
         })
+        if (emailResult?.sent) {
+          console.log(`[threat-level] Ban email sent successfully to ${normalizedEmail}`)
+        } else {
+          console.warn(`[threat-level] Ban email not sent: ${emailResult?.reason || emailResult?.error || 'unknown reason'}`)
+        }
+      } else if (existingLevel === 3) {
+        console.log(`[threat-level] User ${uid} was already banned — skipping ban email`)
+      } else if (!normalizedEmail) {
+        console.warn(`[threat-level] No email found for user ${uid} — cannot send ban notification`)
       }
     }
 
@@ -16275,6 +16315,8 @@ app.post('/api/admin/threat-level', async (req, res) => {
       bannedById: level === 3 ? adminUserId : null,
       bannedByName: level === 3 ? bannedByName : null,
       email: emailResult,
+      shadowBanApplied: shadowBanApplied || false,
+      shadowBanReverted: shadowBanReverted || false,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to update threat level' })

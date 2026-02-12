@@ -422,6 +422,21 @@
       "statusScheduledNotice": "Cet article est planifié. Il deviendra public à la date de publication."
     }
   },
+  "ban": {
+    "loginBlocked": "Votre compte a été suspendu. Vous ne pouvez pas vous connecter ni créer un nouveau compte. Si vous pensez qu'il s'agit d'une erreur, veuillez nous contacter à support@aphylia.app.",
+    "modal": {
+      "title": "Compte suspendu",
+      "description": "Votre compte a été suspendu en raison d'une violation de nos règles communautaires. Vous allez être déconnecté.",
+      "whatHappened": "Ce que cela signifie",
+      "detail1": "Votre profil a été rendu privé et n'est plus visible par les autres utilisateurs",
+      "detail2": "Vos jardins et favoris ont été rendus privés",
+      "detail3": "Les demandes d'amis et les invitations de jardin ont été désactivées",
+      "detail4": "Les notifications par e-mail et push ont été désactivées",
+      "contact": "Si vous pensez qu'il s'agit d'une erreur, veuillez nous contacter à",
+      "contactEmail": "support@aphylia.app",
+      "acknowledge": "Je comprends — me déconnecter"
+    }
+  },
   "auth": {
     "login": "Se connecter",
     "signup": "Créer votre compte",
@@ -2094,13 +2109,21 @@
       "title": "Ce profil est privé",
       "description": "Seuls les amis peuvent voir ce profil et cette activité."
     },
+    "bannedProfile": {
+      "title": "Cet utilisateur est banni",
+      "description": "Ce compte a été banni (niveau de menace 3). Son profil, ses jardins et ses favoris sont masqués de tous les utilisateurs. Seuls les administrateurs peuvent voir ce profil."
+    },
+    "bannedProfileViewedByAdmin": "Profil d'utilisateur banni consulté par un administrateur",
+    "bannedBadge": "BANNI",
     "searchUsers": {
       "label": "Rechercher des utilisateurs",
       "placeholder": "Recherchez par nom d'affichage ou pseudo...",
       "noResults": "Aucun utilisateur ne correspond à votre recherche.",
       "error": "Impossible de charger les suggestions. Réessayez bientôt.",
       "privateTooltip": "Profil privé — seuls les amis peuvent voir",
-      "privateHint": "Profil privé • seuls les amis peuvent voir"
+      "privateHint": "Profil privé • seuls les amis peuvent voir",
+      "bannedTooltip": "Utilisateur banni — banni de la plateforme",
+      "bannedHint": "Banni • banni de la plateforme"
     },
     "highlights": "Aperçu",
     "plantsOwned": "Plantes possédées",

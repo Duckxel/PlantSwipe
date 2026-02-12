@@ -47,6 +47,7 @@ type PublicProfile = {
   job?: string | null
   profile_link?: string | null
   show_country?: boolean | null
+  is_banned?: boolean | null
 }
 
 type PublicStats = {
@@ -72,6 +73,7 @@ type ProfileSuggestion = {
   isFriend: boolean
   isSelf: boolean
   canView: boolean
+  isBanned: boolean
 }
 
 export default function PublicProfilePage() {
@@ -325,6 +327,7 @@ export default function PublicProfilePage() {
           job: row.job || null,
           profile_link: row.profile_link || null,
           show_country: row.show_country != null ? Boolean(row.show_country) : true,
+          is_banned: Boolean(row.is_banned || false),
         })
 
         // Only load stats and data if user can view profile
@@ -467,6 +470,7 @@ export default function PublicProfilePage() {
             isFriend: Boolean(row.is_friend),
             isSelf: Boolean(row.is_self),
             canView: Boolean(row.can_view),
+            isBanned: Boolean(row.is_banned),
           })))
           setSearchError(null)
         } else {
@@ -940,9 +944,11 @@ export default function PublicProfilePage() {
                   {!searchError && searchResults.length > 0 && (
                     <ul className="max-h-64 overflow-auto py-1">
                       {searchResults.map((suggestion) => {
-                        const secondaryText = !suggestion.canView && !suggestion.isSelf
-                          ? t('profile.searchUsers.privateHint')
-                          : suggestion.country || ''
+                        const secondaryText = suggestion.isBanned
+                          ? t('profile.searchUsers.bannedHint')
+                          : !suggestion.canView && !suggestion.isSelf
+                            ? t('profile.searchUsers.privateHint')
+                            : suggestion.country || ''
                         return (
                           <li key={suggestion.id}>
                             <button
@@ -970,7 +976,16 @@ export default function PublicProfilePage() {
                                       <UserCheck className="h-4 w-4" aria-hidden />
                                     </span>
                                   )}
-                                  {!suggestion.isFriend && !suggestion.isSelf && suggestion.isPrivate && (
+                                  {!suggestion.isFriend && !suggestion.isSelf && suggestion.isBanned && (
+                                    <span
+                                      className="inline-flex items-center text-red-500 dark:text-red-400"
+                                      title={t('profile.searchUsers.bannedTooltip')}
+                                      aria-label={t('profile.searchUsers.bannedTooltip')}
+                                    >
+                                      <Ban className="h-4 w-4" aria-hidden />
+                                    </span>
+                                  )}
+                                  {!suggestion.isFriend && !suggestion.isSelf && suggestion.isPrivate && !suggestion.isBanned && (
                                     <span
                                       className="inline-flex items-center text-stone-400"
                                       title={t('profile.searchUsers.privateTooltip')}
@@ -1033,7 +1048,13 @@ export default function PublicProfilePage() {
                       </span>
                       <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
                     </div>
-                    {pp.isAdminViewingPrivateNonFriend && (
+                    {pp.is_banned && (
+                      <div title={t('profile.bannedProfileViewedByAdmin')} className="flex items-center gap-1">
+                        <Ban className="h-5 w-5 text-red-500 dark:text-red-400" />
+                        <span className="text-xs font-medium text-red-500 dark:text-red-400">{t('profile.bannedBadge')}</span>
+                      </div>
+                    )}
+                    {pp.isAdminViewingPrivateNonFriend && !pp.is_banned && (
                       <div title={t('profile.privateProfileViewedByAdmin')}>
                         <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
                       </div>
@@ -1381,6 +1402,20 @@ export default function PublicProfilePage() {
               )}
             </CardContent>
             </Card>
+
+            {pp.is_banned && profile?.is_admin && (
+              <div className="mt-4 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 flex items-start gap-3">
+                <Ban className="h-5 w-5 mt-0.5 text-red-600 dark:text-red-400 shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-red-900 dark:text-red-100 mb-1">
+                    {t('profile.bannedProfile.title')}
+                  </div>
+                  <div className="text-xs opacity-70 text-red-700 dark:text-red-300">
+                    {t('profile.bannedProfile.description')}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {canViewProfile && (
               <>

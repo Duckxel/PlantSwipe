@@ -661,3 +661,214 @@ do $$ begin
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- ========== Shadow Ban System (Threat Level 3) ==========
+-- When a user's threat level is set to 3, they become a "shadow" on the platform:
+-- their account is NOT deleted, but all public-facing settings are locked down.
+-- The shadow_ban_backup column stores pre-ban settings so changes are fully reversible.
+
+-- Apply shadow ban: saves current settings, then locks everything down
+create or replace function public.apply_shadow_ban(_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile record;
+  v_garden_backups jsonb;
+  v_bookmark_backups jsonb;
+begin
+  -- 1. Read current profile settings before overwriting
+  select
+    is_private,
+    disable_friend_requests,
+    notify_email,
+    notify_push,
+    marketing_consent,
+    email_product_updates,
+    email_tips_advice,
+    email_community_highlights,
+    email_promotions,
+    push_task_reminders,
+    push_friend_activity,
+    push_messages,
+    push_garden_updates,
+    personalized_recommendations,
+    analytics_improvement
+  into v_profile
+  from public.profiles
+  where id = _user_id;
+
+  if v_profile is null then
+    raise exception 'User % not found', _user_id;
+  end if;
+
+  -- 2. Collect current garden privacy settings
+  select coalesce(jsonb_agg(jsonb_build_object('id', g.id, 'privacy', g.privacy)), '[]'::jsonb)
+  into v_garden_backups
+  from public.gardens g
+  join public.garden_members gm on gm.garden_id = g.id
+  where gm.user_id = _user_id and gm.role = 'owner';
+
+  -- 3. Collect current bookmark visibility settings
+  select coalesce(jsonb_agg(jsonb_build_object('id', b.id, 'visibility', b.visibility)), '[]'::jsonb)
+  into v_bookmark_backups
+  from public.bookmarks b
+  where b.user_id = _user_id;
+
+  -- 4. Store backup in profile (only if not already shadow-banned, to avoid overwriting original backup)
+  update public.profiles
+  set shadow_ban_backup = jsonb_build_object(
+    'profile', jsonb_build_object(
+      'is_private', v_profile.is_private,
+      'disable_friend_requests', v_profile.disable_friend_requests,
+      'notify_email', v_profile.notify_email,
+      'notify_push', v_profile.notify_push,
+      'marketing_consent', v_profile.marketing_consent,
+      'email_product_updates', v_profile.email_product_updates,
+      'email_tips_advice', v_profile.email_tips_advice,
+      'email_community_highlights', v_profile.email_community_highlights,
+      'email_promotions', v_profile.email_promotions,
+      'push_task_reminders', v_profile.push_task_reminders,
+      'push_friend_activity', v_profile.push_friend_activity,
+      'push_messages', v_profile.push_messages,
+      'push_garden_updates', v_profile.push_garden_updates,
+      'personalized_recommendations', v_profile.personalized_recommendations,
+      'analytics_improvement', v_profile.analytics_improvement
+    ),
+    'gardens', v_garden_backups,
+    'bookmarks', v_bookmark_backups,
+    'applied_at', to_jsonb(now())
+  )
+  where id = _user_id
+    and shadow_ban_backup is null; -- Don't overwrite existing backup
+
+  -- 5. Lock down profile: private, no friend requests, no emails/push
+  update public.profiles
+  set
+    is_private = true,
+    disable_friend_requests = true,
+    notify_email = false,
+    notify_push = false,
+    marketing_consent = false,
+    email_product_updates = false,
+    email_tips_advice = false,
+    email_community_highlights = false,
+    email_promotions = false,
+    push_task_reminders = false,
+    push_friend_activity = false,
+    push_messages = false,
+    push_garden_updates = false,
+    personalized_recommendations = false,
+    analytics_improvement = false
+  where id = _user_id;
+
+  -- 6. Make all gardens owned by this user private
+  update public.gardens
+  set privacy = 'private'
+  where id in (
+    select gm.garden_id
+    from public.garden_members gm
+    where gm.user_id = _user_id and gm.role = 'owner'
+  );
+
+  -- 7. Make all bookmarks private
+  update public.bookmarks
+  set visibility = 'private'
+  where user_id = _user_id;
+
+  -- 8. Delete pending friend requests TO this user (others can't add them)
+  delete from public.friend_requests
+  where recipient_id = _user_id and status = 'pending';
+
+  -- 9. Delete pending friend requests FROM this user
+  delete from public.friend_requests
+  where requester_id = _user_id and status = 'pending';
+
+  -- 10. Cancel pending garden invites to/from this user
+  update public.garden_invites
+  set status = 'cancelled', responded_at = now()
+  where (invitee_id = _user_id or inviter_id = _user_id)
+    and status = 'pending';
+
+end;
+$$;
+
+-- Revert shadow ban: restores pre-ban settings from backup
+create or replace function public.revert_shadow_ban(_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_backup jsonb;
+  v_profile_backup jsonb;
+  v_garden record;
+  v_bookmark record;
+begin
+  -- 1. Read backup
+  select shadow_ban_backup into v_backup
+  from public.profiles
+  where id = _user_id;
+
+  if v_backup is null then
+    -- No backup to restore; just ensure private settings are reasonable defaults
+    update public.profiles
+    set
+      is_private = false,
+      disable_friend_requests = false,
+      notify_email = true,
+      notify_push = true
+    where id = _user_id;
+    return;
+  end if;
+
+  v_profile_backup := v_backup -> 'profile';
+
+  -- 2. Restore profile settings from backup
+  update public.profiles
+  set
+    is_private = coalesce((v_profile_backup ->> 'is_private')::boolean, false),
+    disable_friend_requests = coalesce((v_profile_backup ->> 'disable_friend_requests')::boolean, false),
+    notify_email = coalesce((v_profile_backup ->> 'notify_email')::boolean, true),
+    notify_push = coalesce((v_profile_backup ->> 'notify_push')::boolean, true),
+    marketing_consent = coalesce((v_profile_backup ->> 'marketing_consent')::boolean, false),
+    email_product_updates = coalesce((v_profile_backup ->> 'email_product_updates')::boolean, true),
+    email_tips_advice = coalesce((v_profile_backup ->> 'email_tips_advice')::boolean, true),
+    email_community_highlights = coalesce((v_profile_backup ->> 'email_community_highlights')::boolean, true),
+    email_promotions = coalesce((v_profile_backup ->> 'email_promotions')::boolean, false),
+    push_task_reminders = coalesce((v_profile_backup ->> 'push_task_reminders')::boolean, true),
+    push_friend_activity = coalesce((v_profile_backup ->> 'push_friend_activity')::boolean, true),
+    push_messages = coalesce((v_profile_backup ->> 'push_messages')::boolean, true),
+    push_garden_updates = coalesce((v_profile_backup ->> 'push_garden_updates')::boolean, true),
+    personalized_recommendations = coalesce((v_profile_backup ->> 'personalized_recommendations')::boolean, true),
+    analytics_improvement = coalesce((v_profile_backup ->> 'analytics_improvement')::boolean, true),
+    shadow_ban_backup = null  -- Clear backup after restore
+  where id = _user_id;
+
+  -- 3. Restore garden privacy settings
+  if v_backup -> 'gardens' is not null then
+    for v_garden in select * from jsonb_array_elements(v_backup -> 'gardens') loop
+      update public.gardens
+      set privacy = coalesce(v_garden.value ->> 'privacy', 'private')
+      where id = (v_garden.value ->> 'id')::uuid;
+    end loop;
+  end if;
+
+  -- 4. Restore bookmark visibility settings
+  if v_backup -> 'bookmarks' is not null then
+    for v_bookmark in select * from jsonb_array_elements(v_backup -> 'bookmarks') loop
+      update public.bookmarks
+      set visibility = coalesce(v_bookmark.value ->> 'visibility', 'public')
+      where id = (v_bookmark.value ->> 'id')::uuid;
+    end loop;
+  end if;
+
+end;
+$$;
+
+-- Grant execute to authenticated (admin will call these via service role anyway)
+grant execute on function public.apply_shadow_ban(uuid) to authenticated;
+grant execute on function public.revert_shadow_ban(uuid) to authenticated;
+

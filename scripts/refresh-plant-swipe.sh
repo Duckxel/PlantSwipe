@@ -928,13 +928,29 @@ else
     sudo -n systemctl status "$SERVICE_NODE" "$SERVICE_ADMIN" --no-pager || true
   fi
 
-  # Post-restart DB health check; if TLS fails, auto-enable insecure DB TLS for immediate availability
-  sleep 1
+  # Post-restart DB health check with retry loop
+  # The Node server needs a few seconds to start up, load dependencies, and bind to port 3000.
+  # Retry up to 10 times (1s apart) before concluding the health check failed.
   if command -v curl >/dev/null 2>&1; then
-    HEALTH="$(curl -sS -m 4 http://127.0.0.1:3000/api/health/db || true)"
-    if echo "$HEALTH" | grep -q '"db"\s*:\s*{\s*"ok"\s*:\s*true'; then
-      log "DB health OK after restart."
-    else
+    HEALTH=""
+    HEALTH_OK=false
+    for attempt in $(seq 1 10); do
+      sleep 2
+      HEALTH="$(curl -sS -m 4 http://127.0.0.1:3000/api/health/db 2>&1 || true)"
+      if echo "$HEALTH" | grep -q '"db"\s*:\s*{\s*"ok"\s*:\s*true'; then
+        log "DB health OK after restart (attempt $attempt)."
+        HEALTH_OK=true
+        break
+      fi
+      # If we got a connection refused, the server isn't up yet — keep retrying
+      if echo "$HEALTH" | grep -qi 'connect\|refused\|reset'; then
+        log "Server not ready yet (attempt $attempt/10), waiting…"
+        continue
+      fi
+      # If we got a response but it's not healthy, stop retrying (it's a real error)
+      break
+    done
+    if [[ "$HEALTH_OK" != "true" ]]; then
       if echo "$HEALTH" | grep -qi 'self-signed certificate'; then
         log "DB TLS verification failed; enabling ALLOW_INSECURE_DB_TLS for availability."
         SENV="/etc/plant-swipe/service.env"

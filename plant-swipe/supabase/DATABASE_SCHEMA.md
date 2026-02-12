@@ -27,7 +27,8 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Custom functions/RPCs** for complex operations
 - **Real-time subscriptions** for live updates
 
-### Recent Updates
+### Recent Updates (Keep Less than 10)
+- **Feb 12, 2026:** Added **Shadow Ban system** for threat level 3 users. When a user's threat level is set to 3, `apply_shadow_ban()` is called to: make their profile private, make all their gardens private, make all their bookmarks private, disable friend requests, remove all email/push notification consent, cancel pending friend requests and garden invites. All pre-ban settings are stored in the new `shadow_ban_backup` JSONB column on `profiles` for full reversibility via `revert_shadow_ban()`. Updated `profiles_select_self` RLS policy, `search_user_profiles` RPC, `get_profile_public_by_display_name` RPC, and `friend_requests`/`garden_invites` insert policies to exclude shadow-banned users.
 - **Feb 12, 2026:** Added `plant_recipes` table to store structured recipe ideas per plant, with `category` (breakfast_brunch, starters_appetizers, soups_salads, main_courses, side_dishes, desserts, drinks, other), `time` (quick, 30_plus, slow_cooking, undefined), and optional `link` (external recipe URL, admin-only, not AI-filled) columns. Includes migration from `recipes_ideas` in `plant_translations`. All existing recipes migrated with category='other' and time='undefined'.
 - **Feb 10, 2026:** Added `impressions` table to track page view counts for plant info pages and blog posts. Admin-only read access. Includes `increment_impression` RPC function.
 - **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type to `notification_automations` for event-driven notifications when a plant request is fulfilled via AI prefill or manual creation. Added `/api/admin/notify-plant-requesters` endpoint.
@@ -280,6 +281,7 @@ looking_for                 TEXT ('eat'|'ornamental'|'various')
 notification_time           TEXT DEFAULT '10h' (0-23h)
 email_verified              BOOLEAN DEFAULT false
 force_password_change       BOOLEAN DEFAULT false  -- When true, user must change password before accessing app
+shadow_ban_backup           JSONB                  -- Stores pre-shadow-ban settings for reversibility when threat_level=3
 -- Communication preferences
 email_product_updates       BOOLEAN DEFAULT true
 email_tips_advice           BOOLEAN DEFAULT true
@@ -518,6 +520,13 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `get_gardens_today_progress_batch(uuid[])` | Batch progress for multiple gardens |
 | `get_task_occurrences_batch(uuid[])` | Get task occurrences efficiently |
 | `ensure_task_occurrences_for_garden(uuid)` | Generate task instances |
+
+### Shadow Ban Functions (Threat Level 3)
+
+| Function | Purpose |
+|----------|---------|
+| `apply_shadow_ban(uuid)` | Apply shadow ban: saves current settings to `shadow_ban_backup`, then makes profile/gardens/bookmarks private, disables friend requests, removes all email/push consent, cancels pending requests/invites |
+| `revert_shadow_ban(uuid)` | Revert shadow ban: restores pre-ban settings from `shadow_ban_backup` column, re-enables original privacy/notification preferences |
 
 ### Utility Functions
 

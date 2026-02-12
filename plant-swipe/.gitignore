@@ -28,6 +28,7 @@ package-lock.json
 
 # Generated files
 public/sitemap.xml
+public/llms.txt
 
 # Ephemeral chat uploads
 uploads/to_delete/

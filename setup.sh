@@ -936,6 +936,26 @@ else
   log "Linked $WEB_ROOT_LINK -> $NODE_DIR"
 fi
 
+# Ensure public/ directory and generated files are writable by the service user
+# This is required for the sitemap generator (runs as www-data) to write
+# sitemap.xml and llms.txt into public/ and dist/
+log "Ensuring public/ directory is writable by $SERVICE_USER for sitemap/llms.txt generation…"
+if [[ -d "$NODE_DIR/public" ]]; then
+  $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/public" || true
+  $SUDO chmod -R u+rwX "$NODE_DIR/public" || true
+fi
+# Also fix dist/ directory if it exists (sitemap is copied there after generation)
+if [[ -d "$NODE_DIR/dist" ]]; then
+  $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/dist" || true
+  $SUDO chmod -R u+rwX "$NODE_DIR/dist" || true
+fi
+# Touch the files that the sitemap generator writes, ensuring they exist and are writable
+for gen_file in "$NODE_DIR/public/sitemap.xml" "$NODE_DIR/public/llms.txt"; do
+  $SUDO touch "$gen_file" 2>/dev/null || true
+  $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$gen_file" 2>/dev/null || true
+  $SUDO chmod 0644 "$gen_file" 2>/dev/null || true
+done
+
 # Ask about SSL setup BEFORE installing nginx config
 WANT_SSL=""
 if [[ ! -f "$REPO_DIR/domain.json" ]]; then

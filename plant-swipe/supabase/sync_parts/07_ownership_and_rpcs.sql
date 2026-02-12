@@ -439,17 +439,27 @@ returns table(
   experience_level text,
   job text,
   profile_link text,
-  show_country boolean
+  show_country boolean,
+  is_banned boolean
 )
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  with base as (
-    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.roles, '{}') as roles, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests, p.experience_level, p.job, p.profile_link, coalesce(p.show_country, true) as show_country
+  with viewer_admin as (
+    select exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid()
+        and (p.is_admin = true or 'admin' = any(coalesce(p.roles, '{}')))
+    ) as is_admin
+  ),
+  base as (
+    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.roles, '{}') as roles, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests, p.experience_level, p.job, p.profile_link, coalesce(p.show_country, true) as show_country, coalesce(p.threat_level, 0) >= 3 as is_banned
     from public.profiles p
     where lower(p.display_name) = lower(_name)
+      -- Exclude shadow-banned users from public profile lookups UNLESS viewer is admin
+      and (coalesce(p.threat_level, 0) < 3 or (select is_admin from viewer_admin))
     limit 1
   ),
   auth_meta as (
@@ -479,7 +489,8 @@ as $$
          b.experience_level,
          b.job,
          b.profile_link,
-         b.show_country
+         b.show_country,
+         b.is_banned
   from base b
   left join auth_meta a on a.id = b.id
   left join ls l on l.user_id = b.id
