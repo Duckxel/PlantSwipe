@@ -406,7 +406,7 @@ function RecipeCard({
           style={{ left: 48, width: 2, background: '#d66' }}
         />
 
-        <div className="relative px-5 sm:px-7 py-4 sm:py-5" style={{ paddingLeft: 58 }}>
+        <div className="relative px-5 sm:px-7 pt-4 sm:pt-5" style={{ paddingLeft: 58, paddingBottom: OVERLAP + TAB_HEIGHT + 8 }}>
           {/* Category heading */}
           <div className="flex items-center gap-2.5 mb-3">
             <span className="text-lg sm:text-xl">{categoryIcon}</span>
