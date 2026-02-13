@@ -1307,12 +1307,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   }))
     const palette = plant.identity?.colors?.length ? plant.identity.colors : []
     const showPalette = palette.length > 0
-    const gridClass = showPalette 
-      ? 'grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)] items-stretch'
-      : 'grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 items-stretch'
-    const dimensionColClass = showPalette ? 'col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-1'
-    const paletteColClass = showPalette ? 'col-span-1' : ''
-    const timelineColClass = showPalette ? 'col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-1'
+    const showRightColumn = showPalette || !!plant.identity?.livingSpace
+    const gridClass = showRightColumn
+      ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-start'
+      : ''
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return t('moreInfo.values.flexible')
       return schedules
@@ -1586,11 +1584,61 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </p>
         </div>
       
-        {/* Dynamic Grid Layout */}
+        {/* Seasonal Timeline — full width, first element */}
+        <section
+          className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
+        >
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+          <div className="relative space-y-3 sm:space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+                <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.timeline.title')}</span>
+              </div>
+              {hoveredMonth ? (
+                <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">{hoveredMonth}</span>
+              ) : (
+                <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">{t('moreInfo.timeline.hoverPrompt')}</span>
+              )}
+            </div>
+            <div className="h-36 sm:h-44">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={timelineData} stackOffset="expand" onMouseMove={handleTimelineHover} onMouseLeave={clearTimelineHover}>
+                  <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
+                  <YAxis hide domain={[0, 3]} />
+                  <RechartsTooltip content={<TimelineTooltip t={t} />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
+                  <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} shape={(props: any) => <RoundedBar {...props} dataKey="sowing" data={timelineData} />} />
+                  <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} shape={(props: any) => <RoundedBar {...props} dataKey="fruiting" data={timelineData} />} />
+                  <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} shape={(props: any) => <RoundedBar {...props} dataKey="flowering" data={timelineData} />} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
+              <span className="flex items-center gap-1 sm:gap-1.5">
+                <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.flowering }} />
+                <Flower2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.flowering }} />
+                {t('moreInfo.timeline.legend.flowering')}
+              </span>
+              <span className="flex items-center gap-1 sm:gap-1.5">
+                <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.fruiting }} />
+                <Cherry className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.fruiting }} />
+                {t('moreInfo.timeline.legend.fruiting')}
+              </span>
+              <span className="flex items-center gap-1 sm:gap-1.5">
+                <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.sowing }} />
+                <Sprout className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.sowing }} />
+                {t('moreInfo.timeline.legend.sowing')}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* Dimensions + Color Moodboard & Living Space grid */}
         <div className={gridClass}>
           {(height !== null || wingspan !== null || spacing !== null) && (
             <section
-              className={`${dimensionColClass} rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent`}
+              className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent"
             >
               <div className="mb-3">
                 <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
@@ -1613,80 +1661,35 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </section>
           )}
 
-            {showPalette && (
-            <section
-              className={`${paletteColClass} justify-self-start w-full sm:w-auto relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4 max-w-[260px] lg:max-w-[240px]`}
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-              <div className="relative space-y-2 sm:space-y-3">
-                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-                  <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
-                </div>
-                <div className="grid grid-cols-1 gap-1.5 sm:gap-2">
-                  {palette.map((color, idx) => {
-                    const colorLabel = color.name || `Color ${idx + 1}`
-                    return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
-                  })}
-                </div>
-              </div>
-            </section>
-          )}
+          {/* Right column: Color Moodboard + Living Space stacked */}
+          {showRightColumn && (
+            <div className="flex flex-col gap-3 sm:gap-4">
+              {showPalette && (
+                <section
+                  className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4"
+                >
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+                  <div className="relative space-y-2 sm:space-y-3">
+                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                      <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-1.5 sm:gap-2">
+                      {palette.map((color, idx) => {
+                        const colorLabel = color.name || `Color ${idx + 1}`
+                        return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
+                      })}
+                    </div>
+                  </div>
+                </section>
+              )}
 
-          <section
-            className={`${timelineColClass} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-            <div className="relative space-y-3 sm:space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-                  <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.timeline.title')}</span>
-                </div>
-                {hoveredMonth ? (
-                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">{hoveredMonth}</span>
-                ) : (
-                  <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">{t('moreInfo.timeline.hoverPrompt')}</span>
-                )}
-              </div>
-              <div className="h-36 sm:h-44">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={timelineData} stackOffset="expand" onMouseMove={handleTimelineHover} onMouseLeave={clearTimelineHover}>
-                    <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
-                    <YAxis hide domain={[0, 3]} />
-                    <RechartsTooltip content={<TimelineTooltip t={t} />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} shape={(props: any) => <RoundedBar {...props} dataKey="sowing" data={timelineData} />} />
-                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} shape={(props: any) => <RoundedBar {...props} dataKey="fruiting" data={timelineData} />} />
-                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} shape={(props: any) => <RoundedBar {...props} dataKey="flowering" data={timelineData} />} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.flowering }} />
-                  <Flower2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.flowering }} />
-                  {t('moreInfo.timeline.legend.flowering')}
-                </span>
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.fruiting }} />
-                  <Cherry className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.fruiting }} />
-                  {t('moreInfo.timeline.legend.fruiting')}
-                </span>
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.sowing }} />
-                  <Sprout className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.sowing }} />
-                  {t('moreInfo.timeline.legend.sowing')}
-                </span>
-              </div>
+              {plant.identity?.livingSpace && (
+                <LivingSpaceVisualizer livingSpace={plant.identity.livingSpace} t={t} />
+              )}
             </div>
-          </section>
+          )}
         </div>
-
-        {/* Indoor / Outdoor Visualizer */}
-        {plant.identity?.livingSpace && (
-          <LivingSpaceVisualizer livingSpace={plant.identity.livingSpace} t={t} />
-        )}
 
         {/* Habitat Map */}
         {habitats.length > 0 && (
