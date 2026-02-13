@@ -19,7 +19,8 @@ import {
   User,
   Loader2,
   Clock,
-  ExternalLink
+  ExternalLink,
+  ListChecks
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabaseClient'
@@ -44,6 +45,7 @@ interface NotificationPanelProps {
   anchorRef: React.RefObject<HTMLElement | null>
   friendRequests: FriendRequest[]
   gardenInvites: GardenInvite[]
+  pendingTaskCount?: number
   onRefresh: (force?: boolean) => Promise<void>
 }
 
@@ -90,6 +92,7 @@ export function NotificationPanel({
   anchorRef,
   friendRequests,
   gardenInvites,
+  pendingTaskCount = 0,
   onRefresh
 }: NotificationPanelProps) {
   const { t } = useTranslation('common')
@@ -221,7 +224,8 @@ export function NotificationPanel({
 
   if (!isOpen || !position) return null
 
-  const hasItems = friendRequests.length > 0 || gardenInvites.length > 0
+  const hasItems = friendRequests.length > 0 || gardenInvites.length > 0 || pendingTaskCount > 0
+  const totalPendingCount = friendRequests.length + gardenInvites.length + pendingTaskCount
 
   return createPortal(
     <div
@@ -243,7 +247,7 @@ export function NotificationPanel({
             </h3>
             {hasItems && (
               <p className="text-xs text-stone-500 dark:text-stone-400">
-                {friendRequests.length + gardenInvites.length} {t('notifications.pending', { defaultValue: 'pending' })}
+                {totalPendingCount} {t('notifications.pending', { defaultValue: 'pending' })}
               </p>
             )}
           </div>
@@ -266,6 +270,41 @@ export function NotificationPanel({
           </div>
         ) : (
           <div className="p-3 space-y-3">
+            {/* Pending Tasks */}
+            {pendingTaskCount > 0 && (
+              <div>
+                <div className="flex items-center gap-2 px-2 mb-2">
+                  <ListChecks className="h-3.5 w-3.5 text-amber-500" />
+                  <span className="text-[11px] font-semibold text-stone-400 dark:text-stone-500 uppercase tracking-wider">
+                    {t('notifications.gardenTasks', { defaultValue: 'Garden Tasks' })}
+                  </span>
+                  <span className="ml-auto text-[11px] text-amber-500 font-bold">{pendingTaskCount}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    onClose()
+                    navigate('/gardens')
+                  }}
+                  className="w-full p-3 rounded-xl bg-gradient-to-r from-amber-50/80 to-orange-50/50 dark:from-amber-900/15 dark:to-orange-900/10 border border-amber-100/80 dark:border-amber-800/30 hover:border-amber-200 dark:hover:border-amber-700/50 transition-colors text-left group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-amber-500/20">
+                      <ListChecks className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-stone-900 dark:text-white">
+                        {t('notifications.tasksRemaining', { count: pendingTaskCount, defaultValue: '{{count}} tasks remaining today' })}
+                      </p>
+                      <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+                        {t('notifications.tapToViewTasks', { defaultValue: 'Tap to view your garden tasks' })}
+                      </p>
+                    </div>
+                    <Sprout className="h-4 w-4 text-amber-400 group-hover:text-amber-500 transition-colors" />
+                  </div>
+                </button>
+              </div>
+            )}
+
             {/* Friend Requests */}
             {friendRequests.length > 0 && (
               <div>
@@ -534,6 +573,7 @@ interface NotificationBellProps {
   totalCount: number
   friendRequests: FriendRequest[]
   gardenInvites: GardenInvite[]
+  pendingTaskCount?: number
   onRefresh: (force?: boolean) => Promise<void>
   className?: string
 }
@@ -542,6 +582,7 @@ export function NotificationBell({
   totalCount,
   friendRequests,
   gardenInvites,
+  pendingTaskCount = 0,
   onRefresh,
   className
 }: NotificationBellProps) {
@@ -579,6 +620,7 @@ export function NotificationBell({
         anchorRef={buttonRef}
         friendRequests={friendRequests}
         gardenInvites={gardenInvites}
+        pendingTaskCount={pendingTaskCount}
         onRefresh={onRefresh}
       />
     </>

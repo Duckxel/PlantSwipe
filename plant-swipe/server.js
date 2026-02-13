@@ -9771,7 +9771,8 @@ app.post('/api/admin/notification-automations/:id/trigger', async (req, res) => 
       return
     }
     const automation = rows[0]
-    if (!automation.template_id || !automation.message_variants?.length) {
+    // Allow daily_task_reminder to run without a template (uses built-in defaults)
+    if (automation.trigger_type !== 'daily_task_reminder' && (!automation.template_id || !automation.message_variants?.length)) {
       res.status(400).json({ error: 'Automation has no template configured' })
       return
     }
@@ -9795,11 +9796,20 @@ app.post('/api/admin/notification-automations/:id/trigger', async (req, res) => 
 async function runAutomation(automation) {
   if (!sql) return { error: 'Database not configured' }
 
-  const defaultVariants = toStringArray(automation.message_variants)
-  if (!defaultVariants.length) return { error: 'No message variants' }
+  let defaultVariants = toStringArray(automation.message_variants)
+  // For daily_task_reminder: use hardcoded defaults when no template is configured
+  const isTaskReminderFallback = automation.trigger_type === 'daily_task_reminder' && !defaultVariants.length
+  if (isTaskReminderFallback) {
+    defaultVariants = DAILY_TASK_REMINDER_DEFAULTS.variants.en
+  } else if (!defaultVariants.length) {
+    return { error: 'No message variants' }
+  }
 
-  // Get the notification title from template (fallback to automation display_name)
-  const notificationTitle = automation.template_title || automation.display_name || 'Reminder'
+  // Get the notification title from template (fallback to automation display_name or built-in default)
+  let notificationTitle = automation.template_title || automation.display_name || 'Reminder'
+  if (isTaskReminderFallback) {
+    notificationTitle = DAILY_TASK_REMINDER_DEFAULTS.title.en
+  }
 
   // Load translations for the template
   let translations = {}
@@ -9871,44 +9881,54 @@ async function runAutomation(automation) {
     return { recipients: 0, sent: 0, message: 'No recipients found' }
   }
 
+  // Determine default CTA URL based on automation type
+  let defaultCtaUrl = '/'
+  switch (automation.trigger_type) {
+    case 'daily_task_reminder': defaultCtaUrl = '/gardens'; break
+    case 'journal_continue_reminder': defaultCtaUrl = '/gardens'; break
+    case 'weekly_inactive_reminder': defaultCtaUrl = '/discovery'; break
+  }
+  const targetCtaUrl = automation.cta_url || defaultCtaUrl
+
   // Create user_notifications entries
   let insertedCount = 0
   for (const recipient of recipients) {
     // Get message variants for user's language (with fallback to default)
-    const messageVariants = resolveMessageVariants(defaultVariants, normalizedTranslations, recipient.language)
+    let messageVariants
+    let personalizedNotificationTitle = notificationTitle
+    if (isTaskReminderFallback) {
+      const lang = normalizeLanguageCode(recipient.language)
+      const baseLang = lang ? lang.split('-')[0] : 'en'
+      messageVariants = DAILY_TASK_REMINDER_DEFAULTS.variants[baseLang] || DAILY_TASK_REMINDER_DEFAULTS.variants.en
+      personalizedNotificationTitle = DAILY_TASK_REMINDER_DEFAULTS.title[baseLang] || DAILY_TASK_REMINDER_DEFAULTS.title.en
+    } else {
+      messageVariants = resolveMessageVariants(defaultVariants, normalizedTranslations, recipient.language)
+    }
     const shouldRandomize = automation.randomize !== false
     const messageIndex = shouldRandomize
       ? Math.floor(Math.random() * messageVariants.length)
       : 0
     const message = messageVariants[messageIndex]
       .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
-    const personalizedTitle = notificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+    const personalizedTitle = personalizedNotificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
     try {
-      // Check if notification already exists for this automation + user today
-      const existing = await sql`
-        select id from public.user_notifications 
-        where automation_id = ${automation.id} 
-          and user_id = ${recipient.user_id}
-          and scheduled_for::date = current_date
-        limit 1
-      `
-      if (existing && existing.length > 0) {
-        continue // Skip, already sent today
-      }
-
+      // Test Now: skip dedup check — manual triggers should always send.
+      // The automatic scheduler has its own dedup that only counts
+      // non-test notifications, so Test Now never blocks scheduled sends.
       await sql`
         insert into public.user_notifications (
-          automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
+          automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status, payload
         )
         values (
           ${automation.id},
           ${recipient.user_id},
           ${personalizedTitle},
           ${message},
-          ${automation.cta_url || null},
+          ${targetCtaUrl},
           now(),
-          'pending'
+          'pending',
+          ${sql.json({ source: 'manual_test' })}
         )
       `
       insertedCount++
@@ -27480,6 +27500,8 @@ async function deliverPushNotifications(notifications, campaign) {
               notificationId: notification.id,
               url: notification.cta_url || null,
               ctaUrl: notification.cta_url || null,
+              // Include automation type so the service worker can route correctly
+              type: notification.automation_trigger_type || null,
             },
           }),
         )
@@ -27577,8 +27599,11 @@ async function processDueUserNotifications() {
         un.message,
         un.payload,
         un.cta_url,
-        un.campaign_id::text as campaign_id
+        un.campaign_id::text as campaign_id,
+        un.automation_id::text as automation_id,
+        a.trigger_type as automation_trigger_type
       from public.user_notifications un
+      left join public.notification_automations a on a.id = un.automation_id
       where un.delivery_status = 'pending'
         and un.cancelled_at is null
         and un.scheduled_for <= now()
@@ -27777,14 +27802,33 @@ async function runNotificationWorkerTick() {
   }
 }
 
+// Hardcoded default messages for daily_task_reminder when no template is configured
+// These ensure task notifications work out-of-the-box without admin setup
+const DAILY_TASK_REMINDER_DEFAULTS = {
+  title: { en: 'Garden Tasks', fr: 'Tâches du jardin' },
+  variants: {
+    en: [
+      'You have tasks to complete in your garden today!',
+      'Your plants need attention — check your garden tasks!',
+      'Don\'t forget your garden tasks for today!',
+    ],
+    fr: [
+      'Vous avez des tâches à accomplir dans votre jardin aujourd\'hui !',
+      'Vos plantes ont besoin d\'attention — consultez vos tâches !',
+      'N\'oubliez pas vos tâches de jardin pour aujourd\'hui !',
+    ],
+  },
+}
+
 // Process due automations based on user timezone and send_hour
 async function processDueAutomations() {
   if (!sql) return
 
   try {
-    // Get all enabled automations with their templates and translations
+    // Get all enabled automations with templates, PLUS always include daily_task_reminder
+    // even if it's disabled or has no template (we provide hardcoded defaults for task reminders)
     const automations = await sql`
-      select a.*, t.message_variants, t.randomize, t.title as template_title, t.id as template_id,
+      select a.*, t.message_variants, t.randomize, t.title as template_title, t.id as resolved_template_id,
              trans.translations
       from public.notification_automations a
       left join public.notification_templates t on t.id = a.template_id
@@ -27793,8 +27837,8 @@ async function processDueAutomations() {
         from public.notification_template_translations ntt
         where ntt.template_id = t.id
       ) trans on true
-      where a.is_enabled = true
-        and a.template_id is not null
+      where (a.is_enabled = true and a.template_id is not null)
+         or a.trigger_type = 'daily_task_reminder'
     `
 
     if (!automations || !automations.length) return
@@ -27836,6 +27880,7 @@ async function processDueAutomations() {
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
                   and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+                  and (un.payload->>'source' is distinct from 'manual_test')
               )
             limit 1000
           `
@@ -27862,6 +27907,7 @@ async function processDueAutomations() {
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
                   and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+                  and (un.payload->>'source' is distinct from 'manual_test')
               )
             limit 1000
           `
@@ -27880,6 +27926,7 @@ async function processDueAutomations() {
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
                   and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+                  and (un.payload->>'source' is distinct from 'manual_test')
               )
             limit 1000
           `
@@ -27934,12 +27981,20 @@ async function processDueAutomations() {
         }
 
         // Default message variants (English)
-        const defaultVariants = toStringArray(automation.message_variants)
-        if (!defaultVariants.length) {
+        let defaultVariants = toStringArray(automation.message_variants)
+        let notificationTitle = automation.template_title || automation.display_name || 'Reminder'
+
+        // For daily_task_reminder: use hardcoded defaults when no template is configured
+        // This ensures task notifications work out-of-the-box without admin setup
+        const isTaskReminderFallback = automation.trigger_type === 'daily_task_reminder' && !defaultVariants.length
+        if (isTaskReminderFallback) {
+          defaultVariants = DAILY_TASK_REMINDER_DEFAULTS.variants.en
+          notificationTitle = DAILY_TASK_REMINDER_DEFAULTS.title.en
+          console.log(`[automations] daily_task_reminder: Using built-in default messages (no template configured)`)
+        } else if (!defaultVariants.length) {
           console.warn(`[automations] ${automation.trigger_type}: No message template configured, skipping`)
           continue
         }
-        const notificationTitle = automation.template_title || automation.display_name || 'Reminder'
 
         console.log(`[automations] Processing ${automation.trigger_type}: ${recipients.length} recipients`)
 
@@ -27953,7 +28008,7 @@ async function processDueAutomations() {
             defaultUrl = '/gardens'
             break
           case 'weekly_inactive_reminder':
-            defaultUrl = '/'
+            defaultUrl = '/discovery'
             break
         }
         const targetUrl = automation.cta_url || defaultUrl
@@ -27962,7 +28017,16 @@ async function processDueAutomations() {
         let skippedCount = 0
         for (const recipient of recipients) {
           // Get message variants for user's language (with fallback to default)
-          const messageVariants = resolveMessageVariants(defaultVariants, translations, recipient.language)
+          // For task reminder fallback, also check built-in translations
+          let messageVariants
+          if (isTaskReminderFallback) {
+            const lang = normalizeLanguageCode(recipient.language)
+            const baseLang = lang ? lang.split('-')[0] : 'en'
+            messageVariants = DAILY_TASK_REMINDER_DEFAULTS.variants[baseLang] || DAILY_TASK_REMINDER_DEFAULTS.variants.en
+            notificationTitle = DAILY_TASK_REMINDER_DEFAULTS.title[baseLang] || DAILY_TASK_REMINDER_DEFAULTS.title.en
+          } else {
+            messageVariants = resolveMessageVariants(defaultVariants, translations, recipient.language)
+          }
           const shouldRandomize = automation.randomize !== false
           const messageIndex = shouldRandomize
             ? Math.floor(Math.random() * messageVariants.length)
@@ -27972,9 +28036,29 @@ async function processDueAutomations() {
           const personalizedTitle = notificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
           try {
-            // Insert notification with conflict handling for the unique automation constraint
-            // The unique constraint is on (automation_id, user_id, scheduled_for::date)
-            const insertResult = await sql`
+            // Check if a SCHEDULED notification already exists for this automation + user today.
+            // Manual test notifications (payload->>'source' = 'manual_test') are excluded
+            // so that "Test Now" never blocks the scheduled automatic send.
+            const existing = await sql`
+              select id from public.user_notifications
+              where automation_id = ${automation.id}
+                and user_id = ${recipient.user_id}
+                and (scheduled_for at time zone coalesce(
+                  (select timezone from public.profiles where id = ${recipient.user_id}),
+                  ${DEFAULT_USER_TIMEZONE}
+                ))::date = (now() at time zone coalesce(
+                  (select timezone from public.profiles where id = ${recipient.user_id}),
+                  ${DEFAULT_USER_TIMEZONE}
+                ))::date
+                and (payload->>'source' is distinct from 'manual_test')
+              limit 1
+            `
+            if (existing && existing.length > 0) {
+              skippedCount++
+              continue
+            }
+
+            await sql`
               insert into public.user_notifications (
                 automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
               )
@@ -27987,17 +28071,10 @@ async function processDueAutomations() {
                 now(),
                 'pending'
               )
-              on conflict (automation_id, user_id, (scheduled_for::date)) where automation_id is not null
-              do nothing
-              returning id
             `
-            if (insertResult && insertResult.length > 0) {
-              insertedCount++
-            } else {
-              skippedCount++
-            }
+            insertedCount++
           } catch (insertErr) {
-            // Log errors for debugging (duplicate key violations expected if constraint triggered)
+            // Log errors for debugging
             if (!insertErr?.message?.includes('duplicate key') && !insertErr?.message?.includes('violates unique constraint')) {
               console.warn(`[automations] Failed to insert notification for user ${recipient.user_id}:`, insertErr?.message)
             }

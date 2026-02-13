@@ -384,6 +384,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
         onClose={() => setNotificationSheetOpen(false)}
         friendRequests={friendRequests}
         gardenInvites={gardenInvites}
+        pendingTaskCount={counts.pendingTasks}
         onRefresh={refreshNotifications}
       />
     </>

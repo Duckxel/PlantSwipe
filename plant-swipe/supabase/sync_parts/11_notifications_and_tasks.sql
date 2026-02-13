@@ -234,6 +234,15 @@ begin
         on public.user_notifications (automation_id, user_id, scheduled_for)
         where automation_id is not null;
     end if;
+    -- UNIQUE index for deduplicating automation notifications per user per day.
+    -- This is required by the ON CONFLICT clause in processDueAutomations() (server.js).
+    -- Without this index, every INSERT fails with "no unique or exclusion constraint
+    -- matching the ON CONFLICT specification" and NO automation notifications are ever delivered.
+    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_automation_unique_daily') then
+      create unique index user_notifications_automation_unique_daily
+        on public.user_notifications (automation_id, user_id, (scheduled_for::date))
+        where automation_id is not null;
+    end if;
   end if;
 end $$;
 

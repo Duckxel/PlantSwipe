@@ -59,4 +59,5 @@ export interface NotificationCounts {
   friendRequests: number
   gardenInvites: number
   unreadMessages: number
+  pendingTasks: number
 }
