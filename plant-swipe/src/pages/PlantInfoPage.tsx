@@ -54,6 +54,8 @@ import {
   FileText,
   Wrench,
   ChartNoAxesColumn,
+  Flower2,
+  Cherry,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -1670,7 +1672,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">{t('moreInfo.timeline.hoverPrompt')}</span>
                 )}
               </div>
-              <div className="h-52 sm:h-64">
+              <div className="h-36 sm:h-44">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={timelineData} stackOffset="expand" onMouseMove={handleTimelineHover} onMouseLeave={clearTimelineHover}>
                     <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
@@ -1684,16 +1686,19 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </ResponsiveContainer>
               </div>
               <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
-                <span className="flex items-center gap-1.5 sm:gap-2">
+                <span className="flex items-center gap-1 sm:gap-1.5">
                   <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.flowering }} />
+                  <Flower2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.flowering }} />
                   {t('moreInfo.timeline.legend.flowering')}
                 </span>
-                <span className="flex items-center gap-1.5 sm:gap-2">
+                <span className="flex items-center gap-1 sm:gap-1.5">
                   <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.fruiting }} />
+                  <Cherry className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.fruiting }} />
                   {t('moreInfo.timeline.legend.fruiting')}
                 </span>
-                <span className="flex items-center gap-1.5 sm:gap-2">
+                <span className="flex items-center gap-1 sm:gap-1.5">
                   <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.sowing }} />
+                  <Sprout className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.sowing }} />
                   {t('moreInfo.timeline.legend.sowing')}
                 </span>
               </div>
@@ -1947,8 +1952,11 @@ const TimelineTooltip = (
       <div className="space-y-1 mt-1">
         {Object.entries(data).map(([key, value]) =>
           value && key !== 'month' ? (
-            <div key={key} className="flex items-center gap-2">
+            <div key={key} className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TIMELINE_COLORS[key as keyof typeof TIMELINE_COLORS] }} />
+              {key === 'flowering' && <Flower2 className="h-3 w-3" style={{ color: TIMELINE_COLORS.flowering }} />}
+              {key === 'fruiting' && <Cherry className="h-3 w-3" style={{ color: TIMELINE_COLORS.fruiting }} />}
+              {key === 'sowing' && <Sprout className="h-3 w-3" style={{ color: TIMELINE_COLORS.sowing }} />}
               <span>{translateKey(key)}</span>
             </div>
           ) : null,
