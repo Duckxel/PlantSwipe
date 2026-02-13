@@ -24,6 +24,9 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, className }
     }
     const { width: initialWidth, height: initialHeight } = resolveSize()
     renderer.setSize(initialWidth, initialHeight)
+    renderer.domElement.style.display = 'block'
+    renderer.domElement.style.width = '100%'
+    renderer.domElement.style.height = '100%'
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
@@ -236,7 +239,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, className }
     }
   }, [scale])
 
-  return <div ref={containerRef} className={cn('relative h-full w-full', className)} />
+  return <div ref={containerRef} className={cn('relative h-full w-full overflow-hidden', className)} />
 }
 
 export default DimensionCube
