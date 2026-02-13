@@ -1878,6 +1878,8 @@ export const AdminPage: React.FC = () => {
     requested_by: string | null;
     requester_name: string | null;
     requester_email: string | null;
+    /** Whether the requester has admin or editor roles (can create plants themselves) */
+    requester_is_staff: boolean | null;
   };
   type BulkPlantRequestSummary = {
     totalInput: number;
@@ -1890,6 +1892,9 @@ export const AdminPage: React.FC = () => {
     skippedExistingSamples: string[];
     errorSamples: Array<{ name: string; error: string }>;
   };
+  const PLANT_REQUESTS_INITIAL_LIMIT = 100;
+  const PLANT_REQUESTS_PAGE_SIZE = 50;
+
   const [plantRequests, setPlantRequests] = React.useState<PlantRequestRow[]>(
     [],
   );
@@ -1902,14 +1907,23 @@ export const AdminPage: React.FC = () => {
   >(null);
   const [plantRequestsInitialized, setPlantRequestsInitialized] =
     React.useState<boolean>(false);
+  // Accurate total counts (from separate count query, not capped by row limit)
+  const [plantRequestsTotalCount, setPlantRequestsTotalCount] =
+    React.useState<number>(0);
+  const [plantRequestsTotalRequestsSum, setPlantRequestsTotalRequestsSum] =
+    React.useState<number>(0);
+  const [plantRequestsHasMore, setPlantRequestsHasMore] =
+    React.useState<boolean>(false);
+  const [plantRequestsLoadingMore, setPlantRequestsLoadingMore] =
+    React.useState<boolean>(false);
 
-  // Count unique requested plants
-  const uniqueRequestedPlantsCount = React.useMemo(() => {
-    const uniqueNames = new Set(
-      plantRequests.map((req) => req.plant_name_normalized).filter(Boolean),
-    );
-    return uniqueNames.size;
-  }, [plantRequests]);
+  // Toggle to hide requests made by admins/editors (who can create plants themselves)
+  const [hideStaffRequests, setHideStaffRequests] = React.useState<boolean>(true);
+  // Cache of staff (admin/editor) user IDs for filtering
+  const staffUserIdsRef = React.useRef<Set<string>>(new Set());
+
+  // Count unique requested plants - use accurate count from DB, not loaded rows
+  const uniqueRequestedPlantsCount = plantRequestsTotalCount;
   const [completingRequestId, setCompletingRequestId] = React.useState<
     string | null
   >(null);
@@ -2120,6 +2134,84 @@ export const AdminPage: React.FC = () => {
     meta: 'Meta',
   };
 
+  const parseRequestRows = React.useCallback((data: any[]): PlantRequestRow[] => {
+    return (data ?? [])
+      .map((row: any) => {
+        const id = row?.id ? String(row.id) : null;
+        if (!id) return null;
+        const requestCountRaw = row?.request_count;
+        const requestCount =
+          typeof requestCountRaw === "number"
+            ? requestCountRaw
+            : Number(requestCountRaw ?? 0);
+        const requestedBy = row?.requested_by ? String(row.requested_by) : null;
+        return {
+          id,
+          plant_name: row?.plant_name
+            ? String(row.plant_name)
+            : row?.plant_name_normalized
+              ? String(row.plant_name_normalized)
+              : "Unknown request",
+          plant_name_normalized: row?.plant_name_normalized
+            ? String(row.plant_name_normalized)
+            : row?.plant_name
+              ? String(row.plant_name).toLowerCase().trim()
+              : "",
+          request_count: Number.isFinite(requestCount) ? requestCount : 0,
+          created_at: row?.created_at ?? null,
+          updated_at: row?.updated_at ?? null,
+          requested_by: requestedBy,
+          requester_name: null as string | null,
+          requester_email: null as string | null,
+          requester_is_staff: requestedBy ? staffUserIdsRef.current.has(requestedBy) : null,
+        };
+      })
+      .filter((row): row is PlantRequestRow => row !== null);
+  }, []);
+
+  /** Fetch all admin/editor user IDs once and cache them */
+  const loadStaffUserIds = React.useCallback(async () => {
+    try {
+      // Query profiles that have admin or editor roles, or is_admin = true
+      // This is a small set (handful of users), so no pagination needed
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, is_admin, roles")
+        .or("is_admin.eq.true,roles.cs.{admin},roles.cs.{editor}");
+      if (error) {
+        console.warn("Failed to load staff user IDs:", error.message);
+        return;
+      }
+      const ids = new Set<string>();
+      for (const row of data ?? []) {
+        if (!row?.id) continue;
+        const isAdmin = row.is_admin === true;
+        const roles = Array.isArray(row.roles) ? row.roles : [];
+        if (isAdmin || roles.includes("admin") || roles.includes("editor")) {
+          ids.add(String(row.id));
+        }
+      }
+      staffUserIdsRef.current = ids;
+    } catch (err) {
+      console.warn("Failed to load staff user IDs:", err);
+    }
+  }, [supabase]);
+
+  /** Enrich rows with staff status from cached staff IDs */
+  const enrichRowsWithStaffStatus = React.useCallback(
+    (rows: PlantRequestRow[]): PlantRequestRow[] => {
+      const staffIds = staffUserIdsRef.current;
+      if (staffIds.size === 0) return rows;
+      return rows.map((row) => ({
+        ...row,
+        requester_is_staff: row.requested_by
+          ? staffIds.has(row.requested_by)
+          : null,
+      }));
+    },
+    [],
+  );
+
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
       setPlantRequestsError(null);
@@ -2129,6 +2221,48 @@ export const AdminPage: React.FC = () => {
         setPlantRequestsRefreshing(true);
       }
       try {
+        // 0. Ensure staff user IDs are loaded (for admin/editor filter)
+        if (staffUserIdsRef.current.size === 0) {
+          await loadStaffUserIds();
+        }
+
+        // 1. Get accurate total count (not capped by row limit)
+        const { count: totalCount, error: countError } = await supabase
+          .from("requested_plants")
+          .select("id", { head: true, count: "exact" })
+          .is("completed_at", null);
+
+        if (countError) throw new Error(countError.message);
+        const accurateCount = totalCount ?? 0;
+        setPlantRequestsTotalCount(accurateCount);
+
+        // 2. Get accurate sum of all request_count values (paginate to avoid 1000 row cap)
+        let totalSum = 0;
+        let sumOffset = 0;
+        const sumPageSize = 1000;
+        let hasMoreSum = true;
+        while (hasMoreSum) {
+          const { data: sumData, error: sumError } = await supabase
+            .from("requested_plants")
+            .select("request_count")
+            .is("completed_at", null)
+            .range(sumOffset, sumOffset + sumPageSize - 1);
+          if (sumError) break;
+          if (!sumData || sumData.length === 0) {
+            hasMoreSum = false;
+          } else {
+            totalSum += sumData.reduce(
+              (sum: number, row: any) => sum + (Number(row?.request_count) || 0),
+              0,
+            );
+            sumOffset += sumData.length;
+            if (sumData.length < sumPageSize) hasMoreSum = false;
+          }
+        }
+        setPlantRequestsTotalRequestsSum(totalSum);
+
+        // 3. Fetch first page of rows (paginated)
+        const limit = PLANT_REQUESTS_INITIAL_LIMIT;
         const { data, error } = await supabase
           .from("requested_plants")
           .select(
@@ -2136,42 +2270,14 @@ export const AdminPage: React.FC = () => {
           )
           .is("completed_at", null)
           .order("request_count", { ascending: false })
-          .order("updated_at", { ascending: false });
+          .order("updated_at", { ascending: false })
+          .range(0, limit - 1);
 
         if (error) throw new Error(error.message);
 
-        const rows: PlantRequestRow[] = (data ?? [])
-          .map((row: any) => {
-            const id = row?.id ? String(row.id) : null;
-            if (!id) return null;
-            const requestCountRaw = row?.request_count;
-            const requestCount =
-              typeof requestCountRaw === "number"
-                ? requestCountRaw
-                : Number(requestCountRaw ?? 0);
-            return {
-              id,
-              plant_name: row?.plant_name
-                ? String(row.plant_name)
-                : row?.plant_name_normalized
-                  ? String(row.plant_name_normalized)
-                  : "Unknown request",
-              plant_name_normalized: row?.plant_name_normalized
-                ? String(row.plant_name_normalized)
-                : row?.plant_name
-                  ? String(row.plant_name).toLowerCase().trim()
-                  : "",
-              request_count: Number.isFinite(requestCount) ? requestCount : 0,
-              created_at: row?.created_at ?? null,
-              updated_at: row?.updated_at ?? null,
-              requested_by: row?.requested_by ? String(row.requested_by) : null,
-              requester_name: null as string | null,
-              requester_email: null as string | null,
-            };
-          })
-          .filter((row): row is PlantRequestRow => row !== null);
-
+        const rows = enrichRowsWithStaffStatus(parseRequestRows(data));
         setPlantRequests(rows);
+        setPlantRequestsHasMore(rows.length < accurateCount);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setPlantRequestsError(msg);
@@ -2187,8 +2293,48 @@ export const AdminPage: React.FC = () => {
         }
       }
     },
-    [supabase],
+    [supabase, parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds],
   );
+
+  const loadMorePlantRequests = React.useCallback(async () => {
+    if (plantRequestsLoadingMore || !plantRequestsHasMore) return;
+    setPlantRequestsLoadingMore(true);
+    setPlantRequestsError(null);
+    try {
+      const offset = plantRequests.length;
+      const limit = PLANT_REQUESTS_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from("requested_plants")
+        .select(
+          "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
+        )
+        .is("completed_at", null)
+        .order("request_count", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) throw new Error(error.message);
+
+      const newRows = enrichRowsWithStaffStatus(parseRequestRows(data));
+      setPlantRequests((prev) => [...prev, ...newRows]);
+      setPlantRequestsHasMore(
+        plantRequests.length + newRows.length < plantRequestsTotalCount,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPlantRequestsError(msg);
+    } finally {
+      setPlantRequestsLoadingMore(false);
+    }
+  }, [
+    plantRequestsLoadingMore,
+    plantRequestsHasMore,
+    plantRequests.length,
+    plantRequestsTotalCount,
+    supabase,
+    parseRequestRows,
+    enrichRowsWithStaffStatus,
+  ]);
 
   const loadRequestUsers = React.useCallback(
     async (plantNameNormalized: string) => {
@@ -3092,22 +3238,9 @@ export const AdminPage: React.FC = () => {
     [promotionMonthData],
   );
 
-  const totalPlantRequestsCount = React.useMemo(
-    () =>
-      plantRequests.reduce(
-        (sum, req) => sum + (Number(req.request_count) || 0),
-        0,
-      ),
-    [plantRequests],
-  );
-  const totalUniquePlantRequests = React.useMemo(
-    () =>
-      plantRequests.reduce(
-        (sum, req) => sum + (req.request_count > 0 ? 1 : 0),
-        0,
-      ),
-    [plantRequests],
-  );
+  // Use accurate counts from DB (not limited by pagination)
+  const totalPlantRequestsCount = plantRequestsTotalRequestsSum;
+  const totalUniquePlantRequests = plantRequestsTotalCount;
 
   const requestsVsApproved = React.useMemo(() => {
     const denominator = approvedPlantsCount > 0 ? approvedPlantsCount : null;
@@ -3137,7 +3270,7 @@ export const AdminPage: React.FC = () => {
       approved: approvedPlantsCount,
       requests: totalPlantRequestsCount,
     };
-  }, [approvedPlantsCount, totalPlantRequestsCount]);
+  }, [approvedPlantsCount, totalPlantRequestsCount, totalUniquePlantRequests]);
 
   const filteredPlantRows = React.useMemo(() => {
     const term = plantSearchQuery.trim().toLowerCase();
@@ -3307,6 +3440,8 @@ export const AdminPage: React.FC = () => {
             if (success) {
               // Remove completed plant from the local list immediately for visual feedback
               setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
+              // Decrease accurate counts
+              setPlantRequestsTotalCount((prev) => Math.max(0, prev - 1));
             } else if (error && !isCancellationError(error)) {
               // Only log real errors, not cancellations (which are intentional user actions)
               console.error(`Failed to process ${plantName}:`, error);
@@ -8585,7 +8720,7 @@ export const AdminPage: React.FC = () => {
                                 disabled={
                                   plantRequestsLoading || plantRequests.length === 0
                                 }
-                                title="Automatically AI fill, save, and translate all plant requests"
+                                title={`Automatically AI fill, save, and translate the ${plantRequests.length} loaded plant requests`}
                               >
                                 <Sparkles className="h-4 w-4 mr-2" />
                                 <span className="hidden sm:inline">AI Prefill All</span>
@@ -8640,27 +8775,47 @@ export const AdminPage: React.FC = () => {
                         </div>
 
                         {/* Statistics */}
-                        {!plantRequestsLoading && plantRequests.length > 0 && (
-                          <div className="flex flex-wrap gap-4 text-sm">
-                            <div className="flex items-center gap-2">
-                              <span className="opacity-60">
-                                Total Requests:
-                              </span>
-                              <span className="font-medium">
-                                {plantRequests.reduce(
-                                  (sum, req) => sum + req.request_count,
-                                  0,
-                                )}
-                              </span>
+                        {!plantRequestsLoading && plantRequestsTotalCount > 0 && (() => {
+                          const loadedUserOnly = plantRequests.filter((r) => r.requester_is_staff !== true);
+                          const loadedStaff = plantRequests.length - loadedUserOnly.length;
+                          return (
+                            <div className="flex flex-wrap gap-4 text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="opacity-60">
+                                  Total Requests:
+                                </span>
+                                <span className="font-medium">
+                                  {plantRequestsTotalRequestsSum}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="opacity-60">Unique Plants:</span>
+                                <span className="font-medium">
+                                  {plantRequestsTotalCount}
+                                </span>
+                              </div>
+                              {plantRequests.length < plantRequestsTotalCount && (
+                                <div className="flex items-center gap-2">
+                                  <span className="opacity-60">Loaded:</span>
+                                  <span className="font-medium">
+                                    {plantRequests.length} / {plantRequestsTotalCount}
+                                  </span>
+                                </div>
+                              )}
+                              {hideStaffRequests && loadedStaff > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="opacity-60">Visible (users only):</span>
+                                  <span className="font-medium text-purple-600 dark:text-purple-400">
+                                    {loadedUserOnly.length}
+                                  </span>
+                                  <span className="opacity-40 text-xs">
+                                    ({loadedStaff} staff hidden)
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="opacity-60">Unique Plants:</span>
-                              <span className="font-medium">
-                                {plantRequests.length}
-                              </span>
-                            </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         {/* AI Prefill Progress - Neomorphic Design */}
                         {aiPrefillRunning && (
@@ -9048,15 +9203,30 @@ export const AdminPage: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Search */}
-                        <SearchInput
-                          placeholder="Search requests by plant name..."
-                          value={requestSearchQuery}
-                          onChange={(e) =>
-                            setRequestSearchQuery(e.target.value)
-                          }
-                          className="rounded-xl"
-                        />
+                        {/* Search & Filters */}
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <SearchInput
+                            placeholder="Search requests by plant name..."
+                            value={requestSearchQuery}
+                            onChange={(e) =>
+                              setRequestSearchQuery(e.target.value)
+                            }
+                            className="rounded-xl flex-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setHideStaffRequests((prev) => !prev)}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap border ${
+                              hideStaffRequests
+                                ? "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800/50 text-purple-700 dark:text-purple-300"
+                                : "bg-stone-50 dark:bg-[#252528] border-stone-200 dark:border-[#3e3e42] text-stone-500 dark:text-stone-400"
+                            }`}
+                            title={hideStaffRequests ? "Showing only user requests (admins/editors hidden)" : "Showing all requests including admins/editors"}
+                          >
+                            <ShieldX className={`h-3.5 w-3.5 ${hideStaffRequests ? "text-purple-600 dark:text-purple-400" : "opacity-50"}`} />
+                            {hideStaffRequests ? "Staff hidden" : "Show all"}
+                          </button>
+                        </div>
 
                         {plantRequestsError && (
                           <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
@@ -9069,15 +9239,19 @@ export const AdminPage: React.FC = () => {
                           </div>
                         ) : (
                           (() => {
+                            // Apply staff filter first, then search filter
+                            const staffFiltered = hideStaffRequests
+                              ? plantRequests.filter((req) => req.requester_is_staff !== true)
+                              : plantRequests;
                             const filteredRequests = requestSearchQuery.trim()
-                              ? plantRequests.filter((req) =>
+                              ? staffFiltered.filter((req) =>
                                   req.plant_name
                                     .toLowerCase()
                                     .includes(
                                       requestSearchQuery.toLowerCase().trim(),
                                     ),
                                 )
-                              : plantRequests;
+                              : staffFiltered;
 
                             return filteredRequests.length === 0 ? (
                               <div className="text-sm opacity-60">
@@ -9175,11 +9349,19 @@ export const AdminPage: React.FC = () => {
                                               </Button>
                                             </div>
                                           )}
-                                          <div
-                                            className="text-xs opacity-60"
-                                            title={updatedTitle}
-                                          >
-                                            {timeLabel}
+                                          <div className="flex items-center gap-2">
+                                            <div
+                                              className="text-xs opacity-60"
+                                              title={updatedTitle}
+                                            >
+                                              {timeLabel}
+                                            </div>
+                                            {req.requester_is_staff === true && (
+                                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800/40" title="Requested by an admin or editor">
+                                                <Shield className="h-2.5 w-2.5" />
+                                                Staff
+                                              </span>
+                                            )}
                                           </div>
                                         </div>
                                         <Button
@@ -9232,6 +9414,28 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   );
                                 })}
+                                {/* Load More button - only show when not searching and there are more items */}
+                                {!requestSearchQuery.trim() && plantRequestsHasMore && (
+                                  <div className="flex justify-center pt-2">
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-xl"
+                                      onClick={loadMorePlantRequests}
+                                      disabled={plantRequestsLoadingMore}
+                                    >
+                                      {plantRequestsLoadingMore ? (
+                                        <>
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                          Loading...
+                                        </>
+                                      ) : (
+                                        <>
+                                          Load More ({plantRequests.length} / {plantRequestsTotalCount})
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             );
                           })()
