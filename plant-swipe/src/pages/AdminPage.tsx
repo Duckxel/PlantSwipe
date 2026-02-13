@@ -1890,6 +1890,9 @@ export const AdminPage: React.FC = () => {
     skippedExistingSamples: string[];
     errorSamples: Array<{ name: string; error: string }>;
   };
+  const PLANT_REQUESTS_INITIAL_LIMIT = 100;
+  const PLANT_REQUESTS_PAGE_SIZE = 50;
+
   const [plantRequests, setPlantRequests] = React.useState<PlantRequestRow[]>(
     [],
   );
@@ -1902,14 +1905,18 @@ export const AdminPage: React.FC = () => {
   >(null);
   const [plantRequestsInitialized, setPlantRequestsInitialized] =
     React.useState<boolean>(false);
+  // Accurate total counts (from separate count query, not capped by row limit)
+  const [plantRequestsTotalCount, setPlantRequestsTotalCount] =
+    React.useState<number>(0);
+  const [plantRequestsTotalRequestsSum, setPlantRequestsTotalRequestsSum] =
+    React.useState<number>(0);
+  const [plantRequestsHasMore, setPlantRequestsHasMore] =
+    React.useState<boolean>(false);
+  const [plantRequestsLoadingMore, setPlantRequestsLoadingMore] =
+    React.useState<boolean>(false);
 
-  // Count unique requested plants
-  const uniqueRequestedPlantsCount = React.useMemo(() => {
-    const uniqueNames = new Set(
-      plantRequests.map((req) => req.plant_name_normalized).filter(Boolean),
-    );
-    return uniqueNames.size;
-  }, [plantRequests]);
+  // Count unique requested plants - use accurate count from DB, not loaded rows
+  const uniqueRequestedPlantsCount = plantRequestsTotalCount;
   const [completingRequestId, setCompletingRequestId] = React.useState<
     string | null
   >(null);
@@ -2120,6 +2127,39 @@ export const AdminPage: React.FC = () => {
     meta: 'Meta',
   };
 
+  const parseRequestRows = React.useCallback((data: any[]): PlantRequestRow[] => {
+    return (data ?? [])
+      .map((row: any) => {
+        const id = row?.id ? String(row.id) : null;
+        if (!id) return null;
+        const requestCountRaw = row?.request_count;
+        const requestCount =
+          typeof requestCountRaw === "number"
+            ? requestCountRaw
+            : Number(requestCountRaw ?? 0);
+        return {
+          id,
+          plant_name: row?.plant_name
+            ? String(row.plant_name)
+            : row?.plant_name_normalized
+              ? String(row.plant_name_normalized)
+              : "Unknown request",
+          plant_name_normalized: row?.plant_name_normalized
+            ? String(row.plant_name_normalized)
+            : row?.plant_name
+              ? String(row.plant_name).toLowerCase().trim()
+              : "",
+          request_count: Number.isFinite(requestCount) ? requestCount : 0,
+          created_at: row?.created_at ?? null,
+          updated_at: row?.updated_at ?? null,
+          requested_by: row?.requested_by ? String(row.requested_by) : null,
+          requester_name: null as string | null,
+          requester_email: null as string | null,
+        };
+      })
+      .filter((row): row is PlantRequestRow => row !== null);
+  }, []);
+
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
       setPlantRequestsError(null);
@@ -2129,6 +2169,43 @@ export const AdminPage: React.FC = () => {
         setPlantRequestsRefreshing(true);
       }
       try {
+        // 1. Get accurate total count (not capped by row limit)
+        const { count: totalCount, error: countError } = await supabase
+          .from("requested_plants")
+          .select("id", { head: true, count: "exact" })
+          .is("completed_at", null);
+
+        if (countError) throw new Error(countError.message);
+        const accurateCount = totalCount ?? 0;
+        setPlantRequestsTotalCount(accurateCount);
+
+        // 2. Get accurate sum of all request_count values (paginate to avoid 1000 row cap)
+        let totalSum = 0;
+        let sumOffset = 0;
+        const sumPageSize = 1000;
+        let hasMoreSum = true;
+        while (hasMoreSum) {
+          const { data: sumData, error: sumError } = await supabase
+            .from("requested_plants")
+            .select("request_count")
+            .is("completed_at", null)
+            .range(sumOffset, sumOffset + sumPageSize - 1);
+          if (sumError) break;
+          if (!sumData || sumData.length === 0) {
+            hasMoreSum = false;
+          } else {
+            totalSum += sumData.reduce(
+              (sum: number, row: any) => sum + (Number(row?.request_count) || 0),
+              0,
+            );
+            sumOffset += sumData.length;
+            if (sumData.length < sumPageSize) hasMoreSum = false;
+          }
+        }
+        setPlantRequestsTotalRequestsSum(totalSum);
+
+        // 3. Fetch first page of rows (paginated)
+        const limit = PLANT_REQUESTS_INITIAL_LIMIT;
         const { data, error } = await supabase
           .from("requested_plants")
           .select(
@@ -2136,42 +2213,14 @@ export const AdminPage: React.FC = () => {
           )
           .is("completed_at", null)
           .order("request_count", { ascending: false })
-          .order("updated_at", { ascending: false });
+          .order("updated_at", { ascending: false })
+          .range(0, limit - 1);
 
         if (error) throw new Error(error.message);
 
-        const rows: PlantRequestRow[] = (data ?? [])
-          .map((row: any) => {
-            const id = row?.id ? String(row.id) : null;
-            if (!id) return null;
-            const requestCountRaw = row?.request_count;
-            const requestCount =
-              typeof requestCountRaw === "number"
-                ? requestCountRaw
-                : Number(requestCountRaw ?? 0);
-            return {
-              id,
-              plant_name: row?.plant_name
-                ? String(row.plant_name)
-                : row?.plant_name_normalized
-                  ? String(row.plant_name_normalized)
-                  : "Unknown request",
-              plant_name_normalized: row?.plant_name_normalized
-                ? String(row.plant_name_normalized)
-                : row?.plant_name
-                  ? String(row.plant_name).toLowerCase().trim()
-                  : "",
-              request_count: Number.isFinite(requestCount) ? requestCount : 0,
-              created_at: row?.created_at ?? null,
-              updated_at: row?.updated_at ?? null,
-              requested_by: row?.requested_by ? String(row.requested_by) : null,
-              requester_name: null as string | null,
-              requester_email: null as string | null,
-            };
-          })
-          .filter((row): row is PlantRequestRow => row !== null);
-
+        const rows = parseRequestRows(data);
         setPlantRequests(rows);
+        setPlantRequestsHasMore(rows.length < accurateCount);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setPlantRequestsError(msg);
@@ -2187,8 +2236,47 @@ export const AdminPage: React.FC = () => {
         }
       }
     },
-    [supabase],
+    [supabase, parseRequestRows],
   );
+
+  const loadMorePlantRequests = React.useCallback(async () => {
+    if (plantRequestsLoadingMore || !plantRequestsHasMore) return;
+    setPlantRequestsLoadingMore(true);
+    setPlantRequestsError(null);
+    try {
+      const offset = plantRequests.length;
+      const limit = PLANT_REQUESTS_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from("requested_plants")
+        .select(
+          "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
+        )
+        .is("completed_at", null)
+        .order("request_count", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) throw new Error(error.message);
+
+      const newRows = parseRequestRows(data);
+      setPlantRequests((prev) => [...prev, ...newRows]);
+      setPlantRequestsHasMore(
+        plantRequests.length + newRows.length < plantRequestsTotalCount,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPlantRequestsError(msg);
+    } finally {
+      setPlantRequestsLoadingMore(false);
+    }
+  }, [
+    plantRequestsLoadingMore,
+    plantRequestsHasMore,
+    plantRequests.length,
+    plantRequestsTotalCount,
+    supabase,
+    parseRequestRows,
+  ]);
 
   const loadRequestUsers = React.useCallback(
     async (plantNameNormalized: string) => {
@@ -3092,22 +3180,9 @@ export const AdminPage: React.FC = () => {
     [promotionMonthData],
   );
 
-  const totalPlantRequestsCount = React.useMemo(
-    () =>
-      plantRequests.reduce(
-        (sum, req) => sum + (Number(req.request_count) || 0),
-        0,
-      ),
-    [plantRequests],
-  );
-  const totalUniquePlantRequests = React.useMemo(
-    () =>
-      plantRequests.reduce(
-        (sum, req) => sum + (req.request_count > 0 ? 1 : 0),
-        0,
-      ),
-    [plantRequests],
-  );
+  // Use accurate counts from DB (not limited by pagination)
+  const totalPlantRequestsCount = plantRequestsTotalRequestsSum;
+  const totalUniquePlantRequests = plantRequestsTotalCount;
 
   const requestsVsApproved = React.useMemo(() => {
     const denominator = approvedPlantsCount > 0 ? approvedPlantsCount : null;
@@ -3137,7 +3212,7 @@ export const AdminPage: React.FC = () => {
       approved: approvedPlantsCount,
       requests: totalPlantRequestsCount,
     };
-  }, [approvedPlantsCount, totalPlantRequestsCount]);
+  }, [approvedPlantsCount, totalPlantRequestsCount, totalUniquePlantRequests]);
 
   const filteredPlantRows = React.useMemo(() => {
     const term = plantSearchQuery.trim().toLowerCase();
@@ -3307,6 +3382,8 @@ export const AdminPage: React.FC = () => {
             if (success) {
               // Remove completed plant from the local list immediately for visual feedback
               setPlantRequests((prev) => prev.filter((req) => req.id !== requestId));
+              // Decrease accurate counts
+              setPlantRequestsTotalCount((prev) => Math.max(0, prev - 1));
             } else if (error && !isCancellationError(error)) {
               // Only log real errors, not cancellations (which are intentional user actions)
               console.error(`Failed to process ${plantName}:`, error);
@@ -8585,7 +8662,7 @@ export const AdminPage: React.FC = () => {
                                 disabled={
                                   plantRequestsLoading || plantRequests.length === 0
                                 }
-                                title="Automatically AI fill, save, and translate all plant requests"
+                                title={`Automatically AI fill, save, and translate the ${plantRequests.length} loaded plant requests`}
                               >
                                 <Sparkles className="h-4 w-4 mr-2" />
                                 <span className="hidden sm:inline">AI Prefill All</span>
@@ -8640,25 +8717,30 @@ export const AdminPage: React.FC = () => {
                         </div>
 
                         {/* Statistics */}
-                        {!plantRequestsLoading && plantRequests.length > 0 && (
+                        {!plantRequestsLoading && plantRequestsTotalCount > 0 && (
                           <div className="flex flex-wrap gap-4 text-sm">
                             <div className="flex items-center gap-2">
                               <span className="opacity-60">
                                 Total Requests:
                               </span>
                               <span className="font-medium">
-                                {plantRequests.reduce(
-                                  (sum, req) => sum + req.request_count,
-                                  0,
-                                )}
+                                {plantRequestsTotalRequestsSum}
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="opacity-60">Unique Plants:</span>
                               <span className="font-medium">
-                                {plantRequests.length}
+                                {plantRequestsTotalCount}
                               </span>
                             </div>
+                            {plantRequests.length < plantRequestsTotalCount && (
+                              <div className="flex items-center gap-2">
+                                <span className="opacity-60">Loaded:</span>
+                                <span className="font-medium">
+                                  {plantRequests.length} / {plantRequestsTotalCount}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -9232,6 +9314,28 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   );
                                 })}
+                                {/* Load More button - only show when not searching and there are more items */}
+                                {!requestSearchQuery.trim() && plantRequestsHasMore && (
+                                  <div className="flex justify-center pt-2">
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-xl"
+                                      onClick={loadMorePlantRequests}
+                                      disabled={plantRequestsLoadingMore}
+                                    >
+                                      {plantRequestsLoadingMore ? (
+                                        <>
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                          Loading...
+                                        </>
+                                      ) : (
+                                        <>
+                                          Load More ({plantRequests.length} / {plantRequestsTotalCount})
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             );
                           })()
