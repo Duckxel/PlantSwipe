@@ -15,7 +15,7 @@ export const FilterSectionHeader: React.FC<FilterSectionHeaderProps> = ({
   <button
     type="button"
     onClick={onToggle}
-    className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-300"
+    className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-300 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
     aria-expanded={isOpen}
   >
     <span>{label}</span>
