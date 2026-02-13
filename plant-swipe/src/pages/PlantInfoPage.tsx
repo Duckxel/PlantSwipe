@@ -54,17 +54,12 @@ import {
   FileText,
   Wrench,
   ChartNoAxesColumn,
+  Flower,
+  Flower2,
+  Cherry,
+  House,
+  TreeDeciduous,
 } from 'lucide-react'
-import type { TooltipProps } from 'recharts'
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-} from 'recharts'
 import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
@@ -1301,25 +1296,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     ...MAP_PIN_POSITIONS[idx],
     label: translateEnum(label),
   }))
-  const climateBadges = [
-    plant.identity?.livingSpace,
-    plant.plantCare?.levelSun,
-    plant.ecology?.conservationStatus,
-  ].filter(Boolean).map(v => translateEnum(v))
-  const highlightBadges = [
-    plant.identity?.livingSpace ? translateEnum(plant.identity.livingSpace) : null,
-    plant.plantCare?.levelSun ? translateEnum(plant.plantCare.levelSun) : null,
-    plant.utility?.[0] ? translateEnum(plant.utility[0]) : null,
-    plant.identity?.season?.slice(0, 2).map(s => translateEnum(s)).join(' • '),
-  ].filter(Boolean) as string[]
     const palette = plant.identity?.colors?.length ? plant.identity.colors : []
     const showPalette = palette.length > 0
-    const gridClass = showPalette 
-      ? 'grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,2fr)] items-stretch'
-      : 'grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 items-stretch'
-    const dimensionColClass = showPalette ? 'col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-1'
-    const paletteColClass = showPalette ? 'col-span-1' : ''
-    const timelineColClass = showPalette ? 'col-span-2 lg:col-span-1' : 'col-span-1 sm:col-span-2 lg:col-span-1'
+    const showRightColumn = showPalette || !!plant.identity?.livingSpace || !!plant.identity?.composition?.includes('Pot')
+    const gridClass = showRightColumn
+      ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-stretch'
+      : ''
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return t('moreInfo.values.flexible')
       return schedules
@@ -1353,7 +1335,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const utilityList = translateEnumArray(plant.utility as string[] | undefined)
       const sowTypeList = translateEnumArray(growth.sowType as string[] | undefined)
       const pollenizerList = translateEnumArray(ecology.polenizer as string[] | undefined)
-      const companions = compactStrings(misc.companions)
+      const companionNames = companionPlants.length > 0
+        ? companionPlants.map(c => c.name)
+        : compactStrings(misc.companions)
       const tagList = compactStrings(misc.tags)
       const pestList = compactStrings(danger.pests)
       const diseaseList = compactStrings(danger.diseases)
@@ -1420,7 +1404,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const originLabel = originList.length ? originList.join(' • ') : null
       const utilityLabel = utilityList.length ? utilityList.join(' • ') : null
       const sowTypeLabel = sowTypeList.length ? sowTypeList.join(' • ') : null
-      const companionsLabel = companions.length ? companions.join(' • ') : null
+      const companionsLabel = companionNames.length ? companionNames.join(' • ') : null
       const tagLabel = tagList.length ? tagList.join(' • ') : null
       const pestLabel = pestList.length ? pestList.join(' • ') : null
       const diseaseLabel = diseaseList.length ? diseaseList.join(' • ') : null
@@ -1444,19 +1428,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const growthSupportNotes = formatTextValue(growth.adviceTutoring)
       const growthSowingNotes = formatTextValue(growth.adviceSowing)
       const groundEffectLabel = formatTextValue(ecology.groundEffect)
-    const [hoveredMonth, setHoveredMonth] = React.useState<string | null>(null)
-
-    const handleTimelineHover = React.useCallback((state: { activeLabel?: string | number } | undefined) => {
-      if (state?.activeLabel && typeof state.activeLabel === 'string') {
-        setHoveredMonth(state.activeLabel)
-      } else {
-        setHoveredMonth(null)
-      }
-    }, [])
-
-    const clearTimelineHover = React.useCallback(() => {
-      setHoveredMonth(null)
-    }, [])
 
       const careHighlights = filterInfoItems([
         {
@@ -1591,37 +1562,37 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </p>
         </div>
       
-        {/* Dynamic Grid Layout */}
+        {/* Seasonal Timeline — full width Gantt-style, first element */}
+        <section
+          className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
+        >
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+          <div className="relative space-y-3 sm:space-y-4">
+            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+              <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.timeline.title')}</span>
+            </div>
+            <GanttTimeline timelineData={timelineData} monthLabels={monthLabels} t={t} />
+          </div>
+        </section>
+
+        {/* Dimensions + Color Moodboard & Living Space grid */}
         <div className={gridClass}>
           {(height !== null || wingspan !== null || spacing !== null) && (
             <section
-              className={`${dimensionColClass} rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent`}
+              className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent"
             >
-              <div className="mb-3 space-y-2">
-                <div>
-                  <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
-                    {t('moreInfo.cube.eyebrow')}
-                  </p>
-                  <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
-                </div>
-                {highlightBadges.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {highlightBadges.slice(0, 4).map((badge) => (
-                      <Badge
-                        key={badge}
-                        className="rounded-2xl border border-emerald-300/70 bg-white px-3 py-1 text-xs sm:text-sm font-semibold tracking-wide text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/15 dark:text-emerald-100 uppercase shadow-sm"
-                      >
-                        {badge}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+              <div className="mb-3">
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
+                  {t('moreInfo.cube.eyebrow')}
+                </p>
+                <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
               </div>
               <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
-                <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[260px]">
+                <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[200px] max-h-[320px] overflow-hidden">
                   <DimensionCube scale={cubeScale} className="h-full w-full" />
                 </div>
-                <div className="flex flex-col gap-2 md:min-h-[260px]">
+                <div className="flex flex-col gap-2 md:min-h-[200px]">
                   {dimensionLegend.map((item) => (
                     <div key={item.label} className="md:flex-1">
                       <DimensionLegendCard {...item} className="h-full" />
@@ -1632,71 +1603,38 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </section>
           )}
 
-            {showPalette && (
-            <section
-              className={`${paletteColClass} justify-self-start w-full sm:w-auto relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4 max-w-[260px] lg:max-w-[240px]`}
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-              <div className="relative space-y-2 sm:space-y-3">
-                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-                  <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
-                </div>
-                <div className="grid grid-cols-1 gap-1.5 sm:gap-2">
-                  {palette.map((color, idx) => {
-                    const colorLabel = color.name || `Color ${idx + 1}`
-                    return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
-                  })}
-                </div>
-              </div>
-            </section>
-          )}
+          {/* Right column: Color Moodboard + Living Space stacked */}
+          {showRightColumn && (
+            <div className="flex flex-col gap-3 sm:gap-4">
+              {showPalette && (
+                <section
+                  className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3"
+                >
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+                  <div className="relative space-y-1.5 sm:space-y-2">
+                    <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                      <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 sm:gap-2.5">
+                      {palette.map((color, idx) => {
+                        const colorLabel = color.name || `Color ${idx + 1}`
+                        return <ColorSwatch key={`${colorLabel}-${idx}`} color={color} />
+                      })}
+                    </div>
+                  </div>
+                </section>
+              )}
 
-          <section
-            className={`${timelineColClass} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-            <div className="relative space-y-3 sm:space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-                  <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.timeline.title')}</span>
-                </div>
-                {hoveredMonth ? (
-                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">{hoveredMonth}</span>
-                ) : (
-                  <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">{t('moreInfo.timeline.hoverPrompt')}</span>
-                )}
-              </div>
-              <div className="h-52 sm:h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={timelineData} stackOffset="expand" onMouseMove={handleTimelineHover} onMouseLeave={clearTimelineHover}>
-                    <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
-                    <YAxis hide domain={[0, 3]} />
-                    <RechartsTooltip content={<TimelineTooltip t={t} />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} shape={(props: any) => <RoundedBar {...props} dataKey="sowing" data={timelineData} />} />
-                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} shape={(props: any) => <RoundedBar {...props} dataKey="fruiting" data={timelineData} />} />
-                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} shape={(props: any) => <RoundedBar {...props} dataKey="flowering" data={timelineData} />} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
-                <span className="flex items-center gap-1.5 sm:gap-2">
-                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.flowering }} />
-                  {t('moreInfo.timeline.legend.flowering')}
-                </span>
-                <span className="flex items-center gap-1.5 sm:gap-2">
-                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.fruiting }} />
-                  {t('moreInfo.timeline.legend.fruiting')}
-                </span>
-                <span className="flex items-center gap-1.5 sm:gap-2">
-                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.sowing }} />
-                  {t('moreInfo.timeline.legend.sowing')}
-                </span>
-              </div>
+              {(plant.identity?.livingSpace || plant.identity?.composition?.includes('Pot')) && (
+                <LivingSpaceVisualizer
+                  livingSpace={plant.identity?.livingSpace}
+                  isPottable={plant.identity?.composition?.includes('Pot') ?? false}
+                  t={t}
+                />
+              )}
             </div>
-          </section>
+          )}
         </div>
 
         {/* Habitat Map */}
@@ -1724,21 +1662,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                     <span className="whitespace-nowrap">{pin.label}</span>
                   </div>
                 ))}
-              </div>
-              <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                {climateBadges.length ? (
-                  climateBadges.map((badge) => (
-                    <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                      <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                      {badge}
-                    </Badge>
-                  ))
-                ) : (
-                  <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                    <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                    {t('moreInfo.values.temperate')}
-                  </Badge>
-                )}
               </div>
             </div>
           </section>
@@ -1921,80 +1844,203 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   )
 }
 
-const TimelineTooltip = (
-  props: TooltipProps<number, string> & { 
-    payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number; month?: string } }>,
-    t: (key: string) => string
-  },
-) => {
-  const { active, payload: tooltipPayload, t } = props
-  const data = tooltipPayload && tooltipPayload.length > 0 ? tooltipPayload[0].payload : null
-  if (!active || !data) return null
-  const displayLabel = typeof data?.month === 'string' ? data.month : ''
-  
-  const translateKey = (key: string) => {
-    if (key === 'flowering') return t('moreInfo.timeline.legend.flowering')
-    if (key === 'fruiting') return t('moreInfo.timeline.legend.fruiting')
-    if (key === 'sowing') return t('moreInfo.timeline.legend.sowing')
-    return key
+// Gantt-style seasonal timeline with rows per activity and month columns
+type GanttTimelineProps = {
+  timelineData: Array<{ month: string; flowering: number; fruiting: number; sowing: number }>
+  monthLabels: string[]
+  t: (key: string, options?: Record<string, string>) => string
+}
+
+const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels, t }) => {
+  const rows: Array<{
+    key: 'flowering' | 'fruiting' | 'sowing'
+    label: string
+    color: string
+    bgClass: string
+    icon: React.ReactNode
+  }> = [
+    {
+      key: 'flowering',
+      label: t('moreInfo.timeline.legend.flowering'),
+      color: TIMELINE_COLORS.flowering,
+      bgClass: 'bg-orange-400',
+      icon: <Flower2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.flowering }} />,
+    },
+    {
+      key: 'fruiting',
+      label: t('moreInfo.timeline.legend.fruiting'),
+      color: TIMELINE_COLORS.fruiting,
+      bgClass: 'bg-green-500',
+      icon: <Cherry className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.fruiting }} />,
+    },
+    {
+      key: 'sowing',
+      label: t('moreInfo.timeline.legend.sowing'),
+      color: TIMELINE_COLORS.sowing,
+      bgClass: 'bg-indigo-500',
+      icon: <Sprout className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.sowing }} />,
+    },
+  ]
+
+  // Only show rows that have at least one active month
+  const activeRows = rows.filter((row) =>
+    timelineData.some((d) => d[row.key] > 0),
+  )
+
+  if (activeRows.length === 0) return null
+
+  // Build contiguous bar segments for a row (consecutive active months get merged into one bar)
+  const buildSegments = (key: 'flowering' | 'fruiting' | 'sowing') => {
+    const segments: Array<{ start: number; end: number }> = []
+    let segStart: number | null = null
+    for (let i = 0; i < 12; i++) {
+      const active = timelineData[i]?.[key] > 0
+      if (active && segStart === null) segStart = i
+      if (!active && segStart !== null) {
+        segments.push({ start: segStart, end: i - 1 })
+        segStart = null
+      }
+    }
+    if (segStart !== null) segments.push({ start: segStart, end: 11 })
+    return segments
   }
-  
+
   return (
-    <div className="rounded-xl border border-sky-400/30 bg-white/95 px-3 py-2 text-xs text-stone-700 shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95 dark:text-stone-100">
-      <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{displayLabel || '—'}</p>
-      <div className="space-y-1 mt-1">
-        {Object.entries(data).map(([key, value]) =>
-          value && key !== 'month' ? (
-            <div key={key} className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TIMELINE_COLORS[key as keyof typeof TIMELINE_COLORS] }} />
-              <span>{translateKey(key)}</span>
-            </div>
-          ) : null,
-        )}
+    <div className="space-y-2">
+      {/* Month labels row */}
+      <div className="grid gap-1 sm:gap-1.5" style={{ gridTemplateColumns: 'minmax(90px, auto) repeat(12, minmax(0, 1fr))' }}>
+        <div />
+        {monthLabels.map((label, idx) => (
+          <div key={idx} className="flex items-center justify-center">
+            <span className="text-[8px] sm:text-[9px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
+              {label.slice(0, 3)}
+            </span>
+          </div>
+        ))}
       </div>
+
+      {/* Activity rows */}
+      {activeRows.map((row) => {
+        const segments = buildSegments(row.key)
+        return (
+          <div
+            key={row.key}
+            className="grid gap-1 sm:gap-1.5 items-center"
+            style={{ gridTemplateColumns: 'minmax(90px, auto) repeat(12, minmax(0, 1fr))' }}
+          >
+            {/* Row label */}
+            <div className="flex items-center gap-1.5 sm:gap-2 pr-2">
+              {row.icon}
+              <span className="text-[10px] sm:text-xs font-semibold text-stone-600 dark:text-stone-300 truncate">
+                {row.label}
+              </span>
+            </div>
+            {/* Month cells with bars */}
+            <div className="col-span-12 relative grid grid-cols-12 gap-1 sm:gap-1.5">
+              {/* Background cells */}
+              {Array.from({ length: 12 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="h-7 sm:h-9 rounded-md sm:rounded-lg bg-stone-100/60 dark:bg-stone-800/30 border border-stone-200/40 dark:border-stone-700/25"
+                />
+              ))}
+              {/* Colored bar segments overlaid */}
+              {segments.map((seg, sIdx) => {
+                const span = seg.end - seg.start + 1
+                // Calculate position with gap offsets
+                return (
+                  <div
+                    key={sIdx}
+                    className="absolute inset-y-0 flex items-center"
+                    style={{
+                      left: `calc(${(seg.start / 12) * 100}% + 2px)`,
+                      width: `calc(${(span / 12) * 100}% - 4px)`,
+                    }}
+                  >
+                    <div
+                      className="w-full h-5 sm:h-7 rounded-md sm:rounded-lg shadow-sm"
+                      style={{ backgroundColor: row.color, opacity: 0.85 }}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-// Custom bar shape that applies rounded corners only to the topmost bar in each stack
-const RoundedBar = (props: any) => {
-  const { x, y, width, height, fill, dataKey, data, index } = props
-  if (!height || height <= 0) return null
-  
-  // Determine if this bar is the topmost in the stack for this month
-  const monthData = data?.[index]
-  if (!monthData) return <rect x={x} y={y} width={width} height={height} fill={fill} />
-  
-  // Stack order from bottom to top: sowing -> fruiting -> flowering
-  const stackOrder = ['sowing', 'fruiting', 'flowering']
-  const currentIndex = stackOrder.indexOf(dataKey)
-  
-  // Check if any bar above this one has data
-  let isTopmost = true
-  for (let i = currentIndex + 1; i < stackOrder.length; i++) {
-    if (monthData[stackOrder[i]] > 0) {
-      isTopmost = false
-      break
-    }
-  }
-  
-  const radius = isTopmost ? 6 : 0
-  
-  if (radius === 0) {
-    return <rect x={x} y={y} width={width} height={height} fill={fill} />
-  }
-  
-  // Draw rounded rectangle for topmost bar
-  const path = `
-    M ${x},${y + radius}
-    Q ${x},${y} ${x + radius},${y}
-    L ${x + width - radius},${y}
-    Q ${x + width},${y} ${x + width},${y + radius}
-    L ${x + width},${y + height}
-    L ${x},${y + height}
-    Z
-  `
-  return <path d={path} fill={fill} />
+// Indoor / Outdoor / Pot visual indicator
+type LivingSpaceVisualizerProps = {
+  livingSpace: string | undefined
+  isPottable: boolean
+  t: (key: string, options?: Record<string, string>) => string
+}
+
+const LivingSpacePanel: React.FC<{
+  active: boolean
+  icon: React.ReactNode
+  label: string
+}> = ({ active, icon, label }) => (
+  <div className={`flex flex-col items-center gap-1 rounded-xl sm:rounded-2xl border p-2 sm:p-3 transition-all flex-1 min-w-0 ${
+    active
+      ? 'border-emerald-400/60 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/10 shadow-sm'
+      : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
+  }`}>
+    {icon}
+    <span className={`text-[8px] sm:text-[10px] font-semibold uppercase tracking-wider text-center leading-tight ${
+      active
+        ? 'text-emerald-700 dark:text-emerald-300'
+        : 'text-stone-400 dark:text-stone-600'
+    }`}>
+      {label}
+    </span>
+  </div>
+)
+
+const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpace, isPottable, t }) => {
+  if (!livingSpace && !isPottable) return null
+
+  const normalized = (livingSpace || '').toLowerCase().replace(/[_\s&-]+/g, '')
+
+  const isIndoor = normalized === 'indoor'
+  const isOutdoor = normalized === 'outdoor'
+  const isBoth = normalized === 'both' || normalized === 'indooroutdoor'
+
+  const activeClass = 'text-emerald-600 dark:text-emerald-400'
+  const inactiveClass = 'text-stone-400 dark:text-stone-600'
+
+  return (
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden flex-1">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+      <div className="relative space-y-1.5 sm:space-y-2 h-full flex flex-col">
+        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+          <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('moreInfo.livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
+        </div>
+
+        <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-1">
+          <LivingSpacePanel
+            active={isIndoor || isBoth}
+            icon={<House className={`h-7 w-7 sm:h-8 sm:w-8 ${isIndoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('moreInfo.enums.livingSpace.indoor', { defaultValue: 'Indoor' })}
+          />
+          <LivingSpacePanel
+            active={isOutdoor || isBoth}
+            icon={<TreeDeciduous className={`h-7 w-7 sm:h-8 sm:w-8 ${isOutdoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('moreInfo.enums.livingSpace.outdoor', { defaultValue: 'Outdoor' })}
+          />
+          <LivingSpacePanel
+            active={isPottable}
+            icon={<Flower className={`h-7 w-7 sm:h-8 sm:w-8 ${isPottable ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('moreInfo.livingSpaceVisualizer.pot', { defaultValue: 'Pot' })}
+          />
+        </div>
+      </div>
+    </section>
+  )
 }
 
 const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string; className?: string }> = ({
@@ -2078,16 +2124,18 @@ const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.
   )
 }
 
-const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
-  const label = color.name || 'Palette'
+const ColorSwatch: React.FC<{ color: PlantColor }> = ({ color }) => {
+  const label = color.name || 'Color'
   const tone = color.hexCode || '#16a34a'
-  const category = 'Palette'
-  const gradient = `linear-gradient(135deg, ${tone}, ${tone})`
   return (
-    <div className="group relative overflow-hidden rounded-md sm:rounded-lg border border-stone-200/60 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-1 sm:p-1.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="mb-1 sm:mb-1.5 h-8 sm:h-10 w-full rounded-md shadow-inner" style={{ backgroundImage: gradient }} />
-      <div className="text-[7px] sm:text-[9px] uppercase tracking-[0.3em] text-stone-500 dark:text-stone-400">{category}</div>
-      <div className="text-[10px] sm:text-[11px] font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
+    <div className="group relative">
+      <div
+        className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg flex-shrink-0 shadow-inner border border-white/20 dark:border-white/10 cursor-pointer transition-transform group-hover:scale-110"
+        style={{ backgroundColor: tone }}
+      />
+      <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap rounded-md bg-stone-900/90 dark:bg-stone-100/90 px-2 py-0.5 text-[9px] sm:text-[10px] font-medium text-white dark:text-stone-900 shadow-lg">
+        {label}
+      </div>
     </div>
   )
 }

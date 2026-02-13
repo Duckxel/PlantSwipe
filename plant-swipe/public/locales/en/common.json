@@ -1162,9 +1162,9 @@
   },
   "moreInfo": {
     "header": {
-      "eyebrow": "Immersive overview",
-      "title": "Feel the plant before the paragraphs",
-      "subtitle": "Play with the holographic cube, skim the seasonal timeline, and glance at ecology badges—then dive deeper if you want."
+      "eyebrow": "Plant overview",
+      "title": "Learn to know the plant",
+      "subtitle": "Explore its dimensions, seasonal rhythm and living conditions at a glance — then dive deeper if you want."
     },
     "cube": {
       "eyebrow": "3D View",
@@ -1206,6 +1206,10 @@
     },
     "habitatMap": {
       "title": "Habitat Map"
+    },
+    "livingSpaceVisualizer": {
+      "title": "Living Space",
+      "pot": "Pot"
     },
     "recipes": {
       "title": "Recipe Ideas",
