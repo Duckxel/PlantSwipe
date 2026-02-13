@@ -1851,13 +1851,6 @@ type GanttTimelineProps = {
   t: (key: string, options?: Record<string, string>) => string
 }
 
-const QUARTER_COLORS = [
-  'bg-indigo-100/80 dark:bg-indigo-500/10',
-  'bg-fuchsia-100/60 dark:bg-fuchsia-500/8',
-  'bg-lime-100/60 dark:bg-lime-500/8',
-  'bg-amber-100/60 dark:bg-amber-500/8',
-] as const
-
 const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels, t }) => {
   const rows: Array<{
     key: 'flowering' | 'fruiting' | 'sowing'
@@ -1914,22 +1907,6 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
 
   return (
     <div className="space-y-2">
-      {/* Quarter headers */}
-      <div className="grid gap-1 sm:gap-1.5" style={{ gridTemplateColumns: 'minmax(90px, auto) repeat(12, minmax(0, 1fr))' }}>
-        {/* Empty label cell */}
-        <div />
-        {[0, 1, 2, 3].map((q) => (
-          <div
-            key={q}
-            className={`col-span-3 rounded-lg sm:rounded-xl ${QUARTER_COLORS[q]} flex items-center justify-center py-1.5 sm:py-2`}
-          >
-            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-stone-500 dark:text-stone-400">
-              Q{q + 1}
-            </span>
-          </div>
-        ))}
-      </div>
-
       {/* Month labels row */}
       <div className="grid gap-1 sm:gap-1.5" style={{ gridTemplateColumns: 'minmax(90px, auto) repeat(12, minmax(0, 1fr))' }}>
         <div />
