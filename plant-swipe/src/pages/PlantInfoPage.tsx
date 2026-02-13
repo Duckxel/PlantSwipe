@@ -1616,7 +1616,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                       <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
                     </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 sm:gap-x-4 sm:gap-y-1.5">
+                    <div className="flex flex-wrap gap-2 sm:gap-2.5">
                       {palette.map((color, idx) => {
                         const colorLabel = color.name || `Color ${idx + 1}`
                         return <ColorSwatch key={`${colorLabel}-${idx}`} color={color} />
@@ -2128,14 +2128,14 @@ const ColorSwatch: React.FC<{ color: PlantColor }> = ({ color }) => {
   const label = color.name || 'Color'
   const tone = color.hexCode || '#16a34a'
   return (
-    <div className="group flex items-center gap-1.5 sm:gap-2" title={label}>
+    <div className="group relative">
       <div
-        className="h-5 w-5 sm:h-6 sm:w-6 rounded-md flex-shrink-0 shadow-inner border border-white/20 dark:border-white/10"
+        className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg flex-shrink-0 shadow-inner border border-white/20 dark:border-white/10 cursor-pointer transition-transform group-hover:scale-110"
         style={{ backgroundColor: tone }}
       />
-      <span className="text-[9px] sm:text-[10px] font-medium text-stone-600 dark:text-stone-300 truncate leading-tight">
+      <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap rounded-md bg-stone-900/90 dark:bg-stone-100/90 px-2 py-0.5 text-[9px] sm:text-[10px] font-medium text-white dark:text-stone-900 shadow-lg">
         {label}
-      </span>
+      </div>
     </div>
   )
 }
