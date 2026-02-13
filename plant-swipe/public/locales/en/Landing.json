@@ -99,7 +99,18 @@
     "petWarningText": "Dieffenbachia is toxic to cats",
     "encyclopediaTitle": "Plant Encyclopedia",
     "encyclopediaText": "10,000+ species with care guides",
-    "encyclopediaSearch": "Search any plant..."
+    "encyclopediaSearch": "Search any plant...",
+    "keepAwayFromPets": "Keep away from pets",
+    "owner": "Owner",
+    "last30Days": "Last 30 days",
+    "completed": "Completed",
+    "missed": "Missed",
+    "overview": "Overview",
+    "tasks": "Tasks",
+    "completionRate": "Completion Rate",
+    "currentStreak": "Current Streak",
+    "vsLastWeek": "vs last week",
+    "bestStreak": "Best: 21 days"
   },
   "testimonials": {
     "title": "Loved by plant people.",

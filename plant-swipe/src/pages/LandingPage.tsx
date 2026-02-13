@@ -1513,7 +1513,7 @@ const ShowcaseSection: React.FC = () => {
                       </div>
                       <span className="text-xs text-stone-700 dark:text-stone-300">{member.name}</span>
                       {member.role === 'owner' && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">Owner</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">{t("showcase.owner")}</span>
                       )}
                     </div>
                   ))}
@@ -1558,16 +1558,16 @@ const ShowcaseSection: React.FC = () => {
             <div className="p-5 border-t border-stone-200/50 dark:border-stone-700/50">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-semibold text-sm flex items-center gap-2 text-stone-800 dark:text-stone-200">
-                  <Calendar className="h-4 w-4" /> Last 30 days
+                  <Calendar className="h-4 w-4" /> {t("showcase.last30Days")}
                 </h4>
                 <div className="flex items-center gap-3 text-[10px]">
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded bg-emerald-500" />
-                    <span className="text-stone-500">Completed</span>
+                    <span className="text-stone-500">{t("showcase.completed")}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded bg-stone-300 dark:bg-stone-600" />
-                    <span className="text-stone-500">Missed</span>
+                    <span className="text-stone-500">{t("showcase.missed")}</span>
                   </div>
                 </div>
               </div>
@@ -1641,8 +1641,8 @@ const ShowcaseSection: React.FC = () => {
                 <span className="font-semibold text-stone-900 dark:text-white text-sm">{t("showcase.analyticsTitle", { defaultValue: "Analytics" })}</span>
               </div>
               <div className="flex bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5">
-                <span className="px-2 py-1 text-[10px] font-medium rounded-md bg-white dark:bg-stone-700 shadow-sm text-emerald-600 dark:text-emerald-400">Overview</span>
-                <span className="px-2 py-1 text-[10px] font-medium text-stone-500">Tasks</span>
+                <span className="px-2 py-1 text-[10px] font-medium rounded-md bg-white dark:bg-stone-700 shadow-sm text-emerald-600 dark:text-emerald-400">{t("showcase.overview")}</span>
+                <span className="px-2 py-1 text-[10px] font-medium text-stone-500">{t("showcase.tasks")}</span>
               </div>
             </div>
             
@@ -1652,13 +1652,13 @@ const ShowcaseSection: React.FC = () => {
                 <div className="relative">
                   <div className="flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-300 mb-1">
                     <Target className="w-3 h-3" />
-                    <span>Completion Rate</span>
+                    <span>{t("showcase.completionRate")}</span>
                   </div>
                   <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{config.completion_rate}%</div>
                   <div className="flex items-center gap-1 mt-0.5">
                     <TrendingUp className="w-3 h-3 text-emerald-500" />
                     <span className="text-[10px] text-emerald-500">+8%</span>
-                    <span className="text-[9px] text-stone-400">vs last week</span>
+                    <span className="text-[9px] text-stone-400">{t("showcase.vsLastWeek")}</span>
                   </div>
                 </div>
               </div>
@@ -1668,10 +1668,10 @@ const ShowcaseSection: React.FC = () => {
                 <div className="relative">
                   <div className="flex items-center gap-1 text-[10px] text-orange-700 dark:text-orange-300 mb-1">
                     <Flame className="w-3 h-3" />
-                    <span>Current Streak</span>
+                    <span>{t("showcase.currentStreak")}</span>
                   </div>
                   <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{config.analytics_streak}</div>
-                  <div className="text-[10px] text-stone-500 mt-0.5">Best: 21 days</div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">{t("showcase.bestStreak")}</div>
                 </div>
               </div>
             </div>
@@ -1741,7 +1741,7 @@ const ShowcaseSection: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
               <Shield className="h-4 w-4 text-rose-500" />
-              <span className="text-xs text-rose-600 dark:text-rose-400">Keep away from pets</span>
+              <span className="text-xs text-rose-600 dark:text-rose-400">{t("showcase.keepAwayFromPets")}</span>
             </div>
           </div>
 

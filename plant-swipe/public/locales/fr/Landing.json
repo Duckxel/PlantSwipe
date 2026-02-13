@@ -100,7 +100,18 @@
     "petWarningText": "Le Dieffenbachia est toxique pour les chats",
     "encyclopediaTitle": "Encyclopédie des plantes",
     "encyclopediaText": "10 000+ espèces avec guides d'entretien",
-    "encyclopediaSearch": "Rechercher une plante..."
+    "encyclopediaSearch": "Rechercher une plante...",
+    "keepAwayFromPets": "Tenir éloigné des animaux",
+    "owner": "Propriétaire",
+    "last30Days": "30 derniers jours",
+    "completed": "Complété",
+    "missed": "Manqué",
+    "overview": "Aperçu",
+    "tasks": "Tâches",
+    "completionRate": "Taux de complétion",
+    "currentStreak": "Série en cours",
+    "vsLastWeek": "vs semaine dernière",
+    "bestStreak": "Record : 21 jours"
   },
   "testimonials": {
     "title": "Adoré par les amoureux des plantes.",
