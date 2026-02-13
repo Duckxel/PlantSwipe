@@ -1665,12 +1665,76 @@ const plantImageMaxFetchBytes = 100 * 1024 * 1024 // 100MB max download - large 
 const plantImageContentLengthWarnBytes = 50 * 1024 * 1024 // Log a warning above 50MB
 
 /**
+ * Validate URL to prevent SSRF (Server-Side Request Forgery)
+ * Checks that the hostname does not resolve to a private IP address
+ */
+async function validateImageUrl(urlString) {
+  try {
+    const url = new URL(urlString)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('Only http/https protocols allowed')
+    }
+
+    // Check if hostname is an IP address directly
+    const hostname = url.hostname
+
+    // Resolve hostname to IP
+    // Note: dns is imported from 'dns' at the top of the file
+    // Using dns.promises.lookup to get the IP address
+    const { address } = await dns.promises.lookup(hostname)
+
+    // Check for 0.0.0.0 (resolves to localhost on Linux/macOS)
+    if (address === '0.0.0.0') {
+      throw new Error(`Hostname resolves to restricted IP: ${address}`)
+    }
+
+    // Check for IPv6 mapped IPv4 addresses (::ffff:x.x.x.x)
+    let checkAddr = address
+    if (address.startsWith('::ffff:')) {
+      checkAddr = address.substring(7)
+    }
+
+    // Check for private ranges
+    // 127.0.0.0/8 (Loopback)
+    // 10.0.0.0/8 (Private)
+    // 172.16.0.0/12 (Private)
+    // 192.168.0.0/16 (Private)
+    // 169.254.0.0/16 (Link-local)
+    // ::1 (IPv6 Loopback)
+    // fc00::/7 (IPv6 Unique Local)
+    // fe80::/10 (IPv6 Link-local)
+
+    if (
+      checkAddr.startsWith('127.') ||
+      checkAddr.startsWith('10.') ||
+      checkAddr.startsWith('192.168.') ||
+      checkAddr.startsWith('169.254.') ||
+      checkAddr === '0.0.0.0' ||
+      (checkAddr.startsWith('172.') && parseInt(checkAddr.split('.')[1], 10) >= 16 && parseInt(checkAddr.split('.')[1], 10) <= 31) ||
+      checkAddr === '::1' ||
+      checkAddr.toLowerCase().startsWith('fc') ||
+      checkAddr.toLowerCase().startsWith('fd') ||
+      checkAddr.toLowerCase().startsWith('fe80')
+    ) {
+      throw new Error(`Hostname resolves to private/local IP: ${address}`)
+    }
+
+    return true
+  } catch (err) {
+    throw new Error(`Invalid or restricted URL: ${err.message}`)
+  }
+}
+
+/**
  * Fetch an external image URL, optimize it to WebP, upload to PLANTS bucket, and record in DB.
  * Uses sharp streaming pipeline to avoid holding huge raw images in memory.
  * Returns { url, bucket, path, sizeBytes, originalSizeBytes } or throws.
  */
 async function uploadPlantImageFromUrl(imageUrl, { plantName, source, adminId, adminEmail, adminName } = {}) {
   if (!supabaseServiceClient) throw new Error('Supabase service role key not configured')
+
+  // Validate URL to prevent SSRF
+  await validateImageUrl(imageUrl)
 
   // Fetch the image with streaming
   const controller = new AbortController()
