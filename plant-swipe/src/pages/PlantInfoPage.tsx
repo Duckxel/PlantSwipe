@@ -1353,7 +1353,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const utilityList = translateEnumArray(plant.utility as string[] | undefined)
       const sowTypeList = translateEnumArray(growth.sowType as string[] | undefined)
       const pollenizerList = translateEnumArray(ecology.polenizer as string[] | undefined)
-      const companions = compactStrings(misc.companions)
+      const companionNames = companionPlants.length > 0
+        ? companionPlants.map(c => c.name)
+        : compactStrings(misc.companions)
       const tagList = compactStrings(misc.tags)
       const pestList = compactStrings(danger.pests)
       const diseaseList = compactStrings(danger.diseases)
@@ -1420,7 +1422,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const originLabel = originList.length ? originList.join(' • ') : null
       const utilityLabel = utilityList.length ? utilityList.join(' • ') : null
       const sowTypeLabel = sowTypeList.length ? sowTypeList.join(' • ') : null
-      const companionsLabel = companions.length ? companions.join(' • ') : null
+      const companionsLabel = companionNames.length ? companionNames.join(' • ') : null
       const tagLabel = tagList.length ? tagList.join(' • ') : null
       const pestLabel = pestList.length ? pestList.join(' • ') : null
       const diseaseLabel = diseaseList.length ? diseaseList.join(' • ') : null
