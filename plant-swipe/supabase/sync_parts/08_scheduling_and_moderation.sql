@@ -599,6 +599,7 @@ create index if not exists blog_posts_author_idx on public.blog_posts (author_id
 create or replace function public.update_blog_posts_updated_at()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.updated_at = now();
