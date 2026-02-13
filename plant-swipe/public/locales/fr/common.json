@@ -615,6 +615,7 @@
       "passwordTooShort": "Le mot de passe doit contenir au moins 6 caractères",
       "passwordsDontMatch": "Les mots de passe ne correspondent pas",
       "currentPasswordIncorrect": "Le mot de passe actuel est incorrect",
+      "newPasswordSameAsCurrent": "Le nouveau mot de passe doit être différent de votre mot de passe actuel.",
       "failedToUpdate": "Échec de la mise à jour du mot de passe"
     },
     "privacy": {

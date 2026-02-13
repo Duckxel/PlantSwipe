@@ -172,6 +172,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [success, setSuccess] = React.useState<string | null>(null)
+  const [passwordError, setPasswordError] = React.useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = React.useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = React.useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
@@ -568,29 +570,29 @@ export default function SettingsPage() {
 
   const handleUpdatePassword = async () => {
     if (!currentPassword) {
-      setError(t('settings.password.enterCurrentPassword'))
+      setPasswordError(t('settings.password.enterCurrentPassword'))
       return
     }
 
     if (!validatePassword(newPassword).valid) {
-      setError(t('auth.passwordRules.tooWeak', { defaultValue: 'Password does not meet the requirements' }))
+      setPasswordError(t('auth.passwordRules.tooWeak', { defaultValue: 'Password does not meet the requirements' }))
       return
     }
 
     if (newPassword !== confirmPassword) {
-      setError(t('settings.password.passwordsDontMatch'))
+      setPasswordError(t('settings.password.passwordsDontMatch'))
       return
     }
 
     // Check if new password is the same as current password
     if (newPassword === currentPassword) {
-      setError(t('settings.password.newPasswordSameAsCurrent', { defaultValue: 'New password must be different from your current password.' }))
+      setPasswordError(t('settings.password.newPasswordSameAsCurrent', { defaultValue: 'New password must be different from your current password.' }))
       return
     }
 
     setSaving(true)
-    setError(null)
-    setSuccess(null)
+    setPasswordError(null)
+    setPasswordSuccess(null)
 
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -635,12 +637,12 @@ export default function SettingsPage() {
         })
       }
 
-      setSuccess(t('settings.password.updated'))
+      setPasswordSuccess(t('settings.password.updated'))
       setCurrentPassword("")
       setNewPassword("")
       setConfirmPassword("")
     } catch (e: any) {
-      setError(e?.message || t('settings.password.failedToUpdate'))
+      setPasswordError(e?.message || t('settings.password.failedToUpdate'))
     } finally {
       setSaving(false)
     }
@@ -1468,7 +1470,7 @@ export default function SettingsPage() {
                     type="password"
                     placeholder={t('settings.password.currentPasswordPlaceholder')}
                     value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    onChange={(e) => { setCurrentPassword(e.target.value); setPasswordError(null); setPasswordSuccess(null) }}
                     disabled={saving}
                   />
                 </div>
@@ -1479,7 +1481,7 @@ export default function SettingsPage() {
                     type="password"
                     placeholder={t('settings.password.newPasswordPlaceholder')}
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
+                    onChange={(e) => { setNewPassword(e.target.value); setPasswordError(null); setPasswordSuccess(null) }}
                     disabled={saving}
                     status={newPasswordValidation.status}
                     error={newPasswordValidation.error}
@@ -1493,12 +1495,24 @@ export default function SettingsPage() {
                     type="password"
                     placeholder={t('settings.password.confirmPasswordPlaceholder')}
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError(null); setPasswordSuccess(null) }}
                     disabled={saving}
                     status={confirmPasswordValidation.status}
                     error={confirmPasswordValidation.error}
                   />
                 </div>
+                {passwordError && (
+                  <div className="p-3 rounded-xl text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>{passwordError}</span>
+                  </div>
+                )}
+                {passwordSuccess && (
+                  <div className="p-3 rounded-xl text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 flex items-start gap-2">
+                    <Check className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>{passwordSuccess}</span>
+                  </div>
+                )}
                 <Button
                   onClick={handleUpdatePassword}
                   disabled={saving || !currentPassword || !newPassword || newPasswordValidation.status === 'error' || confirmPasswordValidation.status === 'error'}
