@@ -440,7 +440,7 @@
   "auth": {
     "login": "Log in",
     "signup": "Create your account",
-    "loginDescription": "Access favorites, notes, and seed wishlists.",
+    "loginDescription": "Access favorites, journal, and gardens.",
     "signupDescription": "Start saving favorites, notes, and seed wishlists.",
     "email": "Email",
     "password": "Password",

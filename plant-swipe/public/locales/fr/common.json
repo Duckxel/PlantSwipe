@@ -440,7 +440,7 @@
   "auth": {
     "login": "Se connecter",
     "signup": "Créer votre compte",
-    "loginDescription": "Accédez aux favoris, notes et listes de souhaits de graines.",
+    "loginDescription": "Accédez aux favoris, au journal et aux jardins.",
     "signupDescription": "Commencez à sauvegarder des favoris, notes et listes de souhaits de graines.",
     "email": "E-mail",
     "password": "Mot de passe",
