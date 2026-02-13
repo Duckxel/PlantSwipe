@@ -1305,17 +1305,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     ...MAP_PIN_POSITIONS[idx],
     label: translateEnum(label),
   }))
-  const climateBadges = [
-    plant.identity?.livingSpace,
-    plant.plantCare?.levelSun,
-    plant.ecology?.conservationStatus,
-  ].filter(Boolean).map(v => translateEnum(v))
-  const highlightBadges = [
-    plant.identity?.livingSpace ? translateEnum(plant.identity.livingSpace) : null,
-    plant.plantCare?.levelSun ? translateEnum(plant.plantCare.levelSun) : null,
-    plant.utility?.[0] ? translateEnum(plant.utility[0]) : null,
-    plant.identity?.season?.slice(0, 2).map(s => translateEnum(s)).join(' • '),
-  ].filter(Boolean) as string[]
     const palette = plant.identity?.colors?.length ? plant.identity.colors : []
     const showPalette = palette.length > 0
     const gridClass = showPalette 
@@ -1603,25 +1592,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             <section
               className={`${dimensionColClass} rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent`}
             >
-              <div className="mb-3 space-y-2">
-                <div>
-                  <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
-                    {t('moreInfo.cube.eyebrow')}
-                  </p>
-                  <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
-                </div>
-                {highlightBadges.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {highlightBadges.slice(0, 4).map((badge) => (
-                      <Badge
-                        key={badge}
-                        className="rounded-2xl border border-emerald-300/70 bg-white px-3 py-1 text-xs sm:text-sm font-semibold tracking-wide text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/15 dark:text-emerald-100 uppercase shadow-sm"
-                      >
-                        {badge}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+              <div className="mb-3">
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
+                  {t('moreInfo.cube.eyebrow')}
+                </p>
+                <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
               </div>
               <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
                 <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[260px]">
@@ -1738,21 +1713,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                     <span className="whitespace-nowrap">{pin.label}</span>
                   </div>
                 ))}
-              </div>
-              <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                {climateBadges.length ? (
-                  climateBadges.map((badge) => (
-                    <Badge key={badge} className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                      <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                      {badge}
-                    </Badge>
-                  ))
-                ) : (
-                  <Badge className="rounded-xl sm:rounded-2xl border-none bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                    <Compass className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                    {t('moreInfo.values.temperate')}
-                  </Badge>
-                )}
               </div>
             </div>
           </section>
