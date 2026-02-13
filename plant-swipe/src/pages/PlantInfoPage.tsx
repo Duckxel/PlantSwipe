@@ -1616,12 +1616,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                       <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
                     </div>
-                    <div className={`grid gap-1.5 sm:gap-2 ${
-                      palette.length <= 2 ? 'grid-cols-2' :
-                      palette.length <= 4 ? 'grid-cols-2' :
-                      palette.length <= 6 ? 'grid-cols-3' :
-                      'grid-cols-4'
-                    }`}>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 sm:gap-x-4 sm:gap-y-1.5">
                       {palette.map((color, idx) => {
                         const colorLabel = color.name || `Color ${idx + 1}`
                         return <ColorSwatch key={`${colorLabel}-${idx}`} color={color} />
@@ -2133,12 +2128,12 @@ const ColorSwatch: React.FC<{ color: PlantColor }> = ({ color }) => {
   const label = color.name || 'Color'
   const tone = color.hexCode || '#16a34a'
   return (
-    <div className="group relative flex flex-col items-center gap-1" title={label}>
+    <div className="group flex items-center gap-1.5 sm:gap-2" title={label}>
       <div
-        className="w-full aspect-square rounded-lg sm:rounded-xl shadow-inner border border-white/20 dark:border-white/10 transition-transform group-hover:scale-105"
+        className="h-5 w-5 sm:h-6 sm:w-6 rounded-md flex-shrink-0 shadow-inner border border-white/20 dark:border-white/10"
         style={{ backgroundColor: tone }}
       />
-      <span className="text-[7px] sm:text-[8px] font-medium text-stone-500 dark:text-stone-400 truncate w-full text-center leading-tight">
+      <span className="text-[9px] sm:text-[10px] font-medium text-stone-600 dark:text-stone-300 truncate leading-tight">
         {label}
       </span>
     </div>
