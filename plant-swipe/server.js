@@ -9913,21 +9913,12 @@ async function runAutomation(automation) {
     const personalizedTitle = personalizedNotificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
     try {
-      // Check if notification already exists for this automation + user today
-      const existing = await sql`
-        select id from public.user_notifications 
-        where automation_id = ${automation.id} 
-          and user_id = ${recipient.user_id}
-          and scheduled_for::date = current_date
-        limit 1
-      `
-      if (existing && existing.length > 0) {
-        continue // Skip, already sent today
-      }
-
+      // Test Now: skip dedup check — manual triggers should always send.
+      // The automatic scheduler has its own dedup that only counts
+      // non-test notifications, so Test Now never blocks scheduled sends.
       await sql`
         insert into public.user_notifications (
-          automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
+          automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status, payload
         )
         values (
           ${automation.id},
@@ -9936,7 +9927,8 @@ async function runAutomation(automation) {
           ${message},
           ${targetCtaUrl},
           now(),
-          'pending'
+          'pending',
+          ${sql.json({ source: 'manual_test' })}
         )
       `
       insertedCount++
@@ -27888,6 +27880,7 @@ async function processDueAutomations() {
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
                   and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+                  and (un.payload->>'source' is distinct from 'manual_test')
               )
             limit 1000
           `
@@ -27914,6 +27907,7 @@ async function processDueAutomations() {
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
                   and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+                  and (un.payload->>'source' is distinct from 'manual_test')
               )
             limit 1000
           `
@@ -27932,6 +27926,7 @@ async function processDueAutomations() {
                 where un.automation_id = ${automation.id}
                   and un.user_id = p.id
                   and (un.scheduled_for at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
+                  and (un.payload->>'source' is distinct from 'manual_test')
               )
             limit 1000
           `
@@ -28041,11 +28036,9 @@ async function processDueAutomations() {
           const personalizedTitle = notificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
           try {
-            // Check if notification already exists for this automation + user today
-            // Using SELECT-then-INSERT instead of ON CONFLICT to avoid dependency on
-            // the unique index (user_notifications_automation_unique_daily) which may
-            // not exist yet on older deployments. The unique index provides additional
-            // safety but this check works regardless.
+            // Check if a SCHEDULED notification already exists for this automation + user today.
+            // Manual test notifications (payload->>'source' = 'manual_test') are excluded
+            // so that "Test Now" never blocks the scheduled automatic send.
             const existing = await sql`
               select id from public.user_notifications
               where automation_id = ${automation.id}
@@ -28057,6 +28050,7 @@ async function processDueAutomations() {
                   (select timezone from public.profiles where id = ${recipient.user_id}),
                   ${DEFAULT_USER_TIMEZONE}
                 ))::date
+                and (payload->>'source' is distinct from 'manual_test')
               limit 1
             `
             if (existing && existing.length > 0) {
