@@ -356,6 +356,10 @@ self.addEventListener('notificationclick', (event) => {
     target = resolveNotificationUrl('/friends')
   } else if (notificationData.type === 'garden_invite' || notificationData.type === 'garden_invite_accepted') {
     target = resolveNotificationUrl('/gardens')
+  } else if (notificationData.type === 'daily_task_reminder' || notificationData.type === 'task_reminder') {
+    target = resolveNotificationUrl('/gardens')
+  } else if (notificationData.type === 'journal_continue_reminder') {
+    target = resolveNotificationUrl('/gardens')
   } else if (notificationData.conversationId) {
     target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
   } else {

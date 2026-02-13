@@ -9881,6 +9881,15 @@ async function runAutomation(automation) {
     return { recipients: 0, sent: 0, message: 'No recipients found' }
   }
 
+  // Determine default CTA URL based on automation type
+  let defaultCtaUrl = '/'
+  switch (automation.trigger_type) {
+    case 'daily_task_reminder': defaultCtaUrl = '/gardens'; break
+    case 'journal_continue_reminder': defaultCtaUrl = '/gardens'; break
+    case 'weekly_inactive_reminder': defaultCtaUrl = '/'; break
+  }
+  const targetCtaUrl = automation.cta_url || defaultCtaUrl
+
   // Create user_notifications entries
   let insertedCount = 0
   for (const recipient of recipients) {
@@ -9925,7 +9934,7 @@ async function runAutomation(automation) {
           ${recipient.user_id},
           ${personalizedTitle},
           ${message},
-          ${automation.cta_url || null},
+          ${targetCtaUrl},
           now(),
           'pending'
         )
@@ -27499,6 +27508,8 @@ async function deliverPushNotifications(notifications, campaign) {
               notificationId: notification.id,
               url: notification.cta_url || null,
               ctaUrl: notification.cta_url || null,
+              // Include automation type so the service worker can route correctly
+              type: notification.automation_trigger_type || null,
             },
           }),
         )
@@ -27596,8 +27607,11 @@ async function processDueUserNotifications() {
         un.message,
         un.payload,
         un.cta_url,
-        un.campaign_id::text as campaign_id
+        un.campaign_id::text as campaign_id,
+        un.automation_id::text as automation_id,
+        a.trigger_type as automation_trigger_type
       from public.user_notifications un
+      left join public.notification_automations a on a.id = un.automation_id
       where un.delivery_status = 'pending'
         and un.cancelled_at is null
         and un.scheduled_for <= now()
