@@ -1300,7 +1300,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     const showPalette = palette.length > 0
     const showRightColumn = showPalette || !!plant.identity?.livingSpace || !!plant.identity?.composition?.includes('Pot')
     const gridClass = showRightColumn
-      ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-start'
+      ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-stretch'
       : ''
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return t('moreInfo.values.flexible')
@@ -1608,18 +1608,23 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             <div className="flex flex-col gap-3 sm:gap-4">
               {showPalette && (
                 <section
-                  className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4"
+                  className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3"
                 >
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-                  <div className="relative space-y-2 sm:space-y-3">
-                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-                      <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
-                      <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
+                  <div className="relative space-y-1.5 sm:space-y-2">
+                    <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                      <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
                     </div>
-                    <div className="grid grid-cols-1 gap-1.5 sm:gap-2">
+                    <div className={`grid gap-1.5 sm:gap-2 ${
+                      palette.length <= 2 ? 'grid-cols-2' :
+                      palette.length <= 4 ? 'grid-cols-2' :
+                      palette.length <= 6 ? 'grid-cols-3' :
+                      'grid-cols-4'
+                    }`}>
                       {palette.map((color, idx) => {
                         const colorLabel = color.name || `Color ${idx + 1}`
-                        return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
+                        return <ColorSwatch key={`${colorLabel}-${idx}`} color={color} />
                       })}
                     </div>
                   </div>
@@ -1984,13 +1989,13 @@ const LivingSpacePanel: React.FC<{
   icon: React.ReactNode
   label: string
 }> = ({ active, icon, label }) => (
-  <div className={`flex flex-col items-center gap-1.5 sm:gap-2 rounded-2xl border p-3 sm:p-4 transition-all flex-1 min-w-0 ${
+  <div className={`flex flex-col items-center gap-1 rounded-xl sm:rounded-2xl border p-2 sm:p-3 transition-all flex-1 min-w-0 ${
     active
       ? 'border-emerald-400/60 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/10 shadow-sm'
       : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
   }`}>
     {icon}
-    <span className={`text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-center leading-tight ${
+    <span className={`text-[8px] sm:text-[10px] font-semibold uppercase tracking-wider text-center leading-tight ${
       active
         ? 'text-emerald-700 dark:text-emerald-300'
         : 'text-stone-400 dark:text-stone-600'
@@ -2013,28 +2018,28 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
   const inactiveClass = 'text-stone-400 dark:text-stone-600'
 
   return (
-    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6 relative overflow-hidden">
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden flex-1">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-      <div className="relative space-y-3 sm:space-y-4">
-        <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-          <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
-          <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
+      <div className="relative space-y-1.5 sm:space-y-2 h-full flex flex-col">
+        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+          <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('moreInfo.livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
         </div>
 
-        <div className="flex items-center justify-center gap-2 sm:gap-3">
+        <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-1">
           <LivingSpacePanel
             active={isIndoor || isBoth}
-            icon={<House className={`h-8 w-8 sm:h-10 sm:w-10 ${isIndoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            icon={<House className={`h-7 w-7 sm:h-8 sm:w-8 ${isIndoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('moreInfo.enums.livingSpace.indoor', { defaultValue: 'Indoor' })}
           />
           <LivingSpacePanel
             active={isOutdoor || isBoth}
-            icon={<TreeDeciduous className={`h-8 w-8 sm:h-10 sm:w-10 ${isOutdoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            icon={<TreeDeciduous className={`h-7 w-7 sm:h-8 sm:w-8 ${isOutdoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('moreInfo.enums.livingSpace.outdoor', { defaultValue: 'Outdoor' })}
           />
           <LivingSpacePanel
             active={isPottable}
-            icon={<Flower className={`h-8 w-8 sm:h-10 sm:w-10 ${isPottable ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            icon={<Flower className={`h-7 w-7 sm:h-8 sm:w-8 ${isPottable ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('moreInfo.livingSpaceVisualizer.pot', { defaultValue: 'Pot' })}
           />
         </div>
@@ -2124,16 +2129,18 @@ const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.
   )
 }
 
-const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
-  const label = color.name || 'Palette'
+const ColorSwatch: React.FC<{ color: PlantColor }> = ({ color }) => {
+  const label = color.name || 'Color'
   const tone = color.hexCode || '#16a34a'
-  const category = 'Palette'
-  const gradient = `linear-gradient(135deg, ${tone}, ${tone})`
   return (
-    <div className="group relative overflow-hidden rounded-md sm:rounded-lg border border-stone-200/60 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-1 sm:p-1.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="mb-1 sm:mb-1.5 h-8 sm:h-10 w-full rounded-md shadow-inner" style={{ backgroundImage: gradient }} />
-      <div className="text-[7px] sm:text-[9px] uppercase tracking-[0.3em] text-stone-500 dark:text-stone-400">{category}</div>
-      <div className="text-[10px] sm:text-[11px] font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
+    <div className="group relative flex flex-col items-center gap-1" title={label}>
+      <div
+        className="w-full aspect-square rounded-lg sm:rounded-xl shadow-inner border border-white/20 dark:border-white/10 transition-transform group-hover:scale-105"
+        style={{ backgroundColor: tone }}
+      />
+      <span className="text-[7px] sm:text-[8px] font-medium text-stone-500 dark:text-stone-400 truncate w-full text-center leading-tight">
+        {label}
+      </span>
     </div>
   )
 }
