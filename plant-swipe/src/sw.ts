@@ -360,6 +360,8 @@ self.addEventListener('notificationclick', (event) => {
     target = resolveNotificationUrl('/gardens')
   } else if (notificationData.type === 'journal_continue_reminder') {
     target = resolveNotificationUrl('/gardens')
+  } else if (notificationData.type === 'weekly_inactive_reminder') {
+    target = resolveNotificationUrl('/discovery')
   } else if (notificationData.conversationId) {
     target = resolveNotificationUrl(`/messages?conversation=${notificationData.conversationId}`)
   } else {

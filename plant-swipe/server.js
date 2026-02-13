@@ -9886,7 +9886,7 @@ async function runAutomation(automation) {
   switch (automation.trigger_type) {
     case 'daily_task_reminder': defaultCtaUrl = '/gardens'; break
     case 'journal_continue_reminder': defaultCtaUrl = '/gardens'; break
-    case 'weekly_inactive_reminder': defaultCtaUrl = '/'; break
+    case 'weekly_inactive_reminder': defaultCtaUrl = '/discovery'; break
   }
   const targetCtaUrl = automation.cta_url || defaultCtaUrl
 
@@ -28013,7 +28013,7 @@ async function processDueAutomations() {
             defaultUrl = '/gardens'
             break
           case 'weekly_inactive_reminder':
-            defaultUrl = '/'
+            defaultUrl = '/discovery'
             break
         }
         const targetUrl = automation.cta_url || defaultUrl
