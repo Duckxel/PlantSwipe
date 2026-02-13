@@ -1207,6 +1207,9 @@
     "habitatMap": {
       "title": "Carte des habitats"
     },
+    "livingSpaceVisualizer": {
+      "title": "Espace de vie"
+    },
     "recipes": {
       "title": "Idées de recettes",
       "subtitle": "Inspiration culinaire pour cette plante",

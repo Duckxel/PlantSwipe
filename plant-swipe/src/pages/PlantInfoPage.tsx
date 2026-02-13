@@ -56,6 +56,8 @@ import {
   ChartNoAxesColumn,
   Flower2,
   Cherry,
+  House,
+  TreeDeciduous,
 } from 'lucide-react'
 import type { TooltipProps } from 'recharts'
 import {
@@ -1706,6 +1708,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </section>
         </div>
 
+        {/* Indoor / Outdoor Visualizer */}
+        {plant.identity?.livingSpace && (
+          <LivingSpaceVisualizer livingSpace={plant.identity.livingSpace} t={t} />
+        )}
+
         {/* Habitat Map */}
         {habitats.length > 0 && (
           <section
@@ -1963,6 +1970,89 @@ const TimelineTooltip = (
         )}
       </div>
     </div>
+  )
+}
+
+// Indoor / Outdoor visual indicator
+type LivingSpaceVisualizerProps = {
+  livingSpace: string | undefined
+  t: (key: string, options?: Record<string, string>) => string
+}
+
+const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpace, t }) => {
+  if (!livingSpace) return null
+
+  const normalized = livingSpace.toLowerCase().replace(/[_\s&-]+/g, '')
+
+  const isIndoor = normalized === 'indoor'
+  const isOutdoor = normalized === 'outdoor'
+  const isBoth = normalized === 'both' || normalized === 'indooroutdoor'
+
+  if (!isIndoor && !isOutdoor && !isBoth) return null
+
+  return (
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6 relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+      <div className="relative space-y-3 sm:space-y-4">
+        <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+          <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
+          <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
+        </div>
+
+        <div className="flex items-center justify-center gap-4 sm:gap-6">
+          {/* Indoor panel */}
+          <div className={`flex flex-col items-center gap-2 sm:gap-3 rounded-2xl border p-4 sm:p-6 transition-all ${
+            isIndoor || isBoth
+              ? 'border-emerald-400/60 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/10 shadow-sm'
+              : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
+          }`}>
+            <House className={`h-10 w-10 sm:h-14 sm:w-14 ${
+              isIndoor || isBoth
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-stone-400 dark:text-stone-600'
+            }`} strokeWidth={1.5} />
+            <span className={`text-xs sm:text-sm font-semibold uppercase tracking-wider ${
+              isIndoor || isBoth
+                ? 'text-emerald-700 dark:text-emerald-300'
+                : 'text-stone-400 dark:text-stone-600'
+            }`}>
+              {t('moreInfo.enums.livingSpace.indoor', { defaultValue: 'Indoor' })}
+            </span>
+          </div>
+
+          {/* Divider */}
+          <div className="flex flex-col items-center gap-1">
+            <div className="h-8 sm:h-10 w-px bg-stone-300/50 dark:bg-stone-600/50" />
+            {isBoth ? (
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-emerald-600 dark:text-emerald-400 font-bold">&</span>
+            ) : (
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-stone-400 dark:text-stone-500">/</span>
+            )}
+            <div className="h-8 sm:h-10 w-px bg-stone-300/50 dark:bg-stone-600/50" />
+          </div>
+
+          {/* Outdoor panel */}
+          <div className={`flex flex-col items-center gap-2 sm:gap-3 rounded-2xl border p-4 sm:p-6 transition-all ${
+            isOutdoor || isBoth
+              ? 'border-emerald-400/60 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/10 shadow-sm'
+              : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
+          }`}>
+            <TreeDeciduous className={`h-10 w-10 sm:h-14 sm:w-14 ${
+              isOutdoor || isBoth
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-stone-400 dark:text-stone-600'
+            }`} strokeWidth={1.5} />
+            <span className={`text-xs sm:text-sm font-semibold uppercase tracking-wider ${
+              isOutdoor || isBoth
+                ? 'text-emerald-700 dark:text-emerald-300'
+                : 'text-stone-400 dark:text-stone-600'
+            }`}>
+              {t('moreInfo.enums.livingSpace.outdoor', { defaultValue: 'Outdoor' })}
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
