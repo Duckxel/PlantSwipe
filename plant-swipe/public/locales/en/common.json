@@ -1208,7 +1208,8 @@
       "title": "Habitat Map"
     },
     "livingSpaceVisualizer": {
-      "title": "Living Space"
+      "title": "Living Space",
+      "pot": "Pot"
     },
     "recipes": {
       "title": "Recipe Ideas",

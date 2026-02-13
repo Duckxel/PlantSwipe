@@ -54,6 +54,7 @@ import {
   FileText,
   Wrench,
   ChartNoAxesColumn,
+  Flower,
   Flower2,
   Cherry,
   House,
@@ -1297,7 +1298,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   }))
     const palette = plant.identity?.colors?.length ? plant.identity.colors : []
     const showPalette = palette.length > 0
-    const showRightColumn = showPalette || !!plant.identity?.livingSpace
+    const showRightColumn = showPalette || !!plant.identity?.livingSpace || !!plant.identity?.composition?.includes('Pot')
     const gridClass = showRightColumn
       ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-start'
       : ''
@@ -1625,8 +1626,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </section>
               )}
 
-              {plant.identity?.livingSpace && (
-                <LivingSpaceVisualizer livingSpace={plant.identity.livingSpace} t={t} />
+              {(plant.identity?.livingSpace || plant.identity?.composition?.includes('Pot')) && (
+                <LivingSpaceVisualizer
+                  livingSpace={plant.identity?.livingSpace}
+                  isPottable={plant.identity?.composition?.includes('Pot') ?? false}
+                  t={t}
+                />
               )}
             </div>
           )}
@@ -1990,22 +1995,45 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
   )
 }
 
-// Indoor / Outdoor visual indicator
+// Indoor / Outdoor / Pot visual indicator
 type LivingSpaceVisualizerProps = {
   livingSpace: string | undefined
+  isPottable: boolean
   t: (key: string, options?: Record<string, string>) => string
 }
 
-const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpace, t }) => {
-  if (!livingSpace) return null
+const LivingSpacePanel: React.FC<{
+  active: boolean
+  icon: React.ReactNode
+  label: string
+}> = ({ active, icon, label }) => (
+  <div className={`flex flex-col items-center gap-1.5 sm:gap-2 rounded-2xl border p-3 sm:p-4 transition-all flex-1 min-w-0 ${
+    active
+      ? 'border-emerald-400/60 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/10 shadow-sm'
+      : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
+  }`}>
+    {icon}
+    <span className={`text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-center leading-tight ${
+      active
+        ? 'text-emerald-700 dark:text-emerald-300'
+        : 'text-stone-400 dark:text-stone-600'
+    }`}>
+      {label}
+    </span>
+  </div>
+)
 
-  const normalized = livingSpace.toLowerCase().replace(/[_\s&-]+/g, '')
+const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpace, isPottable, t }) => {
+  if (!livingSpace && !isPottable) return null
+
+  const normalized = (livingSpace || '').toLowerCase().replace(/[_\s&-]+/g, '')
 
   const isIndoor = normalized === 'indoor'
   const isOutdoor = normalized === 'outdoor'
   const isBoth = normalized === 'both' || normalized === 'indooroutdoor'
 
-  if (!isIndoor && !isOutdoor && !isBoth) return null
+  const activeClass = 'text-emerald-600 dark:text-emerald-400'
+  const inactiveClass = 'text-stone-400 dark:text-stone-600'
 
   return (
     <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6 relative overflow-hidden">
@@ -2016,57 +2044,22 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
           <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
         </div>
 
-        <div className="flex items-center justify-center gap-4 sm:gap-6">
-          {/* Indoor panel */}
-          <div className={`flex flex-col items-center gap-2 sm:gap-3 rounded-2xl border p-4 sm:p-6 transition-all ${
-            isIndoor || isBoth
-              ? 'border-emerald-400/60 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/10 shadow-sm'
-              : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
-          }`}>
-            <House className={`h-10 w-10 sm:h-14 sm:w-14 ${
-              isIndoor || isBoth
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-stone-400 dark:text-stone-600'
-            }`} strokeWidth={1.5} />
-            <span className={`text-xs sm:text-sm font-semibold uppercase tracking-wider ${
-              isIndoor || isBoth
-                ? 'text-emerald-700 dark:text-emerald-300'
-                : 'text-stone-400 dark:text-stone-600'
-            }`}>
-              {t('moreInfo.enums.livingSpace.indoor', { defaultValue: 'Indoor' })}
-            </span>
-          </div>
-
-          {/* Divider */}
-          <div className="flex flex-col items-center gap-1">
-            <div className="h-8 sm:h-10 w-px bg-stone-300/50 dark:bg-stone-600/50" />
-            {isBoth ? (
-              <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-emerald-600 dark:text-emerald-400 font-bold">&</span>
-            ) : (
-              <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-stone-400 dark:text-stone-500">/</span>
-            )}
-            <div className="h-8 sm:h-10 w-px bg-stone-300/50 dark:bg-stone-600/50" />
-          </div>
-
-          {/* Outdoor panel */}
-          <div className={`flex flex-col items-center gap-2 sm:gap-3 rounded-2xl border p-4 sm:p-6 transition-all ${
-            isOutdoor || isBoth
-              ? 'border-emerald-400/60 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/10 shadow-sm'
-              : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
-          }`}>
-            <TreeDeciduous className={`h-10 w-10 sm:h-14 sm:w-14 ${
-              isOutdoor || isBoth
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-stone-400 dark:text-stone-600'
-            }`} strokeWidth={1.5} />
-            <span className={`text-xs sm:text-sm font-semibold uppercase tracking-wider ${
-              isOutdoor || isBoth
-                ? 'text-emerald-700 dark:text-emerald-300'
-                : 'text-stone-400 dark:text-stone-600'
-            }`}>
-              {t('moreInfo.enums.livingSpace.outdoor', { defaultValue: 'Outdoor' })}
-            </span>
-          </div>
+        <div className="flex items-center justify-center gap-2 sm:gap-3">
+          <LivingSpacePanel
+            active={isIndoor || isBoth}
+            icon={<House className={`h-8 w-8 sm:h-10 sm:w-10 ${isIndoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('moreInfo.enums.livingSpace.indoor', { defaultValue: 'Indoor' })}
+          />
+          <LivingSpacePanel
+            active={isOutdoor || isBoth}
+            icon={<TreeDeciduous className={`h-8 w-8 sm:h-10 sm:w-10 ${isOutdoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('moreInfo.enums.livingSpace.outdoor', { defaultValue: 'Outdoor' })}
+          />
+          <LivingSpacePanel
+            active={isPottable}
+            icon={<Flower className={`h-8 w-8 sm:h-10 sm:w-10 ${isPottable ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('moreInfo.livingSpaceVisualizer.pot', { defaultValue: 'Pot' })}
+          />
         </div>
       </div>
     </section>

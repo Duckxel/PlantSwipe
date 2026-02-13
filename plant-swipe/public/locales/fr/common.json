@@ -1208,7 +1208,8 @@
       "title": "Carte des habitats"
     },
     "livingSpaceVisualizer": {
-      "title": "Espace de vie"
+      "title": "Espace de vie",
+      "pot": "Pot"
     },
     "recipes": {
       "title": "Idées de recettes",
