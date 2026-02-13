@@ -615,6 +615,7 @@
       "passwordTooShort": "Password must be at least 6 characters",
       "passwordsDontMatch": "Passwords do not match",
       "currentPasswordIncorrect": "Current password is incorrect",
+      "newPasswordSameAsCurrent": "New password must be different from your current password.",
       "failedToUpdate": "Failed to update password"
     },
     "privacy": {
