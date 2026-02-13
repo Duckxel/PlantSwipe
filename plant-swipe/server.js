@@ -28027,9 +28027,30 @@ async function processDueAutomations() {
           const personalizedTitle = notificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
           try {
-            // Insert notification with conflict handling for the unique automation constraint
-            // The unique constraint is on (automation_id, user_id, scheduled_for::date)
-            const insertResult = await sql`
+            // Check if notification already exists for this automation + user today
+            // Using SELECT-then-INSERT instead of ON CONFLICT to avoid dependency on
+            // the unique index (user_notifications_automation_unique_daily) which may
+            // not exist yet on older deployments. The unique index provides additional
+            // safety but this check works regardless.
+            const existing = await sql`
+              select id from public.user_notifications
+              where automation_id = ${automation.id}
+                and user_id = ${recipient.user_id}
+                and (scheduled_for at time zone coalesce(
+                  (select timezone from public.profiles where id = ${recipient.user_id}),
+                  ${DEFAULT_USER_TIMEZONE}
+                ))::date = (now() at time zone coalesce(
+                  (select timezone from public.profiles where id = ${recipient.user_id}),
+                  ${DEFAULT_USER_TIMEZONE}
+                ))::date
+              limit 1
+            `
+            if (existing && existing.length > 0) {
+              skippedCount++
+              continue
+            }
+
+            await sql`
               insert into public.user_notifications (
                 automation_id, user_id, title, message, cta_url, scheduled_for, delivery_status
               )
@@ -28042,17 +28063,10 @@ async function processDueAutomations() {
                 now(),
                 'pending'
               )
-              on conflict (automation_id, user_id, (scheduled_for::date)) where automation_id is not null
-              do nothing
-              returning id
             `
-            if (insertResult && insertResult.length > 0) {
-              insertedCount++
-            } else {
-              skippedCount++
-            }
+            insertedCount++
           } catch (insertErr) {
-            // Log errors for debugging (duplicate key violations expected if constraint triggered)
+            // Log errors for debugging
             if (!insertErr?.message?.includes('duplicate key') && !insertErr?.message?.includes('violates unique constraint')) {
               console.warn(`[automations] Failed to insert notification for user ${recipient.user_id}:`, insertErr?.message)
             }
