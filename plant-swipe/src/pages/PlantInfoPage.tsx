@@ -59,16 +59,6 @@ import {
   House,
   TreeDeciduous,
 } from 'lucide-react'
-import type { TooltipProps } from 'recharts'
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-} from 'recharts'
 import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
@@ -1437,19 +1427,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const growthSupportNotes = formatTextValue(growth.adviceTutoring)
       const growthSowingNotes = formatTextValue(growth.adviceSowing)
       const groundEffectLabel = formatTextValue(ecology.groundEffect)
-    const [hoveredMonth, setHoveredMonth] = React.useState<string | null>(null)
-
-    const handleTimelineHover = React.useCallback((state: { activeLabel?: string | number } | undefined) => {
-      if (state?.activeLabel && typeof state.activeLabel === 'string') {
-        setHoveredMonth(state.activeLabel)
-      } else {
-        setHoveredMonth(null)
-      }
-    }, [])
-
-    const clearTimelineHover = React.useCallback(() => {
-      setHoveredMonth(null)
-    }, [])
 
       const careHighlights = filterInfoItems([
         {
@@ -1584,53 +1561,17 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </p>
         </div>
       
-        {/* Seasonal Timeline — full width, first element */}
+        {/* Seasonal Timeline — full width Gantt-style, first element */}
         <section
           className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
           <div className="relative space-y-3 sm:space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-                <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.timeline.title')}</span>
-              </div>
-              {hoveredMonth ? (
-                <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">{hoveredMonth}</span>
-              ) : (
-                <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">{t('moreInfo.timeline.hoverPrompt')}</span>
-              )}
+            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+              <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.timeline.title')}</span>
             </div>
-            <div className="h-36 sm:h-44">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={timelineData} stackOffset="expand" onMouseMove={handleTimelineHover} onMouseLeave={clearTimelineHover}>
-                  <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
-                  <YAxis hide domain={[0, 3]} />
-                  <RechartsTooltip content={<TimelineTooltip t={t} />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                  <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} shape={(props: any) => <RoundedBar {...props} dataKey="sowing" data={timelineData} />} />
-                  <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} shape={(props: any) => <RoundedBar {...props} dataKey="fruiting" data={timelineData} />} />
-                  <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} shape={(props: any) => <RoundedBar {...props} dataKey="flowering" data={timelineData} />} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
-              <span className="flex items-center gap-1 sm:gap-1.5">
-                <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.flowering }} />
-                <Flower2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.flowering }} />
-                {t('moreInfo.timeline.legend.flowering')}
-              </span>
-              <span className="flex items-center gap-1 sm:gap-1.5">
-                <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.fruiting }} />
-                <Cherry className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.fruiting }} />
-                {t('moreInfo.timeline.legend.fruiting')}
-              </span>
-              <span className="flex items-center gap-1 sm:gap-1.5">
-                <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TIMELINE_COLORS.sowing }} />
-                <Sprout className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" style={{ color: TIMELINE_COLORS.sowing }} />
-                {t('moreInfo.timeline.legend.sowing')}
-              </span>
-            </div>
+            <GanttTimeline timelineData={timelineData} monthLabels={monthLabels} t={t} />
           </div>
         </section>
 
@@ -1898,40 +1839,153 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   )
 }
 
-const TimelineTooltip = (
-  props: TooltipProps<number, string> & { 
-    payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number; month?: string } }>,
-    t: (key: string) => string
-  },
-) => {
-  const { active, payload: tooltipPayload, t } = props
-  const data = tooltipPayload && tooltipPayload.length > 0 ? tooltipPayload[0].payload : null
-  if (!active || !data) return null
-  const displayLabel = typeof data?.month === 'string' ? data.month : ''
-  
-  const translateKey = (key: string) => {
-    if (key === 'flowering') return t('moreInfo.timeline.legend.flowering')
-    if (key === 'fruiting') return t('moreInfo.timeline.legend.fruiting')
-    if (key === 'sowing') return t('moreInfo.timeline.legend.sowing')
-    return key
+// Gantt-style seasonal timeline with rows per activity and month columns
+type GanttTimelineProps = {
+  timelineData: Array<{ month: string; flowering: number; fruiting: number; sowing: number }>
+  monthLabels: string[]
+  t: (key: string, options?: Record<string, string>) => string
+}
+
+const QUARTER_COLORS = [
+  'bg-indigo-100/80 dark:bg-indigo-500/10',
+  'bg-fuchsia-100/60 dark:bg-fuchsia-500/8',
+  'bg-lime-100/60 dark:bg-lime-500/8',
+  'bg-amber-100/60 dark:bg-amber-500/8',
+] as const
+
+const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels, t }) => {
+  const rows: Array<{
+    key: 'flowering' | 'fruiting' | 'sowing'
+    label: string
+    color: string
+    bgClass: string
+    icon: React.ReactNode
+  }> = [
+    {
+      key: 'flowering',
+      label: t('moreInfo.timeline.legend.flowering'),
+      color: TIMELINE_COLORS.flowering,
+      bgClass: 'bg-orange-400',
+      icon: <Flower2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.flowering }} />,
+    },
+    {
+      key: 'fruiting',
+      label: t('moreInfo.timeline.legend.fruiting'),
+      color: TIMELINE_COLORS.fruiting,
+      bgClass: 'bg-green-500',
+      icon: <Cherry className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.fruiting }} />,
+    },
+    {
+      key: 'sowing',
+      label: t('moreInfo.timeline.legend.sowing'),
+      color: TIMELINE_COLORS.sowing,
+      bgClass: 'bg-indigo-500',
+      icon: <Sprout className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.sowing }} />,
+    },
+  ]
+
+  // Only show rows that have at least one active month
+  const activeRows = rows.filter((row) =>
+    timelineData.some((d) => d[row.key] > 0),
+  )
+
+  if (activeRows.length === 0) return null
+
+  // Build contiguous bar segments for a row (consecutive active months get merged into one bar)
+  const buildSegments = (key: 'flowering' | 'fruiting' | 'sowing') => {
+    const segments: Array<{ start: number; end: number }> = []
+    let segStart: number | null = null
+    for (let i = 0; i < 12; i++) {
+      const active = timelineData[i]?.[key] > 0
+      if (active && segStart === null) segStart = i
+      if (!active && segStart !== null) {
+        segments.push({ start: segStart, end: i - 1 })
+        segStart = null
+      }
+    }
+    if (segStart !== null) segments.push({ start: segStart, end: 11 })
+    return segments
   }
-  
+
   return (
-    <div className="rounded-xl border border-sky-400/30 bg-white/95 px-3 py-2 text-xs text-stone-700 shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95 dark:text-stone-100">
-      <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{displayLabel || '—'}</p>
-      <div className="space-y-1 mt-1">
-        {Object.entries(data).map(([key, value]) =>
-          value && key !== 'month' ? (
-            <div key={key} className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TIMELINE_COLORS[key as keyof typeof TIMELINE_COLORS] }} />
-              {key === 'flowering' && <Flower2 className="h-3 w-3" style={{ color: TIMELINE_COLORS.flowering }} />}
-              {key === 'fruiting' && <Cherry className="h-3 w-3" style={{ color: TIMELINE_COLORS.fruiting }} />}
-              {key === 'sowing' && <Sprout className="h-3 w-3" style={{ color: TIMELINE_COLORS.sowing }} />}
-              <span>{translateKey(key)}</span>
-            </div>
-          ) : null,
-        )}
+    <div className="space-y-2">
+      {/* Quarter headers */}
+      <div className="grid gap-1 sm:gap-1.5" style={{ gridTemplateColumns: 'minmax(90px, auto) repeat(12, minmax(0, 1fr))' }}>
+        {/* Empty label cell */}
+        <div />
+        {[0, 1, 2, 3].map((q) => (
+          <div
+            key={q}
+            className={`col-span-3 rounded-lg sm:rounded-xl ${QUARTER_COLORS[q]} flex items-center justify-center py-1.5 sm:py-2`}
+          >
+            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-stone-500 dark:text-stone-400">
+              Q{q + 1}
+            </span>
+          </div>
+        ))}
       </div>
+
+      {/* Month labels row */}
+      <div className="grid gap-1 sm:gap-1.5" style={{ gridTemplateColumns: 'minmax(90px, auto) repeat(12, minmax(0, 1fr))' }}>
+        <div />
+        {monthLabels.map((label, idx) => (
+          <div key={idx} className="flex items-center justify-center">
+            <span className="text-[8px] sm:text-[9px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
+              {label.slice(0, 3)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Activity rows */}
+      {activeRows.map((row) => {
+        const segments = buildSegments(row.key)
+        return (
+          <div
+            key={row.key}
+            className="grid gap-1 sm:gap-1.5 items-center"
+            style={{ gridTemplateColumns: 'minmax(90px, auto) repeat(12, minmax(0, 1fr))' }}
+          >
+            {/* Row label */}
+            <div className="flex items-center gap-1.5 sm:gap-2 pr-2">
+              {row.icon}
+              <span className="text-[10px] sm:text-xs font-semibold text-stone-600 dark:text-stone-300 truncate">
+                {row.label}
+              </span>
+            </div>
+            {/* Month cells with bars */}
+            <div className="col-span-12 relative grid grid-cols-12 gap-1 sm:gap-1.5">
+              {/* Background cells */}
+              {Array.from({ length: 12 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="h-7 sm:h-9 rounded-md sm:rounded-lg bg-stone-100/60 dark:bg-stone-800/30 border border-stone-200/40 dark:border-stone-700/25"
+                />
+              ))}
+              {/* Colored bar segments overlaid */}
+              {segments.map((seg, sIdx) => {
+                const span = seg.end - seg.start + 1
+                // Calculate position with gap offsets
+                return (
+                  <div
+                    key={sIdx}
+                    className="absolute inset-y-0 flex items-center"
+                    style={{
+                      left: `calc(${(seg.start / 12) * 100}% + 2px)`,
+                      width: `calc(${(span / 12) * 100}% - 4px)`,
+                    }}
+                  >
+                    <div
+                      className="w-full h-5 sm:h-7 rounded-md sm:rounded-lg shadow-sm"
+                      style={{ backgroundColor: row.color, opacity: 0.85 }}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -2017,47 +2071,6 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
       </div>
     </section>
   )
-}
-
-// Custom bar shape that applies rounded corners only to the topmost bar in each stack
-const RoundedBar = (props: any) => {
-  const { x, y, width, height, fill, dataKey, data, index } = props
-  if (!height || height <= 0) return null
-  
-  // Determine if this bar is the topmost in the stack for this month
-  const monthData = data?.[index]
-  if (!monthData) return <rect x={x} y={y} width={width} height={height} fill={fill} />
-  
-  // Stack order from bottom to top: sowing -> fruiting -> flowering
-  const stackOrder = ['sowing', 'fruiting', 'flowering']
-  const currentIndex = stackOrder.indexOf(dataKey)
-  
-  // Check if any bar above this one has data
-  let isTopmost = true
-  for (let i = currentIndex + 1; i < stackOrder.length; i++) {
-    if (monthData[stackOrder[i]] > 0) {
-      isTopmost = false
-      break
-    }
-  }
-  
-  const radius = isTopmost ? 6 : 0
-  
-  if (radius === 0) {
-    return <rect x={x} y={y} width={width} height={height} fill={fill} />
-  }
-  
-  // Draw rounded rectangle for topmost bar
-  const path = `
-    M ${x},${y + radius}
-    Q ${x},${y} ${x + radius},${y}
-    L ${x + width - radius},${y}
-    Q ${x + width},${y} ${x + width},${y + radius}
-    L ${x + width},${y + height}
-    L ${x},${y + height}
-    Z
-  `
-  return <path d={path} fill={fill} />
 }
 
 const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string; className?: string }> = ({
