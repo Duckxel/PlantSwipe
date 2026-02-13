@@ -1878,6 +1878,8 @@ export const AdminPage: React.FC = () => {
     requested_by: string | null;
     requester_name: string | null;
     requester_email: string | null;
+    /** Whether the requester has admin or editor roles (can create plants themselves) */
+    requester_is_staff: boolean | null;
   };
   type BulkPlantRequestSummary = {
     totalInput: number;
@@ -1914,6 +1916,11 @@ export const AdminPage: React.FC = () => {
     React.useState<boolean>(false);
   const [plantRequestsLoadingMore, setPlantRequestsLoadingMore] =
     React.useState<boolean>(false);
+
+  // Toggle to hide requests made by admins/editors (who can create plants themselves)
+  const [hideStaffRequests, setHideStaffRequests] = React.useState<boolean>(true);
+  // Cache of staff (admin/editor) user IDs for filtering
+  const staffUserIdsRef = React.useRef<Set<string>>(new Set());
 
   // Count unique requested plants - use accurate count from DB, not loaded rows
   const uniqueRequestedPlantsCount = plantRequestsTotalCount;
@@ -2137,6 +2144,7 @@ export const AdminPage: React.FC = () => {
           typeof requestCountRaw === "number"
             ? requestCountRaw
             : Number(requestCountRaw ?? 0);
+        const requestedBy = row?.requested_by ? String(row.requested_by) : null;
         return {
           id,
           plant_name: row?.plant_name
@@ -2152,13 +2160,57 @@ export const AdminPage: React.FC = () => {
           request_count: Number.isFinite(requestCount) ? requestCount : 0,
           created_at: row?.created_at ?? null,
           updated_at: row?.updated_at ?? null,
-          requested_by: row?.requested_by ? String(row.requested_by) : null,
+          requested_by: requestedBy,
           requester_name: null as string | null,
           requester_email: null as string | null,
+          requester_is_staff: requestedBy ? staffUserIdsRef.current.has(requestedBy) : null,
         };
       })
       .filter((row): row is PlantRequestRow => row !== null);
   }, []);
+
+  /** Fetch all admin/editor user IDs once and cache them */
+  const loadStaffUserIds = React.useCallback(async () => {
+    try {
+      // Query profiles that have admin or editor roles, or is_admin = true
+      // This is a small set (handful of users), so no pagination needed
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, is_admin, roles")
+        .or("is_admin.eq.true,roles.cs.{admin},roles.cs.{editor}");
+      if (error) {
+        console.warn("Failed to load staff user IDs:", error.message);
+        return;
+      }
+      const ids = new Set<string>();
+      for (const row of data ?? []) {
+        if (!row?.id) continue;
+        const isAdmin = row.is_admin === true;
+        const roles = Array.isArray(row.roles) ? row.roles : [];
+        if (isAdmin || roles.includes("admin") || roles.includes("editor")) {
+          ids.add(String(row.id));
+        }
+      }
+      staffUserIdsRef.current = ids;
+    } catch (err) {
+      console.warn("Failed to load staff user IDs:", err);
+    }
+  }, [supabase]);
+
+  /** Enrich rows with staff status from cached staff IDs */
+  const enrichRowsWithStaffStatus = React.useCallback(
+    (rows: PlantRequestRow[]): PlantRequestRow[] => {
+      const staffIds = staffUserIdsRef.current;
+      if (staffIds.size === 0) return rows;
+      return rows.map((row) => ({
+        ...row,
+        requester_is_staff: row.requested_by
+          ? staffIds.has(row.requested_by)
+          : null,
+      }));
+    },
+    [],
+  );
 
   const loadPlantRequests = React.useCallback(
     async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -2169,6 +2221,11 @@ export const AdminPage: React.FC = () => {
         setPlantRequestsRefreshing(true);
       }
       try {
+        // 0. Ensure staff user IDs are loaded (for admin/editor filter)
+        if (staffUserIdsRef.current.size === 0) {
+          await loadStaffUserIds();
+        }
+
         // 1. Get accurate total count (not capped by row limit)
         const { count: totalCount, error: countError } = await supabase
           .from("requested_plants")
@@ -2218,7 +2275,7 @@ export const AdminPage: React.FC = () => {
 
         if (error) throw new Error(error.message);
 
-        const rows = parseRequestRows(data);
+        const rows = enrichRowsWithStaffStatus(parseRequestRows(data));
         setPlantRequests(rows);
         setPlantRequestsHasMore(rows.length < accurateCount);
       } catch (err) {
@@ -2236,7 +2293,7 @@ export const AdminPage: React.FC = () => {
         }
       }
     },
-    [supabase, parseRequestRows],
+    [supabase, parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds],
   );
 
   const loadMorePlantRequests = React.useCallback(async () => {
@@ -2258,7 +2315,7 @@ export const AdminPage: React.FC = () => {
 
       if (error) throw new Error(error.message);
 
-      const newRows = parseRequestRows(data);
+      const newRows = enrichRowsWithStaffStatus(parseRequestRows(data));
       setPlantRequests((prev) => [...prev, ...newRows]);
       setPlantRequestsHasMore(
         plantRequests.length + newRows.length < plantRequestsTotalCount,
@@ -2276,6 +2333,7 @@ export const AdminPage: React.FC = () => {
     plantRequestsTotalCount,
     supabase,
     parseRequestRows,
+    enrichRowsWithStaffStatus,
   ]);
 
   const loadRequestUsers = React.useCallback(
@@ -8717,32 +8775,47 @@ export const AdminPage: React.FC = () => {
                         </div>
 
                         {/* Statistics */}
-                        {!plantRequestsLoading && plantRequestsTotalCount > 0 && (
-                          <div className="flex flex-wrap gap-4 text-sm">
-                            <div className="flex items-center gap-2">
-                              <span className="opacity-60">
-                                Total Requests:
-                              </span>
-                              <span className="font-medium">
-                                {plantRequestsTotalRequestsSum}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="opacity-60">Unique Plants:</span>
-                              <span className="font-medium">
-                                {plantRequestsTotalCount}
-                              </span>
-                            </div>
-                            {plantRequests.length < plantRequestsTotalCount && (
+                        {!plantRequestsLoading && plantRequestsTotalCount > 0 && (() => {
+                          const loadedUserOnly = plantRequests.filter((r) => r.requester_is_staff !== true);
+                          const loadedStaff = plantRequests.length - loadedUserOnly.length;
+                          return (
+                            <div className="flex flex-wrap gap-4 text-sm">
                               <div className="flex items-center gap-2">
-                                <span className="opacity-60">Loaded:</span>
+                                <span className="opacity-60">
+                                  Total Requests:
+                                </span>
                                 <span className="font-medium">
-                                  {plantRequests.length} / {plantRequestsTotalCount}
+                                  {plantRequestsTotalRequestsSum}
                                 </span>
                               </div>
-                            )}
-                          </div>
-                        )}
+                              <div className="flex items-center gap-2">
+                                <span className="opacity-60">Unique Plants:</span>
+                                <span className="font-medium">
+                                  {plantRequestsTotalCount}
+                                </span>
+                              </div>
+                              {plantRequests.length < plantRequestsTotalCount && (
+                                <div className="flex items-center gap-2">
+                                  <span className="opacity-60">Loaded:</span>
+                                  <span className="font-medium">
+                                    {plantRequests.length} / {plantRequestsTotalCount}
+                                  </span>
+                                </div>
+                              )}
+                              {hideStaffRequests && loadedStaff > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="opacity-60">Visible (users only):</span>
+                                  <span className="font-medium text-purple-600 dark:text-purple-400">
+                                    {loadedUserOnly.length}
+                                  </span>
+                                  <span className="opacity-40 text-xs">
+                                    ({loadedStaff} staff hidden)
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* AI Prefill Progress - Neomorphic Design */}
                         {aiPrefillRunning && (
@@ -9130,15 +9203,30 @@ export const AdminPage: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Search */}
-                        <SearchInput
-                          placeholder="Search requests by plant name..."
-                          value={requestSearchQuery}
-                          onChange={(e) =>
-                            setRequestSearchQuery(e.target.value)
-                          }
-                          className="rounded-xl"
-                        />
+                        {/* Search & Filters */}
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <SearchInput
+                            placeholder="Search requests by plant name..."
+                            value={requestSearchQuery}
+                            onChange={(e) =>
+                              setRequestSearchQuery(e.target.value)
+                            }
+                            className="rounded-xl flex-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setHideStaffRequests((prev) => !prev)}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap border ${
+                              hideStaffRequests
+                                ? "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800/50 text-purple-700 dark:text-purple-300"
+                                : "bg-stone-50 dark:bg-[#252528] border-stone-200 dark:border-[#3e3e42] text-stone-500 dark:text-stone-400"
+                            }`}
+                            title={hideStaffRequests ? "Showing only user requests (admins/editors hidden)" : "Showing all requests including admins/editors"}
+                          >
+                            <ShieldX className={`h-3.5 w-3.5 ${hideStaffRequests ? "text-purple-600 dark:text-purple-400" : "opacity-50"}`} />
+                            {hideStaffRequests ? "Staff hidden" : "Show all"}
+                          </button>
+                        </div>
 
                         {plantRequestsError && (
                           <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
@@ -9151,15 +9239,19 @@ export const AdminPage: React.FC = () => {
                           </div>
                         ) : (
                           (() => {
+                            // Apply staff filter first, then search filter
+                            const staffFiltered = hideStaffRequests
+                              ? plantRequests.filter((req) => req.requester_is_staff !== true)
+                              : plantRequests;
                             const filteredRequests = requestSearchQuery.trim()
-                              ? plantRequests.filter((req) =>
+                              ? staffFiltered.filter((req) =>
                                   req.plant_name
                                     .toLowerCase()
                                     .includes(
                                       requestSearchQuery.toLowerCase().trim(),
                                     ),
                                 )
-                              : plantRequests;
+                              : staffFiltered;
 
                             return filteredRequests.length === 0 ? (
                               <div className="text-sm opacity-60">
@@ -9257,11 +9349,19 @@ export const AdminPage: React.FC = () => {
                                               </Button>
                                             </div>
                                           )}
-                                          <div
-                                            className="text-xs opacity-60"
-                                            title={updatedTitle}
-                                          >
-                                            {timeLabel}
+                                          <div className="flex items-center gap-2">
+                                            <div
+                                              className="text-xs opacity-60"
+                                              title={updatedTitle}
+                                            >
+                                              {timeLabel}
+                                            </div>
+                                            {req.requester_is_staff === true && (
+                                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800/40" title="Requested by an admin or editor">
+                                                <Shield className="h-2.5 w-2.5" />
+                                                Staff
+                                              </span>
+                                            )}
                                           </div>
                                         </div>
                                         <Button
