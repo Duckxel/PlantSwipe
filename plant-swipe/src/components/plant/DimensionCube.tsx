@@ -57,13 +57,11 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     const scene = new THREE.Scene()
 
-    // Camera setup – frame both the plant box and the human model
+    // Camera setup – pull back: half cube width + full human height + offset
     const fov = 38
-    const fovRad = (fov * Math.PI) / 180
-    const distanceForHeight = sceneMaxHeight / (2 * Math.tan(fovRad / 2)) + 0.5
     const aspect = initialWidth / Math.max(1, initialHeight)
-    const distanceForWidth = sceneWidth / (2 * Math.tan(fovRad / 2) * aspect) + 0.5
-    const cameraDistance = Math.max(distanceForHeight, distanceForWidth, 3.5)
+    const cameraOffset = 1.0
+    const cameraDistance = plantW / 2 + HUMAN_HEIGHT_M + cameraOffset
 
     const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 200)
     const orbitCenter = new THREE.Vector3(sceneCenterX, sceneCenterY, 0)
