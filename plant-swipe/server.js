@@ -1614,7 +1614,14 @@ const adminUploadAllowedMimeTypes = new Set([
   'audio/webm',
   // Archives
   'application/zip',
+  // 3D Models
+  'model/obj',
 ])
+
+// Extension-to-MIME mapping for file types that browsers report as application/octet-stream
+const extensionToMimeOverrides = {
+  '.obj': 'model/obj',
+}
 
 // Media proxy URL configuration
 // Transforms Supabase storage URLs to use the nginx reverse proxy
@@ -2010,7 +2017,16 @@ async function handleScopedImageUpload(req, res, options = {}) {
         res.status(400).json({ error: 'Missing file (expected form field "file")' })
         return
       }
-      const mime = (file.mimetype || '').toLowerCase()
+      let mime = (file.mimetype || '').toLowerCase()
+      // Browsers often report unknown file types (e.g. .obj) as application/octet-stream
+      // Resolve actual MIME from extension when browser sends a generic type
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        const ext = path.extname(String(file.originalname || '')).toLowerCase()
+        const resolved = extensionToMimeOverrides[ext]
+        if (resolved) {
+          mime = resolved
+        }
+      }
       if (!adminUploadAllowedMimeTypes.has(mime)) {
         res.status(400).json({ error: `Unsupported file type: ${mime}` })
         return
@@ -2106,6 +2122,8 @@ async function handleScopedImageUpload(req, res, options = {}) {
           'audio/webm': 'weba',
           // Archives
           'application/zip': 'zip',
+          // 3D Models
+          'model/obj': 'obj',
         }
         const ext = extMap[mime] || originalTypeSegment
         finalTypeSegment = sanitizePathSegment(ext, ext)

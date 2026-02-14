@@ -59,9 +59,30 @@ const ALLOWED_MIME_TYPES = new Set([
   "audio/webm",
   // Archives
   "application/zip",
+  // 3D Models
+  "model/obj",
 ])
 
-const ACCEPT_STRING = Array.from(ALLOWED_MIME_TYPES).join(",")
+// Extensions that browsers report as application/octet-stream or empty
+// Listed explicitly so the file picker shows them and validation accepts them
+const ALLOWED_EXTENSIONS = new Set([".obj"])
+
+const ACCEPT_STRING = [
+  ...Array.from(ALLOWED_MIME_TYPES),
+  ...Array.from(ALLOWED_EXTENSIONS),
+].join(",")
+
+function getFileExtension(name: string): string {
+  const dot = name.lastIndexOf(".")
+  return dot >= 0 ? name.slice(dot).toLowerCase() : ""
+}
+
+function isFileAllowed(file: File): boolean {
+  const mime = (file.type || "").toLowerCase()
+  if (ALLOWED_MIME_TYPES.has(mime)) return true
+  // Fallback: check extension for types browsers don't recognise (e.g. .obj)
+  return ALLOWED_EXTENSIONS.has(getFileExtension(file.name))
+}
 
 function formatBytes(value: number) {
   if (!Number.isFinite(value)) return "-"
@@ -113,9 +134,8 @@ export const AdminUploadPanel: React.FC = () => {
     async (file: File | null) => {
       if (!file) return
       setError(null)
-      const mime = (file.type || "").toLowerCase()
-      if (!ALLOWED_MIME_TYPES.has(mime)) {
-        setError("This file type is not supported. Accepted: images, PDF, video, audio, CSV, JSON, TXT, ZIP.")
+      if (!isFileAllowed(file)) {
+        setError("This file type is not supported. Accepted: images, PDF, video, audio, CSV, JSON, TXT, ZIP, OBJ.")
         return
       }
       if (file.size > DEFAULT_MAX_MB * BYTES_IN_MB) {
@@ -294,7 +314,7 @@ export const AdminUploadPanel: React.FC = () => {
         </div>
         
         <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm mx-auto">
-          Images, PDF, video, audio, CSV, JSON, TXT, ZIP. Max {DEFAULT_MAX_MB} MB.
+          Images, PDF, video, audio, CSV, JSON, TXT, ZIP, OBJ. Max {DEFAULT_MAX_MB} MB.
           {optimize && (
             <>
               <br />
