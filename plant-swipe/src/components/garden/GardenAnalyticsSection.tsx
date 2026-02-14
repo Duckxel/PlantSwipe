@@ -1141,7 +1141,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               <div className="relative">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-lg flex items-center gap-2">
-                    <span className="text-2xl">🧑‍🌾</span>
+                    <img src="https://media.aphylia.app/UTILITY/admin/uploads/svg/img-3070-contourblac-4f70f26d-ff6b-461f-b007-388aeeee50bf.svg" alt="Gardener Advice" className="w-8 h-8" />
                     {t("gardenDashboard.analyticsSection.gardenerAdvice", { defaultValue: "Gardener Advice" })}
                   </h3>
                   {isEligibleForAdvice && (
