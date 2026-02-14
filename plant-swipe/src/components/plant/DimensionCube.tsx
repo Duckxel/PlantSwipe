@@ -6,10 +6,8 @@ import { cn } from '@/lib/utils'
 type DimensionCubeProps = {
   /** Plant height in centimeters */
   heightCm: number | null
-  /** Plant wingspan / spread in centimeters */
+  /** Plant wingspan / spread in centimeters (used for both X and Z) */
   wingspanCm: number | null
-  /** Plant spacing / depth in centimeters */
-  spacingCm: number | null
   className?: string
 }
 
@@ -20,7 +18,6 @@ const HUMAN_HEIGHT_M = 1.8 // Target human height in meters (scene units)
 export const DimensionCube: React.FC<DimensionCubeProps> = ({
   heightCm,
   wingspanCm,
-  spacingCm,
   className,
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null)
@@ -31,9 +28,9 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     if (!container) return
 
     // Convert plant dimensions from cm to meters (1 scene unit = 1 meter)
+    // Height → Y axis, Wingspan → both X and Z axes
     const plantH = Math.max((heightCm ?? 30) / 100, 0.05)
     const plantW = Math.max((wingspanCm ?? 30) / 100, 0.05)
-    const plantD = Math.max((spacingCm ?? 30) / 100, 0.05)
 
     // Estimate the total scene extent for camera framing
     const humanEstimatedWidth = 0.5 // approximate human model width in meters
@@ -89,7 +86,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     scene.add(ambientLight, directionalLight, pointLight)
 
     // ── Plant box (outer) ──
-    const outerGeometry = new THREE.BoxGeometry(plantW, plantH, plantD)
+    const outerGeometry = new THREE.BoxGeometry(plantW, plantH, plantW)
     const outerMaterial = new THREE.MeshStandardMaterial({
       color: 0x031512,
       transparent: true,
@@ -114,7 +111,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     // Inner wireframe (70 % scale)
     const innerWire = new THREE.LineSegments(
       new THREE.EdgesGeometry(
-        new THREE.BoxGeometry(plantW * 0.7, plantH * 0.7, plantD * 0.7),
+        new THREE.BoxGeometry(plantW * 0.7, plantH * 0.7, plantW * 0.7),
       ),
       new THREE.LineBasicMaterial({
         color: 0x10b981,
@@ -350,7 +347,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         container.removeChild(renderer.domElement)
       }
     }
-  }, [heightCm, wingspanCm, spacingCm])
+  }, [heightCm, wingspanCm])
 
   return (
     <div

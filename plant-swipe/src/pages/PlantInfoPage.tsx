@@ -1582,7 +1582,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </div>
               <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
                 <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[200px] max-h-[320px] overflow-hidden">
-                  <DimensionCube heightCm={height} wingspanCm={wingspan} spacingCm={spacing} className="h-full w-full" />
+                  <DimensionCube heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
                 </div>
                 <div className="flex flex-col gap-2 md:min-h-[200px]">
                   {dimensionLegend.map((item) => (
