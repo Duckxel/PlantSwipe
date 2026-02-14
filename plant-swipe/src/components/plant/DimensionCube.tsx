@@ -33,11 +33,10 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const plantW = Math.max((wingspanCm ?? 30) / 100, 0.05)
 
     // Estimate the total scene extent for camera framing
-    const humanEstimatedWidth = 0.5 // approximate human model width in meters
+    const humanEstimatedWidth = 0.8 // approximate horizontal span of the human model (arm span) in meters
     const gap = 0.35 // gap between cube and human in meters
     const humanX = plantW / 2 + gap + humanEstimatedWidth / 2
     const sceneMaxHeight = Math.max(plantH, HUMAN_HEIGHT_M)
-    const sceneWidth = plantW / 2 + gap + humanEstimatedWidth + 0.3
     const sceneCenterX = humanX / 2
     const sceneCenterY = sceneMaxHeight / 2
 
@@ -57,11 +56,13 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     const scene = new THREE.Scene()
 
-    // Camera setup – pull back: half cube width + full human height + offset
+    // Camera orbit radius – must clear all models on the XZ plane to avoid
+    // clipping as the camera rotates: half cube width + full human horizontal
+    // span + offset for breathing room
     const fov = 38
     const aspect = initialWidth / Math.max(1, initialHeight)
     const cameraOffset = 1.0
-    const cameraDistance = plantW / 2 + HUMAN_HEIGHT_M + cameraOffset
+    const cameraDistance = plantW / 2 + humanEstimatedWidth + cameraOffset
 
     const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 200)
     const orbitCenter = new THREE.Vector3(sceneCenterX, sceneCenterY, 0)
@@ -121,7 +122,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     scene.add(innerWire)
 
     // ── Ground grid ──
-    const gridSize = Math.max(sceneWidth * 2.5, 6)
+    const gridSize = Math.max(cameraDistance * 2.5, 6)
     const grid = new THREE.GridHelper(
       gridSize,
       Math.round(gridSize * 3),
