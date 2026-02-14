@@ -1,5 +1,5 @@
 import React from "react"
-import { UploadCloud, Loader2, Check, Copy, FileImage, Sparkles } from "lucide-react"
+import { UploadCloud, Loader2, Check, Copy, FileImage, File, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,7 @@ type UploadResult = {
   quality?: number | null
   compressionPercent?: number | null
   optimized?: boolean
+  isImage?: boolean
 }
 
 type RuntimeEnv = {
@@ -28,6 +29,39 @@ type RuntimeEnv = {
 
 const BYTES_IN_MB = 1024 * 1024
 const DEFAULT_MAX_MB = 15
+
+const ALLOWED_MIME_TYPES = new Set([
+  // Images
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/heic",
+  "image/heif",
+  "image/gif",
+  "image/tiff",
+  "image/bmp",
+  "image/svg+xml",
+  // Documents
+  "application/pdf",
+  "application/json",
+  "text/csv",
+  "text/plain",
+  "text/markdown",
+  // Videos
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  // Audio
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/wav",
+  "audio/webm",
+  // Archives
+  "application/zip",
+])
+
+const ACCEPT_STRING = Array.from(ALLOWED_MIME_TYPES).join(",")
 
 function formatBytes(value: number) {
   if (!Number.isFinite(value)) return "-"
@@ -79,8 +113,9 @@ export const AdminUploadPanel: React.FC = () => {
     async (file: File | null) => {
       if (!file) return
       setError(null)
-      if (!file.type.startsWith("image/")) {
-        setError("Only image files are supported.")
+      const mime = (file.type || "").toLowerCase()
+      if (!ALLOWED_MIME_TYPES.has(mime)) {
+        setError("This file type is not supported. Accepted: images, PDF, video, audio, CSV, JSON, TXT, ZIP.")
         return
       }
       if (file.size > DEFAULT_MAX_MB * BYTES_IN_MB) {
@@ -93,7 +128,7 @@ export const AdminUploadPanel: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session
         const token = session?.access_token
         if (!token && !adminToken) {
-          setError("You must be signed in as an admin to upload images.")
+          setError("You must be signed in as an admin to upload files.")
           return
         }
         const form = new FormData()
@@ -157,7 +192,7 @@ export const AdminUploadPanel: React.FC = () => {
           Upload Media
         </h2>
         <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-          Drop an image to {optimize ? "optimize and " : ""}store it in the <span className="font-medium text-emerald-600">UTILITY</span> bucket
+          Drop a file to {optimize ? "optimize and " : ""}store it in the <span className="font-medium text-emerald-600">UTILITY</span> bucket
         </p>
       </div>
 
@@ -181,7 +216,7 @@ export const AdminUploadPanel: React.FC = () => {
             </label>
             <p className="text-xs text-stone-500 dark:text-stone-400">
               {optimize 
-                ? "PNG, JPG, WebP will be compressed and converted to WebP"
+                ? "PNG, JPG, WebP images will be compressed and converted to WebP"
                 : "File will be uploaded as-is without optimization"
               }
             </p>
@@ -226,7 +261,7 @@ export const AdminUploadPanel: React.FC = () => {
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept={ACCEPT_STRING}
           hidden
           onChange={handleFileChange}
           disabled={uploading}
@@ -247,23 +282,23 @@ export const AdminUploadPanel: React.FC = () => {
         
         <div className="text-lg font-semibold text-stone-900 dark:text-white mb-2">
           {dragActive ? (
-            "Drop your image here"
+            "Drop your file here"
           ) : uploading ? (
             "Uploading..."
           ) : (
             <>
-              Drag & drop an image or{" "}
+              Drag & drop a file or{" "}
               <span className="text-emerald-600 dark:text-emerald-400">browse</span>
             </>
           )}
         </div>
         
         <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm mx-auto">
-          PNG, JPG, WebP, HEIC, AVIF, GIF, SVG. Max {DEFAULT_MAX_MB} MB.
+          Images, PDF, video, audio, CSV, JSON, TXT, ZIP. Max {DEFAULT_MAX_MB} MB.
           {optimize && (
             <>
               <br />
-              <span className="text-emerald-600 dark:text-emerald-400">PNG, JPG, WebP optimized automatically</span>
+              <span className="text-emerald-600 dark:text-emerald-400">PNG, JPG, WebP images optimized automatically</span>
             </>
           )}
         </p>
@@ -353,8 +388,10 @@ export const AdminUploadPanel: React.FC = () => {
               <div className="flex items-center gap-2 mb-3">
                 {result.optimized !== false ? (
                   <Sparkles className="h-4 w-4 text-emerald-600" />
-                ) : (
+                ) : result.isImage !== false ? (
                   <FileImage className="h-4 w-4 text-blue-600" />
+                ) : (
+                  <File className="h-4 w-4 text-blue-600" />
                 )}
                 <span className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">
                   {result.optimized !== false ? "Optimization" : "File Info"}
@@ -410,7 +447,11 @@ export const AdminUploadPanel: React.FC = () => {
             {/* Storage Path */}
             <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-4">
               <div className="flex items-center gap-2 mb-3">
-                <FileImage className="h-4 w-4 text-emerald-600" />
+                {result.isImage !== false ? (
+                  <FileImage className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  <File className="h-4 w-4 text-emerald-600" />
+                )}
                 <span className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">
                   Storage Path
                 </span>
