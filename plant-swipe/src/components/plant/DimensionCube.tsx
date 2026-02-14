@@ -133,7 +133,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const gridMaterial = grid.material as THREE.Material
     gridMaterial.transparent = true
     gridMaterial.opacity = 0.25
-    grid.position.set(sceneCenterX, 0, 0)
+    grid.position.set(0, 0, 0)
     scene.add(grid)
 
     // ── Human reference model ──
