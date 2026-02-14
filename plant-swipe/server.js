@@ -1586,6 +1586,7 @@ const adminUploadMulter = multer({
 })
 const singleAdminImageUpload = adminUploadMulter.single('file')
 const adminUploadAllowedMimeTypes = new Set([
+  // Images
   'image/jpeg',
   'image/png',
   'image/webp',
@@ -1596,7 +1597,31 @@ const adminUploadAllowedMimeTypes = new Set([
   'image/tiff',
   'image/bmp',
   'image/svg+xml',
+  // Documents
+  'application/pdf',
+  'application/json',
+  'text/csv',
+  'text/plain',
+  'text/markdown',
+  // Videos
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  // Audio
+  'audio/mpeg',
+  'audio/ogg',
+  'audio/wav',
+  'audio/webm',
+  // Archives
+  'application/zip',
+  // 3D Models
+  'model/obj',
 ])
+
+// Extension-to-MIME mapping for file types that browsers report as application/octet-stream
+const extensionToMimeOverrides = {
+  '.obj': 'model/obj',
+}
 
 // Media proxy URL configuration
 // Transforms Supabase storage URLs to use the nginx reverse proxy
@@ -1989,16 +2014,21 @@ async function handleScopedImageUpload(req, res, options = {}) {
     ; (async () => {
       const file = req.file
       if (!file) {
-        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        res.status(400).json({ error: 'Missing file (expected form field "file")' })
         return
       }
-      const mime = (file.mimetype || '').toLowerCase()
-      if (!mime.startsWith('image/')) {
-        res.status(400).json({ error: 'Only image uploads are supported' })
-        return
+      let mime = (file.mimetype || '').toLowerCase()
+      // Browsers often report unknown file types (e.g. .obj) as application/octet-stream
+      // Resolve actual MIME from extension when browser sends a generic type
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        const ext = path.extname(String(file.originalname || '')).toLowerCase()
+        const resolved = extensionToMimeOverrides[ext]
+        if (resolved) {
+          mime = resolved
+        }
       }
       if (!adminUploadAllowedMimeTypes.has(mime)) {
-        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        res.status(400).json({ error: `Unsupported file type: ${mime}` })
         return
       }
       if (!file.buffer || file.buffer.length === 0) {
@@ -2006,6 +2036,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         return
       }
 
+      const isImage = mime.startsWith('image/')
       const baseName = sanitizeUploadBaseName(file.originalname)
       const originalTypeSegment = deriveUploadTypeSegment(file.originalname, mime)
       const scopedPrefix =
@@ -2017,8 +2048,8 @@ async function handleScopedImageUpload(req, res, options = {}) {
       const optimizeParam = req.body?.optimize
       const userWantsOptimization = optimizeParam !== 'false'
       
-      // Determine if file should be optimized (only JPEG, PNG, WebP when user wants optimization)
-      const shouldOptimize = userWantsOptimization && optimizableMimeTypes.has(mime)
+      // Determine if file should be optimized (only JPEG, PNG, WebP images when user wants optimization)
+      const shouldOptimize = isImage && userWantsOptimization && optimizableMimeTypes.has(mime)
 
       let finalBuffer
       let finalMimeType
@@ -2058,11 +2089,12 @@ async function handleScopedImageUpload(req, res, options = {}) {
           return
         }
       } else {
-        // Upload as-is without optimization (SVG, GIF, AVIF, HEIC, etc., or when user skips optimization)
+        // Upload as-is without optimization (non-image files, SVG, GIF, AVIF, HEIC, etc., or when user skips optimization)
         finalBuffer = file.buffer
         finalMimeType = mime
         // Derive extension from mime type
         const extMap = {
+          // Images
           'image/jpeg': 'jpg',
           'image/png': 'png',
           'image/webp': 'webp',
@@ -2073,6 +2105,25 @@ async function handleScopedImageUpload(req, res, options = {}) {
           'image/heif': 'heif',
           'image/tiff': 'tiff',
           'image/bmp': 'bmp',
+          // Documents
+          'application/pdf': 'pdf',
+          'application/json': 'json',
+          'text/csv': 'csv',
+          'text/plain': 'txt',
+          'text/markdown': 'md',
+          // Videos
+          'video/mp4': 'mp4',
+          'video/webm': 'webm',
+          'video/quicktime': 'mov',
+          // Audio
+          'audio/mpeg': 'mp3',
+          'audio/ogg': 'ogg',
+          'audio/wav': 'wav',
+          'audio/webm': 'weba',
+          // Archives
+          'application/zip': 'zip',
+          // 3D Models
+          'model/obj': 'obj',
         }
         const ext = extMap[mime] || originalTypeSegment
         finalTypeSegment = sanitizePathSegment(ext, ext)
@@ -2091,8 +2142,8 @@ async function handleScopedImageUpload(req, res, options = {}) {
           throw new Error(uploadError.message || 'Supabase storage upload failed')
         }
       } catch (storageErr) {
-        console.error('[upload-image] supabase storage upload failed', storageErr)
-        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        console.error('[upload] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store file' })
         return
       }
 
@@ -2115,6 +2166,7 @@ async function handleScopedImageUpload(req, res, options = {}) {
         quality,
         compressionPercent,
         optimized: shouldOptimize,
+        isImage,
       }
       if (!proxyUrl) {
         payload.warning = 'Bucket is not public; no public URL is available'
