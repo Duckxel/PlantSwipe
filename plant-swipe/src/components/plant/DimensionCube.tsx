@@ -158,7 +158,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         const scaledBbox = new THREE.Box3().setFromObject(obj)
 
         // Position human to the right of the plant box with a gap
-        obj.position.x = plantW / 2 + gap - scaledBbox.min.x * scaleFactor
+        obj.position.x = plantW / 2 + gap - scaledBbox.min.x
         obj.position.y = -scaledBbox.min.y // feet on the ground
         obj.position.z = 0
 
