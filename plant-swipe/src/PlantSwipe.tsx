@@ -113,62 +113,6 @@ type ExtendedWindow = Window & {
 const RE_SPLIT_COLOR = /[-_/]+/g
 const RE_WHITESPACE = /\s+/
 
-// ⚡ Bolt: Module-level WeakMap caches for lazy property memoization
-// These persist across renders as long as the same Plant object is reused,
-// avoiding redundant computation when preparedPlants is recalculated
-const lazySearchStringCache = new WeakMap<Plant, string>()
-const lazyNormalizedColorsCache = new WeakMap<Plant, string[]>()
-const lazyColorTokensCache = new WeakMap<Plant, Set<string>>()
-const lazyUsageLabelsCache = new WeakMap<Plant, string[]>()
-const lazyUsageSetCache = new WeakMap<Plant, Set<string>>()
-const lazyHabitatsCache = new WeakMap<Plant, string[]>()
-const lazyHabitatSetCache = new WeakMap<Plant, Set<string>>()
-const lazySeasonsSetCache = new WeakMap<Plant, Set<string>>()
-
-/**
- * ⚡ Bolt: Helper to define a lazy, memoized property on an object.
- * The computation is deferred until first access, then cached both:
- * 1. On the object itself (via property replacement) for fast subsequent access
- * 2. In a WeakMap (keyed by source object) for persistence across re-renders
- * 
- * @param target - The object to define the property on
- * @param propertyName - The name of the property
- * @param cache - WeakMap to use for cross-render caching (keyed by source)
- * @param source - Original source object (Plant) for cache key
- * @param compute - Function that computes the property value
- */
-function defineLazyMemoized<T, K extends string, V>(
-  target: T,
-  propertyName: K,
-  cache: WeakMap<Plant, V>,
-  source: Plant,
-  compute: () => V
-): void {
-  Object.defineProperty(target, propertyName, {
-    configurable: true,
-    enumerable: true,
-    get: function(this: T) {
-      // Check WeakMap cache first (persists across renders)
-      const cached = cache.get(source)
-      if (cached !== undefined) {
-        // Replace getter with direct value for fast subsequent access
-        Object.defineProperty(this, propertyName, { value: cached, enumerable: true })
-        return cached
-      }
-      
-      // Compute the value
-      const value = compute()
-      
-      // Cache in WeakMap for persistence across renders
-      cache.set(source, value)
-      
-      // Replace getter with direct value on this object
-      Object.defineProperty(this, propertyName, { value, enumerable: true })
-      return value
-    }
-  })
-}
-
 const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
   if (typeof window === "undefined") {
     return () => {}
@@ -919,164 +863,152 @@ export default function PlantSwipe() {
       return tokens
     }
 
-    return plants.map((p) => {
-      // ⚡ Bolt Optimization: Lazy computing for expensive properties
-      // Properties used for filtering (Sets, search strings) are only computed when accessed.
-      // Properties used for sorting or basic checks (bools, numbers) are computed eagerly.
-
-      // 1. Cheap computations (Eager)
-      // Type
-      const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
-
-      // Maintenance
-      const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
-
-      // Toxicity
-      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-
-      // Living space
-      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
-
-      // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
-      const createdAtValue = p.meta?.createdAt
-      const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
-      const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
-
-      // Pre-extract popularity for faster sorting
-      const popularityLikes = p.popularity?.likes ?? 0
-
-      // Pre-compute image availability for Discovery page filtering
-      const hasLegacyImage = Boolean(p.image)
-      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
-      const hasImage = hasLegacyImage || hasImagesArray
-
-      // Pre-compute promotion status
-      const isPromoted = isPlantOfTheMonth(p, now)
-
-      // Pre-compute in-progress status
-      const status = p.meta?.status?.toLowerCase()
-      const isInProgress = status === 'in progres' || status === 'in progress'
-
-      // 2. Prepare base object with eager properties
-      // Cast to PreparedPlant to allow defining properties later
-      const prepared = {
-        ...p,
-        _typeLabel: typeLabel,
-        _maintenance: maintenance,
-        _petSafe: petSafe,
-        _humanSafe: humanSafe,
-        _livingSpace: livingSpace,
-        _createdAtTs: createdAtTsFinal,
-        _popularityLikes: popularityLikes,
-        _hasImage: hasImage,
-        _isPromoted: isPromoted,
-        _isInProgress: isInProgress,
-        // Lazy properties are technically missing here but will be intercepted by getters
-      } as PreparedPlant
-
-      // 3. Define Lazy Getters for Expensive Properties
-      // ⚡ Bolt: Using helper function with WeakMap caching for cross-render persistence
+    // ⚡ Bolt Optimization: Use a Class-based wrapper for prepared plants
+    // This reduces memory overhead (one prototype vs N closures) and speeds up instantiation
+    // compared to calling Object.defineProperties repeatedly in a loop.
+    class PreparedPlantWrapper {
+      // Base properties are copied via Object.assign
+      // These explicit declarations help TS inference but aren't strictly required at runtime
+      _typeLabel: string | null
+      _maintenance: string
+      _petSafe: boolean
+      _humanSafe: boolean
+      _livingSpace: string
+      _createdAtTs: number
+      _popularityLikes: number
+      _hasImage: boolean
+      _isPromoted: boolean
+      _isInProgress: boolean
       
-      // Helper to compute normalized colors (used by both _normalizedColors and _colorTokens)
-      const computeNormalizedColors = (): string[] => {
+      // Store raw plant reference for lazy computations
+      private _p: Plant
+
+      constructor(p: Plant) {
+        // Copy all properties from the source plant to this instance
+        Object.assign(this, p)
+        this._p = p
+
+        // 1. Cheap computations (Eager)
+        // Type
+        this._typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
+
+        // Maintenance
+        this._maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+
+        // Toxicity
+        this._petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+        this._humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+
+        // Living space
+        this._livingSpace = (p.identity?.livingSpace || '').toLowerCase()
+
+        // Pre-parse createdAt for faster sorting
+        const createdAtValue = p.meta?.createdAt
+        const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
+        this._createdAtTs = Number.isNaN(createdAtTs) ? 0 : createdAtTs
+
+        // Pre-extract popularity
+        this._popularityLikes = p.popularity?.likes ?? 0
+
+        // Pre-compute image availability
+        const hasLegacyImage = Boolean(p.image)
+        const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
+        this._hasImage = hasLegacyImage || hasImagesArray
+
+        // Pre-compute promotion status
+        this._isPromoted = isPlantOfTheMonth(p, now)
+
+        // Pre-compute in-progress status
+        const status = p.meta?.status?.toLowerCase()
+        this._isInProgress = status === 'in progres' || status === 'in progress'
+      }
+
+      // 2. Define Lazy Getters on Prototype
+      // These use property shadowing: the first access computes the value and defines it
+      // as an own property on the instance, making subsequent accesses standard property reads.
+
+      get _normalizedColors(): string[] {
+        // Colors - build array for iteration
+        const p = this._p
         const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
         const identityColors = Array.isArray(p.identity?.colors)
           ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
           : []
         const colors = [...legacyColors, ...identityColors]
-        return colors.map(c => c.toLowerCase().trim())
+        const value = colors.map(c => c.toLowerCase().trim())
+
+        Object.defineProperty(this, '_normalizedColors', { value, enumerable: true, configurable: true })
+        return value
       }
-      
-      defineLazyMemoized(prepared, '_normalizedColors', lazyNormalizedColorsCache, p, computeNormalizedColors)
-      
-      defineLazyMemoized(prepared, '_colorTokens', lazyColorTokensCache, p, () => {
+
+      get _colorTokens(): Set<string> {
         const tokens = new Set<string>()
-        const normalized = (prepared as PreparedPlant)._normalizedColors
-        for (const color of normalized) {
+        // Access lazy _normalizedColors (now on `this`)
+        // The type cast is needed because TS doesn't know about the getter shadowing pattern fully
+        const normalized = (this as unknown as PreparedPlant)._normalizedColors
+        normalized.forEach(color => {
+          // Use the captured getTokensForColor from the parent scope (closure)
           const cachedTokens = getTokensForColor(color)
           for (const t of cachedTokens) {
             tokens.add(t)
           }
-        }
+        })
+
+        Object.defineProperty(this, '_colorTokens', { value: tokens, enumerable: true, configurable: true })
         return tokens
-      })
-      
-      defineLazyMemoized(prepared, '_searchString', lazySearchStringCache, p, () => {
+      }
+
+      get _searchString(): string {
+        const p = this._p
+        // Search string - includes name, scientific name, meaning, colors, common names and synonyms
         const commonNames = (p.identity?.commonNames || []).join(' ')
         const synonyms = (p.identity?.synonyms || []).join(' ')
         const givenNames = (p.identity?.givenNames || []).join(' ')
-        const colorString = (prepared as PreparedPlant)._normalizedColors.join(" ")
-        return `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colorString} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
-      })
-      
-      defineLazyMemoized(prepared, '_usageLabels', lazyUsageLabelsCache, p, () => {
-        return getPlantUsageLabels(p).map((label) => label.toLowerCase())
-      })
-      
-      defineLazyMemoized(prepared, '_usageSet', lazyUsageSetCache, p, () => {
-        return new Set((prepared as PreparedPlant)._usageLabels)
-      })
-      
-      defineLazyMemoized(prepared, '_habitats', lazyHabitatsCache, p, () => {
-        return (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
-      })
-      
-      defineLazyMemoized(prepared, '_habitatSet', lazyHabitatSetCache, p, () => {
-        return new Set((prepared as PreparedPlant)._habitats)
-      })
-      
-      defineLazyMemoized(prepared, '_seasonsSet', lazySeasonsSetCache, p, () => {
-        const seasons = Array.isArray(p.seasons) ? p.seasons : []
-        return new Set(seasons.map(s => String(s)))
-      })
 
-      return prepared
-    })
+        // Use _normalizedColors to avoid re-deriving colors
+        const colorString = (this as unknown as PreparedPlant)._normalizedColors.join(" ")
+
+        const value = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colorString} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+
+        Object.defineProperty(this, '_searchString', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _usageLabels(): string[] {
+        const value = getPlantUsageLabels(this._p).map((label) => label.toLowerCase())
+        Object.defineProperty(this, '_usageLabels', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _usageSet(): Set<string> {
+        const value = new Set((this as unknown as PreparedPlant)._usageLabels)
+        Object.defineProperty(this, '_usageSet', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _habitats(): string[] {
+        const p = this._p
+        const value = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+        Object.defineProperty(this, '_habitats', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _habitatSet(): Set<string> {
+        const value = new Set((this as unknown as PreparedPlant)._habitats)
+        Object.defineProperty(this, '_habitatSet', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _seasonsSet(): Set<string> {
+        const seasons = Array.isArray(this._p.seasons) ? this._p.seasons : []
+        const value = new Set(seasons.map(s => String(s)))
+        Object.defineProperty(this, '_seasonsSet', { value, enumerable: true, configurable: true })
+        return value
+      }
+    }
+
+    return plants.map((p) => new PreparedPlantWrapper(p) as unknown as PreparedPlant)
   }, [plants, colorLookups])
-
-  // ⚡ Bolt: Pre-warm lazy properties during idle time
-  // This ensures commonly-used properties (_searchString, _colorTokens) are ready
-  // when the user starts typing/filtering, avoiding jank on first interaction
-  useEffect(() => {
-    if (preparedPlants.length === 0) return
-
-    // Use chunked processing to avoid blocking the main thread
-    const CHUNK_SIZE = 50
-    let currentIndex = 0
-    let cancelled = false
-    
-    const processChunk = () => {
-      if (cancelled) return
-      
-      const endIndex = Math.min(currentIndex + CHUNK_SIZE, preparedPlants.length)
-      
-      // Pre-warm _searchString and _colorTokens (most commonly accessed)
-      // Accessing the property triggers the lazy getter and caches the result
-      for (let i = currentIndex; i < endIndex; i++) {
-        const plant = preparedPlants[i]
-        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-        plant._searchString
-        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-        plant._colorTokens
-      }
-      
-      currentIndex = endIndex
-      
-      // Schedule next chunk if not done
-      if (currentIndex < preparedPlants.length) {
-        cancelTask = scheduleIdleTask(processChunk, 100)
-      }
-    }
-    
-    // Start pre-warming after initial render settles
-    let cancelTask = scheduleIdleTask(processChunk, 500)
-    
-    return () => {
-      cancelled = true
-      cancelTask()
-    }
-  }, [preparedPlants])
 
   // Memoize color filter expansion separately to avoid recomputing on every filter change
   // This builds a Set of all color names that should match (including children of primary colors)
