@@ -338,7 +338,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                     <button
                       type="button"
                       onClick={() => setAdvancedColorsOpen((prev) => !prev)}
-                      className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-300"
+                      className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-300 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                       aria-expanded={advancedColorsOpen}
                     >
                       <span>{t("plant.advancedColors", { defaultValue: "Advanced colors" })}</span>
