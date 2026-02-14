@@ -159,9 +159,21 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         obj.position.y = -scaledBbox.min.y // feet on the ground
         obj.position.z = 0
 
-        // Apply a subtle silhouette material
+        // Remove flat ring/disc meshes baked into the OBJ (e.g. base plates)
+        // and apply a subtle silhouette material to the remaining body meshes
+        const toRemove: THREE.Object3D[] = []
         obj.traverse((child) => {
           if (child instanceof THREE.Mesh) {
+            const childBbox = new THREE.Box3().setFromObject(child)
+            const childH = childBbox.max.y - childBbox.min.y
+            const childW = childBbox.max.x - childBbox.min.x
+            const childD = childBbox.max.z - childBbox.min.z
+            const span = Math.max(childW, childD)
+            // If the mesh is very flat relative to its footprint, it's a ring/disc
+            if (span > 0 && childH / span < 0.05) {
+              toRemove.push(child)
+              return
+            }
             child.material = new THREE.MeshStandardMaterial({
               color: 0x8faaa6,
               transparent: true,
@@ -173,6 +185,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
             })
           }
         })
+        toRemove.forEach((c) => c.removeFromParent())
 
         humanGroup = obj
         scene.add(obj)
