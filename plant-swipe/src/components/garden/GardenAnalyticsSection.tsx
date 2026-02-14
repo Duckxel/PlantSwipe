@@ -490,12 +490,25 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     }
   }, [gardenId]);
 
-  // Fetch AI gardener advice
+  // Ref to abort in-flight advice requests on unmount or re-fetch
+  const adviceAbortRef = React.useRef<AbortController | null>(null);
+
+  // Fetch AI gardener advice with auto-retry.
+  // The backend may take several minutes to generate advice via OpenAI.
+  // If the first attempt fails (504/timeout), the backend likely cached
+  // the result, so a quick retry should return it instantly.
   const fetchAdvice = React.useCallback(async (forceRefresh = false) => {
     if (!gardenId || !isEligibleForAdvice) return;
+
+    // Abort any previous in-flight request
+    if (adviceAbortRef.current) {
+      adviceAbortRef.current.abort();
+    }
+
     setAdviceLoading(true);
     setAdviceError(null);
-    try {
+
+    const doFetch = async (signal: AbortSignal): Promise<{ ok: boolean; data?: Record<string, unknown>; status?: number }> => {
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
       const headers: Record<string, string> = { Accept: "application/json" };
@@ -508,20 +521,76 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       const resp = await fetch(url, {
         headers,
         credentials: "same-origin",
+        signal,
       });
 
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data?.ok && data.advice) {
-          setAdvice(data.advice);
-        } else if (data?.message) {
-          setAdviceError(data.message);
-        }
-      } else {
-        const data = await resp.json().catch(() => ({}));
-        setAdviceError(data?.error || "Failed to load advice");
+      const data = await resp.json().catch(() => ({}));
+      return { ok: resp.ok, data, status: resp.status };
+    };
+
+    try {
+      const controller = new AbortController();
+      adviceAbortRef.current = controller;
+
+      // First attempt – give backend up to 4 minutes (just under the 5m Nginx timeout)
+      const timeoutId = setTimeout(() => controller.abort(), 4 * 60 * 1000);
+      let result: { ok: boolean; data?: Record<string, unknown>; status?: number };
+
+      try {
+        result = await doFetch(controller.signal);
+      } finally {
+        clearTimeout(timeoutId);
       }
+
+      if (result.ok && result.data?.ok && result.data?.advice) {
+        setAdvice(result.data.advice as GardenerAdvice);
+        return;
+      }
+
+      if (result.ok && result.data?.message) {
+        setAdviceError(result.data.message as string);
+        return;
+      }
+
+      // First attempt failed (504, 500, etc.) – the backend may still be
+      // generating in the background. Wait a few seconds, then retry once.
+      // On retry, the cached result is usually ready.
+      if (!controller.signal.aborted && (result.status === 504 || result.status === 502 || result.status === 500)) {
+        console.log(`[Analytics] Advice fetch returned ${result.status}, retrying in 8s...`);
+        await new Promise(resolve => setTimeout(resolve, 8000));
+
+        if (controller.signal.aborted) return; // component unmounted
+
+        const retryController = new AbortController();
+        adviceAbortRef.current = retryController;
+        const retryTimeout = setTimeout(() => retryController.abort(), 30000); // 30s for cache hit
+
+        try {
+          // Retry without forceRefresh – just fetch the (now cached) result
+          const retryResult = await doFetch(retryController.signal);
+          if (retryResult.ok && retryResult.data?.ok && retryResult.data?.advice) {
+            setAdvice(retryResult.data.advice as GardenerAdvice);
+            return;
+          }
+          if (retryResult.ok && retryResult.data?.message) {
+            setAdviceError(retryResult.data.message as string);
+            return;
+          }
+          setAdviceError((retryResult.data?.error as string) || "Failed to load advice");
+        } catch (retryErr: unknown) {
+          if (retryErr instanceof DOMException && retryErr.name === "AbortError") return;
+          console.warn("[Analytics] Advice retry failed:", retryErr);
+          setAdviceError("Failed to load advice");
+        } finally {
+          clearTimeout(retryTimeout);
+        }
+        return;
+      }
+
+      // Other non-OK status
+      setAdviceError((result.data?.error as string) || "Failed to load advice");
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return; // unmounted or superseded
       console.warn("[Analytics] Failed to fetch advice:", err);
       const errMsg = err instanceof Error ? err.message : "Failed to load advice";
       setAdviceError(errMsg);
@@ -584,6 +653,12 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     if (isEligibleForAdvice) {
       fetchAdvice();
     }
+    return () => {
+      // Abort in-flight advice request on unmount or dependency change
+      if (adviceAbortRef.current) {
+        adviceAbortRef.current.abort();
+      }
+    };
   }, [isEligibleForAdvice, fetchAdvice]);
 
   // Fetch weather data directly (independent of advice)
