@@ -863,101 +863,151 @@ export default function PlantSwipe() {
       return tokens
     }
 
-    return plants.map((p) => {
-      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors)
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
-      const normalizedColors = colors.map(c => c.toLowerCase().trim())
+    // ⚡ Bolt Optimization: Use a Class-based wrapper for prepared plants
+    // This reduces memory overhead (one prototype vs N closures) and speeds up instantiation
+    // compared to calling Object.defineProperties repeatedly in a loop.
+    class PreparedPlantWrapper {
+      // Base properties are copied via Object.assign
+      // These explicit declarations help TS inference but aren't strictly required at runtime
+      _typeLabel: string | null
+      _maintenance: string
+      _petSafe: boolean
+      _humanSafe: boolean
+      _livingSpace: string
+      _createdAtTs: number
+      _popularityLikes: number
+      _hasImage: boolean
+      _isPromoted: boolean
+      _isInProgress: boolean
       
-      // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
-      // This avoids regex operations during filtering
-      // Enhanced: Also add translations for bi-directional matching
-      // (e.g., plant with "red" will also match filter "rouge")
-      const colorTokens = new Set<string>()
-      normalizedColors.forEach(color => {
-        const cachedTokens = getTokensForColor(color)
-        for (const t of cachedTokens) {
-          colorTokens.add(t)
-        }
-      })
+      // Store raw plant reference for lazy computations
+      private _p: Plant
 
-      // Search string - includes name, scientific name, meaning, colors, common names and synonyms
-      // This allows users to search by any name they might know the plant by
-      const commonNames = (p.identity?.commonNames || []).join(' ')
-      const synonyms = (p.identity?.synonyms || []).join(' ')
-      const givenNames = (p.identity?.givenNames || []).join(' ')
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+      constructor(p: Plant) {
+        // Copy all properties from the source plant to this instance
+        Object.assign(this, p)
+        this._p = p
 
-      // Type
-      const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
+        // 1. Cheap computations (Eager)
+        // Type
+        this._typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
 
-      // Usage - both array and Set
-      const usageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-      const usageSet = new Set(usageLabels)
+        // Maintenance
+        this._maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
 
-      // Habitat - both array and Set for O(1) lookups
-      const habitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
-      const habitatSet = new Set(habitats)
+        // Toxicity
+        this._petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+        this._humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
 
-      // Maintenance
-      const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+        // Living space
+        this._livingSpace = (p.identity?.livingSpace || '').toLowerCase()
 
-      // Toxicity
-      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+        // Pre-parse createdAt for faster sorting
+        const createdAtValue = p.meta?.createdAt
+        const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
+        this._createdAtTs = Number.isNaN(createdAtTs) ? 0 : createdAtTs
 
-      // Living space
-      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
+        // Pre-extract popularity
+        this._popularityLikes = p.popularity?.likes ?? 0
 
-      // Seasons - convert to Set for O(1) lookups
-      const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const seasonsSet = new Set(seasons.map(s => String(s)))
+        // Pre-compute image availability
+        const hasLegacyImage = Boolean(p.image)
+        const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
+        this._hasImage = hasLegacyImage || hasImagesArray
 
-      // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
-      const createdAtValue = p.meta?.createdAt
-      const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
-      const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
+        // Pre-compute promotion status
+        this._isPromoted = isPlantOfTheMonth(p, now)
 
-      // Pre-extract popularity for faster sorting
-      const popularityLikes = p.popularity?.likes ?? 0
+        // Pre-compute in-progress status
+        const status = p.meta?.status?.toLowerCase()
+        this._isInProgress = status === 'in progres' || status === 'in progress'
+      }
 
-      // Pre-compute image availability for Discovery page filtering
-      const hasLegacyImage = Boolean(p.image)
-      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
-      const hasImage = hasLegacyImage || hasImagesArray
+      // 2. Define Lazy Getters on Prototype
+      // These use property shadowing: the first access computes the value and defines it
+      // as an own property on the instance, making subsequent accesses standard property reads.
 
-      // Pre-compute promotion status
-      const isPromoted = isPlantOfTheMonth(p, now)
+      get _normalizedColors(): string[] {
+        // Colors - build array for iteration
+        const p = this._p
+        const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+        const identityColors = Array.isArray(p.identity?.colors)
+          ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+          : []
+        const colors = [...legacyColors, ...identityColors]
+        const value = colors.map(c => c.toLowerCase().trim())
 
-      // Pre-compute in-progress status
-      const status = p.meta?.status?.toLowerCase()
-      const isInProgress = status === 'in progres' || status === 'in progress'
+        Object.defineProperty(this, '_normalizedColors', { value, enumerable: true, configurable: true })
+        return value
+      }
 
-      return {
-        ...p,
-        _searchString: searchString,
-        _normalizedColors: normalizedColors,
-        _colorTokens: colorTokens,
-        _typeLabel: typeLabel,
-        _usageLabels: usageLabels,
-        _usageSet: usageSet,
-        _habitats: habitats,
-        _habitatSet: habitatSet,
-        _maintenance: maintenance,
-        _petSafe: petSafe,
-        _humanSafe: humanSafe,
-        _livingSpace: livingSpace,
-        _seasonsSet: seasonsSet,
-        _createdAtTs: createdAtTsFinal,
-        _popularityLikes: popularityLikes,
-        _hasImage: hasImage,
-        _isPromoted: isPromoted,
-        _isInProgress: isInProgress
-      } as PreparedPlant
-    })
+      get _colorTokens(): Set<string> {
+        const tokens = new Set<string>()
+        // Access lazy _normalizedColors (now on `this`)
+        // The type cast is needed because TS doesn't know about the getter shadowing pattern fully
+        const normalized = (this as unknown as PreparedPlant)._normalizedColors
+        normalized.forEach(color => {
+          // Use the captured getTokensForColor from the parent scope (closure)
+          const cachedTokens = getTokensForColor(color)
+          for (const t of cachedTokens) {
+            tokens.add(t)
+          }
+        })
+
+        Object.defineProperty(this, '_colorTokens', { value: tokens, enumerable: true, configurable: true })
+        return tokens
+      }
+
+      get _searchString(): string {
+        const p = this._p
+        // Search string - includes name, scientific name, meaning, colors, common names and synonyms
+        const commonNames = (p.identity?.commonNames || []).join(' ')
+        const synonyms = (p.identity?.synonyms || []).join(' ')
+        const givenNames = (p.identity?.givenNames || []).join(' ')
+
+        // Use _normalizedColors to avoid re-deriving colors
+        const colorString = (this as unknown as PreparedPlant)._normalizedColors.join(" ")
+
+        const value = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colorString} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+
+        Object.defineProperty(this, '_searchString', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _usageLabels(): string[] {
+        const value = getPlantUsageLabels(this._p).map((label) => label.toLowerCase())
+        Object.defineProperty(this, '_usageLabels', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _usageSet(): Set<string> {
+        const value = new Set((this as unknown as PreparedPlant)._usageLabels)
+        Object.defineProperty(this, '_usageSet', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _habitats(): string[] {
+        const p = this._p
+        const value = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+        Object.defineProperty(this, '_habitats', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _habitatSet(): Set<string> {
+        const value = new Set((this as unknown as PreparedPlant)._habitats)
+        Object.defineProperty(this, '_habitatSet', { value, enumerable: true, configurable: true })
+        return value
+      }
+
+      get _seasonsSet(): Set<string> {
+        const seasons = Array.isArray(this._p.seasons) ? this._p.seasons : []
+        const value = new Set(seasons.map(s => String(s)))
+        Object.defineProperty(this, '_seasonsSet', { value, enumerable: true, configurable: true })
+        return value
+      }
+    }
+
+    return plants.map((p) => new PreparedPlantWrapper(p) as unknown as PreparedPlant)
   }, [plants, colorLookups])
 
   // Memoize color filter expansion separately to avoid recomputing on every filter change
