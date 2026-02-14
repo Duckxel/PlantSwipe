@@ -68,11 +68,13 @@ import {
   Loader2,
   ChevronRight,
   AlertCircle,
-  CheckCircle2,
   Info,
   Download,
   FileText,
   FileJson,
+  Lightbulb,
+  ShieldCheck,
+  Sprout,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
@@ -1276,214 +1278,279 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     </Button>
                   </div>
                 ) : advice ? (
-                  <div className="space-y-5">
-                    {/* Location & Weather Header with Forecast */}
-                    {advice.weatherContext && advice.weatherContext.current && (
-                      <div className={`p-4 rounded-xl bg-gradient-to-r ${getWeatherBgClass(advice.weatherContext.current.condition || '')} border border-blue-200/50 dark:border-blue-800/50`}>
-                        {/* Current Weather */}
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <span className="text-4xl">{getWeatherIcon(advice.weatherContext.current.condition || '')}</span>
-                            <div>
-                              <div className="text-2xl font-bold text-stone-800 dark:text-stone-100">
-                                {advice.weatherContext.current.temp}°C
-                              </div>
-                              <div className="text-sm text-stone-600 dark:text-stone-300">
-                                {advice.weatherContext.current.condition}
-                              </div>
-                              {advice.weatherContext.current.humidity && (
-                                <div className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1">
-                                  💧 {advice.weatherContext.current.humidity}% {t("gardenDashboard.analyticsSection.humidity", { defaultValue: "humidity" })}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          {advice.locationContext?.city && (
-                            <div className="text-right">
-                              <div className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                                📍 {advice.locationContext.city}
-                              </div>
-                              {advice.locationContext.country && (
-                                <div className="text-xs text-stone-500 dark:text-stone-400">
-                                  {advice.locationContext.country}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* 7-Day Forecast */}
-                        {advice.weatherContext.forecast && advice.weatherContext.forecast.length > 0 && (
-                          <div className="pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
-                            <h4 className="text-xs font-medium text-stone-600 dark:text-stone-400 mb-2">
-                              {t("gardenDashboard.analyticsSection.weeklyForecast", { defaultValue: "7-Day Forecast" })}
-                            </h4>
-                            <div className="grid grid-cols-7 gap-1">
-                              {advice.weatherContext.forecast.slice(0, 7).map((day, idx) => {
-                                const dayDate = new Date(day.date);
-                                const dayName = dayDate.toLocaleDateString(currentLang, { weekday: 'short' }).slice(0, 2);
-                                return (
-                                  <div key={idx} className="text-center p-1.5 rounded-lg bg-white/50 dark:bg-black/20">
-                                    <div className="text-[10px] font-medium text-stone-500 dark:text-stone-400 uppercase">
-                                      {dayName}
-                                    </div>
-                                    <div className="text-lg my-0.5">{getWeatherIcon(day.condition)}</div>
-                                    <div className="text-xs font-semibold text-stone-700 dark:text-stone-200">
-                                      {Math.round(day.tempMax)}°
-                                    </div>
-                                    <div className="text-[10px] text-stone-500 dark:text-stone-400">
-                                      {Math.round(day.tempMin)}°
-                                    </div>
-                                    {day.precipProbability > 20 && (
-                                      <div className="text-[9px] text-blue-500">
-                                        💧{day.precipProbability}%
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                  <div className="space-y-6">
 
-                    {/* Summary with Improvement Score */}
-                    <div className="flex items-start gap-4">
-                      {advice.improvementScore !== null && (
-                        <div className="flex-shrink-0 w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg">
-                          <span className="text-xl font-bold text-white">{advice.improvementScore}</span>
-                        </div>
-                      )}
-                      <div className="flex-1">
+                    {/* ── Hero: Score Ring + Summary ── */}
+                    <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-5">
+                      {/* Score ring – SVG radial gauge */}
+                      {advice.improvementScore !== null && (() => {
+                        const score = advice.improvementScore ?? 0;
+                        const radius = 38;
+                        const circumference = 2 * Math.PI * radius;
+                        const offset = circumference - (score / 100) * circumference;
+                        const color = score >= 75 ? "text-emerald-500" : score >= 50 ? "text-amber-500" : "text-red-500";
+                        return (
+                          <div className="flex-shrink-0 relative w-24 h-24">
+                            <svg viewBox="0 0 96 96" className="w-full h-full -rotate-90">
+                              <circle cx="48" cy="48" r={radius} fill="none" strokeWidth="7"
+                                className="stroke-stone-200 dark:stroke-stone-700" />
+                              <circle cx="48" cy="48" r={radius} fill="none" strokeWidth="7"
+                                strokeLinecap="round"
+                                strokeDasharray={circumference}
+                                strokeDashoffset={offset}
+                                className={`${color.replace("text-", "stroke-")} transition-all duration-1000 ease-out`} />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <span className={`text-2xl font-extrabold ${color}`}>{score}</span>
+                              <span className="text-[9px] uppercase tracking-wider text-stone-400 font-medium">score</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <div className="flex-1 text-center sm:text-left">
                         {advice.adviceSummary && (
-                          <p className="text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
+                          <p className="text-[15px] leading-relaxed text-stone-700 dark:text-stone-200">
                             {advice.adviceSummary}
                           </p>
                         )}
                         {advice.encouragement && (
-                          <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-2 italic">
-                            ✨ {advice.encouragement}
+                          <p className="mt-2.5 text-sm text-emerald-600 dark:text-emerald-400 italic flex items-center gap-1.5 justify-center sm:justify-start">
+                            <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
+                            {advice.encouragement}
                           </p>
                         )}
                       </div>
                     </div>
 
-                    {/* Weekly Focus */}
-                    {advice.weeklyFocus && (
-                      <div className="p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200/50 dark:border-amber-800/50">
-                        <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-2 mb-2">
-                          🎯 {t("gardenDashboard.analyticsSection.weeklyFocus", { defaultValue: "This Week's Focus" })}
-                        </h4>
-                        <p className="text-sm text-amber-800 dark:text-amber-200">{advice.weeklyFocus}</p>
+                    {/* ── Weather Banner (compact) ── */}
+                    {advice.weatherContext && advice.weatherContext.current && (
+                      <div className={`rounded-2xl overflow-hidden bg-gradient-to-r ${getWeatherBgClass(advice.weatherContext.current.condition || '')} border border-blue-200/40 dark:border-blue-800/40`}>
+                        <div className="flex items-center gap-3 px-4 py-3">
+                          <span className="text-3xl leading-none">{getWeatherIcon(advice.weatherContext.current.condition || '')}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-xl font-bold text-stone-800 dark:text-stone-100">
+                                {advice.weatherContext.current.temp}°C
+                              </span>
+                              <span className="text-sm text-stone-600 dark:text-stone-300">
+                                {advice.weatherContext.current.condition}
+                              </span>
+                              {advice.weatherContext.current.humidity != null && (
+                                <span className="text-xs text-stone-500 dark:text-stone-400">
+                                  · {advice.weatherContext.current.humidity}% {t("gardenDashboard.analyticsSection.humidity", { defaultValue: "humidity" })}
+                                </span>
+                              )}
+                            </div>
+                            {advice.locationContext?.city && (
+                              <div className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+                                {advice.locationContext.city}{advice.locationContext.country ? `, ${advice.locationContext.country}` : ''}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* Forecast strip */}
+                        {advice.weatherContext.forecast && advice.weatherContext.forecast.length > 0 && (
+                          <div className="flex gap-0 border-t border-white/30 dark:border-white/10 bg-white/20 dark:bg-black/15">
+                            {advice.weatherContext.forecast.slice(0, 7).map((day, idx) => {
+                              const dayDate = new Date(day.date);
+                              const dayName = dayDate.toLocaleDateString(currentLang, { weekday: 'short' }).slice(0, 2);
+                              return (
+                                <div key={idx} className="flex-1 text-center py-2 px-0.5 first:rounded-bl-2xl last:rounded-br-2xl">
+                                  <div className="text-[10px] font-medium text-stone-500 dark:text-stone-400 uppercase">{dayName}</div>
+                                  <div className="text-base leading-none my-1">{getWeatherIcon(day.condition)}</div>
+                                  <div className="text-[11px] font-semibold text-stone-700 dark:text-stone-200">
+                                    {Math.round(day.tempMax)}°
+                                  </div>
+                                  <div className="text-[10px] text-stone-400">
+                                    {Math.round(day.tempMin)}°
+                                  </div>
+                                  {day.precipProbability > 20 && (
+                                    <div className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">
+                                      {day.precipProbability}%
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {/* Weather Advice */}
-                    {advice.weatherAdvice && (
-                      <div className="p-4 rounded-xl bg-gradient-to-r from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 border border-sky-200/50 dark:border-sky-800/50">
-                        <h4 className="text-sm font-semibold text-sky-700 dark:text-sky-300 flex items-center gap-2 mb-2">
-                          🌤️ {t("gardenDashboard.analyticsSection.weatherAdvice", { defaultValue: "Weather-Based Tips" })}
-                        </h4>
-                        <p className="text-sm text-sky-800 dark:text-sky-200">{advice.weatherAdvice}</p>
+                    {/* ── Focus & Weather cards row ── */}
+                    {(advice.weeklyFocus || advice.weatherAdvice) && (
+                      <div className={`grid gap-3 ${advice.weeklyFocus && advice.weatherAdvice ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+                        {advice.weeklyFocus && (
+                          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50/80 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200/50 dark:border-amber-800/40">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                                <Target className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                              </div>
+                              <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                                {t("gardenDashboard.analyticsSection.weeklyFocus", { defaultValue: "This Week's Focus" })}
+                              </h4>
+                            </div>
+                            <p className="text-sm text-amber-900/80 dark:text-amber-200/90 leading-relaxed">{advice.weeklyFocus}</p>
+                          </div>
+                        )}
+                        {advice.weatherAdvice && (
+                          <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50/80 dark:from-sky-950/30 dark:to-blue-950/20 border border-sky-200/50 dark:border-sky-800/40">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center">
+                                <Droplets className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                              </div>
+                              <h4 className="text-sm font-semibold text-sky-700 dark:text-sky-300">
+                                {t("gardenDashboard.analyticsSection.weatherAdvice", { defaultValue: "Weather-Based Tips" })}
+                              </h4>
+                            </div>
+                            <p className="text-sm text-sky-900/80 dark:text-sky-200/90 leading-relaxed">{advice.weatherAdvice}</p>
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {/* Focus Areas */}
+                    {/* ── Action Items – timeline style ── */}
                     {advice.focusAreas && advice.focusAreas.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                      <div>
+                        <h4 className="text-sm font-semibold text-stone-700 dark:text-stone-200 flex items-center gap-2 mb-3">
+                          <Lightbulb className="w-4 h-4 text-emerald-500" />
                           {t("gardenDashboard.analyticsSection.focusAreas", { defaultValue: "Action Items" })}
                         </h4>
-                        <div className="grid gap-2">
-                          {advice.focusAreas.map((area, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/50 dark:border-stone-700/50"
-                            >
-                              <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                {idx + 1}
-                              </div>
-                              <span className="text-sm text-stone-700 dark:text-stone-300">{area}</span>
-                            </div>
-                          ))}
+                        <div className="relative pl-5">
+                          {/* Timeline line */}
+                          <div className="absolute left-[9px] top-1 bottom-1 w-px bg-gradient-to-b from-emerald-400 via-emerald-300 to-transparent dark:from-emerald-500 dark:via-emerald-700" />
+
+                          <div className="space-y-3">
+                            {advice.focusAreas.map((area, idx) => {
+                              // Cycle through visual accents for variety
+                              const accents = [
+                                "border-l-emerald-400 dark:border-l-emerald-500",
+                                "border-l-sky-400 dark:border-l-sky-500",
+                                "border-l-violet-400 dark:border-l-violet-500",
+                                "border-l-amber-400 dark:border-l-amber-500",
+                                "border-l-rose-400 dark:border-l-rose-500",
+                                "border-l-teal-400 dark:border-l-teal-500",
+                              ];
+                              const dotColors = [
+                                "bg-emerald-400 dark:bg-emerald-500",
+                                "bg-sky-400 dark:bg-sky-500",
+                                "bg-violet-400 dark:bg-violet-500",
+                                "bg-amber-400 dark:bg-amber-500",
+                                "bg-rose-400 dark:bg-rose-500",
+                                "bg-teal-400 dark:bg-teal-500",
+                              ];
+                              const accent = accents[idx % accents.length];
+                              const dotColor = dotColors[idx % dotColors.length];
+
+                              return (
+                                <div key={idx} className="relative flex items-start gap-3">
+                                  {/* Timeline dot */}
+                                  <div className={`absolute -left-5 top-3 w-[11px] h-[11px] rounded-full ring-2 ring-white dark:ring-[#1f1f1f] ${dotColor}`} />
+                                  {/* Card */}
+                                  <div className={`flex-1 border-l-[3px] ${accent} rounded-xl bg-white/60 dark:bg-white/[0.04] backdrop-blur-sm p-3.5 shadow-sm hover:shadow-md transition-shadow`}>
+                                    <div className="flex items-start gap-2.5">
+                                      <span className="flex-shrink-0 w-5 h-5 rounded-md bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-[11px] font-bold text-stone-500 dark:text-stone-400 mt-px">
+                                        {idx + 1}
+                                      </span>
+                                      <p className="text-sm leading-relaxed text-stone-700 dark:text-stone-300">{area}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Plant-Specific Tips */}
+                    {/* ── Plant-Specific Tips – cards with colored side accents ── */}
                     {advice.plantSpecificTips && advice.plantSpecificTips.length > 0 && (
-                      <div className="space-y-2 pt-2">
-                        <h4 className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                      <div>
+                        <h4 className="text-sm font-semibold text-stone-700 dark:text-stone-200 flex items-center gap-2 mb-3">
+                          <Sprout className="w-4 h-4 text-emerald-500" />
                           {t("gardenDashboard.analyticsSection.plantTips", { defaultValue: "Plant-Specific Tips" })}
                         </h4>
-                        <div className="grid gap-2">
-                          {advice.plantSpecificTips.map((tip, idx) => (
-                            <div
-                              key={idx}
-                              className={`flex items-start gap-3 p-3 rounded-xl ${
-                                tip.priority === "high"
-                                  ? "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
-                                  : tip.priority === "medium"
-                                    ? "bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
-                                    : "bg-stone-50 dark:bg-stone-800/50 border border-stone-200 dark:border-stone-700"
-                              }`}
-                            >
-                              <div className="flex-shrink-0 mt-0.5">
-                                {tip.priority === "high" ? (
-                                  <AlertCircle className="w-4 h-4 text-red-500" />
-                                ) : tip.priority === "medium" ? (
-                                  <Info className="w-4 h-4 text-amber-500" />
-                                ) : (
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                )}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between">
-                                  <div className="text-xs font-semibold text-stone-600 dark:text-stone-400">
-                                    🌱 {tip.plantName}
+                        <div className="grid gap-3">
+                          {advice.plantSpecificTips.map((tip, idx) => {
+                            const isHigh = tip.priority === "high";
+                            const isMedium = tip.priority === "medium";
+
+                            const cardClasses = isHigh
+                              ? "border-l-red-500 bg-gradient-to-r from-red-50/80 to-transparent dark:from-red-950/30 dark:to-transparent"
+                              : isMedium
+                                ? "border-l-amber-500 bg-gradient-to-r from-amber-50/80 to-transparent dark:from-amber-950/30 dark:to-transparent"
+                                : "border-l-emerald-400 bg-gradient-to-r from-emerald-50/50 to-transparent dark:from-emerald-950/20 dark:to-transparent";
+
+                            const iconBg = isHigh
+                              ? "bg-red-100 dark:bg-red-900/40"
+                              : isMedium
+                                ? "bg-amber-100 dark:bg-amber-900/40"
+                                : "bg-emerald-100 dark:bg-emerald-900/40";
+
+                            return (
+                              <div key={idx} className={`border-l-[3px] rounded-xl p-4 ${cardClasses}`}>
+                                {/* Header row */}
+                                <div className="flex items-center gap-2.5 mb-2">
+                                  <div className={`w-7 h-7 rounded-lg ${iconBg} flex items-center justify-center`}>
+                                    {isHigh ? (
+                                      <AlertCircle className="w-4 h-4 text-red-500" />
+                                    ) : isMedium ? (
+                                      <ShieldCheck className="w-4 h-4 text-amber-500" />
+                                    ) : (
+                                      <Leaf className="w-4 h-4 text-emerald-500" />
+                                    )}
                                   </div>
-                                  {tip.priority === "high" && (
-                                    <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
-                                      Priority
+                                  <span className="font-semibold text-sm text-stone-800 dark:text-stone-100">
+                                    {tip.plantName}
+                                  </span>
+                                  {isHigh && (
+                                    <span className="ml-auto text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200/50 dark:border-red-800/50">
+                                      {t("gardenDashboard.analyticsSection.urgent", { defaultValue: "Urgent" })}
+                                    </span>
+                                  )}
+                                  {isMedium && (
+                                    <span className="ml-auto text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/50">
+                                      {t("gardenDashboard.analyticsSection.attention", { defaultValue: "Attention" })}
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-sm text-stone-700 dark:text-stone-300 mt-1">
+                                {/* Tip body */}
+                                <p className="text-sm leading-relaxed text-stone-700 dark:text-stone-300">
                                   {tip.tip}
-                                </div>
+                                </p>
                                 {tip.reason && (
-                                  <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 italic">
-                                    → {tip.reason}
-                                  </div>
+                                  <p className="mt-2 text-xs text-stone-500 dark:text-stone-400 italic flex items-start gap-1.5">
+                                    <Lightbulb className="w-3 h-3 mt-0.5 flex-shrink-0 text-amber-500" />
+                                    {tip.reason}
+                                  </p>
                                 )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
 
-                    {/* Full Advice Text */}
+                    {/* ── Full Advice Expandable ── */}
                     {advice.adviceText && (
-                      <details className="group">
-                        <summary className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 cursor-pointer hover:text-emerald-700 dark:hover:text-emerald-300">
+                      <details className="group rounded-2xl border border-stone-200/60 dark:border-stone-700/60 overflow-hidden">
+                        <summary className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-emerald-600 dark:text-emerald-400 cursor-pointer hover:bg-stone-50 dark:hover:bg-white/[0.03] transition-colors select-none">
                           <ChevronRight className="w-4 h-4 transition-transform group-open:rotate-90" />
                           {t("gardenDashboard.analyticsSection.fullAdvice", { defaultValue: "Read full advice" })}
                         </summary>
-                        <div className="mt-3 p-4 rounded-xl bg-white/50 dark:bg-black/20 text-sm text-stone-700 dark:text-stone-300 leading-relaxed whitespace-pre-wrap">
+                        <div className="px-4 pb-4 text-sm text-stone-700 dark:text-stone-300 leading-relaxed whitespace-pre-wrap">
                           {advice.adviceText}
                         </div>
                       </details>
                     )}
 
-                    {/* Export button */}
-                    <div className="flex justify-end pt-3 border-t border-stone-200/50 dark:border-stone-700/50">
+                    {/* ── Export ── */}
+                    <div className="flex justify-end">
                       <div className="relative" ref={exportMenuRef}>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="rounded-xl text-xs gap-1.5"
+                          className="rounded-xl text-xs gap-1.5 border-stone-200 dark:border-stone-700"
                           onClick={() => setExportMenuOpen(!exportMenuOpen)}
                           disabled={exporting}
                         >
