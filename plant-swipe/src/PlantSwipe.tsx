@@ -113,6 +113,218 @@ type ExtendedWindow = Window & {
 const RE_SPLIT_COLOR = /[-_/]+/g
 const RE_WHITESPACE = /\s+/
 
+class PreparedPlantWrapper {
+  private _searchStringMemo?: string
+  private _normalizedColorsMemo?: string[]
+  private _colorTokensMemo?: Set<string>
+  private _typeLabelMemo?: string | null
+  private _usageLabelsMemo?: string[]
+  private _usageSetMemo?: Set<string>
+  private _habitatsMemo?: string[]
+  private _habitatSetMemo?: Set<string>
+  private _maintenanceMemo?: string
+  private _petSafeMemo?: boolean
+  private _humanSafeMemo?: boolean
+  private _livingSpaceMemo?: string
+  private _seasonsSetMemo?: Set<string>
+  private _createdAtTsMemo?: number
+  private _popularityLikesMemo?: number
+  private _hasImageMemo?: boolean
+  private _isPromotedMemo?: boolean
+  private _isInProgressMemo?: boolean
+
+  constructor(
+    plant: Plant,
+    private aliasMap: Map<string, Set<string>>,
+    private now: Date,
+    private colorTokenCache: Map<string, Set<string>>
+  ) {
+    Object.assign(this, plant)
+  }
+
+  get _searchString(): string {
+    if (this._searchStringMemo === undefined) {
+      const p = this as unknown as Plant
+      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+      const identityColors = Array.isArray(p.identity?.colors)
+        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+        : []
+      const colors = [...legacyColors, ...identityColors]
+      const commonNames = (p.identity?.commonNames || []).join(' ')
+      const synonyms = (p.identity?.synonyms || []).join(' ')
+      const givenNames = (p.identity?.givenNames || []).join(' ')
+      this._searchStringMemo = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+    }
+    return this._searchStringMemo
+  }
+
+  get _normalizedColors(): string[] {
+    if (this._normalizedColorsMemo === undefined) {
+      const p = this as unknown as Plant
+      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+      const identityColors = Array.isArray(p.identity?.colors)
+        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+        : []
+      const colors = [...legacyColors, ...identityColors]
+      this._normalizedColorsMemo = colors.map(c => c.toLowerCase().trim())
+    }
+    return this._normalizedColorsMemo
+  }
+
+  get _colorTokens(): Set<string> {
+    if (this._colorTokensMemo === undefined) {
+      const tokens = new Set<string>()
+      this._normalizedColors.forEach(color => {
+        let cached = this.colorTokenCache.get(color)
+        if (!cached) {
+          cached = new Set<string>()
+          cached.add(color)
+          const fullColorAliases = this.aliasMap.get(color)
+          if (fullColorAliases) {
+            for (const alias of fullColorAliases) cached.add(alias)
+          }
+          const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
+          splitTokens.forEach(token => {
+            cached!.add(token)
+            const aliases = this.aliasMap.get(token)
+            if (aliases) {
+              for (const alias of aliases) cached!.add(alias)
+            }
+          })
+          this.colorTokenCache.set(color, cached)
+        }
+        for (const t of cached) tokens.add(t)
+      })
+      this._colorTokensMemo = tokens
+    }
+    return this._colorTokensMemo
+  }
+
+  get _typeLabel(): string | null {
+    if (this._typeLabelMemo === undefined) {
+      const p = this as unknown as Plant
+      this._typeLabelMemo = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
+    }
+    return this._typeLabelMemo
+  }
+
+  get _usageLabels(): string[] {
+    if (this._usageLabelsMemo === undefined) {
+      const p = this as unknown as Plant
+      this._usageLabelsMemo = getPlantUsageLabels(p).map((label) => label.toLowerCase())
+    }
+    return this._usageLabelsMemo
+  }
+
+  get _usageSet(): Set<string> {
+    if (this._usageSetMemo === undefined) {
+      this._usageSetMemo = new Set(this._usageLabels)
+    }
+    return this._usageSetMemo
+  }
+
+  get _habitats(): string[] {
+    if (this._habitatsMemo === undefined) {
+      const p = this as unknown as Plant
+      this._habitatsMemo = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+    }
+    return this._habitatsMemo
+  }
+
+  get _habitatSet(): Set<string> {
+    if (this._habitatSetMemo === undefined) {
+      this._habitatSetMemo = new Set(this._habitats)
+    }
+    return this._habitatSetMemo
+  }
+
+  get _maintenance(): string {
+    if (this._maintenanceMemo === undefined) {
+      const p = this as unknown as Plant
+      this._maintenanceMemo = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+    }
+    return this._maintenanceMemo
+  }
+
+  get _petSafe(): boolean {
+    if (this._petSafeMemo === undefined) {
+      const p = this as unknown as Plant
+      this._petSafeMemo = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+    }
+    return this._petSafeMemo
+  }
+
+  get _humanSafe(): boolean {
+    if (this._humanSafeMemo === undefined) {
+      const p = this as unknown as Plant
+      this._humanSafeMemo = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+    }
+    return this._humanSafeMemo
+  }
+
+  get _livingSpace(): string {
+    if (this._livingSpaceMemo === undefined) {
+      const p = this as unknown as Plant
+      this._livingSpaceMemo = (p.identity?.livingSpace || '').toLowerCase()
+    }
+    return this._livingSpaceMemo
+  }
+
+  get _seasonsSet(): Set<string> {
+    if (this._seasonsSetMemo === undefined) {
+      const p = this as unknown as Plant
+      const seasons = Array.isArray(p.seasons) ? p.seasons : []
+      this._seasonsSetMemo = new Set(seasons.map(s => String(s)))
+    }
+    return this._seasonsSetMemo
+  }
+
+  get _createdAtTs(): number {
+    if (this._createdAtTsMemo === undefined) {
+      const p = this as unknown as Plant
+      const createdAtValue = p.meta?.createdAt
+      const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
+      this._createdAtTsMemo = Number.isNaN(createdAtTs) ? 0 : createdAtTs
+    }
+    return this._createdAtTsMemo
+  }
+
+  get _popularityLikes(): number {
+    if (this._popularityLikesMemo === undefined) {
+      const p = this as unknown as Plant
+      this._popularityLikesMemo = p.popularity?.likes ?? 0
+    }
+    return this._popularityLikesMemo
+  }
+
+  get _hasImage(): boolean {
+    if (this._hasImageMemo === undefined) {
+      const p = this as unknown as Plant
+      const hasLegacyImage = Boolean(p.image)
+      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
+      this._hasImageMemo = hasLegacyImage || hasImagesArray
+    }
+    return this._hasImageMemo
+  }
+
+  get _isPromoted(): boolean {
+    if (this._isPromotedMemo === undefined) {
+      const p = this as unknown as Plant
+      this._isPromotedMemo = isPlantOfTheMonth(p, this.now)
+    }
+    return this._isPromotedMemo
+  }
+
+  get _isInProgress(): boolean {
+    if (this._isInProgressMemo === undefined) {
+      const p = this as unknown as Plant
+      const status = p.meta?.status?.toLowerCase()
+      this._isInProgressMemo = status === 'in progres' || status === 'in progress'
+    }
+    return this._isInProgressMemo
+  }
+}
+
 const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
   if (typeof window === "undefined") {
     return () => {}
@@ -826,137 +1038,9 @@ export default function PlantSwipe() {
     // repeated across thousands of plants.
     const colorTokenCache = new Map<string, Set<string>>()
 
-    const getTokensForColor = (color: string): Set<string> => {
-      const cached = colorTokenCache.get(color)
-      if (cached) {
-        return cached
-      }
-
-      const tokens = new Set<string>()
-      tokens.add(color)
-
-      // Check aliases for the full color string (e.g. "dark-green" -> "vert fonce")
-      const fullColorAliases = aliasMap.get(color)
-      if (fullColorAliases) {
-        for (const alias of fullColorAliases) {
-          tokens.add(alias)
-        }
-      }
-
-      // Split compound colors and add individual tokens
-      const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
-      splitTokens.forEach(token => {
-        tokens.add(token)
-
-        // O(1) expansion of tokens to all their aliases (canonical + translations)
-        // Uses the pre-calculated aliasMap to avoid object iteration
-        const aliases = aliasMap.get(token)
-        if (aliases) {
-          // Fast add of all aliases
-          for (const alias of aliases) {
-            tokens.add(alias)
-          }
-        }
-      })
-
-      colorTokenCache.set(color, tokens)
-      return tokens
-    }
-
     return plants.map((p) => {
-      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors)
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
-      const normalizedColors = colors.map(c => c.toLowerCase().trim())
-      
-      // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
-      // This avoids regex operations during filtering
-      // Enhanced: Also add translations for bi-directional matching
-      // (e.g., plant with "red" will also match filter "rouge")
-      const colorTokens = new Set<string>()
-      normalizedColors.forEach(color => {
-        const cachedTokens = getTokensForColor(color)
-        for (const t of cachedTokens) {
-          colorTokens.add(t)
-        }
-      })
-
-      // Search string - includes name, scientific name, meaning, colors, common names and synonyms
-      // This allows users to search by any name they might know the plant by
-      const commonNames = (p.identity?.commonNames || []).join(' ')
-      const synonyms = (p.identity?.synonyms || []).join(' ')
-      const givenNames = (p.identity?.givenNames || []).join(' ')
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
-
-      // Type
-      const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
-
-      // Usage - both array and Set
-      const usageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-      const usageSet = new Set(usageLabels)
-
-      // Habitat - both array and Set for O(1) lookups
-      const habitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
-      const habitatSet = new Set(habitats)
-
-      // Maintenance
-      const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
-
-      // Toxicity
-      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-
-      // Living space
-      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
-
-      // Seasons - convert to Set for O(1) lookups
-      const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const seasonsSet = new Set(seasons.map(s => String(s)))
-
-      // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
-      const createdAtValue = p.meta?.createdAt
-      const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
-      const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
-
-      // Pre-extract popularity for faster sorting
-      const popularityLikes = p.popularity?.likes ?? 0
-
-      // Pre-compute image availability for Discovery page filtering
-      const hasLegacyImage = Boolean(p.image)
-      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
-      const hasImage = hasLegacyImage || hasImagesArray
-
-      // Pre-compute promotion status
-      const isPromoted = isPlantOfTheMonth(p, now)
-
-      // Pre-compute in-progress status
-      const status = p.meta?.status?.toLowerCase()
-      const isInProgress = status === 'in progres' || status === 'in progress'
-
-      return {
-        ...p,
-        _searchString: searchString,
-        _normalizedColors: normalizedColors,
-        _colorTokens: colorTokens,
-        _typeLabel: typeLabel,
-        _usageLabels: usageLabels,
-        _usageSet: usageSet,
-        _habitats: habitats,
-        _habitatSet: habitatSet,
-        _maintenance: maintenance,
-        _petSafe: petSafe,
-        _humanSafe: humanSafe,
-        _livingSpace: livingSpace,
-        _seasonsSet: seasonsSet,
-        _createdAtTs: createdAtTsFinal,
-        _popularityLikes: popularityLikes,
-        _hasImage: hasImage,
-        _isPromoted: isPromoted,
-        _isInProgress: isInProgress
-      } as PreparedPlant
+      // Use PreparedPlantWrapper for lazy evaluation of expensive properties
+      return new PreparedPlantWrapper(p, aliasMap, now, colorTokenCache) as unknown as PreparedPlant
     })
   }, [plants, colorLookups])
 
