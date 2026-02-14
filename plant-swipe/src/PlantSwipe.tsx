@@ -113,6 +113,62 @@ type ExtendedWindow = Window & {
 const RE_SPLIT_COLOR = /[-_/]+/g
 const RE_WHITESPACE = /\s+/
 
+// ⚡ Bolt: Module-level WeakMap caches for lazy property memoization
+// These persist across renders as long as the same Plant object is reused,
+// avoiding redundant computation when preparedPlants is recalculated
+const lazySearchStringCache = new WeakMap<Plant, string>()
+const lazyNormalizedColorsCache = new WeakMap<Plant, string[]>()
+const lazyColorTokensCache = new WeakMap<Plant, Set<string>>()
+const lazyUsageLabelsCache = new WeakMap<Plant, string[]>()
+const lazyUsageSetCache = new WeakMap<Plant, Set<string>>()
+const lazyHabitatsCache = new WeakMap<Plant, string[]>()
+const lazyHabitatSetCache = new WeakMap<Plant, Set<string>>()
+const lazySeasonsSetCache = new WeakMap<Plant, Set<string>>()
+
+/**
+ * ⚡ Bolt: Helper to define a lazy, memoized property on an object.
+ * The computation is deferred until first access, then cached both:
+ * 1. On the object itself (via property replacement) for fast subsequent access
+ * 2. In a WeakMap (keyed by source object) for persistence across re-renders
+ * 
+ * @param target - The object to define the property on
+ * @param propertyName - The name of the property
+ * @param cache - WeakMap to use for cross-render caching (keyed by source)
+ * @param source - Original source object (Plant) for cache key
+ * @param compute - Function that computes the property value
+ */
+function defineLazyMemoized<T, K extends string, V>(
+  target: T,
+  propertyName: K,
+  cache: WeakMap<Plant, V>,
+  source: Plant,
+  compute: () => V
+): void {
+  Object.defineProperty(target, propertyName, {
+    configurable: true,
+    enumerable: true,
+    get: function(this: T) {
+      // Check WeakMap cache first (persists across renders)
+      const cached = cache.get(source)
+      if (cached !== undefined) {
+        // Replace getter with direct value for fast subsequent access
+        Object.defineProperty(this, propertyName, { value: cached, enumerable: true })
+        return cached
+      }
+      
+      // Compute the value
+      const value = compute()
+      
+      // Cache in WeakMap for persistence across renders
+      cache.set(source, value)
+      
+      // Replace getter with direct value on this object
+      Object.defineProperty(this, propertyName, { value, enumerable: true })
+      return value
+    }
+  })
+}
+
 const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
   if (typeof window === "undefined") {
     return () => {}
@@ -920,111 +976,107 @@ export default function PlantSwipe() {
       } as PreparedPlant
 
       // 3. Define Lazy Getters for Expensive Properties
-      Object.defineProperties(prepared, {
-        _normalizedColors: {
-          configurable: true,
-          enumerable: true,
-          get: function() {
-            // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-            const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-            const identityColors = Array.isArray(p.identity?.colors)
-              ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-              : []
-            const colors = [...legacyColors, ...identityColors]
-            const value = colors.map(c => c.toLowerCase().trim())
-
-            Object.defineProperty(this, '_normalizedColors', { value, enumerable: true })
-            return value
-          }
-        },
-        _colorTokens: {
-          configurable: true,
-          enumerable: true,
-          get: function() {
-            const tokens = new Set<string>()
-            // Access lazy _normalizedColors
-            const normalized = (this as PreparedPlant)._normalizedColors
-            normalized.forEach(color => {
-              const cachedTokens = getTokensForColor(color)
-              for (const t of cachedTokens) {
-                tokens.add(t)
-              }
-            })
-
-            Object.defineProperty(this, '_colorTokens', { value: tokens, enumerable: true })
-            return tokens
-          }
-        },
-        _searchString: {
-          configurable: true,
-          enumerable: true,
-          get: function() {
-            // Search string - includes name, scientific name, meaning, colors, common names and synonyms
-            const commonNames = (p.identity?.commonNames || []).join(' ')
-            const synonyms = (p.identity?.synonyms || []).join(' ')
-            const givenNames = (p.identity?.givenNames || []).join(' ')
-
-            // Use _normalizedColors to avoid re-deriving colors
-            // joining normalized colors is equivalent to colors.join(" ").toLowerCase()
-            const colorString = (this as PreparedPlant)._normalizedColors.join(" ")
-
-            const value = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colorString} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
-
-            Object.defineProperty(this, '_searchString', { value, enumerable: true })
-            return value
-          }
-        },
-        _usageLabels: {
-          configurable: true,
-          enumerable: true,
-          get: function() {
-            const value = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-            Object.defineProperty(this, '_usageLabels', { value, enumerable: true })
-            return value
-          }
-        },
-        _usageSet: {
-          configurable: true,
-          enumerable: true,
-          get: function() {
-            const value = new Set((this as PreparedPlant)._usageLabels)
-            Object.defineProperty(this, '_usageSet', { value, enumerable: true })
-            return value
-          }
-        },
-        _habitats: {
-          configurable: true,
-          enumerable: true,
-          get: function() {
-            const value = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
-            Object.defineProperty(this, '_habitats', { value, enumerable: true })
-            return value
-          }
-        },
-        _habitatSet: {
-          configurable: true,
-          enumerable: true,
-          get: function() {
-            const value = new Set((this as PreparedPlant)._habitats)
-            Object.defineProperty(this, '_habitatSet', { value, enumerable: true })
-            return value
-          }
-        },
-        _seasonsSet: {
-          configurable: true,
-          enumerable: true,
-          get: function() {
-            const seasons = Array.isArray(p.seasons) ? p.seasons : []
-            const value = new Set(seasons.map(s => String(s)))
-            Object.defineProperty(this, '_seasonsSet', { value, enumerable: true })
-            return value
+      // ⚡ Bolt: Using helper function with WeakMap caching for cross-render persistence
+      
+      // Helper to compute normalized colors (used by both _normalizedColors and _colorTokens)
+      const computeNormalizedColors = (): string[] => {
+        const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+        const identityColors = Array.isArray(p.identity?.colors)
+          ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+          : []
+        const colors = [...legacyColors, ...identityColors]
+        return colors.map(c => c.toLowerCase().trim())
+      }
+      
+      defineLazyMemoized(prepared, '_normalizedColors', lazyNormalizedColorsCache, p, computeNormalizedColors)
+      
+      defineLazyMemoized(prepared, '_colorTokens', lazyColorTokensCache, p, () => {
+        const tokens = new Set<string>()
+        const normalized = (prepared as PreparedPlant)._normalizedColors
+        for (const color of normalized) {
+          const cachedTokens = getTokensForColor(color)
+          for (const t of cachedTokens) {
+            tokens.add(t)
           }
         }
+        return tokens
+      })
+      
+      defineLazyMemoized(prepared, '_searchString', lazySearchStringCache, p, () => {
+        const commonNames = (p.identity?.commonNames || []).join(' ')
+        const synonyms = (p.identity?.synonyms || []).join(' ')
+        const givenNames = (p.identity?.givenNames || []).join(' ')
+        const colorString = (prepared as PreparedPlant)._normalizedColors.join(" ")
+        return `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colorString} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+      })
+      
+      defineLazyMemoized(prepared, '_usageLabels', lazyUsageLabelsCache, p, () => {
+        return getPlantUsageLabels(p).map((label) => label.toLowerCase())
+      })
+      
+      defineLazyMemoized(prepared, '_usageSet', lazyUsageSetCache, p, () => {
+        return new Set((prepared as PreparedPlant)._usageLabels)
+      })
+      
+      defineLazyMemoized(prepared, '_habitats', lazyHabitatsCache, p, () => {
+        return (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+      })
+      
+      defineLazyMemoized(prepared, '_habitatSet', lazyHabitatSetCache, p, () => {
+        return new Set((prepared as PreparedPlant)._habitats)
+      })
+      
+      defineLazyMemoized(prepared, '_seasonsSet', lazySeasonsSetCache, p, () => {
+        const seasons = Array.isArray(p.seasons) ? p.seasons : []
+        return new Set(seasons.map(s => String(s)))
       })
 
       return prepared
     })
   }, [plants, colorLookups])
+
+  // ⚡ Bolt: Pre-warm lazy properties during idle time
+  // This ensures commonly-used properties (_searchString, _colorTokens) are ready
+  // when the user starts typing/filtering, avoiding jank on first interaction
+  useEffect(() => {
+    if (preparedPlants.length === 0) return
+
+    // Use chunked processing to avoid blocking the main thread
+    const CHUNK_SIZE = 50
+    let currentIndex = 0
+    let cancelled = false
+    
+    const processChunk = () => {
+      if (cancelled) return
+      
+      const endIndex = Math.min(currentIndex + CHUNK_SIZE, preparedPlants.length)
+      
+      // Pre-warm _searchString and _colorTokens (most commonly accessed)
+      // Accessing the property triggers the lazy getter and caches the result
+      for (let i = currentIndex; i < endIndex; i++) {
+        const plant = preparedPlants[i]
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        plant._searchString
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        plant._colorTokens
+      }
+      
+      currentIndex = endIndex
+      
+      // Schedule next chunk if not done
+      if (currentIndex < preparedPlants.length) {
+        cancelTask = scheduleIdleTask(processChunk, 100)
+      }
+    }
+    
+    // Start pre-warming after initial render settles
+    let cancelTask = scheduleIdleTask(processChunk, 500)
+    
+    return () => {
+      cancelled = true
+      cancelTask()
+    }
+  }, [preparedPlants])
 
   // Memoize color filter expansion separately to avoid recomputing on every filter change
   // This builds a Set of all color names that should match (including children of primary colors)
