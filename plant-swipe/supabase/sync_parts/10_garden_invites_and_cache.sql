@@ -180,6 +180,7 @@ CREATE OR REPLACE FUNCTION refresh_garden_daily_cache(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   _start_iso timestamptz;
@@ -233,6 +234,7 @@ CREATE OR REPLACE FUNCTION refresh_garden_weekly_cache(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   _week_end_date date;
@@ -316,6 +318,7 @@ CREATE OR REPLACE FUNCTION refresh_garden_plant_task_counts_cache(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   _today date := CURRENT_DATE;
@@ -359,6 +362,7 @@ CREATE OR REPLACE FUNCTION refresh_garden_today_occurrences_cache(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   _start_iso timestamptz;
@@ -415,6 +419,7 @@ CREATE OR REPLACE FUNCTION refresh_garden_task_cache(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   _week_start_date date;
@@ -448,6 +453,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
@@ -592,6 +598,7 @@ CREATE OR REPLACE FUNCTION cleanup_old_garden_task_cache()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   _cutoff_date date := CURRENT_DATE - INTERVAL '1 day'; -- Keep only today and yesterday
@@ -635,6 +642,7 @@ CREATE OR REPLACE FUNCTION initialize_all_task_cache()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   _garden_record RECORD;
@@ -670,6 +678,7 @@ GRANT EXECUTE ON FUNCTION initialize_all_task_cache() TO service_role;
 CREATE OR REPLACE FUNCTION trigger_refresh_garden_task_cache()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   _garden_id uuid;
@@ -706,6 +715,7 @@ $$;
 CREATE OR REPLACE FUNCTION trigger_refresh_garden_task_cache_on_task_change()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   _garden_id uuid;
@@ -831,6 +841,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   _has_remaining boolean;
@@ -867,6 +878,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   _all_done boolean;
@@ -906,6 +918,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
@@ -990,6 +1003,7 @@ CREATE OR REPLACE FUNCTION refresh_user_task_daily_cache(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   _total_due integer := 0;
@@ -1055,6 +1069,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   _cached RECORD;
@@ -1108,6 +1123,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   -- ONLY read from cache - never compute
@@ -1142,6 +1158,7 @@ $$;
 CREATE OR REPLACE FUNCTION trigger_refresh_user_task_cache()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   _user_record RECORD;
@@ -1183,6 +1200,7 @@ CREATE TRIGGER trigger_refresh_user_cache_on_garden_cache_change
 CREATE OR REPLACE FUNCTION trigger_refresh_user_cache_on_membership_change()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   _user_id uuid;

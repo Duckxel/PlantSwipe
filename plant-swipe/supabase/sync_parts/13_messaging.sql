@@ -605,7 +605,7 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public;
 
 drop trigger if exists ensure_single_landing_page_settings_trigger on public.landing_page_settings;
 create trigger ensure_single_landing_page_settings_trigger
@@ -655,7 +655,7 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public;
 
 drop trigger if exists ensure_single_landing_stats_trigger on public.landing_stats;
 create trigger ensure_single_landing_stats_trigger
@@ -838,7 +838,7 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public;
 
 drop trigger if exists ensure_single_landing_showcase_config_trigger on public.landing_showcase_config;
 create trigger ensure_single_landing_showcase_config_trigger
@@ -853,7 +853,7 @@ begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public;
 
 -- Add updated_at triggers for all landing tables that have the column
 drop trigger if exists landing_page_settings_updated_at on public.landing_page_settings;
@@ -919,7 +919,7 @@ begin
     where id = auth.uid() and is_admin = true
   );
 end;
-$$ language plpgsql security definer stable;
+$$ language plpgsql security definer stable set search_path = public;
 
 -- ========== landing_page_settings RLS ==========
 alter table public.landing_page_settings enable row level security;

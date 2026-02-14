@@ -28,7 +28,7 @@ jobs:
 
       - name: Check which files changed
         id: changed-files
-        uses: tj-actions/changed-files@v44
+        uses: tj-actions/changed-files@v46
         with:
           files: |
             plant-swipe/src/content/terms-of-service.html

@@ -140,7 +140,7 @@ begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public;
 
 drop trigger if exists team_members_updated_at on public.team_members;
 create trigger team_members_updated_at
@@ -170,6 +170,7 @@ create index if not exists requested_plants_created_at_idx on public.requested_p
 create or replace function update_requested_plants_updated_at()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.updated_at = now();
@@ -290,6 +291,7 @@ end $$;
 create or replace function public.sync_request_count()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   update public.requested_plants
