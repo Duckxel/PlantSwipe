@@ -477,6 +477,13 @@ export default function SettingsPage() {
     }
   }, [debouncedLocationSearch, currentLang])
 
+  const handleAcceptNewEmailSuggestion = React.useCallback(() => {
+    const res = validateEmailFormat(newEmail)
+    if (res.suggestion) {
+      setNewEmail(res.suggestion)
+    }
+  }, [newEmail])
+
   const handleUpdateEmail = async () => {
     if (!newEmail || newEmail === email) {
       setError(t('settings.email.enterNewEmail'))
@@ -1428,7 +1435,7 @@ export default function SettingsPage() {
                     status={newEmailValidation.status}
                     error={newEmailValidation.error}
                     suggestion={newEmailValidation.suggestion}
-                    onAcceptSuggestion={newEmailValidation.suggestion ? () => { /* display-only */ } : undefined}
+                    onAcceptSuggestion={newEmailValidation.suggestion ? handleAcceptNewEmailSuggestion : undefined}
                   />
                 </div>
                 <Button

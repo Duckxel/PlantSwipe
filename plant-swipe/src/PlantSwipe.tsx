@@ -1576,6 +1576,16 @@ export default function PlantSwipe() {
     }
   }
 
+  // Handle email suggestion acceptance
+  const handleAcceptEmailSuggestion = React.useCallback(() => {
+    // Re-run format validation to get the raw suggestion string (e.g. "user@gmail.com")
+    // based on the current input value.
+    const res = validateEmailFormat(authEmail)
+    if (res.suggestion) {
+      setAuthEmail(res.suggestion)
+    }
+  }, [authEmail])
+
   // Handle cookie acceptance from within the auth dialog
   const handleAcceptCookiesForAuth = React.useCallback(() => {
     try {
@@ -1877,7 +1887,7 @@ export default function PlantSwipe() {
                 
                 <div className="grid gap-1">
                   <Label htmlFor="email">{t('auth.email')}</Label>
-                  <ValidatedInput id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} status={isSignupMode ? emailValidation.status : 'idle'} error={emailValidation.error} suggestion={emailValidation.suggestion} onAcceptSuggestion={emailValidation.suggestion ? () => { /* suggestion is display-only, user can edit */ } : undefined} />
+                  <ValidatedInput id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} status={isSignupMode ? emailValidation.status : 'idle'} error={emailValidation.error} suggestion={emailValidation.suggestion} onAcceptSuggestion={emailValidation.suggestion ? handleAcceptEmailSuggestion : undefined} />
                 </div>
                 <div className="grid gap-1">
                   <Label htmlFor="password">{t('auth.password')}</Label>
@@ -2604,7 +2614,7 @@ export default function PlantSwipe() {
             
             <div className="grid gap-1">
               <Label htmlFor="email">{t('auth.email')}</Label>
-              <ValidatedInput id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} status={isSignupMode ? emailValidation.status : 'idle'} error={emailValidation.error} suggestion={emailValidation.suggestion} onAcceptSuggestion={emailValidation.suggestion ? () => { /* suggestion is display-only */ } : undefined} />
+              <ValidatedInput id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} status={isSignupMode ? emailValidation.status : 'idle'} error={emailValidation.error} suggestion={emailValidation.suggestion} onAcceptSuggestion={emailValidation.suggestion ? handleAcceptEmailSuggestion : undefined} />
             </div>
             <div className="grid gap-1">
               <Label htmlFor="password">{t('auth.password')}</Label>
