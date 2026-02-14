@@ -12,7 +12,7 @@ type DimensionCubeProps = {
 }
 
 const HUMAN_MODEL_URL =
-  'https://media.aphylia.app/UTILITY/admin/uploads/obj/basespiderman-3fc58ac2-f639-438f-9cc7-4e132d795ab0.obj'
+  'https://media.aphylia.app/UTILITY/admin/uploads/obj/basespiderman-5d85e4ec-e7a4-4be3-b585-b770d0718bf3.obj'
 const HUMAN_HEIGHT_M = 1.8 // Target human height in meters (scene units)
 
 export const DimensionCube: React.FC<DimensionCubeProps> = ({
