@@ -66,8 +66,9 @@ def _scrub_pii_from_string(value: str) -> str:
         return value
     # Scrub email addresses
     value = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL_REDACTED]', value)
-    # Scrub potential passwords in URLs or logs
-    value = re.sub(r'password[=:][^\s&"\']+', 'password=[REDACTED]', value, flags=re.IGNORECASE)
+    # Scrub potential passwords in URLs, logs, JSON, or Python dict strings
+    # Matches: key (password or "password" or 'password') + separator + value (double/single quoted or unquoted)
+    value = re.sub(r'((["\']?)password\2\s*[:=]\s*)(".*?"|\'.*?\'|[^&"\s]+)', r'\1"[REDACTED]"', value, flags=re.IGNORECASE)
     # Scrub bearer tokens
     value = re.sub(r'Bearer\s+[A-Za-z0-9\-_\.]+', 'Bearer [REDACTED]', value)
     return value
@@ -166,7 +167,17 @@ def _sentry_before_send(event, hint):
     # Scrub PII from request data if present
     if event.get("request", {}).get("data"):
         data = event["request"]["data"]
-        if isinstance(data, str):
+        if isinstance(data, (dict, list)):
+            try:
+                # Convert complex types to string for regex scrubbing
+                s = json.dumps(data)
+                scrubbed = _scrub_pii_from_string(s)
+                # Try to parse back to JSON to keep structural data in Sentry
+                event["request"]["data"] = json.loads(scrubbed)
+            except Exception:
+                # If conversion fails, store as scrubbed string or original scrubbed
+                event["request"]["data"] = _scrub_pii_from_string(str(data))
+        elif isinstance(data, str):
             event["request"]["data"] = _scrub_pii_from_string(data)
     
     # Don't send request headers (may contain auth tokens)
