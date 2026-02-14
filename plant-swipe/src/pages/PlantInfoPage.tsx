@@ -111,8 +111,6 @@ const MAP_PIN_POSITIONS = [
   { top: '26%', left: '72%' },
 ] as const
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
-
 const buildTimelineData = (plant: Plant, monthLabels: string[]) => {
   const flowering = plant.growth?.floweringMonth || []
   const fruiting = plant.growth?.fruitingMonth || []
@@ -1280,12 +1278,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   const height = plant.growth?.height ?? null
   const wingspan = plant.growth?.wingspan ?? null
   const spacing = plant.growth?.separation ?? null
-  const primaryDimension = Math.max(height ?? 0, wingspan ?? 0, spacing ?? 0, 30)
-  const cubeScale = React.useMemo(() => {
-    const maxReference = Math.max(primaryDimension, 120)
-    const baseScale = 0.45 + (primaryDimension / maxReference) * 0.55
-    return clamp(baseScale, 0.35, 1.08) * 1.45
-  }, [primaryDimension])
     const dimensionLegend = [
       { label: t('moreInfo.dimensions.height'), value: height ? `${height} cm` : '—', subLabel: t('moreInfo.dimensions.heightSub') },
       { label: t('moreInfo.dimensions.spread'), value: wingspan ? `${wingspan} cm` : '—', subLabel: t('moreInfo.dimensions.spreadSub') },
@@ -1590,7 +1582,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               </div>
               <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
                 <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[200px] max-h-[320px] overflow-hidden">
-                  <DimensionCube scale={cubeScale} className="h-full w-full" />
+                  <DimensionCube heightCm={height} wingspanCm={wingspan} spacingCm={spacing} className="h-full w-full" />
                 </div>
                 <div className="flex flex-col gap-2 md:min-h-[200px]">
                   {dimensionLegend.map((item) => (
