@@ -33,3 +33,7 @@
 ## 2025-05-27 - Form Validation Accessibility
 **Learning:** Screen readers do not automatically read error messages associated with an input unless they are programmatically linked. Visual proximity is not enough.
 **Action:** Use `aria-describedby` to link inputs to their error messages and `aria-invalid` to indicate error state. Generate unique IDs with `useId` to facilitate this linking.
+
+## 2025-05-28 - Actionable Validation Suggestions
+**Learning:** Display-only suggestions (like "Did you mean user@gmail.com?") create friction because users expect to be able to click them to fix their input.
+**Action:** Always make validation suggestions actionable by implementing a click handler that applies the suggestion to the input field.
