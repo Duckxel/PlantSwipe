@@ -32,13 +32,10 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const plantH = Math.max((heightCm ?? 30) / 100, 0.05)
     const plantW = Math.max((wingspanCm ?? 30) / 100, 0.05)
 
-    // Estimate the total scene extent for camera framing
+    // Scene layout constants
     const humanEstimatedWidth = 0.8 // approximate horizontal span of the human model (arm span) in meters
     const gap = 0.35 // gap between cube and human in meters
-    const humanX = plantW / 2 + gap + humanEstimatedWidth / 2
     const sceneMaxHeight = Math.max(plantH, HUMAN_HEIGHT_M)
-    const sceneCenterX = humanX / 2
-    const sceneCenterY = sceneMaxHeight / 2
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(window.devicePixelRatio || 1)
@@ -56,18 +53,24 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     const scene = new THREE.Scene()
 
-    // Camera orbit radius – must clear all models on the XZ plane to avoid
-    // clipping as the camera rotates: half cube width + full human horizontal
-    // span + offset for breathing room
+    // Camera pivot = center of the cube
     const fov = 38
     const aspect = initialWidth / Math.max(1, initialHeight)
-    const cameraOffset = 1.0
-    const cameraDistance = plantW / 2 + humanEstimatedWidth + cameraOffset
+    const cubeCenterY = plantH / 2
+    const orbitCenter = new THREE.Vector3(0, cubeCenterY, 0)
+
+    // Camera orbit radius must:
+    // 1. Not clip through the human model (furthest edge from cube center)
+    // 2. Be far enough to frame both objects in the viewport
+    const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth // distance from cube center to human's far side
+    const fovRad = (fov * Math.PI) / 180
+    const distanceForHeight = sceneMaxHeight / (2 * Math.tan(fovRad / 2))
+    const distanceForWidth = (humanFarEdge + plantW / 2) / (2 * Math.tan(fovRad / 2) * aspect)
+    const minClearance = humanFarEdge + 0.5 // must not clip + 0.5m padding
+    const cameraDistance = Math.max(distanceForHeight, distanceForWidth, minClearance)
 
     const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 200)
-    const orbitCenter = new THREE.Vector3(sceneCenterX, sceneCenterY, 0)
-    const cameraHeightOffset = sceneMaxHeight * 0.25
-    const cameraHeight = sceneCenterY + cameraHeightOffset
+    const cameraHeight = cubeCenterY + sceneMaxHeight * 0.3
 
     camera.position.set(
       orbitCenter.x + cameraDistance,
