@@ -34,7 +34,6 @@ import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
 import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
-import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
 import { validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation";
 import { validateUsername } from "@/lib/username";
@@ -48,6 +47,8 @@ import { SwipePage } from "@/pages/SwipePage"
 import { FilterControls } from "@/components/plant/FilterControls"
 import { SwipeCardSkeleton } from "@/components/plant/SwipeCardSkeleton"
 import type { ColorOption } from "@/types/plant"
+import { preparePlants, getPlantTypeLabel, getPlantUsageLabels } from "@/lib/plantPreparation"
+import type { PreparedPlant } from "@/lib/plantPreparation"
 
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })))
@@ -84,34 +85,10 @@ const PasswordChangePageLazy = lazy(() => import("@/pages/PasswordChangePage").t
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites" | "impressions"
 
-type PreparedPlant = Plant & {
-  _searchString: string
-  _normalizedColors: string[]
-  _colorTokens: Set<string>        // Pre-tokenized colors for compound matching
-  _typeLabel: string | null
-  _usageLabels: string[]
-  _usageSet: Set<string>           // O(1) usage lookups
-  _habitats: string[]
-  _habitatSet: Set<string>         // O(1) habitat lookups
-  _maintenance: string
-  _petSafe: boolean
-  _humanSafe: boolean
-  _livingSpace: string
-  _seasonsSet: Set<string>         // O(1) season lookups
-  _createdAtTs: number             // Pre-parsed timestamp for sorting
-  _popularityLikes: number         // Pre-extracted popularity for sorting
-  _hasImage: boolean               // Pre-computed image availability
-  _isPromoted: boolean             // Pre-computed promotion status (Plant of the Month)
-  _isInProgress: boolean           // Pre-computed status for sorting
-}
-
 type ExtendedWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
   cancelIdleCallback?: (handle: number) => void
 }
-
-const RE_SPLIT_COLOR = /[-_/]+/g
-const RE_WHITESPACE = /\s+/
 
 const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
   if (typeof window === "undefined") {
@@ -814,150 +791,10 @@ export default function PlantSwipe() {
   }, [user?.id, profile?.display_name])
 
   // Pre-calculate normalized values for all plants to optimize filter performance
-  // This avoids repeating expensive string operations on every filter change
-  // All Set-based lookups enable O(1) membership tests instead of O(n) array scans
-  // Enhanced: Now includes color translations for bi-directional language matching
+  // ⚡ Bolt: Offloaded to lib/plantPreparation to reduce component complexity
+  // and optimize memory by using arrays instead of Sets for small collections
   const preparedPlants = useMemo(() => {
-    const { aliasMap } = colorLookups
-    const now = new Date()
-    
-    // ⚡ Bolt: Cache tokenization results for unique color strings
-    // This avoids redundant regex splitting and alias lookups for common colors (e.g. "green")
-    // repeated across thousands of plants.
-    const colorTokenCache = new Map<string, Set<string>>()
-
-    const getTokensForColor = (color: string): Set<string> => {
-      const cached = colorTokenCache.get(color)
-      if (cached) {
-        return cached
-      }
-
-      const tokens = new Set<string>()
-      tokens.add(color)
-
-      // Check aliases for the full color string (e.g. "dark-green" -> "vert fonce")
-      const fullColorAliases = aliasMap.get(color)
-      if (fullColorAliases) {
-        for (const alias of fullColorAliases) {
-          tokens.add(alias)
-        }
-      }
-
-      // Split compound colors and add individual tokens
-      const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
-      splitTokens.forEach(token => {
-        tokens.add(token)
-
-        // O(1) expansion of tokens to all their aliases (canonical + translations)
-        // Uses the pre-calculated aliasMap to avoid object iteration
-        const aliases = aliasMap.get(token)
-        if (aliases) {
-          // Fast add of all aliases
-          for (const alias of aliases) {
-            tokens.add(alias)
-          }
-        }
-      })
-
-      colorTokenCache.set(color, tokens)
-      return tokens
-    }
-
-    return plants.map((p) => {
-      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors)
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
-      const normalizedColors = colors.map(c => c.toLowerCase().trim())
-      
-      // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
-      // This avoids regex operations during filtering
-      // Enhanced: Also add translations for bi-directional matching
-      // (e.g., plant with "red" will also match filter "rouge")
-      const colorTokens = new Set<string>()
-      normalizedColors.forEach(color => {
-        const cachedTokens = getTokensForColor(color)
-        for (const t of cachedTokens) {
-          colorTokens.add(t)
-        }
-      })
-
-      // Search string - includes name, scientific name, meaning, colors, common names and synonyms
-      // This allows users to search by any name they might know the plant by
-      const commonNames = (p.identity?.commonNames || []).join(' ')
-      const synonyms = (p.identity?.synonyms || []).join(' ')
-      const givenNames = (p.identity?.givenNames || []).join(' ')
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
-
-      // Type
-      const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
-
-      // Usage - both array and Set
-      const usageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-      const usageSet = new Set(usageLabels)
-
-      // Habitat - both array and Set for O(1) lookups
-      const habitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
-      const habitatSet = new Set(habitats)
-
-      // Maintenance
-      const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
-
-      // Toxicity
-      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-
-      // Living space
-      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
-
-      // Seasons - convert to Set for O(1) lookups
-      const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const seasonsSet = new Set(seasons.map(s => String(s)))
-
-      // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
-      const createdAtValue = p.meta?.createdAt
-      const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
-      const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
-
-      // Pre-extract popularity for faster sorting
-      const popularityLikes = p.popularity?.likes ?? 0
-
-      // Pre-compute image availability for Discovery page filtering
-      const hasLegacyImage = Boolean(p.image)
-      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
-      const hasImage = hasLegacyImage || hasImagesArray
-
-      // Pre-compute promotion status
-      const isPromoted = isPlantOfTheMonth(p, now)
-
-      // Pre-compute in-progress status
-      const status = p.meta?.status?.toLowerCase()
-      const isInProgress = status === 'in progres' || status === 'in progress'
-
-      return {
-        ...p,
-        _searchString: searchString,
-        _normalizedColors: normalizedColors,
-        _colorTokens: colorTokens,
-        _typeLabel: typeLabel,
-        _usageLabels: usageLabels,
-        _usageSet: usageSet,
-        _habitats: habitats,
-        _habitatSet: habitatSet,
-        _maintenance: maintenance,
-        _petSafe: petSafe,
-        _humanSafe: humanSafe,
-        _livingSpace: livingSpace,
-        _seasonsSet: seasonsSet,
-        _createdAtTs: createdAtTsFinal,
-        _popularityLikes: popularityLikes,
-        _hasImage: hasImage,
-        _isPromoted: isPromoted,
-        _isInProgress: isInProgress
-      } as PreparedPlant
-    })
+    return preparePlants(plants, colorLookups)
   }, [plants, colorLookups])
 
   // Memoize color filter expansion separately to avoid recomputing on every filter change
@@ -1052,8 +889,9 @@ export default function PlantSwipe() {
       if (normalizedType && p._typeLabel !== normalizedType) return false
       if (normalizedMaintenanceFilter && p._maintenance !== normalizedMaintenanceFilter) return false
       
-      // Season filter - O(1) Set lookup
-      if (seasonFilter && !p._seasonsSet.has(seasonFilter)) return false
+      // Season filter - array check (native array is small)
+      // ⚡ Bolt: Replaced Set lookup with Array.includes (faster/lighter for small N)
+      if (seasonFilter && !p._seasons.includes(seasonFilter)) return false
       
       // Living space filter - pre-computed logic
       if (livingSpaceCount > 0) {
@@ -1066,64 +904,37 @@ export default function PlantSwipe() {
         }
       }
       
-      // Usage filter - O(k) where k is number of selected usages, using O(1) Set lookups
+      // Usage filter - AND logic
       if (usageSet.size > 0) {
-        // ⚡ Bolt: Early return if plant has fewer usages than required (AND logic)
-        if (p._usageSet.size < usageSet.size) return false
+        // ⚡ Bolt: Array check instead of Set lookup
+        if (p._usageLabels.length < usageSet.size) return false
 
         for (const usage of usageSet) {
-          if (!p._usageSet.has(usage)) return false
+          if (!p._usageLabels.includes(usage)) return false
         }
       }
       
-      // Habitat filter - OR logic: match if plant has ANY selected habitat
-      // Using O(1) Set lookups instead of O(n) array includes
-      // ⚡ Bolt: Optimize intersection by iterating the smaller set (O(min(N, M)))
+      // Habitat filter - OR logic
       if (habitatSet.size > 0) {
         let hasMatchingHabitat = false
-        const filterSet = habitatSet
-        const plantSet = p._habitatSet
-
-        if (filterSet.size <= plantSet.size) {
-          for (const h of filterSet) {
-            if (plantSet.has(h)) {
-              hasMatchingHabitat = true
-              break
-            }
-          }
-        } else {
-          for (const h of plantSet) {
-            if (filterSet.has(h)) {
-              hasMatchingHabitat = true
-              break
-            }
+        // ⚡ Bolt: Iterate small plant array against filter set
+        for (const h of p._habitats) {
+          if (habitatSet.has(h)) {
+            hasMatchingHabitat = true
+            break
           }
         }
         if (!hasMatchingHabitat) return false
       }
       
-      // Color filter - using pre-computed color tokens for O(1) lookups
-      // Optimized: Iterate over plant tokens (smaller set) instead of filter set (larger set)
-      // Note: _colorTokens includes both full color strings (e.g. "red-orange") and split tokens (e.g. "red", "orange")
-      // ⚡ Bolt: Iterate smaller set for faster intersection check
+      // Color filter
+      // ⚡ Bolt: Iterate small plant token array against filter set
       if (expandedColorFilterSet) {
         let hasMatchingColor = false
-        const filterSet = expandedColorFilterSet
-        const plantSet = p._colorTokens
-
-        if (filterSet.size <= plantSet.size) {
-          for (const token of filterSet) {
-            if (plantSet.has(token)) {
-              hasMatchingColor = true
-              break
-            }
-          }
-        } else {
-          for (const token of plantSet) {
-            if (filterSet.has(token)) {
-              hasMatchingColor = true
-              break
-            }
+        for (const token of p._colorTokens) {
+          if (expandedColorFilterSet.has(token)) {
+            hasMatchingColor = true
+            break
           }
         }
         if (!hasMatchingColor) return false
@@ -2740,53 +2551,4 @@ export default function PlantSwipe() {
   )
 }
 
-function getPlantTypeLabel(classification?: Plant["classification"]): string | null {
-  if (!classification?.type) return null
-  const label = formatClassificationLabel(classification.type)
-  return label || null
-}
-
-function getPlantUsageLabels(plant: Plant): string[] {
-  const labels: string[] = []
-  
-  // Get usage labels from utility field
-  if (plant.utility && Array.isArray(plant.utility) && plant.utility.length > 0) {
-    plant.utility.forEach((util) => {
-      if (util) {
-        const formatted = formatClassificationLabel(util)
-        if (formatted && !labels.includes(formatted)) {
-          labels.push(formatted)
-        }
-      }
-    })
-  }
-  
-  // Also check comestiblePart for edible-related labels
-  if (plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0) {
-    const hasEdible = plant.comestiblePart.some(part => part && part.trim().length > 0)
-    if (hasEdible) {
-      const edibleLabel = formatClassificationLabel('comestible')
-      if (edibleLabel && !labels.includes(edibleLabel)) {
-        labels.push(edibleLabel)
-      }
-    }
-  }
-  
-  // Check usage fields for additional indicators
-  if (plant.usage?.aromatherapy) {
-    const aromaticLabel = formatClassificationLabel('aromatic')
-    if (aromaticLabel && !labels.includes(aromaticLabel)) {
-      labels.push(aromaticLabel)
-    }
-  }
-  
-  if (plant.usage?.adviceMedicinal) {
-    const medicinalLabel = formatClassificationLabel('medicinal')
-    if (medicinalLabel && !labels.includes(medicinalLabel)) {
-      labels.push(medicinalLabel)
-    }
-  }
-  
-  return labels
-}
 
