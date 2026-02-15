@@ -2000,6 +2000,9 @@ export default function PlantSwipe() {
 
     return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:top-4 focus:left-4 focus:px-4 focus:py-2 focus:bg-white focus:text-black focus:rounded-md focus:shadow-lg focus:ring-2 focus:ring-emerald-500">
+            {t('common.skipToContent')}
+          </a>
           <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-24 pt-2 md:px-8 md:pb-8 md:pt-4 overflow-y-visible">
           <div className="overflow-y-visible">
           <TopBar
@@ -2074,7 +2077,7 @@ export default function PlantSwipe() {
             )}
 
             {/* Main content area */}
-            <main className="min-h-[60vh]" aria-live="polite">
+            <main id="main-content" className="min-h-[60vh]" aria-live="polite">
               <ErrorBoundary fallback={routeErrorFallback}>
               {/* Sticky search bar for search view - hides on scroll down on mobile */}
               {currentView === "search" && (

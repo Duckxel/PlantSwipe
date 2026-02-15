@@ -5,6 +5,7 @@
   },
   "common": {
     "appName": "Aphylia",
+    "skipToContent": "Skip to content",
     "discovery": "Discovery",
     "garden": "Garden",
     "encyclopedia": "Encyclopedia",
