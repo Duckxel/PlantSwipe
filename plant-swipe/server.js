@@ -6916,9 +6916,12 @@ async function ensureNotificationTables() {
     await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
     await sql`create index if not exists user_notifications_automation_idx on public.user_notifications (automation_id);`
     await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
-    // Unique constraint for automation notifications: one notification per automation per user per day (in user's timezone)
-    // Using scheduled_for::date since the automation inserts with scheduled_for = now()
-    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (scheduled_for::date)) where automation_id is not null;`
+    // Immutable helper for date extraction in index expressions (timestamptz::date is STABLE, not IMMUTABLE)
+    await sql`create or replace function public.immutable_date_utc(ts timestamptz) returns date language sql immutable strict parallel safe as $$ select (ts at time zone 'UTC')::date; $$;`
+    // Drop old index that used non-immutable expression (may or may not exist)
+    await sql`drop index if exists public.user_notifications_unique_automation;`
+    // Unique constraint for automation notifications: one notification per automation per user per day
+    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (public.immutable_date_utc(scheduled_for))) where automation_id is not null;`
 
     // User Push Subscriptions
     await sql`
