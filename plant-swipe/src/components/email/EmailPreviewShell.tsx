@@ -38,36 +38,40 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
 
   return (
     <>
-      {/* Top glow bar */}
-      <div style={{ height: 8, backgroundColor: "#d1fae5" }} />
-
-      {/* Green-tinted area with card */}
-      <div style={{ backgroundColor: "#ecfdf5", padding: "40px 24px 0 24px" }}>
+      {/* Full-height gradient background wrapper */}
+      <div
+        style={{
+          background: "linear-gradient(180deg, #d1fae5 0%, #ecfdf5 8%, #f0fdf4 20%, #ffffff 45%, #ffffff 55%, #fefce8 75%, #fef3c7 90%, #fde68a 100%)",
+          padding: "48px 24px 0 24px",
+        }}
+      >
         <div style={{ maxWidth: 680, margin: "0 auto" }}>
 
-          {/* Email Container (white card) */}
+          {/* Email Container Card */}
           <div
             style={{
-              borderRadius: 24,
+              borderRadius: 32,
               overflow: "hidden",
-              backgroundColor: "#ffffff",
-              border: "1px solid #d1fae5",
+              background: "linear-gradient(170deg, rgba(16,185,129,0.04) 0%, #ffffff 15%, #ffffff 85%, rgba(251,191,36,0.03) 100%)",
+              border: "1px solid rgba(16,185,129,0.15)",
+              boxShadow: "0 25px 60px -12px rgba(16,185,129,0.15), 0 0 0 1px rgba(255,255,255,0.8) inset",
             }}
           >
             {/* Header Banner */}
             <div
               style={{
-                backgroundColor: "#059669",
-                padding: "24px 48px",
+                background: "linear-gradient(135deg, #047857 0%, #059669 30%, #10b981 65%, #34d399 100%)",
+                padding: "28px 48px",
                 textAlign: "center",
               }}
             >
               <div
                 style={{
                   display: "inline-block",
-                  backgroundColor: "rgba(255,255,255,0.15)",
-                  borderRadius: 16,
-                  padding: "10px 24px",
+                  background: "rgba(255,255,255,0.18)",
+                  borderRadius: 18,
+                  padding: "12px 28px",
+                  backdropFilter: "blur(8px)",
                 }}
               >
                 <img
@@ -98,8 +102,9 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
                 style={{
                   borderRadius: 20,
                   padding: "28px 32px",
-                  backgroundColor: "#f0fdf4",
-                  border: "1px solid #d1fae5",
+                  background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 50%, #f5f3ff 100%)",
+                  border: "1px solid rgba(16,185,129,0.12)",
+                  boxShadow: "0 2px 12px rgba(16,185,129,0.06)",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
@@ -112,7 +117,8 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      backgroundColor: "#10b981",
+                      background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
+                      boxShadow: "0 6px 20px -4px rgba(16,185,129,0.5)",
                     }}
                   >
                     <img
@@ -149,8 +155,13 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
         </div>
       </div>
 
-      {/* Footer area — warm amber-tinted background, outside the card */}
-      <div style={{ backgroundColor: "#f5f0e8", padding: "0 24px" }}>
+      {/* Footer — gradient warm area outside the card */}
+      <div
+        style={{
+          background: "linear-gradient(180deg, #fefce8 0%, #fef3c7 40%, #fde68a 100%)",
+          padding: "0 24px",
+        }}
+      >
         <div
           style={{
             maxWidth: 680,
@@ -161,7 +172,7 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
           {/* Decorative green divider */}
           <div
             style={{
-              padding: "28px 0 24px 0",
+              padding: "32px 0 28px 0",
               display: "flex",
               justifyContent: "center",
             }}
@@ -170,25 +181,26 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
               style={{
                 width: 80,
                 height: 3,
-                backgroundColor: "#10b981",
+                background: "linear-gradient(90deg, transparent, #10b981, transparent)",
                 borderRadius: 2,
               }}
             />
           </div>
 
           {/* CTA Button */}
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 28 }}>
             <a
               href={websiteUrl}
               style={{
                 display: "inline-block",
-                padding: "12px 28px",
+                padding: "14px 32px",
                 fontSize: 14,
                 fontWeight: 600,
                 color: "#ffffff",
                 borderRadius: 9999,
                 textDecoration: "none",
-                backgroundColor: "#059669",
+                background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
+                boxShadow: "0 8px 24px -6px rgba(16,185,129,0.4)",
               }}
             >
               {strings.exploreButton}
@@ -196,15 +208,16 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
           </div>
 
           {/* Social Media Links */}
-          <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 24 }}>
             <p
               style={{
                 margin: "0 0 12px 0",
                 fontSize: 11,
-                color: "#78716c",
+                color: "#92400e",
                 textTransform: "uppercase",
                 letterSpacing: "1.5px",
                 fontWeight: 600,
+                opacity: 0.6,
               }}
             >
               {strings.followUs}
@@ -216,72 +229,32 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
                 gap: 12,
               }}
             >
-              <a
-                href={SOCIAL_MEDIA.youtube}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 40,
-                  height: 40,
-                  backgroundColor: "#374151",
-                  borderRadius: 12,
-                  textDecoration: "none",
-                }}
-                title="YouTube"
-              >
-                <img
-                  src={SOCIAL_ICON_URLS.youtube}
-                  alt="YouTube"
-                  style={{ width: 20, height: 20 }}
-                />
-              </a>
-              <a
-                href={SOCIAL_MEDIA.twitter}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 40,
-                  height: 40,
-                  backgroundColor: "#374151",
-                  borderRadius: 12,
-                  textDecoration: "none",
-                }}
-                title="X"
-              >
-                <img
-                  src={SOCIAL_ICON_URLS.twitter}
-                  alt="X"
-                  style={{ width: 20, height: 20 }}
-                />
-              </a>
-              <a
-                href={SOCIAL_MEDIA.instagram}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 40,
-                  height: 40,
-                  backgroundColor: "#374151",
-                  borderRadius: 12,
-                  textDecoration: "none",
-                }}
-                title="Instagram"
-              >
-                <img
-                  src={SOCIAL_ICON_URLS.instagram}
-                  alt="Instagram"
-                  style={{ width: 20, height: 20 }}
-                />
-              </a>
+              {[
+                { href: SOCIAL_MEDIA.youtube, icon: SOCIAL_ICON_URLS.youtube, title: "YouTube" },
+                { href: SOCIAL_MEDIA.twitter, icon: SOCIAL_ICON_URLS.twitter, title: "X" },
+                { href: SOCIAL_MEDIA.instagram, icon: SOCIAL_ICON_URLS.instagram, title: "Instagram" },
+              ].map(({ href, icon, title }) => (
+                <a
+                  key={title}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 40,
+                    height: 40,
+                    backgroundColor: "#374151",
+                    borderRadius: 12,
+                    textDecoration: "none",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+                  }}
+                  title={title}
+                >
+                  <img src={icon} alt={title} style={{ width: 20, height: 20 }} />
+                </a>
+              ))}
             </div>
           </div>
 
@@ -293,18 +266,12 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
             >
               aphylia.app
             </a>
-            <span style={{ margin: "0 8px", color: "#a8a29e" }}>·</span>
-            <a
-              href={`${websiteUrl}/about`}
-              style={{ color: "#78716c", textDecoration: "none" }}
-            >
+            <span style={{ margin: "0 8px", color: "#d97706", opacity: 0.4 }}>·</span>
+            <a href={`${websiteUrl}/about`} style={{ color: "#92400e", opacity: 0.7, textDecoration: "none" }}>
               {strings.aboutLink}
             </a>
-            <span style={{ margin: "0 8px", color: "#a8a29e" }}>·</span>
-            <a
-              href={`${websiteUrl}/contact`}
-              style={{ color: "#78716c", textDecoration: "none" }}
-            >
+            <span style={{ margin: "0 8px", color: "#d97706", opacity: 0.4 }}>·</span>
+            <a href={`${websiteUrl}/contact`} style={{ color: "#92400e", opacity: 0.7, textDecoration: "none" }}>
               {strings.contactLink}
             </a>
           </p>
@@ -314,17 +281,15 @@ export const EmailPreviewShell: React.FC<EmailPreviewShellProps> = ({
             style={{
               margin: 0,
               fontSize: 12,
-              color: "#78716c",
-              paddingBottom: 32,
+              color: "#92400e",
+              opacity: 0.5,
+              paddingBottom: 40,
             }}
           >
             {strings.copyright.replace("{year}", String(currentYear))}
           </p>
         </div>
       </div>
-
-      {/* Bottom glow bar */}
-      <div style={{ height: 8, backgroundColor: "#fef3c7" }} />
     </>
   )
 }
