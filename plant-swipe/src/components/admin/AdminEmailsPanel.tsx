@@ -3,9 +3,9 @@ import "./AdminEmailsPanel.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { TimezoneSelect } from "@/components/ui/timezone-select"
 import {
   Plus,
   Send,
@@ -18,11 +18,14 @@ import {
   Calendar,
   Users,
   ChevronRight,
+  ChevronDown,
   Sparkles,
   Search,
   X,
   Copy,
   Zap,
+  Shield,
+  Check,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -31,6 +34,12 @@ import { supabase } from "@/lib/supabaseClient"
 import { useLocation } from "react-router-dom"
 import { Link } from "@/components/i18n/Link"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { USER_ROLES, ROLE_CONFIG, type UserRole } from "@/constants/userRoles"
+
+const ALL_ROLES: { value: UserRole; label: string }[] = Object.values(USER_ROLES).map(role => ({
+  value: role,
+  label: ROLE_CONFIG[role]?.label ?? role,
+}))
 
 // =============================================================================
 // TRIGGER VARIABLE CATALOG - Variables available for each trigger type
@@ -187,6 +196,7 @@ type EmailCampaign = {
   testMode: boolean
   testEmail: string | null
   isMarketing: boolean // If true, only users with marketing_consent=true receive this
+  targetRoles: string[] // Empty = all users, non-empty = only users with ANY of these roles
   createdAt: string
   updatedAt: string
 }
@@ -294,9 +304,13 @@ export const AdminEmailsPanel: React.FC = () => {
     testMode: false,
     testEmail: "dev@aphylia.app",
     isMarketing: false, // If true, only send to users with marketing_consent=true
+    targetRoles: [] as string[], // Empty = all users, non-empty = only users with ANY of these roles
   })
   const [campaignSaving, setCampaignSaving] = React.useState(false)
-  const [sheetOpen, setSheetOpen] = React.useState(false)
+  const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [templatePickerOpen, setTemplatePickerOpen] = React.useState(false)
+  const [templatePickerSearch, setTemplatePickerSearch] = React.useState("")
+  const [rolesExpanded, setRolesExpanded] = React.useState(false)
 
   const location = useLocation()
   const activeView = location.pathname.includes("/templates") 
@@ -429,7 +443,8 @@ export const AdminEmailsPanel: React.FC = () => {
         previewText: campaignForm.previewText.trim(),
         testMode: campaignForm.testMode,
         testEmail: campaignForm.testMode ? campaignForm.testEmail.trim() : null,
-        isMarketing: campaignForm.isMarketing, // Exclude users without marketing consent
+        isMarketing: campaignForm.isMarketing,
+        targetRoles: campaignForm.targetRoles,
       }
       const resp = await fetch("/api/admin/email-campaigns", {
         method: "POST",
@@ -449,8 +464,9 @@ export const AdminEmailsPanel: React.FC = () => {
         testMode: false,
         testEmail: "dev@aphylia.app",
         isMarketing: false,
+        targetRoles: [],
       })
-      setSheetOpen(false)
+      setDialogOpen(false)
       loadCampaigns().catch(() => {})
     } catch (err) {
       alert((err as Error).message)
@@ -655,7 +671,7 @@ export const AdminEmailsPanel: React.FC = () => {
           {/* Action Buttons - Full width on mobile */}
           {activeView === "campaigns" && (
             <Button 
-              onClick={() => setSheetOpen(true)}
+              onClick={() => setDialogOpen(true)}
               className="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20 h-10 sm:h-11 text-sm"
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -693,7 +709,7 @@ export const AdminEmailsPanel: React.FC = () => {
               <p className="text-sm text-stone-500 dark:text-stone-400 mb-6 max-w-sm mx-auto">
                 Create your first campaign to start sending emails to your users.
               </p>
-              <Button onClick={() => setSheetOpen(true)} className="rounded-xl">
+              <Button onClick={() => setDialogOpen(true)} className="rounded-xl">
                 <Plus className="mr-2 h-4 w-4" />
                 Create Campaign
               </Button>
@@ -734,6 +750,12 @@ export const AdminEmailsPanel: React.FC = () => {
                             {campaign.isMarketing && (
                               <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
                                 📧 Marketing
+                              </div>
+                            )}
+                            {campaign.targetRoles && campaign.targetRoles.length > 0 && (
+                              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400">
+                                <Shield className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                                {campaign.targetRoles.map(r => ROLE_CONFIG[r as UserRole]?.label ?? r).join(", ")}
                               </div>
                             )}
                             <div className={cn(
@@ -1197,107 +1219,198 @@ export const AdminEmailsPanel: React.FC = () => {
         </div>
       )}
 
-      {/* New Campaign Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-lg border-l border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] overflow-y-auto">
-          <SheetHeader className="pb-4 sm:pb-6 border-b border-stone-100 dark:border-[#2a2a2d]">
-            <SheetTitle className="text-lg sm:text-xl font-bold">Create Campaign</SheetTitle>
-            <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
-              Schedule an email to send to all users
-            </p>
-          </SheetHeader>
+      {/* New Campaign Dialog (centered modal) */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl max-h-[90vh] overflow-y-auto border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-0 rounded-2xl [&>button]:z-20">
+          <div className="sticky top-0 z-10 bg-white dark:bg-[#1a1a1d] border-b border-stone-100 dark:border-[#2a2a2d] px-5 sm:px-6 pt-5 sm:pt-6 pb-4 pr-12">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl font-bold text-stone-900 dark:text-white">Create Campaign</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
+                Schedule an email to your users. Select specific roles or send to everyone.
+              </DialogDescription>
+            </DialogHeader>
+          </div>
           
-          <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-5">
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-title" className="text-xs sm:text-sm font-medium">Campaign Name</Label>
-              <Input
-                id="campaign-title"
-                value={campaignForm.title}
-                onChange={(event) =>
-                  setCampaignForm((prev) => ({ ...prev, title: event.target.value }))
-                }
-                placeholder="e.g., Spring Newsletter"
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              />
+          <div className="px-5 sm:px-6 pb-2 space-y-5">
+            {/* Two-column grid for main fields on desktop */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-title" className="text-xs sm:text-sm font-medium">Campaign Name</Label>
+                <Input
+                  id="campaign-title"
+                  value={campaignForm.title}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({ ...prev, title: event.target.value }))
+                  }
+                  placeholder="e.g., Spring Newsletter"
+                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                />
+              </div>
+              
+              {/* Template Picker Button */}
+              <div className="space-y-1.5">
+                <Label className="text-xs sm:text-sm font-medium">Email Template</Label>
+                <button
+                  type="button"
+                  onClick={() => { setTemplatePickerSearch(""); setTemplatePickerOpen(true) }}
+                  className={cn(
+                    "flex items-center justify-between w-full h-10 rounded-xl border px-3 text-sm transition-colors",
+                    campaignForm.templateId
+                      ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-stone-900 dark:text-white"
+                      : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] text-stone-500 dark:text-stone-400"
+                  )}
+                >
+                  <span className="truncate">
+                    {campaignForm.templateId
+                      ? templates.find((t) => t.id === campaignForm.templateId)?.title || "Template selected"
+                      : "Select a template..."}
+                  </span>
+                  <Search className="h-3.5 w-3.5 flex-shrink-0 ml-2 opacity-50" />
+                </button>
+                {templates.length === 0 && (
+                  <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">
+                    No templates available. Create one first.
+                  </p>
+                )}
+              </div>
+              
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-datetime" className="text-xs sm:text-sm font-medium">Schedule For</Label>
+                <Input
+                  id="campaign-datetime"
+                  type="datetime-local"
+                  value={campaignForm.scheduledFor}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({ ...prev, scheduledFor: event.target.value }))
+                  }
+                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                />
+              </div>
+              
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-timezone" className="text-xs sm:text-sm font-medium">Timezone</Label>
+                <TimezoneSelect
+                  id="campaign-timezone"
+                  value={campaignForm.timezone}
+                  onChange={(value) =>
+                    setCampaignForm((prev) => ({ ...prev, timezone: value }))
+                  }
+                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                />
+              </div>
             </div>
-            
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-template" className="text-xs sm:text-sm font-medium">Email Template</Label>
-              <Select
-                id="campaign-template"
-                value={campaignForm.templateId}
-                onChange={(event) =>
-                  setCampaignForm((prev) => ({ ...prev, templateId: event.target.value }))
-                }
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-preview" className="text-xs sm:text-sm font-medium">
+                  Preview Text <span className="text-stone-400 font-normal">(optional)</span>
+                </Label>
+                <Input
+                  id="campaign-preview"
+                  value={campaignForm.previewText}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({ ...prev, previewText: event.target.value }))
+                  }
+                  placeholder="Short preview shown in inbox"
+                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                />
+              </div>
+              
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-description" className="text-xs sm:text-sm font-medium">
+                  Internal Notes <span className="text-stone-400 font-normal">(optional)</span>
+                </Label>
+                <Input
+                  id="campaign-description"
+                  value={campaignForm.description}
+                  onChange={(event) =>
+                    setCampaignForm((prev) => ({ ...prev, description: event.target.value }))
+                  }
+                  placeholder="Notes for your team..."
+                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Target Roles - Collapsible */}
+            <div className="rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setRolesExpanded((prev) => !prev)}
+                className="flex items-center justify-between w-full p-3 sm:p-4 text-left"
               >
-                <option value="">Select a template...</option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.title}
-                  </option>
-                ))}
-              </Select>
-              {templates.length === 0 && (
-                <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">
-                  No templates available. Create one first.
-                </p>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                  <span className="text-xs sm:text-sm font-medium text-sky-800 dark:text-sky-300">
+                    Target Audience
+                  </span>
+                  {campaignForm.targetRoles.length > 0 ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-200 dark:bg-sky-800 text-sky-700 dark:text-sky-300">
+                      {campaignForm.targetRoles.length} role{campaignForm.targetRoles.length > 1 ? "s" : ""}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-100 dark:bg-sky-900/40 text-sky-600 dark:text-sky-400">
+                      All users
+                    </span>
+                  )}
+                </div>
+                <ChevronDown className={cn(
+                  "h-4 w-4 text-sky-500 transition-transform",
+                  rolesExpanded && "rotate-180"
+                )} />
+              </button>
+
+              {rolesExpanded && (
+                <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-0 space-y-3 border-t border-sky-200/50 dark:border-sky-800/50">
+                  <p className="text-[10px] sm:text-xs text-sky-600 dark:text-sky-400 pt-3">
+                    Select which roles should receive this email. Leave all unchecked to send to <strong>everyone</strong>.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {ALL_ROLES.map(({ value, label }) => {
+                      const roleConfig = ROLE_CONFIG[value]
+                      const isSelected = campaignForm.targetRoles.includes(value)
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => {
+                            setCampaignForm((prev) => ({
+                              ...prev,
+                              targetRoles: isSelected
+                                ? prev.targetRoles.filter((r) => r !== value)
+                                : [...prev.targetRoles, value],
+                            }))
+                          }}
+                          className={cn(
+                            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
+                            isSelected
+                              ? `${roleConfig.bgColor} ${roleConfig.darkBgColor} ${roleConfig.borderColor} ${roleConfig.darkBorderColor} ${roleConfig.iconColor} ${roleConfig.darkIconColor}`
+                              : "bg-white dark:bg-[#1e1e20] border-stone-200 dark:border-[#3e3e42] text-stone-500 dark:text-stone-400 hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                          )}
+                        >
+                          {isSelected && <Check className="h-3 w-3" />}
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {campaignForm.targetRoles.length > 0 && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] sm:text-xs text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/40 rounded-lg px-2 py-1.5">
+                        Sending to users with <strong>{campaignForm.targetRoles.length === 1 ? "role" : "any of roles"}</strong>:{" "}
+                        {campaignForm.targetRoles.map(r => ROLE_CONFIG[r as UserRole]?.label ?? r).join(", ")}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setCampaignForm((prev) => ({ ...prev, targetRoles: [] }))}
+                        className="text-[10px] text-sky-500 hover:text-sky-700 dark:hover:text-sky-300 underline ml-2 flex-shrink-0"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
-            </div>
-            
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-datetime" className="text-xs sm:text-sm font-medium">Schedule For</Label>
-              <Input
-                id="campaign-datetime"
-                type="datetime-local"
-                value={campaignForm.scheduledFor}
-                onChange={(event) =>
-                  setCampaignForm((prev) => ({ ...prev, scheduledFor: event.target.value }))
-                }
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              />
-            </div>
-            
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-timezone" className="text-xs sm:text-sm font-medium">Timezone</Label>
-              <Input
-                id="campaign-timezone"
-                value={campaignForm.timezone}
-                onChange={(event) =>
-                  setCampaignForm((prev) => ({ ...prev, timezone: event.target.value }))
-                }
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              />
-            </div>
-            
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-preview" className="text-xs sm:text-sm font-medium">
-                Preview Text <span className="text-stone-400 font-normal">(optional)</span>
-              </Label>
-              <Input
-                id="campaign-preview"
-                value={campaignForm.previewText}
-                onChange={(event) =>
-                  setCampaignForm((prev) => ({ ...prev, previewText: event.target.value }))
-                }
-                placeholder="Short preview shown in inbox"
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              />
-            </div>
-            
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-description" className="text-xs sm:text-sm font-medium">
-                Internal Notes <span className="text-stone-400 font-normal">(optional)</span>
-              </Label>
-              <Textarea
-                id="campaign-description"
-                value={campaignForm.description}
-                onChange={(event) =>
-                  setCampaignForm((prev) => ({ ...prev, description: event.target.value }))
-                }
-                placeholder="Notes for your team..."
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] min-h-[60px] sm:min-h-[80px] text-sm"
-              />
             </div>
 
             {/* Marketing Email Toggle */}
@@ -1363,7 +1476,7 @@ export const AdminEmailsPanel: React.FC = () => {
               </div>
               
               {campaignForm.testMode && (
-                <div className="space-y-1.5 sm:space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="test-email" className="text-[10px] sm:text-xs font-medium text-amber-700 dark:text-amber-400">
                     Test Email Address
                   </Label>
@@ -1382,10 +1495,11 @@ export const AdminEmailsPanel: React.FC = () => {
             </div>
           </div>
           
-          <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-stone-100 dark:border-[#2a2a2d] flex flex-col sm:flex-row gap-2 sm:gap-3">
+          {/* Sticky footer */}
+          <div className="sticky bottom-0 bg-white dark:bg-[#1a1a1d] border-t border-stone-100 dark:border-[#2a2a2d] px-5 sm:px-6 py-4 flex flex-col sm:flex-row gap-2 sm:gap-3">
             <Button 
               variant="outline" 
-              onClick={() => setSheetOpen(false)}
+              onClick={() => setDialogOpen(false)}
               className="w-full sm:flex-1 rounded-xl h-10 text-sm order-2 sm:order-1"
             >
               Cancel
@@ -1408,8 +1522,151 @@ export const AdminEmailsPanel: React.FC = () => {
               {campaignForm.testMode ? "Schedule Test" : "Schedule Campaign"}
             </Button>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
+
+      {/* Template Picker Dialog */}
+      <Dialog open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+        <DialogContent
+          className="w-[calc(100vw-2rem)] max-w-lg max-h-[80vh] border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-0 rounded-2xl flex flex-col"
+          priorityZIndex={100}
+        >
+          <div className="px-5 pt-5 pb-3 border-b border-stone-100 dark:border-[#2a2a2d] space-y-3">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-stone-900 dark:text-white">Choose Template</DialogTitle>
+              <DialogDescription className="text-xs text-stone-500 dark:text-stone-400">
+                Search and select an email template for this campaign.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <input
+                type="text"
+                value={templatePickerSearch}
+                onChange={(e) => setTemplatePickerSearch(e.target.value)}
+                placeholder="Search templates..."
+                autoFocus
+                className="w-full h-10 pl-9 pr-8 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] text-sm text-stone-900 dark:text-white placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
+              />
+              {templatePickerSearch && (
+                <button
+                  type="button"
+                  onClick={() => setTemplatePickerSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-stone-400 hover:text-stone-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-3 py-2">
+            {(() => {
+              const query = templatePickerSearch.toLowerCase().trim()
+              const filtered = query
+                ? templates.filter(
+                    (t) =>
+                      t.title.toLowerCase().includes(query) ||
+                      t.subject.toLowerCase().includes(query)
+                  )
+                : templates
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="py-10 text-center">
+                    <Search className="h-8 w-8 mx-auto text-stone-300 dark:text-stone-600 mb-3" />
+                    <p className="text-sm text-stone-500 dark:text-stone-400">
+                      {templates.length === 0
+                        ? "No templates available. Create one first."
+                        : `No templates match "${templatePickerSearch}"`}
+                    </p>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="space-y-1">
+                  {filtered.map((template) => {
+                    const isActive = template.id === campaignForm.templateId
+                    return (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => {
+                          setCampaignForm((prev) => ({ ...prev, templateId: template.id }))
+                          setTemplatePickerOpen(false)
+                        }}
+                        className={cn(
+                          "w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all",
+                          isActive
+                            ? "bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700"
+                            : "hover:bg-stone-50 dark:hover:bg-[#2a2a2d] border border-transparent"
+                        )}
+                      >
+                        <div className={cn(
+                          "flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center",
+                          isActive
+                            ? "bg-emerald-100 dark:bg-emerald-900/40"
+                            : "bg-stone-100 dark:bg-[#2a2a2d]"
+                        )}>
+                          <FileText className={cn(
+                            "h-4 w-4",
+                            isActive
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-stone-400 dark:text-stone-500"
+                          )} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "text-sm font-medium truncate",
+                              isActive
+                                ? "text-emerald-700 dark:text-emerald-300"
+                                : "text-stone-900 dark:text-white"
+                            )}>
+                              {template.title}
+                            </span>
+                            {isActive && <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />}
+                          </div>
+                          <p className="text-xs text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                            {template.subject}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1 text-[10px] text-stone-400">
+                            <span>v{template.version}</span>
+                            <span>·</span>
+                            <span>Used {template.campaignCount}x</span>
+                            {template.variables?.length > 0 && (
+                              <>
+                                <span>·</span>
+                                <span>{template.variables.length} var{template.variables.length > 1 ? "s" : ""}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+          </div>
+
+          {campaignForm.templateId && (
+            <div className="px-5 py-3 border-t border-stone-100 dark:border-[#2a2a2d]">
+              <button
+                type="button"
+                onClick={() => {
+                  setCampaignForm((prev) => ({ ...prev, templateId: "" }))
+                  setTemplatePickerOpen(false)
+                }}
+                className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 underline"
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -196,6 +196,7 @@ alter table public.admin_email_campaigns add column if not exists test_mode bool
 alter table public.admin_email_campaigns add column if not exists test_email text;
 alter table public.admin_email_campaigns add column if not exists is_marketing boolean default false; -- If true, only send to users with marketing_consent=true
 alter table public.admin_email_campaigns add column if not exists send_summary jsonb;
+alter table public.admin_email_campaigns add column if not exists target_roles text[] default '{}'; -- Empty array = all users, non-empty = only users with ANY of these roles
 
 alter table public.admin_email_campaigns enable row level security;
 

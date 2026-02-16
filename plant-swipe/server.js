@@ -6948,9 +6948,12 @@ async function ensureNotificationTables() {
     await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
     await sql`create index if not exists user_notifications_automation_idx on public.user_notifications (automation_id);`
     await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
-    // Unique constraint for automation notifications: one notification per automation per user per day (in user's timezone)
-    // Using scheduled_for::date since the automation inserts with scheduled_for = now()
-    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (scheduled_for::date)) where automation_id is not null;`
+    // Immutable helper for date extraction in index expressions (timestamptz::date is STABLE, not IMMUTABLE)
+    await sql`create or replace function public.immutable_date_utc(ts timestamptz) returns date language sql immutable strict parallel safe as $$ select (ts at time zone 'UTC')::date; $$;`
+    // Drop old index that used non-immutable expression (may or may not exist)
+    await sql`drop index if exists public.user_notifications_unique_automation;`
+    // Unique constraint for automation notifications: one notification per automation per user per day
+    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (public.immutable_date_utc(scheduled_for))) where automation_id is not null;`
 
     // User Push Subscriptions
     await sql`
@@ -7141,6 +7144,7 @@ const emailCampaignInputSchema = z.object({
   testMode: z.boolean().optional().default(false),
   testEmail: z.string().email().optional().nullable(),
   isMarketing: z.boolean().optional().default(false), // If true, only send to users with marketing_consent=true
+  targetRoles: z.array(z.string().trim().min(1).max(50)).max(20).optional().default([]), // Empty = all users, non-empty = only users with ANY of these roles
 })
 
 const emailCampaignUpdateSchema = z.object({
@@ -10598,6 +10602,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
     const testMode = parsed.testMode === true
     const testEmail = testMode && parsed.testEmail ? parsed.testEmail : null
     const isMarketing = parsed.isMarketing === true
+    const targetRoles = Array.isArray(parsed.targetRoles) ? parsed.targetRoles.filter(r => typeof r === 'string' && r.length) : []
     const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
@@ -10620,6 +10625,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         test_mode,
         test_email,
         is_marketing,
+        target_roles,
         created_by,
         updated_by,
         created_at,
@@ -10644,6 +10650,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         ${testMode},
         ${testEmail},
         ${isMarketing},
+        ${targetRoles},
         ${adminUuid},
         ${adminUuid},
         now(),
@@ -10988,6 +10995,7 @@ function normalizeEmailCampaignRow(row) {
     testMode: row.test_mode === true,
     testEmail: row.test_email || null,
     isMarketing: row.is_marketing === true, // If true, only users with marketing_consent receive this
+    targetRoles: Array.isArray(row.target_roles) ? row.target_roles : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
