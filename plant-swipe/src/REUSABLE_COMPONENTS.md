@@ -216,7 +216,7 @@ const handleSelect = (location: SelectedLocation) => {
 - i18n-aware — search results use the current app language
 - Dark mode support
 
-**Used in:** GardenLocationEditor, SettingsPage (preferences tab), SetupPage (location step)
+**Used in:** GardenLocationEditor, SettingsPage (preferences tab), SetupPage (location step), EditProfileDialog (profile page)
 
 ---
 
