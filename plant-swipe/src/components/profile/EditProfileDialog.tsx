@@ -8,16 +8,17 @@ import { validateUsername } from "@/lib/username"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { CityCountrySelector, type SelectedLocation } from "@/components/ui/city-country-selector"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import type { AccentKey } from "@/lib/accent"
 import { useTranslation } from "react-i18next"
-import { MapPin, ExternalLink, ArrowRight } from "lucide-react"
-import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { MapPin, ExternalLink } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 
 export type EditProfileValues = {
   display_name: string
+  city: string
   country: string
   bio: string
   job: string
@@ -35,7 +36,6 @@ export const EditProfileDialog: React.FC<{
   error?: string | null
 }> = ({ open, onOpenChange, initial, onSubmit, submitting, error }) => {
   const { t } = useTranslation('common')
-  const navigate = useLanguageNavigate()
   const { user } = useAuth()
   const [values, setValues] = React.useState<EditProfileValues>(initial)
 
@@ -108,26 +108,34 @@ export const EditProfileDialog: React.FC<{
             />
           </div>
 
-          {/* Country - read-only with show/hide toggle and link to settings */}
+          {/* City / Country */}
           <div className="grid gap-2">
             <Label className="flex items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5 opacity-60" />
               {t('profile.editProfile.country')}
             </Label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2d2d30] px-3 py-2 text-sm text-stone-500 dark:text-stone-400">
-                {values.country || t('profile.editProfile.noCountrySet', { defaultValue: 'Not set' })}
-              </div>
-              <button
-                type="button"
-                onClick={() => { onOpenChange(false); navigate('/settings') }}
-                className="flex items-center gap-1 rounded-xl border border-stone-200 dark:border-[#3e3e42] px-3 py-2 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-[#2d2d30] transition-colors"
-                title={t('profile.editProfile.changeInSettings', { defaultValue: 'Change in settings' })}
-              >
-                <ArrowRight className="h-3.5 w-3.5" />
-                {t('profile.editProfile.changeInSettings', { defaultValue: 'Change in settings' })}
-              </button>
-            </div>
+            <CityCountrySelector
+              city={values.city}
+              country={values.country}
+              onSelect={(location: SelectedLocation) => {
+                setValues(prev => ({
+                  ...prev,
+                  city: location.city,
+                  country: location.country,
+                }))
+              }}
+              onClear={() => {
+                setValues(prev => ({
+                  ...prev,
+                  city: '',
+                  country: '',
+                }))
+              }}
+              disabled={submitting}
+              showDetectButton
+              variant="sm"
+              label=""
+            />
             <div className="flex items-center justify-between mt-1">
               <Label htmlFor="ep-show-country" className="text-xs opacity-70 cursor-pointer">
                 {t('profile.editProfile.showCountryOnProfile', { defaultValue: 'Show country on profile' })}
