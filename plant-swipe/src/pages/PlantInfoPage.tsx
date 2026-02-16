@@ -1898,32 +1898,29 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
   }
 
   return (
-    <div className="space-y-2">
+    <div
+      className="grid items-center gap-x-1 sm:gap-x-1.5 gap-y-2"
+      style={{ gridTemplateColumns: 'auto repeat(12, minmax(0, 1fr))' }}
+    >
       {/* Month labels row */}
-      <div className="grid gap-1 sm:gap-1.5" style={{ gridTemplateColumns: 'minmax(90px, auto) repeat(12, minmax(0, 1fr))' }}>
-        <div />
-        {monthLabels.map((label, idx) => (
-          <div key={idx} className="flex items-center justify-center">
-            <span className="text-[8px] sm:text-[9px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
-              {label.slice(0, 3)}
-            </span>
-          </div>
-        ))}
-      </div>
+      <div />
+      {monthLabels.map((label, idx) => (
+        <div key={idx} className="flex items-center justify-center">
+          <span className="text-[8px] sm:text-[9px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
+            {label.slice(0, 3)}
+          </span>
+        </div>
+      ))}
 
       {/* Activity rows */}
       {activeRows.map((row) => {
         const segments = buildSegments(row.key)
         return (
-          <div
-            key={row.key}
-            className="grid gap-1 sm:gap-1.5 items-center"
-            style={{ gridTemplateColumns: 'minmax(90px, auto) repeat(12, minmax(0, 1fr))' }}
-          >
+          <React.Fragment key={row.key}>
             {/* Row label */}
-            <div className="flex items-center gap-1.5 sm:gap-2 pr-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 pr-2 min-w-0">
               {row.icon}
-              <span className="text-[10px] sm:text-xs font-semibold text-stone-600 dark:text-stone-300 truncate">
+              <span className="text-[10px] sm:text-xs font-semibold text-stone-600 dark:text-stone-300 whitespace-nowrap">
                 {row.label}
               </span>
             </div>
@@ -1939,7 +1936,6 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
               {/* Colored bar segments overlaid */}
               {segments.map((seg, sIdx) => {
                 const span = seg.end - seg.start + 1
-                // Calculate position with gap offsets
                 return (
                   <div
                     key={sIdx}
@@ -1957,7 +1953,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
                 )
               })}
             </div>
-          </div>
+          </React.Fragment>
         )
       })}
     </div>
