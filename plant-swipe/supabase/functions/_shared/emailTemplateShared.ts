@@ -212,10 +212,10 @@ export function wrapEmailHtmlShared(bodyHtml: string, options: EmailWrapperOptio
     
     /* Responsive */
     @media screen and (max-width: 640px) {
-      .email-container { width: 100% !important; margin: 0 !important; border-radius: 0 !important; border-left: none !important; border-right: none !important; }
+      .email-container { width: 100% !important; margin: 0 !important; border-radius: 20px !important; }
       .email-body { padding: 32px 24px !important; }
       .signature-section { margin: 24px !important; padding: 24px !important; }
-      .footer-section { padding: 24px !important; }
+      .email-footer { padding: 24px 24px 32px 24px !important; }
       h1 { font-size: 26px !important; }
       h2 { font-size: 22px !important; }
     }
@@ -227,7 +227,7 @@ export function wrapEmailHtmlShared(bodyHtml: string, options: EmailWrapperOptio
   <!-- Email Wrapper -->
   <table role="presentation" class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ecfdf5;background:linear-gradient(180deg, #d1fae5 0%, #ecfdf5 6%, #f0fdf4 15%, #ffffff 40%, #fefce8 70%, #fef3c7 85%, #fde68a 100%);margin:0;padding:0;">
     <tr>
-      <td align="center" style="padding:48px 20px;">
+      <td align="center" style="padding:40px 16px;">
         
         <!-- Main Container — single card with body + footer -->
         <table role="presentation" class="email-container" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background-color:#ffffff;background:linear-gradient(170deg, rgba(16,185,129,0.04) 0%, #ffffff 12%, #ffffff 75%, rgba(254,243,199,0.3) 100%);border-radius:32px;border:1px solid rgba(16,185,129,0.15);box-shadow:0 25px 60px -12px rgba(16,185,129,0.18), 0 0 0 1px rgba(255,255,255,0.8) inset;overflow:hidden;">
