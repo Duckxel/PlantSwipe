@@ -1221,8 +1221,8 @@ export const AdminEmailsPanel: React.FC = () => {
 
       {/* New Campaign Dialog (centered modal) */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl max-h-[90vh] overflow-y-auto border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-0 rounded-2xl">
-          <div className="sticky top-0 z-10 bg-white dark:bg-[#1a1a1d] border-b border-stone-100 dark:border-[#2a2a2d] px-5 sm:px-6 pt-5 sm:pt-6 pb-4">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl max-h-[90vh] overflow-y-auto border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-0 rounded-2xl [&>button]:z-20">
+          <div className="sticky top-0 z-10 bg-white dark:bg-[#1a1a1d] border-b border-stone-100 dark:border-[#2a2a2d] px-5 sm:px-6 pt-5 sm:pt-6 pb-4 pr-12">
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl font-bold text-stone-900 dark:text-white">Create Campaign</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
