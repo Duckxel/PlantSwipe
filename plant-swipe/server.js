@@ -4081,7 +4081,7 @@ const CSP_POLICY = [
   "default-src 'self' *.aphylia.app",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.aphylia.app https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://recaptchaenterprise.googleapis.com",
   "style-src 'self' 'unsafe-inline' *.aphylia.app https://fonts.googleapis.com",
-  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://www.google.com https://*.sentry.io https://fonts.googleapis.com https://fonts.gstatic.com https://ipapi.co https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org",
+  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://www.google.com https://*.sentry.io https://fonts.googleapis.com https://fonts.gstatic.com https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org",
   "font-src 'self' *.aphylia.app https://fonts.gstatic.com data:",
   "frame-src 'self' *.aphylia.app https://www.google.com https://recaptcha.google.com",
   "img-src * data: blob:",
@@ -6198,8 +6198,21 @@ function getGeoFromHeaders(req) {
   }
 }
 
-// In-memory cache for IP -> geo lookups to avoid repeated external calls
-const geoCache = new Map()
+// --- IP geo lookup with bounded LRU cache and in-flight deduplication ---
+
+const GEO_CACHE_MAX_SIZE = 2000
+const GEO_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+const geoCache = new Map()          // IP -> { ts, val }
+const geoInflight = new Map()       // IP -> Promise (deduplicates concurrent lookups)
+
+function geoCacheSet(key, val) {
+  // Evict oldest entries when cache exceeds max size (simple FIFO via insertion order)
+  if (geoCache.size >= GEO_CACHE_MAX_SIZE) {
+    const firstKey = geoCache.keys().next().value
+    geoCache.delete(firstKey)
+  }
+  geoCache.set(key, { ts: Date.now(), val })
+}
 
 function isPrivateIp(ip) {
   try {
@@ -6224,21 +6237,7 @@ function geoDebugLog(...args) {
   } catch { }
 }
 
-async function lookupGeoForIp(ip) {
-  const key = `ip:${ip}`
-  const now = Date.now()
-  const ttlMs = 24 * 60 * 60 * 1000 // 24h
-  const cached = geoCache.get(key)
-  if (cached && (now - cached.ts < ttlMs)) {
-    return cached.val
-  }
-
-  if (!ip || isPrivateIp(ip)) {
-    const val = { geo_country: null, geo_region: null, geo_city: null }
-    geoCache.set(key, { ts: now, val })
-    return val
-  }
-
+async function _fetchGeoForIp(ip) {
   // Provider 1: ipapi.co (HTTPS, no key required for basic usage)
   try {
     const r = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, { method: 'GET', headers: { 'Accept': 'application/json' }, redirect: 'follow' })
@@ -6246,11 +6245,10 @@ async function lookupGeoForIp(ip) {
       const j = await r.json().catch(() => null)
       if (j && (j.country || j.region || j.city)) {
         const val = {
-          geo_country: j.country ? String(j.country).toUpperCase() : null, // ISO code
+          geo_country: j.country ? String(j.country).toUpperCase() : null,
           geo_region: j.region || null,
           geo_city: j.city || null,
         }
-        geoCache.set(key, { ts: now, val })
         geoDebugLog('ipapi.co resolved', ip, val)
         return val
       }
@@ -6270,7 +6268,6 @@ async function lookupGeoForIp(ip) {
           geo_region: j2.regionName || null,
           geo_city: j2.city || null,
         }
-        geoCache.set(key, { ts: now, val })
         geoDebugLog('ip-api.com resolved', ip, val)
         return val
       }
@@ -6279,9 +6276,44 @@ async function lookupGeoForIp(ip) {
     geoDebugLog('ip-api.com failed', ip, e?.message || String(e))
   }
 
-  const val = { geo_country: null, geo_region: null, geo_city: null }
-  geoCache.set(key, { ts: now, val })
-  return val
+  return { geo_country: null, geo_region: null, geo_city: null }
+}
+
+async function lookupGeoForIp(ip) {
+  const key = `ip:${ip}`
+
+  // 1. Check cache (with TTL)
+  const cached = geoCache.get(key)
+  if (cached && (Date.now() - cached.ts < GEO_CACHE_TTL_MS)) {
+    return cached.val
+  }
+
+  // 2. Private/missing IPs — cache null immediately, no API call
+  if (!ip || isPrivateIp(ip)) {
+    const val = { geo_country: null, geo_region: null, geo_city: null }
+    geoCacheSet(key, val)
+    return val
+  }
+
+  // 3. Deduplicate concurrent lookups for the same IP
+  const inflight = geoInflight.get(key)
+  if (inflight) {
+    return inflight
+  }
+
+  const promise = _fetchGeoForIp(ip).then((val) => {
+    geoCacheSet(key, val)
+    geoInflight.delete(key)
+    return val
+  }).catch(() => {
+    const val = { geo_country: null, geo_region: null, geo_city: null }
+    geoCacheSet(key, val)
+    geoInflight.delete(key)
+    return val
+  })
+
+  geoInflight.set(key, promise)
+  return promise
 }
 
 async function resolveGeo(req, ipAddress) {

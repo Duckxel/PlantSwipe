@@ -108,7 +108,112 @@ A search-specific input with a search icon, loading spinner, clear button, and k
 | `onClear` | `() => void` | Clear button callback |
 | `shortcut` | `string` | Keyboard shortcut hint |
 
-**Used in:** Discovery page search, garden search, messaging search, setup location search
+**Used in:** Discovery page search, garden search, messaging search
+
+---
+
+### `CityCountrySelector`
+
+**File:** `src/components/ui/city-country-selector.tsx`
+
+A shared city/country location selector with geocoding search, GPS detection, and IP-based auto-detection. Uses the [Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api) for search and [Nominatim](https://nominatim.openstreetmap.org/) for reverse geocoding. Standardised across all pages that need location input.
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `city` | `string` | — | Currently selected city (controlled) |
+| `country` | `string` | — | Currently selected country (controlled) |
+| `timezone` | `string` | — | Optional timezone to display |
+| `onSelect` | `(location: SelectedLocation) => void` | — | Called when a location is selected |
+| `onClear` | `() => void` | — | Called when the selected location is cleared |
+| `disabled` | `boolean` | `false` | Disables all interactions |
+| `showDetectButton` | `boolean` | `true` | Show the "Detect my location" button (browser GPS) |
+| `showTimezone` | `boolean` | `false` | Show timezone in the selected location display |
+| `variant` | `'sm' \| 'default' \| 'lg'` | `'default'` | Size variant for the search input |
+| `className` | `string` | — | Additional class on the root wrapper |
+| `label` | `string` | translated | Label text above the search input |
+| `placeholder` | `string` | translated | Placeholder for the search input |
+| `noResultsText` | `string` | translated | Text for the no-results message |
+
+**`SelectedLocation` type:**
+
+```ts
+interface SelectedLocation {
+  city: string
+  country: string
+  timezone?: string
+  latitude?: number
+  longitude?: number
+  admin1?: string
+}
+```
+
+**Example (basic — auto-save on select):**
+
+```tsx
+import { CityCountrySelector, type SelectedLocation } from "@/components/ui/city-country-selector"
+
+const [city, setCity] = useState("")
+const [country, setCountry] = useState("")
+
+const handleSelect = (location: SelectedLocation) => {
+  setCity(location.city)
+  setCountry(location.country)
+  // Save to database...
+}
+
+<CityCountrySelector
+  city={city}
+  country={country}
+  onSelect={handleSelect}
+  onClear={() => { setCity(""); setCountry("") }}
+  showDetectButton
+  variant="lg"
+/>
+```
+
+**Example (with timezone display):**
+
+```tsx
+<CityCountrySelector
+  city={city}
+  country={country}
+  timezone={timezone}
+  onSelect={handleSelect}
+  onClear={handleClear}
+  showDetectButton
+  showTimezone
+/>
+```
+
+**Example (inside a form with save button — like Garden Settings):**
+
+```tsx
+<CityCountrySelector
+  city={selectedCity}
+  country={selectedCountry}
+  onSelect={handleLocationSelect}
+  onClear={handleLocationClear}
+  disabled={!canEdit}
+  label="Location"
+  placeholder="Search for a city..."
+/>
+<Button onClick={handleSave} disabled={!hasChanges}>Save</Button>
+```
+
+**Features:**
+- Debounced geocoding search via Open-Meteo API (350ms)
+- GPS-based location detection via browser Geolocation + Nominatim reverse geocoding
+- Selected location display with city, country, optional timezone
+- Clear button to reset selection
+- Suggestions dropdown with city, state/province, and country
+- No results message when search returns empty
+- Fully controlled — parent manages `city`/`country` state
+- i18n-aware — search results use the current app language
+- Dark mode support
+
+**Used in:** GardenLocationEditor, SettingsPage (preferences tab), SetupPage (location step), EditProfileDialog (profile page)
 
 ---
 
