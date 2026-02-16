@@ -326,6 +326,12 @@ def _log_admin_action(action: str, target: str = "", detail: dict | None = None)
 
 
 def _verify_request() -> None:
+    # Fail Secure: If APP_SECRET is the default "change-me", reject all requests.
+    if APP_SECRET == "change-me":
+        print("[Security] CRITICAL: ADMIN_BUTTON_SECRET is not set (using default 'change-me'). Request rejected.")
+        # Return 500 to match documented Fail Secure policy
+        abort(500, description="Security misconfiguration: ADMIN_BUTTON_SECRET not set")
+
     # Option A: HMAC on raw body via X-Button-Token
     provided_sig = request.headers.get(HMAC_HEADER, "")
     if provided_sig:
