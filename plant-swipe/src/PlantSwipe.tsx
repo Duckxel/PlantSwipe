@@ -865,11 +865,9 @@ export default function PlantSwipe() {
 
     return plants.map((p) => {
       // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors)
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
+      // ⚡ Bolt: Use p.colors directly as it's already populated with color names in loadPlantPreviews.
+      // Avoid merging with p.identity.colors which duplicates the same data.
+      const colors = Array.isArray(p.colors) ? p.colors : []
       const normalizedColors = colors.map(c => c.toLowerCase().trim())
       
       // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
@@ -914,7 +912,7 @@ export default function PlantSwipe() {
 
       // Seasons - convert to Set for O(1) lookups
       const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const seasonsSet = new Set(seasons.map(s => String(s)))
+      const seasonsSet = new Set(seasons)
 
       // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
       const createdAtValue = p.meta?.createdAt
