@@ -145,8 +145,8 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
     img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; max-width: 100%; }
     
-    /* Base */
-    body { margin: 0 !important; padding: 0 !important; width: 100% !important; background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%); min-height: 100vh; }
+    /* Base - extended gradient */
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f0fdf4; min-height: 100vh; }
     
     /* Typography - colors not using !important to allow inline styles */
     h1 { font-size: 32px; font-weight: 700; color: #111827; margin: 0 0 20px 0; line-height: 1.2; letter-spacing: -0.5px; }
@@ -164,39 +164,44 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
     
     /* Code */
     code { background: #f3f4f6; color: #dc2626; padding: 3px 8px; border-radius: 6px; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em; }
-    pre { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: #e5e7eb; padding: 20px 24px; border-radius: 16px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; line-height: 1.6; margin: 20px 0; }
+    pre { background-color: #1f2937; color: #e5e7eb; padding: 20px 24px; border-radius: 16px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 14px; line-height: 1.6; margin: 20px 0; }
     pre code { background: transparent; color: #e5e7eb; padding: 0; border-radius: 0; }
     
     /* Highlight */
-    mark { background: linear-gradient(135deg, #fef08a 0%, #fde047 100%); color: #713f12; padding: 2px 6px; border-radius: 4px; }
+    mark { background-color: #fef08a; color: #713f12; padding: 2px 6px; border-radius: 4px; }
     
     /* Blockquote */
-    blockquote { border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.08); margin: 20px 0; padding: 16px 24px; border-radius: 0 12px 12px 0; font-style: italic; color: #374151; }
+    blockquote { border-left: 4px solid #10b981; background-color: #ecfdf5; margin: 20px 0; padding: 16px 24px; border-radius: 0 12px 12px 0; font-style: italic; color: #374151; }
     
     /* Lists */
     ul, ol { margin: 16px 0; padding-left: 28px; }
     li { margin: 8px 0; color: #374151; }
     
     /* Horizontal Rule */
-    hr { border: none; height: 2px; background: linear-gradient(90deg, transparent 0%, #10b981 50%, transparent 100%); margin: 32px 0; }
+    hr { border: none; height: 2px; background-color: #10b981; margin: 32px 0; opacity: 0.3; }
     
     /* Strong/Bold */
     strong, b { font-weight: 600; color: #111827; }
     
     /* Dark mode */
     @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
-      .email-wrapper { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
-      .email-container { background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(24, 24, 27, 0.98) 50%, rgba(251, 191, 36, 0.03) 100%) !important; border-color: rgba(63, 63, 70, 0.5) !important; }
+      body { background-color: #0a0f1a !important; }
+      .email-wrapper { background-color: #0a0f1a !important; }
+      .email-top-glow { background-color: #064e3b !important; }
+      .email-bottom-glow { background-color: #1c1917 !important; }
+      .email-container { background-color: #18181b !important; border-color: rgba(63, 63, 70, 0.5) !important; }
       .email-body { color: #f4f4f5 !important; }
       .email-body p, .email-body li, .email-body span, .email-body td { color: #e4e4e7 !important; }
       .email-body h1, .email-body h2, .email-body h3, .email-body h4 { color: #ffffff !important; }
       .email-body a { color: #34d399 !important; }
       .email-body code { background: #374151 !important; color: #fca5a5 !important; }
       .email-body mark { background: #854d0e !important; color: #fef08a !important; }
-      .signature-section { background: rgba(16, 185, 129, 0.08) !important; border-color: rgba(16, 185, 129, 0.15) !important; }
+      .signature-section { background-color: #1a2e1a !important; border-color: rgba(16, 185, 129, 0.2) !important; }
+      .signature-section p { color: #d4d4d8 !important; }
+      .footer-bg { background-color: #111214 !important; }
       .footer-section { border-color: rgba(63, 63, 70, 0.3) !important; }
-      .footer-section p { color: #71717a !important; }
+      .footer-section p, .footer-section a { color: #a1a1aa !important; }
+      .footer-copyright { color: #71717a !important; }
     }
     
     /* Responsive */
@@ -210,21 +215,25 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background:linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+<body style="margin:0;padding:0;background-color:#f0fdf4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
   ${previewTextHtml}
   
   <!-- Email Wrapper -->
-  <table role="presentation" class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%);margin:0;padding:0;min-height:100vh;">
+  <table role="presentation" class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdf4;margin:0;padding:0;">
+    <!-- Top gradient glow area -->
     <tr>
-      <td align="center" style="padding:48px 20px;">
+      <td class="email-top-glow" style="background-color:#d1fae5;height:8px;font-size:0;line-height:0;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#ecfdf5;padding:40px 20px 0 20px;">
         
         <!-- Main Container -->
-        <table role="presentation" class="email-container" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%);border-radius:32px;border:1px solid rgba(16, 185, 129, 0.12);box-shadow:0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;overflow:hidden;">
+        <table role="presentation" class="email-container" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background-color:#ffffff;border-radius:24px;border:1px solid #d1fae5;overflow:hidden;">
           
           <!-- Header Banner -->
           <tr>
-            <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:32px 48px;text-align:center;">
-              <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
+            <td class="email-header" style="background-color:#059669;padding:24px 48px;text-align:center;">
+              <div style="display:inline-block;background-color:rgba(255,255,255,0.15);border-radius:16px;padding:10px 24px;">
                 <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png" alt="Aphylia" height="32" style="display:block;border:0;outline:none;text-decoration:none;height:32px;width:auto;filter:brightness(0) invert(1);" />
               </div>
             </td>
@@ -240,13 +249,12 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
           <!-- Signature Section -->
           <tr>
             <td style="padding:0 48px 48px 48px;">
-              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdf4;border-radius:20px;border:1px solid rgba(16, 185, 129, 0.1);overflow:hidden;">
+              <table role="presentation" class="signature-section" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdf4;border-radius:20px;border:1px solid #d1fae5;overflow:hidden;">
                 <tr>
                   <td style="padding:28px 32px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td width="72" style="vertical-align:middle;padding-right:20px;">
-                          <!-- Logo in green square - using table for centering -->
                           <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#10b981;border-radius:16px;width:56px;height:56px;">
                             <tr>
                               <td align="center" valign="middle" style="width:56px;height:56px;">
@@ -271,78 +279,96 @@ export function wrapEmailHtml(bodyHtml: string, options: EmailWrapperOptions = {
             </td>
           </tr>
           
-          <!-- Footer -->
+        </table>
+        <!-- End Main Container -->
+        
+      </td>
+    </tr>
+
+    <!-- Footer area with warm amber/green tinted background -->
+    <tr>
+      <td class="footer-bg" align="center" style="background-color:#f5f0e8;padding:0 20px;">
+        <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;">
+          
+          <!-- Decorative divider -->
           <tr>
-            <td class="footer-section" style="padding:32px 48px;text-align:center;border-top:1px solid rgba(16, 185, 129, 0.08);">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <td align="center" style="padding:28px 0 24px 0;">
+              <table role="presentation" width="80" cellpadding="0" cellspacing="0">
+                <tr><td style="height:3px;background-color:#10b981;border-radius:2px;font-size:0;line-height:0;">&nbsp;</td></tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- CTA Button -->
+          <tr>
+            <td class="footer-section" align="center" style="padding:0 0 24px 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
                 <tr>
-                  <td align="center">
-                    <!-- Social/CTA -->
-                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
-                      <tr>
-                        <td>
-                          <a href="${opts.websiteUrl}" style="display:inline-block;background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#ffffff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:50px;text-decoration:none;box-shadow:0 8px 24px -6px rgba(16, 185, 129, 0.4);">
-                            ${strings.exploreButton}
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
-                    
-                    <!-- Social Media Links -->
-                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px auto;">
-                      <tr>
-                        <td align="center">
-                          <p style="margin:0 0 12px 0;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">${strings.followUs}</p>
-                          <table role="presentation" cellpadding="0" cellspacing="0">
-                            <tr>
-                              <!-- YouTube -->
-                              <td style="padding:0 8px;">
-                                <a href="${SOCIAL_MEDIA.youtube}" target="_blank" style="display:inline-block;width:36px;height:36px;background:#f3f4f6;border-radius:50%;text-decoration:none;line-height:36px;text-align:center;" title="YouTube">
-                                  <span style="font-size:16px;">▶</span>
-                                </a>
-                              </td>
-                              <!-- X (Twitter) -->
-                              <td style="padding:0 8px;">
-                                <a href="${SOCIAL_MEDIA.twitter}" target="_blank" style="display:inline-block;width:36px;height:36px;background:#f3f4f6;border-radius:50%;text-decoration:none;line-height:36px;text-align:center;" title="X">
-                                  <span style="font-size:16px;font-weight:bold;color:#374151;">𝕏</span>
-                                </a>
-                              </td>
-                              <!-- Instagram -->
-                              <td style="padding:0 8px;">
-                                <a href="${SOCIAL_MEDIA.instagram}" target="_blank" style="display:inline-block;width:36px;height:36px;background:linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);border-radius:50%;text-decoration:none;line-height:36px;text-align:center;" title="Instagram">
-                                  <span style="font-size:14px;color:#ffffff;">📷</span>
-                                </a>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                    
-                    <!-- Links -->
-                    <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;">
-                      <a href="${opts.websiteUrl}" style="color:#059669;text-decoration:none;font-weight:500;">aphylia.app</a>
-                      <span style="color:#d1d5db;margin:0 8px;">•</span>
-                      <a href="${opts.websiteUrl}/about" style="color:#9ca3af;text-decoration:none;">${strings.aboutLink}</a>
-                      <span style="color:#d1d5db;margin:0 8px;">•</span>
-                      <a href="${opts.websiteUrl}/contact" style="color:#9ca3af;text-decoration:none;">${strings.contactLink}</a>
-                      ${opts.unsubscribeUrl ? `<span style="color:#d1d5db;margin:0 8px;">•</span><a href="${opts.unsubscribeUrl}" style="color:#9ca3af;text-decoration:none;">${strings.unsubscribeLink}</a>` : ''}
-                    </p>
-                    
-                    <!-- Copyright -->
-                    <p style="margin:0;font-size:12px;color:#d1d5db;">
-                      ${strings.copyright.replace('{year}', String(currentYear))}
-                    </p>
+                  <td>
+                    <a href="${opts.websiteUrl}" style="display:inline-block;background-color:#059669;color:#ffffff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:50px;text-decoration:none;">
+                      ${strings.exploreButton}
+                    </a>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
           
+          <!-- Social Media Links -->
+          <tr>
+            <td class="footer-section" align="center" style="padding:0 0 20px 0;">
+              <p style="margin:0 0 12px 0;font-size:11px;color:#78716c;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">${strings.followUs}</p>
+              <table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding:0 6px;">
+                    <a href="${SOCIAL_MEDIA.youtube}" target="_blank" style="display:inline-block;width:40px;height:40px;background-color:#374151;border-radius:12px;text-decoration:none;text-align:center;" title="YouTube">
+                      <span style="font-size:16px;line-height:40px;color:#ffffff;">▶</span>
+                    </a>
+                  </td>
+                  <td style="padding:0 6px;">
+                    <a href="${SOCIAL_MEDIA.twitter}" target="_blank" style="display:inline-block;width:40px;height:40px;background-color:#374151;border-radius:12px;text-decoration:none;text-align:center;" title="X">
+                      <span style="font-size:16px;font-weight:bold;color:#ffffff;line-height:40px;">𝕏</span>
+                    </a>
+                  </td>
+                  <td style="padding:0 6px;">
+                    <a href="${SOCIAL_MEDIA.instagram}" target="_blank" style="display:inline-block;width:40px;height:40px;background-color:#e4405f;border-radius:12px;text-decoration:none;text-align:center;" title="Instagram">
+                      <span style="font-size:14px;color:#ffffff;line-height:40px;">📷</span>
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Links -->
+          <tr>
+            <td class="footer-section" align="center" style="padding:0 0 12px 0;">
+              <p style="margin:0;font-size:13px;">
+                <a href="${opts.websiteUrl}" style="color:#059669;text-decoration:none;font-weight:600;">aphylia.app</a>
+                <span style="color:#a8a29e;margin:0 8px;">·</span>
+                <a href="${opts.websiteUrl}/about" style="color:#78716c;text-decoration:none;">${strings.aboutLink}</a>
+                <span style="color:#a8a29e;margin:0 8px;">·</span>
+                <a href="${opts.websiteUrl}/contact" style="color:#78716c;text-decoration:none;">${strings.contactLink}</a>
+                ${opts.unsubscribeUrl ? `<span style="color:#a8a29e;margin:0 8px;">·</span><a href="${opts.unsubscribeUrl}" style="color:#78716c;text-decoration:none;">${strings.unsubscribeLink}</a>` : ''}
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Copyright -->
+          <tr>
+            <td align="center" style="padding:0 0 32px 0;">
+              <p class="footer-copyright" style="margin:0;font-size:12px;color:#78716c;">
+                ${strings.copyright.replace('{year}', String(currentYear))}
+              </p>
+            </td>
+          </tr>
         </table>
-        <!-- End Main Container -->
-        
       </td>
+    </tr>
+
+    <!-- Bottom gradient glow area -->
+    <tr>
+      <td class="email-bottom-glow" style="background-color:#fef3c7;height:8px;font-size:0;line-height:0;">&nbsp;</td>
     </tr>
   </table>
   <!-- End Email Wrapper -->
