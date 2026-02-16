@@ -1,7 +1,7 @@
 # External APIs Used in Aphylia
 
 > **Comprehensive list of all third-party services and APIs**  
-> Last updated: February 15, 2026
+> Last updated: February 16, 2026
 
 ---
 
@@ -35,14 +35,11 @@
 **Authentication:** None required (Free, open-source)
 
 **Usage:**
-- Location search in garden settings
-- User setup wizard
-- Location-based features
+- Location search in garden settings, user settings, setup wizard, and profile editing
+- All location search goes through the shared `CityCountrySelector` component
 
 **Files:**
-- `plant-swipe/src/components/garden/GardenLocationEditor.tsx`
-- `plant-swipe/src/pages/SetupPage.tsx`
-- `plant-swipe/src/pages/SettingsPage.tsx`
+- `plant-swipe/src/components/ui/city-country-selector.tsx` (shared component)
 
 **API Example:**
 ```
@@ -62,12 +59,11 @@ GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=8&language=e
 **Authentication:** None required (Free, open-source)
 
 **Usage:**
-- Converting GPS coordinates to human-readable addresses
-- Auto-detection of user location
+- Converting GPS coordinates to human-readable city/country when user clicks "Detect my location"
+- All reverse geocoding goes through the shared `CityCountrySelector` component
 
 **Files:**
-- `plant-swipe/src/components/garden/GardenLocationEditor.tsx`
-- `plant-swipe/src/pages/SetupPage.tsx`
+- `plant-swipe/src/components/ui/city-country-selector.tsx` (shared component)
 
 **API Example:**
 ```
@@ -80,24 +76,19 @@ GET https://nominatim.openstreetmap.org/reverse?format=json&lat=48.8566&lon=2.35
 
 ### 3. ipapi.co
 
-**URL:** `https://ipapi.co/json/`
+**URL:** `https://ipapi.co/{ip}/json/`
 
 **Purpose:**
-- IP-based geolocation
-- Automatic timezone detection
-- Initial location suggestion during setup
+- Server-side IP geolocation for web visit analytics
 
 **Authentication:** None required for basic usage
 
 **Usage:**
-- User onboarding
-- Timezone detection
-- Location fallback when GPS unavailable
+- Server-side only: resolving visitor IP addresses to country/region/city for analytics logging (`web_visits` table)
+- **Not used on the frontend** — removed from client-side code in Feb 2026 in favour of browser GPS via the `CityCountrySelector` component
 
 **Files:**
-- `plant-swipe/src/pages/SetupPage.tsx`
-- `plant-swipe/src/pages/SettingsPage.tsx`
-- `plant-swipe/server.js`
+- `plant-swipe/server.js` (geo-resolve helper for web visit tracking)
 
 **API Example:**
 ```
@@ -526,7 +517,7 @@ https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap
 |-----|------|---------------|------|----------------|---------|
 | Open-Meteo Geocoding | Location | ❌ No | Free | ✅ Yes | Location search |
 | Nominatim | Location | ❌ No | Free | ✅ Yes | Reverse geocoding |
-| ipapi.co | IP Geo | ❌ No | Free | ⚠️ See policy | IP location |
+| ipapi.co | IP Geo | ❌ No | Free | ⚠️ See policy | Server-side visit geo |
 | Open-Meteo Weather | Weather | ❌ No | Free | ✅ Yes | Weather data |
 | DeepL | Translation | ✅ Yes | Paid | ✅ Yes | Multi-language |
 | OpenAI | AI | ✅ Yes | Paid | ⚠️ See policy | AI features |
@@ -620,7 +611,7 @@ All APIs respect GDPR requirements:
 | reCAPTCHA | Free | $0 |
 | Open-Meteo | Free | $0 |
 | Nominatim | Free | $0 |
-| ipapi.co | Free/Paid | $0-50 |
+| ipapi.co | Free | $0 (server-side only) |
 | Google Fonts | Free | $0 |
 | **Total** | | **$201-976/month** |
 
@@ -676,4 +667,4 @@ For API-related questions:
 
 ---
 
-*Last updated: February 15, 2026*
+*Last updated: February 16, 2026*
