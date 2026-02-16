@@ -128,8 +128,7 @@ A shared city/country location selector with geocoding search, GPS detection, an
 | `onSelect` | `(location: SelectedLocation) => void` | — | Called when a location is selected |
 | `onClear` | `() => void` | — | Called when the selected location is cleared |
 | `disabled` | `boolean` | `false` | Disables all interactions |
-| `showDetectButton` | `boolean` | `true` | Show the GPS "Detect Location" button |
-| `showIpDetect` | `boolean` | `false` | Show the IP-based "Auto-detect" button |
+| `showDetectButton` | `boolean` | `true` | Show the "Detect my location" button (GPS first, IP fallback) |
 | `showTimezone` | `boolean` | `false` | Show timezone in the selected location display |
 | `variant` | `'sm' \| 'default' \| 'lg'` | `'default'` | Size variant for the search input |
 | `className` | `string` | — | Additional class on the root wrapper |
@@ -174,7 +173,7 @@ const handleSelect = (location: SelectedLocation) => {
 />
 ```
 
-**Example (with timezone and IP detect):**
+**Example (with timezone display):**
 
 ```tsx
 <CityCountrySelector
@@ -184,7 +183,6 @@ const handleSelect = (location: SelectedLocation) => {
   onSelect={handleSelect}
   onClear={handleClear}
   showDetectButton
-  showIpDetect
   showTimezone
 />
 ```
@@ -206,8 +204,7 @@ const handleSelect = (location: SelectedLocation) => {
 
 **Features:**
 - Debounced geocoding search via Open-Meteo API (350ms)
-- GPS-based location detection via browser Geolocation + Nominatim reverse geocoding
-- IP-based location detection via ipapi.co (optional)
+- Smart location detection: tries GPS first, falls back to IP-based detection automatically
 - Selected location display with city, country, optional timezone
 - Clear button to reset selection
 - Suggestions dropdown with city, state/province, and country

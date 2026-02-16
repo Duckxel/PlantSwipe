@@ -34,15 +34,19 @@ export interface CityCountrySelectorProps {
   country: string
   /** Optional timezone to display alongside the selected location */
   timezone?: string
-  /** Called when a location is selected (from search, GPS, or IP detect) */
+  /** Called when a location is selected (from search or detection) */
   onSelect: (location: SelectedLocation) => void
   /** Called when the selected location is cleared */
   onClear: () => void
   /** Disables all interactions */
   disabled?: boolean
-  /** Show the "Detect Location" (GPS) button. Default: true */
+  /** Show the "Detect my location" button (tries GPS, falls back to IP). Default: true */
   showDetectButton?: boolean
-  /** Show the "Auto-detect" (IP-based) button. Default: false */
+  /**
+   * @deprecated Use `showDetectButton` instead. IP detection is now built into the
+   * unified detect button as a fallback. This prop is kept for backward compatibility
+   * but has no effect.
+   */
   showIpDetect?: boolean
   /** Show the timezone in the selected location display. Default: false */
   showTimezone?: boolean
@@ -59,11 +63,11 @@ export interface CityCountrySelectorProps {
 }
 
 /**
- * A shared City/Country selector component with geocoding search, GPS detection,
- * and IP-based auto-detection. Uses the Open-Meteo geocoding API for search and
- * Nominatim for reverse geocoding.
+ * A shared City/Country selector component with geocoding search and automatic
+ * location detection. Uses the Open-Meteo geocoding API for search and a
+ * GPS-first / IP-fallback strategy for detection.
  *
- * Standardised across Garden Settings, User Settings, and the Setup page.
+ * Standardised across Garden Settings, User Settings, Setup page, and Edit Profile.
  */
 export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
   city,
@@ -73,7 +77,7 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
   onClear,
   disabled = false,
   showDetectButton = true,
-  showIpDetect = false,
+  showIpDetect: _deprecated_showIpDetect,
   showTimezone = false,
   variant = "default",
   className,
@@ -92,11 +96,8 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
   const [searching, setSearching] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
 
-  // GPS detection state
-  const [detectingGPS, setDetectingGPS] = React.useState(false)
-
-  // IP detection state
-  const [detectingIP, setDetectingIP] = React.useState(false)
+  // Detection state (unified)
+  const [detecting, setDetecting] = React.useState(false)
 
   const suggestionsRef = React.useRef<HTMLDivElement>(null)
 
@@ -203,94 +204,111 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
     setHasSearched(false)
   }
 
-  // Detect location using browser GPS + Nominatim reverse geocoding
-  const detectLocationGPS = async () => {
-    if (!navigator.geolocation) {
-      alert(t("setup.location.geoNotSupported", "Geolocation is not supported by your browser"))
-      return
-    }
-
-    setDetectingGPS(true)
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords
-
-          const resp = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-            { headers: { Accept: "application/json" } }
-          )
-
-          if (resp.ok) {
-            const data = await resp.json()
-            const detectedCity =
-              data.address?.city ||
-              data.address?.town ||
-              data.address?.village ||
-              data.address?.municipality ||
-              ""
-            const detectedCountry = data.address?.country || ""
-
-            if (detectedCity || detectedCountry) {
-              onSelect({
-                city: detectedCity,
-                country: detectedCountry,
-                latitude,
-                longitude,
-              })
-              setSearchQuery("")
-            }
-          }
-        } catch (err) {
-          console.error("[CityCountrySelector] Reverse geocoding failed:", err)
-          alert(t("setup.location.detectFailed", "Unable to detect location. Please search manually."))
-        } finally {
-          setDetectingGPS(false)
-        }
-      },
-      (error) => {
-        console.error("[CityCountrySelector] Geolocation error:", error)
-        setDetectingGPS(false)
-        alert(t("setup.location.detectFailed", "Unable to detect location. Please search manually."))
-      },
-      { timeout: 10000 }
-    )
-  }
-
-  // Detect location using IP-based geolocation
-  const detectLocationIP = async () => {
-    setDetectingIP(true)
+  /**
+   * IP-based location detection via ipapi.co.
+   * Returns the detected location or null on failure.
+   */
+  const detectViaIP = async (): Promise<SelectedLocation | null> => {
     try {
       const response = await fetch("https://ipapi.co/json/")
       if (response.ok) {
         const data = await response.json()
         if (!data.error && (data.country_name || data.city)) {
-          onSelect({
+          return {
             city: data.city || "",
             country: data.country_name || "",
             timezone: data.timezone || undefined,
-          })
-          setSearchQuery("")
-        } else {
-          alert(t("setup.location.detectFailed", "Unable to detect location. Please search manually."))
+          }
         }
-      } else {
-        alert(t("setup.location.detectFailed", "Unable to detect location. Please search manually."))
       }
     } catch (err) {
       console.error("[CityCountrySelector] IP detection failed:", err)
+    }
+    return null
+  }
+
+  /**
+   * GPS-based detection via browser Geolocation + Nominatim reverse geocoding.
+   * Returns a promise that resolves with the detected location or null.
+   */
+  const detectViaGPS = (): Promise<SelectedLocation | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null)
+        return
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords
+            const resp = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+              { headers: { Accept: "application/json" } }
+            )
+
+            if (resp.ok) {
+              const data = await resp.json()
+              const detectedCity =
+                data.address?.city ||
+                data.address?.town ||
+                data.address?.village ||
+                data.address?.municipality ||
+                ""
+              const detectedCountry = data.address?.country || ""
+
+              if (detectedCity || detectedCountry) {
+                resolve({ city: detectedCity, country: detectedCountry, latitude, longitude })
+                return
+              }
+            }
+          } catch (err) {
+            console.error("[CityCountrySelector] Reverse geocoding failed:", err)
+          }
+          resolve(null)
+        },
+        () => {
+          // GPS denied or timed out -- not an error, we'll fall back to IP
+          resolve(null)
+        },
+        { timeout: 8000 }
+      )
+    })
+  }
+
+  /**
+   * Unified detect: tries GPS first, falls back to IP-based detection.
+   * Only shows an error alert if both methods fail.
+   */
+  const detectLocation = async () => {
+    setDetecting(true)
+    try {
+      // Try GPS first (more accurate)
+      const gpsResult = await detectViaGPS()
+      if (gpsResult) {
+        onSelect(gpsResult)
+        setSearchQuery("")
+        return
+      }
+
+      // Fall back to IP detection
+      const ipResult = await detectViaIP()
+      if (ipResult) {
+        onSelect(ipResult)
+        setSearchQuery("")
+        return
+      }
+
+      // Both failed
       alert(t("setup.location.detectFailed", "Unable to detect location. Please search manually."))
     } finally {
-      setDetectingIP(false)
+      setDetecting(false)
     }
   }
 
   const resolvedLabel = label ?? t("setup.location.searchLabel", "Search for your city")
   const resolvedPlaceholder = placeholder ?? t("setup.location.searchPlaceholder", "Type a city name...")
   const resolvedNoResults = noResultsText ?? t("setup.location.noResults", "No cities found. Try a different search.")
-
-  const isDetecting = detectingGPS || detectingIP
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -395,49 +413,27 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
         </div>
       )}
 
-      {/* Action buttons */}
-      {(showDetectButton || showIpDetect) && !hasLocation && (
+      {/* Detect location button */}
+      {showDetectButton && !hasLocation && (
         <div className="flex flex-wrap gap-3">
-          {showDetectButton && (
-            <button
-              type="button"
-              onClick={detectLocationGPS}
-              disabled={disabled || isDetecting}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-all disabled:opacity-50"
-            >
-              {detectingGPS ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {t("setup.location.detectingGPS", "Detecting...")}
-                </>
-              ) : (
-                <>
-                  <MapPin className="w-4 h-4" />
-                  {t("setup.location.detectButton", "Use my current location")}
-                </>
-              )}
-            </button>
-          )}
-          {showIpDetect && (
-            <button
-              type="button"
-              onClick={detectLocationIP}
-              disabled={disabled || isDetecting}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-all disabled:opacity-50"
-            >
-              {detectingIP ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {t("setup.location.detectingGPS", "Detecting...")}
-                </>
-              ) : (
-                <>
-                  <MapPin className="w-4 h-4" />
-                  {t("setup.location.autoDetect", "Auto-detect location")}
-                </>
-              )}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={detectLocation}
+            disabled={disabled || detecting}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-all disabled:opacity-50"
+          >
+            {detecting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {t("setup.location.detectingGPS", "Detecting...")}
+              </>
+            ) : (
+              <>
+                <MapPin className="w-4 h-4" />
+                {t("setup.location.detectButton", "Detect my location")}
+              </>
+            )}
+          </button>
         </div>
       )}
     </div>

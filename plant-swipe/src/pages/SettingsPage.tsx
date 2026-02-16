@@ -2199,7 +2199,6 @@ export default function SettingsPage() {
                 onClear={handleLocationClear}
                 disabled={saving}
                 showDetectButton={true}
-                showIpDetect={true}
                 showTimezone={true}
                 variant="lg"
               />
