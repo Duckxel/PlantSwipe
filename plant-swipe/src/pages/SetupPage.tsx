@@ -1,6 +1,6 @@
 import React from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
@@ -301,7 +301,6 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
 export function SetupPage() {
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
-  const currentLang = useLanguage()
   const { user, profile, refreshProfile } = useAuth()
   
   const [currentStep, setCurrentStep] = React.useState<SetupStep>('welcome')
