@@ -7109,6 +7109,7 @@ const emailCampaignInputSchema = z.object({
   testMode: z.boolean().optional().default(false),
   testEmail: z.string().email().optional().nullable(),
   isMarketing: z.boolean().optional().default(false), // If true, only send to users with marketing_consent=true
+  targetRoles: z.array(z.string().trim().min(1).max(50)).max(20).optional().default([]), // Empty = all users, non-empty = only users with ANY of these roles
 })
 
 const emailCampaignUpdateSchema = z.object({
@@ -10566,6 +10567,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
     const testMode = parsed.testMode === true
     const testEmail = testMode && parsed.testEmail ? parsed.testEmail : null
     const isMarketing = parsed.isMarketing === true
+    const targetRoles = Array.isArray(parsed.targetRoles) ? parsed.targetRoles.filter(r => typeof r === 'string' && r.length) : []
     const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
@@ -10588,6 +10590,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         test_mode,
         test_email,
         is_marketing,
+        target_roles,
         created_by,
         updated_by,
         created_at,
@@ -10612,6 +10615,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         ${testMode},
         ${testEmail},
         ${isMarketing},
+        ${targetRoles},
         ${adminUuid},
         ${adminUuid},
         now(),
@@ -10956,6 +10960,7 @@ function normalizeEmailCampaignRow(row) {
     testMode: row.test_mode === true,
     testEmail: row.test_email || null,
     isMarketing: row.is_marketing === true, // If true, only users with marketing_consent receive this
+    targetRoles: Array.isArray(row.target_roles) ? row.target_roles : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

@@ -24,6 +24,7 @@ type CampaignRow = {
   test_mode: boolean | null
   test_email: string | null
   is_marketing: boolean | null // If true, only send to users with marketing_consent=true
+  target_roles: string[] | null // Empty/null = all users, non-empty = only users with ANY of these roles
 }
 
 type Recipient = {
@@ -358,7 +359,13 @@ async function processCampaign(
       if (isMarketingCampaign) {
         console.log(`[email-campaign-runner] MARKETING CAMPAIGN: filtering to users with marketing_consent=true`)
       }
-      recipients = await collectRecipients(client, options.recipientLimit, isMarketingCampaign)
+      const campaignTargetRoles = Array.isArray(claimed.target_roles) && claimed.target_roles.length > 0
+        ? claimed.target_roles
+        : undefined
+      if (campaignTargetRoles) {
+        console.log(`[email-campaign-runner] TARGET ROLES: filtering to users with roles: [${campaignTargetRoles.join(', ')}]`)
+      }
+      recipients = await collectRecipients(client, options.recipientLimit, isMarketingCampaign, campaignTargetRoles)
     }
 
     summary.totalRecipients = recipients.length
@@ -554,6 +561,7 @@ async function collectRecipients(
   client: SupabaseClient,
   limit?: number,
   isMarketing?: boolean, // If true, only include users with marketing_consent=true
+  targetRoles?: string[], // Empty/undefined = all users, non-empty = only users with ANY of these roles
 ): Promise<Recipient[]> {
   const recipients: Recipient[] = []
   const perPage = 200
@@ -587,6 +595,13 @@ async function collectRecipients(
       // but users can uncheck it during signup or later in Settings
       if (isMarketing && profile?.marketingConsent === false) {
         continue
+      }
+
+      // Filter by target roles: if targetRoles is non-empty, only include users who have ANY of the specified roles
+      if (targetRoles && targetRoles.length > 0) {
+        const userRoles = profile?.roles ?? []
+        const hasMatchingRole = targetRoles.some(role => userRoles.includes(role))
+        if (!hasMatchingRole) continue
       }
 
       const displayName =
@@ -628,6 +643,7 @@ type ProfileMeta = {
   language: string
   notifyEmail: boolean | null
   marketingConsent: boolean | null // If false, user has explicitly opted out of marketing emails
+  roles: string[] // User's assigned roles (e.g., ['admin', 'bug_catcher'])
 }
 
 async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<Map<string, ProfileMeta>> {
@@ -635,7 +651,7 @@ async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<
   if (!ids.length) return map
   const { data, error } = await client
     .from("profiles")
-    .select("id, display_name, timezone, language, notify_email, marketing_consent")
+    .select("id, display_name, timezone, language, notify_email, marketing_consent, roles")
     .in("id", ids)
   if (error) {
     console.warn("[email-campaign-runner] failed to load profile metadata", error)
@@ -649,6 +665,7 @@ async function fetchProfileMeta(client: SupabaseClient, ids: string[]): Promise<
         language: typeof row.language === "string" && row.language.trim().length ? row.language : DEFAULT_LANGUAGE,
         notifyEmail: row.notify_email === false ? false : null, // null means opted in (default)
         marketingConsent: row.marketing_consent === true ? true : row.marketing_consent === false ? false : null,
+        roles: Array.isArray(row.roles) ? row.roles : [],
       })
     }
   }
