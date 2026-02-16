@@ -128,6 +128,7 @@ const TagInput: React.FC<{
   unique?: boolean
   caseInsensitive?: boolean
 }> = ({ value, onChange, placeholder, unique, caseInsensitive }) => {
+  const { t } = useTranslation('common')
   const [input, setInput] = React.useState("")
   const commit = () => {
     const v = input.trim()
@@ -156,7 +157,7 @@ const TagInput: React.FC<{
         {value.map((tag, idx) => (
           <span key={`${tag}-${idx}`} className="px-2 py-1 bg-stone-100 dark:bg-[#2d2d30] rounded text-sm flex items-center gap-1">
             {tag}
-            <button type="button" className="text-red-600" onClick={() => onChange(value.filter((_, i) => i !== idx))}>×</button>
+            <button type="button" className="text-red-600" onClick={() => onChange(value.filter((_, i) => i !== idx))} aria-label={t('plantAdmin.actions.removeTag', 'Remove {{tag}}', { tag })}>×</button>
           </span>
         ))}
       </div>
@@ -568,7 +569,8 @@ const CompanionSelector: React.FC<{
               <button
                 type="button"
                 onClick={() => removeCompanion(c.id)}
-                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold shadow-md"
+                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold shadow-md"
+                aria-label={t('plantAdmin.actions.removeCompanion', 'Remove {{name}}', { name: c.name })}
               >
                 ×
               </button>
@@ -746,7 +748,7 @@ const WateringScheduleEditor: React.FC<{
               </select>
             </div>
             <div className="flex justify-end">
-              <Button variant="ghost" type="button" onClick={() => remove(idx)} className="text-red-600">
+              <Button variant="ghost" type="button" onClick={() => remove(idx)} className="text-red-600" aria-label={t('plantAdmin.actions.removeSchedule', 'Remove schedule for {{season}}', { season: schedule.season || t('plantAdmin.watering.unnamedSeason', 'unnamed season') })}>
                   {t('plantAdmin.actions.remove', 'Remove')}
               </Button>
             </div>
@@ -830,6 +832,7 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
 }
 
 const SourcesEditor: React.FC<{ value: PlantSource[] | undefined; onChange: (v: PlantSource[]) => void }> = ({ value, onChange }) => {
+  const { t } = useTranslation('common')
   const sources = Array.isArray(value) ? value : []
   const [draft, setDraft] = React.useState<PlantSource>({ name: "", url: "" })
   const addSource = () => {
@@ -869,7 +872,7 @@ const SourcesEditor: React.FC<{ value: PlantSource[] | undefined; onChange: (v: 
                 </a>
               )}
             </div>
-            <button type="button" className="text-red-600" onClick={() => remove(idx)} aria-label="Remove source">
+            <button type="button" className="text-red-600" onClick={() => remove(idx)} aria-label={t('plantAdmin.actions.removeSource', 'Remove source {{name}}', { name: src.name })}>
               ×
             </button>
           </div>
@@ -1616,6 +1619,7 @@ const TIME_ICONS: Record<RecipeTime, string> = {
 }
 
 function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange: (v: PlantRecipe[]) => void }) {
+  const { t } = useTranslation('common')
   const [isCollapsed, setIsCollapsed] = React.useState(recipes.length > 3)
   const [newName, setNewName] = React.useState('')
   const [newCategory, setNewCategory] = React.useState<RecipeCategory>('Other')
@@ -1733,6 +1737,7 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                       onClick={() => removeRecipe(idx)}
                       className="text-red-500 hover:text-red-700 text-sm font-bold px-1.5 shrink-0"
                       title="Remove recipe"
+                      aria-label={t('plantAdmin.actions.removeRecipe', 'Remove recipe {{name}}', { name: recipe.name })}
                     >
                       ×
                     </button>
@@ -2017,6 +2022,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
               type="button" 
               className="opacity-50 hover:opacity-100 hover:text-red-600 transition-opacity" 
               onClick={() => onChange(colors.filter((_, i) => i !== idx))}
+              aria-label={t('plantAdmin.actions.removeColor', 'Remove color {{name}}', { name: c.name })}
             >
               ×
             </button>
