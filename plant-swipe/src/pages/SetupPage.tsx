@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { CityCountrySelector, type SelectedLocation } from "@/components/ui/city-country-selector"
-import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Loader2 } from "lucide-react"
+import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, getAccentHex, type AccentKey } from "@/lib/accent"
 
 type SetupStep = 'welcome' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
@@ -316,52 +316,6 @@ export function SetupPage() {
   })
   const [saving, setSaving] = React.useState(false)
   const [direction, setDirection] = React.useState<1 | -1>(1)
-  const [locationLoading, setLocationLoading] = React.useState(true) // Start as loading
-  const [locationDetected, setLocationDetected] = React.useState(false)
-  
-  const locationDetectionAttempted = React.useRef(false)
-
-  // Auto-detect location and timezone on component mount (runs only once)
-  // Note: We DON'T auto-change language here - respect the URL language choice
-  React.useEffect(() => {
-    // Only run once - use ref to prevent multiple attempts
-    if (locationDetectionAttempted.current || locationDetected) {
-      setLocationLoading(false)
-      return
-    }
-    locationDetectionAttempted.current = true
-    
-    const detectLocation = async () => {
-      setLocationLoading(true)
-      try {
-        // Use ipapi.co for free HTTPS IP geolocation (includes timezone)
-        // Free tier: 1000 requests/day, no API key required
-        const response = await fetch('https://ipapi.co/json/')
-        if (response.ok) {
-          const data = await response.json()
-          if (!data.error) {
-            // Update location data
-            setSetupData(prev => ({
-              ...prev,
-              country: data.country_name || prev.country || '',
-              city: data.city || prev.city || '',
-              timezone: data.timezone || prev.timezone || 'UTC',
-            }))
-            
-            setLocationDetected(true)
-            console.log('[setup] Location detected:', data.country_name, data.city, 'Timezone:', data.timezone)
-          }
-        }
-      } catch (err) {
-        console.warn('[setup] Failed to detect location:', err)
-      } finally {
-        setLocationLoading(false)
-      }
-    }
-    
-    detectLocation()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Empty deps - only run on mount
 
   // Redirect if no user or already completed setup
   React.useEffect(() => {
@@ -388,7 +342,6 @@ export function SetupPage() {
       country: location.country,
       timezone: location.timezone || prev.timezone,
     }))
-    setLocationDetected(true)
   }
 
   // Clear selected location
@@ -398,7 +351,6 @@ export function SetupPage() {
       city: '',
       country: '',
     }))
-    setLocationDetected(false)
   }
 
   const currentStepIndex = STEPS.indexOf(currentStep)
@@ -685,14 +637,6 @@ export function SetupPage() {
             />
 
             <div className="space-y-5">
-              {/* Auto-detecting indicator */}
-              {!locationDetected && locationLoading && (
-                <div className="flex items-center gap-3 text-sm text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-4 py-3 rounded-xl">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {t('setup.location.detecting', 'Detecting your location...')}
-                </div>
-              )}
-
               <CityCountrySelector
                 city={setupData.city}
                 country={setupData.country}

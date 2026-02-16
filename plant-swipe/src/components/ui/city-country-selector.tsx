@@ -40,14 +40,8 @@ export interface CityCountrySelectorProps {
   onClear: () => void
   /** Disables all interactions */
   disabled?: boolean
-  /** Show the "Detect my location" button (tries GPS, falls back to IP). Default: true */
+  /** Show the "Detect my location" button (browser GPS). Default: true */
   showDetectButton?: boolean
-  /**
-   * @deprecated Use `showDetectButton` instead. IP detection is now built into the
-   * unified detect button as a fallback. This prop is kept for backward compatibility
-   * but has no effect.
-   */
-  showIpDetect?: boolean
   /** Show the timezone in the selected location display. Default: false */
   showTimezone?: boolean
   /** Size variant for the search input. Default: "default" */
@@ -63,9 +57,9 @@ export interface CityCountrySelectorProps {
 }
 
 /**
- * A shared City/Country selector component with geocoding search and automatic
- * location detection. Uses the Open-Meteo geocoding API for search and a
- * GPS-first / IP-fallback strategy for detection.
+ * A shared City/Country selector component with geocoding search and GPS-based
+ * location detection. Uses the Open-Meteo geocoding API for search and
+ * Nominatim for reverse geocoding.
  *
  * Standardised across Garden Settings, User Settings, Setup page, and Edit Profile.
  */
@@ -77,7 +71,6 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
   onClear,
   disabled = false,
   showDetectButton = true,
-  showIpDetect: _deprecated_showIpDetect,
   showTimezone = false,
   variant = "default",
   className,
@@ -205,29 +198,6 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
   }
 
   /**
-   * IP-based location detection via ipapi.co.
-   * Returns the detected location or null on failure.
-   */
-  const detectViaIP = async (): Promise<SelectedLocation | null> => {
-    try {
-      const response = await fetch("https://ipapi.co/json/")
-      if (response.ok) {
-        const data = await response.json()
-        if (!data.error && (data.country_name || data.city)) {
-          return {
-            city: data.city || "",
-            country: data.country_name || "",
-            timezone: data.timezone || undefined,
-          }
-        }
-      }
-    } catch (err) {
-      console.error("[CityCountrySelector] IP detection failed:", err)
-    }
-    return null
-  }
-
-  /**
    * GPS-based detection via browser Geolocation + Nominatim reverse geocoding.
    * Returns a promise that resolves with the detected location or null.
    */
@@ -267,8 +237,8 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
           }
           resolve(null)
         },
-        () => {
-          // GPS denied or timed out -- not an error, we'll fall back to IP
+        (err) => {
+          console.error("[CityCountrySelector] Geolocation error:", err)
           resolve(null)
         },
         { timeout: 8000 }
@@ -277,30 +247,23 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
   }
 
   /**
-   * Unified detect: tries GPS first, falls back to IP-based detection.
-   * Only shows an error alert if both methods fail.
+   * Detect location via browser GPS + reverse geocoding.
    */
   const detectLocation = async () => {
+    if (!navigator.geolocation) {
+      alert(t("setup.location.geoNotSupported", "Geolocation is not supported by your browser"))
+      return
+    }
+
     setDetecting(true)
     try {
-      // Try GPS first (more accurate)
-      const gpsResult = await detectViaGPS()
-      if (gpsResult) {
-        onSelect(gpsResult)
+      const result = await detectViaGPS()
+      if (result) {
+        onSelect(result)
         setSearchQuery("")
-        return
+      } else {
+        alert(t("setup.location.detectFailed", "Unable to detect location. Please search manually."))
       }
-
-      // Fall back to IP detection
-      const ipResult = await detectViaIP()
-      if (ipResult) {
-        onSelect(ipResult)
-        setSearchQuery("")
-        return
-      }
-
-      // Both failed
-      alert(t("setup.location.detectFailed", "Unable to detect location. Please search manually."))
     } finally {
       setDetecting(false)
     }
