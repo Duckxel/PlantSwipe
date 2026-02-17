@@ -38,52 +38,75 @@ type PlantCareData = NonNullable<Plant["plantCare"]>
 type PlantGrowthData = NonNullable<Plant["growth"]>
 type PlantEcologyData = NonNullable<Plant["ecology"]>
 
-const sanitizeStringValue = (value: string): string | undefined => {
+export const sanitizeStringValue = (value: string): string | undefined => {
+  if (!value) return undefined
   const trimmed = value.trim()
   if (!trimmed) return undefined
 
-  const lower = trimmed.toLowerCase()
-  if (lower === 'null' || lower === 'undefined') return undefined
+  // Optimization: Skip toLowerCase for strings known to be long or short
+  // "undefined" is 9 chars. "null" is 4 chars.
+  // If length > 9, it cannot be "undefined" or "null" (since it is trimmed)
+  if (trimmed.length <= 9) {
+    const lower = trimmed.toLowerCase()
+    if (lower === 'null' || lower === 'undefined') return undefined
+  }
 
-  // Remove digits, common numeric punctuation, percent symbols, and whitespace
-  // If nothing remains, the string only contained placeholder characters like "0", "0.0", "0%" etc.
-  const stripped = trimmed.replace(/[0.,%\s]/g, '')
-  if (stripped.length === 0) return undefined
+  // Optimization: Use regex test instead of replace to avoid string allocation
+  // Checks if there is at least one char that is NOT in the "ignored" set (digits, punctuation, whitespace)
+  if (!/[^0.,%\s]/.test(trimmed)) return undefined
 
   return trimmed
 }
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+export const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   value !== null &&
   typeof value === 'object' &&
   (value.constructor === Object || Object.getPrototypeOf(value) === Object.prototype)
 
-const sanitizeDeep = <T>(value: T): T => {
+export const sanitizeDeep = <T>(value: T): T => {
   if (typeof value === 'string') {
     const sanitized = sanitizeStringValue(value)
     return (sanitized === undefined ? undefined : sanitized) as T
   }
 
   if (Array.isArray(value)) {
-    const sanitizedArray = value
-      .map((item) => sanitizeDeep(item))
-      .filter((item) => {
-        if (item === undefined || item === null) return false
-        if (Array.isArray(item) && item.length === 0) return false
-        if (isPlainObject(item) && Object.keys(item).length === 0) return false
-        return true
-      })
+    const sanitizedArray: unknown[] = []
+    const len = value.length
+    for (let i = 0; i < len; i++) {
+      const item = sanitizeDeep(value[i])
+
+      if (item === undefined || item === null) continue
+      if (Array.isArray(item) && item.length === 0) continue
+
+      // Check for empty object
+      if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
+        if (isPlainObject(item) && Object.keys(item).length === 0) {
+          continue
+        }
+      }
+      sanitizedArray.push(item)
+    }
     return sanitizedArray as unknown as T
   }
 
   if (isPlainObject(value)) {
     const result: Record<string, unknown> = {}
-    for (const [key, entry] of Object.entries(value)) {
-      const sanitized = sanitizeDeep(entry)
-      if (sanitized === undefined || sanitized === null) continue
-      if (Array.isArray(sanitized) && sanitized.length === 0) continue
-      if (isPlainObject(sanitized) && Object.keys(sanitized).length === 0) continue
-      result[key] = sanitized
+    // Optimization: Use for..in loop instead of Object.entries (array allocation)
+    for (const key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const entry = (value as Record<string, unknown>)[key]
+        const sanitized = sanitizeDeep(entry)
+
+        if (sanitized === undefined || sanitized === null) continue
+        if (Array.isArray(sanitized) && sanitized.length === 0) continue
+
+        if (sanitized !== null && typeof sanitized === 'object' && !Array.isArray(sanitized)) {
+          if (isPlainObject(sanitized) && Object.keys(sanitized).length === 0) {
+            continue
+          }
+        }
+        result[key] = sanitized
+      }
     }
     return result as T
   }
