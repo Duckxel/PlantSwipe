@@ -53,7 +53,7 @@ async function buildAdminHeaders() {
   return headers
 }
 
-type EditingMember = TeamMemberInput & { id?: string; _selectedUserName?: string }
+type EditingMember = TeamMemberInput & { id?: string }
 
 const emptyMember: EditingMember = {
   name: "",
@@ -73,14 +73,16 @@ export const AdminTeamPanel: React.FC = () => {
   const [submitError, setSubmitError] = React.useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null)
   const [isDeleting, setIsDeleting] = React.useState(false)
+  const [linkedUserOption, setLinkedUserOption] = React.useState<SearchItemOption | null>(null)
 
   const handleOpenCreate = () => {
     setEditingMember({ ...emptyMember, position: teamMembers.length })
+    setLinkedUserOption(null)
     setSubmitError(null)
     setIsDialogOpen(true)
   }
 
-  const handleOpenEdit = (member: TeamMember) => {
+  const handleOpenEdit = async (member: TeamMember) => {
     setEditingMember({
       id: member.id,
       name: member.name,
@@ -93,6 +95,35 @@ export const AdminTeamPanel: React.FC = () => {
     })
     setSubmitError(null)
     setIsDialogOpen(true)
+
+    // Resolve linked user's display name for the SearchItem trigger
+    if (member.user_id) {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, display_name, avatar_url")
+          .eq("id", member.user_id)
+          .maybeSingle()
+        if (data?.display_name) {
+          setLinkedUserOption({
+            id: data.id,
+            label: data.display_name,
+            description: data.id,
+            icon: data.avatar_url ? (
+              <img src={data.avatar_url} alt="" className="w-full h-full rounded-lg object-cover" />
+            ) : (
+              <User className="h-4 w-4 text-stone-400" />
+            ),
+          })
+        } else {
+          setLinkedUserOption(null)
+        }
+      } catch {
+        setLinkedUserOption(null)
+      }
+    } else {
+      setLinkedUserOption(null)
+    }
   }
 
   const handleCloseDialog = () => {
@@ -483,20 +514,21 @@ export const AdminTeamPanel: React.FC = () => {
               <Label>Linked User Profile</Label>
               <SearchItem
                 value={editingMember.user_id || null}
-                onSelect={(option) =>
+                initialOption={linkedUserOption}
+                onSelect={(option) => {
                   setEditingMember((prev) => ({
                     ...prev,
                     user_id: option.id,
-                    _selectedUserName: option.label,
                   }))
-                }
-                onClear={() =>
+                  setLinkedUserOption(option)
+                }}
+                onClear={() => {
                   setEditingMember((prev) => ({
                     ...prev,
                     user_id: null,
-                    _selectedUserName: undefined,
                   }))
-                }
+                  setLinkedUserOption(null)
+                }}
                 onSearch={searchUsers}
                 placeholder="Search and link a user..."
                 title="Link User Profile"

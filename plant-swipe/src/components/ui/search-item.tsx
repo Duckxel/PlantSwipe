@@ -69,6 +69,12 @@ export interface SearchItemProps {
 
   // ---- Display ----
 
+  /**
+   * Pre-populated option data for the current `value`.
+   * Useful in async mode so the trigger button can display the selected
+   * item's label before the dialog has been opened / results fetched.
+   */
+  initialOption?: SearchItemOption | null
   /** Render a custom card for each option. Falls back to a default card. */
   renderItem?: (option: SearchItemOption, isSelected: boolean) => React.ReactNode
   /** Derive the trigger-button label from the full option (when selected). */
@@ -115,6 +121,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       description: dialogDescription,
       searchPlaceholder = "Search...",
       emptyMessage = "No results found.",
+      initialOption,
       renderItem,
       selectedLabel,
       loading = false,
@@ -134,9 +141,14 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
     const allOptions = staticOptions ?? asyncResults
 
     // Resolve the currently selected option for display
+    // Falls back to initialOption when async results haven't loaded yet
     const selectedOption = React.useMemo(
-      () => (value ? allOptions.find((o) => o.id === value) ?? null : null),
-      [value, allOptions],
+      () => {
+        if (!value) return null
+        return allOptions.find((o) => o.id === value)
+          ?? (initialOption && initialOption.id === value ? initialOption : null)
+      },
+      [value, allOptions, initialOption],
     )
 
     // ------ Filtered list (static mode) ------
