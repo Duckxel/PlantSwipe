@@ -1998,6 +1998,7 @@
       "close": "Close",
       "edit": "Edit",
       "delete": "Delete",
+      "confirmDelete": "Delete",
       "failedToLoad": "Failed to load tasks",
       "failedToDelete": "Failed to delete task",
       "failedToUpdate": "Failed to update task",
