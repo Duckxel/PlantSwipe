@@ -8,6 +8,7 @@ export type TeamMember = {
   role: string
   tag: string | null
   image_url: string | null
+  user_id: string | null
   position: number
   is_active: boolean
   created_at: string
@@ -74,6 +75,7 @@ export type TeamMemberInput = {
   role: string
   tag?: string | null
   image_url?: string | null
+  user_id?: string | null
   position?: number
   is_active?: boolean
 }
@@ -87,6 +89,7 @@ export async function createTeamMember(input: TeamMemberInput): Promise<TeamMemb
       role: input.role,
       tag: input.tag || null,
       image_url: input.image_url || null,
+      user_id: input.user_id || null,
       position: input.position ?? 999,
       is_active: input.is_active ?? true,
     })
@@ -112,6 +115,7 @@ export async function updateTeamMember(
       ...(input.role !== undefined && { role: input.role }),
       ...(input.tag !== undefined && { tag: input.tag }),
       ...(input.image_url !== undefined && { image_url: input.image_url }),
+      ...(input.user_id !== undefined && { user_id: input.user_id }),
       ...(input.position !== undefined && { position: input.position }),
       ...(input.is_active !== undefined && { is_active: input.is_active }),
     })
