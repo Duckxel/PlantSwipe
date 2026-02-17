@@ -598,6 +598,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.validate_task_schedule()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   -- Validate one_time_date schedule
@@ -677,6 +678,7 @@ CREATE TRIGGER validate_task_schedule_trigger
 CREATE OR REPLACE FUNCTION public.validate_task_occurrence()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   -- Ensure required_count is positive

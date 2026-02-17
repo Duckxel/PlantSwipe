@@ -107,7 +107,7 @@ BEGIN
   GET DIAGNOSTICS deleted_count = ROW_COUNT;
   RETURN deleted_count;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 COMMENT ON FUNCTION cleanup_expired_verification_codes() IS 'Removes expired or already-used verification codes. Should be called periodically by a daily cleanup job.';
 
@@ -170,7 +170,7 @@ BEGIN
   SET email_verified = false
   WHERE id = p_user_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 COMMENT ON FUNCTION reset_email_verification_on_email_change(uuid) IS 'Resets email_verified to false when a user changes their email address. Called from the application when email is updated.';
 
