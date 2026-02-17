@@ -363,7 +363,20 @@ export default function AboutPage() {
                           </span>
                         </div>
                       )}
-                      {member.tag ? (
+                      {member.user_id && linkedProfiles[member.user_id] ? (
+                        <div className="absolute inset-x-3 bottom-3 flex justify-center">
+                          <Link
+                            to={`/u/${encodeURIComponent(linkedProfiles[member.user_id].display_name)}`}
+                          >
+                            <Badge
+                              variant="secondary"
+                              className="rounded-full px-3 py-0.5 text-[11px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm cursor-pointer hover:bg-emerald-200/90 dark:hover:bg-emerald-800/60 transition-colors"
+                            >
+                              {linkedProfiles[member.user_id].display_name}
+                            </Badge>
+                          </Link>
+                        </div>
+                      ) : member.tag ? (
                         <div className="absolute inset-x-3 bottom-3 flex justify-center pointer-events-none">
                           <Badge
                             variant="secondary"
@@ -376,18 +389,7 @@ export default function AboutPage() {
                     </div>
                   </div>
                   <CardHeader className="px-4 pb-4 pt-3 space-y-1 text-center">
-                    {member.user_id && linkedProfiles[member.user_id] ? (
-                      <CardTitle className="text-base">
-                        <Link
-                          to={`/u/${encodeURIComponent(linkedProfiles[member.user_id].display_name)}`}
-                          className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors underline decoration-emerald-500/30 underline-offset-2 hover:decoration-emerald-500"
-                        >
-                          {linkedProfiles[member.user_id].display_name}
-                        </Link>
-                      </CardTitle>
-                    ) : (
-                      <CardTitle className="text-base">{member.display_name}</CardTitle>
-                    )}
+                    <CardTitle className="text-base">{member.display_name}</CardTitle>
                     <CardDescription className="text-xs">{member.role}</CardDescription>
                   </CardHeader>
                 </Card>

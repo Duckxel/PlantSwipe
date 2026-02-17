@@ -59,7 +59,6 @@ const emptyMember: EditingMember = {
   name: "",
   display_name: "",
   role: "",
-  tag: "",
   image_url: "",
   user_id: null,
   position: 999,
@@ -87,7 +86,6 @@ export const AdminTeamPanel: React.FC = () => {
       name: member.name,
       display_name: member.display_name,
       role: member.role,
-      tag: member.tag || "",
       image_url: member.image_url || "",
       user_id: member.user_id || null,
       position: member.position,
@@ -115,7 +113,6 @@ export const AdminTeamPanel: React.FC = () => {
           name: editingMember.name,
           display_name: editingMember.display_name,
           role: editingMember.role,
-          tag: editingMember.tag || null,
           image_url: editingMember.image_url || null,
           user_id: editingMember.user_id || null,
           position: editingMember.position,
@@ -127,7 +124,6 @@ export const AdminTeamPanel: React.FC = () => {
           name: editingMember.name,
           display_name: editingMember.display_name,
           role: editingMember.role,
-          tag: editingMember.tag || null,
           image_url: editingMember.image_url || null,
           user_id: editingMember.user_id || null,
           position: editingMember.position,
@@ -347,11 +343,6 @@ export const AdminTeamPanel: React.FC = () => {
                         <h4 className="font-medium text-stone-900 dark:text-white">
                           {member.display_name}
                         </h4>
-                        {member.tag && (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
-                            {member.tag}
-                          </span>
-                        )}
                         {!member.is_active && (
                           <span className="px-2 py-0.5 text-xs rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-400">
                             Hidden
@@ -474,34 +465,18 @@ export const AdminTeamPanel: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="role">Role / Title</Label>
-                <Input
-                  id="role"
-                  value={editingMember.role}
-                  onChange={(e) =>
-                    setEditingMember((prev) => ({ ...prev, role: e.target.value }))
-                  }
-                  placeholder="e.g., Co-Founder"
-                  required
-                  className="rounded-xl"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="tag">Tag / Nickname</Label>
-                <Input
-                  id="tag"
-                  value={editingMember.tag || ""}
-                  onChange={(e) =>
-                    setEditingMember((prev) => ({ ...prev, tag: e.target.value }))
-                  }
-                  placeholder="e.g., Creative Lead"
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-stone-500">Optional badge shown on photo</p>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="role">Role / Title</Label>
+              <Input
+                id="role"
+                value={editingMember.role}
+                onChange={(e) =>
+                  setEditingMember((prev) => ({ ...prev, role: e.target.value }))
+                }
+                placeholder="e.g., Co-Founder"
+                required
+                className="rounded-xl"
+              />
             </div>
 
             <div className="space-y-2">
@@ -525,14 +500,14 @@ export const AdminTeamPanel: React.FC = () => {
                 onSearch={searchUsers}
                 placeholder="Search and link a user..."
                 title="Link User Profile"
-                description="Search for a user to link to this team member. Their name will be clickable on the About page."
+                description="Search for a user to link to this team member. Their name will appear as a clickable badge on the photo in the About page."
                 searchPlaceholder="Search by name..."
                 emptyMessage="No users found."
                 selectedLabel={(opt) => opt.label}
                 priorityZIndex={120}
               />
               <p className="text-xs text-stone-500">
-                Optional — link to an existing user profile. Name becomes clickable on the About page.
+                Optional — link to a user profile. Their display name replaces the tag badge on the About page and links to their profile.
               </p>
             </div>
 
