@@ -322,8 +322,6 @@ export const AdminEmailsPanel: React.FC = () => {
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [scheduledForError, setScheduledForError] = React.useState<string | null>(null)
   const [minScheduleDateTime, setMinScheduleDateTime] = React.useState(getMinDateTimeLocal)
-  const [templatePickerOpen, setTemplatePickerOpen] = React.useState(false)
-  const [templatePickerSearch, setTemplatePickerSearch] = React.useState("")
   const [rolesExpanded, setRolesExpanded] = React.useState(false)
 
   const location = useLocation()
