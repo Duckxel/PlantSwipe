@@ -30,6 +30,7 @@ import {
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
 import { SearchInput } from "@/components/ui/search-input"
+import { SearchItem } from "@/components/ui/search-item"
 import { supabase } from "@/lib/supabaseClient"
 import { useLocation } from "react-router-dom"
 import { Link } from "@/components/i18n/Link"
@@ -308,8 +309,6 @@ export const AdminEmailsPanel: React.FC = () => {
   })
   const [campaignSaving, setCampaignSaving] = React.useState(false)
   const [dialogOpen, setDialogOpen] = React.useState(false)
-  const [templatePickerOpen, setTemplatePickerOpen] = React.useState(false)
-  const [templatePickerSearch, setTemplatePickerSearch] = React.useState("")
   const [rolesExpanded, setRolesExpanded] = React.useState(false)
 
   const location = useLocation()
@@ -1247,26 +1246,27 @@ export const AdminEmailsPanel: React.FC = () => {
                 />
               </div>
               
-              {/* Template Picker Button */}
+              {/* Template Picker (SearchItem) */}
               <div className="space-y-1.5">
                 <Label className="text-xs sm:text-sm font-medium">Email Template</Label>
-                <button
-                  type="button"
-                  onClick={() => { setTemplatePickerSearch(""); setTemplatePickerOpen(true) }}
-                  className={cn(
-                    "flex items-center justify-between w-full h-10 rounded-xl border px-3 text-sm transition-colors",
-                    campaignForm.templateId
-                      ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-stone-900 dark:text-white"
-                      : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] text-stone-500 dark:text-stone-400"
-                  )}
-                >
-                  <span className="truncate">
-                    {campaignForm.templateId
-                      ? templates.find((t) => t.id === campaignForm.templateId)?.title || "Template selected"
-                      : "Select a template..."}
-                  </span>
-                  <Search className="h-3.5 w-3.5 flex-shrink-0 ml-2 opacity-50" />
-                </button>
+                <SearchItem
+                  value={campaignForm.templateId || null}
+                  onSelect={(opt) => setCampaignForm((prev) => ({ ...prev, templateId: opt.id }))}
+                  onClear={() => setCampaignForm((prev) => ({ ...prev, templateId: "" }))}
+                  options={templates.map((t) => ({
+                    id: t.id,
+                    label: t.title,
+                    description: t.subject,
+                    meta: `v${t.version} · Used ${t.campaignCount}x${t.variables?.length > 0 ? ` · ${t.variables.length} var${t.variables.length > 1 ? "s" : ""}` : ""}`,
+                    icon: <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+                  }))}
+                  placeholder="Select a template..."
+                  title="Choose Template"
+                  description="Search and select an email template for this campaign."
+                  searchPlaceholder="Search templates..."
+                  emptyMessage={templates.length === 0 ? "No templates available. Create one first." : "No templates match your search."}
+                  priorityZIndex={100}
+                />
                 {templates.length === 0 && (
                   <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">
                     No templates available. Create one first.
@@ -1525,148 +1525,7 @@ export const AdminEmailsPanel: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Template Picker Dialog */}
-      <Dialog open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
-        <DialogContent
-          className="w-[calc(100vw-2rem)] max-w-lg max-h-[80vh] border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-0 rounded-2xl flex flex-col"
-          priorityZIndex={100}
-        >
-          <div className="px-5 pt-5 pb-3 border-b border-stone-100 dark:border-[#2a2a2d] space-y-3">
-            <DialogHeader>
-              <DialogTitle className="text-base font-bold text-stone-900 dark:text-white">Choose Template</DialogTitle>
-              <DialogDescription className="text-xs text-stone-500 dark:text-stone-400">
-                Search and select an email template for this campaign.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-              <input
-                type="text"
-                value={templatePickerSearch}
-                onChange={(e) => setTemplatePickerSearch(e.target.value)}
-                placeholder="Search templates..."
-                autoFocus
-                className="w-full h-10 pl-9 pr-8 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] text-sm text-stone-900 dark:text-white placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
-              />
-              {templatePickerSearch && (
-                <button
-                  type="button"
-                  onClick={() => setTemplatePickerSearch("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-stone-400 hover:text-stone-600"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-3 py-2">
-            {(() => {
-              const query = templatePickerSearch.toLowerCase().trim()
-              const filtered = query
-                ? templates.filter(
-                    (t) =>
-                      t.title.toLowerCase().includes(query) ||
-                      t.subject.toLowerCase().includes(query)
-                  )
-                : templates
-
-              if (filtered.length === 0) {
-                return (
-                  <div className="py-10 text-center">
-                    <Search className="h-8 w-8 mx-auto text-stone-300 dark:text-stone-600 mb-3" />
-                    <p className="text-sm text-stone-500 dark:text-stone-400">
-                      {templates.length === 0
-                        ? "No templates available. Create one first."
-                        : `No templates match "${templatePickerSearch}"`}
-                    </p>
-                  </div>
-                )
-              }
-
-              return (
-                <div className="space-y-1">
-                  {filtered.map((template) => {
-                    const isActive = template.id === campaignForm.templateId
-                    return (
-                      <button
-                        key={template.id}
-                        type="button"
-                        onClick={() => {
-                          setCampaignForm((prev) => ({ ...prev, templateId: template.id }))
-                          setTemplatePickerOpen(false)
-                        }}
-                        className={cn(
-                          "w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all",
-                          isActive
-                            ? "bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700"
-                            : "hover:bg-stone-50 dark:hover:bg-[#2a2a2d] border border-transparent"
-                        )}
-                      >
-                        <div className={cn(
-                          "flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center",
-                          isActive
-                            ? "bg-emerald-100 dark:bg-emerald-900/40"
-                            : "bg-stone-100 dark:bg-[#2a2a2d]"
-                        )}>
-                          <FileText className={cn(
-                            "h-4 w-4",
-                            isActive
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-stone-400 dark:text-stone-500"
-                          )} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className={cn(
-                              "text-sm font-medium truncate",
-                              isActive
-                                ? "text-emerald-700 dark:text-emerald-300"
-                                : "text-stone-900 dark:text-white"
-                            )}>
-                              {template.title}
-                            </span>
-                            {isActive && <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />}
-                          </div>
-                          <p className="text-xs text-stone-500 dark:text-stone-400 truncate mt-0.5">
-                            {template.subject}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1 text-[10px] text-stone-400">
-                            <span>v{template.version}</span>
-                            <span>·</span>
-                            <span>Used {template.campaignCount}x</span>
-                            {template.variables?.length > 0 && (
-                              <>
-                                <span>·</span>
-                                <span>{template.variables.length} var{template.variables.length > 1 ? "s" : ""}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              )
-            })()}
-          </div>
-
-          {campaignForm.templateId && (
-            <div className="px-5 py-3 border-t border-stone-100 dark:border-[#2a2a2d]">
-              <button
-                type="button"
-                onClick={() => {
-                  setCampaignForm((prev) => ({ ...prev, templateId: "" }))
-                  setTemplatePickerOpen(false)
-                }}
-                className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 underline"
-              >
-                Clear selection
-              </button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Template Picker Dialog is now handled by the SearchItem component above */}
     </div>
   )
 }

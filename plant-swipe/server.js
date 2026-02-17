@@ -15436,6 +15436,92 @@ app.get('/api/admin/member-list', async (req, res) => {
   }
 })
 
+// Admin: search users by display name or email (for SearchItem component)
+app.get('/api/admin/search-users', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+
+    const query = (req.query.q || '').toString().trim()
+    const limit = Math.min(Number(req.query.limit) || 20, 50)
+
+    if (sql) {
+      const rows = query
+        ? await sql`
+            select
+              p.id,
+              p.display_name,
+              p.avatar_url,
+              p.is_admin,
+              coalesce(p.roles, '{}') as roles
+            from public.profiles p
+            where p.display_name ilike ${'%' + query + '%'}
+               or p.id::text ilike ${'%' + query + '%'}
+            order by
+              case when lower(p.display_name) = lower(${query}) then 0 else 1 end,
+              p.display_name asc
+            limit ${limit}
+          `
+        : await sql`
+            select
+              p.id,
+              p.display_name,
+              p.avatar_url,
+              p.is_admin,
+              coalesce(p.roles, '{}') as roles
+            from public.profiles p
+            where p.display_name is not null and p.display_name != ''
+            order by p.display_name asc
+            limit ${limit}
+          `
+
+      const users = (rows || []).map(r => ({
+        id: String(r.id),
+        display_name: r.display_name || null,
+        avatar_url: r.avatar_url || null,
+        is_admin: r.is_admin === true,
+        roles: Array.isArray(r.roles) ? r.roles : [],
+      }))
+
+      res.json({ ok: true, users })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      let url = `${supabaseUrlEnv}/rest/v1/profiles?select=id,display_name,avatar_url,is_admin,roles&display_name=not.is.null&order=display_name.asc&limit=${limit}`
+      if (query) {
+        url = `${supabaseUrlEnv}/rest/v1/profiles?select=id,display_name,avatar_url,is_admin,roles&display_name=ilike.*${encodeURIComponent(query)}*&order=display_name.asc&limit=${limit}`
+      }
+
+      const resp = await fetch(url, { headers })
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        res.status(resp.status).json({ error: body || 'Failed to search users' })
+        return
+      }
+      const arr = await resp.json().catch(() => [])
+      const users = (Array.isArray(arr) ? arr : []).map(r => ({
+        id: String(r.id),
+        display_name: r.display_name || null,
+        avatar_url: r.avatar_url || null,
+        is_admin: r.is_admin === true,
+        roles: Array.isArray(r.roles) ? r.roles : [],
+      }))
+
+      res.json({ ok: true, users })
+      return
+    }
+
+    res.status(500).json({ error: 'Database not configured' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to search users' })
+  }
+})
+
 // Admin: get role statistics (count of users per role)
 app.get('/api/admin/role-stats', async (req, res) => {
   try {

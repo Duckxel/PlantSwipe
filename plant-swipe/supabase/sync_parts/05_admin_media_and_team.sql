@@ -108,8 +108,21 @@ create table if not exists public.team_members (
   updated_at timestamptz not null default now()
 );
 
+-- Add user_id column to link a team member to an actual user profile
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+    and table_name = 'team_members'
+    and column_name = 'user_id'
+  ) then
+    alter table public.team_members add column user_id uuid references auth.users(id) on delete set null;
+  end if;
+end $$;
+
 create index if not exists idx_team_members_position on public.team_members(position);
 create index if not exists idx_team_members_active on public.team_members(is_active) where is_active = true;
+create index if not exists idx_team_members_user_id on public.team_members(user_id) where user_id is not null;
 
 alter table public.team_members enable row level security;
 

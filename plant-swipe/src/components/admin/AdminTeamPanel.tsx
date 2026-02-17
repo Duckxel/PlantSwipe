@@ -34,8 +34,24 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  User,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabaseClient"
+import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
+
+async function buildAdminHeaders() {
+  const session = (await supabase.auth.getSession()).data.session
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  }
+  if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`
+  const globalEnv = globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } }
+  const adminToken = globalEnv.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+  if (adminToken) headers["X-Admin-Token"] = adminToken
+  return headers
+}
 
 type EditingMember = TeamMemberInput & { id?: string }
 
@@ -43,8 +59,8 @@ const emptyMember: EditingMember = {
   name: "",
   display_name: "",
   role: "",
-  tag: "",
   image_url: "",
+  user_id: null,
   position: 999,
   is_active: true,
 }
@@ -57,26 +73,57 @@ export const AdminTeamPanel: React.FC = () => {
   const [submitError, setSubmitError] = React.useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null)
   const [isDeleting, setIsDeleting] = React.useState(false)
+  const [linkedUserOption, setLinkedUserOption] = React.useState<SearchItemOption | null>(null)
 
   const handleOpenCreate = () => {
     setEditingMember({ ...emptyMember, position: teamMembers.length })
+    setLinkedUserOption(null)
     setSubmitError(null)
     setIsDialogOpen(true)
   }
 
-  const handleOpenEdit = (member: TeamMember) => {
+  const handleOpenEdit = async (member: TeamMember) => {
     setEditingMember({
       id: member.id,
       name: member.name,
       display_name: member.display_name,
       role: member.role,
-      tag: member.tag || "",
       image_url: member.image_url || "",
+      user_id: member.user_id || null,
       position: member.position,
       is_active: member.is_active,
     })
     setSubmitError(null)
     setIsDialogOpen(true)
+
+    // Resolve linked user's display name for the SearchItem trigger
+    if (member.user_id) {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, display_name, avatar_url")
+          .eq("id", member.user_id)
+          .maybeSingle()
+        if (data?.display_name) {
+          setLinkedUserOption({
+            id: data.id,
+            label: data.display_name,
+            description: data.id,
+            icon: data.avatar_url ? (
+              <img src={data.avatar_url} alt="" className="w-full h-full rounded-lg object-cover" />
+            ) : (
+              <User className="h-4 w-4 text-stone-400" />
+            ),
+          })
+        } else {
+          setLinkedUserOption(null)
+        }
+      } catch {
+        setLinkedUserOption(null)
+      }
+    } else {
+      setLinkedUserOption(null)
+    }
   }
 
   const handleCloseDialog = () => {
@@ -90,26 +137,33 @@ export const AdminTeamPanel: React.FC = () => {
     setIsSubmitting(true)
     setSubmitError(null)
 
+    // Auto-generate the internal name key from display_name
+    const autoName = editingMember.display_name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "") || "member"
+
     try {
       if (editingMember.id) {
         // Update existing
         await updateTeamMember(editingMember.id, {
-          name: editingMember.name,
+          name: autoName,
           display_name: editingMember.display_name,
           role: editingMember.role,
-          tag: editingMember.tag || null,
           image_url: editingMember.image_url || null,
+          user_id: editingMember.user_id || null,
           position: editingMember.position,
           is_active: editingMember.is_active,
         })
       } else {
         // Create new
         await createTeamMember({
-          name: editingMember.name,
+          name: autoName,
           display_name: editingMember.display_name,
           role: editingMember.role,
-          tag: editingMember.tag || null,
           image_url: editingMember.image_url || null,
+          user_id: editingMember.user_id || null,
           position: editingMember.position,
           is_active: editingMember.is_active,
         })
@@ -180,6 +234,31 @@ export const AdminTeamPanel: React.FC = () => {
       console.error("Failed to toggle active state:", err)
     }
   }
+
+  // Search users via admin API for the SearchItem component
+  const searchUsers = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
+    try {
+      const headers = await buildAdminHeaders()
+      const url = `/api/admin/search-users?q=${encodeURIComponent(query)}&limit=20`
+      const resp = await fetch(url, { headers, credentials: "same-origin" })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) return []
+      const users = Array.isArray(data?.users) ? data.users : []
+      return users.map((u: { id: string; display_name: string | null; avatar_url: string | null; roles: string[] }) => ({
+        id: u.id,
+        label: u.display_name || "Unnamed user",
+        description: u.id,
+        meta: u.roles.length > 0 ? u.roles.join(", ") : undefined,
+        icon: u.avatar_url ? (
+          <img src={u.avatar_url} alt="" className="w-full h-full rounded-lg object-cover" />
+        ) : (
+          <User className="h-4 w-4 text-stone-400" />
+        ),
+      }))
+    } catch {
+      return []
+    }
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -302,11 +381,6 @@ export const AdminTeamPanel: React.FC = () => {
                         <h4 className="font-medium text-stone-900 dark:text-white">
                           {member.display_name}
                         </h4>
-                        {member.tag && (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
-                            {member.tag}
-                          </span>
-                        )}
                         {!member.is_active && (
                           <span className="px-2 py-0.5 text-xs rounded-full bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-400">
                             Hidden
@@ -315,7 +389,12 @@ export const AdminTeamPanel: React.FC = () => {
                       </div>
                       <p className="text-sm text-stone-500 dark:text-stone-400">{member.role}</p>
                       <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
-                        ID: {member.name} • Position: {member.position}
+                        Position: {member.position}
+                        {member.user_id && (
+                          <span className="ml-1">
+                            • Linked: <span className="font-mono text-emerald-600 dark:text-emerald-400">{member.user_id.slice(0, 8)}...</span>
+                          </span>
+                        )}
                       </p>
                     </div>
 
@@ -393,65 +472,65 @@ export const AdminTeamPanel: React.FC = () => {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">ID / Key</Label>
-                <Input
-                  id="name"
-                  value={editingMember.name}
-                  onChange={(e) =>
-                    setEditingMember((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                  placeholder="e.g., john_doe"
-                  required
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-stone-500">Unique identifier (lowercase, no spaces)</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="display_name">Display Name</Label>
-                <Input
-                  id="display_name"
-                  value={editingMember.display_name}
-                  onChange={(e) =>
-                    setEditingMember((prev) => ({ ...prev, display_name: e.target.value }))
-                  }
-                  placeholder="e.g., John Doe"
-                  required
-                  className="rounded-xl"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="display_name">Display Name</Label>
+              <Input
+                id="display_name"
+                value={editingMember.display_name}
+                onChange={(e) =>
+                  setEditingMember((prev) => ({ ...prev, display_name: e.target.value }))
+                }
+                placeholder="e.g., John Doe"
+                required
+                className="rounded-xl"
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="role">Role / Title</Label>
-                <Input
-                  id="role"
-                  value={editingMember.role}
-                  onChange={(e) =>
-                    setEditingMember((prev) => ({ ...prev, role: e.target.value }))
-                  }
-                  placeholder="e.g., Co-Founder"
-                  required
-                  className="rounded-xl"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="role">Role / Title</Label>
+              <Input
+                id="role"
+                value={editingMember.role}
+                onChange={(e) =>
+                  setEditingMember((prev) => ({ ...prev, role: e.target.value }))
+                }
+                placeholder="e.g., Co-Founder"
+                required
+                className="rounded-xl"
+              />
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="tag">Tag / Nickname</Label>
-                <Input
-                  id="tag"
-                  value={editingMember.tag || ""}
-                  onChange={(e) =>
-                    setEditingMember((prev) => ({ ...prev, tag: e.target.value }))
-                  }
-                  placeholder="e.g., Creative Lead"
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-stone-500">Optional badge shown on photo</p>
-              </div>
+            <div className="space-y-2">
+              <Label>Linked User Profile</Label>
+              <SearchItem
+                value={editingMember.user_id || null}
+                initialOption={linkedUserOption}
+                onSelect={(option) => {
+                  setEditingMember((prev) => ({
+                    ...prev,
+                    user_id: option.id,
+                  }))
+                  setLinkedUserOption(option)
+                }}
+                onClear={() => {
+                  setEditingMember((prev) => ({
+                    ...prev,
+                    user_id: null,
+                  }))
+                  setLinkedUserOption(null)
+                }}
+                onSearch={searchUsers}
+                placeholder="Search and link a user..."
+                title="Link User Profile"
+                description="Search for a user to link to this team member. Their name will appear as a clickable badge on the photo in the About page."
+                searchPlaceholder="Search by name..."
+                emptyMessage="No users found."
+                selectedLabel={(opt) => opt.label}
+                priorityZIndex={120}
+              />
+              <p className="text-xs text-stone-500">
+                Optional — link to a user profile. Their display name replaces the tag badge on the About page and links to their profile.
+              </p>
             </div>
 
             <div className="space-y-2">
