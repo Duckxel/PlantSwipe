@@ -137,11 +137,18 @@ export const AdminTeamPanel: React.FC = () => {
     setIsSubmitting(true)
     setSubmitError(null)
 
+    // Auto-generate the internal name key from display_name
+    const autoName = editingMember.display_name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "") || "member"
+
     try {
       if (editingMember.id) {
         // Update existing
         await updateTeamMember(editingMember.id, {
-          name: editingMember.name,
+          name: autoName,
           display_name: editingMember.display_name,
           role: editingMember.role,
           image_url: editingMember.image_url || null,
@@ -152,7 +159,7 @@ export const AdminTeamPanel: React.FC = () => {
       } else {
         // Create new
         await createTeamMember({
-          name: editingMember.name,
+          name: autoName,
           display_name: editingMember.display_name,
           role: editingMember.role,
           image_url: editingMember.image_url || null,
@@ -382,7 +389,7 @@ export const AdminTeamPanel: React.FC = () => {
                       </div>
                       <p className="text-sm text-stone-500 dark:text-stone-400">{member.role}</p>
                       <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
-                        ID: {member.name} • Position: {member.position}
+                        Position: {member.position}
                         {member.user_id && (
                           <span className="ml-1">
                             • Linked: <span className="font-mono text-emerald-600 dark:text-emerald-400">{member.user_id.slice(0, 8)}...</span>
@@ -465,35 +472,18 @@ export const AdminTeamPanel: React.FC = () => {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">ID / Key</Label>
-                <Input
-                  id="name"
-                  value={editingMember.name}
-                  onChange={(e) =>
-                    setEditingMember((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                  placeholder="e.g., john_doe"
-                  required
-                  className="rounded-xl"
-                />
-                <p className="text-xs text-stone-500">Unique identifier (lowercase, no spaces)</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="display_name">Display Name</Label>
-                <Input
-                  id="display_name"
-                  value={editingMember.display_name}
-                  onChange={(e) =>
-                    setEditingMember((prev) => ({ ...prev, display_name: e.target.value }))
-                  }
-                  placeholder="e.g., John Doe"
-                  required
-                  className="rounded-xl"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="display_name">Display Name</Label>
+              <Input
+                id="display_name"
+                value={editingMember.display_name}
+                onChange={(e) =>
+                  setEditingMember((prev) => ({ ...prev, display_name: e.target.value }))
+                }
+                placeholder="e.g., John Doe"
+                required
+                className="rounded-xl"
+              />
             </div>
 
             <div className="space-y-2">
