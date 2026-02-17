@@ -225,6 +225,105 @@ Basic styled input. Use `ValidatedInput` instead when you need validation feedba
 
 ---
 
+### `SearchItem`
+
+**File:** `src/components/ui/search-item.tsx`
+
+A field that, once clicked, opens a popup dialog with a search bar and a scrollable list of cards. Designed for selecting a single item from a complex list. Supports both **static mode** (pre-loaded options with client-side filtering) and **async mode** (server-side search via a callback). Based on the Email Campaign Template selector pattern.
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `value` | `string \| null` | — | Currently selected option id (controlled) |
+| `onSelect` | `(option: SearchItemOption) => void` | — | Called when the user picks an option |
+| `onClear` | `() => void` | — | Called when the user clears the selection |
+| `options` | `SearchItemOption[]` | — | **Static mode** — pre-loaded array of options (filtered client-side) |
+| `onSearch` | `(query: string) => Promise<SearchItemOption[]>` | — | **Async mode** — function that returns options for a query (debounced) |
+| `filterFn` | `(option, query) => boolean` | label+desc includes | Custom client-side filter (static mode only) |
+| `placeholder` | `string` | `"Select an item..."` | Trigger button placeholder |
+| `title` | `string` | `"Choose Item"` | Dialog title |
+| `description` | `string` | — | Dialog description |
+| `searchPlaceholder` | `string` | `"Search..."` | Search input placeholder |
+| `emptyMessage` | `string` | `"No results found."` | Empty state message |
+| `renderItem` | `(option, isSelected) => ReactNode` | — | Custom item card renderer |
+| `selectedLabel` | `(option) => string` | `option.label` | Derive trigger label from selected option |
+| `loading` | `boolean` | `false` | Show spinner on trigger button |
+| `className` | `string` | — | Additional class on trigger button |
+| `priorityZIndex` | `number` | `100` | Z-index for nested dialog scenarios |
+| `disabled` | `boolean` | `false` | Disable the trigger |
+
+**`SearchItemOption` type:**
+
+```ts
+interface SearchItemOption {
+  id: string
+  label: string
+  description?: string | null
+  meta?: string | null
+  icon?: React.ReactNode
+}
+```
+
+**Example (async — search users via API):**
+
+```tsx
+import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
+
+const searchUsers = async (query: string): Promise<SearchItemOption[]> => {
+  const resp = await fetch(`/api/admin/search-users?q=${encodeURIComponent(query)}`)
+  const data = await resp.json()
+  return data.users.map((u) => ({
+    id: u.id,
+    label: u.display_name || "Unknown",
+    description: u.id,
+  }))
+}
+
+<SearchItem
+  value={selectedUserId}
+  onSelect={(opt) => setSelectedUserId(opt.id)}
+  onClear={() => setSelectedUserId(null)}
+  onSearch={searchUsers}
+  placeholder="Search and select a user..."
+  title="Select User"
+  searchPlaceholder="Search by name..."
+/>
+```
+
+**Example (static — pre-loaded options):**
+
+```tsx
+const templates = [
+  { id: "1", label: "Welcome Email", description: "Sent to new users" },
+  { id: "2", label: "Newsletter", description: "Monthly newsletter" },
+]
+
+<SearchItem
+  value={selectedTemplateId}
+  onSelect={(opt) => setSelectedTemplateId(opt.id)}
+  onClear={() => setSelectedTemplateId(null)}
+  options={templates}
+  placeholder="Choose a template..."
+  title="Select Template"
+/>
+```
+
+**Features:**
+- Trigger button with selected value or placeholder, search icon
+- Dialog popup with search bar and scrollable card list
+- Debounced async search (300ms) with loading spinner
+- Client-side filtering for static options (label + description + meta)
+- Selected item highlight with check icon
+- Clear selection footer
+- Dark mode support
+- Configurable z-index for nested dialogs
+- Custom item renderer support
+
+**Used in:** AdminTeamPanel (user profile linking)
+
+---
+
 ## Validation Hooks
 
 ### `useFieldValidation`

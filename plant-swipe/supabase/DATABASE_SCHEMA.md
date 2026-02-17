@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Feb 17, 2026:** Added `user_id` (nullable UUID, FK to `auth.users`) column to `team_members` table. Links a team member to an actual user profile. When set, the About page shows the linked user's display name as a clickable link to their profile page. Added `idx_team_members_user_id` partial index.
 - **Feb 12, 2026:** Added **Shadow Ban system** for threat level 3 users. When a user's threat level is set to 3, `apply_shadow_ban()` is called to: make their profile private, make all their gardens private, make all their bookmarks private, disable friend requests, remove all email/push notification consent, cancel pending friend requests and garden invites. All pre-ban settings are stored in the new `shadow_ban_backup` JSONB column on `profiles` for full reversibility via `revert_shadow_ban()`. Updated `profiles_select_self` RLS policy, `search_user_profiles` RPC, `get_profile_public_by_display_name` RPC, and `friend_requests`/`garden_invites` insert policies to exclude shadow-banned users.
 - **Feb 12, 2026:** Added `plant_recipes` table to store structured recipe ideas per plant, with `category` (breakfast_brunch, starters_appetizers, soups_salads, main_courses, side_dishes, desserts, drinks, other), `time` (quick, 30_plus, slow_cooking, undefined), and optional `link` (external recipe URL, admin-only, not AI-filled) columns. Includes migration from `recipes_ideas` in `plant_translations`. All existing recipes migrated with category='other' and time='undefined'.
 - **Feb 10, 2026:** Added `impressions` table to track page view counts for plant info pages and blog posts. Admin-only read access. Includes `increment_impression` RPC function.
@@ -206,7 +207,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 |-------|---------|
 | `blog_posts` | Blog articles |
 | `broadcast_messages` | System announcements |
-| `team_members` | About page team |
+| `team_members` | About page team (supports `user_id` for profile linking) |
 | `profile_admin_notes` | Admin notes on users |
 | `user_reports` | User moderation reports |
 | `user_report_notes` | Report notes |
