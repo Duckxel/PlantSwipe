@@ -452,7 +452,33 @@ async function processCampaign(
       summary.durationMs = Date.now() - startedAt.getTime()
       const nextRun =
         summary.nextScheduledFor ?? new Date(now.getTime() + RESCHEDULE_BACKOFF_MS).toISOString()
-      await updateCampaignSchedule(client, campaign.id, summary, nextRun)
+      try {
+        await updateCampaignSchedule(client, campaign.id, summary, nextRun)
+      } catch (scheduleError) {
+        // If rescheduling fails (e.g., transient Cloudflare 500), revert campaign
+        // back to "scheduled" so the cron can pick it up again on the next run.
+        // Do NOT let this propagate to the outer catch which would mark it "failed" permanently.
+        console.warn(
+          `[email-campaign-runner] Failed to reschedule campaign ${campaign.id}, reverting to scheduled status`,
+          scheduleError instanceof Error ? scheduleError.message : scheduleError,
+        )
+        try {
+          await client
+            .from("admin_email_campaigns")
+            .update({
+              status: "scheduled",
+              send_error: null,
+              send_started_at: null,
+            })
+            .eq("id", campaign.id)
+          console.log(`[email-campaign-runner] Campaign ${campaign.id} reverted to scheduled`)
+        } catch (revertError) {
+          console.error(
+            `[email-campaign-runner] Failed to revert campaign ${campaign.id} to scheduled`,
+            revertError instanceof Error ? revertError.message : revertError,
+          )
+        }
+      }
       return summary
     }
 
@@ -537,7 +563,6 @@ async function processCampaign(
         ? JSON.stringify(error)
         : String(error)
     
-    summary.status = "failed"
     summary.reason = errorMessage
     summary.durationMs = Date.now() - startedAt.getTime()
     const failureCount =
@@ -546,9 +571,35 @@ async function processCampaign(
         : summary.failedCount
     summary.failedCount = failureCount
 
-    // If emails were already sent, mark as partial success instead of failed
+    // Determine appropriate status based on what happened
     if (summary.sentThisRun > 0) {
+      // Some emails were sent - mark as partial success
       summary.status = "partial"
+    } else {
+      // No emails sent yet - check if this is a transient error
+      const isTransient = errorMessage.includes("500") || errorMessage.includes("Internal Server Error") || errorMessage.includes("cloudflare")
+      if (isTransient) {
+        // Transient error before any emails were sent - revert to "scheduled"
+        // so the cron can pick it up again on the next run
+        summary.status = "scheduled"
+        console.warn(`[email-campaign-runner] Transient error for campaign ${campaign.id} (no emails sent), reverting to scheduled`)
+        try {
+          await client
+            .from("admin_email_campaigns")
+            .update({
+              status: "scheduled",
+              send_error: `Transient error (will retry): ${errorMessage.substring(0, 200)}`,
+              send_started_at: null,
+            })
+            .eq("id", campaign.id)
+          console.log(`[email-campaign-runner] Campaign ${campaign.id} reverted to scheduled after transient error`)
+          return summary
+        } catch (revertError) {
+          console.error(`[email-campaign-runner] Failed to revert campaign ${campaign.id}`, revertError)
+          // Fall through to normal failure handling
+        }
+      }
+      summary.status = "failed"
     }
 
     // Try to finalize with error status (don't throw if this fails)
