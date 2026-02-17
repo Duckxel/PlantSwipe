@@ -1998,6 +1998,7 @@
       "close": "Fermer",
       "edit": "Modifier",
       "delete": "Supprimer",
+      "confirmDelete": "Supprimer",
       "failedToLoad": "Échec du chargement des tâches",
       "failedToDelete": "Échec de la suppression de la tâche",
       "failedToUpdate": "Échec de la mise à jour de la tâche",

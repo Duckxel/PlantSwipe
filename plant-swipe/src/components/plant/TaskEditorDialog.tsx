@@ -247,7 +247,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                         onClick={() => remove(task.id)}
                         className="h-8 px-2 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
                       >
-                        {t('gardenDashboard.taskDialog.confirmDelete', 'Delete?')}
+                        {t('gardenDashboard.taskDialog.confirmDelete', 'Delete')}
                       </button>
                       <button
                         type="button"
