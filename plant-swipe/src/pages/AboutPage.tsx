@@ -68,7 +68,10 @@ export default function AboutPage() {
   const { teamMembers: dbTeamMembers, loading: teamLoading, error: teamError } = useTeamMembers()
   
   // Use DB team members or fallback
-  const teamMembers = dbTeamMembers.length > 0 ? dbTeamMembers : (teamError ? fallbackTeamMembers : [])
+  const teamMembers = React.useMemo(
+    () => dbTeamMembers.length > 0 ? dbTeamMembers : (teamError ? fallbackTeamMembers : []),
+    [dbTeamMembers, teamError],
+  )
 
   // Resolve linked user profiles (user_id → display_name for clickable links)
   const [linkedProfiles, setLinkedProfiles] = React.useState<Record<string, { display_name: string }>>({})
