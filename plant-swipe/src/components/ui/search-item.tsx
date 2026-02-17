@@ -192,26 +192,26 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
         : selectedOption.label
       : placeholder
 
-    // ------ Default item renderer ------
+    // ------ Default card renderer ------
     const defaultRenderItem = (option: SearchItemOption, isSelected: boolean) => (
-      <div className="flex items-start gap-3 flex-1 min-w-0">
+      <div className="flex flex-col items-center text-center gap-2 w-full">
         {option.icon && (
           <div
             className={cn(
-              "flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center",
+              "w-11 h-11 rounded-xl flex items-center justify-center",
               isSelected
                 ? "bg-emerald-100 dark:bg-emerald-900/40"
-                : "bg-stone-100 dark:bg-[#2a2a2d]",
+                : "bg-gradient-to-br from-stone-100 to-stone-50 dark:from-[#2a2a2d] dark:to-[#232326]",
             )}
           >
             {option.icon}
           </div>
         )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 w-full">
+          <div className="flex items-center justify-center gap-1.5">
             <span
               className={cn(
-                "text-sm font-medium truncate",
+                "text-sm font-semibold truncate",
                 isSelected
                   ? "text-emerald-700 dark:text-emerald-300"
                   : "text-stone-900 dark:text-white",
@@ -229,7 +229,16 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
             </p>
           )}
           {option.meta && (
-            <p className="text-[10px] text-stone-400 mt-0.5">{option.meta}</p>
+            <div className="flex flex-wrap justify-center gap-1 mt-1.5">
+              {option.meta.split(", ").map((tag) => (
+                <span
+                  key={tag}
+                  className="px-1.5 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] text-stone-500 dark:text-stone-400"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -266,7 +275,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
         {/* Search dialog */}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent
-            className="w-[calc(100vw-2rem)] max-w-lg max-h-[80vh] border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-0 rounded-2xl flex flex-col"
+            className="w-[calc(100vw-2rem)] max-w-2xl max-h-[85vh] border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-0 rounded-2xl flex flex-col"
             priorityZIndex={priorityZIndex}
           >
             {/* Header + Search */}
@@ -304,21 +313,21 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
               </div>
             </div>
 
-            {/* Options list */}
-            <div className="flex-1 overflow-y-auto px-3 py-2">
+            {/* Options grid */}
+            <div className="flex-1 overflow-y-auto px-4 py-3">
               {asyncLoading ? (
-                <div className="flex items-center justify-center py-10">
+                <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-5 w-5 animate-spin text-stone-400" />
                 </div>
               ) : filteredOptions.length === 0 ? (
-                <div className="py-10 text-center">
+                <div className="py-12 text-center">
                   <Search className="h-8 w-8 mx-auto text-stone-300 dark:text-stone-600 mb-3" />
                   <p className="text-sm text-stone-500 dark:text-stone-400">
                     {emptyMessage}
                   </p>
                 </div>
               ) : (
-                <div className="space-y-1">
+                <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
                   {filteredOptions.map((option) => {
                     const isActive = option.id === value
                     return (
@@ -330,12 +339,18 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                           setOpen(false)
                         }}
                         className={cn(
-                          "w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all",
+                          "group relative rounded-xl sm:rounded-2xl border p-4 cursor-pointer transition-all text-left",
                           isActive
-                            ? "bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700"
-                            : "hover:bg-stone-50 dark:hover:bg-[#2a2a2d] border border-transparent",
+                            ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 shadow-md shadow-emerald-500/10"
+                            : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5",
                         )}
                       >
+                        {/* Hover gradient accent */}
+                        <div className={cn(
+                          "absolute inset-x-0 top-0 h-1 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 transition-opacity",
+                          isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                        )} />
+
                         {renderItem
                           ? renderItem(option, isActive)
                           : defaultRenderItem(option, isActive)}
