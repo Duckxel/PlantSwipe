@@ -65,6 +65,7 @@ export function TaskCreateDialog({
       setWeeklyDays([])
       setMonthlyNthWeekdays([])
       setYearlyDays([])
+      setSaving(false)
       setError(null)
     }
   }, [open])
@@ -116,6 +117,7 @@ export function TaskCreateDialog({
         monthlyNthWeekdays: period === 'month' ? [...monthlyNthWeekdays].sort() : null,
       })
 
+      setSaving(false)
       onOpenChange(false)
 
       const taskTypeLabel = type === 'custom' ? (customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${type}`)
