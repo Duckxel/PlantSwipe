@@ -1,3 +1,4 @@
+import React from "react"
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
 import { Sparkles, PartyPopper, Leaf, HeartHandshake, MapPin, BookOpenCheck, CalendarDays, Loader2 } from "lucide-react"
@@ -7,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers"
+import { supabase } from "@/lib/supabaseClient"
 
 type PillarCard = { eyebrow: string; title: string; description: string | string[] }
 
@@ -19,6 +21,7 @@ const fallbackTeamMembers: TeamMember[] = [
     role: "CEO",
     tag: null,
     image_url: null,
+    user_id: null,
     position: 0,
     is_active: true,
     created_at: "",
@@ -31,6 +34,7 @@ const fallbackTeamMembers: TeamMember[] = [
     role: "Co-Founder",
     tag: "Psychokwak",
     image_url: "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0151-ab46ee91-19d9-4c9f-9694-8c975c084cf1.webp",
+    user_id: null,
     position: 1,
     is_active: true,
     created_at: "",
@@ -43,6 +47,7 @@ const fallbackTeamMembers: TeamMember[] = [
     role: "Co-Founder",
     tag: "Five",
     image_url: "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0414-2-low-0a499a50-08a7-4615-834d-288b179e628e.webp",
+    user_id: null,
     position: 2,
     is_active: true,
     created_at: "",
@@ -64,6 +69,36 @@ export default function AboutPage() {
   
   // Use DB team members or fallback
   const teamMembers = dbTeamMembers.length > 0 ? dbTeamMembers : (teamError ? fallbackTeamMembers : [])
+
+  // Resolve linked user profiles (user_id → display_name for clickable links)
+  const [linkedProfiles, setLinkedProfiles] = React.useState<Record<string, { display_name: string }>>({})
+
+  React.useEffect(() => {
+    const userIds = teamMembers
+      .map((m) => m.user_id)
+      .filter((id): id is string => !!id)
+    if (userIds.length === 0) return
+
+    const fetchProfiles = async () => {
+      try {
+        const { data, error: fetchErr } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", userIds)
+        if (fetchErr || !data) return
+        const map: Record<string, { display_name: string }> = {}
+        for (const row of data) {
+          if (row.display_name) {
+            map[row.id] = { display_name: row.display_name }
+          }
+        }
+        setLinkedProfiles(map)
+      } catch {
+        // Silently fail
+      }
+    }
+    fetchProfiles()
+  }, [teamMembers])
   
   const featureItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
   const pillars = t("pillars", { returnObjects: true }) as {
@@ -338,7 +373,18 @@ export default function AboutPage() {
                     </div>
                   </div>
                   <CardHeader className="px-4 pb-4 pt-3 space-y-1 text-center">
-                    <CardTitle className="text-base">{member.display_name}</CardTitle>
+                    {member.user_id && linkedProfiles[member.user_id] ? (
+                      <CardTitle className="text-base">
+                        <Link
+                          to={`/u/${encodeURIComponent(linkedProfiles[member.user_id].display_name)}`}
+                          className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors underline decoration-emerald-500/30 underline-offset-2 hover:decoration-emerald-500"
+                        >
+                          {linkedProfiles[member.user_id].display_name}
+                        </Link>
+                      </CardTitle>
+                    ) : (
+                      <CardTitle className="text-base">{member.display_name}</CardTitle>
+                    )}
                     <CardDescription className="text-xs">{member.role}</CardDescription>
                   </CardHeader>
                 </Card>

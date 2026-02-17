@@ -34,10 +34,26 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  User,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabaseClient"
+import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
 
-type EditingMember = TeamMemberInput & { id?: string }
+async function buildAdminHeaders() {
+  const session = (await supabase.auth.getSession()).data.session
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  }
+  if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`
+  const globalEnv = globalThis as { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } }
+  const adminToken = globalEnv.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+  if (adminToken) headers["X-Admin-Token"] = adminToken
+  return headers
+}
+
+type EditingMember = TeamMemberInput & { id?: string; _selectedUserName?: string }
 
 const emptyMember: EditingMember = {
   name: "",
@@ -45,6 +61,7 @@ const emptyMember: EditingMember = {
   role: "",
   tag: "",
   image_url: "",
+  user_id: null,
   position: 999,
   is_active: true,
 }
@@ -72,6 +89,7 @@ export const AdminTeamPanel: React.FC = () => {
       role: member.role,
       tag: member.tag || "",
       image_url: member.image_url || "",
+      user_id: member.user_id || null,
       position: member.position,
       is_active: member.is_active,
     })
@@ -99,6 +117,7 @@ export const AdminTeamPanel: React.FC = () => {
           role: editingMember.role,
           tag: editingMember.tag || null,
           image_url: editingMember.image_url || null,
+          user_id: editingMember.user_id || null,
           position: editingMember.position,
           is_active: editingMember.is_active,
         })
@@ -110,6 +129,7 @@ export const AdminTeamPanel: React.FC = () => {
           role: editingMember.role,
           tag: editingMember.tag || null,
           image_url: editingMember.image_url || null,
+          user_id: editingMember.user_id || null,
           position: editingMember.position,
           is_active: editingMember.is_active,
         })
@@ -180,6 +200,31 @@ export const AdminTeamPanel: React.FC = () => {
       console.error("Failed to toggle active state:", err)
     }
   }
+
+  // Search users via admin API for the SearchItem component
+  const searchUsers = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
+    try {
+      const headers = await buildAdminHeaders()
+      const url = `/api/admin/search-users?q=${encodeURIComponent(query)}&limit=20`
+      const resp = await fetch(url, { headers, credentials: "same-origin" })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) return []
+      const users = Array.isArray(data?.users) ? data.users : []
+      return users.map((u: { id: string; display_name: string | null; avatar_url: string | null; roles: string[] }) => ({
+        id: u.id,
+        label: u.display_name || "Unnamed user",
+        description: u.id,
+        meta: u.roles.length > 0 ? u.roles.join(", ") : undefined,
+        icon: u.avatar_url ? (
+          <img src={u.avatar_url} alt="" className="w-full h-full rounded-lg object-cover" />
+        ) : (
+          <User className="h-4 w-4 text-stone-400" />
+        ),
+      }))
+    } catch {
+      return []
+    }
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -316,6 +361,11 @@ export const AdminTeamPanel: React.FC = () => {
                       <p className="text-sm text-stone-500 dark:text-stone-400">{member.role}</p>
                       <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
                         ID: {member.name} • Position: {member.position}
+                        {member.user_id && (
+                          <span className="ml-1">
+                            • Linked: <span className="font-mono text-emerald-600 dark:text-emerald-400">{member.user_id.slice(0, 8)}...</span>
+                          </span>
+                        )}
                       </p>
                     </div>
 
@@ -452,6 +502,38 @@ export const AdminTeamPanel: React.FC = () => {
                 />
                 <p className="text-xs text-stone-500">Optional badge shown on photo</p>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Linked User Profile</Label>
+              <SearchItem
+                value={editingMember.user_id || null}
+                onSelect={(option) =>
+                  setEditingMember((prev) => ({
+                    ...prev,
+                    user_id: option.id,
+                    _selectedUserName: option.label,
+                  }))
+                }
+                onClear={() =>
+                  setEditingMember((prev) => ({
+                    ...prev,
+                    user_id: null,
+                    _selectedUserName: undefined,
+                  }))
+                }
+                onSearch={searchUsers}
+                placeholder="Search and link a user..."
+                title="Link User Profile"
+                description="Search for a user to link to this team member. Their name will be clickable on the About page."
+                searchPlaceholder="Search by name..."
+                emptyMessage="No users found."
+                selectedLabel={(opt) => opt.label}
+                priorityZIndex={120}
+              />
+              <p className="text-xs text-stone-500">
+                Optional — link to an existing user profile. Name becomes clickable on the About page.
+              </p>
             </div>
 
             <div className="space-y-2">
