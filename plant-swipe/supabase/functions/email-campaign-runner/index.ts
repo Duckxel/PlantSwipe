@@ -415,7 +415,21 @@ async function processCampaign(
 
     const plans = buildRecipientPlans(claimed, unsentRecipients)
     const now = new Date()
-    const { due, future } = partitionRecipientPlans(plans, now)
+
+    // When manually triggered (forceCampaignId is set), send to ALL recipients immediately
+    // regardless of timezone scheduling. This ensures the "Send" button always works.
+    let due: RecipientPlan[]
+    let future: RecipientPlan[]
+    if (options.forceCampaignId) {
+      console.log(`[email-campaign-runner] Manual trigger: bypassing timezone scheduling, sending to all ${plans.length} recipients immediately`)
+      due = plans
+      future = []
+    } else {
+      const partition = partitionRecipientPlans(plans, now)
+      due = partition.due
+      future = partition.future
+    }
+
     summary.dueThisRun = due.length
     summary.pendingCount = future.length
     summary.nextScheduledFor = future.length ? future[0].sendAt : null
@@ -438,7 +452,33 @@ async function processCampaign(
       summary.durationMs = Date.now() - startedAt.getTime()
       const nextRun =
         summary.nextScheduledFor ?? new Date(now.getTime() + RESCHEDULE_BACKOFF_MS).toISOString()
-      await updateCampaignSchedule(client, campaign.id, summary, nextRun)
+      try {
+        await updateCampaignSchedule(client, campaign.id, summary, nextRun)
+      } catch (scheduleError) {
+        // If rescheduling fails (e.g., transient Cloudflare 500), revert campaign
+        // back to "scheduled" so the cron can pick it up again on the next run.
+        // Do NOT let this propagate to the outer catch which would mark it "failed" permanently.
+        console.warn(
+          `[email-campaign-runner] Failed to reschedule campaign ${campaign.id}, reverting to scheduled status`,
+          scheduleError instanceof Error ? scheduleError.message : scheduleError,
+        )
+        try {
+          await client
+            .from("admin_email_campaigns")
+            .update({
+              status: "scheduled",
+              send_error: null,
+              send_started_at: null,
+            })
+            .eq("id", campaign.id)
+          console.log(`[email-campaign-runner] Campaign ${campaign.id} reverted to scheduled`)
+        } catch (revertError) {
+          console.error(
+            `[email-campaign-runner] Failed to revert campaign ${campaign.id} to scheduled`,
+            revertError instanceof Error ? revertError.message : revertError,
+          )
+        }
+      }
       return summary
     }
 
@@ -523,7 +563,6 @@ async function processCampaign(
         ? JSON.stringify(error)
         : String(error)
     
-    summary.status = "failed"
     summary.reason = errorMessage
     summary.durationMs = Date.now() - startedAt.getTime()
     const failureCount =
@@ -532,9 +571,35 @@ async function processCampaign(
         : summary.failedCount
     summary.failedCount = failureCount
 
-    // If emails were already sent, mark as partial success instead of failed
+    // Determine appropriate status based on what happened
     if (summary.sentThisRun > 0) {
+      // Some emails were sent - mark as partial success
       summary.status = "partial"
+    } else {
+      // No emails sent yet - check if this is a transient error
+      const isTransient = errorMessage.includes("500") || errorMessage.includes("Internal Server Error") || errorMessage.includes("cloudflare")
+      if (isTransient) {
+        // Transient error before any emails were sent - revert to "scheduled"
+        // so the cron can pick it up again on the next run
+        summary.status = "scheduled"
+        console.warn(`[email-campaign-runner] Transient error for campaign ${campaign.id} (no emails sent), reverting to scheduled`)
+        try {
+          await client
+            .from("admin_email_campaigns")
+            .update({
+              status: "scheduled",
+              send_error: `Transient error (will retry): ${errorMessage.substring(0, 200)}`,
+              send_started_at: null,
+            })
+            .eq("id", campaign.id)
+          console.log(`[email-campaign-runner] Campaign ${campaign.id} reverted to scheduled after transient error`)
+          return summary
+        } catch (revertError) {
+          console.error(`[email-campaign-runner] Failed to revert campaign ${campaign.id}`, revertError)
+          // Fall through to normal failure handling
+        }
+      }
+      summary.status = "failed"
     }
 
     // Try to finalize with error status (don't throw if this fails)
@@ -904,21 +969,36 @@ async function updateCampaignSchedule(
     console.warn("[email-campaign-runner] Could not serialize summary for schedule update")
   }
 
-  const { error } = await client
-    .from("admin_email_campaigns")
-    .update({
-      status: "scheduled",
-      scheduled_for: nextScheduledFor,
-      total_recipients: summary.totalRecipients,
-      sent_count: summary.sentCount,
-      failed_count: summary.failedCount,
-      send_summary: sanitizedSummary,
-      send_error: null,
-      send_completed_at: null,
-    })
-    .eq("id", campaignId)
-  if (error) {
-    throw new Error(`Failed to update campaign schedule: ${error.message || JSON.stringify(error)}`)
+  const payload = {
+    status: "scheduled",
+    scheduled_for: nextScheduledFor,
+    total_recipients: summary.totalRecipients,
+    sent_count: summary.sentCount,
+    failed_count: summary.failedCount,
+    send_summary: sanitizedSummary,
+    send_error: null,
+    send_completed_at: null,
+  }
+
+  // Retry once on transient errors (e.g., Cloudflare 500)
+  const MAX_RETRIES = 2
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const { error } = await client
+      .from("admin_email_campaigns")
+      .update(payload)
+      .eq("id", campaignId)
+
+    if (!error) return
+
+    const errorMsg = error.message || JSON.stringify(error)
+    const isTransient = errorMsg.includes("500") || errorMsg.includes("Internal Server Error") || errorMsg.includes("cloudflare")
+    if (isTransient && attempt < MAX_RETRIES) {
+      console.warn(`[email-campaign-runner] Transient error updating schedule (attempt ${attempt}/${MAX_RETRIES}), retrying in 2s...`, errorMsg)
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      continue
+    }
+
+    throw new Error(`Failed to update campaign schedule: ${errorMsg}`)
   }
 }
 
@@ -1057,18 +1137,30 @@ async function finalizeCampaign(
     }
   }
 
-  const { error } = await client
-    .from("admin_email_campaigns")
-    .update(payload)
-    .eq("id", campaignId)
-  
-  if (error) {
-    console.error("[email-campaign-runner] failed to finalize campaign", campaignId, JSON.stringify(error))
-    // Throw so the caller knows finalization failed
-    throw new Error(`Failed to finalize campaign: ${error.message || JSON.stringify(error)}`)
+  // Retry once on transient errors (e.g., Cloudflare 500)
+  const MAX_RETRIES = 2
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const { error } = await client
+      .from("admin_email_campaigns")
+      .update(payload)
+      .eq("id", campaignId)
+
+    if (!error) {
+      console.log(`[email-campaign-runner] Campaign ${campaignId} finalized with status: ${payload.status}`)
+      return
+    }
+
+    const errorMsg = error.message || JSON.stringify(error)
+    const isTransient = errorMsg.includes("500") || errorMsg.includes("Internal Server Error") || errorMsg.includes("cloudflare")
+    if (isTransient && attempt < MAX_RETRIES) {
+      console.warn(`[email-campaign-runner] Transient error finalizing campaign (attempt ${attempt}/${MAX_RETRIES}), retrying in 2s...`, errorMsg)
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      continue
+    }
+
+    console.error("[email-campaign-runner] failed to finalize campaign", campaignId, errorMsg)
+    throw new Error(`Failed to finalize campaign: ${errorMsg}`)
   }
-  
-  console.log(`[email-campaign-runner] Campaign ${campaignId} finalized with status: ${payload.status}`)
 }
 
 function renderTemplate(input: string | null | undefined, context: Record<string, string>): string {

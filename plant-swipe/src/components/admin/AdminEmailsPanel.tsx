@@ -230,6 +230,17 @@ async function buildAdminHeaders() {
 const DEFAULT_TIMEZONE =
   typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC"
 
+/** Returns the current local datetime as a string compatible with datetime-local inputs (YYYY-MM-DDTHH:MM) */
+const getMinDateTimeLocal = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, "0")
+  const day = String(now.getDate()).padStart(2, "0")
+  const hours = String(now.getHours()).padStart(2, "0")
+  const minutes = String(now.getMinutes()).padStart(2, "0")
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—"
   try {
@@ -309,6 +320,10 @@ export const AdminEmailsPanel: React.FC = () => {
   })
   const [campaignSaving, setCampaignSaving] = React.useState(false)
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [scheduledForError, setScheduledForError] = React.useState<string | null>(null)
+  const [minScheduleDateTime, setMinScheduleDateTime] = React.useState(getMinDateTimeLocal)
+  const [templatePickerOpen, setTemplatePickerOpen] = React.useState(false)
+  const [templatePickerSearch, setTemplatePickerSearch] = React.useState("")
   const [rolesExpanded, setRolesExpanded] = React.useState(false)
 
   const location = useLocation()
@@ -430,6 +445,12 @@ export const AdminEmailsPanel: React.FC = () => {
       alert("Campaign title, template, and schedule are required.")
       return
     }
+    const scheduledDate = new Date(campaignForm.scheduledFor)
+    if (scheduledDate.getTime() < Date.now()) {
+      setScheduledForError("Schedule time must be in the future")
+      return
+    }
+    setScheduledForError(null)
     setCampaignSaving(true)
     try {
       const headers = await buildAdminHeaders()
@@ -670,7 +691,11 @@ export const AdminEmailsPanel: React.FC = () => {
           {/* Action Buttons - Full width on mobile */}
           {activeView === "campaigns" && (
             <Button 
-              onClick={() => setDialogOpen(true)}
+              onClick={() => {
+                setMinScheduleDateTime(getMinDateTimeLocal())
+                setScheduledForError(null)
+                setDialogOpen(true)
+              }}
               className="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20 h-10 sm:h-11 text-sm"
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -708,7 +733,11 @@ export const AdminEmailsPanel: React.FC = () => {
               <p className="text-sm text-stone-500 dark:text-stone-400 mb-6 max-w-sm mx-auto">
                 Create your first campaign to start sending emails to your users.
               </p>
-              <Button onClick={() => setDialogOpen(true)} className="rounded-xl">
+              <Button onClick={() => {
+                setMinScheduleDateTime(getMinDateTimeLocal())
+                setScheduledForError(null)
+                setDialogOpen(true)
+              }} className="rounded-xl">
                 <Plus className="mr-2 h-4 w-4" />
                 Create Campaign
               </Button>
@@ -1280,11 +1309,29 @@ export const AdminEmailsPanel: React.FC = () => {
                   id="campaign-datetime"
                   type="datetime-local"
                   value={campaignForm.scheduledFor}
-                  onChange={(event) =>
-                    setCampaignForm((prev) => ({ ...prev, scheduledFor: event.target.value }))
-                  }
-                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                  min={minScheduleDateTime}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setCampaignForm((prev) => ({ ...prev, scheduledFor: value }))
+                    if (value && new Date(value).getTime() < Date.now()) {
+                      setScheduledForError("Schedule time must be in the future")
+                    } else {
+                      setScheduledForError(null)
+                    }
+                  }}
+                  className={cn(
+                    "rounded-xl h-10 text-sm",
+                    scheduledForError
+                      ? "border-red-400 dark:border-red-600 focus:ring-red-500/30 focus:border-red-400"
+                      : "border-stone-200 dark:border-[#3e3e42]"
+                  )}
                 />
+                {scheduledForError && (
+                  <p className="text-[10px] sm:text-xs text-red-500 dark:text-red-400 flex items-center gap-1">
+                    <Calendar className="h-3 w-3 flex-shrink-0" />
+                    {scheduledForError}
+                  </p>
+                )}
               </div>
               
               <div className="space-y-1.5">
@@ -1506,7 +1553,7 @@ export const AdminEmailsPanel: React.FC = () => {
             </Button>
             <Button 
               onClick={handleCreateCampaign} 
-              disabled={campaignSaving}
+              disabled={campaignSaving || !!scheduledForError}
               className={cn(
                 "w-full sm:flex-1 rounded-xl h-10 text-sm order-1 sm:order-2",
                 campaignForm.testMode 
