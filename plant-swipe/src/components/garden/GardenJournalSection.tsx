@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { PillTabs } from "@/components/ui/pill-tabs";
+import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
@@ -197,6 +198,22 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     () => [...allPhotos].reverse(),
     [allPhotos],
   );
+
+  // Image viewer for library
+  const libraryViewer = useImageViewer();
+  const libraryViewerImages = React.useMemo(
+    () => libraryPhotos.map((p) => ({ src: p.url, alt: p.caption || p.entryTitle || "Journal photo" })),
+    [libraryPhotos],
+  );
+
+  // Short date formatter: "15 Nov 25"
+  const formatShortDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const day = d.getDate();
+    const month = d.toLocaleString(undefined, { month: "short" });
+    const year = String(d.getFullYear()).slice(2);
+    return `${day} ${month} ${year}`;
+  };
 
   // Timelapse playback
   React.useEffect(() => {
@@ -1452,24 +1469,22 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 </p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {libraryPhotos.map((photo) => (
-                  <div key={photo.id} className="group relative aspect-square rounded-2xl overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-stone-800">
+                {libraryPhotos.map((photo, idx) => (
+                  <button
+                    key={photo.id}
+                    type="button"
+                    onClick={() => libraryViewer.openGallery(libraryViewerImages, idx)}
+                    className="group relative aspect-square rounded-2xl overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-stone-800 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+                  >
                     <img
                       src={photo.thumbnailUrl || photo.url}
                       alt={photo.caption || photo.entryTitle || "Journal photo"}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       loading="lazy"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <div className="absolute bottom-0 inset-x-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all">
-                      <div className="text-white text-xs font-medium truncate">
-                        {photo.entryTitle || formatDate(photo.date)}
-                      </div>
-                      {photo.caption && (
-                        <div className="text-white/70 text-[11px] truncate mt-0.5">
-                          {photo.caption}
-                        </div>
-                      )}
+                    {/* Date tag — always visible */}
+                    <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white text-[11px] font-medium">
+                      {formatShortDate(photo.date)}
                     </div>
                     {photo.mood && (
                       <div className="absolute top-2 left-2">
@@ -1485,9 +1500,10 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         </span>
                       </div>
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
+              <ImageViewer {...libraryViewer.props} enableZoom />
             </>
           )}
         </div>
