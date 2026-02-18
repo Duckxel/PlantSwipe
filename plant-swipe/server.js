@@ -23160,7 +23160,7 @@ app.post('/api/garden/:id/journal', async (req, res) => {
         garden_id, user_id, entry_date, title, content, mood, is_private, tags, weather_snapshot
       ) values (
         ${gardenId}, ${user.id}, ${today}, ${title || null}, ${content.trim()},
-        ${mood || null}, ${isPrivate || false}, ${JSON.stringify(tags || [])}::text[], ${JSON.stringify(weatherSnapshot)}::jsonb
+        ${mood || null}, ${isPrivate || false}, ${sql.array(tags || [])}, ${JSON.stringify(weatherSnapshot)}::jsonb
       )
       returning id
     `
@@ -23216,7 +23216,7 @@ app.put('/api/garden/:id/journal', async (req, res) => {
         content = ${content?.trim() || ''},
         mood = ${mood || null},
         is_private = ${isPrivate || false},
-        tags = ${JSON.stringify(tags || [])}::text[],
+        tags = ${sql.array(tags || [])},
         updated_at = now()
       where id = ${entryId}
     `
