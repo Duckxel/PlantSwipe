@@ -1197,18 +1197,21 @@ export default function PlantSwipe() {
     }
   }, [swipeablePlants, shuffleEpoch])
   
+  // ⚡ Bolt: Memoize plant map to avoid O(N) reconstruction when only shuffle order changes
+  // This separates the data structure creation from the sorting logic
+  const plantMap = useMemo(() => {
+    return new Map(swipeablePlants.map(p => [p.id, p]))
+  }, [swipeablePlants])
+
   // Build the actual swipe list from the stable shuffled IDs
   const swipeList = useMemo(() => {
     if (shuffledPlantIds.length === 0) return []
-    
-    // Create a map for O(1) lookups
-    const plantMap = new Map(swipeablePlants.map(p => [p.id, p]))
     
     // Return plants in shuffled order, filtering out any that no longer exist
     return shuffledPlantIds
       .map(id => plantMap.get(id))
       .filter((p): p is PreparedPlant => p !== undefined)
-  }, [shuffledPlantIds, swipeablePlants])
+  }, [shuffledPlantIds, plantMap])
 
   const sortedSearchResults = useMemo(() => {
     // For default sort:
