@@ -10,7 +10,7 @@ import type { TFunction } from "i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantType, PlantWateringSchedule, RecipeCategory, RecipeTime } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 
@@ -128,6 +128,7 @@ const TagInput: React.FC<{
   unique?: boolean
   caseInsensitive?: boolean
 }> = ({ value, onChange, placeholder, unique, caseInsensitive }) => {
+  const { t } = useTranslation('common')
   const [input, setInput] = React.useState("")
   const commit = () => {
     const v = input.trim()
@@ -156,7 +157,14 @@ const TagInput: React.FC<{
         {value.map((tag, idx) => (
           <span key={`${tag}-${idx}`} className="px-2 py-1 bg-stone-100 dark:bg-[#2d2d30] rounded text-sm flex items-center gap-1">
             {tag}
-            <button type="button" className="text-red-600" onClick={() => onChange(value.filter((_, i) => i !== idx))}>×</button>
+            <button
+              type="button"
+              className="text-red-600 hover:text-red-700 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none rounded-sm p-0.5"
+              onClick={() => onChange(value.filter((_, i) => i !== idx))}
+              aria-label={t('common.removeTag', 'Remove tag')}
+            >
+              <X className="h-3 w-3" />
+            </button>
           </span>
         ))}
       </div>
@@ -568,9 +576,10 @@ const CompanionSelector: React.FC<{
               <button
                 type="button"
                 onClick={() => removeCompanion(c.id)}
-                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold shadow-md"
+                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold shadow-md focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
+                aria-label={t('plantAdmin.removeCompanion', { name: c.name, defaultValue: 'Remove {{name}}' })}
               >
-                ×
+                <X className="h-4 w-4" />
               </button>
             </div>
           ))}
@@ -830,6 +839,7 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
 }
 
 const SourcesEditor: React.FC<{ value: PlantSource[] | undefined; onChange: (v: PlantSource[]) => void }> = ({ value, onChange }) => {
+  const { t } = useTranslation('common')
   const sources = Array.isArray(value) ? value : []
   const [draft, setDraft] = React.useState<PlantSource>({ name: "", url: "" })
   const addSource = () => {
@@ -869,8 +879,13 @@ const SourcesEditor: React.FC<{ value: PlantSource[] | undefined; onChange: (v: 
                 </a>
               )}
             </div>
-            <button type="button" className="text-red-600" onClick={() => remove(idx)} aria-label="Remove source">
-              ×
+            <button
+              type="button"
+              className="text-red-600 hover:text-red-700 p-1 rounded-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
+              onClick={() => remove(idx)}
+              aria-label={t('plantAdmin.removeSource', 'Remove source')}
+            >
+              <X className="h-4 w-4" />
             </button>
           </div>
         ))}
@@ -1616,6 +1631,7 @@ const TIME_ICONS: Record<RecipeTime, string> = {
 }
 
 function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange: (v: PlantRecipe[]) => void }) {
+  const { t } = useTranslation('common')
   const [isCollapsed, setIsCollapsed] = React.useState(recipes.length > 3)
   const [newName, setNewName] = React.useState('')
   const [newCategory, setNewCategory] = React.useState<RecipeCategory>('Other')
@@ -1731,10 +1747,11 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                     <button
                       type="button"
                       onClick={() => removeRecipe(idx)}
-                      className="text-red-500 hover:text-red-700 text-sm font-bold px-1.5 shrink-0"
+                      className="text-red-500 hover:text-red-700 p-1 rounded-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none shrink-0"
                       title="Remove recipe"
+                      aria-label={t('common.removeRecipe', 'Remove recipe')}
                     >
-                      ×
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
