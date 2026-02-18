@@ -2754,14 +2754,15 @@ export const GardenDashboardPage: React.FC = () => {
                   <NavLink
                     key={k}
                     to={`/garden/${id}/${k}`}
-                    className={`flex-shrink-0 md:flex-shrink flex items-center gap-2 px-3.5 py-2 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl text-sm font-medium transition-colors no-underline md:w-full ${
+                    title={String(label)}
+                    className={`flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-2 p-2.5 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl text-sm font-medium transition-colors no-underline md:w-full ${
                       isActive
                         ? "bg-emerald-600 text-white shadow-sm"
                         : "text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
                     }`}
                   >
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span className="whitespace-nowrap">{label}</span>
+                    <Icon className="w-5 h-5 md:w-4 md:h-4 flex-shrink-0" />
+                    <span className="hidden md:inline whitespace-nowrap">{label}</span>
                   </NavLink>
                 );
               })}
