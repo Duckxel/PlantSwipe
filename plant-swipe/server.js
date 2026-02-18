@@ -23273,6 +23273,55 @@ app.delete('/api/garden/:id/journal/:entryId', async (req, res) => {
   }
 })
 
+// Delete a single journal photo (garden owner only)
+app.delete('/api/garden/:id/journal/photo/:photoId', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    const photoId = String(req.params.photoId || '').trim()
+    if (!gardenId || !photoId) { res.status(400).json({ ok: false, error: 'garden id and photo id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+    await ensureJournalTables()
+
+    // Only garden owners can delete individual photos
+    const membership = await sql`
+      select role from public.garden_members
+      where garden_id = ${gardenId} and user_id = ${user.id}
+      limit 1
+    `
+    if (!membership?.length) { res.status(403).json({ ok: false, error: 'Access denied' }); return }
+    if (membership[0].role !== 'owner') {
+      res.status(403).json({ ok: false, error: 'Only garden owners can delete photos' })
+      return
+    }
+
+    // Get the photo record
+    const photoRows = await sql`
+      select gjp.id, gjp.image_url, gjp.thumbnail_url, gje.garden_id
+      from public.garden_journal_photos gjp
+      join public.garden_journal_entries gje on gje.id = gjp.entry_id
+      where gjp.id = ${photoId} and gje.garden_id = ${gardenId}
+      limit 1
+    `
+    if (!photoRows?.length) { res.status(404).json({ ok: false, error: 'Photo not found' }); return }
+
+    const photo = photoRows[0]
+
+    // Delete from storage
+    if (photo.image_url) await deleteStorageObjectByUrl(photo.image_url)
+    if (photo.thumbnail_url) await deleteStorageObjectByUrl(photo.thumbnail_url)
+
+    // Delete DB record
+    await sql`delete from public.garden_journal_photos where id = ${photoId}`
+
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('[journal] Error deleting photo:', e)
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to delete photo', code: e?.code, detail: e?.detail, hint: e?.hint })
+  }
+})
+
 // Generate AI feedback for a journal entry (with image analysis)
 app.post('/api/garden/:id/journal/:entryId/feedback', async (req, res) => {
   try {

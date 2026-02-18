@@ -34,6 +34,7 @@ import {
   Download,
   Film,
   Images,
+  ArrowUpDown,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
@@ -124,6 +125,17 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     { key: "library" as const, label: t("gardenDashboard.journalSection.libraryTab", "Library") },
   ], [t]);
 
+  // Owner check
+  const isOwner = React.useMemo(
+    () => _members.some((m) => m.userId === user?.id && m.role === "owner"),
+    [_members, user?.id],
+  );
+
+  // Sort state
+  type SortOrder = "newest" | "oldest";
+  const [journalSort, setJournalSort] = React.useState<SortOrder>("newest");
+  const [librarySort, setLibrarySort] = React.useState<SortOrder>("newest");
+
   // State
   const [loading, setLoading] = React.useState(true);
   const [entries, setEntries] = React.useState<JournalEntry[]>([]);
@@ -164,6 +176,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const allPhotos = React.useMemo(() => {
     const photos: Array<{
       id: string;
+      entryId: string;
+      userId: string;
       url: string;
       thumbnailUrl?: string;
       date: string;
@@ -178,6 +192,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         entry.photos.forEach((photo) => {
           photos.push({
             id: photo.id,
+            entryId: entry.id,
+            userId: entry.userId,
             url: photo.imageUrl,
             thumbnailUrl: photo.thumbnailUrl || undefined,
             date: entry.entryDate,
@@ -193,10 +209,18 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     return photos.sort((a, b) => a.date.localeCompare(b.date));
   }, [entries]);
 
-  // Newest-first for the library grid
+  // Library photos sorted by user preference
   const libraryPhotos = React.useMemo(
-    () => [...allPhotos].reverse(),
-    [allPhotos],
+    () => librarySort === "newest" ? [...allPhotos].reverse() : [...allPhotos],
+    [allPhotos, librarySort],
+  );
+
+  // Journal entries sorted by user preference
+  const sortedEntries = React.useMemo(
+    () => journalSort === "newest"
+      ? [...entries].sort((a, b) => b.entryDate.localeCompare(a.entryDate))
+      : [...entries].sort((a, b) => a.entryDate.localeCompare(b.entryDate)),
+    [entries, journalSort],
   );
 
   // Image viewer for library
@@ -585,6 +609,36 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     }
   };
 
+
+  // Delete a single photo (owner only)
+  const [deletingPhotoId, setDeletingPhotoId] = React.useState<string | null>(null);
+  const handleDeletePhoto = async (photoId: string) => {
+    if (!confirm(t("gardenDashboard.journalSection.confirmDeletePhoto", "Delete this photo? This cannot be undone."))) return;
+    setDeletingPhotoId(photoId);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const resp = await fetch(`/api/garden/${gardenId}/journal/photo/${photoId}`, {
+        method: "DELETE",
+        headers,
+        credentials: "same-origin",
+      });
+
+      const data = await resp.json().catch(() => null);
+      if (resp.ok && data?.ok) {
+        fetchEntries();
+      } else {
+        alert(data?.error || "Failed to delete photo");
+      }
+    } catch (err) {
+      console.warn("[Journal] Failed to delete photo:", err);
+    } finally {
+      setDeletingPhotoId(null);
+    }
+  };
 
   // Edit entry
   const startEditEntry = (entry: JournalEntry) => {
@@ -1277,8 +1331,22 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
             </div>
           </Card>
         ) : (
-          <div className="space-y-6">
-            {entries.map((entry, index) => {
+          <div className="space-y-4">
+            <div className="flex items-center justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-xl gap-1.5 text-xs text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
+                onClick={() => setJournalSort(journalSort === "newest" ? "oldest" : "newest")}
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" />
+                {journalSort === "newest"
+                  ? t("gardenDashboard.journalSection.newestFirst", "Newest first")
+                  : t("gardenDashboard.journalSection.oldestFirst", "Oldest first")}
+              </Button>
+            </div>
+            <div className="space-y-6">
+            {sortedEntries.map((entry, index) => {
               const moodConfig = getMoodConfig(entry.mood);
               const isOwn = entry.userId === user?.id;
               
@@ -1423,6 +1491,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 </motion.div>
               );
             })}
+            </div>
           </div>
         )}
       </div>
@@ -1467,40 +1536,67 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 <p className="text-sm text-muted-foreground">
                   {libraryPhotos.length} {t("gardenDashboard.journalSection.photos", "photos")}
                 </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl gap-1.5 text-xs text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
+                  onClick={() => setLibrarySort(librarySort === "newest" ? "oldest" : "newest")}
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  {librarySort === "newest"
+                    ? t("gardenDashboard.journalSection.newestFirst", "Newest first")
+                    : t("gardenDashboard.journalSection.oldestFirst", "Oldest first")}
+                </Button>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 {libraryPhotos.map((photo, idx) => (
-                  <button
-                    key={photo.id}
-                    type="button"
-                    onClick={() => libraryViewer.openGallery(libraryViewerImages, idx)}
-                    className="group relative aspect-square rounded-2xl overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-stone-800 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
-                  >
-                    <img
-                      src={photo.thumbnailUrl || photo.url}
-                      alt={photo.caption || photo.entryTitle || "Journal photo"}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
-                    />
-                    {/* Date tag — always visible */}
-                    <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white text-[11px] font-medium">
+                  <div key={photo.id} className="group relative aspect-square rounded-2xl overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-stone-800">
+                    <button
+                      type="button"
+                      onClick={() => libraryViewer.openGallery(libraryViewerImages, idx)}
+                      className="w-full h-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                    >
+                      <img
+                        src={photo.thumbnailUrl || photo.url}
+                        alt={photo.caption || photo.entryTitle || "Journal photo"}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    </button>
+                    {/* Date tag */}
+                    <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white text-[11px] font-medium pointer-events-none">
                       {formatShortDate(photo.date)}
                     </div>
                     {photo.mood && (
-                      <div className="absolute top-2 left-2">
+                      <div className="absolute top-2 left-2 pointer-events-none">
                         <span className="text-lg drop-shadow-md">
                           {MOODS.find(m => m.key === photo.mood)?.emoji}
                         </span>
                       </div>
                     )}
                     {photo.plantHealth && (
-                      <div className="absolute top-2 right-2">
+                      <div className="absolute top-2 right-2 pointer-events-none">
                         <span className="text-lg drop-shadow-md">
                           {PLANT_HEALTH.find(h => h.key === photo.plantHealth)?.emoji}
                         </span>
                       </div>
                     )}
-                  </button>
+                    {/* Owner delete button */}
+                    {isOwner && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo.id); }}
+                        disabled={deletingPhotoId === photo.id}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm text-white/80 hover:text-white hover:bg-red-600/80 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                        aria-label={t("common.delete", "Delete")}
+                      >
+                        {deletingPhotoId === photo.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />
+                        }
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
               <ImageViewer {...libraryViewer.props} enableZoom />
