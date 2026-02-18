@@ -23099,7 +23099,7 @@ app.get('/api/garden/:id/journal', async (req, res) => {
     res.json({ ok: true, entries: result })
   } catch (e) {
     console.error('[journal] Error fetching entries:', e)
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to fetch journal' })
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to fetch journal', code: e?.code, detail: e?.detail, hint: e?.hint })
   }
 })
 
@@ -23179,7 +23179,7 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     res.json({ ok: true, entryId: String(entryId) })
   } catch (e) {
     console.error('[journal] Error creating entry:', e)
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to create entry' })
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to create entry', code: e?.code, detail: e?.detail, hint: e?.hint })
   }
 })
 
@@ -23234,7 +23234,7 @@ app.put('/api/garden/:id/journal', async (req, res) => {
     res.json({ ok: true })
   } catch (e) {
     console.error('[journal] Error updating entry:', e)
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to update entry' })
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to update entry', code: e?.code, detail: e?.detail, hint: e?.hint })
   }
 })
 
@@ -23272,7 +23272,7 @@ app.delete('/api/garden/:id/journal/:entryId', async (req, res) => {
     res.json({ ok: true })
   } catch (e) {
     console.error('[journal] Error deleting entry:', e)
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to delete entry' })
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to delete entry', code: e?.code, detail: e?.detail, hint: e?.hint })
   }
 })
 
@@ -23410,7 +23410,7 @@ Be specific and reference what you actually see in the images. If you notice any
     res.json({ ok: true, feedback, imagesAnalyzed: photos.length, tokensUsed })
   } catch (e) {
     console.error('[journal-feedback] Error:', e)
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to generate feedback' })
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to generate feedback', code: e?.code, detail: e?.detail, hint: e?.hint })
   }
 })
 

@@ -120,6 +120,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   // State
   const [loading, setLoading] = React.useState(true);
   const [entries, setEntries] = React.useState<JournalEntry[]>([]);
+  const [fetchError, setFetchError] = React.useState<string | null>(null);
   const [_selectedDate, _setSelectedDate] = React.useState<Date>(new Date());
   const [isEditing, setIsEditing] = React.useState(false);
   const [editingEntry, setEditingEntry] = React.useState<JournalEntry | null>(null);
@@ -370,6 +371,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const fetchEntries = React.useCallback(async () => {
     if (!gardenId) return;
     setLoading(true);
+    setFetchError(null);
     try {
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
@@ -381,13 +383,17 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         credentials: "same-origin",
       });
 
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data?.ok && data.entries) {
-          setEntries(data.entries);
-        }
+      const data = await resp.json().catch(() => null);
+      if (resp.ok && data?.ok && data.entries) {
+        setEntries(data.entries);
+      } else {
+        const errMsg = data?.error || `HTTP ${resp.status}`;
+        const detail = [data?.code, data?.detail, data?.hint].filter(Boolean).join(" | ");
+        setFetchError(detail ? `${errMsg} (${detail})` : errMsg);
+        console.error("[Journal] Server error:", data);
       }
     } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Network error");
       console.warn("[Journal] Failed to fetch entries:", err);
     } finally {
       setLoading(false);
@@ -499,15 +505,21 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         body: JSON.stringify(entryData),
       });
 
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data?.ok) {
-          resetForm();
-          setShowNewEntry(false);
-          fetchEntries();
-        }
+      const data = await resp.json().catch(() => null);
+      if (resp.ok && data?.ok) {
+        resetForm();
+        setShowNewEntry(false);
+        fetchEntries();
+      } else {
+        const errMsg = data?.error || `HTTP ${resp.status}`;
+        const detail = [data?.code, data?.detail, data?.hint].filter(Boolean).join(" | ");
+        const fullErr = detail ? `${errMsg} (${detail})` : errMsg;
+        alert(`Failed to save entry: ${fullErr}`);
+        console.error("[Journal] Save error:", data);
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      alert(`Failed to save entry: ${msg}`);
       console.warn("[Journal] Failed to save entry:", err);
     } finally {
       setSaving(false);
@@ -1229,11 +1241,34 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
 
       {/* Journal Entries Timeline */}
       <div className="space-y-4">
+        {fetchError && (
+          <Card className="rounded-[28px] border-2 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl flex-shrink-0">&#9888;&#65039;</span>
+              <div className="min-w-0">
+                <h4 className="font-semibold text-red-800 dark:text-red-300 mb-1">
+                  {t("gardenDashboard.journalSection.fetchError", "Failed to load journal")}
+                </h4>
+                <pre className="text-sm text-red-700 dark:text-red-400 whitespace-pre-wrap break-all font-mono bg-red-100 dark:bg-red-900/40 rounded-xl p-3 mt-2">
+                  {fetchError}
+                </pre>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                  onClick={fetchEntries}
+                >
+                  {t("common.retry", "Retry")}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
           </div>
-        ) : entries.length === 0 ? (
+        ) : !fetchError && entries.length === 0 ? (
           <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-12 text-center">
             <div className="max-w-md mx-auto">
               <div className="text-6xl mb-4">📝</div>
