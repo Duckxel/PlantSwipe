@@ -156,7 +156,14 @@ const TagInput: React.FC<{
         {value.map((tag, idx) => (
           <span key={`${tag}-${idx}`} className="px-2 py-1 bg-stone-100 dark:bg-[#2d2d30] rounded text-sm flex items-center gap-1">
             {tag}
-            <button type="button" className="text-red-600" onClick={() => onChange(value.filter((_, i) => i !== idx))}>×</button>
+            <button
+              type="button"
+              className="text-red-600 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-full w-4 h-4 flex items-center justify-center"
+              onClick={() => onChange(value.filter((_, i) => i !== idx))}
+              aria-label={`Remove ${tag}`}
+            >
+              ×
+            </button>
           </span>
         ))}
       </div>
@@ -568,7 +575,8 @@ const CompanionSelector: React.FC<{
               <button
                 type="button"
                 onClick={() => removeCompanion(c.id)}
-                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold shadow-md"
+                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                aria-label={`Remove ${c.name}`}
               >
                 ×
               </button>
@@ -1731,8 +1739,9 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                     <button
                       type="button"
                       onClick={() => removeRecipe(idx)}
-                      className="text-red-500 hover:text-red-700 text-sm font-bold px-1.5 shrink-0"
+                      className="text-red-500 hover:text-red-700 text-sm font-bold px-1.5 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                       title="Remove recipe"
+                      aria-label={`Remove recipe: ${recipe.name || 'Untitled'}`}
                     >
                       ×
                     </button>
@@ -2015,8 +2024,9 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
             <span className="font-medium">{c.name}</span>
             <button 
               type="button" 
-              className="opacity-50 hover:opacity-100 hover:text-red-600 transition-opacity" 
+              className="opacity-50 hover:opacity-100 hover:text-red-600 focus:opacity-100 focus:text-red-600 transition-opacity rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
               onClick={() => onChange(colors.filter((_, i) => i !== idx))}
+              aria-label={`Remove color: ${c.name}`}
             >
               ×
             </button>
