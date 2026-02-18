@@ -2,6 +2,7 @@ import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
@@ -1242,27 +1243,10 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       {/* Journal Entries Timeline */}
       <div className="space-y-4">
         {fetchError && (
-          <Card className="rounded-[28px] border-2 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl flex-shrink-0">&#9888;&#65039;</span>
-              <div className="min-w-0">
-                <h4 className="font-semibold text-red-800 dark:text-red-300 mb-1">
-                  {t("gardenDashboard.journalSection.fetchError", "Failed to load journal")}
-                </h4>
-                <pre className="text-sm text-red-700 dark:text-red-400 whitespace-pre-wrap break-all font-mono bg-red-100 dark:bg-red-900/40 rounded-xl p-3 mt-2">
-                  {fetchError}
-                </pre>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
-                  onClick={fetchEntries}
-                >
-                  {t("common.retry", "Retry")}
-                </Button>
-              </div>
-            </div>
-          </Card>
+          <ErrorBanner
+            title={t("gardenDashboard.journalSection.fetchError", "Failed to load journal")}
+            message={fetchError}
+          />
         )}
         {loading ? (
           <div className="flex items-center justify-center py-12">
