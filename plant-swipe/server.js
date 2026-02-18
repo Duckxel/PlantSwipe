@@ -23038,8 +23038,7 @@ app.get('/api/garden/:id/journal', async (req, res) => {
       select 
         e.id, e.garden_id, e.user_id, e.entry_date, e.title, e.content, e.mood,
         e.weather_snapshot, e.plants_mentioned, e.tags, e.is_private,
-        e.ai_feedback, e.ai_feedback_generated_at, e.created_at, e.updated_at,
-        p.display_name as author_name
+        e.created_at, e.updated_at, p.display_name as author_name
       from public.garden_journal_entries e
       left join public.profiles p on p.id = e.user_id
       where e.garden_id = ${gardenId}
@@ -23089,8 +23088,6 @@ app.get('/api/garden/:id/journal', async (req, res) => {
       plantsMentioned: e.plants_mentioned || [],
       tags: e.tags || [],
       isPrivate: e.is_private,
-      aiFeedback: e.ai_feedback,
-      aiFeedbackGeneratedAt: e.ai_feedback_generated_at,
       photos: photosMap[e.id] || [],
       createdAt: e.created_at,
       updatedAt: e.updated_at,

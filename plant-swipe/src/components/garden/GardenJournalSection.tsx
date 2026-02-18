@@ -20,7 +20,6 @@ import {
   Clock,
   Image as ImageIcon,
   Loader2,
-  Sparkles,
   BookOpen,
   CheckCircle2,
   X,
@@ -54,9 +53,6 @@ interface JournalEntry {
   plantsMentioned: string[];
   tags: string[];
   isPrivate: boolean;
-  aiFeedback: string | null;
-  aiFeedbackGeneratedAt: string | null;
-  aiFeedbackImagesAnalyzed?: number;
   photos: JournalPhoto[];
   createdAt: string;
   updatedAt: string;
@@ -1359,34 +1355,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         </div>
                       )}
                       
-                      {/* AI Feedback section (read-only, shown only if already generated) */}
-                      {entry.aiFeedback && (
-                        <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200/50 dark:border-purple-800/50">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300">
-                              <Sparkles className="w-4 h-4" />
-                              {t("gardenDashboard.journalSection.aiFeedback", "AI Gardener Feedback")}
-                            </div>
-                            {entry.photos && entry.photos.length > 0 && (
-                              <span className="text-xs bg-purple-200/50 dark:bg-purple-800/50 text-purple-600 dark:text-purple-300 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <Camera className="w-3 h-3" />
-                                {t("gardenDashboard.journalSection.photosAnalyzed", { 
-                                  defaultValue: "{{count}} photo(s) analyzed",
-                                  count: Math.min(entry.photos.length, 4)
-                                })}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-purple-800 dark:text-purple-200 leading-relaxed whitespace-pre-wrap">
-                            {entry.aiFeedback}
-                          </p>
-                          {entry.aiFeedbackGeneratedAt && (
-                            <p className="text-xs text-purple-500 dark:text-purple-400 mt-2">
-                              {new Date(entry.aiFeedbackGeneratedAt).toLocaleDateString()}
-                            </p>
-                          )}
-                        </div>
-                      )}
                     </div>
                     
                     {/* Entry footer with timestamp */}
