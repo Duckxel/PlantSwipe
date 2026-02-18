@@ -187,7 +187,7 @@ BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS trigger_plant_scan_updated_at ON public.plant_scans;
 CREATE TRIGGER trigger_plant_scan_updated_at

@@ -108,7 +108,112 @@ A search-specific input with a search icon, loading spinner, clear button, and k
 | `onClear` | `() => void` | Clear button callback |
 | `shortcut` | `string` | Keyboard shortcut hint |
 
-**Used in:** Discovery page search, garden search, messaging search, setup location search
+**Used in:** Discovery page search, garden search, messaging search
+
+---
+
+### `CityCountrySelector`
+
+**File:** `src/components/ui/city-country-selector.tsx`
+
+A shared city/country location selector with geocoding search, GPS detection, and IP-based auto-detection. Uses the [Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api) for search and [Nominatim](https://nominatim.openstreetmap.org/) for reverse geocoding. Standardised across all pages that need location input.
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `city` | `string` | — | Currently selected city (controlled) |
+| `country` | `string` | — | Currently selected country (controlled) |
+| `timezone` | `string` | — | Optional timezone to display |
+| `onSelect` | `(location: SelectedLocation) => void` | — | Called when a location is selected |
+| `onClear` | `() => void` | — | Called when the selected location is cleared |
+| `disabled` | `boolean` | `false` | Disables all interactions |
+| `showDetectButton` | `boolean` | `true` | Show the "Detect my location" button (browser GPS) |
+| `showTimezone` | `boolean` | `false` | Show timezone in the selected location display |
+| `variant` | `'sm' \| 'default' \| 'lg'` | `'default'` | Size variant for the search input |
+| `className` | `string` | — | Additional class on the root wrapper |
+| `label` | `string` | translated | Label text above the search input |
+| `placeholder` | `string` | translated | Placeholder for the search input |
+| `noResultsText` | `string` | translated | Text for the no-results message |
+
+**`SelectedLocation` type:**
+
+```ts
+interface SelectedLocation {
+  city: string
+  country: string
+  timezone?: string
+  latitude?: number
+  longitude?: number
+  admin1?: string
+}
+```
+
+**Example (basic — auto-save on select):**
+
+```tsx
+import { CityCountrySelector, type SelectedLocation } from "@/components/ui/city-country-selector"
+
+const [city, setCity] = useState("")
+const [country, setCountry] = useState("")
+
+const handleSelect = (location: SelectedLocation) => {
+  setCity(location.city)
+  setCountry(location.country)
+  // Save to database...
+}
+
+<CityCountrySelector
+  city={city}
+  country={country}
+  onSelect={handleSelect}
+  onClear={() => { setCity(""); setCountry("") }}
+  showDetectButton
+  variant="lg"
+/>
+```
+
+**Example (with timezone display):**
+
+```tsx
+<CityCountrySelector
+  city={city}
+  country={country}
+  timezone={timezone}
+  onSelect={handleSelect}
+  onClear={handleClear}
+  showDetectButton
+  showTimezone
+/>
+```
+
+**Example (inside a form with save button — like Garden Settings):**
+
+```tsx
+<CityCountrySelector
+  city={selectedCity}
+  country={selectedCountry}
+  onSelect={handleLocationSelect}
+  onClear={handleLocationClear}
+  disabled={!canEdit}
+  label="Location"
+  placeholder="Search for a city..."
+/>
+<Button onClick={handleSave} disabled={!hasChanges}>Save</Button>
+```
+
+**Features:**
+- Debounced geocoding search via Open-Meteo API (350ms)
+- GPS-based location detection via browser Geolocation + Nominatim reverse geocoding
+- Selected location display with city, country, optional timezone
+- Clear button to reset selection
+- Suggestions dropdown with city, state/province, and country
+- No results message when search returns empty
+- Fully controlled — parent manages `city`/`country` state
+- i18n-aware — search results use the current app language
+- Dark mode support
+
+**Used in:** GardenLocationEditor, SettingsPage (preferences tab), SetupPage (location step), EditProfileDialog (profile page)
 
 ---
 
@@ -117,6 +222,105 @@ A search-specific input with a search icon, loading spinner, clear button, and k
 **File:** `src/components/ui/input.tsx`
 
 Basic styled input. Use `ValidatedInput` instead when you need validation feedback.
+
+---
+
+### `SearchItem`
+
+**File:** `src/components/ui/search-item.tsx`
+
+A field that, once clicked, opens a popup dialog with a search bar and a scrollable list of cards. Designed for selecting a single item from a complex list. Supports both **static mode** (pre-loaded options with client-side filtering) and **async mode** (server-side search via a callback). Based on the Email Campaign Template selector pattern.
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `value` | `string \| null` | — | Currently selected option id (controlled) |
+| `onSelect` | `(option: SearchItemOption) => void` | — | Called when the user picks an option |
+| `onClear` | `() => void` | — | Called when the user clears the selection |
+| `options` | `SearchItemOption[]` | — | **Static mode** — pre-loaded array of options (filtered client-side) |
+| `onSearch` | `(query: string) => Promise<SearchItemOption[]>` | — | **Async mode** — function that returns options for a query (debounced) |
+| `filterFn` | `(option, query) => boolean` | label+desc includes | Custom client-side filter (static mode only) |
+| `placeholder` | `string` | `"Select an item..."` | Trigger button placeholder |
+| `title` | `string` | `"Choose Item"` | Dialog title |
+| `description` | `string` | — | Dialog description |
+| `searchPlaceholder` | `string` | `"Search..."` | Search input placeholder |
+| `emptyMessage` | `string` | `"No results found."` | Empty state message |
+| `renderItem` | `(option, isSelected) => ReactNode` | — | Custom item card renderer |
+| `selectedLabel` | `(option) => string` | `option.label` | Derive trigger label from selected option |
+| `loading` | `boolean` | `false` | Show spinner on trigger button |
+| `className` | `string` | — | Additional class on trigger button |
+| `priorityZIndex` | `number` | `100` | Z-index for nested dialog scenarios |
+| `disabled` | `boolean` | `false` | Disable the trigger |
+
+**`SearchItemOption` type:**
+
+```ts
+interface SearchItemOption {
+  id: string
+  label: string
+  description?: string | null
+  meta?: string | null
+  icon?: React.ReactNode
+}
+```
+
+**Example (async — search users via API):**
+
+```tsx
+import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
+
+const searchUsers = async (query: string): Promise<SearchItemOption[]> => {
+  const resp = await fetch(`/api/admin/search-users?q=${encodeURIComponent(query)}`)
+  const data = await resp.json()
+  return data.users.map((u) => ({
+    id: u.id,
+    label: u.display_name || "Unknown",
+    description: u.id,
+  }))
+}
+
+<SearchItem
+  value={selectedUserId}
+  onSelect={(opt) => setSelectedUserId(opt.id)}
+  onClear={() => setSelectedUserId(null)}
+  onSearch={searchUsers}
+  placeholder="Search and select a user..."
+  title="Select User"
+  searchPlaceholder="Search by name..."
+/>
+```
+
+**Example (static — pre-loaded options):**
+
+```tsx
+const templates = [
+  { id: "1", label: "Welcome Email", description: "Sent to new users" },
+  { id: "2", label: "Newsletter", description: "Monthly newsletter" },
+]
+
+<SearchItem
+  value={selectedTemplateId}
+  onSelect={(opt) => setSelectedTemplateId(opt.id)}
+  onClear={() => setSelectedTemplateId(null)}
+  options={templates}
+  placeholder="Choose a template..."
+  title="Select Template"
+/>
+```
+
+**Features:**
+- Trigger button with selected value or placeholder, search icon
+- Dialog popup with search bar and scrollable card list
+- Debounced async search (300ms) with loading spinner
+- Client-side filtering for static options (label + description + meta)
+- Selected item highlight with check icon
+- Clear selection footer
+- Dark mode support
+- Configurable z-index for nested dialogs
+- Custom item renderer support
+
+**Used in:** AdminTeamPanel (user profile linking)
 
 ---
 

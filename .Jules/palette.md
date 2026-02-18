@@ -37,3 +37,5 @@
 ## 2025-05-28 - Actionable Validation Suggestions
 **Learning:** Display-only suggestions (like "Did you mean user@gmail.com?") create friction because users expect to be able to click them to fix their input.
 **Action:** Always make validation suggestions actionable by implementing a click handler that applies the suggestion to the input field.
+**Learning:** Buttons that appear only on hover (e.g., "Remove Tag" x) are invisible to keyboard users when focused, causing confusion as the focus ring appears around "nothing".
+**Action:** Always add `focus:opacity-100` (or equivalent) to `group-hover:opacity-100` elements to ensure they become visible when tabbing.

@@ -425,6 +425,7 @@ create or replace function public.get_profile_public_by_display_name(_name text)
 returns table(
   id uuid,
   display_name text,
+  city text,
   country text,
   bio text,
   avatar_url text,
@@ -455,7 +456,7 @@ as $$
     ) as is_admin
   ),
   base as (
-    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.roles, '{}') as roles, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests, p.experience_level, p.job, p.profile_link, coalesce(p.show_country, true) as show_country, coalesce(p.threat_level, 0) >= 3 as is_banned
+    select p.id, p.display_name, p.city, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.roles, '{}') as roles, coalesce(p.is_private, false) as is_private, coalesce(p.disable_friend_requests, false) as disable_friend_requests, p.experience_level, p.job, p.profile_link, coalesce(p.show_country, true) as show_country, coalesce(p.threat_level, 0) >= 3 as is_banned
     from public.profiles p
     where lower(p.display_name) = lower(_name)
       -- Exclude shadow-banned users from public profile lookups UNLESS viewer is admin
@@ -475,6 +476,7 @@ as $$
   )
   select b.id,
          b.display_name,
+         b.city,
          b.country,
          b.bio,
          b.avatar_url,

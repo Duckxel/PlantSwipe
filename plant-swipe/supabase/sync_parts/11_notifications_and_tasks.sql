@@ -1,3 +1,12 @@
+-- ========== Helper: IMMUTABLE date extraction for index expressions ==========
+-- timestamptz::date is STABLE (depends on session timezone), but index expressions require IMMUTABLE.
+-- This wrapper fixes the timezone to UTC so the result is deterministic.
+create or replace function public.immutable_date_utc(ts timestamptz)
+returns date
+language sql
+immutable strict parallel safe
+as $$ select (ts at time zone 'UTC')::date; $$;
+
 -- ========== Notification campaigns & delivery infrastructure ==========
 create table if not exists public.notification_campaigns (
   id uuid primary key default gen_random_uuid(),
@@ -238,11 +247,13 @@ begin
     -- This is required by the ON CONFLICT clause in processDueAutomations() (server.js).
     -- Without this index, every INSERT fails with "no unique or exclusion constraint
     -- matching the ON CONFLICT specification" and NO automation notifications are ever delivered.
-    if not exists (select 1 from pg_indexes where indexname = 'user_notifications_automation_unique_daily') then
-      create unique index user_notifications_automation_unique_daily
-        on public.user_notifications (automation_id, user_id, (scheduled_for::date))
-        where automation_id is not null;
-    end if;
+    -- NOTE: We use an IMMUTABLE helper because timestamptz::date is timezone-dependent (STABLE),
+    -- but PostgreSQL requires IMMUTABLE expressions in index definitions.
+    -- Drop old index that used non-immutable scheduled_for::date (may or may not exist)
+    drop index if exists public.user_notifications_automation_unique_daily;
+    create unique index user_notifications_automation_unique_daily
+      on public.user_notifications (automation_id, user_id, (public.immutable_date_utc(scheduled_for)))
+      where automation_id is not null;
   end if;
 end $$;
 
@@ -587,6 +598,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.validate_task_schedule()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   -- Validate one_time_date schedule
@@ -666,6 +678,7 @@ CREATE TRIGGER validate_task_schedule_trigger
 CREATE OR REPLACE FUNCTION public.validate_task_occurrence()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   -- Ensure required_count is positive

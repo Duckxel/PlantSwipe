@@ -33,6 +33,7 @@ CREATE OR REPLACE FUNCTION public.audit_task_changes()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
@@ -202,7 +203,7 @@ begin
   values (new.id, 'Default', 'public');
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public;
 
 -- Trigger for new user
 -- Check if trigger exists first to avoid error (optional but good practice)

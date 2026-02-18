@@ -1,3 +1,4 @@
+import React from "react"
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
 import { Sparkles, PartyPopper, Leaf, HeartHandshake, MapPin, BookOpenCheck, CalendarDays, Loader2 } from "lucide-react"
@@ -7,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers"
+import { supabase } from "@/lib/supabaseClient"
 
 type PillarCard = { eyebrow: string; title: string; description: string | string[] }
 
@@ -19,6 +21,7 @@ const fallbackTeamMembers: TeamMember[] = [
     role: "CEO",
     tag: null,
     image_url: null,
+    user_id: null,
     position: 0,
     is_active: true,
     created_at: "",
@@ -31,6 +34,7 @@ const fallbackTeamMembers: TeamMember[] = [
     role: "Co-Founder",
     tag: "Psychokwak",
     image_url: "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0151-ab46ee91-19d9-4c9f-9694-8c975c084cf1.webp",
+    user_id: null,
     position: 1,
     is_active: true,
     created_at: "",
@@ -43,6 +47,7 @@ const fallbackTeamMembers: TeamMember[] = [
     role: "Co-Founder",
     tag: "Five",
     image_url: "https://media.aphylia.app/UTILITY/admin/uploads/webp/img-0414-2-low-0a499a50-08a7-4615-834d-288b179e628e.webp",
+    user_id: null,
     position: 2,
     is_active: true,
     created_at: "",
@@ -63,7 +68,40 @@ export default function AboutPage() {
   const { teamMembers: dbTeamMembers, loading: teamLoading, error: teamError } = useTeamMembers()
   
   // Use DB team members or fallback
-  const teamMembers = dbTeamMembers.length > 0 ? dbTeamMembers : (teamError ? fallbackTeamMembers : [])
+  const teamMembers = React.useMemo(
+    () => dbTeamMembers.length > 0 ? dbTeamMembers : (teamError ? fallbackTeamMembers : []),
+    [dbTeamMembers, teamError],
+  )
+
+  // Resolve linked user profiles (user_id → display_name for clickable links)
+  const [linkedProfiles, setLinkedProfiles] = React.useState<Record<string, { display_name: string }>>({})
+
+  React.useEffect(() => {
+    const userIds = teamMembers
+      .map((m) => m.user_id)
+      .filter((id): id is string => !!id)
+    if (userIds.length === 0) return
+
+    const fetchProfiles = async () => {
+      try {
+        const { data, error: fetchErr } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", userIds)
+        if (fetchErr || !data) return
+        const map: Record<string, { display_name: string }> = {}
+        for (const row of data) {
+          if (row.display_name) {
+            map[row.id] = { display_name: row.display_name }
+          }
+        }
+        setLinkedProfiles(map)
+      } catch {
+        // Silently fail
+      }
+    }
+    fetchProfiles()
+  }, [teamMembers])
   
   const featureItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
   const pillars = t("pillars", { returnObjects: true }) as {
@@ -325,7 +363,20 @@ export default function AboutPage() {
                           </span>
                         </div>
                       )}
-                      {member.tag ? (
+                      {member.user_id && linkedProfiles[member.user_id] ? (
+                        <div className="absolute inset-x-3 bottom-3 flex justify-center">
+                          <Link
+                            to={`/u/${encodeURIComponent(linkedProfiles[member.user_id].display_name)}`}
+                          >
+                            <Badge
+                              variant="secondary"
+                              className="rounded-full px-3 py-0.5 text-[11px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm cursor-pointer hover:bg-emerald-200/90 dark:hover:bg-emerald-800/60 transition-colors"
+                            >
+                              {linkedProfiles[member.user_id].display_name}
+                            </Badge>
+                          </Link>
+                        </div>
+                      ) : member.tag ? (
                         <div className="absolute inset-x-3 bottom-3 flex justify-center pointer-events-none">
                           <Badge
                             variant="secondary"

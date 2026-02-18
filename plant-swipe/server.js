@@ -4081,7 +4081,7 @@ const CSP_POLICY = [
   "default-src 'self' *.aphylia.app",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.aphylia.app https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://recaptchaenterprise.googleapis.com",
   "style-src 'self' 'unsafe-inline' *.aphylia.app https://fonts.googleapis.com",
-  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://www.google.com https://*.sentry.io https://fonts.googleapis.com https://fonts.gstatic.com https://ipapi.co https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org",
+  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://www.google.com https://*.sentry.io https://fonts.googleapis.com https://fonts.gstatic.com https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org",
   "font-src 'self' *.aphylia.app https://fonts.gstatic.com data:",
   "frame-src 'self' *.aphylia.app https://www.google.com https://recaptcha.google.com",
   "img-src * data: blob:",
@@ -6198,8 +6198,21 @@ function getGeoFromHeaders(req) {
   }
 }
 
-// In-memory cache for IP -> geo lookups to avoid repeated external calls
-const geoCache = new Map()
+// --- IP geo lookup with bounded LRU cache and in-flight deduplication ---
+
+const GEO_CACHE_MAX_SIZE = 2000
+const GEO_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+const geoCache = new Map()          // IP -> { ts, val }
+const geoInflight = new Map()       // IP -> Promise (deduplicates concurrent lookups)
+
+function geoCacheSet(key, val) {
+  // Evict oldest entries when cache exceeds max size (simple FIFO via insertion order)
+  if (geoCache.size >= GEO_CACHE_MAX_SIZE) {
+    const firstKey = geoCache.keys().next().value
+    geoCache.delete(firstKey)
+  }
+  geoCache.set(key, { ts: Date.now(), val })
+}
 
 function isPrivateIp(ip) {
   try {
@@ -6224,21 +6237,7 @@ function geoDebugLog(...args) {
   } catch { }
 }
 
-async function lookupGeoForIp(ip) {
-  const key = `ip:${ip}`
-  const now = Date.now()
-  const ttlMs = 24 * 60 * 60 * 1000 // 24h
-  const cached = geoCache.get(key)
-  if (cached && (now - cached.ts < ttlMs)) {
-    return cached.val
-  }
-
-  if (!ip || isPrivateIp(ip)) {
-    const val = { geo_country: null, geo_region: null, geo_city: null }
-    geoCache.set(key, { ts: now, val })
-    return val
-  }
-
+async function _fetchGeoForIp(ip) {
   // Provider 1: ipapi.co (HTTPS, no key required for basic usage)
   try {
     const r = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, { method: 'GET', headers: { 'Accept': 'application/json' }, redirect: 'follow' })
@@ -6246,11 +6245,10 @@ async function lookupGeoForIp(ip) {
       const j = await r.json().catch(() => null)
       if (j && (j.country || j.region || j.city)) {
         const val = {
-          geo_country: j.country ? String(j.country).toUpperCase() : null, // ISO code
+          geo_country: j.country ? String(j.country).toUpperCase() : null,
           geo_region: j.region || null,
           geo_city: j.city || null,
         }
-        geoCache.set(key, { ts: now, val })
         geoDebugLog('ipapi.co resolved', ip, val)
         return val
       }
@@ -6270,7 +6268,6 @@ async function lookupGeoForIp(ip) {
           geo_region: j2.regionName || null,
           geo_city: j2.city || null,
         }
-        geoCache.set(key, { ts: now, val })
         geoDebugLog('ip-api.com resolved', ip, val)
         return val
       }
@@ -6279,9 +6276,44 @@ async function lookupGeoForIp(ip) {
     geoDebugLog('ip-api.com failed', ip, e?.message || String(e))
   }
 
-  const val = { geo_country: null, geo_region: null, geo_city: null }
-  geoCache.set(key, { ts: now, val })
-  return val
+  return { geo_country: null, geo_region: null, geo_city: null }
+}
+
+async function lookupGeoForIp(ip) {
+  const key = `ip:${ip}`
+
+  // 1. Check cache (with TTL)
+  const cached = geoCache.get(key)
+  if (cached && (Date.now() - cached.ts < GEO_CACHE_TTL_MS)) {
+    return cached.val
+  }
+
+  // 2. Private/missing IPs — cache null immediately, no API call
+  if (!ip || isPrivateIp(ip)) {
+    const val = { geo_country: null, geo_region: null, geo_city: null }
+    geoCacheSet(key, val)
+    return val
+  }
+
+  // 3. Deduplicate concurrent lookups for the same IP
+  const inflight = geoInflight.get(key)
+  if (inflight) {
+    return inflight
+  }
+
+  const promise = _fetchGeoForIp(ip).then((val) => {
+    geoCacheSet(key, val)
+    geoInflight.delete(key)
+    return val
+  }).catch(() => {
+    const val = { geo_country: null, geo_region: null, geo_city: null }
+    geoCacheSet(key, val)
+    geoInflight.delete(key)
+    return val
+  })
+
+  geoInflight.set(key, promise)
+  return promise
 }
 
 async function resolveGeo(req, ipAddress) {
@@ -6916,9 +6948,12 @@ async function ensureNotificationTables() {
     await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
     await sql`create index if not exists user_notifications_automation_idx on public.user_notifications (automation_id);`
     await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
-    // Unique constraint for automation notifications: one notification per automation per user per day (in user's timezone)
-    // Using scheduled_for::date since the automation inserts with scheduled_for = now()
-    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (scheduled_for::date)) where automation_id is not null;`
+    // Immutable helper for date extraction in index expressions (timestamptz::date is STABLE, not IMMUTABLE)
+    await sql`create or replace function public.immutable_date_utc(ts timestamptz) returns date language sql immutable strict parallel safe as $$ select (ts at time zone 'UTC')::date; $$;`
+    // Drop old index that used non-immutable expression (may or may not exist)
+    await sql`drop index if exists public.user_notifications_unique_automation;`
+    // Unique constraint for automation notifications: one notification per automation per user per day
+    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (public.immutable_date_utc(scheduled_for))) where automation_id is not null;`
 
     // User Push Subscriptions
     await sql`
@@ -7109,6 +7144,7 @@ const emailCampaignInputSchema = z.object({
   testMode: z.boolean().optional().default(false),
   testEmail: z.string().email().optional().nullable(),
   isMarketing: z.boolean().optional().default(false), // If true, only send to users with marketing_consent=true
+  targetRoles: z.array(z.string().trim().min(1).max(50)).max(20).optional().default([]), // Empty = all users, non-empty = only users with ANY of these roles
 })
 
 const emailCampaignUpdateSchema = z.object({
@@ -10566,6 +10602,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
     const testMode = parsed.testMode === true
     const testEmail = testMode && parsed.testEmail ? parsed.testEmail : null
     const isMarketing = parsed.isMarketing === true
+    const targetRoles = Array.isArray(parsed.targetRoles) ? parsed.targetRoles.filter(r => typeof r === 'string' && r.length) : []
     const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
@@ -10588,6 +10625,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         test_mode,
         test_email,
         is_marketing,
+        target_roles,
         created_by,
         updated_by,
         created_at,
@@ -10612,6 +10650,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         ${testMode},
         ${testEmail},
         ${isMarketing},
+        ${targetRoles},
         ${adminUuid},
         ${adminUuid},
         now(),
@@ -10956,6 +10995,7 @@ function normalizeEmailCampaignRow(row) {
     testMode: row.test_mode === true,
     testEmail: row.test_email || null,
     isMarketing: row.is_marketing === true, // If true, only users with marketing_consent receive this
+    targetRoles: Array.isArray(row.target_roles) ? row.target_roles : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -15393,6 +15433,92 @@ app.get('/api/admin/member-list', async (req, res) => {
     res.status(500).json({ error: 'Database not configured' })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load member list' })
+  }
+})
+
+// Admin: search users by display name or email (for SearchItem component)
+app.get('/api/admin/search-users', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+
+    const query = (req.query.q || '').toString().trim()
+    const limit = Math.min(Number(req.query.limit) || 20, 50)
+
+    if (sql) {
+      const rows = query
+        ? await sql`
+            select
+              p.id,
+              p.display_name,
+              p.avatar_url,
+              p.is_admin,
+              coalesce(p.roles, '{}') as roles
+            from public.profiles p
+            where p.display_name ilike ${'%' + query + '%'}
+               or p.id::text ilike ${'%' + query + '%'}
+            order by
+              case when lower(p.display_name) = lower(${query}) then 0 else 1 end,
+              p.display_name asc
+            limit ${limit}
+          `
+        : await sql`
+            select
+              p.id,
+              p.display_name,
+              p.avatar_url,
+              p.is_admin,
+              coalesce(p.roles, '{}') as roles
+            from public.profiles p
+            where p.display_name is not null and p.display_name != ''
+            order by p.display_name asc
+            limit ${limit}
+          `
+
+      const users = (rows || []).map(r => ({
+        id: String(r.id),
+        display_name: r.display_name || null,
+        avatar_url: r.avatar_url || null,
+        is_admin: r.is_admin === true,
+        roles: Array.isArray(r.roles) ? r.roles : [],
+      }))
+
+      res.json({ ok: true, users })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      let url = `${supabaseUrlEnv}/rest/v1/profiles?select=id,display_name,avatar_url,is_admin,roles&display_name=not.is.null&order=display_name.asc&limit=${limit}`
+      if (query) {
+        url = `${supabaseUrlEnv}/rest/v1/profiles?select=id,display_name,avatar_url,is_admin,roles&display_name=ilike.*${encodeURIComponent(query)}*&order=display_name.asc&limit=${limit}`
+      }
+
+      const resp = await fetch(url, { headers })
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        res.status(resp.status).json({ error: body || 'Failed to search users' })
+        return
+      }
+      const arr = await resp.json().catch(() => [])
+      const users = (Array.isArray(arr) ? arr : []).map(r => ({
+        id: String(r.id),
+        display_name: r.display_name || null,
+        avatar_url: r.avatar_url || null,
+        is_admin: r.is_admin === true,
+        roles: Array.isArray(r.roles) ? r.roles : [],
+      }))
+
+      res.json({ ok: true, users })
+      return
+    }
+
+    res.status(500).json({ error: 'Database not configured' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to search users' })
   }
 })
 

@@ -7,7 +7,8 @@ create extension if not exists pgcrypto;
 -- Optional: scheduling support
 create extension if not exists pg_cron;
 -- Optional: network requests (for edge functions)
-create extension if not exists pg_net;
+-- Install in 'extensions' schema to avoid linter warning about extensions in public
+create extension if not exists pg_net schema extensions;
 
 -- ========== Secrets Management (for DB-initiated edge functions) ==========
 create table if not exists public.admin_secrets (
@@ -59,7 +60,7 @@ begin
 
   return request_id;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public;
 
 -- ========== Scheduled Tasks ==========
 -- Email Campaign Runner (every minute)

@@ -28,6 +28,7 @@ Aphylia is a plant care application serving users in the European Union. All con
 - Read relevant documentation files
 - Start with `plant-swipe/README.md` for setup and commands
 - Read `plant-swipe/src/REUSABLE_COMPONENTS.md` before creating any new UI components, hooks, or validation utilities
+- Check `EXTERNAL_APIS.md` for all third-party services and APIs used in the application
 - Understand the existing architecture
 - Follow the guidelines in this document
 - Ask questions if anything is unclear
@@ -439,6 +440,7 @@ await sendEmail(email);
 |------|---------|
 | `plant-swipe/supabase/DATABASE_SCHEMA.md` | Database documentation |
 | `plant-swipe/src/REUSABLE_COMPONENTS.md` | Reusable UI components & hooks reference |
+| `EXTERNAL_APIS.md` | All external APIs and third-party services |
 | `plant-swipe/supabase/sync_parts/*.sql` | Schema definition files |
 | `plant-swipe/server.js` | Backend API |
 | `plant-swipe/src/PlantSwipe.tsx` | Main app component |
@@ -448,6 +450,7 @@ await sendEmail(email);
 
 For questions about:
 - Database schema → Check `DATABASE_SCHEMA.md`
+- External APIs & services → Check `EXTERNAL_APIS.md`
 - Frontend architecture → Check component documentation
 - Security concerns → Escalate to team lead
 

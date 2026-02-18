@@ -9,13 +9,12 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette, Loader2, X } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette } from "lucide-react"
 import { Link } from "@/components/i18n/Link"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
-import { SearchInput } from "@/components/ui/search-input"
-import { useDebounce } from "@/hooks/useDebounce"
+import { CityCountrySelector } from "@/components/ui/city-country-selector"
 import { validateEmail, validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation"
 import { validatePassword } from "@/lib/passwordValidation"
 import { ValidatedInput } from "@/components/ui/validated-input"
@@ -23,16 +22,6 @@ import { PasswordRules } from "@/components/ui/password-rules"
 import { useFieldValidation } from "@/hooks/useFieldValidation"
 
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
-
-interface LocationSuggestion {
-  id: number
-  name: string
-  country: string
-  admin1?: string
-  latitude: number
-  longitude: number
-  timezone?: string
-}
 
 /**
  * Fetch a CSRF token for security-sensitive operations
@@ -157,17 +146,9 @@ export default function SettingsPage() {
   const [country, setCountry] = React.useState("")
   const [city, setCity] = React.useState("")
   const [notificationHour, setNotificationHour] = React.useState<number>(10)
-  const [detectingLocation, setDetectingLocation] = React.useState(false)
   const [gardenType, setGardenType] = React.useState("")
   const [experienceLevel, setExperienceLevel] = React.useState("")
   const [lookingFor, setLookingFor] = React.useState("")
-  const [locationSearch, setLocationSearch] = React.useState("")
-  const debouncedLocationSearch = useDebounce(locationSearch, 350)
-  const [locationSuggestions, setLocationSuggestions] = React.useState<LocationSuggestion[]>([])
-  const [showSuggestions, setShowSuggestions] = React.useState(false)
-  const [searchingLocation, setSearchingLocation] = React.useState(false)
-  const [hasSearched, setHasSearched] = React.useState(false)
-  const suggestionsRef = React.useRef<HTMLDivElement>(null)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -915,70 +896,16 @@ export default function SettingsPage() {
     }
   }
 
-  const handleDetectLocation = async () => {
-    setDetectingLocation(true)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      const response = await fetch('https://ipapi.co/json/')
-      if (!response.ok) {
-        throw new Error(t('setup.location.detectFailed', { defaultValue: 'Unable to detect location. Please enter it manually.' }))
-      }
-
-      const data = await response.json()
-      const nextCountry = data.country_name || ''
-      const nextCity = data.city || ''
-      const nextTimezone = data.timezone || ''
-
-      if (!nextCountry && !nextCity) {
-        throw new Error(t('setup.location.detectFailed', { defaultValue: 'Unable to detect location. Please enter it manually.' }))
-      }
-
-      setCountry(nextCountry)
-      setCity(nextCity)
-      if (nextTimezone) {
-        setTimezone(nextTimezone)
-      }
-      setLocationSearch('')
-      setLocationSuggestions([])
-      setShowSuggestions(false)
-      setHasSearched(false)
-
-      await handleUpdateLocation({
-        country: nextCountry,
-        city: nextCity,
-        timezone: nextTimezone || undefined,
-      })
-    } catch (e: any) {
-      setError(e?.message || t('setup.location.detectFailed', { defaultValue: 'Unable to detect location. Please enter it manually.' }))
-    } finally {
-      setDetectingLocation(false)
-    }
-  }
-
-  const handleLocationSearchChange = (value: string) => {
-    setLocationSearch(value)
-    setShowSuggestions(true)
-    if (value !== debouncedLocationSearch) {
-      setHasSearched(false)
-    }
-  }
-
-  const handleSelectLocation = (suggestion: LocationSuggestion) => {
-    const nextCity = suggestion.name || ''
-    const nextCountry = suggestion.country || ''
-    const nextTimezone = suggestion.timezone || ''
+  const handleLocationSelect = (location: { city: string; country: string; timezone?: string }) => {
+    const nextCity = location.city || ''
+    const nextCountry = location.country || ''
+    const nextTimezone = location.timezone || ''
 
     setCity(nextCity)
     setCountry(nextCountry)
     if (nextTimezone) {
       setTimezone(nextTimezone)
     }
-    setLocationSearch('')
-    setLocationSuggestions([])
-    setShowSuggestions(false)
-    setHasSearched(false)
     void handleUpdateLocation({
       city: nextCity,
       country: nextCountry,
@@ -986,13 +913,9 @@ export default function SettingsPage() {
     })
   }
 
-  const handleClearLocation = () => {
+  const handleLocationClear = () => {
     setCity('')
     setCountry('')
-    setLocationSearch('')
-    setLocationSuggestions([])
-    setShowSuggestions(false)
-    setHasSearched(false)
     void handleUpdateLocation({ city: '', country: '' })
   }
 
@@ -2341,104 +2264,17 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              {(city || country) && (
-                <div className="flex items-center gap-3 p-4 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/10">
-                  <MapPin className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-stone-800 dark:text-stone-100 truncate">
-                      {[city, country].filter(Boolean).join(', ')}
-                    </div>
-                    {timezone && (
-                      <div className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400 mt-1">
-                        <Clock className="w-3 h-3" />
-                        {timezone}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleClearLocation}
-                    disabled={saving}
-                    className="p-2 rounded-full hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50"
-                    aria-label={t('setup.location.clear', { defaultValue: 'Clear location' })}
-                  >
-                    <X className="w-4 h-4 text-emerald-700 dark:text-emerald-300" />
-                  </button>
-                </div>
-              )}
-
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-stone-600 dark:text-stone-300">
-                  {t('setup.location.searchLabel', { defaultValue: 'Search for your city' })}
-                </Label>
-                <div className="relative" ref={suggestionsRef}>
-                  <SearchInput
-                    variant="lg"
-                    value={locationSearch}
-                    onChange={(e) => handleLocationSearchChange(e.target.value)}
-                    onFocus={() => locationSearch.length >= 2 && setShowSuggestions(true)}
-                    onClear={locationSearch ? () => {
-                      setLocationSearch('')
-                      setLocationSuggestions([])
-                      setShowSuggestions(false)
-                    } : undefined}
-                    placeholder={t('setup.location.searchPlaceholder', { defaultValue: 'Type a city name...' })}
-                    loading={searchingLocation}
-                    disabled={saving}
-                    className="bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700"
-                  />
-
-                  {showSuggestions && locationSuggestions.length > 0 && (
-                    <div className="absolute z-50 w-full mt-2 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl overflow-hidden">
-                      {locationSuggestions.map((suggestion) => (
-                        <button
-                          key={suggestion.id}
-                          type="button"
-                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors text-left"
-                          onClick={() => handleSelectLocation(suggestion)}
-                        >
-                          <MapPin className="w-5 h-5 text-stone-400 flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-stone-800 dark:text-stone-100 truncate">
-                              {suggestion.name}
-                            </div>
-                            <div className="text-sm text-stone-500 dark:text-stone-400 truncate">
-                              {suggestion.admin1 ? `${suggestion.admin1}, ` : ''}{suggestion.country}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {showSuggestions && hasSearched && !searchingLocation && locationSuggestions.length === 0 && debouncedLocationSearch.length >= 2 && (
-                    <div className="absolute z-50 w-full mt-2 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl p-4 text-center text-sm text-stone-500">
-                      {t('setup.location.noResults', { defaultValue: 'No cities found. Try a different search.' })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={handleDetectLocation}
-                  disabled={saving || detectingLocation}
-                  variant="outline"
-                  className="rounded-2xl"
-                >
-                  {detectingLocation ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      {t('setup.location.detectingGPS', { defaultValue: 'Detecting...' })}
-                    </>
-                  ) : (
-                    <>
-                      <MapPin className="h-4 w-4 mr-2" />
-                      {t('setup.location.detectButton', { defaultValue: 'Use my current location' })}
-                    </>
-                  )}
-                </Button>
-              </div>
+              <CityCountrySelector
+                city={city}
+                country={country}
+                timezone={timezone}
+                onSelect={handleLocationSelect}
+                onClear={handleLocationClear}
+                disabled={saving}
+                showDetectButton={true}
+                showTimezone={true}
+                variant="lg"
+              />
               <p className="text-xs opacity-70">
                 {t('gardenDashboard.settingsSection.locationSet', { defaultValue: 'Weather-based advice will use this location for forecasts.' })}
               </p>

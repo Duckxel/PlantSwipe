@@ -37,6 +37,7 @@ import {
 } from "@/lib/emailTranslations"
 import { translateEmailToAllLanguages } from "@/lib/deepl"
 import { sanitizeEmailHtml } from "@/lib/emailWrapper"
+import { EmailPreviewShell } from "@/components/email/EmailPreviewShell"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 
 // Language display names
@@ -1608,7 +1609,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
         <div
           className="fixed inset-0 z-50 flex flex-col overflow-y-auto"
           style={{
-            background: 'linear-gradient(180deg, #ecfdf5 0%, #ffffff 30%, #ffffff 70%, #fef3c7 100%)',
+            backgroundColor: '#f0fdf4',
             colorScheme: 'light',
           }}
         >
@@ -2058,214 +2059,24 @@ export const AdminEmailTemplatePage: React.FC = () => {
             </button>
           </div>
 
-          {/* Email Content */}
-          <div style={{ flex: 1, paddingTop: '80px', paddingBottom: '80px', paddingLeft: '24px', paddingRight: '24px' }}>
-            <div style={{ maxWidth: '680px', margin: '0 auto' }}>
-              {/* Email Container */}
+          {/* Email Content — uses the shared EmailPreviewShell component */}
+          <div style={{ flex: 1, paddingTop: '80px', paddingBottom: '0' }}>
+            <EmailPreviewShell>
               <div
-                style={{
-                  borderRadius: '32px',
-                  overflow: 'hidden',
-                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%)',
-                  border: '1px solid rgba(16, 185, 129, 0.12)',
-                  boxShadow: '0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset',
+                ref={previewBodyRef}
+                className="email-preview-body"
+                dangerouslySetInnerHTML={{
+                  __html: sanitizeEmailHtml(
+                    templateForm.bodyHtml
+                      .replace(/\{\{user\}\}/gi, "Five")
+                      .replace(/\{\{email\}\}/gi, "dev@aphylia.app")
+                      .replace(/\{\{random\}\}/gi, "1234567890")
+                      .replace(/\{\{url\}\}/gi, "aphylia.app")
+                      .replace(/\{\{code\}\}/gi, "50L57IC3")
+                  ) || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>"
                 }}
-              >
-                {/* Header Banner */}
-                <div
-                  style={{
-                    background: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%)',
-                    padding: '20px 48px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'inline-block',
-                      background: 'rgba(255, 255, 255, 0.15)',
-                      borderRadius: '16px',
-                      padding: '10px 24px',
-                    }}
-                  >
-                    <img
-                      src="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260-ae7e1e2d-ea1d-4944-be95-84cc4b8a29ed.png"
-                      alt="Aphylia"
-                      style={{ display: 'block', height: '48px', width: 'auto' }}
-                    />
-                  </div>
-                </div>
-
-                {/* Email Body */}
-                <div
-                  ref={previewBodyRef}
-                  className="email-preview-body"
-                  style={{
-                    padding: '48px',
-                    color: '#374151',
-                    fontSize: '16px',
-                    lineHeight: 1.75,
-                    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-                  }}
-                  dangerouslySetInnerHTML={{
-                    __html: sanitizeEmailHtml(
-                      templateForm.bodyHtml
-                        .replace(/\{\{user\}\}/gi, "Five")
-                        .replace(/\{\{email\}\}/gi, "dev@aphylia.app")
-                        .replace(/\{\{random\}\}/gi, "1234567890")
-                        .replace(/\{\{url\}\}/gi, "aphylia.app")
-                        .replace(/\{\{code\}\}/gi, "50L57IC3")
-                    ) || "<p style='color:#9ca3af;font-style:italic;'>Start writing your email content...</p>"
-                  }}
-                />
-
-                {/* Signature Section */}
-                <div style={{ margin: '0 48px 48px 48px' }}>
-                  <div
-                    style={{
-                      borderRadius: '20px',
-                      padding: '28px 32px',
-                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%)',
-                      border: '1px solid rgba(16, 185, 129, 0.1)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                      {/* Logo */}
-                      <div
-                        style={{
-                          flexShrink: 0,
-                          width: '56px',
-                          height: '56px',
-                          borderRadius: '16px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                          boxShadow: '0 8px 24px -8px rgba(16, 185, 129, 0.5)',
-                        }}
-                      >
-                        <img
-                          src="/icons/plant-swipe-icon.svg"
-                          alt="Aphylia"
-                          style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)' }}
-                        />
-                      </div>
-                      <div>
-                        <p style={{ margin: '0 0 4px 0', fontWeight: 700, fontSize: '18px', color: '#1f2937' }}>
-                          The Aphylia Team
-                        </p>
-                        <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
-                          Helping you grow your plant knowledge 🌱
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div
-                  style={{
-                    padding: '32px 48px',
-                    textAlign: 'center',
-                    borderTop: '1px solid rgba(16, 185, 129, 0.08)',
-                  }}
-                >
-                  <a
-                    href="#"
-                    style={{
-                      display: 'inline-block',
-                      marginBottom: '24px',
-                      padding: '14px 32px',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      color: '#ffffff',
-                      borderRadius: '9999px',
-                      textDecoration: 'none',
-                      background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                      boxShadow: '0 8px 24px -6px rgba(16, 185, 129, 0.4)',
-                    }}
-                  >
-                    Explore Aphylia →
-                  </a>
-                  
-                  {/* Social Media Links */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                      Follow us
-                    </p>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                      {/* YouTube */}
-                      <a
-                        href="https://www.youtube.com/@aphylia_app"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '40px',
-                          height: '40px',
-                          background: '#374151',
-                          borderRadius: '12px',
-                          textDecoration: 'none',
-                        }}
-                        title="YouTube"
-                      >
-                        <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/youtube-19624fb6-23e5-4af1-a383-24cbf131cf70.png" alt="YouTube" style={{ width: '20px', height: '20px' }} />
-                      </a>
-                      {/* X (Twitter) */}
-                      <a
-                        href="https://x.com/aphylia_app"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '40px',
-                          height: '40px',
-                          background: '#374151',
-                          borderRadius: '12px',
-                          textDecoration: 'none',
-                        }}
-                        title="X"
-                      >
-                        <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/twitter-700af2d5-45cb-41c2-a0c4-479fa9979124.png" alt="X" style={{ width: '20px', height: '20px' }} />
-                      </a>
-                      {/* Instagram */}
-                      <a
-                        href="https://www.instagram.com/aphylia_app/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '40px',
-                          height: '40px',
-                          background: '#374151',
-                          borderRadius: '12px',
-                          textDecoration: 'none',
-                        }}
-                        title="Instagram"
-                      >
-                        <img src="https://media.aphylia.app/UTILITY/admin/uploads/png/instagram-822eef7b-752d-47af-a1bb-79d99039bbb9.png" alt="Instagram" style={{ width: '20px', height: '20px' }} />
-                      </a>
-                    </div>
-                  </div>
-                  
-                  <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#9ca3af' }}>
-                    <a href="#" style={{ color: '#059669', fontWeight: 500, textDecoration: 'none' }}>aphylia.app</a>
-                    <span style={{ margin: '0 8px', color: '#d1d5db' }}>•</span>
-                    <a href="#" style={{ color: '#9ca3af', textDecoration: 'none' }}>About</a>
-                    <span style={{ margin: '0 8px', color: '#d1d5db' }}>•</span>
-                    <a href="#" style={{ color: '#9ca3af', textDecoration: 'none' }}>Contact</a>
-                  </p>
-                  <p style={{ margin: 0, fontSize: '12px', color: '#d1d5db' }}>
-                    © {new Date().getFullYear()} Aphylia. Made with 💚 for plant enthusiasts everywhere.
-                  </p>
-                </div>
-              </div>
-            </div>
+              />
+            </EmailPreviewShell>
           </div>
 
           {/* Copy notification popup */}

@@ -31,6 +31,7 @@ type PublicProfile = {
   id: string
   username: string | null
   display_name: string | null
+  city: string | null
   country: string | null
   bio: string | null
   avatar_url: string | null
@@ -171,7 +172,7 @@ export default function PublicProfilePage() {
           // Look up current user by ID
           const { data: profileData, error: pErr } = await supabase
             .from('profiles')
-            .select('id, display_name, country, bio, avatar_url, is_admin, roles, accent_key, is_private, disable_friend_requests, experience_level, job, profile_link, show_country')
+            .select('id, display_name, city, country, bio, avatar_url, is_admin, roles, accent_key, is_private, disable_friend_requests, experience_level, job, profile_link, show_country')
             .eq('id', user.id)
             .maybeSingle()
           if (!pErr && profileData) {
@@ -311,6 +312,7 @@ export default function PublicProfilePage() {
           id: userId,
           username: null,
           display_name: row.display_name || null,
+          city: row.city || null,
           country: row.country || null,
           bio: row.bio || null,
           avatar_url: row.avatar_url || null,
@@ -1529,6 +1531,7 @@ export default function PublicProfilePage() {
               onOpenChange={setEditOpen}
               initial={{
                 display_name: (pp.display_name || ''),
+                city: (pp.city || ''),
                 country: (pp.country || ''),
                 bio: (pp.bio || ''),
                 job: (pp.job || ''),
@@ -1565,6 +1568,8 @@ export default function PublicProfilePage() {
                   const updates: Record<string, any> = {
                     id: user.id,
                     display_name: originalDn,
+                    city: vals.city || null,
+                    country: vals.country || null,
                     bio: vals.bio || null,
                     job: vals.job || null,
                     profile_link: vals.profile_link || null,
