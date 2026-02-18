@@ -23,7 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2 } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails } from "@/lib/bookmarks";
@@ -85,6 +85,15 @@ import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { AphyliaChat } from "@/components/aphylia";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
+
+const GARDEN_TAB_ICONS: Record<TabKey, React.FC<{ className?: string }>> = {
+  overview: LayoutDashboard,
+  plants: Sprout,
+  tasks: ListChecks,
+  journal: BookOpen,
+  analytics: BarChart3,
+  settings: Settings,
+};
 
 const getMaxScheduleSelections = (period: "week" | "month" | "year") =>
   period === "week" ? 7 : period === "month" ? 12 : 52;
@@ -2656,7 +2665,7 @@ export const GardenDashboardPage: React.FC = () => {
   );
 
   const sidebarPanelBase =
-    "md:sticky md:top-4 self-start rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-[0_25px_70px_-40px_rgba(15,23,42,0.65)]";
+    "md:sticky md:top-4 self-start rounded-[20px] md:rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-3 md:p-5 shadow-[0_25px_70px_-40px_rgba(15,23,42,0.65)]";
   const mainPanelClass =
     "min-h-[60vh] rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6 md:p-8 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]";
   return (
@@ -2665,12 +2674,12 @@ export const GardenDashboardPage: React.FC = () => {
       {loading && (
         <>
           <aside className={`${sidebarPanelBase} space-y-4`}>
-            <div className="h-7 w-32 bg-stone-200 dark:bg-stone-700 rounded animate-pulse mb-4" />
-            <nav className="flex flex-wrap md:flex-col gap-2">
+            <div className="hidden md:block h-7 w-32 bg-stone-200 dark:bg-stone-700 rounded animate-pulse mb-4" />
+            <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible scrollbar-hide -mx-1 px-1 md:mx-0 md:px-0">
               {Array.from({ length: 4 }).map((_, idx) => (
                 <div
                   key={idx}
-                  className="h-10 w-full bg-stone-200 dark:bg-stone-700 rounded-2xl animate-pulse"
+                  className="h-10 min-w-[64px] md:min-w-0 w-full bg-stone-200 dark:bg-stone-700 rounded-2xl animate-pulse flex-shrink-0 md:flex-shrink"
                 />
               ))}
             </nav>
@@ -2712,49 +2721,53 @@ export const GardenDashboardPage: React.FC = () => {
       )}
       {!loading && garden && canViewOverview && (
         <>
-          <aside className={`${sidebarPanelBase} space-y-4`}>
-            <div className="text-xl font-semibold">{garden.name}</div>
-            {/* Show privacy badge for non-members */}
+          <aside className={`${sidebarPanelBase} space-y-3 md:space-y-4`}>
+            <div className="hidden md:block text-xl font-semibold">{garden.name}</div>
             {!isMember && garden.privacy === 'public' && (
-              <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-full px-3 py-1.5">
+              <div className="hidden md:flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-full px-3 py-1.5">
                 <Globe className="w-3.5 h-3.5" />
                 {t("gardenDashboard.publicGarden")}
               </div>
             )}
             {!isMember && garden.privacy === 'friends_only' && (
-              <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full px-3 py-1.5">
+              <div className="hidden md:flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full px-3 py-1.5">
                 <Users className="w-3.5 h-3.5" />
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
-            <nav className="flex flex-wrap md:flex-col gap-2">
+            <nav className="flex md:flex-col gap-1.5 overflow-x-auto md:overflow-visible scrollbar-hide -mx-1 px-1 md:mx-0 md:px-0 pb-1 md:pb-0">
               {(
                 canViewFullGarden
                   ? [
-                      ["overview", t("gardenDashboard.overview")],
-                      ["plants", t("gardenDashboard.plants")],
-                      ["tasks", t("gardenDashboard.tasks", "Tasks")],
-                      ["journal", t("gardenDashboard.journal", "Journal")],
-                      ["analytics", t("gardenDashboard.analytics", "Analytics")],
-                      ["settings", t("gardenDashboard.settings")],
+                      ["overview", t("gardenDashboard.overview")] as const,
+                      ["plants", t("gardenDashboard.plants")] as const,
+                      ["tasks", t("gardenDashboard.tasks", "Tasks")] as const,
+                      ["journal", t("gardenDashboard.journal", "Journal")] as const,
+                      ["analytics", t("gardenDashboard.analytics", "Analytics")] as const,
+                      ["settings", t("gardenDashboard.settings")] as const,
                     ]
-                  : [["overview", t("gardenDashboard.overview")]]
-              ).map(([k, label]) => (
-                <Button
-                  key={k}
-                  asChild
-                  variant={tab === k ? "default" : "secondary"}
-                  className="rounded-2xl md:w-full shadow-sm"
-                >
-                  <NavLink to={`/garden/${id}/${k}`} className="no-underline">
-                    {label}
+                  : [["overview", t("gardenDashboard.overview")] as const]
+              ).map(([k, label]) => {
+                const Icon = GARDEN_TAB_ICONS[k as TabKey];
+                const isActive = tab === k;
+                return (
+                  <NavLink
+                    key={k}
+                    to={`/garden/${id}/${k}`}
+                    className={`flex-shrink-0 md:flex-shrink flex items-center gap-2 px-3.5 py-2 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl text-sm font-medium transition-colors no-underline md:w-full ${
+                      isActive
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="whitespace-nowrap">{label}</span>
                   </NavLink>
-                </Button>
-              ))}
+                );
+              })}
             </nav>
-            {/* Show hint for non-members */}
             {!isMember && (
-              <div className="text-xs text-stone-500 dark:text-stone-400 pt-2 border-t border-stone-200/50 dark:border-stone-700/50">
+              <div className="hidden md:block text-xs text-stone-500 dark:text-stone-400 pt-2 border-t border-stone-200/50 dark:border-stone-700/50">
                 {t("gardenDashboard.viewingAsGuest")}
               </div>
             )}
