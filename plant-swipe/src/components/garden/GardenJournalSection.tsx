@@ -127,7 +127,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const [editingEntry, setEditingEntry] = React.useState<JournalEntry | null>(null);
   const [showNewEntry, setShowNewEntry] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const [generatingFeedback, setGeneratingFeedback] = React.useState(false);
   
   // Entry form state
   const [entryTitle, setEntryTitle] = React.useState("");
@@ -553,39 +552,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     }
   };
 
-  // Generate AI feedback for entry (with image analysis)
-  const handleGenerateFeedback = async (entryId: string) => {
-    setGeneratingFeedback(true);
-    try {
-      const session = (await supabase.auth.getSession()).data.session;
-      const token = session?.access_token;
-      const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      const resp = await fetch(`/api/garden/${gardenId}/journal/${entryId}/feedback`, {
-        method: "POST",
-        headers,
-        credentials: "same-origin",
-      });
-
-      if (resp.ok) {
-        const data = await resp.json();
-        // Store images analyzed count in entry metadata (will be updated on fetch)
-        if (data.imagesAnalyzed > 0) {
-          setEntries(prev => prev.map(e => 
-            e.id === entryId 
-              ? { ...e, aiFeedback: data.feedback, aiFeedbackImagesAnalyzed: data.imagesAnalyzed }
-              : e
-          ));
-        }
-        fetchEntries();
-      }
-    } catch (err) {
-      console.warn("[Journal] Failed to generate feedback:", err);
-    } finally {
-      setGeneratingFeedback(false);
-    }
-  };
 
   // Edit entry
   const startEditEntry = (entry: JournalEntry) => {
@@ -1393,8 +1359,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         </div>
                       )}
                       
-                      {/* AI Feedback section */}
-                      {entry.aiFeedback ? (
+                      {/* AI Feedback section (read-only, shown only if already generated) */}
+                      {entry.aiFeedback && (
                         <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200/50 dark:border-purple-800/50">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300">
@@ -1420,26 +1386,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                             </p>
                           )}
                         </div>
-                      ) : isOwn && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-xl text-purple-600 border-purple-200 hover:bg-purple-50 dark:hover:bg-purple-900/30 gap-2"
-                          onClick={() => handleGenerateFeedback(entry.id)}
-                          disabled={generatingFeedback}
-                        >
-                          {generatingFeedback ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              {t("gardenDashboard.journalSection.generating", "Generating...")}
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="w-4 h-4" />
-                              {t("gardenDashboard.journalSection.getAIFeedback", "Get AI Feedback")}
-                            </>
-                          )}
-                        </Button>
                       )}
                     </div>
                     
@@ -1448,6 +1394,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <div className="flex items-center gap-2">
                           <Clock className="w-3 h-3" />
+                          {formatDate(entry.entryDate)}{" "}
                           {new Date(entry.createdAt).toLocaleTimeString(undefined, {
                             hour: "2-digit",
                             minute: "2-digit",
