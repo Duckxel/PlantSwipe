@@ -22959,6 +22959,59 @@ app.get('/api/garden/:gardenId/plant/:plantId', async (req, res) => {
 
 // ============ JOURNAL ENDPOINTS ============
 
+let journalTablesEnsured = false
+async function ensureJournalTables() {
+  if (!sql) return
+  if (journalTablesEnsured) return
+  try {
+    await sql`
+      create table if not exists public.garden_journal_entries (
+        id uuid primary key default gen_random_uuid(),
+        garden_id uuid not null references public.gardens(id) on delete cascade,
+        user_id uuid not null references auth.users(id) on delete cascade,
+        entry_date date not null,
+        title text,
+        content text not null,
+        mood text check (mood is null or mood in ('blooming', 'thriving', 'sprouting', 'resting', 'wilting')),
+        weather_snapshot jsonb default '{}'::jsonb,
+        plants_mentioned uuid[] default '{}',
+        tags text[] default '{}',
+        is_private boolean not null default false,
+        ai_feedback text,
+        ai_feedback_generated_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      )
+    `
+    await sql`create index if not exists gje_garden_date_idx on public.garden_journal_entries (garden_id, entry_date desc)`
+    await sql`create index if not exists gje_user_date_idx on public.garden_journal_entries (user_id, entry_date desc)`
+    await sql`alter table public.garden_journal_entries enable row level security`
+
+    await sql`
+      create table if not exists public.garden_journal_photos (
+        id uuid primary key default gen_random_uuid(),
+        entry_id uuid not null references public.garden_journal_entries(id) on delete cascade,
+        garden_plant_id uuid references public.garden_plants(id) on delete set null,
+        image_url text not null,
+        thumbnail_url text,
+        caption text,
+        plant_health text check (plant_health is null or plant_health in ('thriving', 'healthy', 'okay', 'struggling', 'critical')),
+        observations text,
+        taken_at timestamptz,
+        uploaded_at timestamptz not null default now()
+      )
+    `
+    await sql`create index if not exists gjp_entry_idx on public.garden_journal_photos (entry_id, uploaded_at desc)`
+    await sql`create index if not exists gjp_plant_idx on public.garden_journal_photos (garden_plant_id, uploaded_at desc)`
+    await sql`alter table public.garden_journal_photos enable row level security`
+
+    journalTablesEnsured = true
+    console.log('[ensureJournalTables] Tables ensured successfully')
+  } catch (err) {
+    console.error('[ensureJournalTables] Failed:', err?.message || err)
+  }
+}
+
 // Get journal entries for a garden
 app.get('/api/garden/:id/journal', async (req, res) => {
   try {
@@ -22967,6 +23020,7 @@ app.get('/api/garden/:id/journal', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+    await ensureJournalTables()
 
     // Verify membership
     const membership = await sql`
@@ -23063,6 +23117,7 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     }
 
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+    await ensureJournalTables()
 
     const { title, content, mood, isPrivate, tags, photos } = req.body || {}
     if (!content?.trim()) {
@@ -23136,6 +23191,7 @@ app.put('/api/garden/:id/journal', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+    await ensureJournalTables()
 
     const { entryId, title, content, mood, isPrivate, tags, photos } = req.body || {}
     if (!entryId) {
@@ -23191,6 +23247,7 @@ app.delete('/api/garden/:id/journal/:entryId', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+    await ensureJournalTables()
 
     // Verify ownership or owner role
     const entry = await sql`
@@ -23229,6 +23286,7 @@ app.post('/api/garden/:id/journal/:entryId/feedback', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
     if (!openai) { res.status(500).json({ ok: false, error: 'AI not configured' }); return }
+    await ensureJournalTables()
 
     // Get entry with photos
     const entries = await sql`
@@ -23423,19 +23481,23 @@ app.get('/api/garden/:id/advice/export', async (req, res) => {
     }
 
     // Get recent journal entries with AI feedback and photos
-    const journalEntries = await sql`
-      select gje.id, gje.entry_date, gje.title, gje.content, gje.mood, gje.ai_feedback, gje.ai_feedback_generated_at,
-             (select json_agg(json_build_object(
-               'url', gjp.image_url,
-               'caption', gjp.caption,
-               'observations', gjp.observations,
-               'plantHealth', gjp.plant_health
-             )) from public.garden_journal_photos gjp where gjp.entry_id = gje.id) as photos
-      from public.garden_journal_entries gje
-      where gje.garden_id = ${gardenId} and gje.ai_feedback is not null
-      order by gje.entry_date desc
-      limit 20
-    `
+    await ensureJournalTables()
+    let journalEntries = []
+    try {
+      journalEntries = await sql`
+        select gje.id, gje.entry_date, gje.title, gje.content, gje.mood, gje.ai_feedback, gje.ai_feedback_generated_at,
+               (select json_agg(json_build_object(
+                 'url', gjp.image_url,
+                 'caption', gjp.caption,
+                 'observations', gjp.observations,
+                 'plantHealth', gjp.plant_health
+               )) from public.garden_journal_photos gjp where gjp.entry_id = gje.id) as photos
+        from public.garden_journal_entries gje
+        where gje.garden_id = ${gardenId} and gje.ai_feedback is not null
+        order by gje.entry_date desc
+        limit 20
+      `
+    } catch { }
 
     // Get plant info
     const plants = await sql`
@@ -25749,6 +25811,7 @@ function getSeasonForMonth(month) {
 // Fetch COMPREHENSIVE garden context from database - ALL DATA for AI
 async function fetchGardenContext(gardenId, userId) {
   if (!sql || !gardenId) return null
+  await ensureJournalTables()
   
   try {
     // Fetch garden details with ALL fields
@@ -26174,6 +26237,7 @@ async function fetchTasksContext(gardenId) {
 // Fetch ALL journal entries for a garden (using correct table name)
 async function fetchJournalContext(gardenId) {
   if (!sql || !gardenId) return []
+  await ensureJournalTables()
   
   try {
     const rows = await sql`
@@ -26328,6 +26392,7 @@ async function fetchCompletedTasksContext(gardenId) {
 // Fetch COMPREHENSIVE analytics/stats for a garden - ALL STATISTICS for AI
 async function fetchAnalyticsContext(gardenId) {
   if (!sql || !gardenId) return null
+  await ensureJournalTables()
   
   try {
     // Task completion stats for last 30 days
@@ -32390,12 +32455,14 @@ if (shouldListen) {
     ensureBanTables().catch(() => { })
     ensureBroadcastTable().catch(() => { })
     ensureNotificationTables().catch(() => { })
+    ensureJournalTables().catch(() => { })
     scheduleNotificationWorker()
   })
   // Store reference for system-health endpoint to count connections
   app._httpServer = httpServer
 } else {
   ensureNotificationTables().catch(() => { })
+  ensureJournalTables().catch(() => { })
   scheduleNotificationWorker()
 }
 
