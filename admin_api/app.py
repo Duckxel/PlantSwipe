@@ -271,6 +271,12 @@ _load_repo_env()
 
 # Now read config variables AFTER env files are loaded
 APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
+
+# Fail Secure: If the secret is still the default, log a critical warning.
+# We will also enforce a block in _verify_request().
+if APP_SECRET == "change-me":
+    print("CRITICAL: APP_SECRET is set to default 'change-me'. HMAC authentication will be DISABLED to prevent unauthorized access.")
+
 ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
 # Allow nginx, node app, and admin api by default; can be overridden via env
 ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
@@ -340,6 +346,12 @@ def _verify_request() -> None:
     # Option A: HMAC on raw body via X-Button-Token
     provided_sig = request.headers.get(HMAC_HEADER, "")
     if provided_sig:
+        # Fail Secure: If APP_SECRET is the default "change-me", reject HMAC requests.
+        # This prevents attackers from using the known default secret to bypass auth.
+        if APP_SECRET == "change-me":
+            print("CRITICAL: Rejected HMAC request because APP_SECRET is 'change-me'. Please set ADMIN_BUTTON_SECRET.")
+            abort(500, description="Server configuration error: Insecure APP_SECRET")
+
         body = request.get_data()  # raw bytes
         computed_sig = hmac.new(APP_SECRET.encode("utf-8"), body, hashlib.sha256).hexdigest()
         if hmac.compare_digest(provided_sig, computed_sig):
