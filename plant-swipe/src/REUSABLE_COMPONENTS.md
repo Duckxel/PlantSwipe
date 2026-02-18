@@ -27,6 +27,44 @@ This document catalogues all reusable components, hooks, and utilities in the Ap
 
 ## Form Inputs
 
+### `PillTabs`
+
+**File:** `src/components/ui/pill-tabs.tsx`
+
+A pill-shaped segmented tab bar. Matches the style used on the admin plants page ("Plants | Requests" toggle). Generic over the key type for full type-safety.
+
+**Props:**
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `tabs` | `PillTab<K>[]` | Array of `{ key, label }` tab definitions |
+| `activeKey` | `K` | The currently active tab key |
+| `onTabChange` | `(key: K) => void` | Called when a tab is clicked |
+| `className` | `string` | Additional CSS classes on the outer wrapper |
+
+**Example:**
+
+```tsx
+import { PillTabs } from "@/components/ui/pill-tabs"
+
+const tabs = [
+  { key: "journal", label: "Journal" },
+  { key: "library", label: "Library" },
+]
+
+<PillTabs tabs={tabs} activeKey={activeTab} onTabChange={setActiveTab} />
+```
+
+**Features:**
+- Pill-shaped container with rounded-full items
+- Active tab: emerald background with white text and shadow
+- Dark mode support, backdrop blur
+- Fully generic — key type is inferred from the tabs array
+
+**Used in:** GardenJournalSection, AdminPage (plants/requests)
+
+---
+
 ### `ValidatedInput`
 
 **File:** `src/components/ui/validated-input.tsx`

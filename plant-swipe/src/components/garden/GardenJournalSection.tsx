@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { PillTabs } from "@/components/ui/pill-tabs";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
@@ -114,6 +115,14 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const { t } = useTranslation("common");
   const { user } = useAuth();
   
+  // Tab state
+  type JournalView = "journal" | "library";
+  const [activeView, setActiveView] = React.useState<JournalView>("journal");
+  const journalTabs = React.useMemo(() => [
+    { key: "journal" as const, label: t("gardenDashboard.journalSection.journalTab", "Journal") },
+    { key: "library" as const, label: t("gardenDashboard.journalSection.libraryTab", "Library") },
+  ], [t]);
+
   // State
   const [loading, setLoading] = React.useState(true);
   const [entries, setEntries] = React.useState<JournalEntry[]>([]);
@@ -150,33 +159,44 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const [timelapseSpeed, setTimelapseSpeed] = React.useState(2000); // ms per frame
   const timelapseRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  // Get all photos sorted by date for timelapse
+  // Get all photos sorted by date (oldest first for timelapse)
   const allPhotos = React.useMemo(() => {
     const photos: Array<{
+      id: string;
       url: string;
+      thumbnailUrl?: string;
       date: string;
       caption?: string;
       entryTitle?: string;
       mood?: string;
+      plantHealth?: string | null;
     }> = [];
     
     entries.forEach((entry) => {
       if (entry.photos && entry.photos.length > 0) {
         entry.photos.forEach((photo) => {
           photos.push({
+            id: photo.id,
             url: photo.imageUrl,
+            thumbnailUrl: photo.thumbnailUrl || undefined,
             date: entry.entryDate,
             caption: photo.caption || undefined,
             entryTitle: entry.title || undefined,
             mood: entry.mood || undefined,
+            plantHealth: photo.plantHealth,
           });
         });
       }
     });
     
-    // Sort oldest to newest for timelapse
     return photos.sort((a, b) => a.date.localeCompare(b.date));
   }, [entries]);
+
+  // Newest-first for the library grid
+  const libraryPhotos = React.useMemo(
+    () => [...allPhotos].reverse(),
+    [allPhotos],
+  );
 
   // Timelapse playback
   React.useEffect(() => {
@@ -654,6 +674,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         </div>
       </div>
 
+      {/* Tab navigation */}
+      <PillTabs tabs={journalTabs} activeKey={activeView} onTabChange={setActiveView} />
+
       {/* Timelapse Viewer Modal */}
       <AnimatePresence>
         {showTimelapse && allPhotos.length > 0 && (
@@ -939,6 +962,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         )}
       </AnimatePresence>
 
+      {/* ===== JOURNAL TAB ===== */}
+      {activeView === "journal" && (
+      <>
       {/* New/Edit Entry Form */}
       <AnimatePresence>
         {showNewEntry && (
@@ -1383,6 +1409,89 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {/* ===== LIBRARY TAB ===== */}
+      {activeView === "library" && (
+        <div className="space-y-4">
+          {fetchError && (
+            <ErrorBanner
+              title={t("gardenDashboard.journalSection.fetchError", "Failed to load journal")}
+              message={fetchError}
+            />
+          )}
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+            </div>
+          ) : libraryPhotos.length === 0 ? (
+            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-12 text-center">
+              <div className="max-w-md mx-auto">
+                <div className="text-6xl mb-4">📷</div>
+                <h3 className="text-xl font-semibold mb-2">
+                  {t("gardenDashboard.journalSection.noPhotos", "No photos yet")}
+                </h3>
+                <p className="text-muted-foreground mb-6">
+                  {t("gardenDashboard.journalSection.noPhotosDesc", "Add photos to your journal entries and they will appear here.")}
+                </p>
+                <Button
+                  onClick={() => { setActiveView("journal"); setShowNewEntry(true); }}
+                  className="rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  {t("gardenDashboard.journalSection.writeFirst", "Write Your First Entry")}
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {libraryPhotos.length} {t("gardenDashboard.journalSection.photos", "photos")}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {libraryPhotos.map((photo) => (
+                  <div key={photo.id} className="group relative aspect-square rounded-2xl overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-stone-800">
+                    <img
+                      src={photo.thumbnailUrl || photo.url}
+                      alt={photo.caption || photo.entryTitle || "Journal photo"}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute bottom-0 inset-x-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all">
+                      <div className="text-white text-xs font-medium truncate">
+                        {photo.entryTitle || formatDate(photo.date)}
+                      </div>
+                      {photo.caption && (
+                        <div className="text-white/70 text-[11px] truncate mt-0.5">
+                          {photo.caption}
+                        </div>
+                      )}
+                    </div>
+                    {photo.mood && (
+                      <div className="absolute top-2 left-2">
+                        <span className="text-lg drop-shadow-md">
+                          {MOODS.find(m => m.key === photo.mood)?.emoji}
+                        </span>
+                      </div>
+                    )}
+                    {photo.plantHealth && (
+                      <div className="absolute top-2 right-2">
+                        <span className="text-lg drop-shadow-md">
+                          {PLANT_HEALTH.find(h => h.key === photo.plantHealth)?.emoji}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };
