@@ -2735,7 +2735,7 @@ export const GardenDashboardPage: React.FC = () => {
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
-            <nav className="flex md:flex-col gap-1.5 overflow-x-auto md:overflow-visible scrollbar-hide -mx-1 px-1 md:mx-0 md:px-0 pb-1 md:pb-0">
+            <nav className="flex justify-around md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0">
               {(
                 canViewFullGarden
                   ? [
