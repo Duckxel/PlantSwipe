@@ -303,9 +303,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
                     <div className="min-w-0 flex-1">
                       <p className="text-[9px] sm:text-xs uppercase text-white/80 leading-tight">{stat.label}</p>
                       <p className="text-base sm:text-xl md:text-2xl font-bold leading-tight break-words">{stat.value}</p>
-                      {stat.detail ? (
-                        <p className="text-[10px] sm:text-xs mt-0.5 text-white/80 break-words">{stat.detail}</p>
-                      ) : null}
                     </div>
                     <div className="ml-1.5 sm:ml-2 flex-shrink-0">{stat.icon}</div>
                   </CardContent>
