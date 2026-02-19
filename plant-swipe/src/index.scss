@@ -38,14 +38,9 @@
     padding-top: var(--window-controls-overlay-height, 0px);
   }
 
-    body.mobile-nav-mounted {
-      /* Reserve space for the floating mobile nav so bottom links remain clickable */
-      padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-    }
-
-    @media (min-width: 768px) {
+    @media (min-width: 1024px) {
       body.mobile-nav-mounted {
-        /* Desktop/tablet layouts don't render the floating nav */
+        /* Desktop layouts don't render the floating nav */
         padding-bottom: env(safe-area-inset-bottom, 0px);
       }
     }
@@ -182,17 +177,8 @@
   }
 }
 
-/* Mobile nav bar stability - prevent flashing during Discovery card swipes */
-@media (max-width: 767px) {
-  /* Force mobile nav to its own compositor layer for smoother animations */
-  nav[aria-label="Primary"] {
-    transform: translate3d(0, 0, 0);
-    -webkit-transform: translate3d(0, 0, 0);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-  }
-  
-  /* Isolate the swipe card container from affecting nav layout */
+/* Isolate the swipe card container from affecting nav layout on mobile */
+@media (max-width: 1023px) {
   .swipe-card-container {
     contain: layout paint;
   }

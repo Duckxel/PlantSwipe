@@ -168,7 +168,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       {
         label: t('plantDetails.stats.maintenance'),
         value: translateMaintenance(maintenanceLevel),
-        detail: t('plantDetails.stats.careIntensity'),
         gradient: "from-emerald-400/90 to-lime-500",
         icon: <Wrench className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
         visible: Boolean(maintenanceLevel),
@@ -177,7 +176,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       label: t('plantDetails.stats.temperature'),
       value:
         plant.plantCare?.temperatureMin !== undefined && plant.plantCare?.temperatureMax !== undefined
-          ? `${plant.plantCare.temperatureMin}°-${plant.plantCare.temperatureMax}°C`
+          ? `${plant.plantCare.temperatureMin}°C to ${plant.plantCare.temperatureMax}°C`
           : plant.plantCare?.temperatureIdeal !== undefined
           ? `${plant.plantCare.temperatureIdeal}°C`
           : t('plantDetails.values.stable'),
@@ -290,13 +289,13 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
       {visibleStats.length > 0 && (
           <div className="rounded-[28px] border border-white/40 bg-white/70 px-3 py-3 shadow-inner backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:px-6 sm:py-6">
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
+            <div className="grid grid-cols-2 lg:flex gap-2.5 sm:gap-4">
               {visibleStats.map((stat, idx) => (
                 <Card
                   key={stat.label}
-                  className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg ${
+                  className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg lg:flex-1 lg:min-w-0 ${
                     visibleStats.length % 2 !== 0 && idx === visibleStats.length - 1
-                      ? 'col-span-2'
+                      ? 'col-span-2 lg:col-span-1'
                       : ''
                   }`}
                 >
@@ -304,9 +303,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
                     <div className="min-w-0 flex-1">
                       <p className="text-[9px] sm:text-xs uppercase text-white/80 leading-tight">{stat.label}</p>
                       <p className="text-base sm:text-xl md:text-2xl font-bold leading-tight break-words">{stat.value}</p>
-                      {stat.detail ? (
-                        <p className="text-[10px] sm:text-xs mt-0.5 text-white/80 break-words">{stat.detail}</p>
-                      ) : null}
                     </div>
                     <div className="ml-1.5 sm:ml-2 flex-shrink-0">{stat.icon}</div>
                   </CardContent>
