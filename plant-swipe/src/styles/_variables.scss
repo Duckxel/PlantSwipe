@@ -114,9 +114,9 @@
   --tt-color-red-dec-5: hsla(1, 100%, 9%, 1);
 
   /* Basic colors */
-  --white: rgba(248, 246, 242, 1);
+  --white: rgba(255, 255, 255, 1);
   --black: rgba(14, 14, 17, 1);
-  --transparent: rgba(248, 246, 242, 0);
+  --transparent: rgba(255, 255, 255, 0);
 
   /****************** 
   Shadow variables
@@ -190,8 +190,6 @@
 
 /* Global colors - Dark mode */
 .dark {
-  --white: rgba(255, 255, 255, 1);
-  --transparent: rgba(255, 255, 255, 0);
   --tt-bg-color: var(--black);
   --tt-border-color: var(--tt-gray-dark-a-200);
   --tt-border-color-tint: var(--tt-gray-dark-a-100);
