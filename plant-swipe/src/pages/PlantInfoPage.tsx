@@ -1589,7 +1589,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <div className="flex flex-col gap-3 sm:gap-4">
                 <div
                   className={`relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden transition-all duration-300 ease-in-out ${
-                    cubeExpanded ? 'min-h-[200px] max-h-[320px]' : 'min-h-[120px] max-h-[150px]'
+                    cubeExpanded ? 'h-[300px]' : 'h-[140px]'
                   }`}
                 >
                   <DimensionCube heightCm={height} wingspanCm={wingspan} className="h-full w-full" />

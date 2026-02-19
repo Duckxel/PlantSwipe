@@ -38,16 +38,17 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
 
     const resolveSize = () => {
-      const width = container.clientWidth || 200
-      const h = container.clientHeight || width
+      const rect = container.getBoundingClientRect()
+      const width = Math.round(rect.width) || 200
+      const h = Math.round(rect.height) || 200
       return { width, height: h }
     }
 
     const { width: initialWidth, height: initialHeight } = resolveSize()
-    renderer.setSize(initialWidth, initialHeight)
+    renderer.setSize(initialWidth, initialHeight, false)
     renderer.domElement.style.display = 'block'
-    renderer.domElement.style.width = '100%'
-    renderer.domElement.style.height = '100%'
+    renderer.domElement.style.width = `${initialWidth}px`
+    renderer.domElement.style.height = `${initialHeight}px`
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
@@ -192,7 +193,9 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const updateRendererSize = () => {
       const { width, height: h } = resolveSize()
       if (width <= 0 || h <= 0) return
-      renderer.setSize(width, h)
+      renderer.setSize(width, h, false)
+      renderer.domElement.style.width = `${width}px`
+      renderer.domElement.style.height = `${h}px`
       const newAspect = width / Math.max(1, h)
       camera.aspect = newAspect
       cameraDistance = computeCameraDistance(newAspect)
