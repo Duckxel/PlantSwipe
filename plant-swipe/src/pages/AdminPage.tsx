@@ -112,6 +112,7 @@ import {
   type PlantFormCategory 
 } from "@/lib/plantFormCategories";
 import { enableMaintenanceMode as enableFrontendMaintenanceMode, disableMaintenanceMode as disableFrontendMaintenanceMode } from "@/lib/sentry";
+import { fetchAllImpressions } from "@/lib/impressions";
 
 /**
  * Enable maintenance mode on both frontend (browser Sentry) and backend (server Sentry)
@@ -3146,56 +3147,28 @@ export const AdminPage: React.FC = () => {
         }
       }
 
-      // Fetch likes counts per plant (from profiles.liked_plant_ids)
+      // Fetch likes counts via the top_liked_plants RPC (server-side aggregation)
       const likesCountMap = new Map<string, number>();
       {
-        let offset = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-        while (hasMore) {
-          const { data: profData, error: profError } = await supabase
-            .from("profiles")
-            .select("liked_plant_ids")
-            .range(offset, offset + pageSize - 1);
-          if (profError) break;
-          if (!profData || profData.length === 0) { hasMore = false; break; }
-          for (const p of profData) {
-            const ids = Array.isArray(p?.liked_plant_ids) ? p.liked_plant_ids : [];
-            for (const pid of ids) {
-              if (typeof pid === "string" && pid.trim()) {
-                likesCountMap.set(pid, (likesCountMap.get(pid) ?? 0) + 1);
-              }
+        const { data: likesData } = await supabase
+          .rpc("top_liked_plants", { limit_count: 100000 });
+        if (Array.isArray(likesData)) {
+          for (const row of likesData) {
+            if (row?.plant_id) {
+              likesCountMap.set(String(row.plant_id), Number(row.likes) || 0);
             }
           }
-          offset += profData.length;
-          if (profData.length < pageSize) hasMore = false;
         }
       }
 
-      // Fetch encyclopedia view counts per plant (from web_visits with page_path like /plants/%)
+      // Fetch permanent impression-based view counts (from the impressions table)
       const viewsCountMap = new Map<string, number>();
       {
-        let offset = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-        while (hasMore) {
-          const { data: vData, error: vError } = await supabase
-            .from("web_visits")
-            .select("page_path")
-            .like("page_path", "%/plants/%")
-            .range(offset, offset + pageSize - 1);
-          if (vError) break;
-          if (!vData || vData.length === 0) { hasMore = false; break; }
-          for (const v of vData) {
-            const path = typeof v?.page_path === "string" ? v.page_path : "";
-            const match = path.match(/^\/(?:[a-z]{2}\/)?plants\/([^/]+)/);
-            if (match?.[1]) {
-              const pid = match[1];
-              viewsCountMap.set(pid, (viewsCountMap.get(pid) ?? 0) + 1);
-            }
+        const impressionsData = await fetchAllImpressions("plant");
+        if (impressionsData) {
+          for (const [entityId, count] of Object.entries(impressionsData)) {
+            viewsCountMap.set(entityId, count);
           }
-          offset += vData.length;
-          if (vData.length < pageSize) hasMore = false;
         }
       }
 
