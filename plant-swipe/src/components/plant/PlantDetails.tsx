@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { Plant, PlantWateringSchedule } from "@/types/plant"
 import { useTranslation } from "react-i18next"
@@ -147,41 +146,46 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     {
       label: t('plantDetails.stats.sunLevel'),
       value: translateLevelSun(plant.plantCare?.levelSun),
-      gradient: "from-amber-400/90 to-orange-600",
-      icon: <SunMedium className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      colorClass: "text-amber-500 dark:text-amber-400",
+      bgClass: "bg-amber-500/10 dark:bg-amber-400/10",
+      icon: <SunMedium className="h-4 w-4" />,
       visible: Boolean(plant.plantCare?.levelSun),
     },
-      {
-        label: t('plantDetails.stats.wateringNeed'),
-        value: formatWateringNeed(plant.plantCare?.watering?.schedules),
-        gradient: "from-blue-400/90 to-cyan-600",
-        icon: <Droplet className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
-        visible: Boolean(plant.plantCare?.watering?.schedules?.length),
-      },
+    {
+      label: t('plantDetails.stats.wateringNeed'),
+      value: formatWateringNeed(plant.plantCare?.watering?.schedules),
+      colorClass: "text-blue-500 dark:text-blue-400",
+      bgClass: "bg-blue-500/10 dark:bg-blue-400/10",
+      icon: <Droplet className="h-4 w-4" />,
+      visible: Boolean(plant.plantCare?.watering?.schedules?.length),
+    },
     {
       label: t('plantDetails.stats.humidity'),
       value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : t('plantDetails.values.ambient'),
-      gradient: "from-cyan-400/90 to-teal-600",
-      icon: <Droplets className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      colorClass: "text-cyan-500 dark:text-cyan-400",
+      bgClass: "bg-cyan-500/10 dark:bg-cyan-400/10",
+      icon: <Droplets className="h-4 w-4" />,
       visible: plant.plantCare?.hygrometry !== undefined,
     },
-      {
-        label: t('plantDetails.stats.maintenance'),
-        value: translateMaintenance(maintenanceLevel),
-        gradient: "from-emerald-400/90 to-lime-500",
-        icon: <Wrench className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
-        visible: Boolean(maintenanceLevel),
-      },
+    {
+      label: t('plantDetails.stats.maintenance'),
+      value: translateMaintenance(maintenanceLevel),
+      colorClass: "text-emerald-500 dark:text-emerald-400",
+      bgClass: "bg-emerald-500/10 dark:bg-emerald-400/10",
+      icon: <Wrench className="h-4 w-4" />,
+      visible: Boolean(maintenanceLevel),
+    },
     {
       label: t('plantDetails.stats.temperature'),
       value:
         plant.plantCare?.temperatureMin !== undefined && plant.plantCare?.temperatureMax !== undefined
-          ? `${plant.plantCare.temperatureMin}°C to ${plant.plantCare.temperatureMax}°C`
+          ? `${plant.plantCare.temperatureMin}°C – ${plant.plantCare.temperatureMax}°C`
           : plant.plantCare?.temperatureIdeal !== undefined
           ? `${plant.plantCare.temperatureIdeal}°C`
           : t('plantDetails.values.stable'),
-      gradient: "from-red-400/90 to-pink-600",
-      icon: <Thermometer className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      colorClass: "text-rose-500 dark:text-rose-400",
+      bgClass: "bg-rose-500/10 dark:bg-rose-400/10",
+      icon: <Thermometer className="h-4 w-4" />,
       visible:
         plant.plantCare?.temperatureMin !== undefined ||
         plant.plantCare?.temperatureMax !== undefined ||
@@ -288,29 +292,23 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       </div>
 
       {visibleStats.length > 0 && (
-          <div className="rounded-[28px] border border-white/40 bg-white/70 px-3 py-3 shadow-inner backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:px-6 sm:py-6">
-            <div className="grid grid-cols-2 lg:flex gap-2.5 sm:gap-4">
-              {visibleStats.map((stat, idx) => (
-                <Card
-                  key={stat.label}
-                  className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg lg:flex-1 lg:min-w-0 ${
-                    visibleStats.length % 2 !== 0 && idx === visibleStats.length - 1
-                      ? 'col-span-2 lg:col-span-1'
-                      : ''
-                  }`}
-                >
-                  <CardContent className="flex items-center justify-between p-2.5 sm:p-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[9px] sm:text-xs uppercase text-white/80 leading-tight">{stat.label}</p>
-                      <p className="text-base sm:text-xl md:text-2xl font-bold leading-tight break-words">{stat.value}</p>
-                    </div>
-                    <div className="ml-1.5 sm:ml-2 flex-shrink-0">{stat.icon}</div>
-                  </CardContent>
-                </Card>
-              ))}
+        <div className="flex flex-wrap gap-2 sm:gap-2.5">
+          {visibleStats.map((stat) => (
+            <div
+              key={stat.label}
+              className="flex items-center gap-2.5 rounded-2xl border border-muted/40 bg-white/60 px-3.5 py-2.5 backdrop-blur-sm dark:border-white/[0.08] dark:bg-white/[0.04]"
+            >
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${stat.bgClass} ${stat.colorClass}`}>
+                {stat.icon}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] leading-none text-muted-foreground">{stat.label}</p>
+                <p className="mt-0.5 text-sm font-semibold leading-tight text-foreground">{stat.value}</p>
+              </div>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
+      )}
 
       <ImageViewer
         {...imageViewer.props}
