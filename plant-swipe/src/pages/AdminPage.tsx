@@ -112,6 +112,7 @@ import {
   type PlantFormCategory 
 } from "@/lib/plantFormCategories";
 import { enableMaintenanceMode as enableFrontendMaintenanceMode, disableMaintenanceMode as disableFrontendMaintenanceMode } from "@/lib/sentry";
+import { fetchAllImpressions } from "@/lib/impressions";
 
 /**
  * Enable maintenance mode on both frontend (browser Sentry) and backend (server Sentry)
@@ -424,9 +425,12 @@ type PlantDashboardRow = {
   primaryImage: string | null;
   updatedAt: number | null;
   createdAt: number | null;
+  gardensCount: number;
+  likesCount: number;
+  viewsCount: number;
 };
 
-type PlantSortOption = "status" | "updated" | "created" | "name";
+type PlantSortOption = "status" | "updated" | "created" | "name" | "gardens" | "likes" | "views";
 
 const normalizePlantStatus = (
   status?: string | null,
@@ -454,7 +458,7 @@ const toPromotionMonthSlug = (
 
 // Constants for persisting admin plants list state in sessionStorage
 const ADMIN_PLANTS_STATE_KEY = "admin-plants-list-state";
-const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name"];
+const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name", "gardens", "likes", "views"];
 
 // Type for persisted plant list state
 type AdminPlantsListState = {
@@ -2261,23 +2265,47 @@ export const AdminPage: React.FC = () => {
         }
         setPlantRequestsTotalRequestsSum(totalSum);
 
-        // 3. Fetch first page of rows (paginated)
-        const limit = PLANT_REQUESTS_INITIAL_LIMIT;
-        const { data, error } = await supabase
-          .from("requested_plants")
-          .select(
-            "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
-          )
-          .is("completed_at", null)
-          .order("request_count", { ascending: false })
-          .order("updated_at", { ascending: false })
-          .range(0, limit - 1);
+        // 3. Fetch rows — when hiding staff, keep fetching pages until
+        //    non-staff rows reach the desired limit (or DB is exhausted).
+        const targetVisible = PLANT_REQUESTS_INITIAL_LIMIT;
+        const batchSize = PLANT_REQUESTS_INITIAL_LIMIT;
+        let allRows: PlantRequestRow[] = [];
+        let fetchOffset = 0;
+        let exhausted = false;
 
-        if (error) throw new Error(error.message);
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { data, error } = await supabase
+            .from("requested_plants")
+            .select(
+              "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
+            )
+            .is("completed_at", null)
+            .order("request_count", { ascending: false })
+            .order("updated_at", { ascending: false })
+            .range(fetchOffset, fetchOffset + batchSize - 1);
 
-        const rows = enrichRowsWithStaffStatus(parseRequestRows(data));
-        setPlantRequests(rows);
-        setPlantRequestsHasMore(rows.length < accurateCount);
+          if (error) throw new Error(error.message);
+
+          const batch = enrichRowsWithStaffStatus(parseRequestRows(data));
+          allRows = [...allRows, ...batch];
+          fetchOffset += (data?.length ?? 0);
+
+          if (!data || data.length < batchSize) {
+            exhausted = true;
+            break;
+          }
+
+          if (!hideStaffRequests) break;
+
+          const nonStaffCount = allRows.filter(
+            (r) => r.requester_is_staff !== true,
+          ).length;
+          if (nonStaffCount >= targetVisible) break;
+        }
+
+        setPlantRequests(allRows);
+        setPlantRequestsHasMore(!exhausted && fetchOffset < accurateCount);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setPlantRequestsError(msg);
@@ -2293,7 +2321,7 @@ export const AdminPage: React.FC = () => {
         }
       }
     },
-    [supabase, parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds],
+    [supabase, parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests],
   );
 
   const loadMorePlantRequests = React.useCallback(async () => {
@@ -2301,24 +2329,47 @@ export const AdminPage: React.FC = () => {
     setPlantRequestsLoadingMore(true);
     setPlantRequestsError(null);
     try {
-      const offset = plantRequests.length;
-      const limit = PLANT_REQUESTS_PAGE_SIZE;
-      const { data, error } = await supabase
-        .from("requested_plants")
-        .select(
-          "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
-        )
-        .is("completed_at", null)
-        .order("request_count", { ascending: false })
-        .order("updated_at", { ascending: false })
-        .range(offset, offset + limit - 1);
+      const startOffset = plantRequests.length;
+      const targetNew = PLANT_REQUESTS_PAGE_SIZE;
+      const batchSize = PLANT_REQUESTS_PAGE_SIZE;
+      let newRows: PlantRequestRow[] = [];
+      let fetchOffset = startOffset;
+      let exhausted = false;
 
-      if (error) throw new Error(error.message);
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { data, error } = await supabase
+          .from("requested_plants")
+          .select(
+            "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
+          )
+          .is("completed_at", null)
+          .order("request_count", { ascending: false })
+          .order("updated_at", { ascending: false })
+          .range(fetchOffset, fetchOffset + batchSize - 1);
 
-      const newRows = enrichRowsWithStaffStatus(parseRequestRows(data));
+        if (error) throw new Error(error.message);
+
+        const batch = enrichRowsWithStaffStatus(parseRequestRows(data));
+        newRows = [...newRows, ...batch];
+        fetchOffset += (data?.length ?? 0);
+
+        if (!data || data.length < batchSize) {
+          exhausted = true;
+          break;
+        }
+
+        if (!hideStaffRequests) break;
+
+        const newNonStaff = newRows.filter(
+          (r) => r.requester_is_staff !== true,
+        ).length;
+        if (newNonStaff >= targetNew) break;
+      }
+
       setPlantRequests((prev) => [...prev, ...newRows]);
       setPlantRequestsHasMore(
-        plantRequests.length + newRows.length < plantRequestsTotalCount,
+        !exhausted && startOffset + newRows.length < plantRequestsTotalCount,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -2334,6 +2385,7 @@ export const AdminPage: React.FC = () => {
     supabase,
     parseRequestRows,
     enrichRowsWithStaffStatus,
+    hideStaffRequests,
   ]);
 
   const loadRequestUsers = React.useCallback(
@@ -3072,6 +3124,54 @@ export const AdminPage: React.FC = () => {
         }
       });
 
+      // Fetch garden counts per plant (how many gardens each plant appears in)
+      const gardensCountMap = new Map<string, number>();
+      {
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data: gpData, error: gpError } = await supabase
+            .from("garden_plants")
+            .select("plant_id")
+            .range(offset, offset + pageSize - 1);
+          if (gpError) break;
+          if (!gpData || gpData.length === 0) { hasMore = false; break; }
+          for (const gp of gpData) {
+            if (gp?.plant_id) {
+              gardensCountMap.set(gp.plant_id, (gardensCountMap.get(gp.plant_id) ?? 0) + 1);
+            }
+          }
+          offset += gpData.length;
+          if (gpData.length < pageSize) hasMore = false;
+        }
+      }
+
+      // Fetch likes counts via the top_liked_plants RPC (server-side aggregation)
+      const likesCountMap = new Map<string, number>();
+      {
+        const { data: likesData } = await supabase
+          .rpc("top_liked_plants", { limit_count: 100000 });
+        if (Array.isArray(likesData)) {
+          for (const row of likesData) {
+            if (row?.plant_id) {
+              likesCountMap.set(String(row.plant_id), Number(row.likes) || 0);
+            }
+          }
+        }
+      }
+
+      // Fetch permanent impression-based view counts (from the impressions table)
+      const viewsCountMap = new Map<string, number>();
+      {
+        const impressionsData = await fetchAllImpressions("plant");
+        if (impressionsData) {
+          for (const [entityId, count] of Object.entries(impressionsData)) {
+            viewsCountMap.set(entityId, count);
+          }
+        }
+      }
+
       // Now combine the data
       const data = plantsData;
       const error = plantsError;
@@ -3091,9 +3191,10 @@ export const AdminPage: React.FC = () => {
 
           // Get given_names from the map
           const givenNames = givenNamesMap.get(String(row.id)) || [];
+          const plantId = String(row.id);
 
             return {
-              id: String(row.id),
+              id: plantId,
               name: row?.name ? String(row.name) : "Unnamed plant",
               givenNames,
               status: normalizePlantStatus(row?.status),
@@ -3121,6 +3222,9 @@ export const AdminPage: React.FC = () => {
                 const parsed = Date.parse(timestamp);
                 return Number.isFinite(parsed) ? parsed : null;
               })(),
+              gardensCount: gardensCountMap.get(plantId) ?? 0,
+              likesCount: likesCountMap.get(plantId) ?? 0,
+              viewsCount: viewsCountMap.get(plantId) ?? 0,
             } as PlantDashboardRow;
         })
         .filter((row): row is PlantDashboardRow => row !== null);
@@ -3309,15 +3413,23 @@ export const AdminPage: React.FC = () => {
             if (createdB !== createdA) return createdB - createdA;
             return a.name.localeCompare(b.name);
           case "name":
-            // Sort alphabetically by name
+            return a.name.localeCompare(b.name);
+          case "gardens":
+            if (b.gardensCount !== a.gardensCount) return b.gardensCount - a.gardensCount;
+            return a.name.localeCompare(b.name);
+          case "likes":
+            if (b.likesCount !== a.likesCount) return b.likesCount - a.likesCount;
+            return a.name.localeCompare(b.name);
+          case "views":
+            if (b.viewsCount !== a.viewsCount) return b.viewsCount - a.viewsCount;
             return a.name.localeCompare(b.name);
           case "status":
-          default:
-            // Sort by status priority, then alphabetically
+          default: {
             const statusDiff =
               getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
             if (statusDiff !== 0) return statusDiff;
             return a.name.localeCompare(b.name);
+          }
         }
       });
   }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery, plantSortOption]);
@@ -4718,6 +4830,16 @@ export const AdminPage: React.FC = () => {
     if (activeTab !== "plants" || plantRequestsInitialized) return;
     loadPlantRequests({ initial: true });
   }, [activeTab, plantRequestsInitialized, loadPlantRequests]);
+
+  // Re-fetch when staff filter toggles so the visible list fills to the limit
+  const hideStaffPrevRef = React.useRef(hideStaffRequests);
+  React.useEffect(() => {
+    if (hideStaffPrevRef.current === hideStaffRequests) return;
+    hideStaffPrevRef.current = hideStaffRequests;
+    if (plantRequestsInitialized) {
+      loadPlantRequests({ initial: false });
+    }
+  }, [hideStaffRequests, plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
     if (
@@ -8515,6 +8637,9 @@ export const AdminPage: React.FC = () => {
                                             <option value="updated">Last Updated</option>
                                             <option value="created">Last Created</option>
                                             <option value="name">Name (A-Z)</option>
+                                            <option value="gardens">Most in Gardens</option>
+                                            <option value="likes">Most Likes</option>
+                                            <option value="views">Most Views</option>
                                           </select>
                                         </div>
                                       </div>
@@ -8621,9 +8746,24 @@ export const AdminPage: React.FC = () => {
                                               Created {formatTimeAgo(plant.createdAt)}
                                             </span>
                                           )}
-                                          {plantSortOption !== "created" && plant.updatedAt && (
+                                          {plantSortOption !== "created" && plantSortOption !== "gardens" && plantSortOption !== "likes" && plantSortOption !== "views" && plant.updatedAt && (
                                             <span className="text-xs text-stone-400 dark:text-stone-500">
                                               Updated {formatTimeAgo(plant.updatedAt)}
+                                            </span>
+                                          )}
+                                          {plantSortOption === "gardens" && (
+                                            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                              {plant.gardensCount} {plant.gardensCount === 1 ? "garden" : "gardens"}
+                                            </span>
+                                          )}
+                                          {plantSortOption === "likes" && (
+                                            <span className="text-xs font-medium text-pink-600 dark:text-pink-400">
+                                              {plant.likesCount} {plant.likesCount === 1 ? "like" : "likes"}
+                                            </span>
+                                          )}
+                                          {plantSortOption === "views" && (
+                                            <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                                              {plant.viewsCount} {plant.viewsCount === 1 ? "view" : "views"}
                                             </span>
                                           )}
                                         </div>
@@ -8640,6 +8780,16 @@ export const AdminPage: React.FC = () => {
                                           />
                                           {PLANT_STATUS_LABELS[plant.status]}
                                         </span>
+                                        <a
+                                          href={`/plants/${plant.id}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-stone-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all"
+                                          title="Open plant info page"
+                                        >
+                                          <ArrowUpRight className="h-4 w-4" />
+                                        </a>
                                         <button
                                           type="button"
                                           onClick={(e) => {
@@ -9430,7 +9580,7 @@ export const AdminPage: React.FC = () => {
                                         </>
                                       ) : (
                                         <>
-                                          Load More ({plantRequests.length} / {plantRequestsTotalCount})
+                                          Load More ({hideStaffRequests ? staffFiltered.length : plantRequests.length} / {plantRequestsTotalCount})
                                         </>
                                       )}
                                     </Button>
