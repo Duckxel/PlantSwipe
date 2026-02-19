@@ -669,7 +669,7 @@ export const AdminMockupsPanel: React.FC = () => {
 
         {/* Upload Result */}
         {uploadResult && (
-          <div className="rounded-2xl border-2 border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-[#1e1e20] p-6 space-y-4">
+          <div className="rounded-2xl border-2 border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-100/60 to-white dark:from-emerald-900/20 dark:to-[#1e1e20] p-6 space-y-4">
             {/* Success Header */}
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center flex-shrink-0">

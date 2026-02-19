@@ -1921,7 +1921,7 @@ export function AdminNotificationsPanel() {
           hideCloseButton
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 dark:border-[#2a2a2d] bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 dark:border-[#2a2a2d] bg-gradient-to-r from-amber-100/60 to-orange-50/70 dark:from-amber-900/10 dark:to-orange-900/10">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
                 <FileText className="h-6 w-6 text-white" />
