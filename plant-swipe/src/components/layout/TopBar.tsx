@@ -123,11 +123,11 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         {!user ? (
           // Logged-out: show Sign up and Login buttons on all pages
           <>
-            <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>
-              <UserPlus className="h-4 w-4 mr-2" /> {t('common.signup')}
+            <Button className="rounded-2xl" variant="secondary" onClick={openSignup} title={t('common.signup')}>
+              <UserPlus className="h-4 w-4 lg:mr-2" /> <span className="hidden lg:inline">{t('common.signup')}</span>
             </Button>
-            <Button className="rounded-2xl" variant="default" onClick={openLogin}>
-              <LogIn className="h-4 w-4 mr-2" /> {t('common.login')}
+            <Button className="rounded-2xl" variant="default" onClick={openLogin} title={t('common.login')}>
+              <LogIn className="h-4 w-4 lg:mr-2" /> <span className="hidden lg:inline">{t('common.login')}</span>
             </Button>
           </>
         ) : (
@@ -170,10 +170,10 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
               onRefresh={refreshNotifications}
             />
             <div className="relative" ref={anchorRef}>
-              <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Profile menu" aria-haspopup="menu" aria-expanded={menuOpen}>
-                <User className="h-4 w-4 mr-2 shrink-0" />
-                <span className="hidden sm:inline max-w-[40vw] truncate min-w-0">{label}</span>
-                <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
+              <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Profile menu" aria-haspopup="menu" aria-expanded={menuOpen} title={label}>
+                <User className="h-4 w-4 lg:mr-2 shrink-0" />
+                <span className="hidden lg:inline max-w-[40vw] truncate min-w-0">{label}</span>
+                <ChevronDown className="h-4 w-4 lg:ml-2 opacity-70" />
               </Button>
               {menuOpen && menuPosition && createPortal(
                 <div
@@ -233,10 +233,10 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
         variant={'secondary'}
         className={isActive ? "rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 hover:text-white dark:hover:text-black" : "rounded-2xl bg-white dark:bg-[#252526] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#2d2d30] hover:text-black dark:hover:text-white"}
       >
-        <Link to={to} className="no-underline">
+        <Link to={to} className="no-underline" title={label}>
           <span className="inline-flex items-center gap-2">
             {icon}
-            <span>{label}</span>
+            <span className="hidden lg:inline">{label}</span>
           </span>
         </Link>
       </Button>
@@ -287,10 +287,10 @@ function NavPillAnchor({ to, icon, label }: { to: string; icon: React.ReactNode;
         variant={'secondary'}
         className="rounded-2xl bg-white dark:bg-[#252526] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#2d2d30] hover:text-black dark:hover:text-white"
       >
-        <a href={to} onClick={handleClick} className="no-underline">
+        <a href={to} onClick={handleClick} className="no-underline" title={label}>
           <span className="inline-flex items-center gap-2">
             {icon}
-            <span>{label}</span>
+            <span className="hidden lg:inline">{label}</span>
           </span>
         </a>
       </Button>
