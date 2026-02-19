@@ -36,6 +36,8 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.1
 
     const resolveSize = () => {
       const rect = container.getBoundingClientRect()
@@ -52,6 +54,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
+    scene.fog = new THREE.FogExp2(0x050e0d, 0.06)
 
     // Scene layout: cube at origin, human to the right
     const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth
@@ -73,37 +76,44 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     let { halfW, halfH } = computeFrustum(initialAspect)
 
     const camera = new THREE.OrthographicCamera(
-      -halfW, halfW, halfH, -halfH, 0.1, 200,
+      -halfW, halfW, halfH, -halfH, 0.1, 500,
     )
 
-    // Slight elevation for a gentle 3/4 view
-    const cameraDistance = Math.max(sceneMaxHeight, humanFarEdge + 1) * 2
-    const elevationAngle = 0.28
+    // Front-facing camera — no tilt, orbits at cube center height
+    const cameraDistance = Math.max(sceneMaxHeight, humanFarEdge + 1) * 3
     camera.position.set(
-      orbitCenter.x + cameraDistance * Math.cos(elevationAngle),
-      orbitCenter.y + cameraDistance * Math.sin(elevationAngle),
+      orbitCenter.x + cameraDistance,
+      orbitCenter.y,
       orbitCenter.z + cameraDistance,
     )
     camera.lookAt(orbitCenter)
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xbfffe0, 0.6)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9)
-    directionalLight.position.set(4, 6, 5)
-    const pointLight = new THREE.PointLight(0x34d399, 0.6)
-    pointLight.position.set(-3, -2, -6)
-    scene.add(ambientLight, directionalLight, pointLight)
+    // ── Lighting — balanced for flat front view ──
+    const ambientLight = new THREE.AmbientLight(0xc8f0e0, 0.7)
+    scene.add(ambientLight)
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.8)
+    keyLight.position.set(3, 5, 4)
+    scene.add(keyLight)
+
+    const fillLight = new THREE.DirectionalLight(0x88ccbb, 0.35)
+    fillLight.position.set(-4, 2, -3)
+    scene.add(fillLight)
+
+    const rimLight = new THREE.DirectionalLight(0x34d399, 0.25)
+    rimLight.position.set(0, 3, -5)
+    scene.add(rimLight)
 
     // ── Plant box (outer) ──
     const outerGeometry = new THREE.BoxGeometry(plantW, plantH, plantW)
     const outerMaterial = new THREE.MeshStandardMaterial({
-      color: 0x031512,
+      color: 0x041a16,
       transparent: true,
-      opacity: 0.22,
-      metalness: 0.35,
-      roughness: 0.55,
+      opacity: 0.18,
+      metalness: 0.4,
+      roughness: 0.5,
       emissive: 0x0d9488,
-      emissiveIntensity: 0.65,
+      emissiveIntensity: 0.5,
     })
     const outerMesh = new THREE.Mesh(outerGeometry, outerMaterial)
     outerMesh.position.set(0, plantH / 2, 0)
@@ -111,7 +121,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     const outerWire = new THREE.LineSegments(
       new THREE.EdgesGeometry(outerGeometry),
-      new THREE.LineBasicMaterial({ color: 0x34f5c6 }),
+      new THREE.LineBasicMaterial({ color: 0x34f5c6, linewidth: 2 }),
     )
     outerWire.position.set(0, plantH / 2, 0)
     scene.add(outerWire)
@@ -123,25 +133,38 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
       new THREE.LineBasicMaterial({
         color: 0x10b981,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.6,
       }),
     )
     innerWire.position.set(0, plantH / 2, 0)
     scene.add(innerWire)
 
-    // ── Ground grid ──
-    const gridSize = Math.max(cameraDistance * 1.5, 6)
+    // ── Ground grid — large enough to fill the entire visible floor ──
+    const gridExtent = Math.max(frustumHalfHeight * 6, humanFarEdge * 5, 20)
+    const gridDivisions = Math.round(gridExtent * 2.5)
     const grid = new THREE.GridHelper(
-      gridSize,
-      Math.round(gridSize * 3),
-      0x34f5c6,
-      0x0f766e,
+      gridExtent,
+      gridDivisions,
+      0x1a6b5a,
+      0x0d3d33,
     )
-    const gridMaterial = grid.material as THREE.Material
-    gridMaterial.transparent = true
-    gridMaterial.opacity = 0.25
-    grid.position.set(0, 0, 0)
+    const gridMat = grid.material as THREE.Material
+    gridMat.transparent = true
+    gridMat.opacity = 0.35
     scene.add(grid)
+
+    // Brighter sub-grid for a premium layered look
+    const subGrid = new THREE.GridHelper(
+      gridExtent,
+      Math.round(gridDivisions / 5),
+      0x34f5c6,
+      0x34f5c6,
+    )
+    const subGridMat = subGrid.material as THREE.Material
+    subGridMat.transparent = true
+    subGridMat.opacity = 0.12
+    subGrid.position.y = 0.001
+    scene.add(subGrid)
 
     // ── Human reference model ──
     const loader = new OBJLoader()
@@ -166,12 +189,12 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         obj.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             child.material = new THREE.MeshStandardMaterial({
-              color: 0x6b8f88,
+              color: 0x5a8078,
               side: THREE.FrontSide,
-              metalness: 0.05,
-              roughness: 0.9,
+              metalness: 0.08,
+              roughness: 0.85,
               emissive: 0x1a3a35,
-              emissiveIntensity: 0.2,
+              emissiveIntensity: 0.15,
             })
           }
         })
@@ -316,8 +339,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         orbitCenter.x + cameraDistance * Math.cos(totalRotation)
       camera.position.z =
         orbitCenter.z + cameraDistance * Math.sin(totalRotation)
-      camera.position.y =
-        orbitCenter.y + cameraDistance * Math.sin(elevationAngle)
+      camera.position.y = orbitCenter.y
       camera.lookAt(orbitCenter)
 
       renderer.render(scene, camera)
