@@ -952,17 +952,19 @@ const PlantInfoPage: React.FC = () => {
               )}
             </Badge>
           )}
-          {/* Report Button */}
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="rounded-full border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#3e3e42] dark:bg-[#1f1f1f]"
-            onClick={handleReport}
-            aria-label={t('plantInfo.report.button', { defaultValue: 'Report plant information' })}
-          >
-            <Flag className="h-5 w-5" />
-          </Button>
+          {/* Report Button — hidden for plants still in construction */}
+          {plant && plant.meta?.status?.toLowerCase() !== 'in progres' && plant.meta?.status?.toLowerCase() !== 'in progress' && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="rounded-full border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#3e3e42] dark:bg-[#1f1f1f]"
+              onClick={handleReport}
+              aria-label={t('plantInfo.report.button', { defaultValue: 'Report plant information' })}
+            >
+              <Flag className="h-5 w-5" />
+            </Button>
+          )}
           {/* Share Button */}
           <div className="relative">
             <Button
