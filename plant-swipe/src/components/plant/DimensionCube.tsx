@@ -53,41 +53,35 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     const scene = new THREE.Scene()
 
-    // Scene geometry constants (don't change on resize)
-    const fov = 38
-    const fovRad = (fov * Math.PI) / 180
-    const halfVFov = fovRad / 2
-
+    // Scene layout: cube at origin, human to the right
     const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth
+    const sceneCenterX = (humanFarEdge - plantW / 2) / 2
     const sceneCenterY = sceneMaxHeight / 2
-    const orbitCenter = new THREE.Vector3(0, sceneCenterY, 0)
+    const orbitCenter = new THREE.Vector3(sceneCenterX, sceneCenterY, 0)
 
-    const minClearance = humanFarEdge + 0.5
+    // Orthographic frustum — sized to fit the scene with padding
+    const padding = 1.15
+    const frustumHalfHeight = (sceneMaxHeight / 2) * padding
 
-    // Mutable camera parameters — recalculated on every resize
-    let cameraDistance = 5
-    let cameraHeight = sceneCenterY + sceneMaxHeight * 0.15
-
-    const computeCameraDistance = (aspect: number) => {
-      // Vertical: frame the full scene height from orbit center
-      const verticalHalfExtent = sceneMaxHeight / 2
-      const dH = verticalHalfExtent / Math.tan(halfVFov)
-
-      // Horizontal: frame from -plantW/2 to humanFarEdge
-      const halfHFov = Math.atan(Math.tan(halfVFov) * aspect)
-      const dW = humanFarEdge / Math.tan(halfHFov)
-
-      return Math.max(dH, dW, minClearance) * 1.2
+    const computeFrustum = (aspect: number) => {
+      const halfH = frustumHalfHeight
+      const halfW = halfH * aspect
+      return { halfW, halfH }
     }
 
     const initialAspect = initialWidth / Math.max(1, initialHeight)
-    cameraDistance = computeCameraDistance(initialAspect)
-    cameraHeight = sceneCenterY + sceneMaxHeight * 0.15
+    let { halfW, halfH } = computeFrustum(initialAspect)
 
-    const camera = new THREE.PerspectiveCamera(fov, initialAspect, 0.1, 200)
+    const camera = new THREE.OrthographicCamera(
+      -halfW, halfW, halfH, -halfH, 0.1, 200,
+    )
+
+    // Slight elevation for a gentle 3/4 view
+    const cameraDistance = Math.max(sceneMaxHeight, humanFarEdge + 1) * 2
+    const elevationAngle = 0.28
     camera.position.set(
-      orbitCenter.x + cameraDistance,
-      cameraHeight,
+      orbitCenter.x + cameraDistance * Math.cos(elevationAngle),
+      orbitCenter.y + cameraDistance * Math.sin(elevationAngle),
       orbitCenter.z + cameraDistance,
     )
     camera.lookAt(orbitCenter)
@@ -136,7 +130,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     scene.add(innerWire)
 
     // ── Ground grid ──
-    const gridSize = Math.max(cameraDistance * 2.5, 6)
+    const gridSize = Math.max(cameraDistance * 1.5, 6)
     const grid = new THREE.GridHelper(
       gridSize,
       Math.round(gridSize * 3),
@@ -197,9 +191,13 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
       renderer.domElement.style.width = `${width}px`
       renderer.domElement.style.height = `${h}px`
       const newAspect = width / Math.max(1, h)
-      camera.aspect = newAspect
-      cameraDistance = computeCameraDistance(newAspect)
-      cameraHeight = sceneCenterY + sceneMaxHeight * 0.15
+      const f = computeFrustum(newAspect)
+      halfW = f.halfW
+      halfH = f.halfH
+      camera.left = -halfW
+      camera.right = halfW
+      camera.top = halfH
+      camera.bottom = -halfH
       camera.updateProjectionMatrix()
     }
 
@@ -318,7 +316,8 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         orbitCenter.x + cameraDistance * Math.cos(totalRotation)
       camera.position.z =
         orbitCenter.z + cameraDistance * Math.sin(totalRotation)
-      camera.position.y = cameraHeight
+      camera.position.y =
+        orbitCenter.y + cameraDistance * Math.sin(elevationAngle)
       camera.lookAt(orbitCenter)
 
       renderer.render(scene, camera)
