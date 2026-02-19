@@ -948,7 +948,7 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({
         )}
       >
         {active && (
-          <div className={cn(detailBaseClass, detailWidthClass, "pointer-events-none")}>
+          <div className={cn(detailBaseClass, detailWidthClass, "pointer-events-none absolute right-full top-1/2 -translate-y-1/2")}>
             {isColorVariant ? (
               <div className="flex flex-wrap gap-1.5">
                 {item.colors!.map((color) => (
