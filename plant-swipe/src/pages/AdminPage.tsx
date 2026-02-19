@@ -424,9 +424,12 @@ type PlantDashboardRow = {
   primaryImage: string | null;
   updatedAt: number | null;
   createdAt: number | null;
+  gardensCount: number;
+  likesCount: number;
+  viewsCount: number;
 };
 
-type PlantSortOption = "status" | "updated" | "created" | "name";
+type PlantSortOption = "status" | "updated" | "created" | "name" | "gardens" | "likes" | "views";
 
 const normalizePlantStatus = (
   status?: string | null,
@@ -454,7 +457,7 @@ const toPromotionMonthSlug = (
 
 // Constants for persisting admin plants list state in sessionStorage
 const ADMIN_PLANTS_STATE_KEY = "admin-plants-list-state";
-const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name"];
+const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name", "gardens", "likes", "views"];
 
 // Type for persisted plant list state
 type AdminPlantsListState = {
@@ -3120,6 +3123,82 @@ export const AdminPage: React.FC = () => {
         }
       });
 
+      // Fetch garden counts per plant (how many gardens each plant appears in)
+      const gardensCountMap = new Map<string, number>();
+      {
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data: gpData, error: gpError } = await supabase
+            .from("garden_plants")
+            .select("plant_id")
+            .range(offset, offset + pageSize - 1);
+          if (gpError) break;
+          if (!gpData || gpData.length === 0) { hasMore = false; break; }
+          for (const gp of gpData) {
+            if (gp?.plant_id) {
+              gardensCountMap.set(gp.plant_id, (gardensCountMap.get(gp.plant_id) ?? 0) + 1);
+            }
+          }
+          offset += gpData.length;
+          if (gpData.length < pageSize) hasMore = false;
+        }
+      }
+
+      // Fetch likes counts per plant (from profiles.liked_plant_ids)
+      const likesCountMap = new Map<string, number>();
+      {
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data: profData, error: profError } = await supabase
+            .from("profiles")
+            .select("liked_plant_ids")
+            .range(offset, offset + pageSize - 1);
+          if (profError) break;
+          if (!profData || profData.length === 0) { hasMore = false; break; }
+          for (const p of profData) {
+            const ids = Array.isArray(p?.liked_plant_ids) ? p.liked_plant_ids : [];
+            for (const pid of ids) {
+              if (typeof pid === "string" && pid.trim()) {
+                likesCountMap.set(pid, (likesCountMap.get(pid) ?? 0) + 1);
+              }
+            }
+          }
+          offset += profData.length;
+          if (profData.length < pageSize) hasMore = false;
+        }
+      }
+
+      // Fetch encyclopedia view counts per plant (from web_visits with page_path like /plants/%)
+      const viewsCountMap = new Map<string, number>();
+      {
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data: vData, error: vError } = await supabase
+            .from("web_visits")
+            .select("page_path")
+            .like("page_path", "%/plants/%")
+            .range(offset, offset + pageSize - 1);
+          if (vError) break;
+          if (!vData || vData.length === 0) { hasMore = false; break; }
+          for (const v of vData) {
+            const path = typeof v?.page_path === "string" ? v.page_path : "";
+            const match = path.match(/^\/(?:[a-z]{2}\/)?plants\/([^/]+)/);
+            if (match?.[1]) {
+              const pid = match[1];
+              viewsCountMap.set(pid, (viewsCountMap.get(pid) ?? 0) + 1);
+            }
+          }
+          offset += vData.length;
+          if (vData.length < pageSize) hasMore = false;
+        }
+      }
+
       // Now combine the data
       const data = plantsData;
       const error = plantsError;
@@ -3139,9 +3218,10 @@ export const AdminPage: React.FC = () => {
 
           // Get given_names from the map
           const givenNames = givenNamesMap.get(String(row.id)) || [];
+          const plantId = String(row.id);
 
             return {
-              id: String(row.id),
+              id: plantId,
               name: row?.name ? String(row.name) : "Unnamed plant",
               givenNames,
               status: normalizePlantStatus(row?.status),
@@ -3169,6 +3249,9 @@ export const AdminPage: React.FC = () => {
                 const parsed = Date.parse(timestamp);
                 return Number.isFinite(parsed) ? parsed : null;
               })(),
+              gardensCount: gardensCountMap.get(plantId) ?? 0,
+              likesCount: likesCountMap.get(plantId) ?? 0,
+              viewsCount: viewsCountMap.get(plantId) ?? 0,
             } as PlantDashboardRow;
         })
         .filter((row): row is PlantDashboardRow => row !== null);
@@ -3357,15 +3440,23 @@ export const AdminPage: React.FC = () => {
             if (createdB !== createdA) return createdB - createdA;
             return a.name.localeCompare(b.name);
           case "name":
-            // Sort alphabetically by name
+            return a.name.localeCompare(b.name);
+          case "gardens":
+            if (b.gardensCount !== a.gardensCount) return b.gardensCount - a.gardensCount;
+            return a.name.localeCompare(b.name);
+          case "likes":
+            if (b.likesCount !== a.likesCount) return b.likesCount - a.likesCount;
+            return a.name.localeCompare(b.name);
+          case "views":
+            if (b.viewsCount !== a.viewsCount) return b.viewsCount - a.viewsCount;
             return a.name.localeCompare(b.name);
           case "status":
-          default:
-            // Sort by status priority, then alphabetically
+          default: {
             const statusDiff =
               getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
             if (statusDiff !== 0) return statusDiff;
             return a.name.localeCompare(b.name);
+          }
         }
       });
   }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery, plantSortOption]);
@@ -8573,6 +8664,9 @@ export const AdminPage: React.FC = () => {
                                             <option value="updated">Last Updated</option>
                                             <option value="created">Last Created</option>
                                             <option value="name">Name (A-Z)</option>
+                                            <option value="gardens">Most in Gardens</option>
+                                            <option value="likes">Most Likes</option>
+                                            <option value="views">Most Views</option>
                                           </select>
                                         </div>
                                       </div>
@@ -8679,9 +8773,24 @@ export const AdminPage: React.FC = () => {
                                               Created {formatTimeAgo(plant.createdAt)}
                                             </span>
                                           )}
-                                          {plantSortOption !== "created" && plant.updatedAt && (
+                                          {plantSortOption !== "created" && plantSortOption !== "gardens" && plantSortOption !== "likes" && plantSortOption !== "views" && plant.updatedAt && (
                                             <span className="text-xs text-stone-400 dark:text-stone-500">
                                               Updated {formatTimeAgo(plant.updatedAt)}
+                                            </span>
+                                          )}
+                                          {plantSortOption === "gardens" && (
+                                            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                              {plant.gardensCount} {plant.gardensCount === 1 ? "garden" : "gardens"}
+                                            </span>
+                                          )}
+                                          {plantSortOption === "likes" && (
+                                            <span className="text-xs font-medium text-pink-600 dark:text-pink-400">
+                                              {plant.likesCount} {plant.likesCount === 1 ? "like" : "likes"}
+                                            </span>
+                                          )}
+                                          {plantSortOption === "views" && (
+                                            <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                                              {plant.viewsCount} {plant.viewsCount === 1 ? "view" : "views"}
                                             </span>
                                           )}
                                         </div>
@@ -8698,6 +8807,16 @@ export const AdminPage: React.FC = () => {
                                           />
                                           {PLANT_STATUS_LABELS[plant.status]}
                                         </span>
+                                        <a
+                                          href={`/plants/${plant.id}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-stone-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all"
+                                          title="Open plant info page"
+                                        >
+                                          <ArrowUpRight className="h-4 w-4" />
+                                        </a>
                                         <button
                                           type="button"
                                           onClick={(e) => {
