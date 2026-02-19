@@ -586,6 +586,7 @@ export function NotificationBell({
   onRefresh,
   className
 }: NotificationBellProps) {
+  const { t } = useTranslation('common')
   const [isOpen, setIsOpen] = React.useState(false)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
 
@@ -601,7 +602,11 @@ export function NotificationBell({
             e.stopPropagation()
             setIsOpen(!isOpen)
           }}
-          aria-label="Notifications"
+          aria-label={totalCount > 0
+            ? `${t('notifications.title', { defaultValue: 'Notifications' })}, ${totalCount} ${t('notifications.pending', { defaultValue: 'pending' })}`
+            : t('notifications.title', { defaultValue: 'Notifications' })}
+          aria-expanded={isOpen}
+          aria-haspopup="dialog"
         >
           <Bell className="h-4 w-4" />
         </Button>
