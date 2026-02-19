@@ -19,7 +19,8 @@ import {
   MessageCircle,
   ChevronRight,
   ScanLine,
-  Bug
+  Bug,
+  ArrowUpRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
@@ -189,25 +190,24 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
       <Sheet open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
         <SheetContent side="bottom" className="rounded-t-3xl px-0 pb-8 max-h-[85vh]">
           <SheetHeader className="px-6 pb-4 border-b border-stone-100 dark:border-[#2a2a2d]">
-            <div className="flex items-center gap-4">
-              <div className="h-14 w-14 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xl font-semibold shadow-lg shadow-emerald-500/20">
-                {(displayName || 'U').charAt(0).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <SheetTitle className="text-left text-lg">{label}</SheetTitle>
-                <button
-                  onClick={() => {
-                    setProfileMenuOpen(false)
-                    if (onProfile) onProfile()
-                    else navigate("/profile")
-                  }}
-                  className="text-sm text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-sm"
-                >
-                  {t("common.viewProfile", { defaultValue: "View profile" })}
-                </button>
-              </div>
-              {/* Notification Bell - matches web version style */}
-              <div className="relative">
+            <div className="flex items-center gap-3">
+              {/* Clickable profile area: avatar + name + arrow */}
+              <button
+                onClick={() => {
+                  setProfileMenuOpen(false)
+                  if (onProfile) onProfile()
+                  else navigate("/profile")
+                }}
+                className="flex items-center gap-3 flex-1 min-w-0 rounded-xl active:scale-[0.98] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                <div className="h-12 w-12 shrink-0 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-lg font-semibold shadow-lg shadow-emerald-500/20">
+                  {(displayName || 'U').charAt(0).toUpperCase()}
+                </div>
+                <SheetTitle className="text-left text-lg truncate">{label}</SheetTitle>
+                <ArrowUpRight className="h-4 w-4 shrink-0 text-stone-400 dark:text-stone-500" />
+              </button>
+              {/* Notification Bell - offset from the close button */}
+              <div className="relative shrink-0 mr-7">
                 <Button
                   variant="secondary"
                   size="icon"
