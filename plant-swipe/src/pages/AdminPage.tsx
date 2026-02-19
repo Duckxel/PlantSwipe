@@ -2261,23 +2261,47 @@ export const AdminPage: React.FC = () => {
         }
         setPlantRequestsTotalRequestsSum(totalSum);
 
-        // 3. Fetch first page of rows (paginated)
-        const limit = PLANT_REQUESTS_INITIAL_LIMIT;
-        const { data, error } = await supabase
-          .from("requested_plants")
-          .select(
-            "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
-          )
-          .is("completed_at", null)
-          .order("request_count", { ascending: false })
-          .order("updated_at", { ascending: false })
-          .range(0, limit - 1);
+        // 3. Fetch rows — when hiding staff, keep fetching pages until
+        //    non-staff rows reach the desired limit (or DB is exhausted).
+        const targetVisible = PLANT_REQUESTS_INITIAL_LIMIT;
+        const batchSize = PLANT_REQUESTS_INITIAL_LIMIT;
+        let allRows: PlantRequestRow[] = [];
+        let fetchOffset = 0;
+        let exhausted = false;
 
-        if (error) throw new Error(error.message);
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { data, error } = await supabase
+            .from("requested_plants")
+            .select(
+              "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
+            )
+            .is("completed_at", null)
+            .order("request_count", { ascending: false })
+            .order("updated_at", { ascending: false })
+            .range(fetchOffset, fetchOffset + batchSize - 1);
 
-        const rows = enrichRowsWithStaffStatus(parseRequestRows(data));
-        setPlantRequests(rows);
-        setPlantRequestsHasMore(rows.length < accurateCount);
+          if (error) throw new Error(error.message);
+
+          const batch = enrichRowsWithStaffStatus(parseRequestRows(data));
+          allRows = [...allRows, ...batch];
+          fetchOffset += (data?.length ?? 0);
+
+          if (!data || data.length < batchSize) {
+            exhausted = true;
+            break;
+          }
+
+          if (!hideStaffRequests) break;
+
+          const nonStaffCount = allRows.filter(
+            (r) => r.requester_is_staff !== true,
+          ).length;
+          if (nonStaffCount >= targetVisible) break;
+        }
+
+        setPlantRequests(allRows);
+        setPlantRequestsHasMore(!exhausted && fetchOffset < accurateCount);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setPlantRequestsError(msg);
@@ -2293,7 +2317,7 @@ export const AdminPage: React.FC = () => {
         }
       }
     },
-    [supabase, parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds],
+    [supabase, parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests],
   );
 
   const loadMorePlantRequests = React.useCallback(async () => {
@@ -2301,24 +2325,47 @@ export const AdminPage: React.FC = () => {
     setPlantRequestsLoadingMore(true);
     setPlantRequestsError(null);
     try {
-      const offset = plantRequests.length;
-      const limit = PLANT_REQUESTS_PAGE_SIZE;
-      const { data, error } = await supabase
-        .from("requested_plants")
-        .select(
-          "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
-        )
-        .is("completed_at", null)
-        .order("request_count", { ascending: false })
-        .order("updated_at", { ascending: false })
-        .range(offset, offset + limit - 1);
+      const startOffset = plantRequests.length;
+      const targetNew = PLANT_REQUESTS_PAGE_SIZE;
+      const batchSize = PLANT_REQUESTS_PAGE_SIZE;
+      let newRows: PlantRequestRow[] = [];
+      let fetchOffset = startOffset;
+      let exhausted = false;
 
-      if (error) throw new Error(error.message);
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { data, error } = await supabase
+          .from("requested_plants")
+          .select(
+            "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
+          )
+          .is("completed_at", null)
+          .order("request_count", { ascending: false })
+          .order("updated_at", { ascending: false })
+          .range(fetchOffset, fetchOffset + batchSize - 1);
 
-      const newRows = enrichRowsWithStaffStatus(parseRequestRows(data));
+        if (error) throw new Error(error.message);
+
+        const batch = enrichRowsWithStaffStatus(parseRequestRows(data));
+        newRows = [...newRows, ...batch];
+        fetchOffset += (data?.length ?? 0);
+
+        if (!data || data.length < batchSize) {
+          exhausted = true;
+          break;
+        }
+
+        if (!hideStaffRequests) break;
+
+        const newNonStaff = newRows.filter(
+          (r) => r.requester_is_staff !== true,
+        ).length;
+        if (newNonStaff >= targetNew) break;
+      }
+
       setPlantRequests((prev) => [...prev, ...newRows]);
       setPlantRequestsHasMore(
-        plantRequests.length + newRows.length < plantRequestsTotalCount,
+        !exhausted && startOffset + newRows.length < plantRequestsTotalCount,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -2334,6 +2381,7 @@ export const AdminPage: React.FC = () => {
     supabase,
     parseRequestRows,
     enrichRowsWithStaffStatus,
+    hideStaffRequests,
   ]);
 
   const loadRequestUsers = React.useCallback(
@@ -4718,6 +4766,16 @@ export const AdminPage: React.FC = () => {
     if (activeTab !== "plants" || plantRequestsInitialized) return;
     loadPlantRequests({ initial: true });
   }, [activeTab, plantRequestsInitialized, loadPlantRequests]);
+
+  // Re-fetch when staff filter toggles so the visible list fills to the limit
+  const hideStaffPrevRef = React.useRef(hideStaffRequests);
+  React.useEffect(() => {
+    if (hideStaffPrevRef.current === hideStaffRequests) return;
+    hideStaffPrevRef.current = hideStaffRequests;
+    if (plantRequestsInitialized) {
+      loadPlantRequests({ initial: false });
+    }
+  }, [hideStaffRequests, plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
     if (
@@ -9430,7 +9488,7 @@ export const AdminPage: React.FC = () => {
                                         </>
                                       ) : (
                                         <>
-                                          Load More ({plantRequests.length} / {plantRequestsTotalCount})
+                                          Load More ({hideStaffRequests ? staffFiltered.length : plantRequests.length} / {plantRequestsTotalCount})
                                         </>
                                       )}
                                     </Button>
