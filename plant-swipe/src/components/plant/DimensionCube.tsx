@@ -60,23 +60,24 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth
     const orbitCenter = new THREE.Vector3(0, plantH / 2, 0)
 
-    // Orthographic frustum — sized to fit the full scene from the cube's center
-    const padding = 1.15
-    const extentAbove = (sceneMaxHeight - plantH / 2) * padding
-    const extentBelow = (plantH / 2) * padding + 0.15
-    const frustumHalfHeight = Math.max(extentAbove, extentBelow)
+    // Asymmetric orthographic frustum — ground pinned to viewport bottom
+    const groundMargin = 0.08
+    const frustumBottom = -(plantH / 2 + groundMargin)
+    const frustumTop = (sceneMaxHeight - plantH / 2) * 1.12
+    const frustumFullHeight = frustumTop - frustumBottom
 
     const computeFrustum = (aspect: number) => {
-      const halfH = frustumHalfHeight
-      const halfW = halfH * aspect
-      return { halfW, halfH }
+      const halfW = (frustumFullHeight / 2) * aspect
+      return { halfW, top: frustumTop, bottom: frustumBottom }
     }
 
     const initialAspect = initialWidth / Math.max(1, initialHeight)
-    let { halfW, halfH } = computeFrustum(initialAspect)
+    let { halfW } = computeFrustum(initialAspect)
+    let frustumT = frustumTop
+    let frustumB = frustumBottom
 
     const camera = new THREE.OrthographicCamera(
-      -halfW, halfW, halfH, -halfH, 0.1, 500,
+      -halfW, halfW, frustumT, frustumB, 0.1, 500,
     )
 
     // Front-facing camera — no tilt, orbits at cube center height
@@ -216,11 +217,12 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
       const newAspect = width / Math.max(1, h)
       const f = computeFrustum(newAspect)
       halfW = f.halfW
-      halfH = f.halfH
+      frustumT = f.top
+      frustumB = f.bottom
       camera.left = -halfW
       camera.right = halfW
-      camera.top = halfH
-      camera.bottom = -halfH
+      camera.top = frustumT
+      camera.bottom = frustumB
       camera.updateProjectionMatrix()
     }
 
