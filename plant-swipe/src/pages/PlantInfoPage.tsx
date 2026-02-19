@@ -1586,41 +1586,35 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </p>
                 <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
               </div>
-              {cubeExpanded ? (
-                <div className="flex flex-col gap-3 sm:gap-4">
-                  <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden h-[300px]">
-                    <DimensionCube key="cube-expanded" heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
-                    <button
-                      type="button"
-                      onClick={toggleCubeExpanded}
-                      className="absolute bottom-2 right-2 z-10 rounded-lg border border-emerald-500/30 bg-white/90 p-1.5 text-emerald-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-[#102020]/90 dark:text-emerald-200 dark:hover:bg-[#102020]"
-                    >
-                      <Minimize2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className={`grid gap-2 sm:gap-3 md:grid-cols-[1fr_200px] md:gap-3 md:auto-rows-auto ${
+                cubeExpanded ? 'grid-cols-1' : 'grid-cols-2 auto-rows-[1fr]'
+              }`}>
+                <div className={`relative rounded-xl md:rounded-2xl border border-emerald-100/70 bg-white/80 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden md:row-span-3 ${
+                  cubeExpanded ? 'h-[300px] md:h-auto p-2 sm:p-3' : 'p-1.5 sm:p-2 md:p-3'
+                }`}>
+                  <DimensionCube key={cubeExpanded ? 'exp' : 'col'} heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
+                  <button
+                    type="button"
+                    onClick={toggleCubeExpanded}
+                    className={`absolute z-10 md:hidden border border-emerald-500/30 bg-white/90 shadow-sm backdrop-blur-sm transition-colors hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-[#102020]/90 dark:text-emerald-200 dark:hover:bg-[#102020] text-emerald-700 ${
+                      cubeExpanded ? 'bottom-2 right-2 p-1.5 rounded-lg' : 'bottom-1.5 right-1.5 p-1 rounded-md'
+                    }`}
+                  >
+                    {cubeExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3 w-3" />}
+                  </button>
+                </div>
+                {cubeExpanded ? (
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3 md:contents">
                     {dimensionLegend.map((item) => (
                       <DimensionLegendCard key={item.label} {...item} className="h-full" />
                     ))}
                   </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 auto-rows-[1fr] gap-2 sm:gap-3">
-                  <div className="relative rounded-xl border border-emerald-100/70 bg-white/80 p-1.5 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden">
-                    <DimensionCube key="cube-collapsed" heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
-                    <button
-                      type="button"
-                      onClick={toggleCubeExpanded}
-                      className="absolute bottom-1.5 right-1.5 z-10 rounded-md border border-emerald-500/30 bg-white/90 p-1 text-emerald-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-[#102020]/90 dark:text-emerald-200 dark:hover:bg-[#102020]"
-                    >
-                      <Maximize2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                  {dimensionLegend.map((item) => (
+                ) : (
+                  dimensionLegend.map((item) => (
                     <DimensionLegendCard key={item.label} {...item} className="h-full" />
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
             </section>
           )}
 
