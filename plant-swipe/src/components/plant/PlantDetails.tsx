@@ -43,7 +43,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     }
   }, [images.length, activeImageIndex])
 
-    const heroColors = useMemo(() => plant.identity?.colors?.filter((c) => c.hexCode) || [], [plant.identity?.colors])
     const commonNames = useMemo(() => {
       const prioritized =
         plant.identity?.givenNames && plant.identity.givenNames.length > 0
@@ -267,17 +266,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
             </div>
             {plant.identity?.overview && (
               <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{plant.identity.overview}</p>
-            )}
-            {heroColors.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">{t('plantDetails.palette')}</span>
-                {heroColors.map((c) => (
-                  <div key={c.id || c.hexCode} className="flex items-center gap-2 rounded-full border border-muted/50 bg-white/70 px-3 py-1 shadow-sm dark:bg-slate-900/50">
-                    <span className="h-4 w-4 rounded-full border" style={{ backgroundColor: c.hexCode }} />
-                    <span className="text-xs font-medium">{c.name}</span>
-                  </div>
-                ))}
-              </div>
             )}
           </div>
           <div className="flex w-full justify-center lg:w-auto">
