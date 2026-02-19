@@ -15,6 +15,7 @@ import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
 import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
 import { AdminBugsPanel } from "@/components/admin/AdminBugsPanel";
+import { AdminPlantReportsPanel } from "@/components/admin/AdminPlantReportsPanel";
 import { AdminUserMessagesDialog } from "@/components/admin/AdminUserMessagesDialog";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
@@ -295,7 +296,7 @@ const THREAT_LEVEL_META: Record<number, {
   },
 };
 
-type RequestViewMode = "requests" | "plants";
+type RequestViewMode = "requests" | "plants" | "reports";
 type NormalizedPlantStatus =
   | "in progres"
   | "review"
@@ -305,6 +306,7 @@ type NormalizedPlantStatus =
 const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
   { key: "plants", label: "Plants" },
   { key: "requests", label: "Requests" },
+  { key: "reports", label: "Reports" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -1972,6 +1974,7 @@ export const AdminPage: React.FC = () => {
   const [translatingRequestId, setTranslatingRequestId] = React.useState<string | null>(null);
   const requestViewMode: RequestViewMode = React.useMemo(() => {
     if (currentPath.includes("/admin/plants/requests")) return "requests";
+    if (currentPath.includes("/admin/plants/reports")) return "reports";
     return "plants";
   }, [currentPath]);
   const bulkRequestParsed = React.useMemo(() => {
@@ -3435,6 +3438,7 @@ export const AdminPage: React.FC = () => {
   }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery, plantSortOption]);
 
   const plantViewIsPlants = requestViewMode === "plants";
+  const plantViewIsReports = requestViewMode === "reports";
   const plantTableLoading =
     plantDashboardLoading && !plantDashboardInitialized;
   const visiblePlantStatusesSet = React.useMemo(
@@ -8228,7 +8232,7 @@ export const AdminPage: React.FC = () => {
                         <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
                           {REQUEST_VIEW_TABS.map((tab) => {
                             const isActive = requestViewMode === tab.key;
-                            const tabPath = tab.key === "requests" ? "/admin/plants/requests" : "/admin/plants";
+                            const tabPath = tab.key === "requests" ? "/admin/plants/requests" : tab.key === "reports" ? "/admin/plants/reports" : "/admin/plants";
                             return (
                               <Link
                                 key={tab.key}
@@ -8245,7 +8249,9 @@ export const AdminPage: React.FC = () => {
                           })}
                         </div>
                       </div>
-                        {plantViewIsPlants ? (
+                        {plantViewIsReports ? (
+                          <AdminPlantReportsPanel />
+                        ) : plantViewIsPlants ? (
                           <div className="space-y-6 sm:space-y-8">
                             {/* Header Section */}
                             <div className="flex flex-col gap-4 sm:gap-6">

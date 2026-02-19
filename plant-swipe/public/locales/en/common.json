@@ -969,6 +969,24 @@
       "repottingInterval_one": "Every {{count}} year",
       "repottingInterval_other": "Every {{count}} years"
     },
+    "report": {
+      "button": "Report plant information",
+      "title": "Report Plant Information",
+      "description": "Report incorrect or outdated information for {{plantName}}",
+      "noteLabel": "What is wrong?",
+      "notePlaceholder": "Describe what information is incorrect or outdated...",
+      "noteTooShort": "Please provide a detailed description (at least 10 characters).",
+      "imageLabel": "Attach an image (optional)",
+      "imageHint": "Upload a photo showing the correct information or the error",
+      "invalidImage": "Please upload a valid image file (JPEG, PNG, WebP, GIF)",
+      "imageTooLarge": "Image is too large. Maximum size is 10 MB.",
+      "uploading": "Uploading...",
+      "uploadImage": "Click to upload an image",
+      "submitting": "Submitting...",
+      "submit": "Submit Report",
+      "successTitle": "Report Submitted",
+      "successDescription": "Thank you for helping improve our plant data. Our team will review your report."
+    },
     "meta": {
       "auditTitle": "Record history",
       "createdAt": "Created",
