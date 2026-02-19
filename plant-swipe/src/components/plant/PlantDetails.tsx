@@ -152,7 +152,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       chipBorder: "border-amber-200/60 dark:border-amber-700/30",
       labelColor: "text-amber-800/70 dark:text-amber-300/60",
       glowColor: "from-amber-300/30 to-orange-300/30 dark:from-amber-700/15 dark:to-orange-700/15",
-      icon: <SunMedium className="h-3.5 w-3.5 text-white" />,
+      icon: <SunMedium className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 text-white" />,
       visible: Boolean(plant.plantCare?.levelSun),
     },
     {
@@ -165,7 +165,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       chipBorder: "border-blue-200/60 dark:border-blue-700/30",
       labelColor: "text-blue-800/70 dark:text-blue-300/60",
       glowColor: "from-blue-300/30 to-cyan-300/30 dark:from-blue-700/15 dark:to-cyan-700/15",
-      icon: <Droplet className="h-3.5 w-3.5 text-white" />,
+      icon: <Droplet className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 text-white" />,
       visible: Boolean(plant.plantCare?.watering?.schedules?.length),
     },
     {
@@ -178,7 +178,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       chipBorder: "border-cyan-200/60 dark:border-cyan-700/30",
       labelColor: "text-cyan-800/70 dark:text-cyan-300/60",
       glowColor: "from-cyan-300/30 to-teal-300/30 dark:from-cyan-700/15 dark:to-teal-700/15",
-      icon: <Droplets className="h-3.5 w-3.5 text-white" />,
+      icon: <Droplets className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 text-white" />,
       visible: plant.plantCare?.hygrometry !== undefined,
     },
     {
@@ -191,7 +191,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       chipBorder: "border-emerald-200/60 dark:border-emerald-700/30",
       labelColor: "text-emerald-800/70 dark:text-emerald-300/60",
       glowColor: "from-emerald-300/30 to-teal-300/30 dark:from-emerald-700/15 dark:to-teal-700/15",
-      icon: <Wrench className="h-3.5 w-3.5 text-white" />,
+      icon: <Wrench className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 text-white" />,
       visible: Boolean(maintenanceLevel),
     },
     {
@@ -209,7 +209,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       chipBorder: "border-rose-200/60 dark:border-rose-700/30",
       labelColor: "text-rose-800/70 dark:text-rose-300/60",
       glowColor: "from-rose-300/30 to-pink-300/30 dark:from-rose-700/15 dark:to-pink-700/15",
-      icon: <Thermometer className="h-3.5 w-3.5 text-white" />,
+      icon: <Thermometer className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 text-white" />,
       visible:
         plant.plantCare?.temperatureMin !== undefined ||
         plant.plantCare?.temperatureMax !== undefined ||
@@ -305,19 +305,19 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       </div>
 
       {visibleStats.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-2.5 sm:gap-3">
+        <div className="flex flex-wrap justify-center gap-2.5 sm:gap-3 lg:gap-3.5">
           {visibleStats.map((stat) => (
             <div
               key={stat.label}
-              className={`group relative flex items-center gap-2.5 overflow-hidden rounded-2xl border px-3.5 py-2.5 transition-shadow duration-300 ${stat.chipBg} ${stat.chipBorder}`}
+              className={`group relative flex items-center gap-2.5 lg:gap-3 overflow-hidden rounded-2xl border px-3.5 py-2.5 lg:px-5 lg:py-3.5 transition-shadow duration-300 ${stat.chipBg} ${stat.chipBorder}`}
             >
-              <div className={`pointer-events-none absolute -right-3 -top-3 h-16 w-16 rounded-full bg-gradient-to-br ${stat.glowColor} blur-2xl`} />
-              <span className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-md ${stat.iconBg} ${stat.iconShadow}`}>
+              <div className={`pointer-events-none absolute -right-3 -top-3 h-16 w-16 lg:h-20 lg:w-20 rounded-full bg-gradient-to-br ${stat.glowColor} blur-2xl`} />
+              <span className={`relative flex h-7 w-7 lg:h-9 lg:w-9 shrink-0 items-center justify-center rounded-lg lg:rounded-xl shadow-md ${stat.iconBg} ${stat.iconShadow}`}>
                 {stat.icon}
               </span>
               <div className="relative min-w-0">
-                <p className={`text-[10px] leading-none font-medium ${stat.labelColor}`}>{stat.label}</p>
-                <p className="mt-0.5 text-sm font-semibold leading-tight text-foreground">{stat.value}</p>
+                <p className={`text-[10px] lg:text-xs leading-none font-medium ${stat.labelColor}`}>{stat.label}</p>
+                <p className="mt-0.5 text-sm lg:text-base font-semibold leading-tight text-foreground">{stat.value}</p>
               </div>
             </div>
           ))}
