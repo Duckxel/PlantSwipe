@@ -147,7 +147,9 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       label: t('plantDetails.stats.sunLevel'),
       value: translateLevelSun(plant.plantCare?.levelSun),
       colorClass: "text-amber-500 dark:text-amber-400",
-      bgClass: "bg-amber-500/10 dark:bg-amber-400/10",
+      mutedColorClass: "text-amber-700/60 dark:text-amber-300/50",
+      bgClass: "bg-amber-500/15 dark:bg-amber-400/15",
+      ringClass: "ring-1 ring-amber-400/20 dark:ring-amber-400/15",
       icon: <SunMedium className="h-4 w-4" />,
       visible: Boolean(plant.plantCare?.levelSun),
     },
@@ -155,7 +157,9 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       label: t('plantDetails.stats.wateringNeed'),
       value: formatWateringNeed(plant.plantCare?.watering?.schedules),
       colorClass: "text-blue-500 dark:text-blue-400",
-      bgClass: "bg-blue-500/10 dark:bg-blue-400/10",
+      mutedColorClass: "text-blue-700/60 dark:text-blue-300/50",
+      bgClass: "bg-blue-500/15 dark:bg-blue-400/15",
+      ringClass: "ring-1 ring-blue-400/20 dark:ring-blue-400/15",
       icon: <Droplet className="h-4 w-4" />,
       visible: Boolean(plant.plantCare?.watering?.schedules?.length),
     },
@@ -163,7 +167,9 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       label: t('plantDetails.stats.humidity'),
       value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : t('plantDetails.values.ambient'),
       colorClass: "text-cyan-500 dark:text-cyan-400",
-      bgClass: "bg-cyan-500/10 dark:bg-cyan-400/10",
+      mutedColorClass: "text-cyan-700/60 dark:text-cyan-300/50",
+      bgClass: "bg-cyan-500/15 dark:bg-cyan-400/15",
+      ringClass: "ring-1 ring-cyan-400/20 dark:ring-cyan-400/15",
       icon: <Droplets className="h-4 w-4" />,
       visible: plant.plantCare?.hygrometry !== undefined,
     },
@@ -171,7 +177,9 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       label: t('plantDetails.stats.maintenance'),
       value: translateMaintenance(maintenanceLevel),
       colorClass: "text-emerald-500 dark:text-emerald-400",
-      bgClass: "bg-emerald-500/10 dark:bg-emerald-400/10",
+      mutedColorClass: "text-emerald-700/60 dark:text-emerald-300/50",
+      bgClass: "bg-emerald-500/15 dark:bg-emerald-400/15",
+      ringClass: "ring-1 ring-emerald-400/20 dark:ring-emerald-400/15",
       icon: <Wrench className="h-4 w-4" />,
       visible: Boolean(maintenanceLevel),
     },
@@ -184,7 +192,9 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
           ? `${plant.plantCare.temperatureIdeal}°C`
           : t('plantDetails.values.stable'),
       colorClass: "text-rose-500 dark:text-rose-400",
-      bgClass: "bg-rose-500/10 dark:bg-rose-400/10",
+      mutedColorClass: "text-rose-700/60 dark:text-rose-300/50",
+      bgClass: "bg-rose-500/15 dark:bg-rose-400/15",
+      ringClass: "ring-1 ring-rose-400/20 dark:ring-rose-400/15",
       icon: <Thermometer className="h-4 w-4" />,
       visible:
         plant.plantCare?.temperatureMin !== undefined ||
@@ -292,17 +302,17 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       </div>
 
       {visibleStats.length > 0 && (
-        <div className="flex flex-wrap gap-2 sm:gap-2.5">
+        <div className="flex flex-wrap justify-center gap-2 sm:gap-2.5">
           {visibleStats.map((stat) => (
             <div
               key={stat.label}
-              className="flex items-center gap-2.5 rounded-2xl border border-muted/40 bg-white/60 px-3.5 py-2.5 backdrop-blur-sm dark:border-white/[0.08] dark:bg-white/[0.04]"
+              className={`flex items-center gap-2.5 rounded-2xl border px-3.5 py-2.5 backdrop-blur-sm border-muted/30 bg-white/80 dark:border-white/[0.06] dark:bg-white/[0.06] ${stat.ringClass}`}
             >
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${stat.bgClass} ${stat.colorClass}`}>
                 {stat.icon}
               </span>
               <div className="min-w-0">
-                <p className="text-[10px] leading-none text-muted-foreground">{stat.label}</p>
+                <p className={`text-[10px] leading-none ${stat.mutedColorClass}`}>{stat.label}</p>
                 <p className="mt-0.5 text-sm font-semibold leading-tight text-foreground">{stat.value}</p>
               </div>
             </div>
