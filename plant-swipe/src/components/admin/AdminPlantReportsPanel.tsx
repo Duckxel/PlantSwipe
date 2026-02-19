@@ -17,6 +17,7 @@ import {
   Flag,
   User,
   Leaf,
+  MessageSquare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabaseClient'
@@ -231,15 +232,17 @@ export function AdminPlantReportsPanel() {
                       {report.plantName}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-1.5">
                     <button
                       type="button"
-                      className="text-xs text-stone-500 dark:text-stone-400 truncate max-w-[200px] sm:max-w-[300px] hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-left"
+                      className="inline-flex items-center gap-1.5 max-w-[240px] sm:max-w-[360px] px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-700/30 text-xs text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 hover:border-amber-300 dark:hover:border-amber-600/50 transition-all text-left group/note"
                       onClick={(e) => handleNoteClick(report, e)}
+                      title="Click to read full note"
                     >
-                      {truncateNote(report.note)}
+                      <MessageSquare className="h-3 w-3 flex-shrink-0 opacity-60 group-hover/note:opacity-100 transition-opacity" />
+                      <span className="truncate">{truncateNote(report.note)}</span>
                     </button>
-                    <span className="text-xs text-stone-400 dark:text-stone-500 flex items-center gap-1">
+                    <span className="text-[11px] text-stone-400 dark:text-stone-500 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {formatTimeAgo(report.createdAt)}
                     </span>
