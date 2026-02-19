@@ -931,8 +931,6 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({
       : "max-w-[220px]"
     : "max-w-[min(260px,calc(100vw-5rem))]"
 
-  const detailMotionProps = { initial: { opacity: 0, x: 16 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, x: 16 } }
-
   return (
     <div className={cn("pointer-events-auto", !isSidebarVariant && "basis-auto")}>
       <button
@@ -940,8 +938,6 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({
         aria-label={ariaLabel || undefined}
         aria-expanded={active}
         aria-pressed={active}
-        onMouseEnter={allowHover ? onActivate : undefined}
-        onMouseLeave={allowHover ? onDeactivate : undefined}
         onFocus={handleFocus}
         onBlur={handleBlur}
         onClick={handleClick}
@@ -951,44 +947,38 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({
           !isSidebarVariant && "justify-end",
         )}
       >
-        <AnimatePresence>
-          {active && (
-            <motion.div className={cn(detailBaseClass, detailWidthClass)} {...detailMotionProps}>
-              {isColorVariant ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {item.colors!.map((color) => (
-                    <span key={color.id} className="relative flex h-4 w-4 items-center justify-center">
-                      <span
-                        className="h-4 w-4 rounded-full border border-white/30"
-                        style={{ backgroundColor: color.tone }}
-                        title={color.label}
-                        aria-hidden="true"
-                      />
-                      <span className="sr-only">{color.label}</span>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-0.5 text-white">
-                  {item.description && (
-                    <span className="text-[10px] uppercase tracking-[0.25em] text-white/60">
-                      {item.description}
-                    </span>
-                  )}
-                  <span className="text-xs font-semibold leading-tight">{item.label}</span>
-                  {item.detailList?.length ? (
-                    <span className="text-[11px] text-white/70 leading-tight">
-                      {item.detailList.join(", ")}
-                    </span>
-                  ) : null}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {active && (
+          <div className={cn(detailBaseClass, detailWidthClass, "pointer-events-none absolute right-full top-1/2 -translate-y-1/2")}>
+            {isColorVariant ? (
+              <div className="flex flex-wrap gap-1.5">
+                {item.colors!.map((color) => (
+                  <span key={color.id} className="relative flex h-4 w-4 items-center justify-center">
+                    <span
+                      className="h-4 w-4 rounded-full border border-white/30"
+                      style={{ backgroundColor: color.tone }}
+                      aria-hidden="true"
+                    />
+                    <span className="sr-only">{color.label}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-0.5 text-white">
+                <span className="text-xs font-semibold leading-tight">{item.label}</span>
+                {item.detailList?.length ? (
+                  <span className="text-[11px] text-white leading-tight">
+                    {item.detailList.join(", ")}
+                  </span>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
         <span
+          onMouseEnter={allowHover ? onActivate : undefined}
+          onMouseLeave={allowHover ? onDeactivate : undefined}
           className={cn(
-            "flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/65 text-white shadow-lg transition ring-offset-1 ring-offset-transparent",
+            "flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/65 text-white shadow-lg ring-offset-1 ring-offset-transparent",
             item.accentClass,
             active ? "ring-2 ring-white/80" : "ring-0",
             isColorVariant && "p-0",
