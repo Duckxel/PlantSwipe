@@ -684,6 +684,7 @@ DECLARE
   _garden_id uuid;
   _cache_date date := CURRENT_DATE;
   _due_at date;
+  _garden_exists boolean;
 BEGIN
   -- Get garden_id and date from task/occurrence
   IF TG_OP = 'DELETE' THEN
@@ -699,11 +700,12 @@ BEGIN
   END IF;
   
   IF _garden_id IS NOT NULL THEN
-    -- Refresh cache SYNCHRONOUSLY to ensure it's always available
-    -- This is critical for performance - cache must be ready immediately
+    -- Skip cache refresh if the garden is being deleted (session flag set by server)
+    IF current_setting('app.deleting_garden', true) = _garden_id::text THEN
+      RETURN COALESCE(NEW, OLD);
+    END IF;
+
     PERFORM refresh_garden_task_cache(_garden_id, _cache_date);
-    
-    -- Also notify for async user cache refresh
     PERFORM pg_notify('garden_task_cache_refresh', _garden_id::text || '|' || _cache_date::text);
   END IF;
   
@@ -728,10 +730,12 @@ BEGIN
   END IF;
   
   IF _garden_id IS NOT NULL THEN
-    -- Refresh cache SYNCHRONOUSLY to ensure it's always available
+    -- Skip cache refresh if the garden is being deleted (session flag set by server)
+    IF current_setting('app.deleting_garden', true) = _garden_id::text THEN
+      RETURN COALESCE(NEW, OLD);
+    END IF;
+
     PERFORM refresh_garden_task_cache(_garden_id, _cache_date);
-    
-    -- Also notify for async operations
     PERFORM pg_notify('garden_task_cache_refresh', _garden_id::text || '|' || _cache_date::text);
   END IF;
   
@@ -1204,16 +1208,23 @@ SET search_path = public
 AS $$
 DECLARE
   _user_id uuid;
+  _garden_id uuid;
   _cache_date date := CURRENT_DATE;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     _user_id := OLD.user_id;
+    _garden_id := OLD.garden_id;
   ELSE
     _user_id := NEW.user_id;
+    _garden_id := NEW.garden_id;
   END IF;
   
+  -- Skip cache refresh if the garden is being deleted
+  IF current_setting('app.deleting_garden', true) = _garden_id::text THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
   IF _user_id IS NOT NULL THEN
-    -- Refresh SYNCHRONOUSLY to ensure cache is ready
     PERFORM refresh_user_task_daily_cache(_user_id, _cache_date);
   END IF;
   

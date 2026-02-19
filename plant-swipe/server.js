@@ -17597,14 +17597,27 @@ app.post('/api/account/delete', async (req, res) => {
               .maybeSingle()
             const coverUrl = gardenRow?.cover_image_url || null
 
-            // Delete the garden
-            const { error: deleteErr } = await supabaseServiceClient
-              .from('gardens')
-              .delete()
-              .eq('id', gardenId)
-            if (deleteErr) {
-              console.warn('[account-delete] Failed to delete garden', gardenId, deleteErr?.message)
-            } else {
+            // Delete the garden using raw SQL to avoid cascade trigger issues
+            try {
+              if (sql) {
+                await sql.begin(async (tx) => {
+                  await tx`SELECT set_config('app.deleting_garden', ${gardenId}, true)`
+                  await tx`DELETE FROM public.garden_task_user_completions WHERE occurrence_id IN (SELECT o.id FROM public.garden_plant_task_occurrences o JOIN public.garden_plant_tasks t ON t.id = o.task_id WHERE t.garden_id = ${gardenId})`
+                  await tx`DELETE FROM public.garden_plant_task_occurrences WHERE task_id IN (SELECT id FROM public.garden_plant_tasks WHERE garden_id = ${gardenId})`
+                  await tx`DELETE FROM public.garden_plant_tasks WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.garden_task_occurrences_today_cache WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.garden_plant_task_counts_cache WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.garden_task_weekly_cache WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.garden_task_daily_cache WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.gardens WHERE id = ${gardenId}`
+                })
+              } else {
+                const { error: deleteErr } = await supabaseServiceClient
+                  .from('gardens')
+                  .delete()
+                  .eq('id', gardenId)
+                if (deleteErr) throw deleteErr
+              }
               deletedGardens++
               deletedGardenIds.push(gardenId)
 
@@ -17617,6 +17630,8 @@ app.post('/api/account/delete', async (req, res) => {
                   console.warn('[account-delete] Failed to delete cover image', coverUrl, coverErr?.message)
                 }
               }
+            } catch (deleteErr) {
+              console.warn('[account-delete] Failed to delete garden', gardenId, deleteErr?.message)
             }
           }
         } else {
@@ -18058,7 +18073,21 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
                 if (result.deleted) stats.storageObjectsDeleted++
               }
               
-              await supabaseServiceClient.from('gardens').delete().eq('id', gardenId)
+              if (sql) {
+                await sql.begin(async (tx) => {
+                  await tx`SELECT set_config('app.deleting_garden', ${gardenId}, true)`
+                  await tx`DELETE FROM public.garden_task_user_completions WHERE occurrence_id IN (SELECT o.id FROM public.garden_plant_task_occurrences o JOIN public.garden_plant_tasks t ON t.id = o.task_id WHERE t.garden_id = ${gardenId})`
+                  await tx`DELETE FROM public.garden_plant_task_occurrences WHERE task_id IN (SELECT id FROM public.garden_plant_tasks WHERE garden_id = ${gardenId})`
+                  await tx`DELETE FROM public.garden_plant_tasks WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.garden_task_occurrences_today_cache WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.garden_plant_task_counts_cache WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.garden_task_weekly_cache WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.garden_task_daily_cache WHERE garden_id = ${gardenId}`
+                  await tx`DELETE FROM public.gardens WHERE id = ${gardenId}`
+                })
+              } else {
+                await supabaseServiceClient.from('gardens').delete().eq('id', gardenId)
+              }
             }
           } else {
             // Just remove user from garden
@@ -20151,7 +20180,7 @@ app.post('/api/bug-report/upload-screenshot', async (req, res) => {
 
 // DELETE a garden (and its cover image from storage)
 app.delete('/api/garden/:id', async (req, res) => {
-  if (!supabaseServiceClient) {
+  if (!sql && !supabaseServiceClient) {
     res.status(503).json({ error: 'Garden deletion is not configured on this server' })
     return
   }
@@ -20176,16 +20205,63 @@ app.delete('/api/garden/:id', async (req, res) => {
     const gardenRow = await getGardenCoverRow(gardenId)
     const coverImageUrl = gardenRow?.cover_image_url || null
 
-    // 2. Delete the garden row (cascade will delete related rows)
-    const { error: deleteErr } = await supabaseServiceClient
-      .from('gardens')
-      .delete()
-      .eq('id', gardenId)
+    // 2. Delete the garden using raw SQL in a transaction.
+    // Direct CASCADE deletion fails because AFTER DELETE triggers on
+    // garden_plant_tasks / garden_plant_task_occurrences call
+    // refresh_garden_task_cache() which INSERTs new rows into cache tables.
+    // Those rows reference the garden being deleted, causing FK violations
+    // at the end of the statement. We work around this by deleting task data
+    // and cache tables first, then deleting the garden row.
+    if (sql) {
+      await sql.begin(async (tx) => {
+        // Signal triggers to skip cache refreshes for this garden (defense-in-depth).
+        // Triggers check current_setting('app.deleting_garden', true) and bail out early.
+        await tx`SELECT set_config('app.deleting_garden', ${gardenId}, true)`
 
-    if (deleteErr) {
-      console.error('[garden-delete] Failed to delete garden row', deleteErr)
-      res.status(500).json({ error: 'Failed to delete garden' })
-      return
+        // a) Delete task completions → occurrences → tasks (in dependency order).
+        //    Their AFTER DELETE triggers will refresh cache tables, but the garden
+        //    still exists at this point so the INSERTs succeed without FK issues.
+        await tx`
+          DELETE FROM public.garden_task_user_completions
+          WHERE occurrence_id IN (
+            SELECT o.id FROM public.garden_plant_task_occurrences o
+            JOIN public.garden_plant_tasks t ON t.id = o.task_id
+            WHERE t.garden_id = ${gardenId}
+          )
+        `
+        await tx`
+          DELETE FROM public.garden_plant_task_occurrences
+          WHERE task_id IN (
+            SELECT id FROM public.garden_plant_tasks WHERE garden_id = ${gardenId}
+          )
+        `
+        await tx`DELETE FROM public.garden_plant_tasks WHERE garden_id = ${gardenId}`
+
+        // b) Clean up all cache tables (including rows the triggers just created).
+        await tx`DELETE FROM public.garden_task_occurrences_today_cache WHERE garden_id = ${gardenId}`
+        await tx`DELETE FROM public.garden_plant_task_counts_cache WHERE garden_id = ${gardenId}`
+        await tx`DELETE FROM public.garden_task_weekly_cache WHERE garden_id = ${gardenId}`
+        await tx`DELETE FROM public.garden_task_daily_cache WHERE garden_id = ${gardenId}`
+
+        // c) Delete the garden row. CASCADE handles remaining child tables
+        //    (garden_members, garden_plants, garden_events, inventory, journal, etc.).
+        //    No task-related triggers fire because tasks are already gone.
+        const deleted = await tx`DELETE FROM public.gardens WHERE id = ${gardenId} RETURNING id`
+        if (!deleted.length) {
+          throw new Error('Garden not found or already deleted')
+        }
+      })
+    } else if (supabaseServiceClient) {
+      // Fallback for environments without direct DB connection
+      const { error: deleteErr } = await supabaseServiceClient
+        .from('gardens')
+        .delete()
+        .eq('id', gardenId)
+      if (deleteErr) {
+        console.error('[garden-delete] Failed to delete garden row', deleteErr)
+        res.status(500).json({ error: 'Failed to delete garden' })
+        return
+      }
     }
 
     // 3. Delete the cover image from storage if it exists
