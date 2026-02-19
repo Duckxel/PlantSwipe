@@ -2,6 +2,7 @@ import React from 'react'
 import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/context/ThemeContext'
 
 type DimensionCubeProps = {
   /** Plant height in centimeters */
@@ -15,17 +16,51 @@ const HUMAN_MODEL_URL =
   'https://media.aphylia.app/UTILITY/admin/uploads/obj/basespiderman-5d85e4ec-e7a4-4be3-b585-b770d0718bf3.obj'
 const HUMAN_HEIGHT_M = 1.8
 
+const THEME_PALETTES = {
+  dark: {
+    fog: { color: 0x050e0d, density: 0.06 },
+    ambient: { color: 0xc8f0e0, intensity: 0.7 },
+    key: { color: 0xffffff, intensity: 0.8 },
+    fill: { color: 0x88ccbb, intensity: 0.35 },
+    rim: { color: 0x34d399, intensity: 0.25 },
+    outerBox: { color: 0x041a16, opacity: 0.18, metalness: 0.4, roughness: 0.5, emissive: 0x0d9488, emissiveIntensity: 0.5 },
+    outerWire: 0x34f5c6,
+    innerWire: { color: 0x10b981, opacity: 0.6 },
+    grid: { main1: 0x1a6b5a, main2: 0x0d3d33, opacity: 0.35 },
+    subGrid: { color: 0x34f5c6, opacity: 0.12 },
+    human: { color: 0x5a8078, metalness: 0.08, roughness: 0.85, emissive: 0x1a3a35, emissiveIntensity: 0.15 },
+    toneMappingExposure: 1.1,
+  },
+  light: {
+    fog: { color: 0xf0f7f4, density: 0.035 },
+    ambient: { color: 0xffffff, intensity: 1.4 },
+    key: { color: 0xffffff, intensity: 1.3 },
+    fill: { color: 0xd4ece6, intensity: 0.6 },
+    rim: { color: 0x6ee7b7, intensity: 0.35 },
+    outerBox: { color: 0xd1fae5, opacity: 0.35, metalness: 0.05, roughness: 0.8, emissive: 0x10b981, emissiveIntensity: 0.12 },
+    outerWire: 0x059669,
+    innerWire: { color: 0x34d399, opacity: 0.45 },
+    grid: { main1: 0xa7d4c4, main2: 0xc8e4da, opacity: 0.45 },
+    subGrid: { color: 0x6ee7b7, opacity: 0.18 },
+    human: { color: 0x7faa9e, metalness: 0.05, roughness: 0.9, emissive: 0x4a8a7c, emissiveIntensity: 0.06 },
+    toneMappingExposure: 1.3,
+  },
+} as const
+
 export const DimensionCube: React.FC<DimensionCubeProps> = ({
   heightCm,
   wingspanCm,
   className,
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const { effectiveTheme } = useTheme()
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return
     const container = containerRef.current
     if (!container) return
+
+    const palette = THEME_PALETTES[effectiveTheme]
 
     const plantH = Math.max((heightCm ?? 30) / 100, 0.05)
     const plantW = Math.max((wingspanCm ?? 30) / 100, 0.05)
@@ -37,7 +72,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.1
+    renderer.toneMappingExposure = palette.toneMappingExposure
 
     const resolveSize = () => {
       const rect = container.getBoundingClientRect()
@@ -54,7 +89,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    scene.fog = new THREE.FogExp2(0x050e0d, 0.06)
+    scene.fog = new THREE.FogExp2(palette.fog.color, palette.fog.density)
 
     // Scene layout: cube at origin, human to the right
     const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth
@@ -89,32 +124,32 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     )
     camera.lookAt(orbitCenter)
 
-    // ── Lighting — balanced for flat front view ──
-    const ambientLight = new THREE.AmbientLight(0xc8f0e0, 0.7)
+    // ── Lighting ──
+    const ambientLight = new THREE.AmbientLight(palette.ambient.color, palette.ambient.intensity)
     scene.add(ambientLight)
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 0.8)
+    const keyLight = new THREE.DirectionalLight(palette.key.color, palette.key.intensity)
     keyLight.position.set(3, 5, 4)
     scene.add(keyLight)
 
-    const fillLight = new THREE.DirectionalLight(0x88ccbb, 0.35)
+    const fillLight = new THREE.DirectionalLight(palette.fill.color, palette.fill.intensity)
     fillLight.position.set(-4, 2, -3)
     scene.add(fillLight)
 
-    const rimLight = new THREE.DirectionalLight(0x34d399, 0.25)
+    const rimLight = new THREE.DirectionalLight(palette.rim.color, palette.rim.intensity)
     rimLight.position.set(0, 3, -5)
     scene.add(rimLight)
 
     // ── Plant box (outer) ──
     const outerGeometry = new THREE.BoxGeometry(plantW, plantH, plantW)
     const outerMaterial = new THREE.MeshStandardMaterial({
-      color: 0x041a16,
+      color: palette.outerBox.color,
       transparent: true,
-      opacity: 0.18,
-      metalness: 0.4,
-      roughness: 0.5,
-      emissive: 0x0d9488,
-      emissiveIntensity: 0.5,
+      opacity: palette.outerBox.opacity,
+      metalness: palette.outerBox.metalness,
+      roughness: palette.outerBox.roughness,
+      emissive: palette.outerBox.emissive,
+      emissiveIntensity: palette.outerBox.emissiveIntensity,
     })
     const outerMesh = new THREE.Mesh(outerGeometry, outerMaterial)
     outerMesh.position.set(0, plantH / 2, 0)
@@ -122,7 +157,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     const outerWire = new THREE.LineSegments(
       new THREE.EdgesGeometry(outerGeometry),
-      new THREE.LineBasicMaterial({ color: 0x34f5c6, linewidth: 2 }),
+      new THREE.LineBasicMaterial({ color: palette.outerWire, linewidth: 2 }),
     )
     outerWire.position.set(0, plantH / 2, 0)
     scene.add(outerWire)
@@ -132,9 +167,9 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         new THREE.BoxGeometry(plantW * 0.7, plantH * 0.7, plantW * 0.7),
       ),
       new THREE.LineBasicMaterial({
-        color: 0x10b981,
+        color: palette.innerWire.color,
         transparent: true,
-        opacity: 0.6,
+        opacity: palette.innerWire.opacity,
       }),
     )
     innerWire.position.set(0, plantH / 2, 0)
@@ -146,24 +181,23 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const grid = new THREE.GridHelper(
       gridExtent,
       gridDivisions,
-      0x1a6b5a,
-      0x0d3d33,
+      palette.grid.main1,
+      palette.grid.main2,
     )
     const gridMat = grid.material as THREE.Material
     gridMat.transparent = true
-    gridMat.opacity = 0.35
+    gridMat.opacity = palette.grid.opacity
     scene.add(grid)
 
-    // Brighter sub-grid for a premium layered look
     const subGrid = new THREE.GridHelper(
       gridExtent,
       Math.round(gridDivisions / 5),
-      0x34f5c6,
-      0x34f5c6,
+      palette.subGrid.color,
+      palette.subGrid.color,
     )
     const subGridMat = subGrid.material as THREE.Material
     subGridMat.transparent = true
-    subGridMat.opacity = 0.12
+    subGridMat.opacity = palette.subGrid.opacity
     subGrid.position.y = 0.001
     scene.add(subGrid)
 
@@ -190,12 +224,12 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         obj.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             child.material = new THREE.MeshStandardMaterial({
-              color: 0x5a8078,
+              color: palette.human.color,
               side: THREE.FrontSide,
-              metalness: 0.08,
-              roughness: 0.85,
-              emissive: 0x1a3a35,
-              emissiveIntensity: 0.15,
+              metalness: palette.human.metalness,
+              roughness: palette.human.roughness,
+              emissive: palette.human.emissive,
+              emissiveIntensity: palette.human.emissiveIntensity,
             })
           }
         })
@@ -380,7 +414,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         container.removeChild(renderer.domElement)
       }
     }
-  }, [heightCm, wingspanCm])
+  }, [heightCm, wingspanCm, effectiveTheme])
 
   return (
     <div
