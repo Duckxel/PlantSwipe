@@ -55,13 +55,13 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     // Scene layout: cube at origin, human to the right
     const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth
-    const sceneCenterX = (humanFarEdge - plantW / 2) / 2
-    const sceneCenterY = sceneMaxHeight / 2
-    const orbitCenter = new THREE.Vector3(sceneCenterX, sceneCenterY, 0)
+    const orbitCenter = new THREE.Vector3(0, plantH / 2, 0)
 
-    // Orthographic frustum — sized to fit the scene with padding
+    // Orthographic frustum — sized to fit the full scene from the cube's center
     const padding = 1.15
-    const frustumHalfHeight = (sceneMaxHeight / 2) * padding
+    const extentAbove = (sceneMaxHeight - plantH / 2) * padding
+    const extentBelow = (plantH / 2) * padding + 0.15
+    const frustumHalfHeight = Math.max(extentAbove, extentBelow)
 
     const computeFrustum = (aspect: number) => {
       const halfH = frustumHalfHeight
