@@ -2134,11 +2134,11 @@ export const GardenListPage: React.FC = () => {
           {loading && <GardenListSkeleton />}
           {error && <div className="p-6 text-sm text-red-600">{error}</div>}
           {!loading && !error && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-3 md:gap-5">
               {gardens.map((g, idx) => (
                 <Card
                   key={g.id}
-                  className={`group relative overflow-hidden rounded-[28px] border border-stone-200/80 dark:border-[#3e3e42]/80 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.75)] shadow-[0_25px_70px_-40px_rgba(15,23,42,0.65)] cursor-pointer ${dragIndex === idx ? "ring-2 ring-emerald-500" : ""}`}
+                  className={`group relative overflow-hidden rounded-[22px] md:rounded-[28px] border border-stone-200/80 dark:border-[#3e3e42]/80 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)] shadow-[0_25px_70px_-40px_rgba(15,23,42,0.65)] cursor-pointer ${dragIndex === idx ? "ring-2 ring-emerald-500" : ""}`}
                   draggable
                   onDragStart={() => setDragIndex(idx)}
                   onDragOver={(e) => e.preventDefault()}
@@ -2167,7 +2167,7 @@ export const GardenListPage: React.FC = () => {
                         : `${completed} / ${due}`;
                       return (
                         <div
-                          className={`pointer-events-none absolute top-3 right-3 rounded-2xl px-3 py-1.5 text-sm font-semibold z-20 backdrop-blur-sm shadow-lg ${color}`}
+                          className={`pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-1 text-xs font-semibold z-20 backdrop-blur-sm shadow-lg ${color}`}
                         >
                           {label}
                         </div>
@@ -2181,9 +2181,9 @@ export const GardenListPage: React.FC = () => {
                   )}
                   <Link
                     to={`/garden/${g.id}`}
-                    className="block w-full h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-500 rounded-[28px]"
+                    className="block w-full h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-500 rounded-[22px] md:rounded-[28px]"
                   >
-                    <div className="relative aspect-[5/3] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
+                    <div className="relative aspect-[4/3] md:aspect-[5/3] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                       {g.coverImageUrl ? (
                         <img
                           src={g.coverImageUrl}
@@ -2193,19 +2193,19 @@ export const GardenListPage: React.FC = () => {
                         />
                       ) : (
                         <div className="absolute inset-0 w-full h-full flex items-center justify-center">
-                          <div className="text-6xl opacity-30">🌱</div>
+                          <div className="text-4xl md:text-5xl opacity-30">🌱</div>
                         </div>
                       )}
                       {/* Gradient overlay for better text readability */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
-                    <div className="p-5 bg-transparent relative z-10">
-                      <div className="flex items-start justify-between gap-4">
+                    <div className="p-3 md:p-4 bg-transparent relative z-10">
+                      <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-xl truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors mb-2">
+                          <h3 className="font-semibold text-sm md:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors mb-1">
                             {g.name}
                           </h3>
-                          <div className="flex items-center flex-wrap gap-4 text-sm text-stone-600 dark:text-stone-300">
+                          <div className="flex items-center flex-wrap gap-2 md:gap-3 text-xs md:text-sm text-stone-600 dark:text-stone-300">
                             <div className="flex items-center gap-1.5">
                               <svg
                                 className="w-4 h-4"
@@ -2243,9 +2243,9 @@ export const GardenListPage: React.FC = () => {
                             )}
                           </div>
                         </div>
-                        <div className="flex-shrink-0 text-stone-400 dark:text-stone-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                        <div className="hidden md:block flex-shrink-0 text-stone-400 dark:text-stone-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                           <svg
-                            className="w-6 h-6"
+                            className="w-5 h-5"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
