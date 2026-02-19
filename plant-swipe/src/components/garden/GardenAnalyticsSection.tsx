@@ -195,8 +195,8 @@ const getWeatherBgClass = (condition: string): string => {
   if (c.includes('snow') || c.includes('cold')) 
     return 'from-cyan-100 to-blue-100 dark:from-cyan-900/30 dark:to-blue-900/30';
   if (c.includes('clear') || c.includes('sunny')) 
-    return 'from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20';
-  return 'from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20';
+    return 'from-yellow-100/80 to-orange-100/60 dark:from-yellow-900/20 dark:to-orange-900/20';
+  return 'from-sky-100/80 to-blue-100/60 dark:from-sky-900/20 dark:to-blue-900/20';
 };
 
 interface GardenPlant {
@@ -896,8 +896,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Completion Rate */}
-              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-5 relative overflow-hidden">
-                <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-2xl" />
+              <Card className="rounded-[28px] border border-emerald-200/60 dark:border-[#3e3e42]/70 bg-gradient-to-br from-emerald-100/80 to-teal-50/90 dark:from-emerald-900/20 dark:to-teal-900/20 p-5 relative overflow-hidden">
+                <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-200/50 dark:bg-emerald-500/10 rounded-full blur-2xl" />
                 <div className="relative">
                   <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300 mb-2">
                     <Target className="w-4 h-4" />
@@ -926,8 +926,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               </Card>
 
               {/* Current Streak */}
-              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 p-5 relative overflow-hidden">
-                <div className="absolute -right-4 -top-4 w-24 h-24 bg-orange-200/30 dark:bg-orange-500/10 rounded-full blur-2xl" />
+              <Card className="rounded-[28px] border border-orange-200/60 dark:border-[#3e3e42]/70 bg-gradient-to-br from-orange-100/80 to-amber-50/90 dark:from-orange-900/20 dark:to-amber-900/20 p-5 relative overflow-hidden">
+                <div className="absolute -right-4 -top-4 w-24 h-24 bg-orange-200/50 dark:bg-orange-500/10 rounded-full blur-2xl" />
                 <div className="relative">
                   <div className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 mb-2">
                     <Flame className="w-4 h-4" />
@@ -943,8 +943,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               </Card>
 
               {/* Tasks This Week */}
-              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-5 relative overflow-hidden">
-                <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-200/30 dark:bg-blue-500/10 rounded-full blur-2xl" />
+              <Card className="rounded-[28px] border border-blue-200/60 dark:border-[#3e3e42]/70 bg-gradient-to-br from-blue-100/80 to-indigo-50/90 dark:from-blue-900/20 dark:to-indigo-900/20 p-5 relative overflow-hidden">
+                <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-200/50 dark:bg-blue-500/10 rounded-full blur-2xl" />
                 <div className="relative">
                   <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300 mb-2">
                     <Activity className="w-4 h-4" />
@@ -960,8 +960,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
               </Card>
 
               {/* Plants Health */}
-              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-5 relative overflow-hidden">
-                <div className="absolute -right-4 -top-4 w-24 h-24 bg-purple-200/30 dark:bg-purple-500/10 rounded-full blur-2xl" />
+              <Card className="rounded-[28px] border border-purple-200/60 dark:border-[#3e3e42]/70 bg-gradient-to-br from-purple-100/80 to-pink-50/90 dark:from-purple-900/20 dark:to-pink-900/20 p-5 relative overflow-hidden">
+                <div className="absolute -right-4 -top-4 w-24 h-24 bg-purple-200/50 dark:bg-purple-500/10 rounded-full blur-2xl" />
                 <div className="relative">
                   <div className="flex items-center gap-2 text-sm text-purple-700 dark:text-purple-300 mb-2">
                     <Leaf className="w-4 h-4" />
@@ -1115,7 +1115,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {/* Total Tasks */}
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 text-center">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-100/80 to-purple-100/60 dark:from-indigo-900/20 dark:to-purple-900/20 border border-indigo-200/40 dark:border-transparent text-center">
                     <div className="text-3xl mb-1">✅</div>
                     <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
                       {analytics.allTimeStats.totalTasksCompleted.toLocaleString()}
@@ -1126,7 +1126,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </div>
                   
                   {/* Perfect Days */}
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 text-center">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-green-100/80 to-emerald-100/60 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200/40 dark:border-transparent text-center">
                     <div className="text-3xl mb-1">⭐</div>
                     <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                       {analytics.allTimeStats.perfectDays}
@@ -1137,7 +1137,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </div>
                   
                   {/* Longest Streak */}
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 text-center">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-orange-100/80 to-amber-100/60 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200/40 dark:border-transparent text-center">
                     <div className="text-3xl mb-1">🔥</div>
                     <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
                       {analytics.allTimeStats.longestStreak}
@@ -1148,7 +1148,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </div>
                   
                   {/* Average per Day */}
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 text-center">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-blue-100/80 to-cyan-100/60 dark:from-blue-900/20 dark:to-cyan-900/20 border border-blue-200/40 dark:border-transparent text-center">
                     <div className="text-3xl mb-1">📊</div>
                     <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                       {analytics.allTimeStats.averageTasksPerDay}
@@ -1162,7 +1162,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                 {/* Second Row */}
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                   {/* Most Active Day */}
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 text-center">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-pink-100/80 to-rose-100/60 dark:from-pink-900/20 dark:to-rose-900/20 border border-pink-200/40 dark:border-transparent text-center">
                     <div className="text-3xl mb-1">📅</div>
                     <div className="text-lg font-bold text-pink-600 dark:text-pink-400">
                       {t(`gardenDashboard.analyticsSection.dayNames.${analytics.allTimeStats.mostActiveDay}`, { 
@@ -1175,7 +1175,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </div>
                   
                   {/* Days Active */}
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-900/20 dark:to-emerald-900/20 text-center">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-teal-100/80 to-emerald-100/60 dark:from-teal-900/20 dark:to-emerald-900/20 border border-teal-200/40 dark:border-transparent text-center">
                     <div className="text-3xl mb-1">🌱</div>
                     <div className="text-2xl font-bold text-teal-600 dark:text-teal-400">
                       {analytics.allTimeStats.totalDaysActive}
@@ -1186,7 +1186,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                   </div>
                   
                   {/* Monthly Comparison */}
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 text-center">
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-violet-100/80 to-purple-100/60 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200/40 dark:border-transparent text-center">
                     <div className="text-3xl mb-1">📈</div>
                     <div className="flex items-center justify-center gap-1">
                       <span className="text-lg font-bold text-violet-600 dark:text-violet-400">
@@ -1213,8 +1213,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
 
             {/* Gardener Advice Section - Hidden when AI features are disabled */}
             {!hideAiFeatures && (
-            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/50 dark:from-amber-900/10 dark:via-[#1f1f1f] dark:to-emerald-900/10 backdrop-blur p-6 relative overflow-hidden">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-amber-200/30 to-emerald-200/30 dark:from-amber-500/10 dark:to-emerald-500/10 rounded-full blur-3xl" />
+            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-amber-50/80 via-white to-emerald-50/80 dark:from-amber-900/10 dark:via-[#1f1f1f] dark:to-emerald-900/10 backdrop-blur p-6 relative overflow-hidden">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-amber-200/40 to-emerald-200/40 dark:from-amber-500/10 dark:to-emerald-500/10 rounded-full blur-3xl" />
               <div className="relative">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-lg flex items-center gap-2">

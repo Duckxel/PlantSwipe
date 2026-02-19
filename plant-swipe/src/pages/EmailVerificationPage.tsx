@@ -359,7 +359,7 @@ export function EmailVerificationPage() {
         }
       `}</style>
       
-      <div className="min-h-screen bg-white dark:bg-stone-900 flex flex-col">
+      <div className="min-h-screen bg-background flex flex-col">
         {/* Header */}
         <div className="sticky top-0 z-50 bg-white dark:bg-stone-900">
           <div className="flex items-center justify-between px-4 py-4 max-w-2xl mx-auto">

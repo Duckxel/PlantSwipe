@@ -2110,7 +2110,7 @@ export const GardenListPage: React.FC = () => {
         className={`grid grid-cols-1 ${user ? "lg:grid-cols-[minmax(0,1fr)_360px]" : ""} gap-8`}
       >
         <div className="max-w-3xl mx-auto w-full space-y-6">
-          <div className="mt-6 mb-6 relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)] flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="mt-6 mb-6 relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-100/60 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)] flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div
               className="absolute -right-16 top-0 h-40 w-40 rounded-full bg-emerald-200/60 dark:bg-emerald-500/10 blur-3xl"
               aria-hidden="true"

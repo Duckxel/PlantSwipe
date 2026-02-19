@@ -4402,7 +4402,7 @@ function OverviewSection({
   return (
     <div className="space-y-6">
       {/* Hero Section with Cover Image */}
-      <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+      <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-emerald-100/70 via-stone-50 to-amber-100/50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
         {/* Share button - top right corner (for public/friends-only gardens) */}
         {garden && (garden.privacy === 'public' || garden.privacy === 'friends_only') && (
           <div className="absolute top-4 right-4 z-20">
@@ -4929,7 +4929,7 @@ function OverviewSection({
 
       {/* Public Garden Notice for non-members */}
       {!isMember && (
-        <Card className="rounded-[28px] border border-emerald-200/70 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-[#1f1f1f] p-5 shadow-sm">
+        <Card className="rounded-[28px] border border-emerald-200/70 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-100/60 to-white dark:from-emerald-900/20 dark:to-[#1f1f1f] p-5 shadow-sm">
           <div className="text-center py-4">
             <div className="text-3xl mb-3">🌿</div>
             <h3 className="font-semibold text-lg mb-2">

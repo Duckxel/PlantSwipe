@@ -358,7 +358,7 @@ export const ScanPage: React.FC = () => {
       </div>
       
       {/* New Scan Card */}
-      <Card className="mb-8 p-6 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-900/10 dark:to-teal-900/10">
+      <Card className="mb-8 p-6 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-100/50 to-teal-100/40 dark:from-emerald-900/10 dark:to-teal-900/10">
         {isIdentifying ? (
           // Loading state
           <div className="flex flex-col items-center justify-center py-8">

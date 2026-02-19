@@ -156,7 +156,7 @@ const PricingPage: React.FC = () => {
         </div>
 
         {/* Plus Tier */}
-        <div className="relative rounded-3xl border-2 border-emerald-500 dark:border-emerald-400 bg-gradient-to-b from-emerald-50 to-white dark:from-emerald-900/20 dark:to-slate-800/50 p-8 space-y-6 shadow-xl shadow-emerald-500/10">
+        <div className="relative rounded-3xl border-2 border-emerald-500 dark:border-emerald-400 bg-gradient-to-b from-emerald-100/70 to-white dark:from-emerald-900/20 dark:to-slate-800/50 p-8 space-y-6 shadow-xl shadow-emerald-500/10">
           {/* Popular badge */}
           <div className="absolute -top-4 left-1/2 -translate-x-1/2">
             <Badge className="rounded-full px-4 py-1.5 bg-emerald-500 text-white border-0 shadow-lg">
@@ -212,11 +212,11 @@ const PricingPage: React.FC = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.2 }}
-        className="relative rounded-3xl border border-slate-200/70 dark:border-slate-700/50 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800/50 dark:to-slate-900/50 p-8 md:p-12 overflow-hidden"
+        className="relative rounded-3xl border border-slate-200/70 dark:border-slate-700/50 bg-gradient-to-br from-slate-100/80 to-white dark:from-slate-800/50 dark:to-slate-900/50 p-8 md:p-12 overflow-hidden"
       >
         {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-radial from-emerald-200/30 to-transparent dark:from-emerald-500/10 blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-radial from-green-200/20 to-transparent dark:from-green-500/5 blur-2xl" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-radial from-emerald-200/50 to-transparent dark:from-emerald-500/10 blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-radial from-green-200/40 to-transparent dark:from-green-500/5 blur-2xl" />
 
         <div className="relative space-y-6 max-w-3xl">
           <div className="flex items-center gap-3">

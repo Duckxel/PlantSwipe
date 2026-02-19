@@ -516,7 +516,7 @@ const LandingPage: React.FC = () => {
 
   return (
     <LandingDataContext.Provider value={landingData}>
-    <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden pb-24 lg:pb-0">
+    <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50 via-stone-50 to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden pb-24 lg:pb-0">
       <style>{animationStyles}</style>
       
       {/* Ambient Background Elements */}
@@ -757,7 +757,7 @@ const HeroVisual: React.FC = () => {
       <div className="relative w-[300px] sm:w-[340px] animate-float-slow">
         <div className="relative bg-stone-900 dark:bg-stone-950 rounded-[3rem] p-3 shadow-2xl shadow-emerald-900/20">
           {/* Screen */}
-          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-[#0f1a14] dark:to-[#0a1510] rounded-[2.5rem] overflow-hidden">
+          <div className="bg-gradient-to-br from-emerald-100/80 to-teal-50 dark:from-[#0f1a14] dark:to-[#0a1510] rounded-[2.5rem] overflow-hidden">
             {/* Dynamic Island */}
             <div className="h-10 flex items-center justify-center pt-2">
               <div className="w-24 h-7 bg-stone-900 dark:bg-black rounded-full" />
@@ -1447,7 +1447,7 @@ const ShowcaseSection: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="bg-gradient-to-br from-emerald-50 via-stone-50 to-amber-50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
+                <div className="bg-gradient-to-br from-emerald-100/70 via-stone-50 to-amber-100/50 dark:from-[#1a2e1a] dark:via-[#1a1a1a] dark:to-[#2a1f0a]">
                   <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl" />
                   <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-200/30 dark:bg-amber-500/10 rounded-full blur-3xl" />
                   <div className="relative z-10 p-6 md:p-8">
@@ -1647,7 +1647,7 @@ const ShowcaseSection: React.FC = () => {
             </div>
             
             <div className="grid grid-cols-2 gap-2 mb-4">
-              <div className="rounded-[20px] bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-3 relative overflow-hidden border border-stone-200/50 dark:border-stone-700/50">
+              <div className="rounded-[20px] bg-gradient-to-br from-emerald-100/70 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-3 relative overflow-hidden border border-emerald-200/50 dark:border-stone-700/50">
                 <div className="absolute -right-3 -top-3 w-16 h-16 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-2xl" />
                 <div className="relative">
                   <div className="flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-300 mb-1">

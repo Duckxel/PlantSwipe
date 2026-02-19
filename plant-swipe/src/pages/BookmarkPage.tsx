@@ -141,7 +141,7 @@ export const BookmarkPage = () => {
         className="relative overflow-hidden mx-4 mt-4 rounded-[32px]"
       >
         {/* Background with gradient and blur */}
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/80 via-white to-stone-50 dark:from-emerald-950/20 dark:via-[#1e1e1e] dark:to-[#171717]" />
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-100/70 via-white to-stone-100/80 dark:from-emerald-950/20 dark:via-[#1e1e1e] dark:to-[#171717]" />
         
         {/* Decorative blobs */}
         <div className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full bg-emerald-200/30 dark:bg-emerald-500/10 blur-3xl" />
