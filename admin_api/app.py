@@ -337,6 +337,11 @@ def _log_admin_action(action: str, target: str = "", detail: dict | None = None)
 
 
 def _verify_request() -> None:
+    # FAIL SECURE: Reject requests if secret is default
+    if APP_SECRET == "change-me":
+        print("[Security] Rejecting request: APP_SECRET is default 'change-me'. Please configure ADMIN_BUTTON_SECRET.")
+        abort(500, description="Server configuration error: Default secret in use.")
+
     # Option A: HMAC on raw body via X-Button-Token
     provided_sig = request.headers.get(HMAC_HEADER, "")
     if provided_sig:
