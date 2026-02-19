@@ -1586,28 +1586,41 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </p>
                 <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
               </div>
-              <div className="flex flex-col gap-3 sm:gap-4">
-                <div
-                  className={`relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden transition-all duration-300 ease-in-out ${
-                    cubeExpanded ? 'h-[300px]' : 'h-[140px]'
-                  }`}
-                >
-                  <DimensionCube heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
-                  <button
-                    type="button"
-                    onClick={toggleCubeExpanded}
-                    className="absolute bottom-2 right-2 z-10 flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-white/90 px-2 py-1 text-[10px] font-medium text-emerald-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-[#102020]/90 dark:text-emerald-200 dark:hover:bg-[#102020]"
-                  >
-                    {cubeExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-                    {cubeExpanded ? t('moreInfo.cube.collapse') : t('moreInfo.cube.expand')}
-                  </button>
+              {cubeExpanded ? (
+                <div className="flex flex-col gap-3 sm:gap-4">
+                  <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden h-[300px]">
+                    <DimensionCube heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
+                    <button
+                      type="button"
+                      onClick={toggleCubeExpanded}
+                      className="absolute bottom-2 right-2 z-10 rounded-lg border border-emerald-500/30 bg-white/90 p-1.5 text-emerald-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-[#102020]/90 dark:text-emerald-200 dark:hover:bg-[#102020]"
+                    >
+                      <Minimize2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                    {dimensionLegend.map((item) => (
+                      <DimensionLegendCard key={item.label} {...item} className="h-full" />
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              ) : (
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  <div className="relative rounded-xl border border-emerald-100/70 bg-white/80 p-1.5 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden">
+                    <DimensionCube heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
+                    <button
+                      type="button"
+                      onClick={toggleCubeExpanded}
+                      className="absolute bottom-1.5 right-1.5 z-10 rounded-md border border-emerald-500/30 bg-white/90 p-1 text-emerald-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-[#102020]/90 dark:text-emerald-200 dark:hover:bg-[#102020]"
+                    >
+                      <Maximize2 className="h-3 w-3" />
+                    </button>
+                  </div>
                   {dimensionLegend.map((item) => (
                     <DimensionLegendCard key={item.label} {...item} className="h-full" />
                   ))}
                 </div>
-              </div>
+              )}
             </section>
           )}
 
