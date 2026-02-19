@@ -168,7 +168,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       {
         label: t('plantDetails.stats.maintenance'),
         value: translateMaintenance(maintenanceLevel),
-        detail: t('plantDetails.stats.careIntensity'),
         gradient: "from-emerald-400/90 to-lime-500",
         icon: <Wrench className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
         visible: Boolean(maintenanceLevel),
