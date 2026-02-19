@@ -1589,7 +1589,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               {cubeExpanded ? (
                 <div className="flex flex-col gap-3 sm:gap-4">
                   <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden h-[300px]">
-                    <DimensionCube heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
+                    <DimensionCube key="cube-expanded" heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
                     <button
                       type="button"
                       onClick={toggleCubeExpanded}
@@ -1605,9 +1605,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="grid grid-cols-2 auto-rows-[1fr] gap-2 sm:gap-3">
                   <div className="relative rounded-xl border border-emerald-100/70 bg-white/80 p-1.5 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden">
-                    <DimensionCube heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
+                    <DimensionCube key="cube-collapsed" heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
                     <button
                       type="button"
                       onClick={toggleCubeExpanded}
