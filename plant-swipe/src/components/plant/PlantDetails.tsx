@@ -187,7 +187,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       label: t('plantDetails.stats.temperature'),
       value:
         plant.plantCare?.temperatureMin !== undefined && plant.plantCare?.temperatureMax !== undefined
-          ? `${plant.plantCare.temperatureMin}°C – ${plant.plantCare.temperatureMax}°C`
+          ? `${plant.plantCare.temperatureMin}°C to ${plant.plantCare.temperatureMax}°C`
           : plant.plantCare?.temperatureIdeal !== undefined
           ? `${plant.plantCare.temperatureIdeal}°C`
           : t('plantDetails.values.stable'),
