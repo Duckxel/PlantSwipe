@@ -12,6 +12,7 @@ import { useAuthActions } from '@/context/AuthActionsContext'
 import { checkEditorAccess, hasAnyRole, USER_ROLES } from '@/constants/userRoles'
 import { AddToBookmarkDialog } from '@/components/plant/AddToBookmarkDialog'
 import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
+import { ReportPlantDialog } from '@/components/plant/ReportPlantDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { trackImpression, fetchImpression, formatCount } from '@/lib/impressions'
 import { getUserBookmarks } from '@/lib/bookmarks'
@@ -61,6 +62,7 @@ import {
   TreeDeciduous,
   Maximize2,
   Minimize2,
+  Flag,
 } from 'lucide-react'
 import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
@@ -440,6 +442,7 @@ const PlantInfoPage: React.FC = () => {
   const [bookmarkOpen, setBookmarkOpen] = React.useState(false)
   const [isBookmarked, setIsBookmarked] = React.useState(false)
   const [gardenOpen, setGardenOpen] = React.useState(false)
+  const [reportOpen, setReportOpen] = React.useState(false)
   const [shareStatus, setShareStatus] = React.useState<'idle' | 'copied' | 'shared' | 'error'>('idle')
   // For fast-path: show construction banner immediately for non-privileged users
   const [limitedPlantInfo, setLimitedPlantInfo] = React.useState<{
@@ -685,6 +688,14 @@ const PlantInfoPage: React.FC = () => {
       return
     }
     setBookmarkOpen(true)
+  }
+
+  const handleReport = () => {
+    if (!user) {
+      openLogin()
+      return
+    }
+    setReportOpen(true)
   }
 
   const handleAddToGarden = () => {
@@ -941,6 +952,19 @@ const PlantInfoPage: React.FC = () => {
               )}
             </Badge>
           )}
+          {/* Report Button — hidden for plants still in construction */}
+          {plant && plant.meta?.status?.toLowerCase() !== 'in progres' && plant.meta?.status?.toLowerCase() !== 'in progress' && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="rounded-full border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#3e3e42] dark:bg-[#1f1f1f]"
+              onClick={handleReport}
+              aria-label={t('plantInfo.report.button', { defaultValue: 'Report plant information' })}
+            >
+              <Flag className="h-5 w-5" />
+            </Button>
+          )}
           {/* Share Button */}
           <div className="relative">
             <Button
@@ -1106,6 +1130,15 @@ const PlantInfoPage: React.FC = () => {
           plantName={plant.name}
           userId={user.id}
           onAdded={handleGardenAdded}
+        />
+      )}
+
+      {plant && (
+        <ReportPlantDialog
+          open={reportOpen}
+          onOpenChange={setReportOpen}
+          plantId={plant.id}
+          plantName={plant.name}
         />
       )}
     </div>

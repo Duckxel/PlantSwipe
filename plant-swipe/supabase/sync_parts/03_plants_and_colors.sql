@@ -886,3 +886,54 @@ do $$ begin
   create policy translation_languages_read on public.translation_languages for select to authenticated, anon using (true);
 end $$;
 
+-- ========== Plant information reports ==========
+-- Users can report a plant for having wrong or outdated information
+create table if not exists public.plant_reports (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  plant_id text not null references public.plants(id) on delete cascade,
+  note text not null,
+  image_url text,
+  created_at timestamptz not null default now()
+);
+comment on table public.plant_reports is 'User-submitted reports about incorrect or outdated plant information';
+create index if not exists plant_reports_plant_id_idx on public.plant_reports(plant_id);
+create index if not exists plant_reports_user_id_idx on public.plant_reports(user_id);
+create index if not exists plant_reports_created_at_idx on public.plant_reports(created_at desc);
+alter table public.plant_reports enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_reports' and policyname='plant_reports_select_admin') then
+    drop policy plant_reports_select_admin on public.plant_reports;
+  end if;
+  -- Admins and editors can read all reports
+  create policy plant_reports_select_admin on public.plant_reports
+    for select to authenticated
+    using (
+      exists (
+        select 1 from public.profiles
+        where id = auth.uid()
+          and (is_admin = true or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false))
+      )
+    );
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_reports' and policyname='plant_reports_insert_auth') then
+    drop policy plant_reports_insert_auth on public.plant_reports;
+  end if;
+  -- Any authenticated user can create a report
+  create policy plant_reports_insert_auth on public.plant_reports
+    for insert to authenticated
+    with check (auth.uid() = user_id);
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_reports' and policyname='plant_reports_delete_admin') then
+    drop policy plant_reports_delete_admin on public.plant_reports;
+  end if;
+  -- Only admins and editors can delete reports
+  create policy plant_reports_delete_admin on public.plant_reports
+    for delete to authenticated
+    using (
+      exists (
+        select 1 from public.profiles
+        where id = auth.uid()
+          and (is_admin = true or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false))
+      )
+    );
+end $$;
+

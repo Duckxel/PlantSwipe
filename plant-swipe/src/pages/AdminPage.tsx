@@ -15,6 +15,7 @@ import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
 import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
 import { AdminBugsPanel } from "@/components/admin/AdminBugsPanel";
+import { AdminPlantReportsPanel } from "@/components/admin/AdminPlantReportsPanel";
 import { AdminUserMessagesDialog } from "@/components/admin/AdminUserMessagesDialog";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
@@ -295,7 +296,7 @@ const THREAT_LEVEL_META: Record<number, {
   },
 };
 
-type RequestViewMode = "requests" | "plants";
+type RequestViewMode = "requests" | "plants" | "reports";
 type NormalizedPlantStatus =
   | "in progres"
   | "review"
@@ -305,6 +306,7 @@ type NormalizedPlantStatus =
 const REQUEST_VIEW_TABS: Array<{ key: RequestViewMode; label: string }> = [
   { key: "plants", label: "Plants" },
   { key: "requests", label: "Requests" },
+  { key: "reports", label: "Reports" },
 ];
 
 const PLANT_STATUS_LABELS: Record<NormalizedPlantStatus, string> = {
@@ -1972,6 +1974,7 @@ export const AdminPage: React.FC = () => {
   const [translatingRequestId, setTranslatingRequestId] = React.useState<string | null>(null);
   const requestViewMode: RequestViewMode = React.useMemo(() => {
     if (currentPath.includes("/admin/plants/requests")) return "requests";
+    if (currentPath.includes("/admin/plants/reports")) return "reports";
     return "plants";
   }, [currentPath]);
   const bulkRequestParsed = React.useMemo(() => {
@@ -3435,6 +3438,7 @@ export const AdminPage: React.FC = () => {
   }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery, plantSortOption]);
 
   const plantViewIsPlants = requestViewMode === "plants";
+  const plantViewIsReports = requestViewMode === "reports";
   const plantTableLoading =
     plantDashboardLoading && !plantDashboardInitialized;
   const visiblePlantStatusesSet = React.useMemo(
@@ -4882,6 +4886,9 @@ export const AdminPage: React.FC = () => {
   // Pending bug reports count for showing indicator on Bugs nav
   const [pendingBugReportsCount, setPendingBugReportsCount] = React.useState(0);
   
+  // Pending plant information reports count
+  const [pendingPlantReportsCount, setPendingPlantReportsCount] = React.useState(0);
+  
   // Load active reports count on mount (for full admins only)
   React.useEffect(() => {
     if (!isFullAdmin) return;
@@ -4914,6 +4921,23 @@ export const AdminPage: React.FC = () => {
     };
     loadPendingBugReports();
   }, [isFullAdmin]);
+
+  // Load pending plant information reports count on mount
+  React.useEffect(() => {
+    const loadPendingPlantReports = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('plant_reports')
+          .select('*', { count: 'exact', head: true });
+        if (!error && count !== null) {
+          setPendingPlantReportsCount(count);
+        }
+      } catch (e) {
+        console.warn('[AdminPage] Failed to load pending plant reports count:', e);
+      }
+    };
+    loadPendingPlantReports();
+  }, []);
   
   const [memberList, setMemberList] = React.useState<ListedMember[]>([]);
   const [memberListLoading, setMemberListLoading] = React.useState(false);
@@ -6244,9 +6268,18 @@ export const AdminPage: React.FC = () => {
                       {key === "members" && activeReportsCount > 0 && (
                         <AlertTriangle className="h-3.5 w-3.5 text-red-500" title={`${activeReportsCount} active reports`} />
                       )}
-                      {key === "plants" && uniqueRequestedPlantsCount > 0 && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
-                          {uniqueRequestedPlantsCount}
+                      {key === "plants" && (pendingPlantReportsCount > 0 || uniqueRequestedPlantsCount > 0) && (
+                        <span className="flex items-center gap-1">
+                          {pendingPlantReportsCount > 0 && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-amber-500 text-white">
+                              {pendingPlantReportsCount}
+                            </span>
+                          )}
+                          {uniqueRequestedPlantsCount > 0 && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
+                              {uniqueRequestedPlantsCount}
+                            </span>
+                          )}
                         </span>
                       )}
                       {key === "bugs" && pendingBugReportsCount > 0 && (
@@ -6338,13 +6371,26 @@ export const AdminPage: React.FC = () => {
                             title={`${activeReportsCount} active reports`}
                           />
                         )}
-                        {key === "plants" && uniqueRequestedPlantsCount > 0 && (
-                          <span
-                            className={`${
-                              sidebarCollapsed ? "text-[10px]" : "ml-auto text-xs"
-                            } font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100 px-2 py-0.5`}
-                          >
-                            {uniqueRequestedPlantsCount}
+                        {key === "plants" && (pendingPlantReportsCount > 0 || uniqueRequestedPlantsCount > 0) && (
+                          <span className={`flex items-center gap-1 ${sidebarCollapsed ? "" : "ml-auto"}`}>
+                            {pendingPlantReportsCount > 0 && (
+                              <span
+                                className={`${
+                                  sidebarCollapsed ? "text-[10px]" : "text-xs"
+                                } font-semibold rounded-full bg-amber-500 text-white px-2 py-0.5`}
+                              >
+                                {pendingPlantReportsCount}
+                              </span>
+                            )}
+                            {uniqueRequestedPlantsCount > 0 && (
+                              <span
+                                className={`${
+                                  sidebarCollapsed ? "text-[10px]" : "text-xs"
+                                } font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100 px-2 py-0.5`}
+                              >
+                                {uniqueRequestedPlantsCount}
+                              </span>
+                            )}
                           </span>
                         )}
                         {key === "bugs" && pendingBugReportsCount > 0 && (
@@ -8228,7 +8274,7 @@ export const AdminPage: React.FC = () => {
                         <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
                           {REQUEST_VIEW_TABS.map((tab) => {
                             const isActive = requestViewMode === tab.key;
-                            const tabPath = tab.key === "requests" ? "/admin/plants/requests" : "/admin/plants";
+                            const tabPath = tab.key === "requests" ? "/admin/plants/requests" : tab.key === "reports" ? "/admin/plants/reports" : "/admin/plants";
                             return (
                               <Link
                                 key={tab.key}
@@ -8240,12 +8286,23 @@ export const AdminPage: React.FC = () => {
                                 }`}
                               >
                                 {tab.label}
+                                {tab.key === "reports" && pendingPlantReportsCount > 0 && (
+                                  <span className={`ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
+                                    isActive
+                                      ? "bg-white/25 text-white"
+                                      : "bg-amber-500 text-white"
+                                  }`}>
+                                    {pendingPlantReportsCount}
+                                  </span>
+                                )}
                               </Link>
                             );
                           })}
                         </div>
                       </div>
-                        {plantViewIsPlants ? (
+                        {plantViewIsReports ? (
+                          <AdminPlantReportsPanel />
+                        ) : plantViewIsPlants ? (
                           <div className="space-y-6 sm:space-y-8">
                             {/* Header Section */}
                             <div className="flex flex-col gap-4 sm:gap-6">

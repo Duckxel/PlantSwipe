@@ -969,6 +969,24 @@
       "repottingInterval_one": "Tous les {{count}} an",
       "repottingInterval_other": "Tous les {{count}} ans"
     },
+    "report": {
+      "button": "Signaler les informations de la plante",
+      "title": "Signaler les informations",
+      "description": "Signaler des informations incorrectes ou obsolètes pour {{plantName}}",
+      "noteLabel": "Quel est le problème ?",
+      "notePlaceholder": "Décrivez quelles informations sont incorrectes ou obsolètes...",
+      "noteTooShort": "Veuillez fournir une description détaillée (au moins 10 caractères).",
+      "imageLabel": "Joindre une image (optionnel)",
+      "imageHint": "Téléchargez une photo montrant l'information correcte ou l'erreur",
+      "invalidImage": "Veuillez télécharger un fichier image valide (JPEG, PNG, WebP, GIF)",
+      "imageTooLarge": "L'image est trop volumineuse. Taille maximale : 10 Mo.",
+      "uploading": "Téléchargement...",
+      "uploadImage": "Cliquez pour télécharger une image",
+      "submitting": "Envoi en cours...",
+      "submit": "Envoyer le signalement",
+      "successTitle": "Signalement envoyé",
+      "successDescription": "Merci d'aider à améliorer nos données. Notre équipe examinera votre signalement."
+    },
     "meta": {
       "auditTitle": "Historique",
       "createdAt": "Créée",
