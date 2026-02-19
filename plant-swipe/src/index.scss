@@ -38,9 +38,9 @@
     padding-top: var(--window-controls-overlay-height, 0px);
   }
 
-    @media (min-width: 768px) {
+    @media (min-width: 1024px) {
       body.mobile-nav-mounted {
-        /* Desktop/tablet layouts don't render the floating nav */
+        /* Desktop layouts don't render the floating nav */
         padding-bottom: env(safe-area-inset-bottom, 0px);
       }
     }
@@ -178,7 +178,7 @@
 }
 
 /* Mobile nav bar stability - prevent flashing during Discovery card swipes */
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   /* Force mobile nav to its own compositor layer for smoother animations */
   nav[aria-label="Primary"] {
     transform: translate3d(0, 0, 0);

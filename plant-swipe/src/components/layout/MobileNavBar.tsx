@@ -93,7 +93,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     <>
       <nav
         ref={navRef}
-        className="fixed bottom-0 left-0 right-0 md:hidden z-50"
+        className="fixed bottom-0 left-0 right-0 lg:hidden z-50"
         role="navigation"
         aria-label="Primary"
         style={{ 

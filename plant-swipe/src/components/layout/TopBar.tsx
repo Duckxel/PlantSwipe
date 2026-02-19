@@ -79,7 +79,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             filter: brightness(0) saturate(100%) invert(100%);
           }
         `}</style>
-        <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden overflow-y-visible desktop-drag-region" style={{ paddingTop: '1.5rem', paddingBottom: '0.5rem', marginTop: '0' }}>
+        <header className="hidden lg:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden overflow-y-visible desktop-drag-region" style={{ paddingTop: '1.5rem', paddingBottom: '0.5rem', marginTop: '0' }}>
           <Link
             to={user ? "/discovery" : "/"}
             className="flex-shrink-0 no-underline cursor-pointer"
@@ -100,7 +100,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       >
         {t('common.appName')}
       </Link>
-      <nav className="ml-4 hidden md:flex gap-2 items-center">
+      <nav className="ml-4 hidden lg:flex gap-2 items-center">
         {user ? (
           // Logged-in navigation: Discovery, Gardens, Encyclopedia (always normal)
           <>
