@@ -146,41 +146,53 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     {
       label: t('plantDetails.stats.sunLevel'),
       value: translateLevelSun(plant.plantCare?.levelSun),
-      colorClass: "text-amber-500 dark:text-amber-400",
-      mutedColorClass: "text-amber-700/60 dark:text-amber-300/50",
-      bgClass: "bg-amber-500/15 dark:bg-amber-400/15",
-      ringClass: "ring-1 ring-amber-400/20 dark:ring-amber-400/15",
-      icon: <SunMedium className="h-4 w-4" />,
+      iconColor: "text-amber-500 dark:text-amber-400",
+      iconBg: "bg-gradient-to-br from-amber-500 to-orange-500",
+      iconShadow: "shadow-amber-500/30",
+      chipBg: "bg-gradient-to-br from-amber-50 to-orange-50/50 dark:from-amber-950/40 dark:to-orange-950/20",
+      chipBorder: "border-amber-200/60 dark:border-amber-700/30",
+      labelColor: "text-amber-800/70 dark:text-amber-300/60",
+      glowColor: "from-amber-300/30 to-orange-300/30 dark:from-amber-700/15 dark:to-orange-700/15",
+      icon: <SunMedium className="h-3.5 w-3.5 text-white" />,
       visible: Boolean(plant.plantCare?.levelSun),
     },
     {
       label: t('plantDetails.stats.wateringNeed'),
       value: formatWateringNeed(plant.plantCare?.watering?.schedules),
-      colorClass: "text-blue-500 dark:text-blue-400",
-      mutedColorClass: "text-blue-700/60 dark:text-blue-300/50",
-      bgClass: "bg-blue-500/15 dark:bg-blue-400/15",
-      ringClass: "ring-1 ring-blue-400/20 dark:ring-blue-400/15",
-      icon: <Droplet className="h-4 w-4" />,
+      iconColor: "text-blue-500 dark:text-blue-400",
+      iconBg: "bg-gradient-to-br from-blue-500 to-cyan-500",
+      iconShadow: "shadow-blue-500/30",
+      chipBg: "bg-gradient-to-br from-blue-50 to-cyan-50/50 dark:from-blue-950/40 dark:to-cyan-950/20",
+      chipBorder: "border-blue-200/60 dark:border-blue-700/30",
+      labelColor: "text-blue-800/70 dark:text-blue-300/60",
+      glowColor: "from-blue-300/30 to-cyan-300/30 dark:from-blue-700/15 dark:to-cyan-700/15",
+      icon: <Droplet className="h-3.5 w-3.5 text-white" />,
       visible: Boolean(plant.plantCare?.watering?.schedules?.length),
     },
     {
       label: t('plantDetails.stats.humidity'),
       value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : t('plantDetails.values.ambient'),
-      colorClass: "text-cyan-500 dark:text-cyan-400",
-      mutedColorClass: "text-cyan-700/60 dark:text-cyan-300/50",
-      bgClass: "bg-cyan-500/15 dark:bg-cyan-400/15",
-      ringClass: "ring-1 ring-cyan-400/20 dark:ring-cyan-400/15",
-      icon: <Droplets className="h-4 w-4" />,
+      iconColor: "text-cyan-500 dark:text-cyan-400",
+      iconBg: "bg-gradient-to-br from-cyan-500 to-teal-500",
+      iconShadow: "shadow-cyan-500/30",
+      chipBg: "bg-gradient-to-br from-cyan-50 to-teal-50/50 dark:from-cyan-950/40 dark:to-teal-950/20",
+      chipBorder: "border-cyan-200/60 dark:border-cyan-700/30",
+      labelColor: "text-cyan-800/70 dark:text-cyan-300/60",
+      glowColor: "from-cyan-300/30 to-teal-300/30 dark:from-cyan-700/15 dark:to-teal-700/15",
+      icon: <Droplets className="h-3.5 w-3.5 text-white" />,
       visible: plant.plantCare?.hygrometry !== undefined,
     },
     {
       label: t('plantDetails.stats.maintenance'),
       value: translateMaintenance(maintenanceLevel),
-      colorClass: "text-emerald-500 dark:text-emerald-400",
-      mutedColorClass: "text-emerald-700/60 dark:text-emerald-300/50",
-      bgClass: "bg-emerald-500/15 dark:bg-emerald-400/15",
-      ringClass: "ring-1 ring-emerald-400/20 dark:ring-emerald-400/15",
-      icon: <Wrench className="h-4 w-4" />,
+      iconColor: "text-emerald-500 dark:text-emerald-400",
+      iconBg: "bg-gradient-to-br from-emerald-500 to-teal-500",
+      iconShadow: "shadow-emerald-500/30",
+      chipBg: "bg-gradient-to-br from-emerald-50 to-teal-50/50 dark:from-emerald-950/40 dark:to-teal-950/20",
+      chipBorder: "border-emerald-200/60 dark:border-emerald-700/30",
+      labelColor: "text-emerald-800/70 dark:text-emerald-300/60",
+      glowColor: "from-emerald-300/30 to-teal-300/30 dark:from-emerald-700/15 dark:to-teal-700/15",
+      icon: <Wrench className="h-3.5 w-3.5 text-white" />,
       visible: Boolean(maintenanceLevel),
     },
     {
@@ -191,11 +203,14 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
           : plant.plantCare?.temperatureIdeal !== undefined
           ? `${plant.plantCare.temperatureIdeal}°C`
           : t('plantDetails.values.stable'),
-      colorClass: "text-rose-500 dark:text-rose-400",
-      mutedColorClass: "text-rose-700/60 dark:text-rose-300/50",
-      bgClass: "bg-rose-500/15 dark:bg-rose-400/15",
-      ringClass: "ring-1 ring-rose-400/20 dark:ring-rose-400/15",
-      icon: <Thermometer className="h-4 w-4" />,
+      iconColor: "text-rose-500 dark:text-rose-400",
+      iconBg: "bg-gradient-to-br from-rose-500 to-pink-500",
+      iconShadow: "shadow-rose-500/30",
+      chipBg: "bg-gradient-to-br from-rose-50 to-pink-50/50 dark:from-rose-950/40 dark:to-pink-950/20",
+      chipBorder: "border-rose-200/60 dark:border-rose-700/30",
+      labelColor: "text-rose-800/70 dark:text-rose-300/60",
+      glowColor: "from-rose-300/30 to-pink-300/30 dark:from-rose-700/15 dark:to-pink-700/15",
+      icon: <Thermometer className="h-3.5 w-3.5 text-white" />,
       visible:
         plant.plantCare?.temperatureMin !== undefined ||
         plant.plantCare?.temperatureMax !== undefined ||
@@ -302,17 +317,18 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       </div>
 
       {visibleStats.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-2 sm:gap-2.5">
+        <div className="flex flex-wrap justify-center gap-2.5 sm:gap-3">
           {visibleStats.map((stat) => (
             <div
               key={stat.label}
-              className={`flex items-center gap-2.5 rounded-2xl border px-3.5 py-2.5 backdrop-blur-sm border-muted/30 bg-white/80 dark:border-white/[0.06] dark:bg-white/[0.06] ${stat.ringClass}`}
+              className={`group relative flex items-center gap-2.5 overflow-hidden rounded-2xl border px-3.5 py-2.5 transition-shadow duration-300 ${stat.chipBg} ${stat.chipBorder}`}
             >
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${stat.bgClass} ${stat.colorClass}`}>
+              <div className={`pointer-events-none absolute -right-3 -top-3 h-16 w-16 rounded-full bg-gradient-to-br ${stat.glowColor} blur-2xl`} />
+              <span className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-md ${stat.iconBg} ${stat.iconShadow}`}>
                 {stat.icon}
               </span>
-              <div className="min-w-0">
-                <p className={`text-[10px] leading-none ${stat.mutedColorClass}`}>{stat.label}</p>
+              <div className="relative min-w-0">
+                <p className={`text-[10px] leading-none font-medium ${stat.labelColor}`}>{stat.label}</p>
                 <p className="mt-0.5 text-sm font-semibold leading-tight text-foreground">{stat.value}</p>
               </div>
             </div>
