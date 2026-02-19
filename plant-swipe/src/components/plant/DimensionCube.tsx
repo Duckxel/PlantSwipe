@@ -52,36 +52,38 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     const scene = new THREE.Scene()
 
+    // Scene geometry constants (don't change on resize)
     const fov = 38
-    const aspect = initialWidth / Math.max(1, initialHeight)
-    const cubeCenterY = plantH / 2
-    const orbitCenter = new THREE.Vector3(0, cubeCenterY, 0)
-
-    const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth
     const fovRad = (fov * Math.PI) / 180
     const halfVFov = fovRad / 2
 
-    // Vertical framing: camera is elevated, so we need to frame from ground
-    // (y=0) to the top of the tallest object (y=sceneMaxHeight). The orbit
-    // center sits at cubeCenterY, and the camera looks at it from above. We
-    // frame the larger of the two vertical extents from the orbit center.
-    const verticalExtentAbove = sceneMaxHeight - cubeCenterY
-    const verticalExtentBelow = cubeCenterY
-    const maxVerticalExtent = Math.max(verticalExtentAbove, verticalExtentBelow)
-    const distanceForHeight = maxVerticalExtent / Math.tan(halfVFov)
-
-    // Horizontal framing: the scene extends from -plantW/2 to humanFarEdge.
-    // From the orbit center (x=0) the max horizontal extent is humanFarEdge.
-    const halfHFov = Math.atan(Math.tan(halfVFov) * aspect)
-    const distanceForWidth = humanFarEdge / Math.tan(halfHFov)
+    const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth
+    const sceneCenterY = sceneMaxHeight / 2
+    const orbitCenter = new THREE.Vector3(0, sceneCenterY, 0)
 
     const minClearance = humanFarEdge + 0.5
-    const cameraDistance =
-      Math.max(distanceForHeight, distanceForWidth, minClearance) * 1.25
 
-    const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 200)
-    const cameraHeight = cubeCenterY + sceneMaxHeight * 0.3
+    // Mutable camera parameters — recalculated on every resize
+    let cameraDistance = 5
+    let cameraHeight = sceneCenterY + sceneMaxHeight * 0.15
 
+    const computeCameraDistance = (aspect: number) => {
+      // Vertical: frame the full scene height from orbit center
+      const verticalHalfExtent = sceneMaxHeight / 2
+      const dH = verticalHalfExtent / Math.tan(halfVFov)
+
+      // Horizontal: frame from -plantW/2 to humanFarEdge
+      const halfHFov = Math.atan(Math.tan(halfVFov) * aspect)
+      const dW = humanFarEdge / Math.tan(halfHFov)
+
+      return Math.max(dH, dW, minClearance) * 1.2
+    }
+
+    const initialAspect = initialWidth / Math.max(1, initialHeight)
+    cameraDistance = computeCameraDistance(initialAspect)
+    cameraHeight = sceneCenterY + sceneMaxHeight * 0.15
+
+    const camera = new THREE.PerspectiveCamera(fov, initialAspect, 0.1, 200)
     camera.position.set(
       orbitCenter.x + cameraDistance,
       cameraHeight,
@@ -191,7 +193,10 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
       const { width, height: h } = resolveSize()
       if (width <= 0 || h <= 0) return
       renderer.setSize(width, h)
-      camera.aspect = width / Math.max(1, h)
+      const newAspect = width / Math.max(1, h)
+      camera.aspect = newAspect
+      cameraDistance = computeCameraDistance(newAspect)
+      cameraHeight = sceneCenterY + sceneMaxHeight * 0.15
       camera.updateProjectionMatrix()
     }
 
