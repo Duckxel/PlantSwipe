@@ -13,6 +13,11 @@ declare
   v_user uuid;
 begin
   if TG_OP = 'DELETE' then
+    -- When the garden itself is being deleted (CASCADE or session flag),
+    -- allow the member row removal without attempting a recursive garden delete.
+    if current_setting('app.deleting_garden', true) = OLD.garden_id::text then
+      return OLD;
+    end if;
     if OLD.role = 'owner' then
       v_garden := OLD.garden_id;
       v_user := OLD.user_id;
