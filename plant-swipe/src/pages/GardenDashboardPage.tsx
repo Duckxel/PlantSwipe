@@ -23,7 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails } from "@/lib/bookmarks";
@@ -5368,60 +5368,55 @@ function MemberCard({
           </Button>
         )}
         {viewerIsOwner && !isSelf && (
-          <div className="relative">
-            <Button
-              variant="secondary"
-              size="icon"
-              className="rounded-full h-8 w-8"
-              onClick={(e: any) => {
-                e.stopPropagation();
-                setOpen((o) => !o);
-              }}
-              aria-label="Open member actions"
-            >
-              ?
-            </Button>
-            {open && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border rounded-xl shadow-lg z-10">
-                {member.role !== "owner" && (
-                  <button
-                    disabled={!canPromote || busy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      doPromote();
-                    }}
-                    className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? "opacity-60 cursor-not-allowed" : ""}`}
-                  >
-                    {t("gardenDashboard.settingsSection.promoteToOwner")}
-                  </button>
-                )}
-                {member.role === "owner" && (
-                  <button
-                    disabled={!canDemoteOwner || busy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      doDemote();
-                    }}
-                    className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? "opacity-60 cursor-not-allowed" : ""}`}
-                  >
-                    {t("gardenDashboard.settingsSection.demoteToMember")}
-                  </button>
-                )}
-                {member.role !== "owner" && (
-                  <button
-                    disabled={!canRemove || busy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      doRemove();
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600"
-                  >
-                    {t("gardenDashboard.settingsSection.removeMember")}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <DropdownMenu open={open} onOpenChange={setOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="rounded-full h-8 w-8"
+                onClick={(e: any) => e.stopPropagation()}
+                aria-label="Open member actions"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 rounded-xl">
+              {member.role !== "owner" && (
+                <DropdownMenuItem
+                  disabled={!canPromote || busy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    doPromote();
+                  }}
+                >
+                  {t("gardenDashboard.settingsSection.promoteToOwner")}
+                </DropdownMenuItem>
+              )}
+              {member.role === "owner" && (
+                <DropdownMenuItem
+                  disabled={!canDemoteOwner || busy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    doDemote();
+                  }}
+                >
+                  {t("gardenDashboard.settingsSection.demoteToMember")}
+                </DropdownMenuItem>
+              )}
+              {member.role !== "owner" && (
+                <DropdownMenuItem
+                  disabled={!canRemove || busy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    doRemove();
+                  }}
+                  className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                >
+                  {t("gardenDashboard.settingsSection.removeMember")}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
       <div className="flex items-start gap-3">
