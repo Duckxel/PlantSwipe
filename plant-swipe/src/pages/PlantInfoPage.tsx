@@ -1580,15 +1580,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </p>
                 <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
               </div>
-              <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
+              <div className="flex flex-col gap-3 sm:gap-4">
                 <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[200px] max-h-[320px] overflow-hidden">
                   <DimensionCube heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
                 </div>
-                <div className="flex flex-col gap-2 md:min-h-[200px]">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   {dimensionLegend.map((item) => (
-                    <div key={item.label} className="md:flex-1">
-                      <DimensionLegendCard {...item} className="h-full" />
-                    </div>
+                    <DimensionLegendCard key={item.label} {...item} className="h-full" />
                   ))}
                 </div>
               </div>
@@ -2038,15 +2036,15 @@ const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: st
   className,
 }) => (
   <div
-    className={`rounded-xl border border-emerald-500/30 bg-white/95 px-3.5 sm:px-4 py-2.5 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50 ${
+    className={`rounded-xl border border-emerald-500/30 bg-white/95 px-2.5 sm:px-4 py-2 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50 ${
       className || ''
     }`}
   >
-    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
+    <div className="text-[9px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
       {label}
     </div>
-    <div className="text-[11px] sm:text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-1">{subLabel}</div>
-    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">{value}</div>
+    <div className="text-[10px] sm:text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-0.5 sm:mb-1 line-clamp-1">{subLabel}</div>
+    <div className="text-lg sm:text-2xl font-bold text-stone-900 dark:text-white">{value}</div>
   </div>
 )
 
