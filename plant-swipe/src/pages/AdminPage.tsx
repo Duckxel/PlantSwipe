@@ -4886,6 +4886,9 @@ export const AdminPage: React.FC = () => {
   // Pending bug reports count for showing indicator on Bugs nav
   const [pendingBugReportsCount, setPendingBugReportsCount] = React.useState(0);
   
+  // Pending plant information reports count
+  const [pendingPlantReportsCount, setPendingPlantReportsCount] = React.useState(0);
+  
   // Load active reports count on mount (for full admins only)
   React.useEffect(() => {
     if (!isFullAdmin) return;
@@ -4918,6 +4921,23 @@ export const AdminPage: React.FC = () => {
     };
     loadPendingBugReports();
   }, [isFullAdmin]);
+
+  // Load pending plant information reports count on mount
+  React.useEffect(() => {
+    const loadPendingPlantReports = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('plant_reports')
+          .select('*', { count: 'exact', head: true });
+        if (!error && count !== null) {
+          setPendingPlantReportsCount(count);
+        }
+      } catch (e) {
+        console.warn('[AdminPage] Failed to load pending plant reports count:', e);
+      }
+    };
+    loadPendingPlantReports();
+  }, []);
   
   const [memberList, setMemberList] = React.useState<ListedMember[]>([]);
   const [memberListLoading, setMemberListLoading] = React.useState(false);
@@ -6248,9 +6268,18 @@ export const AdminPage: React.FC = () => {
                       {key === "members" && activeReportsCount > 0 && (
                         <AlertTriangle className="h-3.5 w-3.5 text-red-500" title={`${activeReportsCount} active reports`} />
                       )}
-                      {key === "plants" && uniqueRequestedPlantsCount > 0 && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
-                          {uniqueRequestedPlantsCount}
+                      {key === "plants" && (pendingPlantReportsCount > 0 || uniqueRequestedPlantsCount > 0) && (
+                        <span className="flex items-center gap-1">
+                          {pendingPlantReportsCount > 0 && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-amber-500 text-white">
+                              {pendingPlantReportsCount}
+                            </span>
+                          )}
+                          {uniqueRequestedPlantsCount > 0 && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
+                              {uniqueRequestedPlantsCount}
+                            </span>
+                          )}
                         </span>
                       )}
                       {key === "bugs" && pendingBugReportsCount > 0 && (
@@ -6342,13 +6371,26 @@ export const AdminPage: React.FC = () => {
                             title={`${activeReportsCount} active reports`}
                           />
                         )}
-                        {key === "plants" && uniqueRequestedPlantsCount > 0 && (
-                          <span
-                            className={`${
-                              sidebarCollapsed ? "text-[10px]" : "ml-auto text-xs"
-                            } font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100 px-2 py-0.5`}
-                          >
-                            {uniqueRequestedPlantsCount}
+                        {key === "plants" && (pendingPlantReportsCount > 0 || uniqueRequestedPlantsCount > 0) && (
+                          <span className={`flex items-center gap-1 ${sidebarCollapsed ? "" : "ml-auto"}`}>
+                            {pendingPlantReportsCount > 0 && (
+                              <span
+                                className={`${
+                                  sidebarCollapsed ? "text-[10px]" : "text-xs"
+                                } font-semibold rounded-full bg-amber-500 text-white px-2 py-0.5`}
+                              >
+                                {pendingPlantReportsCount}
+                              </span>
+                            )}
+                            {uniqueRequestedPlantsCount > 0 && (
+                              <span
+                                className={`${
+                                  sidebarCollapsed ? "text-[10px]" : "text-xs"
+                                } font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100 px-2 py-0.5`}
+                              >
+                                {uniqueRequestedPlantsCount}
+                              </span>
+                            )}
                           </span>
                         )}
                         {key === "bugs" && pendingBugReportsCount > 0 && (
@@ -8244,6 +8286,15 @@ export const AdminPage: React.FC = () => {
                                 }`}
                               >
                                 {tab.label}
+                                {tab.key === "reports" && pendingPlantReportsCount > 0 && (
+                                  <span className={`ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
+                                    isActive
+                                      ? "bg-white/25 text-white"
+                                      : "bg-amber-500 text-white"
+                                  }`}>
+                                    {pendingPlantReportsCount}
+                                  </span>
+                                )}
                               </Link>
                             );
                           })}
