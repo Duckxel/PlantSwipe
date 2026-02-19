@@ -2673,14 +2673,17 @@ export const GardenDashboardPage: React.FC = () => {
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {loading && (
         <>
-          <aside className={`${sidebarPanelBase} space-y-4`}>
-            <div className="hidden md:block h-7 w-32 bg-stone-200 dark:bg-stone-700 rounded animate-pulse mb-4" />
-            <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible scrollbar-hide -mx-1 px-1 md:mx-0 md:px-0">
-              {Array.from({ length: 4 }).map((_, idx) => (
+          <aside className={`${sidebarPanelBase} space-y-3 md:space-y-4`}>
+            <div className="hidden md:block h-7 w-36 bg-stone-200 dark:bg-stone-700 rounded-lg animate-pulse" />
+            <nav className="flex justify-around md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0">
+              {Array.from({ length: 6 }).map((_, idx) => (
                 <div
                   key={idx}
-                  className="h-10 min-w-[64px] md:min-w-0 w-full bg-stone-200 dark:bg-stone-700 rounded-2xl animate-pulse flex-shrink-0 md:flex-shrink"
-                />
+                  className="flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-2 p-2.5 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl md:w-full"
+                >
+                  <div className="w-5 h-5 md:w-4 md:h-4 bg-stone-200 dark:bg-stone-700 rounded animate-pulse flex-shrink-0" />
+                  <div className="hidden md:block h-4 w-16 bg-stone-200 dark:bg-stone-700 rounded animate-pulse" />
+                </div>
               ))}
             </nav>
           </aside>
