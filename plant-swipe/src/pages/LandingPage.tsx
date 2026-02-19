@@ -516,7 +516,7 @@ const LandingPage: React.FC = () => {
 
   return (
     <LandingDataContext.Provider value={landingData}>
-    <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden pb-24 md:pb-0">
       <style>{animationStyles}</style>
       
       {/* Ambient Background Elements */}

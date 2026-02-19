@@ -38,11 +38,6 @@
     padding-top: var(--window-controls-overlay-height, 0px);
   }
 
-    body.mobile-nav-mounted {
-      /* Reserve space for the floating mobile nav so bottom links remain clickable */
-      padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-    }
-
     @media (min-width: 768px) {
       body.mobile-nav-mounted {
         /* Desktop/tablet layouts don't render the floating nav */
