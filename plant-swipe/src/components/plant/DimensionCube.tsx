@@ -31,7 +31,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const plantW = Math.max((wingspanCm ?? 30) / 100, 0.05)
 
     const humanEstimatedWidth = 0.8
-    const gap = 0.35
+    const gap = 0.12
     const sceneMaxHeight = Math.max(plantH, HUMAN_HEIGHT_M)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
