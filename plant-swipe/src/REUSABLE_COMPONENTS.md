@@ -9,10 +9,11 @@
 
 1. [Overview](#overview)
 2. [Form Inputs](#form-inputs)
-3. [Validation Hooks](#validation-hooks)
-4. [Validation Utilities](#validation-utilities)
-5. [Layout Components](#layout-components)
-6. [Usage Patterns](#usage-patterns)
+3. [Feedback Components](#feedback-components)
+4. [Validation Hooks](#validation-hooks)
+5. [Validation Utilities](#validation-utilities)
+6. [Layout Components](#layout-components)
+7. [Usage Patterns](#usage-patterns)
 
 ---
 
@@ -25,6 +26,44 @@ This document catalogues all reusable components, hooks, and utilities in the Ap
 ---
 
 ## Form Inputs
+
+### `PillTabs`
+
+**File:** `src/components/ui/pill-tabs.tsx`
+
+A pill-shaped segmented tab bar. Matches the style used on the admin plants page ("Plants | Requests" toggle). Generic over the key type for full type-safety.
+
+**Props:**
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `tabs` | `PillTab<K>[]` | Array of `{ key, label }` tab definitions |
+| `activeKey` | `K` | The currently active tab key |
+| `onTabChange` | `(key: K) => void` | Called when a tab is clicked |
+| `className` | `string` | Additional CSS classes on the outer wrapper |
+
+**Example:**
+
+```tsx
+import { PillTabs } from "@/components/ui/pill-tabs"
+
+const tabs = [
+  { key: "journal", label: "Journal" },
+  { key: "library", label: "Library" },
+]
+
+<PillTabs tabs={tabs} activeKey={activeTab} onTabChange={setActiveTab} />
+```
+
+**Features:**
+- Pill-shaped container with rounded-full items
+- Active tab: emerald background with white text and shadow
+- Dark mode support, backdrop blur
+- Fully generic — key type is inferred from the tabs array
+
+**Used in:** GardenJournalSection, AdminPage (plants/requests)
+
+---
 
 ### `ValidatedInput`
 
@@ -321,6 +360,43 @@ const templates = [
 - Custom item renderer support
 
 **Used in:** AdminTeamPanel (user profile linking)
+
+---
+
+## Feedback Components
+
+### `ErrorBanner`
+
+**File:** `src/components/ui/error-banner.tsx`
+
+A styled error banner that displays a title and a selectable, monospace error message block. Use it to surface API or server errors so users and developers can read and copy the exact error text.
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `title` | `string` | — | Optional heading above the error detail |
+| `message` | `string` | — | **Required.** The error text, rendered in a monospace `<pre>` block. Fully selectable/copyable. |
+| `className` | `string` | — | Additional CSS classes on the root element |
+
+**Example:**
+
+```tsx
+import { ErrorBanner } from "@/components/ui/error-banner"
+
+<ErrorBanner
+  title="Failed to load journal"
+  message={errorMessage}
+/>
+```
+
+**Features:**
+- `role="alert"` for screen reader announcements
+- Monospace `<pre>` block with `select-text cursor-text` so users can highlight and copy
+- Dark mode support
+- Rounded 28px style consistent with garden UI cards
+
+**Used in:** GardenJournalSection
 
 ---
 

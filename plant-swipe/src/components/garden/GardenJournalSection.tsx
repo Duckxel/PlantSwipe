@@ -2,6 +2,9 @@ import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { PillTabs } from "@/components/ui/pill-tabs";
+import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
@@ -19,7 +22,6 @@ import {
   Clock,
   Image as ImageIcon,
   Loader2,
-  Sparkles,
   BookOpen,
   CheckCircle2,
   X,
@@ -32,6 +34,7 @@ import {
   Download,
   Film,
   Images,
+  ArrowUpDown,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
@@ -53,9 +56,6 @@ interface JournalEntry {
   plantsMentioned: string[];
   tags: string[];
   isPrivate: boolean;
-  aiFeedback: string | null;
-  aiFeedbackGeneratedAt: string | null;
-  aiFeedbackImagesAnalyzed?: number;
   photos: JournalPhoto[];
   createdAt: string;
   updatedAt: string;
@@ -117,15 +117,34 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const { t } = useTranslation("common");
   const { user } = useAuth();
   
+  // Tab state
+  type JournalView = "journal" | "library";
+  const [activeView, setActiveView] = React.useState<JournalView>("journal");
+  const journalTabs = React.useMemo(() => [
+    { key: "journal" as const, label: t("gardenDashboard.journalSection.journalTab", "Journal") },
+    { key: "library" as const, label: t("gardenDashboard.journalSection.libraryTab", "Library") },
+  ], [t]);
+
+  // Owner check
+  const isOwner = React.useMemo(
+    () => _members.some((m) => m.userId === user?.id && m.role === "owner"),
+    [_members, user?.id],
+  );
+
+  // Sort state
+  type SortOrder = "newest" | "oldest";
+  const [journalSort, setJournalSort] = React.useState<SortOrder>("newest");
+  const [librarySort, setLibrarySort] = React.useState<SortOrder>("newest");
+
   // State
   const [loading, setLoading] = React.useState(true);
   const [entries, setEntries] = React.useState<JournalEntry[]>([]);
+  const [fetchError, setFetchError] = React.useState<string | null>(null);
   const [_selectedDate, _setSelectedDate] = React.useState<Date>(new Date());
   const [isEditing, setIsEditing] = React.useState(false);
   const [editingEntry, setEditingEntry] = React.useState<JournalEntry | null>(null);
   const [showNewEntry, setShowNewEntry] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const [generatingFeedback, setGeneratingFeedback] = React.useState(false);
   
   // Entry form state
   const [entryTitle, setEntryTitle] = React.useState("");
@@ -153,33 +172,72 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const [timelapseSpeed, setTimelapseSpeed] = React.useState(2000); // ms per frame
   const timelapseRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  // Get all photos sorted by date for timelapse
+  // Get all photos sorted by date (oldest first for timelapse)
   const allPhotos = React.useMemo(() => {
     const photos: Array<{
+      id: string;
+      entryId: string;
+      userId: string;
       url: string;
+      thumbnailUrl?: string;
       date: string;
       caption?: string;
       entryTitle?: string;
       mood?: string;
+      plantHealth?: string | null;
     }> = [];
     
     entries.forEach((entry) => {
       if (entry.photos && entry.photos.length > 0) {
         entry.photos.forEach((photo) => {
           photos.push({
+            id: photo.id,
+            entryId: entry.id,
+            userId: entry.userId,
             url: photo.imageUrl,
+            thumbnailUrl: photo.thumbnailUrl || undefined,
             date: entry.entryDate,
             caption: photo.caption || undefined,
             entryTitle: entry.title || undefined,
             mood: entry.mood || undefined,
+            plantHealth: photo.plantHealth,
           });
         });
       }
     });
     
-    // Sort oldest to newest for timelapse
     return photos.sort((a, b) => a.date.localeCompare(b.date));
   }, [entries]);
+
+  // Library photos sorted by user preference
+  const libraryPhotos = React.useMemo(
+    () => librarySort === "newest" ? [...allPhotos].reverse() : [...allPhotos],
+    [allPhotos, librarySort],
+  );
+
+  // Journal entries sorted by user preference
+  const sortedEntries = React.useMemo(
+    () => journalSort === "newest"
+      ? [...entries].sort((a, b) => b.entryDate.localeCompare(a.entryDate))
+      : [...entries].sort((a, b) => a.entryDate.localeCompare(b.entryDate)),
+    [entries, journalSort],
+  );
+
+  // Image viewer for library
+  const libraryViewer = useImageViewer();
+  const libraryViewerImages = React.useMemo(
+    () => libraryPhotos.map((p) => ({ src: p.url, alt: p.caption || p.entryTitle || "Journal photo" })),
+    [libraryPhotos],
+  );
+
+  // Short date formatter: "15 Nov 25"
+  const formatShortDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const day = d.getDate();
+    const month = d.toLocaleString(undefined, { month: "short" });
+    const year = String(d.getFullYear()).slice(2);
+    return `${day} ${month} ${year}`;
+  };
 
   // Timelapse playback
   React.useEffect(() => {
@@ -370,6 +428,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const fetchEntries = React.useCallback(async () => {
     if (!gardenId) return;
     setLoading(true);
+    setFetchError(null);
     try {
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
@@ -381,13 +440,17 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         credentials: "same-origin",
       });
 
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data?.ok && data.entries) {
-          setEntries(data.entries);
-        }
+      const data = await resp.json().catch(() => null);
+      if (resp.ok && data?.ok && data.entries) {
+        setEntries(data.entries);
+      } else {
+        const errMsg = data?.error || `HTTP ${resp.status}`;
+        const detail = [data?.code, data?.detail, data?.hint].filter(Boolean).join(" | ");
+        setFetchError(detail ? `${errMsg} (${detail})` : errMsg);
+        console.error("[Journal] Server error:", data);
       }
     } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Network error");
       console.warn("[Journal] Failed to fetch entries:", err);
     } finally {
       setLoading(false);
@@ -499,15 +562,21 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         body: JSON.stringify(entryData),
       });
 
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data?.ok) {
-          resetForm();
-          setShowNewEntry(false);
-          fetchEntries();
-        }
+      const data = await resp.json().catch(() => null);
+      if (resp.ok && data?.ok) {
+        resetForm();
+        setShowNewEntry(false);
+        fetchEntries();
+      } else {
+        const errMsg = data?.error || `HTTP ${resp.status}`;
+        const detail = [data?.code, data?.detail, data?.hint].filter(Boolean).join(" | ");
+        const fullErr = detail ? `${errMsg} (${detail})` : errMsg;
+        alert(`Failed to save entry: ${fullErr}`);
+        console.error("[Journal] Save error:", data);
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      alert(`Failed to save entry: ${msg}`);
       console.warn("[Journal] Failed to save entry:", err);
     } finally {
       setSaving(false);
@@ -540,37 +609,34 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     }
   };
 
-  // Generate AI feedback for entry (with image analysis)
-  const handleGenerateFeedback = async (entryId: string) => {
-    setGeneratingFeedback(true);
+
+  // Delete a single photo (owner only)
+  const [deletingPhotoId, setDeletingPhotoId] = React.useState<string | null>(null);
+  const handleDeletePhoto = async (photoId: string) => {
+    if (!confirm(t("gardenDashboard.journalSection.confirmDeletePhoto", "Delete this photo? This cannot be undone."))) return;
+    setDeletingPhotoId(photoId);
     try {
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const resp = await fetch(`/api/garden/${gardenId}/journal/${entryId}/feedback`, {
-        method: "POST",
+      const resp = await fetch(`/api/garden/${gardenId}/journal/photo/${photoId}`, {
+        method: "DELETE",
         headers,
         credentials: "same-origin",
       });
 
-      if (resp.ok) {
-        const data = await resp.json();
-        // Store images analyzed count in entry metadata (will be updated on fetch)
-        if (data.imagesAnalyzed > 0) {
-          setEntries(prev => prev.map(e => 
-            e.id === entryId 
-              ? { ...e, aiFeedback: data.feedback, aiFeedbackImagesAnalyzed: data.imagesAnalyzed }
-              : e
-          ));
-        }
+      const data = await resp.json().catch(() => null);
+      if (resp.ok && data?.ok) {
         fetchEntries();
+      } else {
+        alert(data?.error || "Failed to delete photo");
       }
     } catch (err) {
-      console.warn("[Journal] Failed to generate feedback:", err);
+      console.warn("[Journal] Failed to delete photo:", err);
     } finally {
-      setGeneratingFeedback(false);
+      setDeletingPhotoId(null);
     }
   };
 
@@ -678,6 +744,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
           )}
         </div>
       </div>
+
+      {/* Tab navigation */}
+      <PillTabs tabs={journalTabs} activeKey={activeView} onTabChange={setActiveView} />
 
       {/* Timelapse Viewer Modal */}
       <AnimatePresence>
@@ -964,6 +1033,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         )}
       </AnimatePresence>
 
+      {/* ===== JOURNAL TAB ===== */}
+      {activeView === "journal" && (
+      <>
       {/* New/Edit Entry Form */}
       <AnimatePresence>
         {showNewEntry && (
@@ -1229,11 +1301,17 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
 
       {/* Journal Entries Timeline */}
       <div className="space-y-4">
+        {fetchError && (
+          <ErrorBanner
+            title={t("gardenDashboard.journalSection.fetchError", "Failed to load journal")}
+            message={fetchError}
+          />
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
           </div>
-        ) : entries.length === 0 ? (
+        ) : !fetchError && entries.length === 0 ? (
           <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-12 text-center">
             <div className="max-w-md mx-auto">
               <div className="text-6xl mb-4">📝</div>
@@ -1253,8 +1331,22 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
             </div>
           </Card>
         ) : (
-          <div className="space-y-6">
-            {entries.map((entry, index) => {
+          <div className="space-y-4">
+            <div className="flex items-center justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-xl gap-1.5 text-xs text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
+                onClick={() => setJournalSort(journalSort === "newest" ? "oldest" : "newest")}
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" />
+                {journalSort === "newest"
+                  ? t("gardenDashboard.journalSection.newestFirst", "Newest first")
+                  : t("gardenDashboard.journalSection.oldestFirst", "Oldest first")}
+              </Button>
+            </div>
+            <div className="space-y-6">
+            {sortedEntries.map((entry, index) => {
               const moodConfig = getMoodConfig(entry.mood);
               const isOwn = entry.userId === user?.id;
               
@@ -1374,54 +1466,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         </div>
                       )}
                       
-                      {/* AI Feedback section */}
-                      {entry.aiFeedback ? (
-                        <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200/50 dark:border-purple-800/50">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300">
-                              <Sparkles className="w-4 h-4" />
-                              {t("gardenDashboard.journalSection.aiFeedback", "AI Gardener Feedback")}
-                            </div>
-                            {entry.photos && entry.photos.length > 0 && (
-                              <span className="text-xs bg-purple-200/50 dark:bg-purple-800/50 text-purple-600 dark:text-purple-300 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <Camera className="w-3 h-3" />
-                                {t("gardenDashboard.journalSection.photosAnalyzed", { 
-                                  defaultValue: "{{count}} photo(s) analyzed",
-                                  count: Math.min(entry.photos.length, 4)
-                                })}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-purple-800 dark:text-purple-200 leading-relaxed whitespace-pre-wrap">
-                            {entry.aiFeedback}
-                          </p>
-                          {entry.aiFeedbackGeneratedAt && (
-                            <p className="text-xs text-purple-500 dark:text-purple-400 mt-2">
-                              {new Date(entry.aiFeedbackGeneratedAt).toLocaleDateString()}
-                            </p>
-                          )}
-                        </div>
-                      ) : isOwn && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-xl text-purple-600 border-purple-200 hover:bg-purple-50 dark:hover:bg-purple-900/30 gap-2"
-                          onClick={() => handleGenerateFeedback(entry.id)}
-                          disabled={generatingFeedback}
-                        >
-                          {generatingFeedback ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              {t("gardenDashboard.journalSection.generating", "Generating...")}
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="w-4 h-4" />
-                              {t("gardenDashboard.journalSection.getAIFeedback", "Get AI Feedback")}
-                            </>
-                          )}
-                        </Button>
-                      )}
                     </div>
                     
                     {/* Entry footer with timestamp */}
@@ -1429,6 +1473,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <div className="flex items-center gap-2">
                           <Clock className="w-3 h-3" />
+                          {formatDate(entry.entryDate)}{" "}
                           {new Date(entry.createdAt).toLocaleTimeString(undefined, {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -1446,9 +1491,119 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 </motion.div>
               );
             })}
+            </div>
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {/* ===== LIBRARY TAB ===== */}
+      {activeView === "library" && (
+        <div className="space-y-4">
+          {fetchError && (
+            <ErrorBanner
+              title={t("gardenDashboard.journalSection.fetchError", "Failed to load journal")}
+              message={fetchError}
+            />
+          )}
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+            </div>
+          ) : libraryPhotos.length === 0 ? (
+            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-12 text-center">
+              <div className="max-w-md mx-auto">
+                <div className="text-6xl mb-4">📷</div>
+                <h3 className="text-xl font-semibold mb-2">
+                  {t("gardenDashboard.journalSection.noPhotos", "No photos yet")}
+                </h3>
+                <p className="text-muted-foreground mb-6">
+                  {t("gardenDashboard.journalSection.noPhotosDesc", "Add photos to your journal entries and they will appear here.")}
+                </p>
+                <Button
+                  onClick={() => { setActiveView("journal"); setShowNewEntry(true); }}
+                  className="rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  {t("gardenDashboard.journalSection.writeFirst", "Write Your First Entry")}
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {libraryPhotos.length} {t("gardenDashboard.journalSection.photos", "photos")}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl gap-1.5 text-xs text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
+                  onClick={() => setLibrarySort(librarySort === "newest" ? "oldest" : "newest")}
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  {librarySort === "newest"
+                    ? t("gardenDashboard.journalSection.newestFirst", "Newest first")
+                    : t("gardenDashboard.journalSection.oldestFirst", "Oldest first")}
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {libraryPhotos.map((photo, idx) => (
+                  <div key={photo.id} className="group relative aspect-square rounded-2xl overflow-hidden border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-100 dark:bg-stone-800">
+                    <button
+                      type="button"
+                      onClick={() => libraryViewer.openGallery(libraryViewerImages, idx)}
+                      className="w-full h-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                    >
+                      <img
+                        src={photo.thumbnailUrl || photo.url}
+                        alt={photo.caption || photo.entryTitle || "Journal photo"}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    </button>
+                    {/* Date tag */}
+                    <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white text-[11px] font-medium pointer-events-none">
+                      {formatShortDate(photo.date)}
+                    </div>
+                    {photo.mood && (
+                      <div className="absolute top-2 left-2 pointer-events-none">
+                        <span className="text-lg drop-shadow-md">
+                          {MOODS.find(m => m.key === photo.mood)?.emoji}
+                        </span>
+                      </div>
+                    )}
+                    {photo.plantHealth && (
+                      <div className="absolute top-2 right-2 pointer-events-none">
+                        <span className="text-lg drop-shadow-md">
+                          {PLANT_HEALTH.find(h => h.key === photo.plantHealth)?.emoji}
+                        </span>
+                      </div>
+                    )}
+                    {/* Owner delete button */}
+                    {isOwner && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo.id); }}
+                        disabled={deletingPhotoId === photo.id}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm text-white/80 hover:text-white hover:bg-red-600/80 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                        aria-label={t("common.delete", "Delete")}
+                      >
+                        {deletingPhotoId === photo.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />
+                        }
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <ImageViewer {...libraryViewer.props} enableZoom />
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };
