@@ -18,10 +18,12 @@ import {
   User,
   Leaf,
   MessageSquare,
+  Maximize2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabaseClient'
 import { useLanguageNavigate } from '@/lib/i18nRouting'
+import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 
 interface PlantReport {
   id: string
@@ -42,6 +44,7 @@ export function AdminPlantReportsPanel() {
   const [error, setError] = React.useState<string | null>(null)
   const [processingId, setProcessingId] = React.useState<string | null>(null)
   const [detailReport, setDetailReport] = React.useState<PlantReport | null>(null)
+  const imageViewer = useImageViewer()
 
   const loadReports = React.useCallback(async () => {
     setLoading(true)
@@ -286,108 +289,121 @@ export function AdminPlantReportsPanel() {
 
       {/* Report Detail Dialog */}
       <Dialog open={!!detailReport} onOpenChange={() => setDetailReport(null)}>
-        <DialogContent className="max-w-lg rounded-[28px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl w-[calc(100vw-2rem)] rounded-[28px] max-h-[90vh] overflow-y-auto p-0">
           {detailReport && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Flag className="h-5 w-5 text-amber-500" />
-                  Plant Report Details
-                </DialogTitle>
-                <DialogDescription>
-                  Report about {detailReport.plantName}
-                </DialogDescription>
-              </DialogHeader>
+            <div className="flex flex-col">
+              {/* Header */}
+              <div className="px-6 pt-6 pb-4 border-b border-stone-100 dark:border-[#2a2a2d]">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-lg">
+                    <Flag className="h-5 w-5 text-amber-500" />
+                    Plant Report Details
+                  </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Report about {detailReport.plantName}
+                  </DialogDescription>
+                </DialogHeader>
+              </div>
 
-              <div className="space-y-4 py-2">
-                {/* User Info */}
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/30">
-                  <div className="h-10 w-10 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center flex-shrink-0">
-                    <User className="h-5 w-5 text-stone-500 dark:text-stone-400" />
+              {/* Metadata row */}
+              <div className="px-6 py-4 flex flex-wrap items-center gap-4 border-b border-stone-100 dark:border-[#2a2a2d]">
+                {/* User */}
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-full bg-stone-100 dark:bg-stone-700 flex items-center justify-center flex-shrink-0">
+                    <User className="h-4 w-4 text-stone-500 dark:text-stone-400" />
                   </div>
                   <div>
-                    <div className="font-medium text-sm text-stone-900 dark:text-white">
+                    <div className="font-semibold text-sm text-stone-900 dark:text-white leading-tight">
                       {detailReport.userName}
                     </div>
-                    <div className="text-xs text-stone-500 dark:text-stone-400">
+                    <div className="text-[11px] text-stone-500 dark:text-stone-400">
                       {new Date(detailReport.createdAt).toLocaleString()}
                     </div>
                   </div>
                 </div>
 
-                {/* Plant Info */}
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/30">
-                  <div className="h-10 w-10 rounded-xl overflow-hidden bg-stone-200 dark:bg-stone-700 flex items-center justify-center flex-shrink-0">
+                <div className="h-6 w-px bg-stone-200 dark:bg-stone-700 hidden sm:block" />
+
+                {/* Plant */}
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-lg overflow-hidden bg-stone-100 dark:bg-stone-700 flex items-center justify-center flex-shrink-0">
                     {detailReport.plantImage ? (
                       <img src={detailReport.plantImage} alt={detailReport.plantName} className="h-full w-full object-cover" />
                     ) : (
-                      <Leaf className="h-5 w-5 text-stone-500 dark:text-stone-400" />
+                      <Leaf className="h-4 w-4 text-stone-500 dark:text-stone-400" />
                     )}
                   </div>
-                  <div className="font-medium text-sm text-stone-900 dark:text-white">
+                  <div className="font-semibold text-sm text-stone-900 dark:text-white">
                     {detailReport.plantName}
                   </div>
                 </div>
+              </div>
 
-                {/* Full Note */}
-                <div>
-                  <label className="text-xs font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider">
-                    Report Note
-                  </label>
-                  <div className="mt-1.5 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/30 text-sm text-stone-700 dark:text-stone-300 whitespace-pre-wrap">
-                    {detailReport.note}
-                  </div>
-                </div>
-
-                {/* Report Image */}
-                {detailReport.imageUrl && (
-                  <div>
-                    <label className="text-xs font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider">
-                      Attached Image
-                    </label>
-                    <div className="mt-1.5">
-                      <img
-                        src={detailReport.imageUrl}
-                        alt="Report attachment"
-                        className="max-w-full rounded-xl border border-stone-200 dark:border-[#3e3e42]"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 pt-2">
-                  <Button
-                    className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={(e) => {
-                      handleComplete(detailReport.id, e)
-                    }}
-                    disabled={processingId === detailReport.id}
-                  >
-                    {processingId === detailReport.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <Check className="h-4 w-4 mr-2" />
-                    )}
-                    Complete
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 rounded-xl border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400 dark:hover:bg-red-900/20"
-                    onClick={(e) => {
-                      handleReject(detailReport.id, e)
-                    }}
-                    disabled={processingId === detailReport.id}
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Reject
-                  </Button>
+              {/* Note */}
+              <div className="px-6 py-5">
+                <label className="text-[11px] font-semibold text-stone-400 dark:text-stone-500 uppercase tracking-wider">
+                  Report Note
+                </label>
+                <div className="mt-2 p-4 rounded-xl bg-stone-50 dark:bg-[#1a1a1d] border border-stone-100 dark:border-[#2a2a2d] text-[15px] leading-relaxed text-stone-800 dark:text-stone-200 whitespace-pre-wrap">
+                  {detailReport.note}
                 </div>
               </div>
-            </>
+
+              {/* Image */}
+              {detailReport.imageUrl && (
+                <div className="px-6 pb-5">
+                  <label className="text-[11px] font-semibold text-stone-400 dark:text-stone-500 uppercase tracking-wider">
+                    Attached Image
+                  </label>
+                  <div className="mt-2 relative group/img">
+                    <img
+                      src={detailReport.imageUrl}
+                      alt="Report attachment"
+                      className="w-full max-h-[280px] object-cover rounded-xl border border-stone-200 dark:border-[#3e3e42] cursor-pointer transition-opacity hover:opacity-90"
+                      onClick={() => imageViewer.open(detailReport.imageUrl!, 'Report attachment')}
+                    />
+                    <button
+                      type="button"
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 text-white backdrop-blur-sm opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-black/70"
+                      onClick={() => imageViewer.open(detailReport.imageUrl!, 'Report attachment')}
+                      aria-label="View fullscreen"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="px-6 pb-6 pt-2 flex items-center gap-3">
+                <Button
+                  className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white h-10"
+                  onClick={(e) => handleComplete(detailReport.id, e)}
+                  disabled={processingId === detailReport.id}
+                >
+                  {processingId === detailReport.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Check className="h-4 w-4 mr-2" />
+                  )}
+                  Complete
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400 dark:hover:bg-red-900/20 h-10"
+                  onClick={(e) => handleReject(detailReport.id, e)}
+                  disabled={processingId === detailReport.id}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
+
+      <ImageViewer {...imageViewer.props} enableZoom />
     </div>
   )
 }
