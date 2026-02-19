@@ -91,6 +91,7 @@ do $$ declare
     'plant_infusion_mixes',
     'plant_recipes',
     'plant_contributors',
+    'plant_reports',
     'plant_pro_advices',
     'plant_images',
     'colors',

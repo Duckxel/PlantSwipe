@@ -1121,6 +1121,7 @@ const rateLimitStores = {
   translate: new Map(),      // Translation API
   imageUpload: new Map(),    // Image uploads (messages, gardens, etc.)
   bugReport: new Map(),      // Bug report submissions
+  plantReport: new Map(),    // Plant information report submissions
   checkAvailable: new Map(),    // Username/email availability check (signup)
   emailValidate: new Map(),     // Email validation (DNS MX check)
   emailVerifySend: new Map(),   // Email verification code sending
@@ -1169,6 +1170,12 @@ const rateLimitConfig = {
     windowMs: 60 * 60 * 1000,  // 1 hour
     maxAttempts: 20,
     perUser: false,
+  },
+  // Plant information reports: 10 per hour per user
+  plantReport: {
+    windowMs: 60 * 60 * 1000,  // 1 hour
+    maxAttempts: 10,
+    perUser: true,
   },
   // Garden activity: 300 per hour per user (5 per minute for active gardeners)
   gardenActivity: {
@@ -1977,6 +1984,18 @@ const bugScreenshotMulter = multer({
   limits: { fileSize: bugScreenshotMaxBytes },
 })
 const singleBugScreenshotUpload = bugScreenshotMulter.single('file')
+
+// === Plant Report Image Upload Settings ===
+const plantReportUploadBucket = 'PHOTOS'
+const plantReportUploadPrefix = 'plant-reports'
+const plantReportMaxBytes = 10 * 1024 * 1024
+const plantReportMaxDimension = 1920
+const plantReportWebpQuality = 60
+const plantReportMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: plantReportMaxBytes },
+})
+const singlePlantReportUpload = plantReportMulter.single('file')
 
 // Mime types that should be optimized and converted to WebP
 const optimizableMimeTypes = new Set([
@@ -20176,6 +20195,340 @@ app.post('/api/bug-report/upload-screenshot', async (req, res) => {
       }
     })
   })
+})
+
+// =============================================================================
+// PLANT INFORMATION REPORTS
+// Users can report plants for incorrect or outdated information
+// =============================================================================
+
+// Upload image for a plant report
+app.post('/api/plant-report/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'You must be signed in to upload images' })
+    return
+  }
+
+  if (await checkRateLimit('plantReport', req, res, user)) {
+    return
+  }
+
+  singlePlantReportUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(plantReportMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+
+      const mime = (file.mimetype || '').toLowerCase()
+      const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif', 'image/avif']
+      if (!allowedMimes.includes(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}. Allowed: JPEG, PNG, WebP, GIF, HEIC, AVIF` })
+        return
+      }
+
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      let finalMimeType = 'image/webp'
+
+      if (mime === 'image/gif') {
+        optimizedBuffer = file.buffer
+        finalMimeType = 'image/gif'
+      } else {
+        try {
+          optimizedBuffer = await sharp(file.buffer)
+            .rotate()
+            .resize({ width: plantReportMaxDimension, height: plantReportMaxDimension, fit: 'inside', withoutEnlargement: true, fastShrinkOnLoad: true })
+            .webp({ quality: plantReportWebpQuality, effort: 5, smartSubsample: true })
+            .toBuffer()
+        } catch (sharpErr) {
+          console.error('[plant-report] failed to convert image to webp', sharpErr)
+          res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+          return
+        }
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const userSegment = sanitizePathSegment(`user-${user.id}`, 'user')
+      const timestamp = Date.now()
+      const typeSegment = userSegment ? `report-${userSegment}-${timestamp}` : `report-${timestamp}`
+      const finalExtension = finalMimeType === 'image/gif' ? 'gif' : 'webp'
+      const objectPath = buildUploadObjectPath(baseName, typeSegment, plantReportUploadPrefix, finalExtension)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(plantReportUploadBucket)
+          .upload(objectPath, optimizedBuffer, { cacheControl: '31536000', contentType: finalMimeType, upsert: false })
+        if (uploadError) throw new Error(uploadError.message || 'Supabase storage upload failed')
+      } catch (storageErr) {
+        console.error('[plant-report] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient.storage.from(plantReportUploadBucket).getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      const proxyUrl = supabaseStorageToMediaProxy(publicUrl)
+      if (!proxyUrl) {
+        res.status(500).json({ error: 'Failed to generate public URL for image' })
+        return
+      }
+
+      res.json({ ok: true, url: proxyUrl })
+    })().catch((err) => {
+      console.error('[plant-report] unexpected failure', err)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected failure during upload' })
+      }
+    })
+  })
+})
+
+// Submit a plant report
+app.post('/api/plant-report', async (req, res) => {
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'You must be signed in to report a plant' })
+    return
+  }
+
+  if (await checkRateLimit('plantReport', req, res, user)) {
+    return
+  }
+
+  const body = req.body || {}
+  const plantId = typeof body.plantId === 'string' ? body.plantId.trim() : ''
+  const note = typeof body.note === 'string' ? body.note.trim() : ''
+  const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : null
+
+  if (!plantId) {
+    res.status(400).json({ error: 'Plant ID is required' })
+    return
+  }
+  if (!note || note.length < 10) {
+    res.status(400).json({ error: 'Please provide a detailed description (at least 10 characters)' })
+    return
+  }
+  if (note.length > 2000) {
+    res.status(400).json({ error: 'Note is too long (max 2000 characters)' })
+    return
+  }
+
+  try {
+    const client = supabaseServiceClient || supabaseServer
+    if (!client) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+
+    const { error } = await client
+      .from('plant_reports')
+      .insert({ user_id: user.id, plant_id: plantId, note, image_url: imageUrl || null })
+    if (error) throw new Error(error.message)
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[plant-report] failed to create report', err)
+    res.status(500).json({ error: err?.message || 'Failed to submit report' })
+  }
+})
+
+// Admin: List all plant reports
+app.get('/api/admin/plant-reports', async (req, res) => {
+  const caller = await ensureEditor(req, res)
+  if (!caller) return
+
+  try {
+    const client = supabaseServiceClient || supabaseServer
+    if (!client) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+
+    const { data, error } = await client
+      .from('plant_reports')
+      .select('id, user_id, plant_id, note, image_url, created_at')
+      .order('created_at', { ascending: false })
+      .limit(200)
+    if (error) throw new Error(error.message)
+
+    const reports = data || []
+
+    // Enrich with plant info and user display names
+    const plantIds = [...new Set(reports.map(r => r.plant_id))]
+    const userIds = [...new Set(reports.map(r => r.user_id))]
+
+    let plantMap = {}
+    if (plantIds.length > 0) {
+      const { data: plants } = await client.from('plants').select('id, name').in('id', plantIds)
+      const { data: images } = await client.from('plant_images').select('plant_id, link').in('plant_id', plantIds).eq('use', 'primary')
+      for (const p of (plants || [])) {
+        plantMap[p.id] = { name: p.name, image: null }
+      }
+      for (const img of (images || [])) {
+        if (plantMap[img.plant_id]) plantMap[img.plant_id].image = img.link
+      }
+    }
+
+    let userMap = {}
+    if (userIds.length > 0) {
+      const { data: profiles } = await client.from('profiles').select('id, display_name, username').in('id', userIds)
+      for (const p of (profiles || [])) {
+        userMap[p.id] = { displayName: p.display_name || p.username || 'Unknown' }
+      }
+    }
+
+    const enriched = reports.map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      plantId: r.plant_id,
+      note: r.note,
+      imageUrl: r.image_url,
+      createdAt: r.created_at,
+      plantName: plantMap[r.plant_id]?.name || 'Unknown plant',
+      plantImage: plantMap[r.plant_id]?.image || null,
+      userName: userMap[r.user_id]?.displayName || 'Unknown user',
+    }))
+
+    res.json({ ok: true, reports: enriched })
+  } catch (err) {
+    console.error('[plant-report] failed to list reports', err)
+    res.status(500).json({ error: err?.message || 'Failed to load reports' })
+  }
+})
+
+// Admin: Complete a plant report (add user as contributor, then delete report + image)
+app.post('/api/admin/plant-reports/:id/complete', async (req, res) => {
+  const caller = await ensureEditor(req, res)
+  if (!caller) return
+
+  const reportId = String(req.params.id || '').trim()
+  if (!reportId) {
+    res.status(400).json({ error: 'Report ID is required' })
+    return
+  }
+
+  try {
+    const client = supabaseServiceClient || supabaseServer
+    if (!client) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+
+    // Fetch the report
+    const { data: report, error: fetchError } = await client
+      .from('plant_reports')
+      .select('id, user_id, plant_id, image_url')
+      .eq('id', reportId)
+      .maybeSingle()
+    if (fetchError) throw new Error(fetchError.message)
+    if (!report) {
+      res.status(404).json({ error: 'Report not found' })
+      return
+    }
+
+    // Get user display name for contributor record
+    let contributorName = 'Anonymous'
+    try {
+      const { data: profile } = await client.from('profiles').select('display_name, username').eq('id', report.user_id).maybeSingle()
+      if (profile) contributorName = profile.display_name || profile.username || 'Anonymous'
+    } catch { }
+
+    // Add user as contributor (ignore conflict if already exists)
+    try {
+      await client
+        .from('plant_contributors')
+        .insert({ plant_id: report.plant_id, contributor_name: contributorName })
+    } catch { }
+
+    // Delete the report image from storage if it exists
+    if (report.image_url) {
+      try {
+        await deleteStorageObjectByUrl(report.image_url)
+      } catch (e) {
+        console.warn('[plant-report] failed to delete report image from storage', e?.message)
+      }
+    }
+
+    // Delete the report
+    const { error: deleteError } = await client.from('plant_reports').delete().eq('id', reportId)
+    if (deleteError) throw new Error(deleteError.message)
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[plant-report] failed to complete report', err)
+    res.status(500).json({ error: err?.message || 'Failed to complete report' })
+  }
+})
+
+// Admin: Reject a plant report (delete report + image)
+app.post('/api/admin/plant-reports/:id/reject', async (req, res) => {
+  const caller = await ensureEditor(req, res)
+  if (!caller) return
+
+  const reportId = String(req.params.id || '').trim()
+  if (!reportId) {
+    res.status(400).json({ error: 'Report ID is required' })
+    return
+  }
+
+  try {
+    const client = supabaseServiceClient || supabaseServer
+    if (!client) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+
+    // Fetch the report to get image URL
+    const { data: report, error: fetchError } = await client
+      .from('plant_reports')
+      .select('id, image_url')
+      .eq('id', reportId)
+      .maybeSingle()
+    if (fetchError) throw new Error(fetchError.message)
+    if (!report) {
+      res.status(404).json({ error: 'Report not found' })
+      return
+    }
+
+    // Delete the report image from storage if it exists
+    if (report.image_url) {
+      try {
+        await deleteStorageObjectByUrl(report.image_url)
+      } catch (e) {
+        console.warn('[plant-report] failed to delete report image from storage', e?.message)
+      }
+    }
+
+    // Delete the report
+    const { error: deleteError } = await client.from('plant_reports').delete().eq('id', reportId)
+    if (deleteError) throw new Error(deleteError.message)
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[plant-report] failed to reject report', err)
+    res.status(500).json({ error: err?.message || 'Failed to reject report' })
+  }
 })
 
 // DELETE a garden (and its cover image from storage)

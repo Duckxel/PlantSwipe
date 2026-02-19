@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Feb 19, 2026:** Added `plant_reports` table for user-submitted reports about incorrect or outdated plant information. Columns: `id` (UUID PK), `user_id` (UUID FK auth.users), `plant_id` (text FK plants), `note` (text), `image_url` (text, nullable), `created_at` (timestamptz). RLS: authenticated users can insert own reports, admins/editors can read and delete. Admin can mark as complete (adds reporter to plant_contributors) or reject (deletes report + image from storage).
 - **Feb 17, 2026:** Added `user_id` (nullable UUID, FK to `auth.users`) column to `team_members` table. Links a team member to an actual user profile. When set, the About page shows the linked user's display name as a clickable link to their profile page. Added `idx_team_members_user_id` partial index.
 - **Feb 12, 2026:** Added **Shadow Ban system** for threat level 3 users. When a user's threat level is set to 3, `apply_shadow_ban()` is called to: make their profile private, make all their gardens private, make all their bookmarks private, disable friend requests, remove all email/push notification consent, cancel pending friend requests and garden invites. All pre-ban settings are stored in the new `shadow_ban_backup` JSONB column on `profiles` for full reversibility via `revert_shadow_ban()`. Updated `profiles_select_self` RLS policy, `search_user_profiles` RPC, `get_profile_public_by_display_name` RPC, and `friend_requests`/`garden_invites` insert policies to exclude shadow-banned users.
 - **Feb 12, 2026:** Added `plant_recipes` table to store structured recipe ideas per plant, with `category` (breakfast_brunch, starters_appetizers, soups_salads, main_courses, side_dishes, desserts, drinks, other), `time` (quick, 30_plus, slow_cooking, undefined), and optional `link` (external recipe URL, admin-only, not AI-filled) columns. Includes migration from `recipes_ideas` in `plant_translations`. All existing recipes migrated with category='other' and time='undefined'.
@@ -92,6 +93,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `plant_infusion_mixes` | Infusion/tea recipes |
 | `plant_recipes` | Structured recipe ideas with category and time |
 | `plant_contributors` | Contributor names per plant (admin/editor write only) |
+| `plant_reports` | User-submitted reports about incorrect/outdated plant info |
 | `plant_pro_advices` | Professional growing tips |
 | `plant_images` | Plant image gallery |
 | `colors` | Color catalog |
