@@ -18,6 +18,7 @@ const HUMAN_HEIGHT_M = 1.8
 
 const THEME_PALETTES = {
   dark: {
+    clearColor: 0x000000, clearAlpha: 0,
     fog: { color: 0x050e0d, density: 0.06 },
     ambient: { color: 0xc8f0e0, intensity: 0.7 },
     key: { color: 0xffffff, intensity: 0.8 },
@@ -32,17 +33,18 @@ const THEME_PALETTES = {
     toneMappingExposure: 1.1,
   },
   light: {
-    fog: { color: 0xf0f7f4, density: 0.035 },
-    ambient: { color: 0xffffff, intensity: 1.4 },
-    key: { color: 0xffffff, intensity: 1.3 },
-    fill: { color: 0xd4ece6, intensity: 0.6 },
-    rim: { color: 0x6ee7b7, intensity: 0.35 },
-    outerBox: { color: 0xd1fae5, opacity: 0.35, metalness: 0.05, roughness: 0.8, emissive: 0x10b981, emissiveIntensity: 0.12 },
-    outerWire: 0x059669,
-    innerWire: { color: 0x34d399, opacity: 0.45 },
-    grid: { main1: 0xa7d4c4, main2: 0xc8e4da, opacity: 0.45 },
-    subGrid: { color: 0x6ee7b7, opacity: 0.18 },
-    human: { color: 0x7faa9e, metalness: 0.05, roughness: 0.9, emissive: 0x4a8a7c, emissiveIntensity: 0.06 },
+    clearColor: 0xe6f2ec, clearAlpha: 1,
+    fog: { color: 0xdcede4, density: 0.05 },
+    ambient: { color: 0xf5fffa, intensity: 1.3 },
+    key: { color: 0xffffff, intensity: 1.2 },
+    fill: { color: 0xb8ddd0, intensity: 0.55 },
+    rim: { color: 0x6ee7b7, intensity: 0.3 },
+    outerBox: { color: 0x86efac, opacity: 0.28, metalness: 0.1, roughness: 0.6, emissive: 0x059669, emissiveIntensity: 0.35 },
+    outerWire: 0x047857,
+    innerWire: { color: 0x059669, opacity: 0.55 },
+    grid: { main1: 0x6bb8a2, main2: 0x8ecfbc, opacity: 0.5 },
+    subGrid: { color: 0x34d399, opacity: 0.22 },
+    human: { color: 0xb0d4c8, metalness: 0.02, roughness: 0.95, emissive: 0x94c4b6, emissiveIntensity: 0.2 },
     toneMappingExposure: 1.3,
   },
 } as const
@@ -73,6 +75,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = palette.toneMappingExposure
+    renderer.setClearColor(palette.clearColor, palette.clearAlpha)
 
     const resolveSize = () => {
       const rect = container.getBoundingClientRect()
