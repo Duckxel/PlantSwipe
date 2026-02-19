@@ -39,3 +39,7 @@
 **Action:** Always make validation suggestions actionable by implementing a click handler that applies the suggestion to the input field.
 **Learning:** Buttons that appear only on hover (e.g., "Remove Tag" x) are invisible to keyboard users when focused, causing confusion as the focus ring appears around "nothing".
 **Action:** Always add `focus:opacity-100` (or equivalent) to `group-hover:opacity-100` elements to ensure they become visible when tabbing.
+
+## 2026-05-29 - Prop Spreading for Accessibility
+**Learning:** Custom atomic components like `Switch` that don't spread `...props` to their underlying interactive element effectively swallow accessibility attributes like `aria-label` passed by consumers, making them inaccessible in specific contexts.
+**Action:** Always spread `...props` to the root interactive element of reusable UI components to enable consumers to augment them with necessary ARIA attributes.
