@@ -177,17 +177,8 @@
   }
 }
 
-/* Mobile nav bar stability - prevent flashing during Discovery card swipes */
+/* Isolate the swipe card container from affecting nav layout on mobile */
 @media (max-width: 1023px) {
-  /* Force mobile nav to its own compositor layer for smoother animations */
-  nav[aria-label="Primary"] {
-    transform: translate3d(0, 0, 0);
-    -webkit-transform: translate3d(0, 0, 0);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-  }
-  
-  /* Isolate the swipe card container from affecting nav layout */
   .swipe-card-container {
     contain: layout paint;
   }

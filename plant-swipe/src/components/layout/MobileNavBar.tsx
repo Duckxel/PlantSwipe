@@ -93,7 +93,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     <>
       <nav
         ref={navRef}
-        className="fixed bottom-0 left-0 right-0 lg:hidden z-50"
+        className="fixed bottom-0 left-0 right-0 lg:hidden z-50 border-t border-stone-200/80 dark:border-[#3e3e42]/80 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-[#1a1a1c]/70 pb-[max(env(safe-area-inset-bottom),0px)]"
         role="navigation"
         aria-label="Primary"
         style={{ 
@@ -103,8 +103,6 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
           WebkitBackfaceVisibility: "hidden",
         }}
       >
-        {/* Blurred content area */}
-        <div className="border-t border-stone-200/80 dark:border-[#3e3e42]/80 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-[#1a1a1c]/70">
         <div className="relative mx-auto max-w-lg px-2 pt-2 pb-1">
           {/* Center floating create button */}
           {canCreate && (
@@ -186,9 +184,6 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
             )}
           </div>
         </div>
-        </div>
-        {/* Solid safe-area fill so it doesn't appear as a separate bar */}
-        <div className="bg-white dark:bg-[#1a1a1c] pb-[max(env(safe-area-inset-bottom),0px)]" />
       </nav>
 
       {/* Profile Menu Sheet */}
