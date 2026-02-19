@@ -141,7 +141,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     scene.add(innerWire)
 
     // ── Ground grid — large enough to fill the entire visible floor ──
-    const gridExtent = Math.max(frustumHalfHeight * 6, humanFarEdge * 5, 20)
+    const gridExtent = Math.max(frustumFullHeight * 3, humanFarEdge * 5, 20)
     const gridDivisions = Math.round(gridExtent * 2.5)
     const grid = new THREE.GridHelper(
       gridExtent,
