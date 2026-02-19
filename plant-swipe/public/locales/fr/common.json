@@ -1169,7 +1169,9 @@
     },
     "cube": {
       "eyebrow": "Vue 3D",
-      "title": "Dimensions"
+      "title": "Dimensions",
+      "expand": "Agrandir",
+      "collapse": "Réduire"
     },
     "dimensions": {
       "height": "Hauteur",

@@ -13,7 +13,7 @@ type DimensionCubeProps = {
 
 const HUMAN_MODEL_URL =
   'https://media.aphylia.app/UTILITY/admin/uploads/obj/basespiderman-5d85e4ec-e7a4-4be3-b585-b770d0718bf3.obj'
-const HUMAN_HEIGHT_M = 1.8 // Target human height in meters (scene units)
+const HUMAN_HEIGHT_M = 1.8
 
 export const DimensionCube: React.FC<DimensionCubeProps> = ({
   heightCm,
@@ -27,90 +27,106 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const container = containerRef.current
     if (!container) return
 
-    // Convert plant dimensions from cm to meters (1 scene unit = 1 meter)
-    // Height → Y axis, Wingspan → both X and Z axes
     const plantH = Math.max((heightCm ?? 30) / 100, 0.05)
     const plantW = Math.max((wingspanCm ?? 30) / 100, 0.05)
 
-    // Scene layout constants
-    const humanEstimatedWidth = 0.8 // approximate horizontal span of the human model (arm span) in meters
-    const gap = 0.35 // gap between cube and human in meters
+    const humanEstimatedWidth = 0.8
+    const gap = 0.12
     const sceneMaxHeight = Math.max(plantH, HUMAN_HEIGHT_M)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-    renderer.setPixelRatio(window.devicePixelRatio || 1)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.1
+
     const resolveSize = () => {
-      const width = container.clientWidth || 200
-      const h = container.clientHeight || width
+      const rect = container.getBoundingClientRect()
+      const width = Math.round(rect.width) || 200
+      const h = Math.round(rect.height) || 200
       return { width, height: h }
     }
+
     const { width: initialWidth, height: initialHeight } = resolveSize()
-    renderer.setSize(initialWidth, initialHeight)
+    renderer.setSize(initialWidth, initialHeight, false)
     renderer.domElement.style.display = 'block'
-    renderer.domElement.style.width = '100%'
-    renderer.domElement.style.height = '100%'
+    renderer.domElement.style.width = `${initialWidth}px`
+    renderer.domElement.style.height = `${initialHeight}px`
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
+    scene.fog = new THREE.FogExp2(0x050e0d, 0.06)
 
-    // Camera pivot = center of the cube
-    const fov = 38
-    const aspect = initialWidth / Math.max(1, initialHeight)
-    const cubeCenterY = plantH / 2
-    const orbitCenter = new THREE.Vector3(0, cubeCenterY, 0)
+    // Scene layout: cube at origin, human to the right
+    const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth
+    const orbitCenter = new THREE.Vector3(0, plantH / 2, 0)
 
-    // Camera orbit radius must:
-    // 1. Not clip through the human model (furthest edge from cube center)
-    // 2. Be far enough to frame both objects in the viewport
-    const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth // distance from cube center to human's far side
-    const fovRad = (fov * Math.PI) / 180
-    const distanceForHeight = sceneMaxHeight / (2 * Math.tan(fovRad / 2))
-    const distanceForWidth = (humanFarEdge + plantW / 2) / (2 * Math.tan(fovRad / 2) * aspect)
-    const minClearance = humanFarEdge + 0.5 // must not clip + 0.5m padding
-    const cameraDistance = Math.max(distanceForHeight, distanceForWidth, minClearance)
+    // Asymmetric orthographic frustum — ground pinned to viewport bottom
+    const groundMargin = 0.08
+    const frustumBottom = -(plantH / 2 + groundMargin)
+    const frustumTop = (sceneMaxHeight - plantH / 2) * 1.12
+    const frustumFullHeight = frustumTop - frustumBottom
 
-    const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 200)
-    const cameraHeight = cubeCenterY + sceneMaxHeight * 0.3
+    const computeFrustum = (aspect: number) => {
+      const halfW = (frustumFullHeight / 2) * aspect
+      return { halfW, top: frustumTop, bottom: frustumBottom }
+    }
 
+    const initialAspect = initialWidth / Math.max(1, initialHeight)
+    let { halfW } = computeFrustum(initialAspect)
+    let frustumT = frustumTop
+    let frustumB = frustumBottom
+
+    const camera = new THREE.OrthographicCamera(
+      -halfW, halfW, frustumT, frustumB, 0.1, 500,
+    )
+
+    // Front-facing camera — no tilt, orbits at cube center height
+    const cameraDistance = Math.max(sceneMaxHeight, humanFarEdge + 1) * 3
     camera.position.set(
       orbitCenter.x + cameraDistance,
-      cameraHeight,
+      orbitCenter.y,
       orbitCenter.z + cameraDistance,
     )
     camera.lookAt(orbitCenter)
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xbfffe0, 0.5)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9)
-    directionalLight.position.set(4, 6, 5)
-    const pointLight = new THREE.PointLight(0x34d399, 0.8)
-    pointLight.position.set(-3, -2, -6)
-    scene.add(ambientLight, directionalLight, pointLight)
+    // ── Lighting — balanced for flat front view ──
+    const ambientLight = new THREE.AmbientLight(0xc8f0e0, 0.7)
+    scene.add(ambientLight)
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.8)
+    keyLight.position.set(3, 5, 4)
+    scene.add(keyLight)
+
+    const fillLight = new THREE.DirectionalLight(0x88ccbb, 0.35)
+    fillLight.position.set(-4, 2, -3)
+    scene.add(fillLight)
+
+    const rimLight = new THREE.DirectionalLight(0x34d399, 0.25)
+    rimLight.position.set(0, 3, -5)
+    scene.add(rimLight)
 
     // ── Plant box (outer) ──
     const outerGeometry = new THREE.BoxGeometry(plantW, plantH, plantW)
     const outerMaterial = new THREE.MeshStandardMaterial({
-      color: 0x031512,
+      color: 0x041a16,
       transparent: true,
-      opacity: 0.22,
-      metalness: 0.35,
-      roughness: 0.55,
+      opacity: 0.18,
+      metalness: 0.4,
+      roughness: 0.5,
       emissive: 0x0d9488,
-      emissiveIntensity: 0.65,
+      emissiveIntensity: 0.5,
     })
     const outerMesh = new THREE.Mesh(outerGeometry, outerMaterial)
     outerMesh.position.set(0, plantH / 2, 0)
     scene.add(outerMesh)
 
-    // Outer wireframe
     const outerWire = new THREE.LineSegments(
       new THREE.EdgesGeometry(outerGeometry),
-      new THREE.LineBasicMaterial({ color: 0x34f5c6 }),
+      new THREE.LineBasicMaterial({ color: 0x34f5c6, linewidth: 2 }),
     )
     outerWire.position.set(0, plantH / 2, 0)
     scene.add(outerWire)
 
-    // Inner wireframe (70 % scale)
     const innerWire = new THREE.LineSegments(
       new THREE.EdgesGeometry(
         new THREE.BoxGeometry(plantW * 0.7, plantH * 0.7, plantW * 0.7),
@@ -118,25 +134,38 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
       new THREE.LineBasicMaterial({
         color: 0x10b981,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.6,
       }),
     )
     innerWire.position.set(0, plantH / 2, 0)
     scene.add(innerWire)
 
-    // ── Ground grid ──
-    const gridSize = Math.max(cameraDistance * 2.5, 6)
+    // ── Ground grid — large enough to fill the entire visible floor ──
+    const gridExtent = Math.max(frustumFullHeight * 3, humanFarEdge * 5, 20)
+    const gridDivisions = Math.round(gridExtent * 2.5)
     const grid = new THREE.GridHelper(
-      gridSize,
-      Math.round(gridSize * 3),
-      0x34f5c6,
-      0x0f766e,
+      gridExtent,
+      gridDivisions,
+      0x1a6b5a,
+      0x0d3d33,
     )
-    const gridMaterial = grid.material as THREE.Material
-    gridMaterial.transparent = true
-    gridMaterial.opacity = 0.25
-    grid.position.set(0, 0, 0)
+    const gridMat = grid.material as THREE.Material
+    gridMat.transparent = true
+    gridMat.opacity = 0.35
     scene.add(grid)
+
+    // Brighter sub-grid for a premium layered look
+    const subGrid = new THREE.GridHelper(
+      gridExtent,
+      Math.round(gridDivisions / 5),
+      0x34f5c6,
+      0x34f5c6,
+    )
+    const subGridMat = subGrid.material as THREE.Material
+    subGridMat.transparent = true
+    subGridMat.opacity = 0.12
+    subGrid.position.y = 0.001
+    scene.add(subGrid)
 
     // ── Human reference model ──
     const loader = new OBJLoader()
@@ -145,7 +174,6 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     loader.load(
       HUMAN_MODEL_URL,
       (obj) => {
-        // Compute bounding box of the raw model
         const bbox = new THREE.Box3().setFromObject(obj)
         const rawHeight = bbox.max.y - bbox.min.y
         if (rawHeight <= 0) return
@@ -153,24 +181,20 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         const scaleFactor = HUMAN_HEIGHT_M / rawHeight
         obj.scale.setScalar(scaleFactor)
 
-        // Recompute bounding box after scale
         const scaledBbox = new THREE.Box3().setFromObject(obj)
 
-        // Position human to the right of the plant box with a gap
         obj.position.x = plantW / 2 + gap - scaledBbox.min.x
-        obj.position.y = -scaledBbox.min.y // feet on the ground
+        obj.position.y = -scaledBbox.min.y
         obj.position.z = 0
 
-        // Apply a subtle silhouette material
         obj.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             child.material = new THREE.MeshStandardMaterial({
-              color: 0x8faaa6,
-              transparent: true,
-              opacity: 0.55,
-              metalness: 0.1,
-              roughness: 0.8,
-              emissive: 0x34d399,
+              color: 0x5a8078,
+              side: THREE.FrontSide,
+              metalness: 0.08,
+              roughness: 0.85,
+              emissive: 0x1a3a35,
               emissiveIntensity: 0.15,
             })
           }
@@ -179,26 +203,33 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         humanGroup = obj
         scene.add(obj)
       },
-      undefined, // onProgress
-      () => {
-        // Silently ignore load errors – the cube still renders
-      },
+      undefined,
+      () => {},
     )
 
-    // ── Resize handling ──
-    const setRendererSize = () => {
+    // ── Resize handling via ResizeObserver ──
+    const updateRendererSize = () => {
       const { width, height: h } = resolveSize()
-      renderer.setSize(width, h)
-      camera.aspect = width / Math.max(1, h)
+      if (width <= 0 || h <= 0) return
+      renderer.setSize(width, h, false)
+      renderer.domElement.style.width = `${width}px`
+      renderer.domElement.style.height = `${h}px`
+      const newAspect = width / Math.max(1, h)
+      const f = computeFrustum(newAspect)
+      halfW = f.halfW
+      frustumT = f.top
+      frustumB = f.bottom
+      camera.left = -halfW
+      camera.right = halfW
+      camera.top = frustumT
+      camera.bottom = frustumB
       camera.updateProjectionMatrix()
     }
-    setRendererSize()
 
-    const handleResize = () => {
-      if (!container) return
-      setRendererSize()
-    }
-    window.addEventListener('resize', handleResize)
+    const resizeObserver = new ResizeObserver(() => {
+      updateRendererSize()
+    })
+    resizeObserver.observe(container)
 
     // ── Interaction (orbit via drag / touch) ──
     let autoAngle = 0
@@ -310,7 +341,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         orbitCenter.x + cameraDistance * Math.cos(totalRotation)
       camera.position.z =
         orbitCenter.z + cameraDistance * Math.sin(totalRotation)
-      camera.position.y = cameraHeight
+      camera.position.y = orbitCenter.y
       camera.lookAt(orbitCenter)
 
       renderer.render(scene, camera)
@@ -325,7 +356,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     return () => {
       if (frameId) cancelAnimationFrame(frameId)
-      window.removeEventListener('resize', handleResize)
+      resizeObserver.disconnect()
       renderer.domElement.removeEventListener('mousedown', handleMouseDown)
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)

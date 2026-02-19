@@ -59,6 +59,8 @@ import {
   Cherry,
   House,
   TreeDeciduous,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react'
 import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
@@ -1278,6 +1280,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   const height = plant.growth?.height ?? null
   const wingspan = plant.growth?.wingspan ?? null
   const spacing = plant.growth?.separation ?? null
+  const [cubeExpanded, setCubeExpanded] = React.useState(false)
+  const toggleCubeExpanded = React.useCallback(() => {
+    setCubeExpanded(prev => !prev)
+  }, [])
     const dimensionLegend = [
       { label: t('moreInfo.dimensions.height'), value: height ? `${height} cm` : '—', subLabel: t('moreInfo.dimensions.heightSub') },
       { label: t('moreInfo.dimensions.spread'), value: wingspan ? `${wingspan} cm` : '—', subLabel: t('moreInfo.dimensions.spreadSub') },
@@ -1580,17 +1586,34 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </p>
                 <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
               </div>
-              <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
-                <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[200px] max-h-[320px] overflow-hidden">
-                  <DimensionCube heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
+              <div className={`grid gap-2 sm:gap-3 md:grid-cols-[1fr_200px] md:gap-3 md:auto-rows-auto ${
+                cubeExpanded ? 'grid-cols-1' : 'grid-cols-2 auto-rows-[1fr]'
+              }`}>
+                <div className={`relative rounded-xl md:rounded-2xl border border-emerald-100/70 bg-white/80 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden md:row-span-3 ${
+                  cubeExpanded ? 'h-[300px] md:h-auto p-2 sm:p-3' : 'p-1.5 sm:p-2 md:p-3'
+                }`}>
+                  <DimensionCube key={cubeExpanded ? 'exp' : 'col'} heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
+                  <button
+                    type="button"
+                    onClick={toggleCubeExpanded}
+                    className={`absolute z-10 md:hidden border border-emerald-500/30 bg-white/90 shadow-sm backdrop-blur-sm transition-colors hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-[#102020]/90 dark:text-emerald-200 dark:hover:bg-[#102020] text-emerald-700 ${
+                      cubeExpanded ? 'bottom-2 right-2 p-1.5 rounded-lg' : 'bottom-1.5 right-1.5 p-1 rounded-md'
+                    }`}
+                  >
+                    {cubeExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3 w-3" />}
+                  </button>
                 </div>
-                <div className="flex flex-col gap-2 md:min-h-[200px]">
-                  {dimensionLegend.map((item) => (
-                    <div key={item.label} className="md:flex-1">
-                      <DimensionLegendCard {...item} className="h-full" />
-                    </div>
-                  ))}
-                </div>
+                {cubeExpanded ? (
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3 md:contents">
+                    {dimensionLegend.map((item) => (
+                      <DimensionLegendCard key={item.label} {...item} className="h-full" />
+                    ))}
+                  </div>
+                ) : (
+                  dimensionLegend.map((item) => (
+                    <DimensionLegendCard key={item.label} {...item} className="h-full" />
+                  ))
+                )}
               </div>
             </section>
           )}
@@ -2038,15 +2061,15 @@ const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: st
   className,
 }) => (
   <div
-    className={`rounded-xl border border-emerald-500/30 bg-white/95 px-3.5 sm:px-4 py-2.5 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50 ${
+    className={`rounded-xl border border-emerald-500/30 bg-white/95 px-2.5 sm:px-4 py-2 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50 ${
       className || ''
     }`}
   >
-    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
+    <div className="text-[9px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
       {label}
     </div>
-    <div className="text-[11px] sm:text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-1">{subLabel}</div>
-    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">{value}</div>
+    <div className="text-[10px] sm:text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-0.5 sm:mb-1 line-clamp-1">{subLabel}</div>
+    <div className="text-lg sm:text-2xl font-bold text-stone-900 dark:text-white">{value}</div>
   </div>
 )
 

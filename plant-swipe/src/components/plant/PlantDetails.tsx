@@ -148,21 +148,21 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       label: t('plantDetails.stats.sunLevel'),
       value: translateLevelSun(plant.plantCare?.levelSun),
       gradient: "from-amber-400/90 to-orange-600",
-      icon: <SunMedium className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      icon: <SunMedium className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible: Boolean(plant.plantCare?.levelSun),
     },
       {
         label: t('plantDetails.stats.wateringNeed'),
         value: formatWateringNeed(plant.plantCare?.watering?.schedules),
         gradient: "from-blue-400/90 to-cyan-600",
-        icon: <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+        icon: <Droplet className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
         visible: Boolean(plant.plantCare?.watering?.schedules?.length),
       },
     {
       label: t('plantDetails.stats.humidity'),
       value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : t('plantDetails.values.ambient'),
       gradient: "from-cyan-400/90 to-teal-600",
-      icon: <Droplets className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      icon: <Droplets className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible: plant.plantCare?.hygrometry !== undefined,
     },
       {
@@ -170,7 +170,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
         value: translateMaintenance(maintenanceLevel),
         detail: t('plantDetails.stats.careIntensity'),
         gradient: "from-emerald-400/90 to-lime-500",
-        icon: <Wrench className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+        icon: <Wrench className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
         visible: Boolean(maintenanceLevel),
       },
     {
@@ -182,7 +182,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
           ? `${plant.plantCare.temperatureIdeal}°C`
           : t('plantDetails.values.stable'),
       gradient: "from-red-400/90 to-pink-600",
-      icon: <Thermometer className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      icon: <Thermometer className="h-5 w-5 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
       visible:
         plant.plantCare?.temperatureMin !== undefined ||
         plant.plantCare?.temperatureMax !== undefined ||
@@ -289,22 +289,26 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       </div>
 
       {visibleStats.length > 0 && (
-          <div className="rounded-[28px] border border-white/40 bg-white/70 px-4 py-4 shadow-inner backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:px-6 sm:py-6">
-            <div className="flex flex-wrap gap-3 sm:gap-4">
-              {visibleStats.map((stat) => (
+          <div className="rounded-[28px] border border-white/40 bg-white/70 px-3 py-3 shadow-inner backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:px-6 sm:py-6">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
+              {visibleStats.map((stat, idx) => (
                 <Card
                   key={stat.label}
-                  className={`flex-1 min-w-[180px] bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}
+                  className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg ${
+                    visibleStats.length % 2 !== 0 && idx === visibleStats.length - 1
+                      ? 'col-span-2'
+                      : ''
+                  }`}
                 >
-                  <CardContent className="flex items-center justify-between p-3 sm:p-4">
+                  <CardContent className="flex items-center justify-between p-2.5 sm:p-4">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[10px] sm:text-xs uppercase text-white/80">{stat.label}</p>
-                      <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight break-words">{stat.value}</p>
+                      <p className="text-[9px] sm:text-xs uppercase text-white/80 leading-tight">{stat.label}</p>
+                      <p className="text-base sm:text-xl md:text-2xl font-bold leading-tight break-words">{stat.value}</p>
                       {stat.detail ? (
-                        <p className="text-[11px] sm:text-xs mt-1 text-white/80 break-words">{stat.detail}</p>
+                        <p className="text-[10px] sm:text-xs mt-0.5 text-white/80 break-words">{stat.detail}</p>
                       ) : null}
                     </div>
-                    <div className="ml-2 flex-shrink-0">{stat.icon}</div>
+                    <div className="ml-1.5 sm:ml-2 flex-shrink-0">{stat.icon}</div>
                   </CardContent>
                 </Card>
               ))}
