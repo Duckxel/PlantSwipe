@@ -155,7 +155,7 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
         </Card>
 
         {/* Quick Info Card */}
-        <Card className="mt-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-emerald-50/80 to-white dark:from-emerald-900/20 dark:to-[#1f1f1f] p-4">
+        <Card className="mt-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-emerald-100/60 to-white dark:from-emerald-900/20 dark:to-[#1f1f1f] p-4">
           <div className="text-xs text-muted-foreground mb-2">
             {t("garden.created", "Created")}
           </div>

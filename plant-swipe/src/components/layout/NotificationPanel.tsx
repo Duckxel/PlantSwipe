@@ -236,7 +236,7 @@ export function NotificationPanel({
       aria-label={t('notifications.title', { defaultValue: 'Notifications' })}
     >
       {/* Header */}
-      <div className="px-5 py-4 border-b border-stone-100 dark:border-[#2a2a2d] bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10">
+      <div className="px-5 py-4 border-b border-stone-100 dark:border-[#2a2a2d] bg-gradient-to-r from-amber-100/60 to-orange-50/70 dark:from-amber-900/10 dark:to-orange-900/10">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/25">
             <Bell className="h-5 w-5 text-white" />
@@ -285,7 +285,7 @@ export function NotificationPanel({
                     onClose()
                     navigate('/gardens')
                   }}
-                  className="w-full p-3 rounded-xl bg-gradient-to-r from-amber-50/80 to-orange-50/50 dark:from-amber-900/15 dark:to-orange-900/10 border border-amber-100/80 dark:border-amber-800/30 hover:border-amber-200 dark:hover:border-amber-700/50 transition-colors text-left group"
+                  className="w-full p-3 rounded-xl bg-gradient-to-r from-amber-100/60 to-orange-50/60 dark:from-amber-900/15 dark:to-orange-900/10 border border-amber-200/60 dark:border-amber-800/30 hover:border-amber-200 dark:hover:border-amber-700/50 transition-colors text-left group"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-amber-500/20">
@@ -324,7 +324,7 @@ export function NotificationPanel({
                     return (
                       <div
                         key={request.id}
-                        className="group p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/50 dark:from-blue-900/15 dark:to-indigo-900/10 border border-blue-100/80 dark:border-blue-800/30 hover:border-blue-200 dark:hover:border-blue-700/50 transition-colors"
+                        className="group p-3 rounded-xl bg-gradient-to-r from-blue-100/60 to-indigo-50/60 dark:from-blue-900/15 dark:to-indigo-900/10 border border-blue-200/60 dark:border-blue-800/30 hover:border-blue-200 dark:hover:border-blue-700/50 transition-colors"
                       >
                         {/* User Info Row */}
                         <div className="flex items-start gap-3">
@@ -440,7 +440,7 @@ export function NotificationPanel({
                     return (
                       <div
                         key={invite.id}
-                        className="group p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/50 dark:from-emerald-900/15 dark:to-teal-900/10 border border-emerald-100/80 dark:border-emerald-800/30 hover:border-emerald-200 dark:hover:border-emerald-700/50 transition-colors"
+                        className="group p-3 rounded-xl bg-gradient-to-r from-emerald-100/60 to-teal-50/60 dark:from-emerald-900/15 dark:to-teal-900/10 border border-emerald-200/60 dark:border-emerald-800/30 hover:border-emerald-200 dark:hover:border-emerald-700/50 transition-colors"
                       >
                         {/* Garden Info Row */}
                         <div className="flex items-start gap-3">

@@ -28,7 +28,7 @@ export type PlantProfileFormProps = {
 
 const neuCardClass =
   "rounded-2xl border border-emerald-100/80 dark:border-emerald-900/50 bg-gradient-to-br " +
-  "from-emerald-50/80 via-emerald-100/70 to-white/80 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] " +
+  "from-emerald-100/70 via-emerald-100/60 to-white/80 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] " +
   "shadow-[0_18px_50px_-26px_rgba(16,185,129,0.35)] dark:shadow-[0_22px_65px_-40px_rgba(0,0,0,0.65)]"
 
 const normalizeHex = (hex?: string) => {
@@ -515,7 +515,7 @@ const CompanionSelector: React.FC<{
               : t('plantAdmin.showCompanionSuggestions', 'Show AI suggestions')}
           </button>
           {showSuggestions && (
-            <div className="mt-2 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner space-y-3">
+            <div className="mt-2 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-100/60 via-white/80 to-emerald-100/60 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner space-y-3">
               <div className="text-xs text-muted-foreground">
                 {t('plantAdmin.companionSuggestionsReview', 'Click Add to link suggested plants. Not all may exist in the database.')}
               </div>

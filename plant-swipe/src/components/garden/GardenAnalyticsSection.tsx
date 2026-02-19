@@ -1381,7 +1381,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     {(advice.weeklyFocus || advice.weatherAdvice) && (
                       <div className={`grid gap-3 ${advice.weeklyFocus && advice.weatherAdvice ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
                         {advice.weeklyFocus && (
-                          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50/80 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200/50 dark:border-amber-800/40">
+                          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-100/70 to-orange-50/80 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200/50 dark:border-amber-800/40">
                             <div className="flex items-center gap-2 mb-2">
                               <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
                                 <Target className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -1394,7 +1394,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                           </div>
                         )}
                         {advice.weatherAdvice && (
-                          <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50/80 dark:from-sky-950/30 dark:to-blue-950/20 border border-sky-200/50 dark:border-sky-800/40">
+                          <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-100/70 to-blue-50/80 dark:from-sky-950/30 dark:to-blue-950/20 border border-sky-200/50 dark:border-sky-800/40">
                             <div className="flex items-center gap-2 mb-2">
                               <div className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center">
                                 <Droplets className="w-4 h-4 text-sky-600 dark:text-sky-400" />
@@ -1478,8 +1478,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                             const cardClasses = isHigh
                               ? "border-l-red-500 bg-gradient-to-r from-red-50/80 to-transparent dark:from-red-950/30 dark:to-transparent"
                               : isMedium
-                                ? "border-l-amber-500 bg-gradient-to-r from-amber-50/80 to-transparent dark:from-amber-950/30 dark:to-transparent"
-                                : "border-l-emerald-400 bg-gradient-to-r from-emerald-50/50 to-transparent dark:from-emerald-950/20 dark:to-transparent";
+                                ? "border-l-amber-500 bg-gradient-to-r from-amber-100/60 to-transparent dark:from-amber-950/30 dark:to-transparent"
+                                : "border-l-emerald-400 bg-gradient-to-r from-emerald-100/40 to-transparent dark:from-emerald-950/20 dark:to-transparent";
 
                             const iconBg = isHigh
                               ? "bg-red-100 dark:bg-red-900/40"
@@ -1724,7 +1724,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
 
                 {/* Weather-Based Tips */}
                 {advice?.weatherAdvice && (
-                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 p-6">
+                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/70 to-blue-50 dark:from-sky-900/20 dark:to-blue-900/20 p-6">
                     <h3 className="font-semibold text-lg flex items-center gap-2 mb-4">
                       <span className="text-xl">🌤️</span>
                       {t("gardenDashboard.analyticsSection.weatherAdvice", { defaultValue: "Weather-Based Tips" })}

@@ -148,7 +148,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       iconColor: "text-amber-500 dark:text-amber-400",
       iconBg: "bg-gradient-to-br from-amber-500 to-orange-500",
       iconShadow: "shadow-amber-500/30",
-      chipBg: "bg-gradient-to-br from-amber-50 to-orange-50/50 dark:from-amber-950/40 dark:to-orange-950/20",
+      chipBg: "bg-gradient-to-br from-amber-100/70 to-orange-50/60 dark:from-amber-950/40 dark:to-orange-950/20",
       chipBorder: "border-amber-200/60 dark:border-amber-700/30",
       labelColor: "text-amber-800/70 dark:text-amber-300/60",
       glowColor: "from-amber-300/30 to-orange-300/30 dark:from-amber-700/15 dark:to-orange-700/15",
@@ -161,7 +161,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       iconColor: "text-blue-500 dark:text-blue-400",
       iconBg: "bg-gradient-to-br from-blue-500 to-cyan-500",
       iconShadow: "shadow-blue-500/30",
-      chipBg: "bg-gradient-to-br from-blue-50 to-cyan-50/50 dark:from-blue-950/40 dark:to-cyan-950/20",
+      chipBg: "bg-gradient-to-br from-blue-100/70 to-cyan-50/60 dark:from-blue-950/40 dark:to-cyan-950/20",
       chipBorder: "border-blue-200/60 dark:border-blue-700/30",
       labelColor: "text-blue-800/70 dark:text-blue-300/60",
       glowColor: "from-blue-300/30 to-cyan-300/30 dark:from-blue-700/15 dark:to-cyan-700/15",
@@ -187,7 +187,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       iconColor: "text-emerald-500 dark:text-emerald-400",
       iconBg: "bg-gradient-to-br from-emerald-500 to-teal-500",
       iconShadow: "shadow-emerald-500/30",
-      chipBg: "bg-gradient-to-br from-emerald-50 to-teal-50/50 dark:from-emerald-950/40 dark:to-teal-950/20",
+      chipBg: "bg-gradient-to-br from-emerald-100/70 to-teal-50/60 dark:from-emerald-950/40 dark:to-teal-950/20",
       chipBorder: "border-emerald-200/60 dark:border-emerald-700/30",
       labelColor: "text-emerald-800/70 dark:text-emerald-300/60",
       glowColor: "from-emerald-300/30 to-teal-300/30 dark:from-emerald-700/15 dark:to-teal-700/15",
@@ -221,7 +221,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-100/70 via-white to-amber-100/50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
         <div
           className="absolute inset-0 opacity-25 blur-3xl"
           style={{

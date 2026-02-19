@@ -423,7 +423,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
   return (
     <section>
       <div className={cn(
-        "relative z-0 overflow-hidden rounded-3xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-emerald-100 p-4 sm:p-6 shadow-lg dark:border-emerald-800/60 dark:from-[#04281f] dark:via-[#0b1b1a] dark:to-[#0e2f28]",
+        "relative z-0 overflow-hidden rounded-3xl border border-emerald-200/80 bg-gradient-to-br from-emerald-100/80 via-white to-emerald-100 p-4 sm:p-6 shadow-lg dark:border-emerald-800/60 dark:from-[#04281f] dark:via-[#0b1b1a] dark:to-[#0e2f28]",
         hasAdvice ? "pb-12 sm:pb-16" : "pb-4 sm:pb-6"
       )}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.18),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.12),transparent_40%)] pointer-events-none" />
@@ -445,7 +445,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
           <div className="mt-5">
             {/* Prominent Add Advice Button - shown when form is closed */}
             {!formOpen && (
-              <div className="flex flex-col items-center gap-3 py-5 px-4 rounded-2xl border-2 border-dashed border-emerald-300/80 bg-gradient-to-b from-emerald-50/80 to-white dark:border-emerald-700/50 dark:from-emerald-950/30 dark:to-transparent">
+              <div className="flex flex-col items-center gap-3 py-5 px-4 rounded-2xl border-2 border-dashed border-emerald-300/80 bg-gradient-to-b from-emerald-100/60 to-white dark:border-emerald-700/50 dark:from-emerald-950/30 dark:to-transparent">
                 <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
                   <ShieldCheck className="h-4 w-4" />
                   <span className="font-medium">{t("canContribute")}</span>

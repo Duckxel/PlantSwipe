@@ -267,7 +267,7 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
     <div className="space-y-6 md:space-y-8">
       {/* Weekly Overview Card */}
       <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#1f1f1f]/95 backdrop-blur overflow-hidden shadow-sm">
-        <div className="p-4 md:p-5 border-b border-stone-100 dark:border-stone-800/50 bg-gradient-to-r from-blue-50/50 to-indigo-50/30 dark:from-blue-900/10 dark:to-indigo-900/10">
+        <div className="p-4 md:p-5 border-b border-stone-100 dark:border-stone-800/50 bg-gradient-to-r from-blue-100/50 to-indigo-100/30 dark:from-blue-900/10 dark:to-indigo-900/10">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-base md:text-lg flex items-center gap-2.5">
               <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30">

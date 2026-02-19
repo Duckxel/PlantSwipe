@@ -757,7 +757,7 @@ const PlantInfoPage: React.FC = () => {
           </Button>
         </div>
         
-        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 overflow-hidden">
+        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-100/70 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 overflow-hidden">
           {/* Hero section with image */}
           <div className="relative">
             {limitedPlantInfo.primaryImage ? (
@@ -1048,7 +1048,7 @@ const PlantInfoPage: React.FC = () => {
         // Regular users see simplified construction message
         if (isInConstruction && !hasPrivilegedAccess) {
           return (
-            <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-50 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
+            <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-gradient-to-br from-amber-100/70 via-white to-amber-100 dark:from-amber-900/20 dark:via-[#1e1e1e] dark:to-amber-900/10 p-8 sm:p-12 text-center space-y-6">
               <div className="flex justify-center">
                 <div className="p-4 rounded-full bg-amber-100 dark:bg-amber-900/40">
                   <FlaskConical className="h-12 w-12 text-amber-600 dark:text-amber-400" />
@@ -1081,7 +1081,7 @@ const PlantInfoPage: React.FC = () => {
         return (
           <>
             {isInConstruction && hasPrivilegedAccess && (
-              <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-900/30 dark:to-amber-800/20 p-4 sm:p-5 flex items-center gap-4">
+              <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-gradient-to-r from-amber-100/70 to-amber-100 dark:from-amber-900/30 dark:to-amber-800/20 p-4 sm:p-5 flex items-center gap-4">
                 <div className="shrink-0 p-2.5 rounded-full bg-amber-200 dark:bg-amber-800/50">
                   <FlaskConical className="h-6 w-6 text-amber-700 dark:text-amber-300" />
                 </div>
@@ -1611,7 +1611,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         <div className={gridClass}>
           {(height !== null || wingspan !== null || spacing !== null) && (
             <section
-              className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent"
+              className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-100/60 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent"
             >
               <div className="mb-3">
                 <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
@@ -1739,7 +1739,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           />
         ) : recipesIdeasList.length > 0 ? (
           <section
-            className="rounded-2xl sm:rounded-3xl border-2 border-emerald-400/50 bg-gradient-to-br from-emerald-50/90 via-orange-50/60 to-amber-50/80 p-5 sm:p-6 dark:border-emerald-500/60 dark:from-emerald-500/15 dark:via-orange-500/10 dark:to-amber-500/10 shadow-lg"
+            className="rounded-2xl sm:rounded-3xl border-2 border-emerald-400/50 bg-gradient-to-br from-emerald-100/80 via-orange-50/70 to-amber-100/60 p-5 sm:p-6 dark:border-emerald-500/60 dark:from-emerald-500/15 dark:via-orange-500/10 dark:to-amber-500/10 shadow-lg"
           >
             <div className="space-y-4 sm:space-y-5">
               <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-300">
@@ -1822,7 +1822,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           {/* Companion & Related Plants Carousel */}
           {(companionPlants.length > 0 || companionsLoading) && (
             <section
-              className="rounded-2xl sm:rounded-3xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 via-white/60 to-emerald-100/40 dark:from-emerald-950/30 dark:via-[#1f1f1f] dark:to-emerald-900/20 p-4 sm:p-6"
+              className="rounded-2xl sm:rounded-3xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-100/70 via-white/60 to-emerald-100/40 dark:from-emerald-950/30 dark:via-[#1f1f1f] dark:to-emerald-900/20 p-4 sm:p-6"
             >
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
@@ -2193,7 +2193,7 @@ const getToxicityConfig = (level: ToxicityLevel) => {
       return {
         severity: 'safe' as const,
         color: 'emerald',
-        bgGradient: 'from-emerald-50/60 to-green-50/40 dark:from-emerald-950/30 dark:to-green-950/20',
+        bgGradient: 'from-emerald-100/50 to-green-50/50 dark:from-emerald-950/30 dark:to-green-950/20',
         borderColor: 'border-emerald-200/80 dark:border-emerald-700/50',
         iconBg: 'bg-emerald-400/80 dark:bg-emerald-600/70',
         textColor: 'text-emerald-700 dark:text-emerald-300',
@@ -2223,7 +2223,7 @@ const getToxicityConfig = (level: ToxicityLevel) => {
         severity: 'high' as const,
         color: 'amber',
         // Moderate warning - noticeable but not alarming
-        bgGradient: 'from-amber-50/70 to-orange-50/50 dark:from-amber-950/40 dark:to-orange-950/30',
+        bgGradient: 'from-amber-100/60 to-orange-50/60 dark:from-amber-950/40 dark:to-orange-950/30',
         borderColor: 'border-amber-300/80 dark:border-amber-600/60',
         iconBg: 'bg-amber-500 dark:bg-amber-600',
         textColor: 'text-amber-800 dark:text-amber-200',
@@ -2290,7 +2290,7 @@ const ToxicityWarningBanner: React.FC<{
   
   if (bothSafe) {
     return (
-      <div className="rounded-xl sm:rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-r from-emerald-50/50 to-green-50/30 dark:from-emerald-950/20 dark:to-green-950/10 p-3 sm:p-4">
+      <div className="rounded-xl sm:rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-r from-emerald-100/50 to-green-50/40 dark:from-emerald-950/20 dark:to-green-950/10 p-3 sm:p-4">
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-emerald-400/70 dark:bg-emerald-600/60 flex items-center justify-center">
             <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
@@ -2319,7 +2319,7 @@ const ToxicityWarningBanner: React.FC<{
   const bannerConfig = {
     mild: {
       // Very subtle - almost neutral, just informative
-      bg: 'from-stone-50/40 to-stone-100/30 dark:from-stone-900/20 dark:to-stone-800/10',
+      bg: 'from-stone-100/40 to-stone-100/30 dark:from-stone-900/20 dark:to-stone-800/10',
       border: 'border-stone-200/50 dark:border-stone-700/30',
       shadow: '',
       titleColor: 'text-stone-600 dark:text-stone-400',
@@ -2328,7 +2328,7 @@ const ToxicityWarningBanner: React.FC<{
     },
     high: {
       // Moderate warning - noticeable but restrained
-      bg: 'from-amber-50/60 to-orange-50/40 dark:from-amber-950/30 dark:to-orange-950/20',
+      bg: 'from-amber-100/50 to-orange-50/50 dark:from-amber-950/30 dark:to-orange-950/20',
       border: 'border-amber-300/70 dark:border-amber-700/50',
       shadow: 'shadow-sm shadow-amber-100/30 dark:shadow-amber-900/10',
       titleColor: 'text-amber-800 dark:text-amber-200',
@@ -2346,7 +2346,7 @@ const ToxicityWarningBanner: React.FC<{
     },
     safe: {
       // Calm and subtle
-      bg: 'from-emerald-50/50 to-green-50/30 dark:from-emerald-950/20 dark:to-green-950/10',
+      bg: 'from-emerald-100/40 to-green-50/40 dark:from-emerald-950/20 dark:to-green-950/10',
       border: 'border-emerald-200/60 dark:border-emerald-800/40',
       shadow: '',
       titleColor: 'text-emerald-700 dark:text-emerald-300',

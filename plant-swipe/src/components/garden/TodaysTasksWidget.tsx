@@ -115,7 +115,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
 
   if (totalTasks === 0) {
     return (
-      <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-900/10 dark:to-[#1f1f1f] p-4 md:p-5">
+      <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-emerald-100/50 to-white dark:from-emerald-900/10 dark:to-[#1f1f1f] p-4 md:p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-base md:text-lg flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-500" />
@@ -138,7 +138,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
   return (
     <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur overflow-hidden">
       {/* Header */}
-      <div className="p-3 md:p-4 border-b border-stone-200/50 dark:border-stone-700/50 bg-gradient-to-r from-emerald-50/80 to-white dark:from-emerald-900/20 dark:to-[#1f1f1f]">
+      <div className="p-3 md:p-4 border-b border-stone-200/50 dark:border-stone-700/50 bg-gradient-to-r from-emerald-100/60 to-white dark:from-emerald-900/20 dark:to-[#1f1f1f]">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-base md:text-lg flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-500" />

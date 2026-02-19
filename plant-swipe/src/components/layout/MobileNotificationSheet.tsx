@@ -210,7 +210,7 @@ export function MobileNotificationSheet({
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent side="bottom" className="rounded-t-3xl max-h-[90vh] overflow-hidden flex flex-col px-0">
         {/* Header */}
-        <SheetHeader className="px-6 pb-4 border-b border-stone-100 dark:border-[#2a2a2d] flex-shrink-0 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10">
+        <SheetHeader className="px-6 pb-4 border-b border-stone-100 dark:border-[#2a2a2d] flex-shrink-0 bg-gradient-to-r from-amber-100/60 to-orange-50/70 dark:from-amber-900/10 dark:to-orange-900/10">
           <div className="flex items-center gap-4">
             <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/25">
               <Bell className="h-6 w-6 text-white" />
@@ -272,7 +272,7 @@ export function MobileNotificationSheet({
                       onClose()
                       navigate('/gardens')
                     }}
-                    className="w-full p-4 rounded-2xl bg-gradient-to-r from-amber-50/80 to-orange-50/50 dark:from-amber-900/15 dark:to-orange-900/10 border border-amber-100/80 dark:border-amber-800/30 active:scale-[0.98] transition-transform text-left"
+                    className="w-full p-4 rounded-2xl bg-gradient-to-r from-amber-100/60 to-orange-50/60 dark:from-amber-900/15 dark:to-orange-900/10 border border-amber-200/60 dark:border-amber-800/30 active:scale-[0.98] transition-transform text-left"
                   >
                     <div className="flex items-center gap-4">
                       <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-amber-500/25">
@@ -313,7 +313,7 @@ export function MobileNotificationSheet({
                       return (
                         <div
                           key={request.id}
-                          className="group p-4 rounded-2xl bg-gradient-to-r from-blue-50/80 to-indigo-50/50 dark:from-blue-900/15 dark:to-indigo-900/10 border border-blue-100/80 dark:border-blue-800/30"
+                          className="group p-4 rounded-2xl bg-gradient-to-r from-blue-100/60 to-indigo-50/60 dark:from-blue-900/15 dark:to-indigo-900/10 border border-blue-200/60 dark:border-blue-800/30"
                         >
                           {/* User Info Row */}
                           <div className="flex items-start gap-4">
@@ -429,7 +429,7 @@ export function MobileNotificationSheet({
                       return (
                         <div
                           key={invite.id}
-                          className="group p-4 rounded-2xl bg-gradient-to-r from-emerald-50/80 to-teal-50/50 dark:from-emerald-900/15 dark:to-teal-900/10 border border-emerald-100/80 dark:border-emerald-800/30"
+                          className="group p-4 rounded-2xl bg-gradient-to-r from-emerald-100/60 to-teal-50/60 dark:from-emerald-900/15 dark:to-teal-900/10 border border-emerald-200/60 dark:border-emerald-800/30"
                         >
                           {/* Garden Info Row */}
                           <div className="flex items-start gap-4">

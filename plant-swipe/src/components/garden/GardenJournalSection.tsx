@@ -680,7 +680,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   return (
     <div className="space-y-6">
       {/* Header with decorative elements */}
-      <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 dark:from-amber-900/20 dark:via-orange-900/20 dark:to-rose-900/20 p-6 md:p-8">
+      <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-amber-100/70 via-orange-50 to-rose-50 dark:from-amber-900/20 dark:via-orange-900/20 dark:to-rose-900/20 p-6 md:p-8">
         <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-amber-200/40 to-rose-200/40 dark:from-amber-500/10 dark:to-rose-500/10 rounded-full blur-3xl" />
         <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-gradient-to-br from-orange-200/40 to-amber-200/40 dark:from-orange-500/10 dark:to-amber-500/10 rounded-full blur-3xl" />
         

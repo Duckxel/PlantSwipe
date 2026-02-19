@@ -6619,7 +6619,7 @@ export const AdminPage: React.FC = () => {
                     {/* Quick Stats Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {/* Currently Online Card */}
-                        <div className="group relative rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-cyan-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300 overflow-hidden">
+                        <div className="group relative rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-100/60 via-teal-50 to-cyan-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-cyan-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300 overflow-hidden">
                           {/* Decorative background element */}
                           <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-emerald-200/40 to-teal-200/40 dark:from-emerald-800/20 dark:to-teal-800/20 blur-2xl" />
                           <div className="relative">

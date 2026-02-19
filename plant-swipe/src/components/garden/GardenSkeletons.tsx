@@ -93,7 +93,7 @@ export const OverviewSectionSkeleton: React.FC = () => {
     <>
       <div className="space-y-6">
         {/* Hero Section skeleton */}
-        <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-emerald-50/80 via-white to-stone-100/80 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] border border-stone-200/70 dark:border-[#3e3e42]/70 shadow-lg min-h-[200px] p-8 md:p-10">
+        <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-emerald-100/60 via-white to-stone-100/80 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] border border-stone-200/70 dark:border-[#3e3e42]/70 shadow-lg min-h-[200px] p-8 md:p-10">
           {/* Decorative blur elements */}
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute -top-6 -right-8 h-32 w-32 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" />
@@ -218,7 +218,7 @@ const ProfileStatCardSkeleton: React.FC = () => {
 }
 
 // Profile hero card style
-const profileHeroCardClass = "relative overflow-hidden rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-emerald-50/80 via-white to-stone-100/80 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] shadow-lg"
+const profileHeroCardClass = "relative overflow-hidden rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-emerald-100/60 via-white to-stone-100/80 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] shadow-lg"
 
 // Skeleton for Profile Page
 export const ProfilePageSkeleton: React.FC = () => {
@@ -474,7 +474,7 @@ export const PlantInfoPageSkeleton: React.FC<{ label?: string }> = ({ label = 'L
           </div>
 
           {/* Recipes section */}
-          <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-500/40 bg-gradient-to-br from-emerald-50/80 via-orange-50/50 to-amber-50/70 dark:from-emerald-500/20 dark:via-orange-500/10 dark:to-amber-500/10 p-4 sm:p-6 space-y-4">
+          <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-500/40 bg-gradient-to-br from-emerald-100/60 via-orange-50/60 to-amber-100/50 dark:from-emerald-500/20 dark:via-orange-500/10 dark:to-amber-500/10 p-4 sm:p-6 space-y-4">
             <Skeleton className="h-5 w-48 rounded-md" />
             <div className="flex flex-wrap gap-3">
               {Array.from({ length: 4 }).map((_, idx) => (
