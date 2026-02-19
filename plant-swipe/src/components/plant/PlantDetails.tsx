@@ -290,13 +290,13 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
       {visibleStats.length > 0 && (
           <div className="rounded-[28px] border border-white/40 bg-white/70 px-3 py-3 shadow-inner backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:px-6 sm:py-6">
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
+            <div className="grid grid-cols-2 lg:flex gap-2.5 sm:gap-4">
               {visibleStats.map((stat, idx) => (
                 <Card
                   key={stat.label}
-                  className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg ${
+                  className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg lg:flex-1 lg:min-w-0 ${
                     visibleStats.length % 2 !== 0 && idx === visibleStats.length - 1
-                      ? 'col-span-2'
+                      ? 'col-span-2 lg:col-span-1'
                       : ''
                   }`}
                 >
