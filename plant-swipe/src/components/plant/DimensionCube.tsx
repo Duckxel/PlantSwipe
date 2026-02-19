@@ -13,7 +13,7 @@ type DimensionCubeProps = {
 
 const HUMAN_MODEL_URL =
   'https://media.aphylia.app/UTILITY/admin/uploads/obj/basespiderman-5d85e4ec-e7a4-4be3-b585-b770d0718bf3.obj'
-const HUMAN_HEIGHT_M = 1.8 // Target human height in meters (scene units)
+const HUMAN_HEIGHT_M = 1.8
 
 export const DimensionCube: React.FC<DimensionCubeProps> = ({
   heightCm,
@@ -27,23 +27,22 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     const container = containerRef.current
     if (!container) return
 
-    // Convert plant dimensions from cm to meters (1 scene unit = 1 meter)
-    // Height → Y axis, Wingspan → both X and Z axes
     const plantH = Math.max((heightCm ?? 30) / 100, 0.05)
     const plantW = Math.max((wingspanCm ?? 30) / 100, 0.05)
 
-    // Scene layout constants
-    const humanEstimatedWidth = 0.8 // approximate horizontal span of the human model (arm span) in meters
-    const gap = 0.35 // gap between cube and human in meters
+    const humanEstimatedWidth = 0.8
+    const gap = 0.35
     const sceneMaxHeight = Math.max(plantH, HUMAN_HEIGHT_M)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-    renderer.setPixelRatio(window.devicePixelRatio || 1)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+
     const resolveSize = () => {
       const width = container.clientWidth || 200
       const h = container.clientHeight || width
       return { width, height: h }
     }
+
     const { width: initialWidth, height: initialHeight } = resolveSize()
     renderer.setSize(initialWidth, initialHeight)
     renderer.domElement.style.display = 'block'
@@ -53,21 +52,32 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     const scene = new THREE.Scene()
 
-    // Camera pivot = center of the cube
     const fov = 38
     const aspect = initialWidth / Math.max(1, initialHeight)
     const cubeCenterY = plantH / 2
     const orbitCenter = new THREE.Vector3(0, cubeCenterY, 0)
 
-    // Camera orbit radius must:
-    // 1. Not clip through the human model (furthest edge from cube center)
-    // 2. Be far enough to frame both objects in the viewport
-    const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth // distance from cube center to human's far side
+    const humanFarEdge = plantW / 2 + gap + humanEstimatedWidth
     const fovRad = (fov * Math.PI) / 180
-    const distanceForHeight = sceneMaxHeight / (2 * Math.tan(fovRad / 2))
-    const distanceForWidth = (humanFarEdge + plantW / 2) / (2 * Math.tan(fovRad / 2) * aspect)
-    const minClearance = humanFarEdge + 0.5 // must not clip + 0.5m padding
-    const cameraDistance = Math.max(distanceForHeight, distanceForWidth, minClearance)
+    const halfVFov = fovRad / 2
+
+    // Vertical framing: camera is elevated, so we need to frame from ground
+    // (y=0) to the top of the tallest object (y=sceneMaxHeight). The orbit
+    // center sits at cubeCenterY, and the camera looks at it from above. We
+    // frame the larger of the two vertical extents from the orbit center.
+    const verticalExtentAbove = sceneMaxHeight - cubeCenterY
+    const verticalExtentBelow = cubeCenterY
+    const maxVerticalExtent = Math.max(verticalExtentAbove, verticalExtentBelow)
+    const distanceForHeight = maxVerticalExtent / Math.tan(halfVFov)
+
+    // Horizontal framing: the scene extends from -plantW/2 to humanFarEdge.
+    // From the orbit center (x=0) the max horizontal extent is humanFarEdge.
+    const halfHFov = Math.atan(Math.tan(halfVFov) * aspect)
+    const distanceForWidth = humanFarEdge / Math.tan(halfHFov)
+
+    const minClearance = humanFarEdge + 0.5
+    const cameraDistance =
+      Math.max(distanceForHeight, distanceForWidth, minClearance) * 1.25
 
     const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 200)
     const cameraHeight = cubeCenterY + sceneMaxHeight * 0.3
@@ -80,10 +90,10 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     camera.lookAt(orbitCenter)
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xbfffe0, 0.5)
+    const ambientLight = new THREE.AmbientLight(0xbfffe0, 0.6)
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9)
     directionalLight.position.set(4, 6, 5)
-    const pointLight = new THREE.PointLight(0x34d399, 0.8)
+    const pointLight = new THREE.PointLight(0x34d399, 0.6)
     pointLight.position.set(-3, -2, -6)
     scene.add(ambientLight, directionalLight, pointLight)
 
@@ -102,7 +112,6 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     outerMesh.position.set(0, plantH / 2, 0)
     scene.add(outerMesh)
 
-    // Outer wireframe
     const outerWire = new THREE.LineSegments(
       new THREE.EdgesGeometry(outerGeometry),
       new THREE.LineBasicMaterial({ color: 0x34f5c6 }),
@@ -110,7 +119,6 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     outerWire.position.set(0, plantH / 2, 0)
     scene.add(outerWire)
 
-    // Inner wireframe (70 % scale)
     const innerWire = new THREE.LineSegments(
       new THREE.EdgesGeometry(
         new THREE.BoxGeometry(plantW * 0.7, plantH * 0.7, plantW * 0.7),
@@ -145,7 +153,6 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
     loader.load(
       HUMAN_MODEL_URL,
       (obj) => {
-        // Compute bounding box of the raw model
         const bbox = new THREE.Box3().setFromObject(obj)
         const rawHeight = bbox.max.y - bbox.min.y
         if (rawHeight <= 0) return
@@ -153,25 +160,21 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         const scaleFactor = HUMAN_HEIGHT_M / rawHeight
         obj.scale.setScalar(scaleFactor)
 
-        // Recompute bounding box after scale
         const scaledBbox = new THREE.Box3().setFromObject(obj)
 
-        // Position human to the right of the plant box with a gap
         obj.position.x = plantW / 2 + gap - scaledBbox.min.x
-        obj.position.y = -scaledBbox.min.y // feet on the ground
+        obj.position.y = -scaledBbox.min.y
         obj.position.z = 0
 
-        // Apply a subtle silhouette material
         obj.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             child.material = new THREE.MeshStandardMaterial({
-              color: 0x8faaa6,
-              transparent: true,
-              opacity: 0.55,
-              metalness: 0.1,
-              roughness: 0.8,
-              emissive: 0x34d399,
-              emissiveIntensity: 0.15,
+              color: 0x6b8f88,
+              side: THREE.FrontSide,
+              metalness: 0.05,
+              roughness: 0.9,
+              emissive: 0x1a3a35,
+              emissiveIntensity: 0.2,
             })
           }
         })
@@ -179,26 +182,23 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
         humanGroup = obj
         scene.add(obj)
       },
-      undefined, // onProgress
-      () => {
-        // Silently ignore load errors – the cube still renders
-      },
+      undefined,
+      () => {},
     )
 
-    // ── Resize handling ──
-    const setRendererSize = () => {
+    // ── Resize handling via ResizeObserver ──
+    const updateRendererSize = () => {
       const { width, height: h } = resolveSize()
+      if (width <= 0 || h <= 0) return
       renderer.setSize(width, h)
       camera.aspect = width / Math.max(1, h)
       camera.updateProjectionMatrix()
     }
-    setRendererSize()
 
-    const handleResize = () => {
-      if (!container) return
-      setRendererSize()
-    }
-    window.addEventListener('resize', handleResize)
+    const resizeObserver = new ResizeObserver(() => {
+      updateRendererSize()
+    })
+    resizeObserver.observe(container)
 
     // ── Interaction (orbit via drag / touch) ──
     let autoAngle = 0
@@ -325,7 +325,7 @@ export const DimensionCube: React.FC<DimensionCubeProps> = ({
 
     return () => {
       if (frameId) cancelAnimationFrame(frameId)
-      window.removeEventListener('resize', handleResize)
+      resizeObserver.disconnect()
       renderer.domElement.removeEventListener('mousedown', handleMouseDown)
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)

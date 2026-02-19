@@ -1283,7 +1283,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   const [cubeExpanded, setCubeExpanded] = React.useState(false)
   const toggleCubeExpanded = React.useCallback(() => {
     setCubeExpanded(prev => !prev)
-    setTimeout(() => window.dispatchEvent(new Event('resize')), 50)
   }, [])
     const dimensionLegend = [
       { label: t('moreInfo.dimensions.height'), value: height ? `${height} cm` : '—', subLabel: t('moreInfo.dimensions.heightSub') },
