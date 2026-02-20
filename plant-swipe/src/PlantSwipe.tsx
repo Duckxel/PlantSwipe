@@ -884,13 +884,6 @@ export default function PlantSwipe() {
         }
       })
 
-      // Search string - includes name, scientific name, meaning, colors, common names and synonyms
-      // This allows users to search by any name they might know the plant by
-      const commonNames = (p.identity?.commonNames || []).join(' ')
-      const synonyms = (p.identity?.synonyms || []).join(' ')
-      const givenNames = (p.identity?.givenNames || []).join(' ')
-      const searchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
-
       // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
 
@@ -936,9 +929,24 @@ export default function PlantSwipe() {
       const status = p.meta?.status?.toLowerCase()
       const isInProgress = status === 'in progres' || status === 'in progress'
 
+      // ⚡ Bolt: Lazy search string generation to save memory and CPU on initial load
+      // Search string is only computed when user actually types a query
+      let _cachedSearchString: string | undefined
+
       return {
         ...p,
-        _searchString: searchString,
+        get _searchString() {
+          if (_cachedSearchString !== undefined) return _cachedSearchString
+
+          // Search string - includes name, scientific name, meaning, colors, common names and synonyms
+          // This allows users to search by any name they might know the plant by
+          const commonNames = (p.identity?.commonNames || []).join(' ')
+          const synonyms = (p.identity?.synonyms || []).join(' ')
+          const givenNames = (p.identity?.givenNames || []).join(' ')
+
+          _cachedSearchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+          return _cachedSearchString
+        },
         _normalizedColors: normalizedColors,
         _colorTokens: colorTokens,
         _typeLabel: typeLabel,
