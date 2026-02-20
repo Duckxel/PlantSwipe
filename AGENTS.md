@@ -26,9 +26,10 @@ Aphylia is a plant care application serving users in the European Union. All con
 
 **Before you begin:**
 - Read relevant documentation files
-- Start with `plant-swipe/README.md` for setup and commands
+- Start with `plant-swipe/README.md` for setup, commands, and architecture
 - Read `plant-swipe/src/REUSABLE_COMPONENTS.md` before creating any new UI components, hooks, or validation utilities
 - Check `EXTERNAL_APIS.md` for all third-party services and APIs used in the application
+- Review `plant-swipe/SECURITY_AUDIT_REPORT.md` for known security considerations
 - Understand the existing architecture
 - Follow the guidelines in this document
 - Ask questions if anything is unclear
@@ -37,11 +38,12 @@ Aphylia is a plant care application serving users in the European Union. All con
 
 ## Repository Layout
 
-- `plant-swipe/` - main web app (React/Vite) and Express API server (`server.js`)
-- `plant-swipe/src/` - frontend UI and client logic
-- `plant-swipe/supabase/` - database schema, migrations, and Edge Functions
-- `admin_api/` - Flask admin API and service config
-- `scripts/` - operational scripts for deployment and maintenance
+- `plant-swipe/` — main web app (React 19 / Vite 7) and Express API server (`server.js`)
+- `plant-swipe/src/` — frontend UI and client logic (components, pages, hooks, lib, types)
+- `plant-swipe/supabase/` — database schema, migrations, and Edge Functions
+- `admin_api/` — Flask admin API and service config
+- `scripts/` — operational scripts for deployment, sitemap generation, and service restarts
+- `.github/workflows/` — CI pipelines (auto-version, translation checks, legal version updates)
 
 ---
 
@@ -393,19 +395,19 @@ await sendEmail(email);
 
 ### Before Submitting Changes
 
-1. **Build Check**
+1. **Build Check** (includes TypeScript type checking and sitemap generation)
    ```bash
-   npm run build
+   cd plant-swipe && bun run build
    ```
 
-2. **Type Check**
+2. **Lint Check**
    ```bash
-   npx tsc --noEmit
+   cd plant-swipe && bun run lint
    ```
 
-3. **Lint Check**
+3. **Translation Validation** (if locale files were touched)
    ```bash
-   npm run lint
+   cd plant-swipe && bun run check-translations
    ```
 
 4. **Manual Testing**
@@ -415,10 +417,11 @@ await sendEmail(email);
 
 ### Database Changes
 
-1. Run schema sync and verify no errors
-2. Test affected queries
-3. Verify RLS policies work correctly
-4. Test with both authenticated and anonymous users
+1. Run schema sync from Admin panel
+2. Verify the sync completes without errors
+3. Test CRUD operations on affected tables
+4. Verify RLS policies work correctly
+5. Test with both authenticated and anonymous users
 
 ---
 
@@ -428,31 +431,39 @@ await sendEmail(email);
 
 | Command | Purpose |
 |---------|---------|
-| `bun run dev` | Start frontend dev server (plant-swipe) |
-| `bun run serve` | Start API server (plant-swipe) |
-| `bun run build` | Production build (includes type check) |
-| `bun run lint` | Lint check |
-| `bun run check-translations` | Validate locale files |
+| `bun run dev` | Start frontend dev server on port 5173 |
+| `bun run serve` | Start Express API server on port 3000 |
+| `bun run build` | Production build (sitemap + type check + Vite bundle) |
+| `bun run build:low-mem` | Production build with reduced memory usage |
+| `bun run lint` | ESLint check |
+| `bun run check-translations` | Validate locale files for missing/extra keys |
+| `bun run generate:sitemap` | Generate sitemap.xml (also runs during build) |
+| `bun run sync-email-template` | Sync email templates |
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
+| `plant-swipe/README.md` | Technical documentation for developers |
 | `plant-swipe/supabase/DATABASE_SCHEMA.md` | Database documentation |
 | `plant-swipe/src/REUSABLE_COMPONENTS.md` | Reusable UI components & hooks reference |
 | `EXTERNAL_APIS.md` | All external APIs and third-party services |
-| `plant-swipe/supabase/sync_parts/*.sql` | Schema definition files |
-| `plant-swipe/server.js` | Backend API |
+| `plant-swipe/SECURITY_AUDIT_REPORT.md` | Security audit findings and remediations |
+| `plant-swipe/supabase/sync_parts/*.sql` | Schema definition files (15 files) |
+| `plant-swipe/server.js` | Backend Express API |
 | `plant-swipe/src/PlantSwipe.tsx` | Main app component |
-| `admin_api/app.py` | Admin API entrypoint |
+| `admin_api/app.py` | Admin API entrypoint (Flask) |
+| `plant-swipe/vite.config.ts` | Vite build configuration |
+| `plant-swipe/package.json` | Dependencies and scripts |
 
 ### Contacts
 
 For questions about:
 - Database schema → Check `DATABASE_SCHEMA.md`
 - External APIs & services → Check `EXTERNAL_APIS.md`
+- Reusable UI components → Check `REUSABLE_COMPONENTS.md`
+- Security → Check `SECURITY_AUDIT_REPORT.md`, escalate to team lead
 - Frontend architecture → Check component documentation
-- Security concerns → Escalate to team lead
 
 ---
 

@@ -27,11 +27,13 @@ Made with care by **Neolite** & **Five**
 | 📚 **Structured Knowledge** | Typed plant data with seasons, rarity, care instructions, and symbolism |
 | 🔍 **Smart Search** | Filter by colors, seasons, rarity, and full-text search |
 | 👥 **Social Features** | Friends system, public profiles, activity heatmaps, and streaks |
+| 💬 **Messaging** | Real-time private conversations with media sharing and link previews |
 | 🌍 **Multi-language** | Built-in i18n (English/French) with DeepL auto-translation support |
 | 🌱 **Grow Together** | Gardens, inventories, task management, and shared activity |
 | 📱 **Progressive Web App** | Installable, works offline, push notifications, and native-like experience |
 | 📝 **Rich Content** | Blog system with TipTap editor for rich text editing |
-| 🤖 **AI-Powered** | Smart analytics and recommendations powered by OpenAI |
+| 🤖 **AI-Powered** | Smart analytics, plant scanning, and recommendations powered by OpenAI |
+| 🛡️ **Moderation** | User reporting, blocking, and content moderation tools |
 | 🛠️ **Developer-friendly** | Modern, readable stack with clear, safe conventions |
 
 ---
@@ -105,12 +107,42 @@ Made with care by **Neolite** & **Five**
 </details>
 
 <details>
+<summary><strong>💬 Messaging</strong> — Real-time private conversations</summary>
+
+- **Direct Messages**: Private conversations between users
+- **Media Sharing**: Send images and camera captures within conversations
+- **Link Previews**: Internal plant/garden links rendered as rich previews
+- **Search**: Search through conversation history
+- **Notifications**: Real-time message notification toasts
+
+</details>
+
+<details>
 <summary><strong>📝 Blog System</strong> — Share gardening knowledge</summary>
 
 - **Rich Text Editor**: Powered by TipTap with full formatting support
 - **Media Integration**: Upload and embed images in posts
 - **Multi-language**: Create posts in multiple languages
 - **Categories & Tags**: Organize content for easy discovery
+
+</details>
+
+<details>
+<summary><strong>🔬 Plant Scanning</strong> — Identify plants with AI</summary>
+
+- **Camera Capture**: Take a photo of a plant directly from the app
+- **AI Identification**: Powered by OpenAI vision models
+- **Instant Results**: Get plant name, care tips, and matching database entries
+
+</details>
+
+<details>
+<summary><strong>🛡️ Moderation & Safety</strong> — Keep the community safe</summary>
+
+- **User Reporting**: Report inappropriate content or behavior
+- **Block Users**: Block other users from interacting with you
+- **Content Moderation**: Admin tools for reviewing and acting on reports
+- **Ban System**: Restrict access for users who violate community guidelines
 
 </details>
 
@@ -181,11 +213,13 @@ flowchart TB
     subgraph Database["💾 Database"]
         Supabase[(Supabase/Postgres)]
         Auth[🔐 Supabase Auth]
+        Realtime[🔄 Realtime]
         Cache[📦 Task Cache]
     end
     
     subgraph External["🌐 External"]
         DeepL[DeepL API]
+        OpenAI[🤖 OpenAI]
         Resend[📧 Resend Email]
     end
     
@@ -193,11 +227,13 @@ flowchart TB
     PWA --> SW
     SW --> React
     React --> i18n
+    React --> Realtime
     i18n --> Express
     Express --> Supabase
     Express --> Auth
     Express --> Cache
     Express --> DeepL
+    Express --> OpenAI
     Admin --> Supabase
     Admin --> Resend
     
@@ -246,7 +282,8 @@ flowchart TB
 | **Push Notifications** | web-push 3.6.6 | Browser push notifications |
 | **Image Processing** | Sharp 0.34.5 | Image optimization |
 | **Validation** | Zod 4.1.12 | Runtime type validation |
-| **AI** | OpenAI 6.8.1 | AI-powered features |
+| **AI** | OpenAI 6.8.1 | AI-powered features (advice, scanning, plant fill) |
+| **Monitoring** | Sentry 9.x | Error tracking and performance monitoring |
 
 </details>
 
@@ -264,16 +301,21 @@ flowchart TB
 | 📊 **Dashboard** | `/garden/:id` | Track inventory, events, streaks, tasks, journal |
 | 👤 **Profile** | `/u/:username` | Public profile with stats, gardens, and heatmap |
 | 👥 **Friends** | `/friends` | Manage friends, send requests |
+| 💬 **Messages** | `/messages` | Private conversations with media sharing |
 | 📚 **Bookmarks** | `/bookmarks` | Organized plant collections |
 | 📝 **Blog** | `/blog` | Read and create blog posts |
+| 🔬 **Scan** | `/scan` | AI plant identification via camera |
 | ⚙️ **Settings** | `/settings` | Account, privacy, language, notifications |
+| 🧙 **Setup** | `/setup` | New user onboarding wizard |
 | ➕ **Create Plant** | `/create` | Add new plants with translations |
 | ✏️ **Edit Plant** | `/edit/:id` | Update plant information |
+| 🐛 **Bug Catcher** | `/bug-catcher` | Report bugs with screenshots |
 | 📥 **Download** | `/download` | Install app instructions |
 | 💰 **Pricing** | `/pricing` | Subscription plans |
 | ℹ️ **About** | `/about` | About the project |
 | 📞 **Contact** | `/contact` | Contact form |
 | 📜 **Terms** | `/terms` | Terms of service |
+| 🔒 **Privacy** | `/privacy` | Privacy policy |
 | 🔧 **Admin** | `/admin` | Git, services, schema, analytics, emails |
 
 ---
@@ -304,8 +346,8 @@ curl -fsSL https://bun.sh/install | bash
 ### 2. Clone & Install Dependencies
 
 ```bash
-git clone https://github.com/your-org/aphylia.git
-cd aphylia/plant-swipe
+git clone https://github.com/Duckxel/PlantSwipe.git
+cd PlantSwipe/plant-swipe
 bun install
 ```
 
@@ -410,7 +452,7 @@ sudo systemctl reload nginx
 - 📈 **Grows with you**: From casual browsing to full garden dashboards
 - 🚀 **No heavy setup**: Works locally, deploys cleanly, extends easily
 - 🌍 **Multi-language**: Built-in support for multiple languages with auto-translation
-- 👥 **Social**: Connect with friends and share your gardening journey
+- 👥 **Social**: Connect with friends, message them, and share your gardening journey
 - 📱 **Works anywhere**: PWA with offline support and push notifications
 
 ---
@@ -448,6 +490,10 @@ sudo systemctl reload nginx
 | ✅ | Blog system with rich text | Complete |
 | ✅ | Task caching system | Complete |
 | ✅ | AI-powered analytics & recommendations | Complete |
+| ✅ | Real-time messaging system | Complete |
+| ✅ | AI plant scanning & identification | Complete |
+| ✅ | Moderation & user safety tools | Complete |
+| ✅ | Bug reporting system | Complete |
 | ⏳ | Garden events with reminders | In Progress |
 | ⏳ | Collaborative collections and sharing | Planned |
 | 🔬 | Plant disease identification | Future |
@@ -518,7 +564,7 @@ sudo systemctl reload nginx
 <summary><strong>Common Questions</strong></summary>
 
 **Q: Is it open-source?**  
-A: Yes — use, learn, and adapt freely.
+A: Yes — Aphylia is released under the MIT License. Use, learn, and adapt freely.
 
 **Q: Can I plug in my own database?**  
 A: Yes — point the server to your Postgres instance using environment variables.
@@ -550,10 +596,15 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 | Document | Description |
 |----------|-------------|
 | [**Technical README**](./plant-swipe/README.md) | Deep dive for engineers |
+| [**Development Guidelines**](./AGENTS.md) | Coding standards, database rules, GDPR compliance |
+| [**External APIs**](./EXTERNAL_APIS.md) | All third-party services and API integrations |
 | [**Bun Migration Guide**](./plant-swipe/BUN_MIGRATION.md) | npm to Bun transition & performance comparison |
 | [**DeepL Setup Guide**](./plant-swipe/DEEPL_API_SETUP.md) | Translation API configuration |
 | [**Cache Implementation**](./plant-swipe/CACHE_IMPLEMENTATION.md) | Database caching system details |
 | [**Garden Task Cache**](./plant-swipe/GARDEN_TASK_CACHE.md) | Task caching documentation |
+| [**Security Audit**](./plant-swipe/SECURITY_AUDIT_REPORT.md) | Security audit findings and remediations |
+| [**Database Schema**](./plant-swipe/supabase/DATABASE_SCHEMA.md) | Complete database documentation |
+| [**Reusable Components**](./plant-swipe/src/REUSABLE_COMPONENTS.md) | Shared UI components & hooks reference |
 | [**Admin API**](./admin_api/) | Admin endpoint documentation |
 | [**Supabase Functions**](./plant-swipe/supabase/functions/) | Edge function documentation |
 
