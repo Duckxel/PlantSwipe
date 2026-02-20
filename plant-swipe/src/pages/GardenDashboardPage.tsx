@@ -4644,7 +4644,7 @@ function OverviewSection({
                       </div>
                     )}
                     {isOwnerRole && (
-                      <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-stone-50 dark:bg-stone-800/50 rounded-full flex items-center justify-center ring-2 ring-stone-50 dark:ring-stone-800/50">
+                      <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-white dark:bg-[#1f1f1f] rounded-full flex items-center justify-center ring-2 ring-white dark:ring-[#1f1f1f]">
                         <span className="text-[11px]">👑</span>
                       </div>
                     )}
