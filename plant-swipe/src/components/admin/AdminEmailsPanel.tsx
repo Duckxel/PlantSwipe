@@ -79,53 +79,6 @@ const TRIGGER_VARIABLES: Record<string, {
       { token: '{{url}}', description: 'Website URL' },
     ]
   },
-  // Security triggers - Password
-  PASSWORD_RESET_REQUEST: {
-    category: 'security',
-    variables: [
-      { token: '{{user}}', description: "User's display name", required: true },
-      { token: '{{url}}', description: 'Secure password reset link', required: true },
-      { token: '{{email}}', description: "User's email address" },
-      { token: '{{time}}', description: 'When the request was made (UTC)' },
-    ]
-  },
-  PASSWORD_CHANGE_CONFIRMATION: {
-    category: 'security',
-    variables: [
-      { token: '{{user}}', description: "User's display name", required: true },
-      { token: '{{email}}', description: "User's email address" },
-      { token: '{{time}}', description: 'When the password was changed (UTC)', required: true },
-      { token: '{{device}}', description: 'Device/browser used (e.g., Chrome on Windows)' },
-      { token: '{{location}}', description: 'Geographic location (city, country)' },
-      { token: '{{ip_address}}', description: 'IP address of the request' },
-      { token: '{{url}}', description: 'Website URL' },
-    ]
-  },
-  // Security triggers - Login
-  SUSPICIOUS_LOGIN_ALERT: {
-    category: 'security',
-    variables: [
-      { token: '{{user}}', description: "User's display name", required: true },
-      { token: '{{email}}', description: "User's email address" },
-      { token: '{{location}}', description: 'Login location (city, country)', required: true },
-      { token: '{{device}}', description: 'Device/browser used', required: true },
-      { token: '{{ip_address}}', description: 'IP address of the login' },
-      { token: '{{time}}', description: 'When the login occurred (UTC)' },
-      { token: '{{url}}', description: 'Website URL' },
-    ]
-  },
-  NEW_DEVICE_LOGIN: {
-    category: 'security',
-    variables: [
-      { token: '{{user}}', description: "User's display name", required: true },
-      { token: '{{email}}', description: "User's email address" },
-      { token: '{{device}}', description: 'New device/browser detected', required: true },
-      { token: '{{location}}', description: 'Login location (city, country)' },
-      { token: '{{ip_address}}', description: 'IP address of the login' },
-      { token: '{{time}}', description: 'When the login occurred (UTC)' },
-      { token: '{{url}}', description: 'Website URL' },
-    ]
-  },
   // Email Verification
   EMAIL_VERIFICATION: {
     category: 'security',

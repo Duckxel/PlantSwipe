@@ -11038,28 +11038,6 @@ const DEFAULT_EMAIL_TRIGGERS = [
     displayName: 'Email Changed Notification',
     description: 'Sent to the OLD email address to inform that the email has been changed. Variables: {{new_email}}, {{old_email}}, {{time}}',
   },
-  // Security Emails - Password
-  {
-    triggerType: 'PASSWORD_RESET_REQUEST',
-    displayName: 'Password Reset Request',
-    description: 'Sent when user requests a password reset. Contains a secure reset link. Variables: {{url}}, {{time}}',
-  },
-  {
-    triggerType: 'PASSWORD_CHANGE_CONFIRMATION',
-    displayName: 'Password Changed Confirmation',
-    description: 'Sent after password has been successfully changed. Variables: {{time}}, {{device}}, {{location}}',
-  },
-  // Security Emails - Login Security
-  {
-    triggerType: 'SUSPICIOUS_LOGIN_ALERT',
-    displayName: 'Suspicious Login Alert',
-    description: 'Sent when a login is detected from an unusual location or device. Variables: {{location}}, {{device}}, {{ip_address}}, {{time}}',
-  },
-  {
-    triggerType: 'NEW_DEVICE_LOGIN',
-    displayName: 'New Device Login',
-    description: 'Sent when user logs in from a new device. Variables: {{device}}, {{location}}, {{ip_address}}, {{time}}',
-  },
   // Email Verification
   {
     triggerType: 'EMAIL_VERIFICATION',
@@ -11416,7 +11394,7 @@ app.post('/api/send-automatic-email', async (req, res) => {
  * - Supports extra context variables for security info
  * - Can send to any email address (important for email change notifications)
  * 
- * @param triggerType - The trigger type (e.g., 'PASSWORD_RESET_REQUEST', 'EMAIL_VERIFICATION')
+ * @param triggerType - The trigger type (e.g., 'EMAIL_VERIFICATION', 'EMAIL_CHANGE_NOTIFICATION')
  * @param options.recipientEmail - Email address to send to (may differ from user's current email)
  * @param options.userId - User ID for logging
  * @param options.userDisplayName - User's display name for {{user}} variable
@@ -11615,10 +11593,6 @@ app.post('/api/send-security-email', async (req, res) => {
   // Validate trigger type is a security-related trigger
   const securityTriggers = [
     'EMAIL_CHANGE_NOTIFICATION', 
-    'PASSWORD_RESET_REQUEST',
-    'PASSWORD_CHANGE_CONFIRMATION',
-    'SUSPICIOUS_LOGIN_ALERT',
-    'NEW_DEVICE_LOGIN',
     'EMAIL_VERIFICATION',
     'FORGOT_PASSWORD',
   ]
@@ -11807,25 +11781,6 @@ app.post('/api/force-password-change', requireCsrfToken, async (req, res) => {
     }
 
     console.log(`[force-password-change] Password changed for user ${authUser.id.slice(0, 8)}...`)
-
-    // Send password change confirmation email (non-blocking)
-    if (authUser.email) {
-      const profileForName = await sql`
-        select display_name, language from public.profiles where id = ${authUser.id} limit 1
-      `
-      const userName = profileForName?.[0]?.display_name || 'User'
-      const userLang = profileForName?.[0]?.language || 'en'
-
-      sendSecurityEmail('PASSWORD_CHANGE_CONFIRMATION', {
-        recipientEmail: authUser.email,
-        userId: authUser.id,
-        userDisplayName: userName,
-        userLanguage: userLang,
-        extraContext: {}
-      }).catch(err => {
-        console.warn('[force-password-change] Failed to send confirmation email:', err?.message)
-      })
-    }
 
     // Return email so client can re-authenticate with the new password
     // (the old magic link session is invalidated after password change)
@@ -12475,44 +12430,6 @@ async function cleanupExpiredVerificationCodes() {
     return 0
   }
 }
-
-// Convenience endpoint: Send password change confirmation email
-// CSRF protected - requires X-CSRF-Token header
-// Auth protected - requires authenticated user to match userId
-app.post('/api/security/password-changed', requireCsrfToken, async (req, res) => {
-  const { userId, userEmail, userDisplayName, userLanguage, device, location, ipAddress } = req.body || {}
-  
-  if (!userId || !userEmail) {
-    res.status(400).json({ error: 'Missing required fields: userId, userEmail' })
-    return
-  }
-
-  // Verify authenticated user matches the userId in the request
-  const authUser = await getUserFromRequest(req)
-  if (!authUser?.id || authUser.id !== userId) {
-    console.warn('[security/password-changed] User ID mismatch or not authenticated', { 
-      authUserId: authUser?.id, 
-      requestUserId: userId,
-      ip: req.ip || req.headers['x-forwarded-for']
-    })
-    return res.status(403).json({ error: 'Unauthorized: User ID mismatch', code: 'AUTH_MISMATCH' })
-  }
-
-  const result = await sendSecurityEmail('PASSWORD_CHANGE_CONFIRMATION', {
-    recipientEmail: userEmail,
-    userId,
-    userDisplayName: userDisplayName || 'User',
-    userLanguage,
-    extraContext: {
-      device: device || req.headers['user-agent'] || 'Unknown device',
-      location: location || 'Unknown location',
-      ip_address: ipAddress || req.ip || req.headers['x-forwarded-for'] || 'Unknown',
-      time: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
-    }
-  })
-
-  res.json(result)
-})
 
 // Convenience endpoint: Send email change notification to OLD email
 // CSRF protected - requires X-CSRF-Token header
