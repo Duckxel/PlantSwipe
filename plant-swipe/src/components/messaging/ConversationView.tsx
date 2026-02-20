@@ -725,6 +725,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           size="icon"
           className="rounded-full h-10 w-10 flex-shrink-0"
           onClick={onBack}
+          aria-label={t('common.back', { defaultValue: 'Back' })}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -758,6 +759,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             className="rounded-full h-9 w-9 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white"
             onClick={() => setSearchOpen(true)}
             title={t('messages.searchMessages', { defaultValue: 'Search messages' })}
+            aria-label={t('messages.searchMessages', { defaultValue: 'Search messages' })}
           >
             <Search className="h-5 w-5" />
           </Button>
@@ -767,6 +769,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             className="rounded-full h-9 w-9 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white"
             onClick={() => setMediaGalleryOpen(true)}
             title={t('messages.viewMedia', { defaultValue: 'View media' })}
+            aria-label={t('messages.viewMedia', { defaultValue: 'View media' })}
           >
             <Images className="h-5 w-5" />
           </Button>
@@ -915,6 +918,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             size="icon"
             className="h-8 w-8 rounded-full"
             onClick={() => setReplyingTo(null)}
+            aria-label={t('messages.cancelReply', { defaultValue: 'Cancel reply' })}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -938,6 +942,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             size="icon"
             className="h-8 w-8 rounded-full"
             onClick={() => setPendingLink(null)}
+            aria-label={t('messages.removeLink', { defaultValue: 'Remove link' })}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -956,6 +961,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             <button
               onClick={cancelPendingImage}
               className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-stone-800 dark:bg-stone-600 text-white flex items-center justify-center shadow-md hover:bg-stone-700"
+              aria-label={t('messages.removeImage', { defaultValue: 'Remove image' })}
             >
               <X className="h-4 w-4" />
             </button>
@@ -999,6 +1005,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               className="rounded-full h-9 w-9 flex-shrink-0 text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200"
               onClick={() => setShowAttachMenu(!showAttachMenu)}
               disabled={sending}
+              aria-label={t('messages.attach', { defaultValue: 'Attach file' })}
             >
               <Plus className={cn("h-5 w-5 transition-transform", showAttachMenu && "rotate-45")} />
             </Button>
@@ -1079,6 +1086,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             )}
             onClick={handleSend}
             disabled={sending || (!newMessage.trim() && !pendingLink && !pendingImage)}
+            aria-label={t('messages.send', { defaultValue: 'Send message' })}
           >
             {sending ? (
               <Loader2 className="h-5 w-5 animate-spin" />
