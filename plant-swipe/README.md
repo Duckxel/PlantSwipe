@@ -40,7 +40,7 @@
 
 ## 📖 Overview
 
-Aphylia is a modern Progressive Web Application built with **React 19**, **TypeScript**, **Vite 7**, and **Express.js**, connecting to a **PostgreSQL** database via **Supabase**. It features a swipe-first UI for plant discovery, comprehensive garden management, social features, and multi-language support.
+Aphylia is a modern Progressive Web Application built with **React 19**, **TypeScript**, **Vite 7**, and **Express.js**, connecting to a **PostgreSQL** database via **Supabase**. It features a swipe-first UI for plant discovery, comprehensive garden management, social features with real-time messaging, AI-powered plant scanning, content moderation tools, and multi-language support.
 
 ### Key Technologies
 
@@ -86,6 +86,7 @@ flowchart TB
     subgraph Database["💾 Database Layer"]
         Supabase[(Supabase/Postgres)]
         Auth[Supabase Auth]
+        Realtime[Supabase Realtime]
         Cache[Task Cache Tables]
     end
     
@@ -93,11 +94,13 @@ flowchart TB
         DeepL[DeepL Translation API]
         Resend[Resend Email API]
         OpenAI[OpenAI API]
+        Sentry[Sentry Monitoring]
     end
     
     PWA --> SW
     SW --> React
     React -->|HTTP Requests| ExpressAPI
+    React -->|WebSocket| Realtime
     Vite -->|Proxy /api/*| ExpressAPI
     ExpressAPI -->|SQL Queries| Supabase
     ExpressAPI -->|Auth Requests| Auth
@@ -107,6 +110,7 @@ flowchart TB
     Flask -->|Admin Ops| Supabase
     Flask -->|Emails| Resend
     ExpressAPI -->|AI Features| OpenAI
+    ExpressAPI -->|Error Tracking| Sentry
     
     style React fill:#61dafb
     style ExpressAPI fill:#339933
@@ -152,10 +156,14 @@ plant-swipe/
 ├── src/
 │   ├── components/           # Reusable UI components
 │   │   ├── admin/           # Admin console components
+│   │   ├── aphylia/         # Aphylia AI chat components
 │   │   ├── blog/            # Blog editor and cards
+│   │   ├── email/           # Email template components
 │   │   ├── garden/          # Garden management components
 │   │   ├── i18n/            # i18n-aware Link, Navigate, NavLink
 │   │   ├── layout/          # Layout (TopBar, BottomBar, Footer)
+│   │   ├── messaging/       # Private messaging & conversations
+│   │   ├── moderation/      # User reporting, blocking, banning
 │   │   ├── plant/           # Plant-related components
 │   │   ├── profile/         # Profile and bookmarks
 │   │   ├── pwa/             # PWA components (ServiceWorkerToast)
@@ -168,28 +176,37 @@ plant-swipe/
 │   │   ├── seo.ts           # SEO constants
 │   │   └── userRoles.ts     # User role definitions
 │   ├── context/             # React context providers
-│   │   ├── AuthContext.tsx  # Authentication state
-│   │   ├── AuthActionsContext.tsx # Auth actions
-│   │   └── ThemeContext.tsx # Theme (dark/light) state
+│   │   ├── AuthContext.tsx   # Authentication state
+│   │   ├── AuthActionsContext.tsx # Auth actions (login, signup, etc.)
+│   │   └── ThemeContext.tsx  # Theme (dark/light) state
 │   ├── hooks/               # Custom React hooks
 │   │   ├── use-*.ts         # Various utility hooks
+│   │   ├── useAphyliaChat.ts # AI chat assistant hook
+│   │   ├── useMessageNotifications.ts # Message notification handling
 │   │   ├── usePageMetadata.ts # Page SEO metadata
 │   │   ├── usePushSubscription.ts # Push notification handling
+│   │   ├── useSentry.ts     # Error tracking hook
 │   │   └── useTaskNotification.ts # Task reminder notifications
-│   ├── lib/                 # Utility libraries
+│   ├── lib/                 # Utility libraries (40+ modules)
 │   │   ├── i18n.ts          # i18n configuration
 │   │   ├── i18nRouting.ts   # Language routing helpers
 │   │   ├── supabaseClient.ts # Supabase client setup
 │   │   ├── gardens.ts       # Garden API functions
+│   │   ├── messaging.ts     # Messaging API functions
+│   │   ├── moderation.ts    # Moderation API functions
 │   │   ├── photos.ts        # Photo handling
 │   │   ├── plantTranslations.ts # Plant translation utilities
+│   │   ├── plantScan.ts     # AI plant scanning
 │   │   ├── deepl.ts         # DeepL API integration
 │   │   ├── pushNotifications.ts # Push notification logic
 │   │   ├── realtime.ts      # Realtime subscriptions
+│   │   ├── sentry.ts        # Error tracking setup
+│   │   ├── gdprAnalytics.ts # GDPR-compliant analytics
+│   │   ├── recaptcha.ts     # reCAPTCHA integration
 │   │   └── ...              # Other utilities
-│   ├── pages/               # Page components (routes)
+│   ├── pages/               # Page components (30+ route pages)
 │   ├── styles/              # Global styles and variables
-│   ├── types/               # TypeScript type definitions
+│   ├── types/               # TypeScript type definitions (plant, garden, blog, messaging, moderation, scan, etc.)
 │   ├── App.tsx              # Root component with routing
 │   ├── PlantSwipe.tsx       # Main app wrapper
 │   ├── sw.ts                # Service worker source
@@ -204,13 +221,17 @@ plant-swipe/
 │   ├── offline.html         # Offline fallback page
 │   └── robots.txt           # Robots configuration
 ├── scripts/
+│   ├── apply_migration.js    # Apply database migrations
 │   ├── check-translations.js # Validate translation files
-│   ├── generate-sitemap.js  # Generate sitemap.xml
-│   └── refresh-plant-swipe.sh # Deployment helper
+│   ├── generate-sitemap.js   # Generate sitemap.xml
+│   ├── sync-email-template.sh # Sync email templates
+│   └── verify_email_sanitization.ts # Email sanitization verification
 ├── supabase/
 │   ├── functions/           # Supabase Edge Functions
+│   │   ├── _shared/        # Shared utilities for Edge Functions
 │   │   ├── contact-support/ # Contact form handler
 │   │   └── email-campaign-runner/ # Email campaigns
+│   ├── sync_parts/          # Schema definition files (15 SQL files)
 │   └── migrations/          # Database migrations
 ├── server.js                # Express API server
 ├── vite.config.ts           # Vite configuration
@@ -292,6 +313,7 @@ SITEMAP_MAX_PLANT_URLS=1000
 | `lint` | `bun run lint` | Run ESLint |
 | `check-translations` | `bun run check-translations` | Validate translation files |
 | `generate:sitemap` | `bun run generate:sitemap` | Generate sitemap.xml |
+| `sync-email-template` | `bun run sync-email-template` | Sync email templates |
 
 > 💡 All commands use Bun for faster execution. You can also use `npm run` as a fallback.
 
@@ -614,6 +636,29 @@ Weekly task breakdowns.
 </details>
 
 <details>
+<summary><strong>💬 Messaging Endpoints</strong></summary>
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/api/conversations` | List user conversations |
+| `GET` | `/api/conversations/:id/messages` | Get messages in a conversation |
+| `POST` | `/api/conversations` | Create a new conversation |
+| `POST` | `/api/conversations/:id/messages` | Send a message |
+
+</details>
+
+<details>
+<summary><strong>🛡️ Moderation Endpoints</strong></summary>
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `POST` | `/api/report` | Report a user or content |
+| `POST` | `/api/block` | Block a user |
+| `DELETE` | `/api/block/:id` | Unblock a user |
+
+</details>
+
+<details>
 <summary><strong>📊 Supabase RPC Functions</strong></summary>
 
 ### User Functions
@@ -920,7 +965,7 @@ manualChunks: {
 
 ```bash
 # Check for missing/extra translation keys
-npm run check-translations
+bun run check-translations
 ```
 
 </details>
@@ -943,7 +988,7 @@ bun run build
 
 ### Deployment Steps
 
-1. **Build**: `npm run build`
+1. **Build**: `bun run build`
 2. **Copy**: Deploy `dist/` to server
 3. **Configure**: Set up nginx/server config
 4. **Start**: Run Express server for API
