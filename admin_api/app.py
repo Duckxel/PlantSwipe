@@ -1138,10 +1138,14 @@ def sync_schema():
 
         # --- POST-SYNC: Populate Admin Secrets ---
         try:
-            supa_url = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
-            supa_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            supa_url_raw = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
+            supa_key_raw = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
             
-            if supa_url and supa_key:
+            if supa_url_raw and supa_key_raw:
+                # Basic SQL injection protection: escape single quotes
+                supa_url = supa_url_raw.replace("'", "''")
+                supa_key = supa_key_raw.replace("'", "''")
+
                 secret_sql = f"""
                 INSERT INTO public.admin_secrets (key, value)
                 VALUES ('SUPABASE_URL', '{supa_url}'), ('SUPABASE_SERVICE_ROLE_KEY', '{supa_key}')
