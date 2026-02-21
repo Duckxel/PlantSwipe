@@ -3277,6 +3277,12 @@
       "subtitle": "D'abord, apprenons à nous connaître et découvrons l'environnement où votre jardin va évoluer.",
       "getStarted": "C'est parti !"
     },
+    "editLaterNote": "Vous pourrez toujours modifier ces choix plus tard dans les Paramètres.",
+    "languageTheme": {
+      "title": "Personnalisez votre expérience",
+      "languageLabel": "Langue",
+      "themeLabel": "Thème"
+    },
     "accent": {
       "title": "Choisissez votre couleur d'accent",
       "subtitle": "Personnalisez votre expérience Aphylia",
@@ -3363,6 +3369,19 @@
       "notificationTimeDescription": "Quand devons-nous vous envoyer des rappels ?",
       "notificationTimeHelper": "Les notifications planifiées seront envoyées à la même heure locale dans votre fuseau horaire ({{timezone}})."
     }
+  },
+  "profileActions": {
+    "title": "Pour bien démarrer",
+    "subtitle": "{{done}} sur {{total}} complétés",
+    "allDoneTitle": "Tout est fait !",
+    "allDoneSubtitle": "Vous avez complété toutes les actions. Bravo !",
+    "congratulations": "Félicitations !",
+    "dismiss": "Masquer",
+    "createGarden": "Créez votre premier jardin",
+    "addPlant": "Ajoutez une plante à votre jardin",
+    "addFriend": "Ajoutez un ami",
+    "completeProfile": "Complétez votre profil",
+    "addBookmark": "Ajoutez une plante en favori"
   },
   "emailVerification": {
     "title": "Vérifiez votre email",
