@@ -1077,6 +1077,11 @@ export function SetupPage() {
         {showContinueButton && (
           <div className="sticky bottom-0 bg-white dark:bg-stone-900 border-t border-stone-100 dark:border-stone-800 p-4">
             <div className="max-w-md mx-auto">
+              {!isWelcomeStep && !isCompleteStep && (
+                <p className="text-xs text-stone-400 dark:text-stone-500 text-center mb-2">
+                  {t('setup.editLaterNote', 'You can always change these later in Settings.')}
+                </p>
+              )}
               <Button 
                 onClick={isCompleteStep ? completeSetup : goToNextStep}
                 disabled={!canContinue() || saving}
