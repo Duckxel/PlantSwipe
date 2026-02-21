@@ -532,33 +532,6 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError
 
-      // Send password change confirmation email (CSRF + Auth protected, non-blocking)
-      if (user?.id && email) {
-        Promise.all([getCsrfToken(), supabase.auth.getSession()]).then(([csrfToken, sessionRes]) => {
-          const pwHeaders: Record<string, string> = { 
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': csrfToken,
-          }
-          if (sessionRes.data.session?.access_token) {
-            pwHeaders['Authorization'] = `Bearer ${sessionRes.data.session.access_token}`
-          }
-          fetch('/api/security/password-changed', {
-            method: 'POST',
-            headers: pwHeaders,
-            body: JSON.stringify({
-              userId: user.id,
-              userEmail: email,
-              userDisplayName: profile?.display_name || 'User',
-              userLanguage: (profile as any)?.language || 'en',
-              // Browser will auto-detect device from user-agent on server
-            }),
-            credentials: 'same-origin',
-          })
-        }).catch((err) => {
-          console.warn('[password-change] Failed to send confirmation email:', err)
-        })
-      }
-
       setPasswordSuccess(t('settings.password.updated'))
       setCurrentPassword("")
       setNewPassword("")
