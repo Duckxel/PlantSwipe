@@ -3370,6 +3370,19 @@
       "notificationTimeHelper": "Les notifications planifiées seront envoyées à la même heure locale dans votre fuseau horaire ({{timezone}})."
     }
   },
+  "profileActions": {
+    "title": "Pour bien démarrer",
+    "subtitle": "{{done}} sur {{total}} complétés",
+    "allDoneTitle": "Tout est fait !",
+    "allDoneSubtitle": "Vous avez complété toutes les actions. Bravo !",
+    "congratulations": "Félicitations !",
+    "dismiss": "Masquer",
+    "createGarden": "Créez votre premier jardin",
+    "addPlant": "Ajoutez une plante à votre jardin",
+    "addFriend": "Ajoutez un ami",
+    "completeProfile": "Complétez votre profil",
+    "addBookmark": "Ajoutez une plante en favori"
+  },
   "emailVerification": {
     "title": "Vérifiez votre email",
     "description": "Nous avons envoyé un code de vérification à :",

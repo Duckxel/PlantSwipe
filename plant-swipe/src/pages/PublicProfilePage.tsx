@@ -18,6 +18,7 @@ import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { BookmarksSection } from "@/components/profile/BookmarksSection"
+import { ProfileActions } from "@/components/profile/ProfileActions"
 import { PublicGardensSection } from "@/components/profile/PublicGardensSection"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { Link } from "@/components/i18n/Link"
@@ -1417,6 +1418,16 @@ export default function PublicProfilePage() {
                   </div>
                 </div>
               </div>
+            )}
+
+            {isOwner && stats && (
+              <ProfileActions
+                userId={pp.id}
+                gardensCount={stats.gardensCount}
+                plantsTotal={stats.plantsTotal}
+                friendsCount={stats.friendsCount ?? 0}
+                hasBio={Boolean(pp.bio && pp.bio.trim().length > 0)}
+              />
             )}
 
             {canViewProfile && (

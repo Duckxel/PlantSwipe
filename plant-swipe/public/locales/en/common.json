@@ -3370,6 +3370,19 @@
       "notificationTimeHelper": "Scheduled notifications will be sent at the same local time in your timezone ({{timezone}})."
     }
   },
+  "profileActions": {
+    "title": "Get started",
+    "subtitle": "{{done}} of {{total}} completed",
+    "allDoneTitle": "All done!",
+    "allDoneSubtitle": "You completed every action. Great job!",
+    "congratulations": "Congratulations!",
+    "dismiss": "Dismiss",
+    "createGarden": "Create your first garden",
+    "addPlant": "Add a plant to your garden",
+    "addFriend": "Add a friend",
+    "completeProfile": "Complete your profile",
+    "addBookmark": "Bookmark a plant"
+  },
   "emailVerification": {
     "title": "Verify Your Email",
     "description": "We've sent a verification code to:",
