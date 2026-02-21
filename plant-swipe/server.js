@@ -11074,6 +11074,16 @@ async function ensureDefaultEmailTriggers() {
             description = EXCLUDED.description,
             updated_at = now()
     `)
+
+    const validTypes = DEFAULT_EMAIL_TRIGGERS.map(t => `'${t.triggerType}'`).join(', ')
+    const deleted = await sql.unsafe(`
+      DELETE FROM public.admin_email_triggers
+      WHERE trigger_type NOT IN (${validTypes})
+      RETURNING trigger_type
+    `)
+    if (deleted.length > 0) {
+      console.log(`[email-triggers] Removed obsolete triggers: ${deleted.map(r => r.trigger_type).join(', ')}`)
+    }
     
     defaultTriggersEnsured = true
     console.log('[email-triggers] Default triggers ensured')
