@@ -302,6 +302,7 @@ import multer from 'multer'
 import sharp from 'sharp'
 import webpush from 'web-push'
 import cron from 'node-cron'
+import helmet from 'helmet'
 
 // Note: dotenv already loaded at top of file before Sentry init
 
@@ -4094,49 +4095,42 @@ app.options('/api/*', (_req, res) => {
   res.status(204).end()
 })
 
-// Content Security Policy - Allow all *.aphylia.app subdomains EXCEPT for images
-// img-src and media-src allow all sources; other directives restrict to aphylia.app domains
-const CSP_POLICY = [
-  "default-src 'self' *.aphylia.app",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.aphylia.app https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://recaptchaenterprise.googleapis.com",
-  "style-src 'self' 'unsafe-inline' *.aphylia.app https://fonts.googleapis.com",
-  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://www.google.com https://*.sentry.io https://fonts.googleapis.com https://fonts.gstatic.com https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org",
-  "font-src 'self' *.aphylia.app https://fonts.gstatic.com data:",
-  "frame-src 'self' *.aphylia.app https://www.google.com https://recaptcha.google.com",
-  "img-src * data: blob:",
-  "media-src * data: blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self' *.aphylia.app",
-  "worker-src 'self' *.aphylia.app blob:",
-  "manifest-src 'self' *.aphylia.app"
-].join('; ')
+// Security headers middleware using Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'self'", "*.aphylia.app"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*.aphylia.app", "https://www.googletagmanager.com", "https://www.google.com", "https://www.gstatic.com", "https://recaptchaenterprise.googleapis.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "*.aphylia.app", "https://fonts.googleapis.com"],
+      connectSrc: ["'self'", "*.aphylia.app", "wss://*.aphylia.app", "https://*.supabase.co", "wss://*.supabase.co", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com", "https://recaptchaenterprise.googleapis.com", "https://www.google.com", "https://*.sentry.io", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://geocoding-api.open-meteo.com", "https://nominatim.openstreetmap.org"],
+      fontSrc: ["'self'", "*.aphylia.app", "https://fonts.gstatic.com", "data:"],
+      frameSrc: ["'self'", "*.aphylia.app", "https://www.google.com", "https://recaptcha.google.com"],
+      imgSrc: ["*", "data:", "blob:"],
+      mediaSrc: ["*", "data:", "blob:"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'", "*.aphylia.app"],
+      workerSrc: ["'self'", "*.aphylia.app", "blob:"],
+      manifestSrc: ["'self'", "*.aphylia.app"],
+    },
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  strictTransportSecurity: process.env.NODE_ENV === 'production' ? {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: false,
+  } : false,
+}))
 
-// Security headers middleware
+// Additional security headers not handled by Helmet
 app.use((_req, res, next) => {
-  // Content Security Policy
-  res.setHeader('Content-Security-Policy', CSP_POLICY)
-  
-  // Prevent MIME type sniffing
-  res.setHeader('X-Content-Type-Options', 'nosniff')
-  
-  // Prevent clickjacking (in addition to CSP frame-ancestors)
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
-  
-  // XSS protection (legacy browsers)
+  // XSS protection (legacy browsers, removed in Helmet 4)
   res.setHeader('X-XSS-Protection', '1; mode=block')
-  
-  // Referrer policy - don't leak URLs to external sites
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
   
   // Permissions policy - disable unnecessary browser features
   res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(self), microphone=()')
-  
-  // HSTS - enforce HTTPS (only in production)
-  if (process.env.NODE_ENV === 'production') {
-    // max-age=31536000 (1 year), includeSubDomains
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
-  }
   
   next()
 })
