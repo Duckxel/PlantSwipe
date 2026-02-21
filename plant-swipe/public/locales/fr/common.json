@@ -3277,6 +3277,11 @@
       "subtitle": "D'abord, apprenons à nous connaître et découvrons l'environnement où votre jardin va évoluer.",
       "getStarted": "C'est parti !"
     },
+    "languageTheme": {
+      "title": "Personnalisez votre expérience",
+      "languageLabel": "Langue",
+      "themeLabel": "Thème"
+    },
     "accent": {
       "title": "Choisissez votre couleur d'accent",
       "subtitle": "Personnalisez votre expérience Aphylia",

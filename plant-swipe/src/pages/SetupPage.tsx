@@ -1,15 +1,17 @@
 import React from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { useLanguageNavigate, useChangeLanguage, useLanguage } from "@/lib/i18nRouting"
 import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
+import { useTheme, type Theme } from "@/context/ThemeContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { CityCountrySelector, type SelectedLocation } from "@/components/ui/city-country-selector"
-import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check } from "lucide-react"
+import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Globe, Monitor, Sun, Moon } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, getAccentHex, type AccentKey } from "@/lib/accent"
+import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 
-type SetupStep = 'welcome' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
+type SetupStep = 'welcome' | 'language_theme' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
 
 type GardenType = 'inside' | 'outside' | 'both'
 type ExperienceLevel = 'novice' | 'intermediate' | 'expert'
@@ -27,7 +29,7 @@ interface SetupData {
   notification_time: NotificationTime | null
 }
 
-const STEPS: SetupStep[] = ['welcome', 'accent', 'location', 'garden_type', 'experience', 'purpose', 'notification_time', 'notifications', 'complete']
+const STEPS: SetupStep[] = ['welcome', 'language_theme', 'accent', 'location', 'garden_type', 'experience', 'purpose', 'notification_time', 'notifications', 'complete']
 
 // Liana/Vine Progress Bar Component with leaves and flowers
 const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = ({ progress, accentColor }) => {
@@ -302,6 +304,9 @@ export function SetupPage() {
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
   const { user, profile, refreshProfile } = useAuth()
+  const { theme, setTheme } = useTheme()
+  const changeLanguage = useChangeLanguage()
+  const currentLang = useLanguage()
   
   const [currentStep, setCurrentStep] = React.useState<SetupStep>('welcome')
   const [setupData, setSetupData] = React.useState<SetupData>({
@@ -443,6 +448,8 @@ export function SetupPage() {
   // Check if current step has a valid selection for continue button
   const canContinue = () => {
     switch (currentStep) {
+      case 'language_theme':
+        return true
       case 'accent':
         return true // Always has default
       case 'location':
@@ -574,6 +581,67 @@ export function SetupPage() {
             >
               {t('setup.welcome.subtitle', "First, let's get to know each other and the environment where your garden will evolve.")}
             </motion.p>
+          </motion.div>
+        )
+
+      case 'language_theme':
+        return (
+          <motion.div
+            key="language_theme"
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.25 }}
+            className="max-w-md mx-auto"
+          >
+            <QuestionHeader 
+              icon={<Globe className="w-6 h-6 text-white" />}
+              question={t('setup.languageTheme.title', 'Personalize your experience')}
+            />
+
+            <p className="text-sm font-semibold text-stone-700 dark:text-stone-200 mb-3">
+              {t('setup.languageTheme.languageLabel', 'Language')}
+            </p>
+            <div className="flex flex-col gap-3 mb-8">
+              {SUPPORTED_LANGUAGES.map((lang, index) => (
+                <PillOption
+                  key={lang}
+                  selected={currentLang === lang}
+                  onClick={() => changeLanguage(lang)}
+                  label={lang === 'en' ? 'English' : 'Français'}
+                  index={index}
+                />
+              ))}
+            </div>
+
+            <p className="text-sm font-semibold text-stone-700 dark:text-stone-200 mb-3">
+              {t('setup.languageTheme.themeLabel', 'Theme')}
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              {([
+                { value: 'system' as Theme, icon: <Monitor className="w-5 h-5" />, label: t('settings.theme.system', 'System') },
+                { value: 'light' as Theme, icon: <Sun className="w-5 h-5" />, label: t('settings.theme.light', 'Light') },
+                { value: 'dark' as Theme, icon: <Moon className="w-5 h-5" />, label: t('settings.theme.dark', 'Dark') },
+              ]).map((opt, index) => (
+                <motion.button
+                  key={opt.value}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.08 }}
+                  onClick={() => setTheme(opt.value)}
+                  className={`flex flex-col items-center gap-2 px-4 py-5 rounded-2xl text-sm font-medium transition-all duration-200 ${
+                    theme === opt.value
+                      ? 'bg-accent text-accent-foreground shadow-lg'
+                      : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700'
+                  }`}
+                >
+                  {opt.icon}
+                  {opt.label}
+                </motion.button>
+              ))}
+            </div>
           </motion.div>
         )
 

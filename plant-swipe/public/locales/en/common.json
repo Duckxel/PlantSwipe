@@ -3277,6 +3277,11 @@
       "subtitle": "First, let's get to know each other and the environment where your garden will evolve.",
       "getStarted": "Let's get started"
     },
+    "languageTheme": {
+      "title": "Personalize your experience",
+      "languageLabel": "Language",
+      "themeLabel": "Theme"
+    },
     "accent": {
       "title": "Choose your accent color",
       "subtitle": "Personalize your Aphylia experience",
