@@ -2299,16 +2299,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 </select>
               </div>
               <div className="flex flex-wrap gap-2 items-center">
-                <Button type="button" onClick={translatePlant} disabled={translating} className="rounded-2xl shadow-md">
-                  {translating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                <Button type="button" onClick={translatePlant} disabled={translating} className="rounded-2xl shadow-md" loading={translating}>
                   {t('plantAdmin.deeplTranslate', 'DeepL Translation')}
                 </Button>
               </div>
               <div className="flex gap-2">
                   <Button variant="secondary" onClick={onCancel} className="rounded-2xl">{t('common.cancel', 'Cancel')}</Button>
-                <Button onClick={() => savePlant()} disabled={saving || aiWorking} className="rounded-2xl shadow-md">
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {t('plantAdmin.savePlant', 'Save Plant')}
+                <Button onClick={() => savePlant()} disabled={saving || aiWorking} className="rounded-2xl shadow-md" loading={saving}>
+                  {t('plantAdmin.savePlant', 'Save Plant')}
                 </Button>
               </div>
             </div>
@@ -2344,8 +2342,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 type="button"
                 onClick={aiCompleted ? undefined : runAiFill}
                 disabled={aiWorking || !(plant.name && typeof plant.name === 'string' && plant.name.trim()) || aiCompleted}
+                loading={aiWorking}
               >
-                {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                {!aiWorking && (aiCompleted ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />)}
                 {aiCompleted ? t('plantAdmin.aiFilled', 'AI Filled') : t('plantAdmin.aiFill', 'AI fill all fields')}
               </Button>
               <Button
@@ -2353,8 +2352,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 variant="secondary"
                 onClick={runExternalImageFetch}
                 disabled={fetchingExternalImages || !(plant.name && typeof plant.name === 'string' && plant.name.trim())}
+                loading={fetchingExternalImages}
               >
-                {fetchingExternalImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImagePlus className="mr-2 h-4 w-4" />}
+                {!fetchingExternalImages && <ImagePlus className="h-4 w-4" />}
                 {t('plantAdmin.fetchExternalImages', 'Fetch Images')}
               </Button>
               {externalImagesTotal !== null && !fetchingExternalImages && (
