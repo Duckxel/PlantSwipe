@@ -864,36 +864,23 @@ export default function PlantSwipe() {
     }
 
     return plants.map((p) => {
-      // Colors - build both array (for iteration) and Sets (for O(1) lookups)
-      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-      const identityColors = Array.isArray(p.identity?.colors)
-        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-        : []
-      const colors = [...legacyColors, ...identityColors]
-      const normalizedColors = colors.map(c => c.toLowerCase().trim())
+      // ⚡ Bolt: Use lazy getters for expensive properties to optimize initial load time
+      // This avoids computing regexes, Sets, and string manipulations for thousands of plants
+      // unless they are actually needed by active filters.
+      // For the default "Discovery Mode" (swiping), these are NEVER computed!
       
-      // Pre-tokenize compound colors (e.g., "red-orange" -> ["red", "orange"])
-      // This avoids regex operations during filtering
-      // Enhanced: Also add translations for bi-directional matching
-      // (e.g., plant with "red" will also match filter "rouge")
-      const colorTokens = new Set<string>()
-      normalizedColors.forEach(color => {
-        const cachedTokens = getTokensForColor(color)
-        for (const t of cachedTokens) {
-          colorTokens.add(t)
-        }
-      })
+      let _cachedColors: string[] | undefined
+      let _cachedNormalizedColors: string[] | undefined
+      let _cachedColorTokens: Set<string> | undefined
+      let _cachedUsageLabels: string[] | undefined
+      let _cachedUsageSet: Set<string> | undefined
+      let _cachedHabitats: string[] | undefined
+      let _cachedHabitatSet: Set<string> | undefined
+      let _cachedSeasonsSet: Set<string> | undefined
+      let _cachedSearchString: string | undefined
 
       // Type
       const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
-
-      // Usage - both array and Set
-      const usageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-      const usageSet = new Set(usageLabels)
-
-      // Habitat - both array and Set for O(1) lookups
-      const habitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
-      const habitatSet = new Set(habitats)
 
       // Maintenance
       const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
@@ -904,10 +891,6 @@ export default function PlantSwipe() {
 
       // Living space
       const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
-
-      // Seasons - convert to Set for O(1) lookups
-      const seasons = Array.isArray(p.seasons) ? p.seasons : []
-      const seasonsSet = new Set(seasons.map(s => String(s)))
 
       // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
       const createdAtValue = p.meta?.createdAt
@@ -929,9 +912,33 @@ export default function PlantSwipe() {
       const status = p.meta?.status?.toLowerCase()
       const isInProgress = status === 'in progres' || status === 'in progress'
 
-      // ⚡ Bolt: Lazy search string generation to save memory and CPU on initial load
-      // Search string is only computed when user actually types a query
-      let _cachedSearchString: string | undefined
+      const getColors = () => {
+        if (_cachedColors) return _cachedColors
+        const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+        const identityColors = Array.isArray(p.identity?.colors)
+          ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+          : []
+        _cachedColors = [...legacyColors, ...identityColors]
+        return _cachedColors
+      }
+
+      const getNormalizedColors = () => {
+        if (_cachedNormalizedColors) return _cachedNormalizedColors
+        _cachedNormalizedColors = getColors().map(c => c.toLowerCase().trim())
+        return _cachedNormalizedColors
+      }
+
+      const getUsageLabels = () => {
+        if (_cachedUsageLabels) return _cachedUsageLabels
+        _cachedUsageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
+        return _cachedUsageLabels
+      }
+
+      const getHabitats = () => {
+        if (_cachedHabitats) return _cachedHabitats
+        _cachedHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+        return _cachedHabitats
+      }
 
       return {
         ...p,
@@ -943,22 +950,55 @@ export default function PlantSwipe() {
           const commonNames = (p.identity?.commonNames || []).join(' ')
           const synonyms = (p.identity?.synonyms || []).join(' ')
           const givenNames = (p.identity?.givenNames || []).join(' ')
+          const colors = getColors()
 
           _cachedSearchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
           return _cachedSearchString
         },
-        _normalizedColors: normalizedColors,
-        _colorTokens: colorTokens,
+        get _normalizedColors() {
+          return getNormalizedColors()
+        },
+        get _colorTokens() {
+          if (_cachedColorTokens) return _cachedColorTokens
+
+          const colorTokens = new Set<string>()
+          getNormalizedColors().forEach(color => {
+            const cachedTokens = getTokensForColor(color)
+            for (const t of cachedTokens) {
+              colorTokens.add(t)
+            }
+          })
+
+          _cachedColorTokens = colorTokens
+          return _cachedColorTokens
+        },
         _typeLabel: typeLabel,
-        _usageLabels: usageLabels,
-        _usageSet: usageSet,
-        _habitats: habitats,
-        _habitatSet: habitatSet,
+        get _usageLabels() {
+           return getUsageLabels()
+        },
+        get _usageSet() {
+           if (_cachedUsageSet) return _cachedUsageSet
+           _cachedUsageSet = new Set(getUsageLabels())
+           return _cachedUsageSet
+        },
+        get _habitats() {
+           return getHabitats()
+        },
+        get _habitatSet() {
+           if (_cachedHabitatSet) return _cachedHabitatSet
+           _cachedHabitatSet = new Set(getHabitats())
+           return _cachedHabitatSet
+        },
         _maintenance: maintenance,
         _petSafe: petSafe,
         _humanSafe: humanSafe,
         _livingSpace: livingSpace,
-        _seasonsSet: seasonsSet,
+        get _seasonsSet() {
+           if (_cachedSeasonsSet) return _cachedSeasonsSet
+           const seasons = Array.isArray(p.seasons) ? p.seasons : []
+           _cachedSeasonsSet = new Set(seasons.map(s => String(s)))
+           return _cachedSeasonsSet
+        },
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
         _hasImage: hasImage,
