@@ -190,6 +190,8 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
       <Sheet open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
         <SheetContent side="bottom" className="rounded-t-3xl px-0 pb-8 max-h-[85vh]">
           <SheetHeader className="px-6 pb-4 border-b border-stone-100 dark:border-[#2a2a2d]">
+            {/* Visually hidden title for accessibility (dialog requirement) */}
+            <SheetTitle className="sr-only">{label}</SheetTitle>
             <div className="flex items-center gap-3">
               {/* Clickable profile area: avatar + name + arrow */}
               <button
@@ -203,7 +205,8 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                 <div className="h-12 w-12 shrink-0 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-lg font-semibold shadow-lg shadow-emerald-500/20">
                   {(displayName || 'U').charAt(0).toUpperCase()}
                 </div>
-                <SheetTitle className="text-left text-lg truncate">{label}</SheetTitle>
+                {/* Visual title (span instead of h2) */}
+                <span className="text-left text-lg font-semibold text-foreground truncate">{label}</span>
                 <ArrowUpRight className="h-4 w-4 shrink-0 text-stone-400 dark:text-stone-500" />
               </button>
               {/* Notification Bell - offset from the close button */}
