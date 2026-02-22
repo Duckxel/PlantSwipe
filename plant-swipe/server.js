@@ -281,6 +281,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // ESM server to serve API and static assets
 import express from 'express'
+import helmet from 'helmet'
 import postgres from 'postgres'
 // Note: dotenv, path, fileURLToPath already imported at top of file for early env loading
 import fs from 'fs/promises'
@@ -3940,6 +3941,32 @@ function getVisitsTableIdentifierParts() {
 }
 
 const app = express()
+
+// Add security headers via Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'", "*.aphylia.app"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*.aphylia.app"],
+      styleSrc: ["'self'", "'unsafe-inline'", "*.aphylia.app", "fonts.googleapis.com"],
+      fontSrc: ["'self'", "*.aphylia.app", "fonts.gstatic.com"],
+      connectSrc: ["'self'", "*.aphylia.app", "wss://*.aphylia.app", "*.supabase.co", "*.sentry.io"],
+      imgSrc: ["*", "data:", "blob:"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'self'"],
+      ...(process.env.NODE_ENV === 'production' ? { upgradeInsecureRequests: [] } : {}),
+    },
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  strictTransportSecurity: process.env.NODE_ENV === 'production' ? {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  } : false,
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+}))
+
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch { }
 // Limit JSON body size to 100kb to prevent DoS (large uploads use multer/multipart)
