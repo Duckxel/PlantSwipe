@@ -144,6 +144,178 @@ const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
   }
 }
 
+// ⚡ Bolt: Wrapper class to optimize memory usage by avoiding closure creation for each plant
+// Methods are defined on the prototype once, rather than recreated for every instance.
+class PreparedPlantWrapper {
+  _cachedColors: string[] | undefined
+  _cachedNormalizedColors: string[] | undefined
+  _cachedColorTokens: Set<string> | undefined
+  _cachedUsageLabels: string[] | undefined
+  _cachedUsageSet: Set<string> | undefined
+  _cachedHabitats: string[] | undefined
+  _cachedHabitatSet: Set<string> | undefined
+  _cachedSeasonsSet: Set<string> | undefined
+  _cachedSearchString: string | undefined
+
+  _typeLabel: string | null
+  _maintenance: string
+  _petSafe: boolean
+  _humanSafe: boolean
+  _livingSpace: string
+  _createdAtTs: number
+  _popularityLikes: number
+  _hasImage: boolean
+  _isPromoted: boolean
+  _isInProgress: boolean
+
+  // Explicitly declare properties (needed for erasableSyntaxOnly: true)
+  p: Plant
+  aliasMap: Map<string, Set<string>>
+  colorTokenCache: Map<string, Set<string>>
+
+  // Index signature to allow property access like a Plant object
+  [key: string]: unknown
+
+  constructor(
+    p: Plant,
+    aliasMap: Map<string, Set<string>>,
+    colorTokenCache: Map<string, Set<string>>,
+    now: Date
+  ) {
+    this.p = p
+    this.aliasMap = aliasMap
+    this.colorTokenCache = colorTokenCache
+
+    // Copy all properties from p to this instance
+    Object.assign(this, p)
+
+    // Pre-compute scalar values (eagerly)
+    this._typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
+    this._maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+    this._petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+    this._humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+    this._livingSpace = (p.identity?.livingSpace || '').toLowerCase()
+
+    const createdAtValue = p.meta?.createdAt
+    const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
+    this._createdAtTs = Number.isNaN(createdAtTs) ? 0 : createdAtTs
+
+    this._popularityLikes = p.popularity?.likes ?? 0
+
+    const hasLegacyImage = Boolean(p.image)
+    const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
+    this._hasImage = hasLegacyImage || hasImagesArray
+
+    this._isPromoted = isPlantOfTheMonth(p, now)
+
+    const status = p.meta?.status?.toLowerCase()
+    this._isInProgress = status === 'in progres' || status === 'in progress'
+  }
+
+  getColors(): string[] {
+    if (this._cachedColors) return this._cachedColors
+    const legacyColors = Array.isArray(this.p.colors) ? this.p.colors.map((c: string) => String(c)) : []
+    const identityColors = Array.isArray(this.p.identity?.colors)
+      ? this.p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+      : []
+    this._cachedColors = [...legacyColors, ...identityColors]
+    return this._cachedColors
+  }
+
+  getNormalizedColors(): string[] {
+    if (this._cachedNormalizedColors) return this._cachedNormalizedColors
+    this._cachedNormalizedColors = this.getColors().map(c => c.toLowerCase().trim())
+    return this._cachedNormalizedColors
+  }
+
+  getTokensForColor(color: string): Set<string> {
+    const cached = this.colorTokenCache.get(color)
+    if (cached) return cached
+
+    const tokens = new Set<string>()
+    tokens.add(color)
+
+    const fullColorAliases = this.aliasMap.get(color)
+    if (fullColorAliases) {
+      for (const alias of fullColorAliases) {
+        tokens.add(alias)
+      }
+    }
+
+    const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
+    splitTokens.forEach(token => {
+      tokens.add(token)
+      const aliases = this.aliasMap.get(token)
+      if (aliases) {
+        for (const alias of aliases) {
+          tokens.add(alias)
+        }
+      }
+    })
+
+    this.colorTokenCache.set(color, tokens)
+    return tokens
+  }
+
+  get _searchString(): string {
+    if (this._cachedSearchString !== undefined) return this._cachedSearchString
+    const commonNames = (this.p.identity?.commonNames || []).join(' ')
+    const synonyms = (this.p.identity?.synonyms || []).join(' ')
+    const givenNames = (this.p.identity?.givenNames || []).join(' ')
+    const colors = this.getColors()
+    this._cachedSearchString = `${this.p.name} ${this.p.scientificName || ''} ${this.p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+    return this._cachedSearchString
+  }
+
+  get _normalizedColors(): string[] {
+    return this.getNormalizedColors()
+  }
+
+  get _colorTokens(): Set<string> {
+    if (this._cachedColorTokens) return this._cachedColorTokens
+    const colorTokens = new Set<string>()
+    this.getNormalizedColors().forEach(color => {
+      const cachedTokens = this.getTokensForColor(color)
+      for (const t of cachedTokens) {
+        colorTokens.add(t)
+      }
+    })
+    this._cachedColorTokens = colorTokens
+    return this._cachedColorTokens
+  }
+
+  get _usageLabels(): string[] {
+    if (this._cachedUsageLabels) return this._cachedUsageLabels
+    this._cachedUsageLabels = getPlantUsageLabels(this.p).map((label) => label.toLowerCase())
+    return this._cachedUsageLabels
+  }
+
+  get _usageSet(): Set<string> {
+    if (this._cachedUsageSet) return this._cachedUsageSet
+    this._cachedUsageSet = new Set(this._usageLabels)
+    return this._cachedUsageSet
+  }
+
+  get _habitats(): string[] {
+    if (this._cachedHabitats) return this._cachedHabitats
+    this._cachedHabitats = (this.p.plantCare?.habitat || this.p.care?.habitat || []).map((h) => h.toLowerCase())
+    return this._cachedHabitats
+  }
+
+  get _habitatSet(): Set<string> {
+    if (this._cachedHabitatSet) return this._cachedHabitatSet
+    this._cachedHabitatSet = new Set(this._habitats)
+    return this._cachedHabitatSet
+  }
+
+  get _seasonsSet(): Set<string> {
+    if (this._cachedSeasonsSet) return this._cachedSeasonsSet
+    const seasons = Array.isArray(this.p.seasons) ? this.p.seasons : []
+    this._cachedSeasonsSet = new Set(seasons.map(s => String(s)))
+    return this._cachedSeasonsSet
+  }
+}
+
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile, banned, acknowledgeBan } = useAuth()
@@ -826,186 +998,9 @@ export default function PlantSwipe() {
     // repeated across thousands of plants.
     const colorTokenCache = new Map<string, Set<string>>()
 
-    const getTokensForColor = (color: string): Set<string> => {
-      const cached = colorTokenCache.get(color)
-      if (cached) {
-        return cached
-      }
-
-      const tokens = new Set<string>()
-      tokens.add(color)
-
-      // Check aliases for the full color string (e.g. "dark-green" -> "vert fonce")
-      const fullColorAliases = aliasMap.get(color)
-      if (fullColorAliases) {
-        for (const alias of fullColorAliases) {
-          tokens.add(alias)
-        }
-      }
-
-      // Split compound colors and add individual tokens
-      const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
-      splitTokens.forEach(token => {
-        tokens.add(token)
-
-        // O(1) expansion of tokens to all their aliases (canonical + translations)
-        // Uses the pre-calculated aliasMap to avoid object iteration
-        const aliases = aliasMap.get(token)
-        if (aliases) {
-          // Fast add of all aliases
-          for (const alias of aliases) {
-            tokens.add(alias)
-          }
-        }
-      })
-
-      colorTokenCache.set(color, tokens)
-      return tokens
-    }
-
-    return plants.map((p) => {
-      // ⚡ Bolt: Use lazy getters for expensive properties to optimize initial load time
-      // This avoids computing regexes, Sets, and string manipulations for thousands of plants
-      // unless they are actually needed by active filters.
-      // For the default "Discovery Mode" (swiping), these are NEVER computed!
-      
-      let _cachedColors: string[] | undefined
-      let _cachedNormalizedColors: string[] | undefined
-      let _cachedColorTokens: Set<string> | undefined
-      let _cachedUsageLabels: string[] | undefined
-      let _cachedUsageSet: Set<string> | undefined
-      let _cachedHabitats: string[] | undefined
-      let _cachedHabitatSet: Set<string> | undefined
-      let _cachedSeasonsSet: Set<string> | undefined
-      let _cachedSearchString: string | undefined
-
-      // Type
-      const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
-
-      // Maintenance
-      const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
-
-      // Toxicity
-      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-
-      // Living space
-      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
-
-      // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
-      const createdAtValue = p.meta?.createdAt
-      const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
-      const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
-
-      // Pre-extract popularity for faster sorting
-      const popularityLikes = p.popularity?.likes ?? 0
-
-      // Pre-compute image availability for Discovery page filtering
-      const hasLegacyImage = Boolean(p.image)
-      const hasImagesArray = Array.isArray(p.images) && p.images.some((img) => img?.link)
-      const hasImage = hasLegacyImage || hasImagesArray
-
-      // Pre-compute promotion status
-      const isPromoted = isPlantOfTheMonth(p, now)
-
-      // Pre-compute in-progress status
-      const status = p.meta?.status?.toLowerCase()
-      const isInProgress = status === 'in progres' || status === 'in progress'
-
-      const getColors = () => {
-        if (_cachedColors) return _cachedColors
-        const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-        const identityColors = Array.isArray(p.identity?.colors)
-          ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
-          : []
-        _cachedColors = [...legacyColors, ...identityColors]
-        return _cachedColors
-      }
-
-      const getNormalizedColors = () => {
-        if (_cachedNormalizedColors) return _cachedNormalizedColors
-        _cachedNormalizedColors = getColors().map(c => c.toLowerCase().trim())
-        return _cachedNormalizedColors
-      }
-
-      const getUsageLabels = () => {
-        if (_cachedUsageLabels) return _cachedUsageLabels
-        _cachedUsageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-        return _cachedUsageLabels
-      }
-
-      const getHabitats = () => {
-        if (_cachedHabitats) return _cachedHabitats
-        _cachedHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
-        return _cachedHabitats
-      }
-
-      return {
-        ...p,
-        get _searchString() {
-          if (_cachedSearchString !== undefined) return _cachedSearchString
-
-          // Search string - includes name, scientific name, meaning, colors, common names and synonyms
-          // This allows users to search by any name they might know the plant by
-          const commonNames = (p.identity?.commonNames || []).join(' ')
-          const synonyms = (p.identity?.synonyms || []).join(' ')
-          const givenNames = (p.identity?.givenNames || []).join(' ')
-          const colors = getColors()
-
-          _cachedSearchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
-          return _cachedSearchString
-        },
-        get _normalizedColors() {
-          return getNormalizedColors()
-        },
-        get _colorTokens() {
-          if (_cachedColorTokens) return _cachedColorTokens
-
-          const colorTokens = new Set<string>()
-          getNormalizedColors().forEach(color => {
-            const cachedTokens = getTokensForColor(color)
-            for (const t of cachedTokens) {
-              colorTokens.add(t)
-            }
-          })
-
-          _cachedColorTokens = colorTokens
-          return _cachedColorTokens
-        },
-        _typeLabel: typeLabel,
-        get _usageLabels() {
-           return getUsageLabels()
-        },
-        get _usageSet() {
-           if (_cachedUsageSet) return _cachedUsageSet
-           _cachedUsageSet = new Set(getUsageLabels())
-           return _cachedUsageSet
-        },
-        get _habitats() {
-           return getHabitats()
-        },
-        get _habitatSet() {
-           if (_cachedHabitatSet) return _cachedHabitatSet
-           _cachedHabitatSet = new Set(getHabitats())
-           return _cachedHabitatSet
-        },
-        _maintenance: maintenance,
-        _petSafe: petSafe,
-        _humanSafe: humanSafe,
-        _livingSpace: livingSpace,
-        get _seasonsSet() {
-           if (_cachedSeasonsSet) return _cachedSeasonsSet
-           const seasons = Array.isArray(p.seasons) ? p.seasons : []
-           _cachedSeasonsSet = new Set(seasons.map(s => String(s)))
-           return _cachedSeasonsSet
-        },
-        _createdAtTs: createdAtTsFinal,
-        _popularityLikes: popularityLikes,
-        _hasImage: hasImage,
-        _isPromoted: isPromoted,
-        _isInProgress: isInProgress
-      } as PreparedPlant
-    })
+    // Use the class wrapper to optimize memory and performance
+    // The class encapsulates all the logic previously defined in closures here
+    return plants.map((p) => new PreparedPlantWrapper(p, aliasMap, colorTokenCache, now) as unknown as PreparedPlant)
   }, [plants, colorLookups])
 
   // Memoize color filter expansion separately to avoid recomputing on every filter change
