@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** February 12, 2026  
+> **Last Updated:** February 24, 2026  
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,15 +28,16 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
-- **Feb 19, 2026:** Added `plant_reports` table for user-submitted reports about incorrect or outdated plant information. Columns: `id` (UUID PK), `user_id` (UUID FK auth.users), `plant_id` (text FK plants), `note` (text), `image_url` (text, nullable), `created_at` (timestamptz). RLS: authenticated users can insert own reports, admins/editors can read and delete. Admin can mark as complete (adds reporter to plant_contributors) or reject (deletes report + image from storage).
-- **Feb 17, 2026:** Added `user_id` (nullable UUID, FK to `auth.users`) column to `team_members` table. Links a team member to an actual user profile. When set, the About page shows the linked user's display name as a clickable link to their profile page. Added `idx_team_members_user_id` partial index.
-- **Feb 12, 2026:** Added **Shadow Ban system** for threat level 3 users. When a user's threat level is set to 3, `apply_shadow_ban()` is called to: make their profile private, make all their gardens private, make all their bookmarks private, disable friend requests, remove all email/push notification consent, cancel pending friend requests and garden invites. All pre-ban settings are stored in the new `shadow_ban_backup` JSONB column on `profiles` for full reversibility via `revert_shadow_ban()`. Updated `profiles_select_self` RLS policy, `search_user_profiles` RPC, `get_profile_public_by_display_name` RPC, and `friend_requests`/`garden_invites` insert policies to exclude shadow-banned users.
-- **Feb 12, 2026:** Added `plant_recipes` table to store structured recipe ideas per plant, with `category` (breakfast_brunch, starters_appetizers, soups_salads, main_courses, side_dishes, desserts, drinks, other), `time` (quick, 30_plus, slow_cooking, undefined), and optional `link` (external recipe URL, admin-only, not AI-filled) columns. Includes migration from `recipes_ideas` in `plant_translations`. All existing recipes migrated with category='other' and time='undefined'.
-- **Feb 10, 2026:** Added `impressions` table to track page view counts for plant info pages and blog posts. Admin-only read access. Includes `increment_impression` RPC function.
-- **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type to `notification_automations` for event-driven notifications when a plant request is fulfilled via AI prefill or manual creation. Added `/api/admin/notify-plant-requesters` endpoint.
-- **Feb 8, 2026:** Added `job`, `profile_link`, `show_country` columns to `profiles` table for public profile display. Updated `get_profile_public_by_display_name` RPC to return `experience_level`, `job`, `profile_link`, `show_country`.
-- **Feb 5, 2026:** Restricted `plant_contributors` RLS write policy to admins/editors only (was previously open to all authenticated users).
-- **Feb 4, 2026:** Added `plant_contributors` table to store contributor names per plant.
+- **Feb 24, 2026:** **MAJOR: Complete plant database schema overhaul** to match new 9-section specification. See [plants table](#plants-master-plant-catalog) and [plant_translations table](#plant_translations-multi-language-content) for full new schema. Key changes: renamed columns for clarity (e.g. `comestible_part`→`edible_part`, `tutoring`→`staking`, `spiked`→`thorny`), converted many single-select fields to multi-select (`life_cycle`, `foliage_persistence`, `living_space`, `conservation_status`, `care_level`, `sunlight`), updated all enum values to English standards (IUCN codes for conservation, proper toxicity levels including `undetermined`), added ~40 new fields for ecology/biodiversity/consumption, added full migration logic for existing data. **Sections:** 1) Base, 2) Identity, 3) Care, 4) Growth, 5) Danger, 6) Ecology, 7) Consumption, 8) Misc, 9) Meta.
+- **Feb 19, 2026:** Added `plant_reports` table for user-submitted reports about incorrect or outdated plant information.
+- **Feb 17, 2026:** Added `user_id` column to `team_members` table for profile linking.
+- **Feb 12, 2026:** Added **Shadow Ban system** for threat level 3 users.
+- **Feb 12, 2026:** Added `plant_recipes` table with `category`, `time`, and `link` columns.
+- **Feb 10, 2026:** Added `impressions` table to track page view counts.
+- **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type.
+- **Feb 8, 2026:** Added `job`, `profile_link`, `show_country` columns to `profiles`.
+- **Feb 5, 2026:** Restricted `plant_contributors` RLS write policy to admins/editors only.
+- **Feb 4, 2026:** Added `plant_contributors` table.
 
 ### Required Extensions
 ```sql
@@ -405,6 +406,202 @@ count           BIGINT NOT NULL DEFAULT 0
 last_viewed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 UNIQUE (entity_type, entity_id)
+```
+
+### `plants` (Master Plant Catalog)
+
+Non-translatable base data for all plants. Organized into 9 sections matching the encyclopedia specification. All translatable content (names, descriptions, advice text) is stored in `plant_translations`.
+
+```sql
+id                        TEXT PRIMARY KEY
+name                      TEXT NOT NULL UNIQUE   -- Canonical English name
+
+-- Section 1: Base — Identity & naming
+scientific_name_species   TEXT                   -- Latin species name
+scientific_name_variety   TEXT                   -- Latin variety name
+family                    TEXT                   -- Botanical family (Latin)
+encyclopedia_category     TEXT[]                 -- Multi-select: tree, shrub, cactus_succulent, herbaceous, palm, etc.
+featured_month            TEXT[]                 -- Multi-select months for promotion
+
+-- Section 2: Identity — Origin & environment
+climate                   TEXT[]                 -- Multi-select: polar, montane, oceanic, mediterranean, tropical_humid, etc.
+season                    TEXT[]                 -- CHECK: spring, summer, autumn, winter
+
+-- Section 2: Identity — Utility & safety
+utility                   TEXT[]                 -- CHECK: edible, ornamental, aromatic, medicinal, fragrant, cereal, spice
+edible_part               TEXT[]                 -- CHECK: flower, fruit, seed, leaf, stem, bulb, rhizome, bark, wood
+thorny                    BOOLEAN DEFAULT false
+toxicity_human            TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
+toxicity_pets             TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
+poisoning_method          TEXT[]                 -- CHECK: touch, ingestion, eye_contact, inhalation, sap_contact
+
+-- Section 2: Identity — Life cycle & foliage
+life_cycle                TEXT[]                 -- CHECK: annual, biennial, perennial, succulent_perennial, monocarpic, short_cycle, ephemeral
+average_lifespan          TEXT[]                 -- CHECK: less_than_1_year, 2_years, 3_to_10_years, 10_to_50_years, over_50_years
+foliage_persistence       TEXT[]                 -- CHECK: deciduous, evergreen, semi_evergreen, marcescent, winter_dormant, dry_season_deciduous
+
+-- Section 2: Identity — Habitat & plant form
+living_space              TEXT[]                 -- CHECK: indoor, outdoor, both, terrarium, greenhouse
+landscaping               TEXT[]                 -- Multi-select: pot, planter, hanging, flowerbed, hedge, ground_cover, etc.
+plant_habit               TEXT[]                 -- Multi-select: upright, arborescent, bushy, clumping, climbing, trailing, etc.
+multicolor                BOOLEAN DEFAULT false
+bicolor                   BOOLEAN DEFAULT false
+
+-- Section 3: Care — Difficulty & conditions
+care_level                TEXT[]                 -- CHECK: easy, moderate, complex
+sunlight                  TEXT[]                 -- CHECK: full_sun, partial_sun, partial_shade, light_shade, deep_shade, direct_light, bright_indirect_light, medium_light, low_light
+temperature_max           INTEGER
+temperature_min           INTEGER
+temperature_ideal         INTEGER
+
+-- Section 3: Care — Water & humidity
+watering_frequency_warm   INTEGER                -- Times per week (warm season)
+watering_frequency_cold   INTEGER                -- Times per week (cold season)
+watering_type             TEXT[]                 -- CHECK: hose, surface, drip, soaking, wick
+hygrometry                INTEGER                -- Humidity percentage
+misting_frequency         INTEGER                -- Times per week
+
+-- Section 3: Care — Special needs, substrate, mulch, nutrition
+special_needs             TEXT[]                 -- Multi-select: winter_veil, etc.
+substrate                 TEXT[]                 -- Multi-select substrates (no check constraint — very large list)
+substrate_mix             TEXT[]                 -- Special mixes: aroid_mix, cactus_mix, orchid_mix, etc.
+mulching_needed           BOOLEAN DEFAULT false
+mulch_type                TEXT[]                 -- Multi-select mulch types (no check constraint — very large list)
+nutrition_need            TEXT[]                 -- Multi-select nutrients (no check constraint)
+fertilizer                TEXT[]                 -- Multi-select fertilizers (no check constraint)
+
+-- Section 4: Growth — Calendar
+sowing_month              TEXT[]                 -- Multi-select months
+flowering_month           TEXT[]                 -- Multi-select months
+fruiting_month            TEXT[]                 -- Multi-select months
+
+-- Section 4: Growth — Dimensions & support
+height_cm                 INTEGER
+wingspan_cm               INTEGER
+staking                   BOOLEAN DEFAULT false  -- Whether staking/support is needed
+
+-- Section 4: Growth — Propagation & cultivation
+division                  TEXT[]                 -- CHECK: seed, clump_division, bulb_division, rhizome_division, cutting, layering, stolon, sucker, grafting, spore
+cultivation_mode          TEXT[]                 -- Multi-select: open_ground, raised_bed, container, greenhouse, hydroponic, etc.
+sowing_method             TEXT[]                 -- CHECK: open_ground, pot, tray, greenhouse, mini_greenhouse, broadcast, row
+transplanting             BOOLEAN
+
+-- Section 4: Growth — Pruning
+pruning                   BOOLEAN DEFAULT false
+pruning_month             TEXT[]                 -- Multi-select months
+
+-- Section 6: Ecology — Conservation & status
+conservation_status       TEXT[]                 -- CHECK (IUCN): least_concern, near_threatened, vulnerable, endangered, critically_endangered, extinct_in_wild, extinct, data_deficient, not_evaluated
+ecological_status         TEXT[]                 -- Multi-select: indigenous, endemic, introduced, naturalized, invasive, pioneer, etc.
+
+-- Section 6: Ecology — Habitats
+biotopes                  TEXT[]                 -- Multi-select: temperate_deciduous_forest, wetland, steppe, coastal_dune, etc.
+urban_biotopes            TEXT[]                 -- Multi-select: urban_garden, park, balcony, green_wall, roadside, etc.
+
+-- Section 6: Ecology — Tolerance & roles
+ecological_tolerance      TEXT[]                 -- CHECK: drought, scorching_sun, permanent_shade, excess_water, frost, heatwave, wind
+biodiversity_role         TEXT[]                 -- Multi-select: melliferous, insect_refuge, bird_refuge, host_plant, nitrogen_fixer, etc.
+pollinators_attracted     TEXT[]                 -- Multi-select (short list)
+birds_attracted           TEXT[]                 -- Multi-select (short list)
+mammals_attracted         TEXT[]                 -- Multi-select (short list)
+
+-- Section 6: Ecology — Symbiosis & management
+ecological_management     TEXT[]                 -- Multi-select: let_seed, no_winter_pruning, natural_mulch, etc.
+ecological_impact         TEXT[]                 -- CHECK: neutral, favorable, potentially_invasive, locally_invasive
+
+-- Section 7: Consumption
+infusion                  BOOLEAN DEFAULT false
+infusion_parts            TEXT[]                 -- Which plant parts can be used for infusion
+medicinal                 BOOLEAN DEFAULT false
+aromatherapy              BOOLEAN DEFAULT false
+fragrance                 BOOLEAN DEFAULT false
+edible_oil                TEXT                   -- CHECK: yes, no, unknown
+
+-- Section 8: Misc
+companion_plants          TEXT[]                 -- Plant IDs for garden pairing
+biotope_plants            TEXT[]                 -- Plant IDs typical of same biotope
+beneficial_plants         TEXT[]                 -- Plant IDs
+harmful_plants            TEXT[]                 -- Plant IDs
+varieties                 TEXT[]                 -- Related variety IDs
+sponsored_shop_ids        TEXT[]                 -- Merchant IDs (future sponsor feature)
+
+-- Section 9: Meta
+status                    TEXT                   -- CHECK: in_progress, rework, review, approved
+admin_commentary          TEXT
+user_notes                TEXT
+created_by                TEXT
+created_time              TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_by                TEXT
+updated_time              TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### `plant_translations` (Multi-language Content)
+
+All translatable text content per language (including English). One row per plant per language.
+
+```sql
+id                      UUID PRIMARY KEY
+plant_id                TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+language                TEXT NOT NULL REFERENCES translation_languages(code)
+UNIQUE(plant_id, language)
+
+-- Core
+name                    TEXT NOT NULL             -- Display name in this language
+common_names            TEXT[]                    -- Alternative common names
+presentation            TEXT                      -- Encyclopedia-style description
+
+-- Identity
+origin                  TEXT[]                    -- Countries of origin
+allergens               TEXT[]                    -- Known allergens
+poisoning_symptoms      TEXT                      -- Prevention/symptom description
+
+-- Care
+soil_advice             TEXT                      -- Substrate/soil guidance
+mulch_advice            TEXT                      -- Mulching recommendations
+fertilizer_advice       TEXT                      -- Fertilizer guidance
+
+-- Growth
+staking_advice          TEXT                      -- Staking/support recommendations
+sowing_advice           TEXT                      -- Sowing instructions
+transplanting_time      TEXT                      -- e.g. "After 4 true leaves"
+outdoor_planting_time   TEXT                      -- e.g. "After 6 true leaves"
+pruning_advice          TEXT                      -- Pruning instructions
+
+-- Danger
+pests                   TEXT[]                    -- Known pests
+diseases                TEXT[]                    -- Known diseases
+
+-- Consumption
+nutritional_value       TEXT                      -- Nutritional information
+recipes_ideas           TEXT[]                    -- Recipe suggestions (deprecated — use plant_recipes table)
+infusion_benefits       TEXT                      -- Benefits of infusion/tea
+infusion_recipe_ideas   TEXT                      -- Infusion/tea recipe ideas
+medicinal_benefits      TEXT                      -- Medicinal benefits
+medicinal_usage         TEXT                      -- How to use medicinally
+medicinal_warning       TEXT                      -- Safety warning (historical vs modern use)
+medicinal_history       TEXT                      -- Historical medicinal use
+aromatherapy_benefits   TEXT                      -- Aromatherapy benefits
+essential_oil_blends    TEXT                      -- Essential oil blend ideas
+
+-- Ecology
+beneficial_roles        TEXT[]                    -- Beneficial ecological roles
+harmful_roles           TEXT[]                    -- Harmful ecological roles
+symbiosis               TEXT[]                    -- Symbiotic relationships
+symbiosis_notes         TEXT                      -- Detailed symbiosis description
+
+-- Misc
+plant_tags              TEXT[]                    -- General plant tags
+biodiversity_tags       TEXT[]                    -- Biodiversity-specific tags
+source_name             TEXT                      -- Information source name
+source_url              TEXT                      -- Information source URL
+user_notes              TEXT                      -- User-contributed notes
+
+-- Deprecated
+spice_mixes             TEXT[]                    -- Kept for backward compatibility
+
+-- Timestamps
+created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
 ### `plant_recipes`
