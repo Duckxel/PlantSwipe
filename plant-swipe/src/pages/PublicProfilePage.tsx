@@ -1420,14 +1420,8 @@ export default function PublicProfilePage() {
               </div>
             )}
 
-            {isOwner && stats && (
-              <ProfileActions
-                userId={pp.id}
-                gardensCount={stats.gardensCount}
-                plantsTotal={stats.plantsTotal}
-                friendsCount={stats.friendsCount ?? 0}
-                hasBio={Boolean(pp.bio && pp.bio.trim().length > 0)}
-              />
+            {isOwner && (
+              <ProfileActions userId={pp.id} />
             )}
 
             {canViewProfile && (
