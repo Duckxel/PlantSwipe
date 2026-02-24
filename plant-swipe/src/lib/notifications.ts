@@ -60,48 +60,43 @@ export async function getUnreadNotificationCount(_userId: string): Promise<numbe
  */
 export async function getNotificationCounts(userId: string): Promise<NotificationCounts> {
   try {
-    // Get friend request count
-    const { count: friendRequestCount, error: frError } = await supabase
-      .from('friend_requests')
-      .select('*', { count: 'exact', head: true })
-      .eq('recipient_id', userId)
-      .eq('status', 'pending')
+    // Run both count queries in parallel
+    const [frResult, giResult] = await Promise.all([
+      supabase
+        .from('friend_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('recipient_id', userId)
+        .eq('status', 'pending'),
+      supabase
+        .from('garden_invites')
+        .select('*', { count: 'exact', head: true })
+        .eq('invitee_id', userId)
+        .eq('status', 'pending'),
+    ])
 
-    if (frError && !isMissingTableError(frError)) {
-      throw frError
+    const friendRequestCount =
+      frResult.error && !isMissingTableError(frResult.error)
+        ? (() => { throw frResult.error })()
+        : frResult.count || 0
+
+    let gardenInviteCount = 0
+    if (giResult.error) {
+      if (!isMissingTableError(giResult.error)) {
+        console.warn('[notifications] Error fetching garden invites:', giResult.error)
+      }
+    } else {
+      gardenInviteCount = giResult.count || 0
     }
 
-    // Get garden invite count
-    const { count: gardenInviteCount, error: giError } = await supabase
-      .from('garden_invites')
-      .select('*', { count: 'exact', head: true })
-      .eq('invitee_id', userId)
-      .eq('status', 'pending')
-
-    if (giError) {
-      // If table doesn't exist or other error, return counts without garden invites
-      if (!isMissingTableError(giError)) {
-        console.warn('[notifications] Error fetching garden invites:', giError)
-      }
-      return {
-        total: friendRequestCount || 0,
-        unread: 0,
-        friendRequests: friendRequestCount || 0,
-        gardenInvites: 0,
-        unreadMessages: 0,
-        pendingTasks: 0
-      }
-    }
-
-    const total = (friendRequestCount || 0) + (gardenInviteCount || 0)
+    const total = friendRequestCount + gardenInviteCount
 
     return {
       total,
-      unread: 0, // The 'notifications' table doesn't exist - this is always 0
-      friendRequests: friendRequestCount || 0,
-      gardenInvites: gardenInviteCount || 0,
-      unreadMessages: 0, // Will be populated by useNotifications hook
-      pendingTasks: 0 // Will be populated by useNotifications hook
+      unread: 0,
+      friendRequests: friendRequestCount,
+      gardenInvites: gardenInviteCount,
+      unreadMessages: 0,
+      pendingTasks: 0
     }
   } catch (error) {
     console.warn('[notifications] Failed to get counts:', error)
