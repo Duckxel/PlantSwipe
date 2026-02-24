@@ -1,5 +1,5 @@
 -- ========== Plants base table ==========
--- ARCHITECTURE NOTE: As of 2024, ALL translatable content is stored ONLY in plant_translations.
+-- ARCHITECTURE NOTE: As of 2025, ALL translatable content is stored ONLY in plant_translations.
 -- This table contains ONLY non-translatable base data. No translatable columns exist here
 -- except for 'name' which is the canonical English name used for unique constraint.
 --
@@ -8,218 +8,900 @@
 --   plant_translations.name = displayed name for each language (including English)
 --   When saving in English, BOTH plants.name AND plant_translations.name are updated
 --
--- COMPANIONS: The companions array stores plant IDs (not names) for stable references.
+-- SCHEMA SECTIONS:
+--   1) Base: Identity & naming, encyclopedia categories, featured months, images
+--   2) Identity: Origin, climate, utility, safety, life cycle, habitat, plant form
+--   3) Care: Difficulty, watering, substrate, mulch, nutrition
+--   4) Growth: Calendar, dimensions, propagation, pruning
+--   5) Danger: Pests & diseases (in translations)
+--   6) Ecology: Conservation, biotopes, tolerance, biodiversity, fauna
+--   7) Consumption: Nutrition, infusion, medicinal, fragrance
+--   8) Misc: Tags, companions, varieties
+--   9) Meta: Status, notes, contributors, sources
 --
 -- NON-TRANSLATABLE FIELDS (stored in this table):
---   id, name (canonical English), plant_type, utility, comestible_part, fruit_type
---   spiked, scent, multicolor, bicolor
---   temperature_max, temperature_min, temperature_ideal, hygrometry
---   watering_type, division, soil, mulching, nutrition_need, fertilizer
---   sowing_month, flowering_month, fruiting_month
---   height_cm, wingspan_cm, tutoring, sow_type, separation_cm, transplanting
---   infusion, aromatherapy
---   melliferous, polenizer, be_fertilizer, conservation_status
---   companions
---   status, admin_commentary, created_by, created_time, updated_by, updated_time
+--   Section 1: id, name, scientific_name_species, scientific_name_variety, family,
+--              encyclopedia_category, featured_month
+--   Section 2: climate, season, utility, edible_part, thorny, toxicity_human, toxicity_pets,
+--              poisoning_method, life_cycle, average_lifespan, foliage_persistence,
+--              living_space, landscaping, plant_habit, multicolor, bicolor
+--   Section 3: care_level, sunlight, temperature_max/min/ideal, watering_frequency_warm/cold,
+--              watering_type, hygrometry, misting_frequency, special_needs,
+--              substrate, substrate_mix, mulching_needed, mulch_type, nutrition_need, fertilizer
+--   Section 4: sowing_month, flowering_month, fruiting_month, height_cm, wingspan_cm,
+--              staking, division, cultivation_mode, sowing_method, transplanting,
+--              pruning, pruning_month
+--   Section 6: conservation_status, ecological_status, biotopes, urban_biotopes,
+--              ecological_tolerance, biodiversity_role, pollinators_attracted,
+--              birds_attracted, mammals_attracted, ecological_management, ecological_impact
+--   Section 7: infusion, infusion_parts, medicinal, aromatherapy, fragrance, edible_oil
+--   Section 8: companion_plants, biotope_plants, beneficial_plants, harmful_plants,
+--              varieties, sponsored_shop_ids
+--   Section 9: status, admin_commentary, user_notes, created_by, created_time,
+--              updated_by, updated_time
 --
 -- TRANSLATABLE FIELDS (stored ONLY in plant_translations):
---   spice_mixes, pests, diseases (also kept in plants table for backward compatibility)
---   name, given_names, scientific_name, family, overview
---   promotion_month, life_cycle, season, foliage_persistance
---   toxicity_human, toxicity_pets, allergens, symbolism
---   living_space, composition, maintenance_level
---   origin, habitat, level_sun
---   advice_soil, advice_mulching, advice_fertilizer
---   advice_tutoring, advice_sowing, cut
---   advice_medicinal, advice_infusion, nutritional_intake, recipes_ideas
---   ground_effect, source_name, source_url, tags
+--   name, common_names, presentation, origin, allergens, poisoning_symptoms
+--   soil_advice, mulch_advice, fertilizer_advice
+--   staking_advice, sowing_advice, transplanting_time, outdoor_planting_time, pruning_advice
+--   pests, diseases
+--   nutritional_value, recipes_ideas, infusion_benefits, infusion_recipe_ideas
+--   medicinal_benefits, medicinal_usage, medicinal_warning, medicinal_history
+--   aromatherapy_benefits, essential_oil_blends
+--   beneficial_roles, harmful_roles, symbiosis, symbiosis_notes
+--   plant_tags, biodiversity_tags, source_name, source_url, user_notes
+--   spice_mixes (deprecated)
 
 create table if not exists public.plants (
   id text primary key,
-  -- Canonical English name (unique constraint). When saving in English, this AND
-  -- plant_translations.name (language='en') are both updated.
   name text not null,
-  -- Non-translatable classification fields
-  plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')),
-  utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']),
-  comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']),
-  fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']),
-  -- Non-translatable identity fields
-  spiked boolean default false,
-  scent boolean default false,
+
+  -- Section 1: Base — Identity & naming
+  scientific_name_species text,
+  scientific_name_variety text,
+  family text,
+  encyclopedia_category text[] not null default '{}'::text[],
+  featured_month text[] not null default '{}'::text[],
+
+  -- Section 2: Identity — Origin & environment
+  climate text[] not null default '{}'::text[],
+  season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']),
+
+  -- Section 2: Identity — Utility & safety
+  utility text[] not null default '{}'::text[] check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice']),
+  edible_part text[] not null default '{}'::text[] check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']),
+  thorny boolean default false,
+  toxicity_human text check (toxicity_human in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')),
+  toxicity_pets text check (toxicity_pets in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')),
+  poisoning_method text[] not null default '{}'::text[] check (poisoning_method <@ array['touch','ingestion','eye_contact','inhalation','sap_contact']),
+
+  -- Section 2: Identity — Life cycle & foliage
+  life_cycle text[] not null default '{}'::text[] check (life_cycle <@ array['annual','biennial','perennial','succulent_perennial','monocarpic','short_cycle','ephemeral']),
+  average_lifespan text[] not null default '{}'::text[] check (average_lifespan <@ array['less_than_1_year','2_years','3_to_10_years','10_to_50_years','over_50_years']),
+  foliage_persistence text[] not null default '{}'::text[] check (foliage_persistence <@ array['deciduous','evergreen','semi_evergreen','marcescent','winter_dormant','dry_season_deciduous']),
+
+  -- Section 2: Identity — Habitat & plant form
+  living_space text[] not null default '{}'::text[] check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']),
+  landscaping text[] not null default '{}'::text[],
+  plant_habit text[] not null default '{}'::text[],
   multicolor boolean default false,
   bicolor boolean default false,
-  -- Non-translatable plant care fields
+
+  -- Section 3: Care — Difficulty & conditions
+  care_level text[] not null default '{}'::text[] check (care_level <@ array['easy','moderate','complex']),
+  sunlight text[] not null default '{}'::text[] check (sunlight <@ array['full_sun','partial_sun','partial_shade','light_shade','deep_shade','direct_light','bright_indirect_light','medium_light','low_light']),
   temperature_max integer,
   temperature_min integer,
   temperature_ideal integer,
+
+  -- Section 3: Care — Water & humidity
+  watering_frequency_warm integer,
+  watering_frequency_cold integer,
+  watering_type text[] not null default '{}'::text[] check (watering_type <@ array['hose','surface','drip','soaking','wick']),
   hygrometry integer,
-  watering_type text[] not null default '{}'::text[] check (watering_type <@ array['surface','buried','hose','drop','drench']),
-  division text[] not null default '{}'::text[] check (division <@ array['seed','cutting','division','layering','grafting','tissue separation','bulb separation']),
-  soil text[] not null default '{}'::text[] check (soil <@ array['vermiculite','perlite','sphagnum moss','rock wool','sand','gravel','potting soil','peat','clay pebbles','coconut fiber','bark','wood chips']),
-  mulching text[] not null default '{}'::text[] check (mulching <@ array['wood chips','bark','green manure','cocoa bean hulls','buckwheat hulls','cereal straw','hemp straw','woven fabric','pozzolana','crushed slate','clay pellets']),
-  nutrition_need text[] not null default '{}'::text[] check (nutrition_need <@ array['nitrogen','phosphorus','potassium','calcium','magnesium','sulfur','iron','boron','manganese','molybene','chlorine','copper','zinc','nitrate','phosphate']),
-  fertilizer text[] not null default '{}'::text[] check (fertilizer <@ array['granular fertilizer','liquid fertilizer','meat flour','fish flour','crushed bones','crushed horns','slurry','manure','animal excrement','sea fertilizer','yurals','wine','guano','coffee grounds','banana peel','eggshell','vegetable cooking water','urine','grass clippings','vegetable waste','natural mulch']),
-  -- Non-translatable growth fields
-  sowing_month text[] not null default '{}'::text[] check (sowing_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
-  flowering_month text[] not null default '{}'::text[] check (flowering_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
-  fruiting_month text[] not null default '{}'::text[] check (fruiting_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
+  misting_frequency integer,
+
+  -- Section 3: Care — Special needs
+  special_needs text[] not null default '{}'::text[],
+
+  -- Section 3: Care — Substrate & soil
+  substrate text[] not null default '{}'::text[],
+  substrate_mix text[] not null default '{}'::text[],
+
+  -- Section 3: Care — Mulch
+  mulching_needed boolean default false,
+  mulch_type text[] not null default '{}'::text[],
+
+  -- Section 3: Care — Nutrition
+  nutrition_need text[] not null default '{}'::text[],
+  fertilizer text[] not null default '{}'::text[],
+
+  -- Section 4: Growth — Calendar
+  sowing_month text[] not null default '{}'::text[],
+  flowering_month text[] not null default '{}'::text[],
+  fruiting_month text[] not null default '{}'::text[],
+
+  -- Section 4: Growth — Dimensions & support
   height_cm integer,
   wingspan_cm integer,
-  tutoring boolean default false,
-  sow_type text[] not null default '{}'::text[] check (sow_type <@ array['direct','indoor','row','hill','broadcast','seed tray','cell','pot']),
-  separation_cm integer,
+  staking boolean default false,
+
+  -- Section 4: Growth — Propagation & cultivation
+  division text[] not null default '{}'::text[] check (division <@ array['seed','clump_division','bulb_division','rhizome_division','cutting','layering','stolon','sucker','grafting','spore']),
+  cultivation_mode text[] not null default '{}'::text[],
+  sowing_method text[] not null default '{}'::text[] check (sowing_method <@ array['open_ground','pot','tray','greenhouse','mini_greenhouse','broadcast','row']),
   transplanting boolean,
-  -- Non-translatable usage fields
+
+  -- Section 4: Growth — Pruning
+  pruning boolean default false,
+  pruning_month text[] not null default '{}'::text[],
+
+  -- Section 6: Ecology — Conservation & status
+  conservation_status text[] not null default '{}'::text[] check (conservation_status <@ array['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated']),
+  ecological_status text[] not null default '{}'::text[],
+
+  -- Section 6: Ecology — Habitats
+  biotopes text[] not null default '{}'::text[],
+  urban_biotopes text[] not null default '{}'::text[],
+
+  -- Section 6: Ecology — Tolerance & roles
+  ecological_tolerance text[] not null default '{}'::text[] check (ecological_tolerance <@ array['drought','scorching_sun','permanent_shade','excess_water','frost','heatwave','wind']),
+  biodiversity_role text[] not null default '{}'::text[],
+  pollinators_attracted text[] not null default '{}'::text[],
+  birds_attracted text[] not null default '{}'::text[],
+  mammals_attracted text[] not null default '{}'::text[],
+
+  -- Section 6: Ecology — Symbiosis & management
+  ecological_management text[] not null default '{}'::text[],
+  ecological_impact text[] not null default '{}'::text[] check (ecological_impact <@ array['neutral','favorable','potentially_invasive','locally_invasive']),
+
+  -- Section 7: Consumption
   infusion boolean default false,
+  infusion_parts text[] not null default '{}'::text[],
+  medicinal boolean default false,
   aromatherapy boolean default false,
-  -- DEPRECATED: spice_mixes moved to plant_translations (will be dropped after migration)
-  spice_mixes text[] not null default '{}',
-  -- Non-translatable ecology fields
-  melliferous boolean default false,
-  polenizer text[] not null default '{}'::text[] check (polenizer <@ array['bee','wasp','ant','butterfly','bird','mosquito','fly','beetle','ladybug','stagbeetle','cockchafer','dungbeetle','weevil']),
-  be_fertilizer boolean default false,
-  conservation_status text check (conservation_status in ('safe','at risk','vulnerable','endangered','critically endangered','extinct')),
-  -- DEPRECATED: pests and diseases moved to plant_translations (will be dropped after migration)
-  pests text[] not null default '{}',
-  diseases text[] not null default '{}',
-  -- Non-translatable miscellaneous fields
-  -- companions stores plant IDs (not names) for stable references
-  companions text[] not null default '{}',
-  -- Meta (non-translatable)
-  status text check (status in ('in progres','rework','review','approved')),
+  fragrance boolean default false,
+  edible_oil text check (edible_oil in ('yes','no','unknown')),
+
+  -- Section 8: Misc
+  companion_plants text[] not null default '{}'::text[],
+  biotope_plants text[] not null default '{}'::text[],
+  beneficial_plants text[] not null default '{}'::text[],
+  harmful_plants text[] not null default '{}'::text[],
+  varieties text[] not null default '{}'::text[],
+  sponsored_shop_ids text[] not null default '{}'::text[],
+
+  -- Section 9: Meta
+  status text check (status in ('in_progress','rework','review','approved')),
   admin_commentary text,
+  user_notes text,
   created_by text,
   created_time timestamptz not null default now(),
   updated_by text,
   updated_time timestamptz not null default now()
 );
 
--- Unique constraint on name - canonical English name for the plant
+-- Unique constraint on name — canonical English name for the plant
 create unique index if not exists plants_name_unique on public.plants (lower(name));
 
 -- Drop the scientific_name unique constraint if it exists
--- Multiple plants can have the same scientific name (different cultivars, varieties, etc.)
 drop index if exists plants_scientific_name_unique;
 alter table if exists public.plants drop constraint if exists plants_scientific_name_unique;
 
--- Ensure meta columns exist on older deployments (add columns before referencing them)
--- Using DO blocks to avoid PostgreSQL's "1600 columns" parsing bug with many consecutive ALTER TABLE statements
-do $add_plants_cols$ 
+-- ========== Phase 1: Add new columns for upgrades from older schema ==========
+do $add_plants_cols$
 declare
   col_def record;
   col_defs text[][] := array[
-    -- Meta columns
-    array['status', 'text check (status in (''in progres'',''rework'',''review'',''approved''))'],
-    array['admin_commentary', 'text'],
-    array['given_names', 'text[] not null default ''{}'''],
-    array['created_by', 'text'],
-    array['created_time', 'timestamptz not null default now()'],
-    array['updated_by', 'text'],
-    array['updated_time', 'timestamptz not null default now()'],
-    -- Classification columns
-    array['plant_type', 'text check (plant_type in (''plant'',''flower'',''bamboo'',''shrub'',''tree'',''cactus'',''succulent''))'],
-    array['utility', 'text[] not null default ''{}''::text[] check (utility <@ array[''comestible'',''ornemental'',''produce_fruit'',''aromatic'',''medicinal'',''odorous'',''climbing'',''cereal'',''spice''])'],
-    array['comestible_part', 'text[] not null default ''{}''::text[] check (comestible_part <@ array[''flower'',''fruit'',''seed'',''leaf'',''stem'',''root'',''bulb'',''bark'',''wood''])'],
-    array['fruit_type', 'text[] not null default ''{}''::text[] check (fruit_type <@ array[''nut'',''seed'',''stone''])'],
-    -- Identity columns
-    array['scientific_name', 'text'],
+    -- Section 1: Base
+    array['scientific_name_species', 'text'],
+    array['scientific_name_variety', 'text'],
     array['family', 'text'],
-    array['overview', 'text'],
-    array['promotion_month', 'text check (promotion_month in (''january'',''february'',''march'',''april'',''may'',''june'',''july'',''august'',''september'',''october'',''november'',''december''))'],
-    array['life_cycle', 'text check (life_cycle in (''annual'',''biennials'',''perenials'',''ephemerals'',''monocarpic'',''polycarpic''))'],
-    array['season', 'text[] not null default ''{}''::text[] check (season <@ array[''spring'',''summer'',''autumn'',''winter''])'],
-    array['foliage_persistance', 'text check (foliage_persistance in (''deciduous'',''evergreen'',''semi-evergreen'',''marcescent''))'],
-    array['spiked', 'boolean default false'],
-    array['toxicity_human', 'text check (toxicity_human in (''non-toxic'',''midly irritating'',''highly toxic'',''lethally toxic''))'],
-    array['toxicity_pets', 'text check (toxicity_pets in (''non-toxic'',''midly irritating'',''highly toxic'',''lethally toxic''))'],
-    array['allergens', 'text[] not null default ''{}'''],
-    array['scent', 'boolean default false'],
-    array['symbolism', 'text[] not null default ''{}'''],
-    array['living_space', 'text check (living_space in (''indoor'',''outdoor'',''both''))'],
-    array['composition', 'text[] not null default ''{}''::text[] check (composition <@ array[''flowerbed'',''path'',''hedge'',''ground cover'',''pot''])'],
-    array['maintenance_level', 'text check (maintenance_level in (''none'',''low'',''moderate'',''heavy''))'],
+    array['encyclopedia_category', 'text[] not null default ''{}''::text[]'],
+    array['featured_month', 'text[] not null default ''{}''::text[]'],
+    -- Section 2: Identity
+    array['climate', 'text[] not null default ''{}''::text[]'],
+    array['season', 'text[] not null default ''{}''::text[]'],
+    array['utility', 'text[] not null default ''{}''::text[]'],
+    array['edible_part', 'text[] not null default ''{}''::text[]'],
+    array['thorny', 'boolean default false'],
+    array['toxicity_human', 'text'],
+    array['toxicity_pets', 'text'],
+    array['poisoning_method', 'text[] not null default ''{}''::text[]'],
+    array['life_cycle', 'text[] not null default ''{}''::text[]'],
+    array['average_lifespan', 'text[] not null default ''{}''::text[]'],
+    array['foliage_persistence', 'text[] not null default ''{}''::text[]'],
+    array['living_space', 'text[] not null default ''{}''::text[]'],
+    array['landscaping', 'text[] not null default ''{}''::text[]'],
+    array['plant_habit', 'text[] not null default ''{}''::text[]'],
     array['multicolor', 'boolean default false'],
     array['bicolor', 'boolean default false'],
-    array['origin', 'text[] not null default ''{}'''],
-    array['habitat', 'text[] not null default ''{}''::text[] check (habitat <@ array[''aquatic'',''semi-aquatic'',''wetland'',''tropical'',''temperate'',''arid'',''mediterranean'',''mountain'',''grassland'',''forest'',''coastal'',''urban''])'],
-    -- Environment columns
+    -- Section 3: Care
+    array['care_level', 'text[] not null default ''{}''::text[]'],
+    array['sunlight', 'text[] not null default ''{}''::text[]'],
     array['temperature_max', 'integer'],
     array['temperature_min', 'integer'],
     array['temperature_ideal', 'integer'],
-    array['level_sun', 'text check (level_sun in (''low light'',''shade'',''partial sun'',''full sun''))'],
+    array['watering_frequency_warm', 'integer'],
+    array['watering_frequency_cold', 'integer'],
+    array['watering_type', 'text[] not null default ''{}''::text[]'],
     array['hygrometry', 'integer'],
-    array['watering_type', 'text[] not null default ''{}''::text[] check (watering_type <@ array[''surface'',''buried'',''hose'',''drop'',''drench''])'],
-    array['division', 'text[] not null default ''{}''::text[] check (division <@ array[''seed'',''cutting'',''division'',''layering'',''grafting'',''tissue separation'',''bulb separation''])'],
-    array['soil', 'text[] not null default ''{}''::text[] check (soil <@ array[''vermiculite'',''perlite'',''sphagnum moss'',''rock wool'',''sand'',''gravel'',''potting soil'',''peat'',''clay pebbles'',''coconut fiber'',''bark'',''wood chips''])'],
-    array['advice_soil', 'text'],
-    array['mulching', 'text[] not null default ''{}''::text[] check (mulching <@ array[''wood chips'',''bark'',''green manure'',''cocoa bean hulls'',''buckwheat hulls'',''cereal straw'',''hemp straw'',''woven fabric'',''pozzolana'',''crushed slate'',''clay pellets''])'],
-    array['advice_mulching', 'text'],
-    array['nutrition_need', 'text[] not null default ''{}''::text[] check (nutrition_need <@ array[''nitrogen'',''phosphorus'',''potassium'',''calcium'',''magnesium'',''sulfur'',''iron'',''boron'',''manganese'',''molybene'',''chlorine'',''copper'',''zinc'',''nitrate'',''phosphate''])'],
-    array['fertilizer', 'text[] not null default ''{}''::text[] check (fertilizer <@ array[''granular fertilizer'',''liquid fertilizer'',''meat flour'',''fish flour'',''crushed bones'',''crushed horns'',''slurry'',''manure'',''animal excrement'',''sea fertilizer'',''yurals'',''wine'',''guano'',''coffee grounds'',''banana peel'',''eggshell'',''vegetable cooking water'',''urine'',''grass clippings'',''vegetable waste'',''natural mulch''])'],
-    array['advice_fertilizer', 'text'],
-    -- Growth columns
-    array['sowing_month', 'text[] not null default ''{}''::text[] check (sowing_month <@ array[''january'',''february'',''march'',''april'',''may'',''june'',''july'',''august'',''september'',''october'',''november'',''december''])'],
-    array['flowering_month', 'text[] not null default ''{}''::text[] check (flowering_month <@ array[''january'',''february'',''march'',''april'',''may'',''june'',''july'',''august'',''september'',''october'',''november'',''december''])'],
-    array['fruiting_month', 'text[] not null default ''{}''::text[] check (fruiting_month <@ array[''january'',''february'',''march'',''april'',''may'',''june'',''july'',''august'',''september'',''october'',''november'',''december''])'],
+    array['misting_frequency', 'integer'],
+    array['special_needs', 'text[] not null default ''{}''::text[]'],
+    array['substrate', 'text[] not null default ''{}''::text[]'],
+    array['substrate_mix', 'text[] not null default ''{}''::text[]'],
+    array['mulching_needed', 'boolean default false'],
+    array['mulch_type', 'text[] not null default ''{}''::text[]'],
+    array['nutrition_need', 'text[] not null default ''{}''::text[]'],
+    array['fertilizer', 'text[] not null default ''{}''::text[]'],
+    -- Section 4: Growth
+    array['sowing_month', 'text[] not null default ''{}''::text[]'],
+    array['flowering_month', 'text[] not null default ''{}''::text[]'],
+    array['fruiting_month', 'text[] not null default ''{}''::text[]'],
     array['height_cm', 'integer'],
     array['wingspan_cm', 'integer'],
-    array['tutoring', 'boolean default false'],
-    array['advice_tutoring', 'text'],
-    array['sow_type', 'text[] not null default ''{}''::text[] check (sow_type <@ array[''direct'',''indoor'',''row'',''hill'',''broadcast'',''seed tray'',''cell'',''pot''])'],
-    array['separation_cm', 'integer'],
+    array['staking', 'boolean default false'],
+    array['division', 'text[] not null default ''{}''::text[]'],
+    array['cultivation_mode', 'text[] not null default ''{}''::text[]'],
+    array['sowing_method', 'text[] not null default ''{}''::text[]'],
     array['transplanting', 'boolean'],
-    array['advice_sowing', 'text'],
-    array['cut', 'text'],
-    array['advice_medicinal', 'text'],
-    array['nutritional_intake', 'text[] not null default ''{}'''],
+    array['pruning', 'boolean default false'],
+    array['pruning_month', 'text[] not null default ''{}''::text[]'],
+    -- Section 6: Ecology
+    array['conservation_status', 'text[] not null default ''{}''::text[]'],
+    array['ecological_status', 'text[] not null default ''{}''::text[]'],
+    array['biotopes', 'text[] not null default ''{}''::text[]'],
+    array['urban_biotopes', 'text[] not null default ''{}''::text[]'],
+    array['ecological_tolerance', 'text[] not null default ''{}''::text[]'],
+    array['biodiversity_role', 'text[] not null default ''{}''::text[]'],
+    array['pollinators_attracted', 'text[] not null default ''{}''::text[]'],
+    array['birds_attracted', 'text[] not null default ''{}''::text[]'],
+    array['mammals_attracted', 'text[] not null default ''{}''::text[]'],
+    array['ecological_management', 'text[] not null default ''{}''::text[]'],
+    array['ecological_impact', 'text[] not null default ''{}''::text[]'],
+    -- Section 7: Consumption
     array['infusion', 'boolean default false'],
-    array['advice_infusion', 'text'],
-    array['recipes_ideas', 'text[] not null default ''{}'''],
+    array['infusion_parts', 'text[] not null default ''{}''::text[]'],
+    array['medicinal', 'boolean default false'],
     array['aromatherapy', 'boolean default false'],
-    array['spice_mixes', 'text[] not null default ''{}'''],
-    -- Ecology columns
-    array['melliferous', 'boolean default false'],
-    array['polenizer', 'text[] not null default ''{}''::text[] check (polenizer <@ array[''bee'',''wasp'',''ant'',''butterfly'',''bird'',''mosquito'',''fly'',''beetle'',''ladybug'',''stagbeetle'',''cockchafer'',''dungbeetle'',''weevil''])'],
-    array['be_fertilizer', 'boolean default false'],
-    array['ground_effect', 'text'],
-    array['conservation_status', 'text check (conservation_status in (''safe'',''at risk'',''vulnerable'',''endangered'',''critically endangered'',''extinct''))'],
-    array['pests', 'text[] not null default ''{}'''],
-    array['diseases', 'text[] not null default ''{}'''],
-    array['companions', 'text[] not null default ''{}'''],
-    array['tags', 'text[] not null default ''{}'''],
-    array['source_name', 'text'],
-    array['source_url', 'text']
+    array['fragrance', 'boolean default false'],
+    array['edible_oil', 'text'],
+    -- Section 8: Misc
+    array['companion_plants', 'text[] not null default ''{}''::text[]'],
+    array['biotope_plants', 'text[] not null default ''{}''::text[]'],
+    array['beneficial_plants', 'text[] not null default ''{}''::text[]'],
+    array['harmful_plants', 'text[] not null default ''{}''::text[]'],
+    array['varieties', 'text[] not null default ''{}''::text[]'],
+    array['sponsored_shop_ids', 'text[] not null default ''{}''::text[]'],
+    -- Section 9: Meta
+    array['status', 'text'],
+    array['admin_commentary', 'text'],
+    array['user_notes', 'text'],
+    array['created_by', 'text'],
+    array['created_time', 'timestamptz not null default now()'],
+    array['updated_by', 'text'],
+    array['updated_time', 'timestamptz not null default now()']
   ];
 begin
-  -- Only proceed if the plants table exists
   if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'plants') then
     return;
   end if;
-  
-  -- Add each column individually using dynamic SQL to avoid "1600 columns" parsing bug
+
   for i in 1..array_length(col_defs, 1) loop
     begin
-      -- Check if column exists before trying to add
       if not exists (
-        select 1 from information_schema.columns 
-        where table_schema = 'public' 
-        and table_name = 'plants' 
+        select 1 from information_schema.columns
+        where table_schema = 'public'
+        and table_name = 'plants'
         and column_name = col_defs[i][1]
       ) then
         execute format('alter table public.plants add column %I %s', col_defs[i][1], col_defs[i][2]);
       end if;
     exception when others then
-      -- Column may already exist with different constraints, skip silently
       null;
     end;
   end loop;
 end $add_plants_cols$;
 
+-- ========== Phase 2: Migrate data from old columns to new columns ==========
+-- This handles renames, value mappings, and type conversions for upgrades
+do $migrate_plants$
+begin
+  if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'plants') then
+    return;
+  end if;
+
+  -- scientific_name → scientific_name_species
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scientific_name') then
+    update public.plants set scientific_name_species = scientific_name
+      where scientific_name is not null and (scientific_name_species is null or trim(scientific_name_species) = '');
+  end if;
+
+  -- plant_type (text) → encyclopedia_category (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='plant_type') then
+    update public.plants set encyclopedia_category = case
+      when plant_type = 'tree' then array['tree']
+      when plant_type = 'shrub' then array['shrub']
+      when plant_type = 'bamboo' then array['bamboo']
+      when plant_type = 'cactus' then array['cactus_succulent']
+      when plant_type = 'succulent' then array['cactus_succulent']
+      when plant_type = 'flower' then array['herbaceous']
+      when plant_type = 'plant' then array['herbaceous']
+      else '{}'::text[]
+    end where plant_type is not null and (encyclopedia_category is null or array_length(encyclopedia_category, 1) is null);
+  end if;
+
+  -- promotion_month (text) → featured_month (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='promotion_month') then
+    update public.plants set featured_month = array[promotion_month]
+      where promotion_month is not null and (featured_month is null or array_length(featured_month, 1) is null);
+  end if;
+
+  -- spiked → thorny
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='spiked') then
+    update public.plants set thorny = spiked where spiked is not null and thorny is null;
+  end if;
+
+  -- scent → fragrance
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scent') then
+    update public.plants set fragrance = scent where scent is not null and fragrance is null;
+  end if;
+
+  -- tutoring → staking
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='tutoring') then
+    update public.plants set staking = tutoring where tutoring is not null and staking is null;
+  end if;
+
+  -- companions → companion_plants
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='companions') then
+    update public.plants set companion_plants = companions
+      where companions is not null and array_length(companions, 1) > 0
+      and (companion_plants is null or array_length(companion_plants, 1) is null);
+  end if;
+
+  -- comestible_part → edible_part (with value mapping)
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='comestible_part') then
+    update public.plants set edible_part = array_replace(comestible_part, 'root', 'rhizome')
+      where comestible_part is not null and array_length(comestible_part, 1) > 0
+      and (edible_part is null or array_length(edible_part, 1) is null);
+  end if;
+
+  -- habitat → climate
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='habitat') then
+    update public.plants set climate = case
+      when habitat is not null and array_length(habitat, 1) > 0 then (
+        select array_agg(case
+          when v = 'tropical' then 'tropical_humid'
+          when v = 'temperate' then 'temperate_continental'
+          when v = 'arid' then 'tropical_dry'
+          when v = 'mediterranean' then 'mediterranean'
+          when v = 'mountain' then 'montane'
+          when v = 'coastal' then 'windswept_coastal'
+          when v = 'oceanic' then 'oceanic'
+          else v
+        end)
+        from unnest(habitat) as v
+        where v not in ('aquatic','semi-aquatic','wetland','grassland','forest','urban')
+      )
+      else '{}'::text[]
+    end where habitat is not null and array_length(habitat, 1) > 0
+      and (climate is null or array_length(climate, 1) is null);
+  end if;
+
+  -- composition → landscaping (with value mapping)
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='composition') then
+    update public.plants set landscaping = (
+      select array_agg(case
+        when v = 'flowerbed' then 'flowerbed'
+        when v = 'path' then 'path'
+        when v = 'hedge' then 'hedge'
+        when v = 'ground cover' then 'ground_cover'
+        when v = 'pot' then 'pot'
+        else v
+      end)
+      from unnest(composition) as v
+    )
+    where composition is not null and array_length(composition, 1) > 0
+      and (landscaping is null or array_length(landscaping, 1) is null);
+  end if;
+
+  -- level_sun (text) → sunlight (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='level_sun') then
+    update public.plants set sunlight = array[case
+      when level_sun = 'low light' then 'low_light'
+      when level_sun = 'shade' then 'deep_shade'
+      when level_sun = 'partial sun' then 'partial_sun'
+      when level_sun = 'full sun' then 'full_sun'
+      else level_sun
+    end]
+    where level_sun is not null and (sunlight is null or array_length(sunlight, 1) is null);
+  end if;
+
+  -- maintenance_level (text) → care_level (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='maintenance_level') then
+    update public.plants set care_level = array[case
+      when maintenance_level in ('none','low') then 'easy'
+      when maintenance_level = 'moderate' then 'moderate'
+      when maintenance_level = 'heavy' then 'complex'
+      else maintenance_level
+    end]
+    where maintenance_level is not null and (care_level is null or array_length(care_level, 1) is null);
+  end if;
+
+  -- soil → substrate
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='soil') then
+    update public.plants set substrate = soil
+      where soil is not null and array_length(soil, 1) > 0
+      and (substrate is null or array_length(substrate, 1) is null);
+  end if;
+
+  -- mulching (text[]) → mulch_type (text[]) + mulching_needed (boolean)
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='mulching'
+    and data_type = 'ARRAY') then
+    update public.plants set mulch_type = mulching
+      where mulching is not null and array_length(mulching, 1) > 0
+      and (mulch_type is null or array_length(mulch_type, 1) is null);
+    update public.plants set mulching_needed = true
+      where mulching is not null and array_length(mulching, 1) > 0 and mulching_needed is null;
+  end if;
+
+  -- sow_type → sowing_method (with value mapping)
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='sow_type') then
+    update public.plants set sowing_method = (
+      select array_agg(case
+        when v = 'direct' then 'open_ground'
+        when v = 'indoor' then 'greenhouse'
+        when v = 'seed tray' then 'tray'
+        when v = 'cell' then 'tray'
+        else v
+      end)
+      from unnest(sow_type) as v
+    )
+    where sow_type is not null and array_length(sow_type, 1) > 0
+      and (sowing_method is null or array_length(sowing_method, 1) is null);
+  end if;
+
+  -- polenizer → pollinators_attracted
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='polenizer') then
+    update public.plants set pollinators_attracted = polenizer
+      where polenizer is not null and array_length(polenizer, 1) > 0
+      and (pollinators_attracted is null or array_length(pollinators_attracted, 1) is null);
+  end if;
+
+  -- melliferous → biodiversity_role (add 'melliferous' to role list)
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='melliferous') then
+    update public.plants set biodiversity_role = array_append(coalesce(biodiversity_role, '{}'), 'melliferous')
+      where melliferous = true and not ('melliferous' = any(coalesce(biodiversity_role, '{}')));
+  end if;
+
+  -- be_fertilizer → biodiversity_role (add 'green_manure' to role list)
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='be_fertilizer') then
+    update public.plants set biodiversity_role = array_append(coalesce(biodiversity_role, '{}'), 'green_manure')
+      where be_fertilizer = true and not ('green_manure' = any(coalesce(biodiversity_role, '{}')));
+  end if;
+
+  -- Migrate utility enum values (old → new)
+  begin
+    update public.plants set utility = (
+      select array_agg(case
+        when v = 'comestible' then 'edible'
+        when v = 'ornemental' then 'ornamental'
+        when v = 'odorous' then 'fragrant'
+        when v in ('produce_fruit','climbing') then null
+        else v
+      end)
+      from unnest(utility) as v
+      where case
+        when v = 'comestible' then 'edible'
+        when v = 'ornemental' then 'ornamental'
+        when v = 'odorous' then 'fragrant'
+        when v in ('produce_fruit','climbing') then null
+        else v
+      end is not null
+    )
+    where utility is not null and array_length(utility, 1) > 0
+      and utility && array['comestible','ornemental','odorous','produce_fruit','climbing'];
+  exception when others then null;
+  end;
+
+  -- Migrate toxicity enum values (old → new)
+  begin
+    update public.plants set toxicity_human = case
+      when toxicity_human = 'non-toxic' then 'non_toxic'
+      when toxicity_human = 'midly irritating' then 'slightly_toxic'
+      when toxicity_human = 'highly toxic' then 'very_toxic'
+      when toxicity_human = 'lethally toxic' then 'deadly'
+      else toxicity_human
+    end where toxicity_human is not null and toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic');
+  exception when others then null;
+  end;
+
+  begin
+    update public.plants set toxicity_pets = case
+      when toxicity_pets = 'non-toxic' then 'non_toxic'
+      when toxicity_pets = 'midly irritating' then 'slightly_toxic'
+      when toxicity_pets = 'highly toxic' then 'very_toxic'
+      when toxicity_pets = 'lethally toxic' then 'deadly'
+      else toxicity_pets
+    end where toxicity_pets is not null and toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic');
+  exception when others then null;
+  end;
+
+  -- Migrate watering_type enum values (old → new)
+  begin
+    update public.plants set watering_type = (
+      select array_agg(case
+        when v = 'buried' then 'drip'
+        when v = 'drop' then 'drip'
+        when v = 'drench' then 'soaking'
+        else v
+      end)
+      from unnest(watering_type) as v
+    )
+    where watering_type is not null and array_length(watering_type, 1) > 0
+      and watering_type && array['buried','drop','drench'];
+  exception when others then null;
+  end;
+
+  -- Migrate division enum values (old → new)
+  begin
+    update public.plants set division = (
+      select array_agg(case
+        when v = 'division' then 'clump_division'
+        when v = 'tissue separation' then 'clump_division'
+        when v = 'bulb separation' then 'bulb_division'
+        else v
+      end)
+      from unnest(division) as v
+    )
+    where division is not null and array_length(division, 1) > 0
+      and division && array['division','tissue separation','bulb separation'];
+  exception when others then null;
+  end;
+
+  -- Migrate status values (fix typo)
+  begin
+    update public.plants set status = 'in_progress' where status = 'in progres';
+  exception when others then null;
+  end;
+
+  -- Migrate conservation_status from text to text[] (if still text type)
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='plants' and column_name='conservation_status'
+    and data_type = 'text' and udt_name = 'text'
+  ) then
+    begin
+      -- Drop all check constraints on conservation_status
+      perform (
+        select string_agg('alter table public.plants drop constraint ' || quote_ident(c.conname), '; ')
+        from pg_constraint c
+        join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid
+        where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'conservation_status'
+      );
+      -- Execute the drops
+      declare r record;
+      begin
+        for r in (
+          select c.conname from pg_constraint c
+          join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid
+          where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'conservation_status'
+        ) loop
+          execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+        end loop;
+      end;
+
+      -- Map old values to new
+      update public.plants set conservation_status = case
+        when conservation_status::text = 'safe' then 'least_concern'
+        when conservation_status::text = 'at risk' then 'near_threatened'
+        when conservation_status::text = 'critically endangered' then 'critically_endangered'
+        else conservation_status::text
+      end where conservation_status is not null;
+
+      -- Change type from text to text[]
+      alter table public.plants alter column conservation_status type text[]
+        using case when conservation_status is not null then array[conservation_status::text] else '{}'::text[] end;
+      alter table public.plants alter column conservation_status set default '{}'::text[];
+      alter table public.plants alter column conservation_status set not null;
+    exception when others then null;
+    end;
+  end if;
+
+  -- Migrate life_cycle from text to text[] (if still text type)
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='plants' and column_name='life_cycle'
+    and data_type = 'text' and udt_name = 'text'
+  ) then
+    begin
+      declare r record;
+      begin
+        for r in (
+          select c.conname from pg_constraint c
+          join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid
+          where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'life_cycle'
+        ) loop
+          execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+        end loop;
+      end;
+
+      update public.plants set life_cycle = case
+        when life_cycle::text = 'biennials' then 'biennial'
+        when life_cycle::text = 'perenials' then 'perennial'
+        when life_cycle::text = 'ephemerals' then 'ephemeral'
+        when life_cycle::text = 'polycarpic' then 'perennial'
+        else life_cycle::text
+      end where life_cycle is not null;
+
+      alter table public.plants alter column life_cycle type text[]
+        using case when life_cycle is not null then array[life_cycle::text] else '{}'::text[] end;
+      alter table public.plants alter column life_cycle set default '{}'::text[];
+      alter table public.plants alter column life_cycle set not null;
+    exception when others then null;
+    end;
+  end if;
+
+  -- Migrate foliage_persistance (text) → foliage_persistence (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistance') then
+    begin
+      declare r record;
+      begin
+        for r in (
+          select c.conname from pg_constraint c
+          join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid
+          where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'foliage_persistance'
+        ) loop
+          execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+        end loop;
+      end;
+
+      update public.plants set foliage_persistence = array[case
+        when foliage_persistance = 'semi-evergreen' then 'semi_evergreen'
+        else foliage_persistance
+      end]
+      where foliage_persistance is not null
+        and (foliage_persistence is null or array_length(foliage_persistence, 1) is null);
+    exception when others then null;
+    end;
+  end if;
+
+  -- Migrate living_space from text to text[] (if still text type)
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='plants' and column_name='living_space'
+    and data_type = 'text' and udt_name = 'text'
+  ) then
+    begin
+      declare r record;
+      begin
+        for r in (
+          select c.conname from pg_constraint c
+          join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid
+          where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'living_space'
+        ) loop
+          execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+        end loop;
+      end;
+
+      alter table public.plants alter column living_space type text[]
+        using case when living_space is not null then array[living_space::text] else '{}'::text[] end;
+      alter table public.plants alter column living_space set default '{}'::text[];
+      alter table public.plants alter column living_space set not null;
+    exception when others then null;
+    end;
+  end if;
+
+end $migrate_plants$;
+
+-- ========== Phase 3: Drop old check constraints and add new ones ==========
+-- Uses robust pattern: find constraints by column attribute, not name pattern
+do $update_constraints$
+declare
+  r record;
+begin
+  if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'plants') then
+    return;
+  end if;
+
+  -- Drop and recreate constraints for columns with updated enum values
+  -- Each block: drop all check constraints on the column, then add the new one
+
+  -- utility
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_utility_check check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice']);
+  exception when duplicate_object then null;
+  end;
+
+  -- edible_part
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'edible_part') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_edible_part_check check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']);
+  exception when duplicate_object then null;
+  end;
+
+  -- toxicity_human
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'toxicity_human') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_toxicity_human_check check (toxicity_human in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined'));
+  exception when duplicate_object then null;
+  end;
+
+  -- toxicity_pets
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'toxicity_pets') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_toxicity_pets_check check (toxicity_pets in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined'));
+  exception when duplicate_object then null;
+  end;
+
+  -- poisoning_method
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'poisoning_method') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_poisoning_method_check check (poisoning_method <@ array['touch','ingestion','eye_contact','inhalation','sap_contact']);
+  exception when duplicate_object then null;
+  end;
+
+  -- life_cycle
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'life_cycle') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_life_cycle_check check (life_cycle <@ array['annual','biennial','perennial','succulent_perennial','monocarpic','short_cycle','ephemeral']);
+  exception when duplicate_object then null;
+  end;
+
+  -- average_lifespan
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'average_lifespan') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_average_lifespan_check check (average_lifespan <@ array['less_than_1_year','2_years','3_to_10_years','10_to_50_years','over_50_years']);
+  exception when duplicate_object then null;
+  end;
+
+  -- foliage_persistence
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'foliage_persistence') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_foliage_persistence_check check (foliage_persistence <@ array['deciduous','evergreen','semi_evergreen','marcescent','winter_dormant','dry_season_deciduous']);
+  exception when duplicate_object then null;
+  end;
+
+  -- living_space
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'living_space') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_living_space_check check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']);
+  exception when duplicate_object then null;
+  end;
+
+  -- care_level
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'care_level') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_care_level_check check (care_level <@ array['easy','moderate','complex']);
+  exception when duplicate_object then null;
+  end;
+
+  -- sunlight
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'sunlight') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_sunlight_check check (sunlight <@ array['full_sun','partial_sun','partial_shade','light_shade','deep_shade','direct_light','bright_indirect_light','medium_light','low_light']);
+  exception when duplicate_object then null;
+  end;
+
+  -- watering_type
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'watering_type') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_watering_type_check check (watering_type <@ array['hose','surface','drip','soaking','wick']);
+  exception when duplicate_object then null;
+  end;
+
+  -- division
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'division') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_division_check check (division <@ array['seed','clump_division','bulb_division','rhizome_division','cutting','layering','stolon','sucker','grafting','spore']);
+  exception when duplicate_object then null;
+  end;
+
+  -- sowing_method
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'sowing_method') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_sowing_method_check check (sowing_method <@ array['open_ground','pot','tray','greenhouse','mini_greenhouse','broadcast','row']);
+  exception when duplicate_object then null;
+  end;
+
+  -- conservation_status
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'conservation_status') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_conservation_status_check check (conservation_status <@ array['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated']);
+  exception when duplicate_object then null;
+  end;
+
+  -- ecological_tolerance
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'ecological_tolerance') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_ecological_tolerance_check check (ecological_tolerance <@ array['drought','scorching_sun','permanent_shade','excess_water','frost','heatwave','wind']);
+  exception when duplicate_object then null;
+  end;
+
+  -- ecological_impact
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'ecological_impact') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_ecological_impact_check check (ecological_impact <@ array['neutral','favorable','potentially_invasive','locally_invasive']);
+  exception when duplicate_object then null;
+  end;
+
+  -- season
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'season') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_season_check check (season <@ array['spring','summer','autumn','winter']);
+  exception when duplicate_object then null;
+  end;
+
+  -- edible_oil
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'edible_oil') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_edible_oil_check check (edible_oil in ('yes','no','unknown'));
+  exception when duplicate_object then null;
+  end;
+
+  -- status
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'status') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_status_check check (status in ('in_progress','rework','review','approved'));
+  exception when duplicate_object then null;
+  end;
+
+  -- Drop old check constraints on removed columns (nutrition_need, fertilizer — now unconstrained)
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'nutrition_need') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'fertilizer') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+
+end $update_constraints$;
+
 -- Set status default and backfill null values
-alter table if exists public.plants alter column status set default 'in progres';
-update public.plants set status = 'in progres' where status is null;
--- Drop obsolete JSON columns from earlier iterations
+alter table if exists public.plants alter column status set default 'in_progress';
+update public.plants set status = 'in_progress' where status is null;
+
+-- Drop obsolete JSON/old columns
 alter table if exists public.plants drop column if exists identity;
 alter table if exists public.plants drop column if exists plant_care;
 alter table if exists public.plants drop column if exists growth;
@@ -249,111 +931,95 @@ alter table if exists public.plants drop column if exists water_freq_unit;
 alter table if exists public.plants drop column if exists water_freq_value;
 alter table if exists public.plants drop column if exists updated_at;
 
--- Update plant_type check constraint to include all valid types (including 'succulent')
--- This fixes databases where the column was created with an older constraint
-do $$ begin
-  -- Drop the old constraint if it exists (constraint name may vary)
-  if exists (
-    select 1 from pg_constraint c
-    join pg_namespace n on n.oid = c.connamespace
-    where c.conrelid = 'public.plants'::regclass
-    and c.contype = 'c'
-    and c.conname like '%plant_type%'
-  ) then
-    execute (
-      select 'alter table public.plants drop constraint ' || quote_ident(c.conname)
-      from pg_constraint c
-      join pg_namespace n on n.oid = c.connamespace
-      where c.conrelid = 'public.plants'::regclass
-      and c.contype = 'c'
-      and c.conname like '%plant_type%'
-      limit 1
-    );
-  end if;
-  -- Add the updated constraint with all valid plant types
-  alter table public.plants add constraint plants_plant_type_check 
-    check (plant_type is null or plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent'));
-exception when duplicate_object then
-  -- Constraint already exists with correct definition
-  null;
-end $$;
-
--- Strict column whitelist for plants (drops anything not declared above)
+-- ========== Phase 4: Column whitelist — drops any column not in the new schema ==========
 do $$ declare
   allowed_columns constant text[] := array[
     'id',
     'name',
-    'plant_type',
-    'utility',
-    'comestible_part',
-    'fruit_type',
-    'given_names',
-    'scientific_name',
+    -- Section 1: Base
+    'scientific_name_species',
+    'scientific_name_variety',
     'family',
-    'overview',
-    'promotion_month',
-    'life_cycle',
+    'encyclopedia_category',
+    'featured_month',
+    -- Section 2: Identity
+    'climate',
     'season',
-    'foliage_persistance',
-    'spiked',
+    'utility',
+    'edible_part',
+    'thorny',
     'toxicity_human',
     'toxicity_pets',
-    'allergens',
-    'scent',
-    'symbolism',
+    'poisoning_method',
+    'life_cycle',
+    'average_lifespan',
+    'foliage_persistence',
     'living_space',
-    'composition',
-    'maintenance_level',
+    'landscaping',
+    'plant_habit',
     'multicolor',
     'bicolor',
-    'origin',
-    'habitat',
+    -- Section 3: Care
+    'care_level',
+    'sunlight',
     'temperature_max',
     'temperature_min',
     'temperature_ideal',
-    'level_sun',
-    'hygrometry',
+    'watering_frequency_warm',
+    'watering_frequency_cold',
     'watering_type',
-    'division',
-    'soil',
-    'advice_soil',
-    'mulching',
-    'advice_mulching',
+    'hygrometry',
+    'misting_frequency',
+    'special_needs',
+    'substrate',
+    'substrate_mix',
+    'mulching_needed',
+    'mulch_type',
     'nutrition_need',
     'fertilizer',
-    'advice_fertilizer',
+    -- Section 4: Growth
     'sowing_month',
     'flowering_month',
     'fruiting_month',
     'height_cm',
     'wingspan_cm',
-    'tutoring',
-    'advice_tutoring',
-    'sow_type',
-    'separation_cm',
+    'staking',
+    'division',
+    'cultivation_mode',
+    'sowing_method',
     'transplanting',
-    'advice_sowing',
-    'cut',
-    'advice_medicinal',
-    'nutritional_intake',
-    'infusion',
-    'advice_infusion',
-    'recipes_ideas',
-    'aromatherapy',
-    'spice_mixes',
-    'melliferous',
-    'polenizer',
-    'be_fertilizer',
-    'ground_effect',
+    'pruning',
+    'pruning_month',
+    -- Section 6: Ecology
     'conservation_status',
-    'pests',
-    'diseases',
-    'companions',
-    'tags',
-    'source_name',
-    'source_url',
+    'ecological_status',
+    'biotopes',
+    'urban_biotopes',
+    'ecological_tolerance',
+    'biodiversity_role',
+    'pollinators_attracted',
+    'birds_attracted',
+    'mammals_attracted',
+    'ecological_management',
+    'ecological_impact',
+    -- Section 7: Consumption
+    'infusion',
+    'infusion_parts',
+    'medicinal',
+    'aromatherapy',
+    'fragrance',
+    'edible_oil',
+    -- Section 8: Misc
+    'companion_plants',
+    'biotope_plants',
+    'beneficial_plants',
+    'harmful_plants',
+    'varieties',
+    'sponsored_shop_ids',
+    -- Section 9: Meta
     'status',
     'admin_commentary',
+    'user_notes',
     'created_by',
     'created_time',
     'updated_by',
@@ -387,7 +1053,6 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='plants_select_all') then
     drop policy plants_select_all on public.plants;
   end if;
-  -- Allow anyone (including anon) to read plants
   create policy plants_select_all on public.plants for select to authenticated, anon using (true);
 end $$;
 do $$ begin
@@ -496,14 +1161,12 @@ do $$ begin
   create policy plant_contributors_select_all on public.plant_contributors for select to authenticated, anon using (true);
 end $$;
 do $$ begin
-  -- Drop the old overly-permissive policy that allowed any authenticated user full access
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_contributors' and policyname='plant_contributors_all') then
     drop policy plant_contributors_all on public.plant_contributors;
   end if;
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_contributors' and policyname='plant_contributors_write') then
     drop policy plant_contributors_write on public.plant_contributors;
   end if;
-  -- Only admins and editors can insert, update, or delete contributor records
   create policy plant_contributors_write on public.plant_contributors
     for all to authenticated
     using (
@@ -557,7 +1220,6 @@ create table if not exists public.plant_recipes (
   created_at timestamptz not null default now()
 );
 
--- Add columns if they don't exist (for existing databases)
 do $$ begin
   if not exists (
     select 1 from information_schema.columns
@@ -594,12 +1256,10 @@ comment on column public.plant_recipes.link is 'Optional external URL to a recip
 comment on column public.plant_recipes.name_fr is 'French translation of recipe name (populated by DeepL during translate step)';
 
 -- Migrate existing recipes_ideas from plant_translations to plant_recipes
--- Only migrate from English translations, set category='other' and time='undefined'
 do $migrate_recipes$
 declare
   migrated_count integer := 0;
 begin
-  -- Check if plant_translations has recipes_ideas column
   if not exists (
     select 1 from information_schema.columns
     where table_schema = 'public'
@@ -609,7 +1269,6 @@ begin
     return;
   end if;
 
-  -- Insert recipe entries from English translations where plant_recipes doesn't already have entries
   with recipe_entries as (
     select pt.plant_id, unnest(pt.recipes_ideas) as recipe_name
     from public.plant_translations pt
@@ -653,13 +1312,11 @@ create table if not exists public.plant_pro_advices (
   constraint plant_pro_advices_metadata_object check (metadata is null or jsonb_typeof(metadata) = 'object')
 );
 
--- Add translation columns if they don't exist (for existing databases)
--- This ensures the columns are added without losing existing data
 do $$ begin
   if not exists (
-    select 1 from information_schema.columns 
-    where table_schema = 'public' 
-    and table_name = 'plant_pro_advices' 
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+    and table_name = 'plant_pro_advices'
     and column_name = 'original_language'
   ) then
     alter table public.plant_pro_advices add column original_language text;
@@ -668,34 +1325,31 @@ end $$;
 
 do $$ begin
   if not exists (
-    select 1 from information_schema.columns 
-    where table_schema = 'public' 
-    and table_name = 'plant_pro_advices' 
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+    and table_name = 'plant_pro_advices'
     and column_name = 'translations'
   ) then
     alter table public.plant_pro_advices add column translations jsonb not null default '{}'::jsonb;
   end if;
 end $$;
 
--- Add constraint for translations column if it doesn't exist
 do $$ begin
   if not exists (
-    select 1 from information_schema.table_constraints 
-    where table_schema = 'public' 
-    and table_name = 'plant_pro_advices' 
+    select 1 from information_schema.table_constraints
+    where table_schema = 'public'
+    and table_name = 'plant_pro_advices'
     and constraint_name = 'plant_pro_advices_translations_object'
   ) then
-    alter table public.plant_pro_advices 
-      add constraint plant_pro_advices_translations_object 
+    alter table public.plant_pro_advices
+      add constraint plant_pro_advices_translations_object
       check (translations is null or jsonb_typeof(translations) = 'object');
   end if;
 end $$;
 
--- Create indexes
 create index if not exists plant_pro_advices_plant_created_idx on public.plant_pro_advices (plant_id, created_at desc);
 create index if not exists plant_pro_advices_original_language_idx on public.plant_pro_advices (original_language);
 
--- Add column comments
 comment on column public.plant_pro_advices.original_language is 'ISO language code of the original content (e.g., en, fr). Detected via DeepL API when advice is created.';
 comment on column public.plant_pro_advices.translations is 'JSONB object storing cached translations keyed by language code. Example: {"fr": "Traduit...", "en": "Translated..."}';
 
@@ -748,18 +1402,11 @@ create table if not exists public.plant_images (
   link text not null,
   use text not null default 'other' check (use in ('primary','discovery','other')),
   created_at timestamptz not null default now(),
-  -- Allow same image URL to be used by different plants (composite unique)
   unique (plant_id, link)
 );
--- Drop the old global link uniqueness constraint if it exists (migration)
 alter table if exists public.plant_images drop constraint if exists plant_images_link_key;
--- Ensure composite uniqueness on (plant_id, link)
 create unique index if not exists plant_images_plant_link_unique on public.plant_images (plant_id, link);
--- Drop old use uniqueness constraint that may have been created without the WHERE clause
--- This is needed because CREATE INDEX IF NOT EXISTS won't update an existing index
 drop index if exists public.plant_images_use_unique;
--- Keep uniqueness on (plant_id, use) ONLY for primary/discovery images
--- This allows unlimited 'other' images per plant, but only 1 primary and 1 discovery
 create unique index plant_images_use_unique on public.plant_images (plant_id, use) where use in ('primary', 'discovery');
 alter table public.plant_images enable row level security;
 do $$ begin
@@ -784,7 +1431,6 @@ create table if not exists public.colors (
   updated_at timestamptz not null default now()
 );
 
--- Add new columns if they don't exist (for existing databases)
 do $$ begin
   if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='colors' and column_name='is_primary') then
     alter table public.colors add column is_primary boolean not null default false;
@@ -795,12 +1441,10 @@ do $$ begin
   if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='colors' and column_name='updated_at') then
     alter table public.colors add column updated_at timestamptz not null default now();
   end if;
-  -- Make hex_code nullable (it was previously not null unique, but we want to allow colors without hex)
   alter table public.colors alter column hex_code drop not null;
 exception when others then null;
 end $$;
 
--- Drop the unique constraint on hex_code if it exists (allow multiple colors with same hex or null hex)
 do $$ begin
   alter table public.colors drop constraint if exists colors_hex_code_key;
 exception when others then null;
@@ -845,7 +1489,6 @@ do $$ begin
     drop policy plant_colors_read on public.plant_colors;
   end if;
   create policy plant_colors_read on public.plant_colors for select to authenticated, anon using (true);
-  -- Color translations policies
   if exists (select 1 from pg_policies where schemaname='public' and tablename='color_translations' and policyname='color_translations_read_all') then
     drop policy color_translations_read_all on public.color_translations;
   end if;
@@ -856,7 +1499,6 @@ do $$ begin
   create policy color_translations_modify on public.color_translations for all to authenticated using (true) with check (true);
 end $$;
 
--- Create index for faster parent lookups
 create index if not exists idx_colors_parent_ids on public.colors using gin (parent_ids);
 create index if not exists idx_colors_is_primary on public.colors (is_primary) where is_primary = true;
 create index if not exists idx_color_translations_color_id on public.color_translations (color_id);
@@ -887,7 +1529,6 @@ do $$ begin
 end $$;
 
 -- ========== Plant information reports ==========
--- Users can report a plant for having wrong or outdated information
 create table if not exists public.plant_reports (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -905,7 +1546,6 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_reports' and policyname='plant_reports_select_admin') then
     drop policy plant_reports_select_admin on public.plant_reports;
   end if;
-  -- Admins and editors can read all reports
   create policy plant_reports_select_admin on public.plant_reports
     for select to authenticated
     using (
@@ -918,14 +1558,12 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_reports' and policyname='plant_reports_insert_auth') then
     drop policy plant_reports_insert_auth on public.plant_reports;
   end if;
-  -- Any authenticated user can create a report
   create policy plant_reports_insert_auth on public.plant_reports
     for insert to authenticated
     with check (auth.uid() = user_id);
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_reports' and policyname='plant_reports_delete_admin') then
     drop policy plant_reports_delete_admin on public.plant_reports;
   end if;
-  -- Only admins and editors can delete reports
   create policy plant_reports_delete_admin on public.plant_reports
     for delete to authenticated
     using (
@@ -936,4 +1574,3 @@ do $$ begin
       )
     );
 end $$;
-
