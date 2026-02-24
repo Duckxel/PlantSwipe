@@ -582,6 +582,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Back"
                 className="rounded-full h-9 w-9"
                 onClick={() => {
                   if (selectedImageIndex !== null) {
@@ -743,6 +744,8 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                   />
                   {messageSearchQuery && (
                     <button
+                      type="button"
+                      aria-label="Clear search"
                       onClick={() => setMessageSearchQuery('')}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
                     >
@@ -916,6 +919,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                       {userImages.map((img, index) => (
                         <div key={img.id} className="relative group aspect-square">
                           <button
+                            type="button"
                             onClick={() => setSelectedImageIndex(index)}
                             className="w-full h-full rounded-lg overflow-hidden bg-stone-100 dark:bg-[#2a2a2d] focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
@@ -938,6 +942,8 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                           
                           {/* Quick download button */}
                           <button
+                            type="button"
+                            aria-label="Download image"
                             onClick={(e) => {
                               e.stopPropagation()
                               downloadImage(img, index)
@@ -999,6 +1005,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label="Close fullscreen"
                           className="rounded-full h-10 w-10 text-white hover:bg-white/20"
                           onClick={(e) => {
                             e.stopPropagation()
@@ -1055,6 +1062,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                     <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-8 pb-4 px-4">
                       <div className="flex items-center justify-center">
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation()
                             downloadImage(selectedImage, selectedImageIndex || 0)
@@ -1091,6 +1099,8 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                   {/* Navigation arrows */}
                   {selectedImageIndex !== null && selectedImageIndex > 0 && (
                     <button
+                      type="button"
+                      aria-label="Previous image"
                       className={cn(
                         "absolute left-2 top-1/2 -translate-y-1/2 p-2 transition-opacity duration-200",
                         "text-white",
@@ -1108,6 +1118,8 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                   )}
                   {selectedImageIndex !== null && selectedImageIndex < userImages.length - 1 && (
                     <button
+                      type="button"
+                      aria-label="Next image"
                       className={cn(
                         "absolute right-2 top-1/2 -translate-y-1/2 p-2 transition-opacity duration-200",
                         "text-white",
