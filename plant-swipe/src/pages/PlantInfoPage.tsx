@@ -527,7 +527,7 @@ const PlantInfoPage: React.FC = () => {
   const resolvedTitle = plant?.name
     ? t('seo.plant.title', { name: plant.name, defaultValue: `${plant.name} plant profile` })
     : fallbackTitle
-  const plantDescription = plant?.description || plant?.identity?.overview
+  const plantDescription = plant?.presentation || plant?.description || plant?.identity?.overview
   const resolvedDescription =
     plantDescription ||
     (plant?.name
@@ -1079,7 +1079,7 @@ const PlantInfoPage: React.FC = () => {
                 <div className="text-left p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-amber-200/50 dark:border-amber-500/20">
                   <h3 className="font-semibold text-lg text-stone-900 dark:text-white">{plant.name}</h3>
                   {plant.scientificNameSpecies && (
-                    <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.identity?.scientificName}</p>
+                    <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.scientificNameSpecies}</p>
                   )}
                 </div>
               </div>
@@ -1168,7 +1168,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   React.useEffect(() => {
     let ignore = false
     const loadCompanions = async () => {
-      const companionIds = plant?.miscellaneous?.companions
+      const companionIds = plant?.companionPlants || (plant?.miscellaneous?.companions as string[] | undefined)
       if (!companionIds || companionIds.length === 0) {
         setCompanionPlants([])
         return
@@ -1255,7 +1255,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     }
     loadCompanions()
     return () => { ignore = true }
-  }, [plant?.miscellaneous?.companions, currentLang])
+  }, [plant?.companionPlants, plant?.miscellaneous?.companions, currentLang])
   
   // Comprehensive enum value translator
   const translateEnum = React.useCallback((value: string | null | undefined): string => {
