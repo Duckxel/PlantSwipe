@@ -137,12 +137,14 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   }
 
   const habitatOptions = [
-    "Aquatic", "Semi-Aquatic", "Wetland", "Tropical", "Temperate",
-    "Arid", "Mediterranean", "Mountain", "Grassland", "Forest", "Coastal", "Urban"
+    "polar", "montane", "oceanic", "degraded_oceanic",
+    "temperate_continental", "mediterranean", "tropical_dry",
+    "tropical_humid", "subtropical_humid", "equatorial",
+    "windswept_coastal"
   ] as const
 
-  const maintenanceOptions = ["None", "Low", "Moderate", "Heavy"] as const
-  const livingSpaceOptions = ["Indoor", "Outdoor"] as const
+  const maintenanceOptions = ["easy", "moderate", "complex"] as const
+  const livingSpaceOptions = ["indoor", "outdoor"] as const
 
   const renderColorOption = (color: ColorOption) => {
     const isActive = colorFilter.includes(color.name)
@@ -294,7 +296,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
         />
         {seasonSectionOpen && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
+            {(["spring", "summer", "autumn", "winter"] as const).map((s) => (
               <button
                 key={s}
                 type="button"
@@ -304,7 +306,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                 }`}
                 aria-pressed={seasonFilter === s}
               >
-                {t(`plant.${s.toLowerCase()}`)}
+                {t(`plant.${s}`)}
               </button>
             ))}
           </div>

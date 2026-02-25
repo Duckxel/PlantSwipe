@@ -186,7 +186,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                   </div>
                   <div className="overflow-hidden">
                     <div className="font-semibold truncate text-sm">{p.name}</div>
-                    <div className="text-[10px] italic opacity-60 truncate">{p.scientificName}</div>
+                    <div className="text-[10px] italic opacity-60 truncate">{p.scientificNameSpecies || p.scientificName}</div>
                   </div>
                 </div>
               </div>
@@ -244,7 +244,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                   </div>
                   <div className="overflow-hidden">
                     <div className="font-semibold truncate text-lg">{p.name}</div>
-                    <div className="text-xs italic opacity-60 truncate">{p.scientificName}</div>
+                    <div className="text-xs italic opacity-60 truncate">{p.scientificNameSpecies || p.scientificName}</div>
                   </div>
                   <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1">{p.description}</p>
                   <div className="flex flex-wrap gap-1 mt-auto max-h-[48px] overflow-hidden">

@@ -374,7 +374,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
             })}
           </div>
           <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
-          {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
+          {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
           <div className="mt-5 grid w-full gap-2 grid-cols-3">
             <Button
               className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
@@ -533,7 +533,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                       })}
                     </div>
                     <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
-                    {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
+                    {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
                     
                     {/* Navigation buttons - inside card so they move with swipe */}
                     {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
@@ -1011,7 +1011,8 @@ const WATER_ACCENTS: Record<IndicatorLevel, string> = {
 
 const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorItem[] => {
   const items: IndicatorItem[] = []
-  const sunSource = (plant.environment?.sunExposure || plant.care?.sunlight || plant.plantCare?.sunlight) ?? undefined
+  const sunArr = Array.isArray(plant.sunlight) ? plant.sunlight : []
+  const sunSource = sunArr[0] ?? (plant.environment?.sunExposure as string) ?? undefined
   const sunLevel = resolveSunLevel(typeof sunSource === 'string' ? sunSource : undefined)
   if (sunSource && sunLevel) {
     items.push({
@@ -1024,10 +1025,11 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
+  const freqAmountRaw = plant.wateringFrequencyWarm ?? plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === "number" ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as "day" | "week" | "month" | "year" | undefined
-  const derivedWater = (deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || plant.care?.water || plant.plantCare?.water) ?? undefined
+  const waterTypeArr = Array.isArray(plant.wateringType) ? plant.wateringType : []
+  const derivedWater = (deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || waterTypeArr[0]) ?? undefined
   const waterLevel = resolveWaterLevel(typeof derivedWater === 'string' ? derivedWater : undefined)
   if (derivedWater && waterLevel) {
     items.push({
@@ -1040,7 +1042,8 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  const nativeRange = (plant.ecology?.nativeRange ?? [])
+  const originArr = Array.isArray(plant.origin) ? plant.origin : []
+  const nativeRange = (originArr.length > 0 ? originArr : (plant.ecology?.nativeRange as string[]) ?? [])
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter((entry): entry is string => Boolean(entry))
   if (nativeRange.length) {
@@ -1060,7 +1063,8 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  if (plant.dimensions?.containerFriendly) {
+  const isPotFriendly = plant.dimensions?.containerFriendly || (Array.isArray(plant.landscaping) && plant.landscaping.includes('pot'))
+  if (isPotFriendly) {
     items.push({
       key: "pottable",
       label: t("discoveryPage.indicators.potFriendly", { defaultValue: "Pot friendly" }),
@@ -1070,15 +1074,12 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  // Check utility field for usage indicators - normalize to lowercase for comparison
   const utilityArray = (plant.utility ?? [])
     .map((util) => String(util))
     .filter((util) => util.trim().length > 0)
   const utilitySet = new Set(utilityArray.map((util) => util.toLowerCase().trim()))
   
-  // Edible: Only show if utility explicitly has "comestible"
-  // The utility field is the source of truth - comestiblePart is just data, not a display indicator
-  if (utilitySet.has("comestible")) {
+  if (utilitySet.has("comestible") || utilitySet.has("edible")) {
     items.push({
       key: "edible",
       label: t("discoveryPage.indicators.edible", { defaultValue: "Edible" }),
@@ -1088,11 +1089,9 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  // Medicinal: Only show if utility explicitly has "medicinal" OR adviceMedicinal has meaningful content
-  const hasMedicinalAdvice = plant.usage?.adviceMedicinal && 
-    typeof plant.usage.adviceMedicinal === "string" && 
-    plant.usage.adviceMedicinal.trim().length > 0
-  if (utilitySet.has("medicinal") || hasMedicinalAdvice) {
+  const hasMedicinalContent = (plant.medicinalBenefits || plant.medicinalUsage || plant.usage?.adviceMedicinal) &&
+    typeof (plant.medicinalBenefits || plant.medicinalUsage || plant.usage?.adviceMedicinal) === "string"
+  if (utilitySet.has("medicinal") || hasMedicinalContent) {
     items.push({
       key: "medicinal",
       label: t("discoveryPage.indicators.medicinal", { defaultValue: "Medicinal" }),
@@ -1102,10 +1101,9 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  // Aromatic: Only show if utility explicitly has "aromatic" OR aromatherapy is true OR scent is true
-  const hasAromatherapy = plant.usage?.aromatherapy === true
-  const hasScent = plant.identity?.scent === true
-  if (utilitySet.has("aromatic") || hasAromatherapy || hasScent) {
+  const hasAromatherapy = plant.aromatherapy === true || plant.usage?.aromatherapy === true
+  const hasFragrance = plant.fragrance === true
+  if (utilitySet.has("aromatic") || hasAromatherapy || hasFragrance) {
     items.push({
       key: "aromatic",
       label: t("discoveryPage.indicators.aromatic", { defaultValue: "Aromatic" }),

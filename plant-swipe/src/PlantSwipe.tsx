@@ -865,9 +865,8 @@ export default function PlantSwipe() {
       let _cachedSeasonsSet: Set<string> | undefined
       let _cachedSearchString: string | undefined
 
-      // Type
-      // Eagerly compute type label for both prepared plant and options
-      const rawTypeLabel = getPlantTypeLabel(p.classification)
+      // Type — use flat encyclopediaCategory (array), take first entry
+      const rawTypeLabel = getPlantTypeLabel(p)
       if (rawTypeLabel) typeLabelsSet.add(rawTypeLabel)
       const typeLabel = rawTypeLabel?.toLowerCase() ?? null
 
@@ -878,18 +877,22 @@ export default function PlantSwipe() {
       rawUsageLabels.forEach(label => usageLabelsSet.add(label))
       const usageLabelsLower = rawUsageLabels.map(l => l.toLowerCase())
 
-      // Maintenance
-      const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+      // Maintenance — new flat: careLevel (array), legacy: identity/care nested
+      const careLevelArr = Array.isArray(p.careLevel) ? p.careLevel : []
+      const maintenance = (careLevelArr[0] || (p.identity?.maintenanceLevel as string) || '').toLowerCase()
 
-      // Toxicity
-      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+      // Toxicity — new flat: toxicityHuman/toxicityPets, legacy: identity nested
+      const toxHuman = (typeof p.toxicityHuman === 'string' ? p.toxicityHuman : (p.identity?.toxicityHuman as string) || '').toLowerCase().replace(/[\s_-]/g, '')
+      const toxPets = (typeof p.toxicityPets === 'string' ? p.toxicityPets : (p.identity?.toxicityPets as string) || '').toLowerCase().replace(/[\s_-]/g, '')
+      const petSafe = toxPets === 'nontoxic' || toxPets === 'non_toxic'
+      const humanSafe = toxHuman === 'nontoxic' || toxHuman === 'non_toxic'
 
-      // Living space
-      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
+      // Living space — new flat: livingSpace (array), legacy: identity nested
+      const livingSpaceArr = Array.isArray(p.livingSpace) ? p.livingSpace : []
+      const livingSpace = (livingSpaceArr[0] || (p.identity?.livingSpace as string) || '').toLowerCase()
 
-      // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
-      const createdAtValue = p.meta?.createdAt
+      // Pre-parse createdAt for faster sorting
+      const createdAtValue = p.createdTime ?? (p.meta?.createdAt as string | undefined)
       const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
       const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
 
@@ -912,11 +915,11 @@ export default function PlantSwipe() {
 
       const getColors = () => {
         if (_cachedColors) return _cachedColors
-        const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: PlantColor | string) => typeof c === 'string' ? c : c.name) : []
-        const identityColors = Array.isArray(p.identity?.colors)
-          ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+        const colorNames = Array.isArray(p.colorNames) ? p.colorNames : []
+        const colorObjects = Array.isArray(p.colors)
+          ? p.colors.map((c: PlantColor | string) => typeof c === 'string' ? c : c.name)
           : []
-        _cachedColors = [...legacyColors, ...identityColors]
+        _cachedColors = colorNames.length > 0 ? colorNames : colorObjects
         return _cachedColors
       }
 
@@ -928,7 +931,10 @@ export default function PlantSwipe() {
 
       const getHabitats = () => {
         if (_cachedHabitats) return _cachedHabitats
-        _cachedHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+        const climateArr = Array.isArray(p.climate) ? p.climate : []
+        const legacyHabitat = (p.plantCare?.habitat || p.care?.habitat || []) as string[]
+        const combined = climateArr.length > 0 ? climateArr : legacyHabitat
+        _cachedHabitats = combined.map((h: string) => h.toLowerCase())
         return _cachedHabitats
       }
 
@@ -937,14 +943,12 @@ export default function PlantSwipe() {
         get _searchString() {
           if (_cachedSearchString !== undefined) return _cachedSearchString
 
-          // Search string - includes name, scientific name, meaning, colors, common names and synonyms
-          // This allows users to search by any name they might know the plant by
-          const commonNames = (p.identity?.commonNames || []).join(' ')
-          const synonyms = (p.identity?.synonyms || []).join(' ')
-          const givenNames = (p.identity?.givenNames || []).join(' ')
+          const commonNames = (p.commonNames || p.identity?.commonNames as string[] || []).join(' ')
+          const givenNames = (p.givenNames || p.identity?.givenNames as string[] || []).join(' ')
+          const synonyms = (p.identity?.synonyms as string[] || []).join(' ')
           const colors = getColors()
 
-          _cachedSearchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+          _cachedSearchString = `${p.name} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
           return _cachedSearchString
         },
         get _normalizedColors() {
@@ -985,8 +989,11 @@ export default function PlantSwipe() {
         _livingSpace: livingSpace,
         get _seasonsSet() {
            if (_cachedSeasonsSet) return _cachedSeasonsSet
-           const seasons = Array.isArray(p.seasons) ? p.seasons : []
-           _cachedSeasonsSet = new Set(seasons.map(s => String(s)))
+           const seasonArr = Array.isArray(p.season) ? p.season
+             : Array.isArray(p.seasons) ? p.seasons
+             : Array.isArray(p.identity?.season) ? p.identity.season
+             : []
+           _cachedSeasonsSet = new Set(seasonArr.map(s => String(s).toLowerCase()))
            return _cachedSeasonsSet
         },
         _createdAtTs: createdAtTsFinal,
@@ -2796,10 +2803,17 @@ export default function PlantSwipe() {
   )
 }
 
-function getPlantTypeLabel(classification?: Plant["classification"]): string | null {
-  if (!classification?.type) return null
-  const label = formatClassificationLabel(classification.type)
-  return label || null
+function getPlantTypeLabel(plant: Plant): string | null {
+  const cats = Array.isArray(plant.encyclopediaCategory) ? plant.encyclopediaCategory : []
+  if (cats.length > 0) {
+    const label = formatClassificationLabel(cats[0])
+    return label || null
+  }
+  if (plant.classification?.type) {
+    const label = formatClassificationLabel(plant.classification.type as string)
+    return label || null
+  }
+  return null
 }
 
 function getPlantUsageLabels(plant: Plant): string[] {
@@ -2828,15 +2842,14 @@ function getPlantUsageLabels(plant: Plant): string[] {
     }
   }
   
-  // Check usage fields for additional indicators
-  if (plant.usage?.aromatherapy) {
+  if (plant.aromatherapy || plant.usage?.aromatherapy) {
     const aromaticLabel = formatClassificationLabel('aromatic')
     if (aromaticLabel && !labels.includes(aromaticLabel)) {
       labels.push(aromaticLabel)
     }
   }
   
-  if (plant.usage?.adviceMedicinal) {
+  if (plant.medicinalBenefits || plant.medicinalUsage || plant.usage?.adviceMedicinal) {
     const medicinalLabel = formatClassificationLabel('medicinal')
     if (medicinalLabel && !labels.includes(medicinalLabel)) {
       labels.push(medicinalLabel)
