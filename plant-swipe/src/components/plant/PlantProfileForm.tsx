@@ -905,98 +905,175 @@ function setValue(obj: any, path: string, val: any): any {
   return next
 }
 
+// ============================================================================
+// Section 1: Base
+// ============================================================================
+const baseFields: FieldConfig[] = [
+  { key: "commonNames", label: "Common Names", description: "Alternative common names for this plant", type: "tags" },
+  { key: "scientificNameSpecies", label: "Scientific Name (Species)", description: "Latin binomial (e.g. Monstera deliciosa)", type: "text" },
+  { key: "scientificNameVariety", label: "Scientific Name (Variety)", description: "Variety or cultivar name", type: "text" },
+  { key: "family", label: "Family", description: "Botanical family (e.g. Araceae)", type: "text" },
+  { key: "encyclopediaCategory", label: "Encyclopedia Category", description: "Plant type for encyclopedia sorting", type: "multiselect", options: ["Tree","Shrub","Small Shrub","Fruit Tree","Bamboo","Cactus & Succulent","Herbaceous","Palm","Fruit Plant","Aromatic Plant","Medicinal Plant","Climbing Plant","Vegetable Plant","Perennial Plant","Bulb Plant","Rhizome Plant","Indoor Plant","Fern","Moss & Lichen","Aquatic / Semi-Aquatic"] },
+  { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
+  { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthOptions },
+]
+
+// ============================================================================
+// Section 2: Identity
+// ============================================================================
 const identityFields: FieldConfig[] = [
-  { key: "identity.givenNames", label: "Given Names", description: "Common names given to the plant", type: "tags" },
-  { key: "identity.scientificName", label: "Scientific Name", description: "Scientific name", type: "text" },
-  { key: "identity.family", label: "Family", description: "Botanical family", type: "text" },
-  { key: "identity.overview", label: "Overview", description: "Long presentation of the plant", type: "textarea" },
-  { key: "identity.promotionMonth", label: "Promotion Month", description: "Month the plant should be promoted", type: "select", options: monthOptions },
-  { key: "identity.lifeCycle", label: "Life Cycle", description: "Lifecycle classification", type: "select", options: ["Annual","Biennials","Perenials","Ephemerals","Monocarpic","Polycarpic"] },
-  { key: "identity.season", label: "Season", description: "Seasons where the plant is active", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
-  { key: "identity.foliagePersistance", label: "Foliage Persistance", description: "Leaf persistence type", type: "select", options: ["Deciduous","Evergreen","Semi-Evergreen","Marcescent"] },
-  { key: "identity.spiked", label: "Spiked", description: "Does the plant have spikes?", type: "boolean" },
-  { key: "identity.toxicityHuman", label: "Toxicity (Human)", description: "Human toxicity level", type: "select", options: ["Non-Toxic","Midly Irritating","Highly Toxic","Lethally Toxic"] },
-  { key: "identity.toxicityPets", label: "Toxicity (Pets)", description: "Pet toxicity level", type: "select", options: ["Non-Toxic","Midly Irritating","Highly Toxic","Lethally Toxic"] },
-  { key: "identity.allergens", label: "Allergens", description: "List of possible allergens", type: "tags" },
-  { key: "identity.scent", label: "Scent", description: "Does the plant have a scent", type: "boolean" },
-  { key: "identity.symbolism", label: "Symbolism", description: "Symbolism and cultural meaning", type: "tags" },
-  { key: "identity.livingSpace", label: "Living Space", description: "Indoor/Outdoor/Both", type: "select", options: ["Indoor","Outdoor","Both"] },
-  { key: "identity.composition", label: "Composition", description: "Where to plant (flowerbed, pot, etc.)", type: "multiselect", options: ["Flowerbed","Path","Hedge","Ground Cover","Pot"] },
-  { key: "identity.maintenanceLevel", label: "Maintenance Level", description: "Care effort", type: "select", options: ["None","Low","Moderate","Heavy"] },
+  { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
+  { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
+  { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
+  { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice"] },
+  { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Flower","Fruit","Seed","Leaf","Stem","Bulb","Rhizome","Bark","Wood"] },
+  { key: "thorny", label: "Thorny?", description: "Does the plant have thorns or spines?", type: "boolean" },
+  { key: "toxicityHuman", label: "Toxicity (Human)", description: "Toxicity level for humans", type: "select", options: ["Non-Toxic","Slightly Toxic","Very Toxic","Deadly","Undetermined"] },
+  { key: "toxicityPets", label: "Toxicity (Pets)", description: "Toxicity level for pets/animals", type: "select", options: ["Non-Toxic","Slightly Toxic","Very Toxic","Deadly","Undetermined"] },
+  { key: "poisoningMethod", label: "Poisoning Method(s)", description: "How poisoning can occur", type: "multiselect", options: ["Touch","Ingestion","Eye Contact","Inhalation","Sap Contact"] },
+  { key: "poisoningSymptoms", label: "Poisoning Symptoms", description: "Symptoms description for prevention", type: "textarea" },
+  { key: "allergens", label: "Allergens", description: "Known allergens", type: "tags" },
+  { key: "lifeCycle", label: "Life Cycle", description: "Plant life cycle type(s)", type: "multiselect", options: ["Annual","Biennial","Perennial","Succulent Perennial","Monocarpic","Short Cycle","Ephemeral"] },
+  { key: "averageLifespan", label: "Average Lifespan", description: "Expected lifespan range", type: "multiselect", options: ["Less than 1 year","2 years","3–10 years","10–50 years","50+ years"] },
+  { key: "foliagePersistence", label: "Foliage Persistence", description: "How leaves behave across seasons", type: "multiselect", options: ["Deciduous","Evergreen","Semi-Evergreen","Marcescent","Winter Dormant","Dry Season Deciduous"] },
+  { key: "livingSpace", label: "Living Space", description: "Where the plant can be grown", type: "multiselect", options: ["Indoor","Outdoor","Both","Terrarium","Greenhouse"] },
+  { key: "landscaping", label: "Landscaping / Placement", description: "Garden placement options", type: "multiselect", options: ["Pot","Planter","Hanging","Window Box","Green Wall","Flowerbed","Border","Edging","Path","Tree Base","Vegetable Garden","Orchard","Hedge","Free Growing","Trimmed Hedge","Windbreak","Pond Edge","Waterside","Ground Cover","Grove","Background","Foreground"] },
+  { key: "plantHabit", label: "Plant Habit / Shape", description: "Growth habit and form", type: "multiselect", options: ["Upright","Arborescent","Shrubby","Bushy","Clumping","Erect","Creeping","Carpeting","Ground Cover","Prostrate","Spreading","Climbing","Twining","Scrambling","Liana","Trailing","Columnar","Conical","Fastigiate","Globular","Spreading Flat","Rosette","Cushion","Ball Shaped","Succulent","Palmate","Rhizomatous","Suckering"] },
+  { key: "multicolor", label: "Multicolor?", description: "Plant has 3+ distinct colors", type: "boolean" },
+  { key: "bicolor", label: "Bicolor?", description: "Plant has exactly 2 colors", type: "boolean" },
 ]
 
+// ============================================================================
+// Section 3: Care
+// ============================================================================
 const careFields: FieldConfig[] = [
-  { key: "plantCare.origin", label: "Origin", description: "Where the plant originates from", type: "tags" },
-  { key: "plantCare.habitat", label: "Habitat", description: "Habitat types", type: "multiselect", options: ["Aquatic","Semi-Aquatic","Wetland","Tropical","Temperate","Arid","Mediterranean","Mountain","Grassland","Forest","Coastal","Urban"] },
-  { key: "plantCare.temperature", label: "Temperature", description: "Temperature range (°C)", type: "temperature" },
-  { key: "plantCare.levelSun", label: "Level Sun", description: "Sun exposure level", type: "select", options: ["Low Light","Shade","Partial Sun","Full Sun"] },
-  { key: "plantCare.hygrometry", label: "Hygrometry", description: "Ideal humidity percentage", type: "number" },
-  { key: "plantCare.watering.schedules", label: "Watering Schedule", description: "Seasonal watering (season + quantity + period)", type: "watering" },
-  { key: "plantCare.wateringType", label: "Watering Type", description: "Watering methods", type: "multiselect", options: ["surface","buried","hose","drop","drench"] },
-  { key: "plantCare.division", label: "Division", description: "Propagation techniques", type: "multiselect", options: ["Seed","Cutting","Division","Layering","Grafting","Tissue Separation","Bulb separation"] },
-  { key: "plantCare.soil", label: "Soil", description: "Soil options", type: "multiselect", options: ["Vermiculite","Perlite","Sphagnum moss","rock wool","Sand","Gravel","Potting Soil","Peat","Clay pebbles","coconut fiber","Bark","Wood Chips"] },
-  { key: "plantCare.adviceSoil", label: "Advice Soil", description: "Advice about soil", type: "textarea" },
-  { key: "plantCare.mulching", label: "Mulching", description: "Mulching materials", type: "multiselect", options: ["Wood Chips","Bark","Green Manure","Cocoa Bean Hulls","Buckwheat Hulls","Cereal Straw","Hemp Straw","Woven Fabric","Pozzolana","Crushed Slate","Clay Pellets"] },
-  { key: "plantCare.adviceMulching", label: "Advice Mulching", description: "Mulching notes", type: "textarea" },
-  { key: "plantCare.nutritionNeed", label: "Nutrition Need", description: "Nutrient needs", type: "multiselect", options: ["Nitrogen","Phosphorus","Potassium","Calcium","Magnesium","Sulfur","Iron","Boron","Manganese","Molybene","Chlorine","Copper","Zinc","Nitrate","Phosphate"] },
-  { key: "plantCare.fertilizer", label: "Fertilizer", description: "Fertilizer choices", type: "multiselect", options: ["Granular fertilizer","Liquid Fertilizer","Meat Flour","Fish flour","Crushed bones","Crushed Horns","Slurry","Manure","Animal excrement","Sea Fertilizer","Yurals","Wine","guano","Coffee Grounds","Banana peel","Eggshell","Vegetable cooking water","Urine","Grass Clippings","Vegetable Waste","Natural Mulch"] },
-  { key: "plantCare.adviceFertilizer", label: "Advice Fertilizer", description: "Fertilizer advice", type: "textarea" },
+  { key: "careLevel", label: "Care Level", description: "How difficult to care for", type: "multiselect", options: ["Easy","Moderate","Complex"] },
+  { key: "sunlight", label: "Sunlight / Exposure", description: "Light requirements", type: "multiselect", options: ["Full Sun","Partial Sun","Partial Shade","Light Shade","Deep Shade","Direct Light","Bright Indirect Light","Medium Light","Low Light"] },
+  { key: "temperatureMax", label: "Temperature Max (°C)", description: "Maximum tolerable temperature", type: "number" },
+  { key: "temperatureMin", label: "Temperature Min (°C)", description: "Minimum tolerable temperature", type: "number" },
+  { key: "temperatureIdeal", label: "Temperature Ideal (°C)", description: "Ideal growing temperature", type: "number" },
+  { key: "wateringFrequencyWarm", label: "Watering (Warm Season)", description: "Times per week in warm season", type: "number" },
+  { key: "wateringFrequencyCold", label: "Watering (Cold Season)", description: "Times per week in cold season", type: "number" },
+  { key: "wateringType", label: "Watering Type", description: "Preferred watering methods", type: "multiselect", options: ["Hose","Surface","Drip","Soaking","Wick"] },
+  { key: "hygrometry", label: "Humidity (%)", description: "Preferred humidity level (0-100)", type: "number" },
+  { key: "mistingFrequency", label: "Misting (per week)", description: "Times per week for misting", type: "number" },
+  { key: "specialNeeds", label: "Special Needs", description: "Special care requirements", type: "tags" },
+  { key: "substrate", label: "Substrate", description: "Suitable substrates/soil types", type: "tags" },
+  { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags" },
+  { key: "soilAdvice", label: "Soil Guidance", description: "Substrate/soil advice text", type: "textarea" },
+  { key: "mulchingNeeded", label: "Mulching Needed?", description: "Is mulching recommended?", type: "boolean" },
+  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags" },
+  { key: "mulchAdvice", label: "Mulch Advice", description: "Mulching guidance", type: "textarea" },
+  { key: "nutritionNeed", label: "Nutrient Needs", description: "Key nutritional requirements", type: "tags" },
+  { key: "fertilizer", label: "Fertilizer", description: "Recommended fertilizer types", type: "tags" },
+  { key: "fertilizerAdvice", label: "Fertilizer Advice", description: "Fertilizing schedule and advice", type: "textarea" },
+  { key: "wateringSchedules", label: "Watering Schedule", description: "Detailed seasonal watering schedule", type: "watering" },
 ]
 
+// ============================================================================
+// Section 4: Growth
+// ============================================================================
 const growthFields: FieldConfig[] = [
-  { key: "growth.sowingMonth", label: "Sowing Month", description: "Months to sow", type: "multiselect", options: monthOptions },
-  { key: "growth.floweringMonth", label: "Flowering Month", description: "Months of flowering", type: "multiselect", options: monthOptions },
-  { key: "growth.fruitingMonth", label: "Fruiting Month", description: "Months of fruiting", type: "multiselect", options: monthOptions },
-  { key: "growth.height", label: "Height (cm)", description: "Average height", type: "number" },
-  { key: "growth.wingspan", label: "Wingspan (cm)", description: "Average wingspan", type: "number" },
-  { key: "growth.tutoring", label: "Tutoring", description: "Needs support", type: "boolean" },
-  { key: "growth.adviceTutoring", label: "Advice Tutoring", description: "Support details", type: "textarea" },
-  { key: "growth.sowType", label: "Sow Type", description: "Planting method", type: "multiselect", options: ["Direct","Indoor","Row","Hill","Broadcast","Seed Tray","Cell","Pot"] },
-  { key: "growth.separation", label: "Separation (cm)", description: "Spacing of sowing", type: "number" },
-  { key: "growth.transplanting", label: "Transplanting", description: "Needs transplanting", type: "boolean" },
-  { key: "growth.adviceSowing", label: "Advice Sowing", description: "Sowing notes", type: "textarea" },
-  { key: "growth.cut", label: "Cut", description: "Type of cut", type: "text" },
+  { key: "sowingMonth", label: "Sowing Month(s)", description: "Best months for sowing", type: "multiselect", options: monthOptions },
+  { key: "floweringMonth", label: "Flowering Month(s)", description: "Months when plant flowers", type: "multiselect", options: monthOptions },
+  { key: "fruitingMonth", label: "Fruiting Month(s)", description: "Months when plant fruits", type: "multiselect", options: monthOptions },
+  { key: "heightCm", label: "Height (cm)", description: "Mature height in centimeters", type: "number" },
+  { key: "wingspanCm", label: "Spread / Width (cm)", description: "Mature spread in centimeters", type: "number" },
+  { key: "staking", label: "Staking Needed?", description: "Does the plant need staking/support?", type: "boolean" },
+  { key: "stakingAdvice", label: "Staking Advice", description: "What type of support and how to stake", type: "textarea" },
+  { key: "division", label: "Division / Propagation", description: "How to propagate", type: "multiselect", options: ["Seed","Clump Division","Bulb Division","Rhizome Division","Cutting","Layering","Stolon","Sucker","Grafting","Spore"] },
+  { key: "cultivationMode", label: "Cultivation Mode", description: "Type of growing setup", type: "multiselect", options: ["Open Ground","Flowerbed","Vegetable Garden","Raised Bed","Orchard","Rockery","Slope","Mound","Pot","Planter","Hanging","Greenhouse","Indoor","Pond","Waterlogged Soil","Hydroponic","Aquaponic","Mineral Substrate","Permaculture","Agroforestry"] },
+  { key: "sowingMethod", label: "Sowing Method", description: "How to sow seeds", type: "multiselect", options: ["Open Ground","Pot","Tray","Greenhouse","Mini Greenhouse","Broadcast","Row"] },
+  { key: "transplanting", label: "Transplanting?", description: "Does the plant need transplanting?", type: "boolean" },
+  { key: "transplantingTime", label: "Transplanting Time", description: "When to transplant (e.g. after 4 true leaves)", type: "text" },
+  { key: "outdoorPlantingTime", label: "Outdoor Planting Time", description: "When to plant outdoors", type: "text" },
+  { key: "sowingAdvice", label: "Sowing Advice", description: "Sowing and planting instructions", type: "textarea" },
+  { key: "pruning", label: "Pruning Needed?", description: "Does the plant need pruning?", type: "boolean" },
+  { key: "pruningMonth", label: "Pruning Month(s)", description: "Best months for pruning", type: "multiselect", options: monthOptions },
+  { key: "pruningAdvice", label: "Pruning Advice", description: "Pruning technique and tips", type: "textarea" },
 ]
 
-const usageFields: FieldConfig[] = [
-  { key: "usage.adviceMedicinal", label: "Advice Medicinal", description: "Medicinal usage details", type: "textarea" },
-  { key: "usage.nutritionalIntake", label: "Nutritional Intake", description: "Nutritional tags", type: "tags" },
-  { key: "usage.infusion", label: "Infusion", description: "Can be used for infusion", type: "boolean" },
-  { key: "usage.adviceInfusion", label: "Advice Infusion", description: "Infusion notes", type: "textarea" },
-  { key: "usage.infusionMix", label: "Infusion Mix", description: "Mix name to benefit", type: "dict" },
-  { key: "usage.aromatherapy", label: "Aromatherapy", description: "Usable for essential oils", type: "boolean" },
-  { key: "usage.spiceMixes", label: "Spice Mixes", description: "Spice mix names", type: "tags" },
-]
-
-const ecologyFields: FieldConfig[] = [
-  { key: "ecology.melliferous", label: "Melliferous", description: "Good for pollinators", type: "boolean" },
-  { key: "ecology.polenizer", label: "Polenizer", description: "Pollinator species", type: "multiselect", options: ["Bee","Wasp","Ant","Butterfly","Bird","Mosquito","Fly","Beetle","ladybug","Stagbeetle","Cockchafer","dungbeetle","weevil"] },
-  { key: "ecology.beFertilizer", label: "Be Fertilizer", description: "Acts as fertilizer for others", type: "boolean" },
-  { key: "ecology.groundEffect", label: "Ground Effect", description: "Effect on soil", type: "textarea" },
-  { key: "ecology.conservationStatus", label: "Conservation Status", description: "Status in the wild", type: "select", options: ["Safe","At Risk","Vulnerable","Endangered","Critically Endangered","Extinct"] },
-]
-
+// ============================================================================
+// Section 5: Danger
+// ============================================================================
 const dangerFields: FieldConfig[] = [
-  { key: "danger.pests", label: "Pests", description: "Pest list", type: "tags" },
-  { key: "danger.diseases", label: "Diseases", description: "Disease list", type: "tags" },
+  { key: "pests", label: "Pests", description: "Common pest threats", type: "tags" },
+  { key: "diseases", label: "Diseases", description: "Common diseases", type: "tags" },
 ]
 
+// ============================================================================
+// Section 6: Ecology & Biodiversity
+// ============================================================================
+const ecologyFields: FieldConfig[] = [
+  { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated"] },
+  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags" },
+  { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags" },
+  { key: "urbanBiotopes", label: "Urban Biotopes", description: "Anthropized/urban environments", type: "multiselect", options: ["Urban Garden","Periurban Garden","Park","Urban Wasteland","Green Wall","Green Roof","Balcony","Agricultural Hedge","Cultivated Orchard","Vegetable Garden","Roadside"] },
+  { key: "ecologicalTolerance", label: "Ecological Tolerance", description: "Environmental tolerances", type: "multiselect", options: ["Drought","Scorching Sun","Permanent Shade","Excess Water","Frost","Heatwave","Wind"] },
+  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "tags" },
+  { key: "beneficialRoles", label: "Beneficial Role(s)", description: "Positive ecological contributions", type: "tags" },
+  { key: "harmfulRoles", label: "Harmful Role(s)", description: "Negative ecological effects", type: "tags" },
+  { key: "pollinatorsAttracted", label: "Pollinators Attracted", description: "Which pollinators visit this plant", type: "tags" },
+  { key: "birdsAttracted", label: "Birds Attracted", description: "Birds drawn to this plant", type: "tags" },
+  { key: "mammalsAttracted", label: "Mammals Attracted", description: "Mammals drawn to this plant", type: "tags" },
+  { key: "symbiosis", label: "Symbiosis", description: "Symbiotic relationships (plants, insects, fungi)", type: "tags" },
+  { key: "symbiosisNotes", label: "Symbiosis Notes", description: "Detailed symbiosis description", type: "textarea" },
+  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "tags" },
+  { key: "ecologicalImpact", label: "Ecological Impact", description: "Overall ecological impact", type: "multiselect", options: ["Neutral","Favorable","Potentially Invasive","Locally Invasive"] },
+]
+
+// ============================================================================
+// Section 7: Consumption / Usage
+// ============================================================================
+const consumptionFields: FieldConfig[] = [
+  { key: "nutritionalValue", label: "Nutritional Value", description: "Nutritional information for edible plants", type: "textarea" },
+  { key: "infusion", label: "Usable for Infusion?", description: "Can be used for tea/infusion", type: "boolean" },
+  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags" },
+  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea" },
+  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea" },
+  { key: "medicinal", label: "Medicinal Plant?", description: "Does the plant have medicinal uses?", type: "boolean" },
+  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea" },
+  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea" },
+  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea" },
+  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea" },
+  { key: "fragrance", label: "Fragrance?", description: "Does the plant have a notable fragrance?", type: "boolean" },
+  { key: "aromatherapy", label: "Aromatherapy?", description: "Used in aromatherapy?", type: "boolean" },
+  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea" },
+  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea" },
+  { key: "edibleOil", label: "Edible Oil?", description: "Does the plant produce an edible oil?", type: "select", options: ["Yes","No","Unknown"] },
+  { key: "spiceMixes", label: "Spice Mixes", description: "Spice blend uses", type: "tags" },
+  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict" },
+]
+
+// ============================================================================
+// Section 8: Misc
+// ============================================================================
 const miscFields: FieldConfig[] = [
-  { key: "miscellaneous.companions", label: "Companions", description: "Companion plants", type: "companions" },
-  { key: "miscellaneous.tags", label: "Tags", description: "Search tags", type: "tags" },
-  { key: "miscellaneous.sources", label: "Sources", description: "Reference links", type: "sources" },
+  { key: "companionPlants", label: "Companion Plants", description: "Good garden companions", type: "companions" },
+  { key: "biotopePlants", label: "Biotope Plants", description: "Plants from the same biotope", type: "tags" },
+  { key: "beneficialPlants", label: "Beneficial Plants", description: "Plants that benefit this one", type: "tags" },
+  { key: "harmfulPlants", label: "Harmful Plants", description: "Plants to avoid nearby", type: "tags" },
+  { key: "varieties", label: "Varieties", description: "Related varieties and cultivars", type: "tags" },
+  { key: "plantTags", label: "Plant Tags", description: "Searchable tags and keywords", type: "tags" },
+  { key: "biodiversityTags", label: "Biodiversity Tags", description: "Biodiversity-specific tags", type: "tags" },
+  { key: "sources", label: "Sources", description: "Reference links and citations", type: "sources" },
 ]
 
+// ============================================================================
+// Section 9: Meta
+// ============================================================================
 const metaFields: FieldConfig[] = [
-  { key: "meta.status", label: "Status", description: "Editorial status", type: "select", options: ["Approved","Rework","Review","In Progres"] },
-  { key: "meta.adminCommentary", label: "Admin Commentary", description: "Moderator feedback", type: "textarea" },
-  { key: "meta.contributors", label: "Contributors", description: "People who requested or edited this plant", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
+  { key: "status", label: "Status", description: "Editorial status", type: "select", options: ["approved","rework","review","in_progress"] },
+  { key: "adminCommentary", label: "Admin Notes", description: "Internal notes for editors", type: "textarea" },
+  { key: "userNotes", label: "User Notes", description: "User-contributed notes", type: "textarea" },
+  { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
 
-const utilityOptions = ["comestible","ornemental","produce_fruit","aromatic","medicinal","odorous","climbing","cereal","spice"] as const
-const comestibleOptions = ["flower","fruit","seed","leaf","stem","root","bulb","bark","wood"] as const
+// Legacy option arrays kept for backward compatibility with form rendering
+const utilityOptions = ["edible","ornamental","aromatic","medicinal","fragrant","cereal","spice"] as const
+const comestibleOptions = ["flower","fruit","seed","leaf","stem","bulb","rhizome","bark","wood"] as const
 const fruitOptions = ["nut","seed","stone"] as const
-const plantTypeOptions = ["plant","flower","bamboo","shrub","tree","cactus","succulent"] as const
+const plantTypeOptions = ["tree","shrub","small_shrub","fruit_tree","bamboo","cactus_succulent","herbaceous","palm","fruit_plant","aromatic_plant","medicinal_plant","climbing_plant","vegetable_plant","perennial_plant","bulb_plant","rhizome_plant","indoor_plant","fern","moss_lichen","aquatic_semi_aquatic"] as const
 
 function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'common'>) {
     const value = getValue(plant, field.key)
@@ -2322,25 +2399,25 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     identity: null,
     plantCare: null,
     growth: null,
-    usage: null,
-    ecology: null,
     danger: null,
-    miscellaneous: null,
+    ecology: null,
+    consumption: null,
+    misc: null,
     meta: null,
   })
   const [selectedCategory, setSelectedCategory] = React.useState<PlantFormCategory>('identity')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const [showCompanionRecommendations, setShowCompanionRecommendations] = React.useState(false)
   const categoryLabels: Record<PlantFormCategory, string> = {
-    basics: t('plantAdmin.categories.basics', 'Basics'),
-    identity: t('plantAdmin.categories.identity', 'Identity'),
-    plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
-    growth: t('plantAdmin.categories.growth', 'Growth'),
-    usage: t('plantAdmin.categories.usage', 'Usage'),
-    ecology: t('plantAdmin.categories.ecology', 'Ecology'),
-    danger: t('plantAdmin.categories.danger', 'Danger'),
-    miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
-    meta: t('plantAdmin.categories.meta', 'Meta'),
+    base: t('plantAdmin.categories.base', '1. Base'),
+    identity: t('plantAdmin.categories.identity', '2. Identity'),
+    care: t('plantAdmin.categories.care', '3. Care'),
+    growth: t('plantAdmin.categories.growth', '4. Growth'),
+    danger: t('plantAdmin.categories.danger', '5. Danger'),
+    ecology: t('plantAdmin.categories.ecology', '6. Ecology'),
+    consumption: t('plantAdmin.categories.consumption', '7. Consumption'),
+    misc: t('plantAdmin.categories.misc', '8. Misc'),
+    meta: t('plantAdmin.categories.meta', '9. Meta'),
   }
   const scrollToCategory = (category: PlantFormCategory) => {
     setSelectedCategory(category)
@@ -2374,18 +2451,18 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
       })
       if (alreadyAdded) return
       const next: PlantColor = hex ? { name, hexCode: hex } : { name }
-      onChange(setValue(value, 'identity.colors', [...current, next]))
+      onChange(setValue(value, 'colors', [...current, next]))
     },
     [onChange, t, value],
   )
-  const categoriesWithoutBasics = plantFormCategoryOrder.filter((cat) => cat !== 'basics')
+  const categoriesWithoutBasics = plantFormCategoryOrder.filter((cat) => cat !== 'base')
   const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
   return (
     <div className="space-y-6">
-      <div ref={(node) => { sectionRefs.current.basics = node }} className="flex-1">
+      <div ref={(node) => { sectionRefs.current.base = node }} className="flex-1">
         <Card className={neuCardClass}>
           <CardHeader>
-            <CardTitle>{categoryLabels.basics}</CardTitle>
+            <CardTitle>{categoryLabels.base}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
               <div className="grid gap-2">
@@ -2394,107 +2471,13 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                   value={value.name}
                   required
                   onChange={(e) => onChange({ ...value, name: e.target.value })}
-                  placeholder={t('plantAdmin.basics.name.placeholder', 'Unique plant name')}
+                  placeholder={t('plantAdmin.basics.name.placeholder', 'Unique plant name (English)')}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {t('plantAdmin.basics.name.description', 'Name of the plant (unique and mandatory).')}
+                  {t('plantAdmin.basics.name.description', 'Canonical English name of the plant (unique, mandatory).')}
                 </p>
               </div>
-              <div className="grid gap-2">
-                <Label>{t('plantAdmin.basics.plantType.label', 'Plant Type')}</Label>
-              <select
-                className="h-9 rounded-md border px-2 text-sm"
-                value={value.plantType || ""}
-                onChange={(e) => onChange({ ...value, plantType: (e.target.value || undefined) as PlantType | undefined })}
-              >
-                  <option value="">{t('plantAdmin.basics.plantType.placeholder', 'Select type')}</option>
-                {plantTypeOptions.map((opt) => (
-                    <option key={opt} value={opt}>{t(`plantAdmin.options.plantType.${opt}`, opt)}</option>
-                ))}
-              </select>
-                <p className="text-xs text-muted-foreground">
-                  {t('plantAdmin.basics.plantType.description', 'Primary plant type')}
-                </p>
-            </div>
-            <div className="grid gap-2">
-                <Label>{t('plantAdmin.basics.utility.label', 'Utility')}</Label>
-              <div className="flex flex-wrap gap-2">
-                {utilityOptions.map((opt) => {
-                  const selected = value.utility?.includes(opt)
-                  return (
-                    <button
-                      key={opt}
-                      type="button"
-                      onClick={() => {
-                        const current = value.utility || []
-                        const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                        onChange({ ...value, utility: next })
-                      }}
-                      className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                    >
-                        {t(`plantAdmin.options.utility.${opt}`, opt)}
-                    </button>
-                  )
-                })}
-              </div>
-                <p className="text-xs text-muted-foreground">
-                  {t('plantAdmin.basics.utility.description', 'Select every utility that applies')}
-                </p>
-            </div>
-            {value.utility?.includes("comestible") && (
-              <div className="grid gap-2">
-                  <Label>{t('plantAdmin.basics.comestiblePart.label', 'Comestible Part')}</Label>
-                <div className="flex flex-wrap gap-2">
-                  {comestibleOptions.map((opt) => {
-                    const selected = value.comestiblePart?.includes(opt)
-                    return (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          const current = value.comestiblePart || []
-                          const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                          onChange({ ...value, comestiblePart: next })
-                        }}
-                        className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                      >
-                          {t(`plantAdmin.options.comestible.${opt}`, opt)}
-                      </button>
-                    )
-                  })}
-                </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t('plantAdmin.basics.comestiblePart.description', 'Edible parts (only if utility includes edible).')}
-                  </p>
-              </div>
-            )}
-            {value.utility?.includes("produce_fruit") && (
-              <div className="grid gap-2">
-                  <Label>{t('plantAdmin.basics.fruitType.label', 'Fruit Type')}</Label>
-                <div className="flex flex-wrap gap-2">
-                  {fruitOptions.map((opt) => {
-                    const selected = value.fruitType?.includes(opt)
-                    return (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          const current = value.fruitType || []
-                          const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                          onChange({ ...value, fruitType: next })
-                        }}
-                        className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                      >
-                          {t(`plantAdmin.options.fruit.${opt}`, opt)}
-                      </button>
-                    )
-                  })}
-                </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t('plantAdmin.basics.fruitType.description', 'Fruit classification (if the plant produces fruit).')}
-                  </p>
-              </div>
-            )}
+              {baseFields.map((f) => renderField(value, setPath, f, t))}
             <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} onRemove={onImageRemove} />
           </CardContent>
         </Card>
@@ -2531,18 +2514,18 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
         </div>
 
         <div className="space-y-6">
-          {(['identity','plantCare','growth','usage','ecology','danger','miscellaneous','meta'] as PlantFormCategory[]).map((cat) => {
+          {(['identity','care','growth','danger','ecology','consumption','misc','meta'] as PlantFormCategory[]).map((cat) => {
             if (selectedCategory !== cat) return null
             const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat] = node }
             const fieldGroups: Record<PlantFormCategory, FieldConfig[]> = {
-              basics: [],
+              base: baseFields,
               identity: identityFields,
-              plantCare: careFields,
+              care: careFields,
               growth: growthFields,
-              usage: usageFields,
-              ecology: ecologyFields,
               danger: dangerFields,
-              miscellaneous: miscFields,
+              ecology: ecologyFields,
+              consumption: consumptionFields,
+              misc: miscFields,
               meta: metaFields,
             }
             const progressInfo = categoryProgress?.[cat]
@@ -2569,25 +2552,24 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
                       {fieldGroups[cat].map((f) => {
-                        // Skip companions field in miscellaneous - we handle it specially below
-                        if (cat === 'miscellaneous' && f.key === 'miscellaneous.companions') return null
+                        if (cat === 'misc' && f.key === 'companionPlants') return null
                         return renderField(value, setPath, f, t)
                       })}
-                    {cat === 'usage' && (
+                    {cat === 'consumption' && (
                       <div className="md:col-span-2">
                         <RecipeEditor
-                          recipes={Array.isArray(value.usage?.recipes) ? value.usage.recipes : []}
-                          onChange={(v) => setPath('usage.recipes', v)}
+                          recipes={Array.isArray(value.recipes) ? value.recipes : []}
+                          onChange={(v) => setPath('recipes', v)}
                         />
                       </div>
                     )}
-                    {cat === 'miscellaneous' && (
+                    {cat === 'misc' && (
                       <div className="md:col-span-2">
-                        <Label>{t('plantAdmin.fields.miscellaneous.companions.label', 'Companion & Related Plants')}</Label>
-                        <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.miscellaneous.companions.description', 'Plants that grow well together or are related varieties (e.g., Rose / Rose Iceberg)')}</p>
-                        <CompanionSelector 
-                          value={Array.isArray(value.miscellaneous?.companions) ? value.miscellaneous.companions : []} 
-                          onChange={(v) => setPath('miscellaneous.companions', v)}
+                        <Label>{t('plantAdmin.fields.companionPlants.label', 'Companion & Related Plants')}</Label>
+                        <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.companionPlants.description', 'Plants that grow well together or are related varieties')}</p>
+                        <CompanionSelector
+                          value={Array.isArray(value.companionPlants) ? value.companionPlants : []}
+                          onChange={(v) => setPath('companionPlants', v)}
                           suggestions={companionSuggestions}
                           showSuggestions={showCompanionRecommendations}
                           onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
