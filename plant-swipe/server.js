@@ -2434,18 +2434,7 @@ async function getUserIdFromRequest(req) {
         if (!error && data?.user?.id) return data.user.id
       } catch { }
     }
-    // Fallback: decode JWT payload locally to grab the subject (sub)
-    try {
-      const parts = token.split('.')
-      if (parts.length >= 2) {
-        const b64 = parts[1]
-        const norm = (b64 + '==='.slice((b64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/')
-        const json = Buffer.from(norm, 'base64').toString('utf8')
-        const payload = JSON.parse(json)
-        const sub = (payload && (payload.sub || payload.user_id))
-        if (typeof sub === 'string' && sub.length > 0) return sub
-      }
-    } catch { }
+    // No fallback: unverified tokens are rejected.
     return null
   } catch {
     return null
@@ -2483,18 +2472,7 @@ async function getUserFromRequest(req) {
         }
       } catch { }
     }
-    try {
-      const parts = token.split('.')
-      if (parts.length >= 2) {
-        const b64 = parts[1]
-        const norm = (b64 + '==='.slice((b64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/')
-        const json = Buffer.from(norm, 'base64').toString('utf8')
-        const payload = JSON.parse(json)
-        const id = (payload && (payload.sub || payload.user_id)) || null
-        const email = (payload && (payload.email || payload.user_email)) || null
-        if (id) return { id, email }
-      }
-    } catch { }
+    // No fallback: unverified tokens are rejected.
     return null
   } catch {
     return null
