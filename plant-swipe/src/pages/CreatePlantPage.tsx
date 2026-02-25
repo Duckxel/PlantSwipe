@@ -1011,42 +1011,30 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const targetFields = React.useMemo(
     () =>
       [
-        'plantType',
-        'utility',
-        'comestiblePart',
-        'fruitType',
-        'seasons',
-        'description',
+        'base',
         'identity',
-        'plantCare',
+        'care',
         'growth',
-        'usage',
-        'ecology',
         'danger',
-        'miscellaneous',
+        'ecology',
+        'consumption',
+        'misc',
+        'meta',
       ].filter((key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase())),
     [],
   )
-  const basicFieldOrder = React.useMemo(
-    () => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description', 'identity'],
-    [],
-  )
-  const aiFieldOrder = React.useMemo(() => {
-    const prioritized = basicFieldOrder.filter((key) => targetFields.includes(key))
-    const remaining = targetFields.filter((key) => !prioritized.includes(key))
-    return [...prioritized, ...remaining]
-  }, [basicFieldOrder, targetFields])
+  const aiFieldOrder = React.useMemo(() => targetFields, [targetFields])
     const mandatoryFieldOrder = aiFieldOrder
     const categoryLabels = React.useMemo(() => ({
-      basics: t('plantAdmin.categories.basics', 'Basics'),
-      identity: t('plantAdmin.categories.identity', 'Identity'),
-      plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
-      growth: t('plantAdmin.categories.growth', 'Growth'),
-      usage: t('plantAdmin.categories.usage', 'Usage'),
-      ecology: t('plantAdmin.categories.ecology', 'Ecology'),
-      danger: t('plantAdmin.categories.danger', 'Danger'),
-      miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
-      meta: t('plantAdmin.categories.meta', 'Meta'),
+      base: t('plantAdmin.categories.base', '1. Base'),
+      identity: t('plantAdmin.categories.identity', '2. Identity'),
+      care: t('plantAdmin.categories.care', '3. Care'),
+      growth: t('plantAdmin.categories.growth', '4. Growth'),
+      danger: t('plantAdmin.categories.danger', '5. Danger'),
+      ecology: t('plantAdmin.categories.ecology', '6. Ecology'),
+      consumption: t('plantAdmin.categories.consumption', '7. Consumption'),
+      misc: t('plantAdmin.categories.misc', '8. Misc'),
+      meta: t('plantAdmin.categories.meta', '9. Meta'),
     }), [t])
 
     React.useEffect(() => {
