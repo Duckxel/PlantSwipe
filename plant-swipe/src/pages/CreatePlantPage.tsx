@@ -53,7 +53,6 @@ import {
   polenizerEnum,
   expandCompositionFromDb,
   expandFoliagePersistanceFromDb,
-  normalizeFoliagePersistanceForDb,
 } from "@/lib/composition"
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase plant data */
