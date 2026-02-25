@@ -119,6 +119,7 @@ export const GardenDashboardPage: React.FC = () => {
     const seg = rest.replace(/^\//, "").split("/")[0] as TabKey;
     setTab((seg as TabKey) || "overview");
   }, [location.pathname, id]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- plants come from API + getGardenPlants with varying shapes
   const [plants, setPlants] = React.useState<Array<any>>([]);
   const [members, setMembers] = React.useState<
     Array<{
@@ -308,8 +309,9 @@ export const GardenDashboardPage: React.FC = () => {
   // Favorites (liked plants)
   const [_likedIds, setLikedIds] = React.useState<string[]>([]);
   React.useEffect(() => {
-    const arr = Array.isArray((profile as any)?.liked_plant_ids)
-      ? ((profile as any).liked_plant_ids as any[]).map(String)
+    const profileData = profile as { liked_plant_ids?: unknown[] } | undefined;
+    const arr = Array.isArray(profileData?.liked_plant_ids)
+      ? profileData.liked_plant_ids.map(String)
       : [];
     setLikedIds(arr);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -407,7 +409,9 @@ export const GardenDashboardPage: React.FC = () => {
       if (!suppressError) setError(null);
       try {
         // Fast-path: hydrate via batched API, then continue with detailed computations
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API + getGardenPlants return varying shapes
         let hydratedPlants: any[] | null = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- getGardenPlants return shape
         let gpsLocal: any[] | null = null;
         let hydrated = false;
         let hydratedGarden = false;
@@ -456,11 +460,11 @@ export const GardenDashboardPage: React.FC = () => {
               }
               if (Array.isArray(data.members) && data.members.length > 0) {
                 setMembers(
-                  data.members.map((m: any) => ({
-                    userId: String(m.userId || m.user_id),
+                  data.members.map((m: { userId?: string; user_id?: string; displayName?: string; display_name?: string; email?: string; role: string; joinedAt?: string; joined_at?: string; accentKey?: string; accent_key?: string; avatarUrl?: string; avatar_url?: string }) => ({
+                    userId: String(m.userId ?? m.user_id ?? ''),
                     displayName: m.displayName ?? m.display_name ?? null,
                     email: m.email ?? null,
-                    role: m.role,
+                    role: m.role as "owner" | "member",
                     joinedAt: m.joinedAt ?? m.joined_at ?? null,
                     accentKey: m.accentKey ?? m.accent_key ?? null,
                     avatarUrl: m.avatarUrl ?? m.avatar_url ?? null,
@@ -544,11 +548,11 @@ export const GardenDashboardPage: React.FC = () => {
             ms.map((m) => ({
               userId: m.userId,
               displayName: m.displayName ?? null,
-              email: (m as any).email ?? null,
+              email: m.email ?? null,
               role: m.role,
-              joinedAt: (m as any).joinedAt,
-              accentKey: (m as any).accentKey ?? null,
-              avatarUrl: (m as any).avatarUrl ?? null,
+              joinedAt: m.joinedAt,
+              accentKey: m.accentKey ?? null,
+              avatarUrl: m.avatarUrl ?? null,
             })),
           );
           todayLocal = nowIso.slice(0, 10);
@@ -640,15 +644,15 @@ export const GardenDashboardPage: React.FC = () => {
           > = {};
           const taskEmojiById: Record<string, string | null> = {};
           for (const t of allTasks) {
-            taskTypeById[t.id] = t.type as any;
-            taskEmojiById[t.id] = (t as any).emoji || null;
+            taskTypeById[t.id] = t.type;
+            taskEmojiById[t.id] = t.emoji || null;
           }
           const occsWithType = occs.map((o) => ({
             ...o,
             taskType: taskTypeById[o.taskId] || "custom",
             taskEmoji: taskEmojiById[o.taskId] || null,
           }));
-          setTodayTaskOccurrences(occsWithType as any);
+          setTodayTaskOccurrences(occsWithType);
           const taskCountMap: Record<string, number> = {};
           for (const t of allTasks)
             taskCountMap[t.gardenPlantId] =
@@ -690,14 +694,14 @@ export const GardenDashboardPage: React.FC = () => {
               string,
               "water" | "fertilize" | "harvest" | "cut" | "custom"
             > = {};
-            for (const t of allTasks) tById[t.id] = t.type as any;
+            for (const t of allTasks) tById[t.id] = t.type;
             for (const o of weekOccs) {
               const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
               const idx = weekDaysIso.indexOf(dayIso);
               if (idx >= 0) {
                 const typ = tById[o.taskId] || "custom";
                 const inc = Math.max(1, Number(o.requiredCount || 1));
-                (typeCounts as any)[typ][idx] += inc;
+                typeCounts[typ][idx] += inc;
               }
             }
             const totals = weekDaysIso.map(
@@ -713,7 +717,7 @@ export const GardenDashboardPage: React.FC = () => {
 
             const dueMapSets: Record<string, Set<number>> = {};
             const taskEmojiById: Record<string, string | null> = {};
-            for (const t of allTasks) taskEmojiById[t.id] = (t as any).emoji || null;
+            for (const t of allTasks) taskEmojiById[t.id] = t.emoji || null;
             const enrichedWeekOccs: typeof weekTaskOccurrences = [];
             for (const o of weekOccs) {
               const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
@@ -784,7 +788,7 @@ export const GardenDashboardPage: React.FC = () => {
         // Load inventory counts for display
         // Compute per-instance counts from garden_plants instances
         const perInstanceCounts: Record<string, number> = {};
-        const plantsLocal = (hydratedPlants ?? gpsLocal ?? plants) as any[];
+        const plantsLocal = hydratedPlants ?? gpsLocal ?? plants;
         for (const gp of plantsLocal) {
           const c = Number(gp.plantsOnHand || 0);
           perInstanceCounts[String(gp.plantId)] =
@@ -858,11 +862,11 @@ export const GardenDashboardPage: React.FC = () => {
             });
           } catch {}
         serverTodayRef.current = today;
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (suppressError) {
           console.warn("[GardenDashboard] Silent load failed:", e);
         } else {
-          setError(e?.message || "Failed to load garden");
+          setError(e instanceof Error ? e.message : String(e));
         }
       } finally {
         if (!silent) setLoading(false);
@@ -936,8 +940,10 @@ export const GardenDashboardPage: React.FC = () => {
         const skipCache = skipTodayCacheRef.current;
         if (skipCache) skipTodayCacheRef.current = false;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- occurrence shape from cache + listOccurrencesForTasks
         let occsDetailed: Array<any> = [];
         let usedCache = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cache return shape
         let cachedOccs: Array<any> | null = null;
 
         if (!skipCache) {
@@ -945,7 +951,7 @@ export const GardenDashboardPage: React.FC = () => {
             () => null,
           );
           if (cachedOccs && cachedOccs.length > 0) {
-            occsDetailed = cachedOccs as any;
+            occsDetailed = cachedOccs;
             usedCache = true;
           }
         }
@@ -962,8 +968,8 @@ export const GardenDashboardPage: React.FC = () => {
           > = {};
           const taskEmojiById: Record<string, string | null> = {};
           for (const t of allTasks) {
-            taskTypeById[t.id] = t.type as any;
-            taskEmojiById[t.id] = (t as any).emoji || null;
+            taskTypeById[t.id] = t.type;
+            taskEmojiById[t.id] = t.emoji || null;
           }
           occsDetailed = occs.map((o) => ({
             ...o,
@@ -973,7 +979,7 @@ export const GardenDashboardPage: React.FC = () => {
           refreshGardenTaskCache(id, today).catch(() => {});
         }
 
-        setTodayTaskOccurrences(occsDetailed as any);
+        setTodayTaskOccurrences(occsDetailed);
 
         if (needsPlantsData || needsTasksData) {
           const taskCountMap: Record<string, number> = {};
@@ -997,12 +1003,12 @@ export const GardenDashboardPage: React.FC = () => {
 
         setDailyStats((prev) => {
           const reqDone = occsDetailed.reduce(
-            (acc: number, o: any) =>
+            (acc: number, o: { requiredCount?: number }) =>
               acc + Math.max(1, Number(o.requiredCount || 1)),
             0,
           );
           const compDone = occsDetailed.reduce(
-            (acc: number, o: any) =>
+            (acc: number, o: { requiredCount?: number; completedCount?: number }) =>
               acc +
               Math.min(
                 Math.max(1, Number(o.requiredCount || 1)),
@@ -1044,8 +1050,8 @@ export const GardenDashboardPage: React.FC = () => {
             const tByIdCached: Record<string, "water" | "fertilize" | "harvest" | "cut" | "custom"> = {};
             const taskEmojiByCached: Record<string, string | null> = {};
             for (const t of allTasks) {
-              tByIdCached[t.id] = t.type as any;
-              taskEmojiByCached[t.id] = (t as any).emoji || null;
+              tByIdCached[t.id] = t.type;
+              taskEmojiByCached[t.id] = t.emoji || null;
             }
             const enrichedWeekOccsCached: typeof weekTaskOccurrences = [];
             for (const o of weekOccs) {
@@ -1113,8 +1119,8 @@ export const GardenDashboardPage: React.FC = () => {
               > = {};
               const taskEmojiByIdLoad: Record<string, string | null> = {};
               for (const t of allTasks) {
-                tById[t.id] = t.type as any;
-                taskEmojiByIdLoad[t.id] = (t as any).emoji || null;
+                tById[t.id] = t.type;
+                taskEmojiByIdLoad[t.id] = t.emoji || null;
               }
               const enrichedWeekOccsLoad: typeof weekTaskOccurrences = [];
               for (const o of weekOccs) {
@@ -1123,7 +1129,7 @@ export const GardenDashboardPage: React.FC = () => {
                 if (idx >= 0) {
                   const typ = tById[o.taskId] || "custom";
                   const inc = Math.max(1, Number(o.requiredCount || 1));
-                  (typeCounts as any)[typ][idx] += inc;
+                  typeCounts[typ][idx] += inc;
                   enrichedWeekOccsLoad.push({
                     id: o.id,
                     taskId: o.taskId,
@@ -1204,11 +1210,11 @@ export const GardenDashboardPage: React.FC = () => {
           }
           setDueToday(dueTodaySet);
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (opts?.suppressError) {
           console.warn("[GardenDashboard] Silent heavy load failed:", e);
         } else {
-          setError(e?.message || "Failed to load tasks");
+          setError(e instanceof Error ? e.message : String(e));
         }
       } finally {
         setHeavyLoading(false);
@@ -1286,8 +1292,8 @@ export const GardenDashboardPage: React.FC = () => {
             > = {};
             const taskEmojiById: Record<string, string | null> = {};
             for (const t of allTasks) {
-              taskTypeById[t.id] = t.type as any;
-              taskEmojiById[t.id] = (t as any).emoji || null;
+              taskTypeById[t.id] = t.type;
+              taskEmojiById[t.id] = t.emoji || null;
             }
             const occsWithType = occs.map((o) => ({
               ...o,
@@ -1300,7 +1306,7 @@ export const GardenDashboardPage: React.FC = () => {
               // Replace with new data but preserve object references for unchanged items to avoid re-renders
               const prevMap = new Map(prev.map((o) => [o.id, o]));
               const _newMap = new Map(occsWithType.map((o) => [o.id, o]));
-              const result: any[] = [];
+              const result: typeof occsWithType = [];
 
               // Use new data order, but keep existing object references when data hasn't changed
               for (const newOcc of occsWithType) {
@@ -1383,8 +1389,8 @@ export const GardenDashboardPage: React.FC = () => {
               > = {};
               const taskEmojiByIdRefresh: Record<string, string | null> = {};
               for (const t of allTasks) {
-                tById[t.id] = t.type as any;
-                taskEmojiByIdRefresh[t.id] = (t as any).emoji || null;
+                tById[t.id] = t.type;
+                taskEmojiByIdRefresh[t.id] = t.emoji || null;
               }
               const enrichedWeekOccsRefresh: typeof weekTaskOccurrences = [];
               for (const o of weekOccs) {
@@ -1393,7 +1399,7 @@ export const GardenDashboardPage: React.FC = () => {
                 if (idx >= 0) {
                   const typ = tById[o.taskId] || "custom";
                   const inc = Math.max(1, Number(o.requiredCount || 1));
-                  (typeCounts as any)[typ][idx] += inc;
+                  typeCounts[typ][idx] += inc;
                   enrichedWeekOccsRefresh.push({
                     id: o.id,
                     taskId: o.taskId,
@@ -1476,8 +1482,8 @@ export const GardenDashboardPage: React.FC = () => {
           const gpsRaw = await getGardenPlants(id, currentLang);
           setPlants((prev) => {
             // Merge: preserve order and existing items, update changed ones
-            const prevMap = new Map(prev.map((p: any) => [p.id, p]));
-            const merged: any[] = [];
+            const prevMap = new Map(prev.map((p: { id: string }) => [p.id, p]));
+            const merged = [] as typeof gpsRaw;
             // Use new order but preserve existing objects where possible
             for (const newP of gpsRaw) {
               const existing = prevMap.get(newP.id);
@@ -1516,11 +1522,11 @@ export const GardenDashboardPage: React.FC = () => {
             ms.map((m) => ({
               userId: m.userId,
               displayName: m.displayName ?? null,
-              email: (m as any).email ?? null,
+              email: m.email ?? null,
               role: m.role,
-              joinedAt: (m as any).joinedAt,
-              accentKey: (m as any).accentKey ?? null,
-              avatarUrl: (m as any).avatarUrl ?? null,
+              joinedAt: m.joinedAt,
+              accentKey: m.accentKey ?? null,
+              avatarUrl: m.avatarUrl ?? null,
             })),
           );
         }
@@ -1796,9 +1802,9 @@ export const GardenDashboardPage: React.FC = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "garden_plant_tasks" },
-        (payload) => {
+        (payload: { new?: { garden_plant_id?: string }; old?: { garden_plant_id?: string } }) => {
           try {
-            const row = (payload as any)?.new || (payload as any)?.old || {};
+            const row = payload?.new || payload?.old || {};
             const gpId = String(row.garden_plant_id || "");
             if (!gpId) {
               updateTargeted("tasks").catch(() => {});
@@ -1905,7 +1911,7 @@ export const GardenDashboardPage: React.FC = () => {
     if (!uid) return null;
     const mm = members.find((m) => m.userId === uid);
     if (!mm?.accentKey) return null;
-    const opt = getAccentOption(mm.accentKey as any);
+    const opt = getAccentOption(mm.accentKey ?? undefined);
     return opt ? `hsl(${opt.hsl})` : null;
   }, [members, profile?.id, user?.id]);
 
@@ -1940,9 +1946,9 @@ export const GardenDashboardPage: React.FC = () => {
       }
 
       // Get unique plant IDs from both searches
-      const basePlantIds = new Set((basePlants || []).map((p: any) => p.id));
+      const basePlantIds = new Set((basePlants || []).map((p: { id: string }) => p.id));
       const translatedPlantIds = new Set(
-        (translatedPlants || []).map((t: any) => t.plant_id),
+        (translatedPlants || []).map((t: { plant_id: string }) => t.plant_id),
       );
       const allPlantIds = new Set([...basePlantIds, ...translatedPlantIds]);
 
@@ -1965,34 +1971,34 @@ export const GardenDashboardPage: React.FC = () => {
       }
 
       // Load translations for ALL languages (including English)
-      const plantIds = fullPlants.map((p: any) => p.id);
+      const plantIds = fullPlants.map((p: { id: string }) => p.id);
       const { data: translations } = await supabase
         .from("plant_translations")
         .select("*")
         .eq("language", currentLang)
         .in("plant_id", plantIds);
 
-      const translationMap = new Map();
+      const translationMap = new Map<string, { plant_id: string }>();
       if (translations) {
-        translations.forEach((t: any) => {
+        translations.forEach((t: { plant_id: string }) => {
           translationMap.set(t.plant_id, t);
         });
       }
 
       // Merge translations with base plants and filter by search query
       const merged: Plant[] = fullPlants
-        .map((p: any) => {
+        .map((p: { id: string; plant_images?: Array<{ link?: string; use?: string }>; image_url?: string; image?: string }) => {
           const translation = translationMap.get(p.id) || null;
           // Convert plant_images to photos format expected by mergePlantWithTranslation
           const images = Array.isArray(p.plant_images) ? p.plant_images : []
-          const photos = images.map((img: any) => ({
+          const photos = images.map((img: { link?: string; use?: string }) => ({
             url: img.link || '',
             isPrimary: img.use === 'primary',
             isVertical: false
           }))
           // Find primary image or use first image as fallback
-          const primaryImageUrl = images.find((img: any) => img.use === 'primary')?.link 
-            || images.find((img: any) => img.use === 'discovery')?.link 
+          const primaryImageUrl = images.find((img: { use?: string }) => img.use === 'primary')?.link 
+            || images.find((img: { use?: string }) => img.use === 'discovery')?.link 
             || images[0]?.link 
             || p.image_url 
             || p.image
@@ -2060,7 +2066,7 @@ export const GardenDashboardPage: React.FC = () => {
       } else {
         setFriends([]);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Failed to load friends:", e);
     }
   }, [user?.id]);
@@ -2135,7 +2141,7 @@ export const GardenDashboardPage: React.FC = () => {
       const actorColorCss = getActorColorCss();
       await logGardenActivity({
         gardenId: id,
-        kind: "note" as any,
+        kind: "note",
         message: "added a member",
         actorColor: actorColorCss || null,
       });
@@ -2158,7 +2164,7 @@ export const GardenDashboardPage: React.FC = () => {
       setAddNickname(selectedPlant.name);
       setAddDetailsOpen(true);
       return;
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(e?.message || "Failed to add plant");
     } finally {
       setAdding(false);
@@ -2175,7 +2181,7 @@ export const GardenDashboardPage: React.FC = () => {
         .select("id")
         .eq("garden_id", id)
         .eq("plant_id", selectedPlant.id);
-      const existingIds = (existingRows || []).map((r: any) => String(r.id));
+      const existingIds = (existingRows || []).map((r: { id: string }) => String(r.id));
       if (existingIds.length === 1) {
         const existingId = existingIds[0];
         const { data: speciesInv } = await supabase
@@ -2231,7 +2237,7 @@ export const GardenDashboardPage: React.FC = () => {
         const actorColorCss = getActorColorCss();
         await logGardenActivity({
           gardenId: id,
-          kind: "plant_added" as any,
+          kind: "plant_added",
           message: `added "${nicknameVal || selectedPlant.name}"${qty > 0 ? ` x${qty}` : ""}`,
           plantName: nicknameVal || selectedPlant.name,
           actorColor: actorColorCss || null,
@@ -2248,7 +2254,7 @@ export const GardenDashboardPage: React.FC = () => {
       setPendingGardenPlantId(gp.id);
       setTaskOpen(true);
       emitGardenRealtime("plants");
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(e?.message || "Failed to add plant");
     }
   };
@@ -2306,7 +2312,7 @@ export const GardenDashboardPage: React.FC = () => {
         const actorColorCss = getActorColorCss();
         await logGardenActivity({
           gardenId: id,
-          kind: "plant_added" as any,
+          kind: "plant_added",
           message: `imported ${importedCount} plant(s) from bookmark "${bookmark.name}"`,
           actorColor: actorColorCss || null,
         });
@@ -2318,7 +2324,7 @@ export const GardenDashboardPage: React.FC = () => {
       setImportingFromBookmark(false);
       emitGardenRealtime("plants");
       await load();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Failed to import plants from bookmark:", e);
       setError(e?.message || t("gardenDashboard.plantsSection.importFailed"));
       setImportingFromBookmark(false);
@@ -2326,7 +2332,7 @@ export const GardenDashboardPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user?.id, t]);
 
-  const _openEditSchedule = async (gardenPlant: any) => {
+  const _openEditSchedule = async (gardenPlant: { id: string }) => {
     try {
       const schedule = await getGardenPlantSchedule(gardenPlant.id);
       const period = (schedule?.period ||
@@ -2404,15 +2410,15 @@ export const GardenDashboardPage: React.FC = () => {
       });
       // Log schedule change so other clients refresh via SSE
       try {
-        const gp = (plants as any[]).find(
-          (p: any) => p.id === pendingGardenPlantId,
+          const gp = plants.find(
+          (p: { id: string }) => p.id === pendingGardenPlantId,
         );
         const plantName = gp?.nickname || gp?.plant?.name || "Plant";
         const actorColorCss = getActorColorCss();
         const per = String(pendingPeriod).toUpperCase();
         await logGardenActivity({
           gardenId: id,
-          kind: "note" as any,
+          kind: "note",
           message: `updated schedule on "${plantName}" (${pendingAmount}/${per})`,
           plantName,
           actorColor: actorColorCss || null,
@@ -2432,7 +2438,7 @@ export const GardenDashboardPage: React.FC = () => {
       }
       if (id) navigate(`/garden/${id}/tasks`);
       emitGardenRealtime("tasks");
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(e?.message || "Failed to save schedule");
       throw e;
     } finally {
@@ -2488,7 +2494,7 @@ export const GardenDashboardPage: React.FC = () => {
       }
       if (id) navigate(`/garden/${id}/tasks`);
       emitGardenRealtime("tasks");
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(e?.message || "Failed to log watering");
     }
   };
@@ -2516,12 +2522,12 @@ export const GardenDashboardPage: React.FC = () => {
       // Log summary activity for this plant
       try {
         if (id) {
-          const gp = (plants as any[]).find((p: any) => p.id === gardenPlantId);
+          const gp = plants.find((p: { id: string }) => p.id === gardenPlantId);
           const plantName = gp?.nickname || gp?.plant?.name || "Plant";
           const actorColorCss = getActorColorCss();
           await logGardenActivity({
             gardenId: id,
-            kind: "task_completed" as any,
+            kind: "task_completed",
             message: `completed all due tasks on "${plantName}"`,
             plantName,
             actorColor: actorColorCss || null,
@@ -2595,12 +2601,12 @@ export const GardenDashboardPage: React.FC = () => {
 
       try {
         await progressTaskOccurrence(occId, inc);
-        const o = todayTaskOccurrences.find((x: any) => x.id === occId);
+        const o = todayTaskOccurrences.find((x: { id: string }) => x.id === occId);
         if (o && id) {
-          const gp = (plants as any[]).find(
-            (p: any) => p.id === o.gardenPlantId,
+          const gp = plants.find(
+            (p: { id: string }) => p.id === o.gardenPlantId,
           );
-          const type = (o as any).taskType || "custom";
+          const type = (o as { taskType?: string }).taskType || "custom";
           const taskTypeLabel = t(`garden.taskTypes.${type}`);
           const plantName = gp?.nickname || gp?.plant?.name || null;
           const newCount = Number(o.completedCount || 0) + inc;
@@ -2621,7 +2627,7 @@ export const GardenDashboardPage: React.FC = () => {
           const actorColorCss = getActorColorCss();
           await logGardenActivity({
             gardenId: id!,
-            kind: kind as any,
+            kind,
             message: msg,
             plantName: plantName || null,
             taskName: taskTypeLabel,
@@ -2848,7 +2854,7 @@ export const GardenDashboardPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {plants.map((gp: any, idx: number) => (
+                      {plants.map((gp: { id: string; nickname?: string | null; plant?: { name?: string }; plantName?: string; name?: string }, idx: number) => (
                         <Card
                           key={gp.id}
                           className={`rounded-[28px] border overflow-hidden relative shadow-sm transition-all ${dragIdx === idx ? "ring-2 ring-emerald-500" : ""} ${
@@ -2882,13 +2888,13 @@ export const GardenDashboardPage: React.FC = () => {
                             try {
                               await updateGardenPlantsOrder({
                                 gardenId: id!,
-                                orderedIds: next.map((p: any) => p.id),
+                                orderedIds: next.map((p: { id: string }) => p.id),
                               });
                               try {
                                 const actorColorCss = getActorColorCss();
                                 await logGardenActivity({
                                   gardenId: id!,
-                                  kind: "note" as any,
+                                  kind: "note",
                                   message: "reordered plants",
                                   actorColor: actorColorCss || null,
                                 });
@@ -2900,12 +2906,12 @@ export const GardenDashboardPage: React.FC = () => {
                         >
                           <div className="absolute top-2 right-2 z-10">
                               <button
-                                onClick={(e: any) => {
+                                onClick={(e: React.MouseEvent) => {
                                   e.stopPropagation();
                                   if (gp?.plant) navigate(`/plants/${gp.plant.id}`);
                                 }}
-                              onMouseDown={(e: any) => e.stopPropagation()}
-                              onTouchStart={(e: any) => e.stopPropagation()}
+                              onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                              onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
                               aria-label={t(
                                 "gardenDashboard.plantsSection.moreInformation",
                               )}
@@ -3028,8 +3034,8 @@ export const GardenDashboardPage: React.FC = () => {
                                   variant="secondary"
                                   className="rounded-2xl"
                                   draggable={false}
-                                  onMouseDown={(e: any) => e.stopPropagation()}
-                                  onTouchStart={(e: any) => e.stopPropagation()}
+                                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                                  onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
                                   onClick={async () => {
                                     await deleteGardenPlant(gp.id);
                                     if (serverToday && id) {
@@ -3079,7 +3085,7 @@ export const GardenDashboardPage: React.FC = () => {
                                       const actorColorCss = getActorColorCss();
                                       await logGardenActivity({
                                         gardenId: id!,
-                                        kind: "plant_deleted" as any,
+                                        kind: "plant_deleted",
                                         message: `deleted "${gp.nickname || gp.plant?.name || "Plant"}"`,
                                         plantName:
                                           gp.nickname || gp.plant?.name || null,
@@ -3316,7 +3322,7 @@ export const GardenDashboardPage: React.FC = () => {
                   <Input
                     value={addNickname}
                     maxLength={30}
-                    onChange={(e: any) => setAddNickname(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddNickname(e.target.value)}
                     placeholder={t(
                       "gardenDashboard.plantsSection.optionalNickname",
                     )}
@@ -3332,7 +3338,7 @@ export const GardenDashboardPage: React.FC = () => {
                     type="number"
                     min={0}
                     value={String(addCount)}
-                    onChange={(e: any) => setAddCount(Number(e.target.value))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddCount(Number(e.target.value))}
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
@@ -3455,14 +3461,14 @@ export const GardenDashboardPage: React.FC = () => {
           <SchedulePickerDialog
             open={scheduleOpen}
             onOpenChange={setScheduleOpen}
-            period={(pendingPeriod as any) || "week"}
+            period={pendingPeriod || "week"}
             amount={pendingAmount || 1}
             onSave={handleSaveSchedule}
             initialSelection={initialSelectionState}
             onChangePeriod={(p) => setPendingPeriod(p)}
             onChangeAmount={(n) => setPendingAmount(n)}
             lockToYear={scheduleLockYear}
-            allowedPeriods={scheduleAllowedPeriods as any}
+            allowedPeriods={scheduleAllowedPeriods}
           />
 
           {/* Task Editor Dialog */}
@@ -3622,6 +3628,7 @@ function AphyliaChatPortal({
     accentKey?: string | null
     avatarUrl?: string | null
   }>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- plants come from API + getGardenPlants with varying shapes
   plants: Array<any>
   todayTaskOccurrences: Array<{
     id: string
@@ -3792,6 +3799,7 @@ function RoutineSection({
   completingPlantIds,
   completeAllTodayForPlant,
 }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- garden plant shape from API
   plants: any[];
   duePlantIds: Set<string> | null;
   onLogWater: (id: string) => Promise<void>;
@@ -3825,7 +3833,7 @@ function RoutineSection({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const duePlants = React.useMemo(() => {
     if (!duePlantIds) return [];
-    return plants.filter((gp: any) => duePlantIds.has(gp.id));
+    return plants.filter((gp: { id: string }) => duePlantIds.has(gp.id));
   }, [plants, duePlantIds]);
   const hasTodayTasks = (todayTaskOccurrences || []).length > 0;
   const emptyPhrases = React.useMemo(
@@ -3842,7 +3850,7 @@ function RoutineSection({
   const maxCount = Math.max(1, ...weekCounts);
   const occsByPlant: Record<string, typeof todayTaskOccurrences> = {};
   for (const o of todayTaskOccurrences) {
-    if (!occsByPlant[o.gardenPlantId]) occsByPlant[o.gardenPlantId] = [] as any;
+    if (!occsByPlant[o.gardenPlantId]) occsByPlant[o.gardenPlantId] = [];
     occsByPlant[o.gardenPlantId].push(o);
   }
   // Fetch completions for done occurrences to display actor names
@@ -3955,7 +3963,7 @@ function RoutineSection({
       </div>
       {hasTodayTasks ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {plants.map((gp: any) => {
+          {plants.map((gp: { id: string; nickname?: string | null; plant?: { name?: string }; plantName?: string; name?: string; plantsOnHand?: number }) => {
             const occs = occsByPlant[gp.id] || [];
             const totalReq = occs.reduce(
               (a, o) => a + Math.max(1, o.requiredCount || 1),
@@ -4007,9 +4015,9 @@ function RoutineSection({
                 </div>
                 <div className="mt-2 flex flex-col gap-2">
                   {occs.map((o) => {
-                    const tt = (o as any).taskType || "custom";
+                    const tt = (o as { taskType?: string }).taskType || "custom";
                     const badgeClass = `${typeToColor[tt]} ${tt === "harvest" ? "text-black" : "text-white"}`;
-                    const taskEmoji = (o as any).taskEmoji;
+                    const taskEmoji = (o as { taskEmoji?: string | null }).taskEmoji;
                     const icon =
                       taskEmoji &&
                       taskEmoji !== "??" &&
@@ -4098,11 +4106,11 @@ function RoutineSection({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {plants
           .filter(
-            (gp: any) =>
+            (gp: { id: string }) =>
               (dueThisWeekByPlant[gp.id]?.length || 0) > 0 &&
               !duePlantIds?.has(gp.id),
           )
-          .map((gp: any) => (
+          .map((gp: { id: string; nickname?: string | null; plant?: { name?: string }; plantName?: string; name?: string }) => (
             <Card key={gp.id} className={routineCardSurface}>
               <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
               {gp.nickname && (
@@ -4159,6 +4167,7 @@ function OverviewSection({
 }: {
   gardenId: string;
   activityRev?: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- garden plant shape from API
   plants: any[];
   members: Array<{
     userId: string;
@@ -4258,7 +4267,7 @@ function OverviewSection({
       try {
         const rows = await listGardenActivityToday(gardenId, serverToday);
         if (!ignore) setActivity(rows);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!ignore)
           setErrAct(
             e?.message ||
@@ -4390,6 +4399,7 @@ function OverviewSection({
     const profile = memberProfiles[member.userId];
     const accentKey = profile?.accentKey || member.accentKey;
     if (accentKey) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accentKey from member may not match AccentKey union
       const option = getAccentOption(accentKey as any);
       if (option) return option.hex;
     }
@@ -4996,6 +5006,7 @@ function EditPlantButton({
   serverToday,
   actorColorCss,
 }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- garden plant with plant relation
   gp: any;
   gardenId: string;
   onChanged: () => Promise<void>;
@@ -5048,6 +5059,7 @@ function EditPlantButton({
     setSubmitting(true);
     try {
       // Update nickname, count, health status, and notes; delete plant if count becomes 0
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase update accepts Record<string, unknown>
       const updateData: Record<string, any> = {
         nickname: nickname.trim() || null,
         plants_on_hand: Math.max(0, Number(count || 0)),
@@ -5068,7 +5080,7 @@ function EditPlantButton({
         try {
           await logGardenActivity({
             gardenId,
-            kind: "plant_deleted" as any,
+            kind: "plant_deleted",
             message: `deleted "${gp.nickname || gp.plant?.name || "Plant"}"`,
             plantName: gp.nickname || gp.plant?.name || null,
             actorColor: actorColorCss || null,
@@ -5097,7 +5109,7 @@ function EditPlantButton({
             nickname.trim() || gp.nickname || gp.plant?.name || "Plant";
           await logGardenActivity({
             gardenId,
-            kind: "plant_updated" as any,
+            kind: "plant_updated",
             message: `updated ${plantName}: ${parts.join(", ")}`,
             plantName,
             actorColor: actorColorCss || null,
@@ -5137,7 +5149,7 @@ function EditPlantButton({
               <Input
                 value={nickname}
                 maxLength={30}
-                onChange={(e: any) => setNickname(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNickname(e.target.value)}
                 placeholder={t(
                   "gardenDashboard.plantsSection.optionalNickname",
                 )}
@@ -5151,7 +5163,7 @@ function EditPlantButton({
                 type="number"
                 min={0}
                 value={String(count)}
-                onChange={(e: any) => setCount(Number(e.target.value))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(Number(e.target.value))}
               />
             </div>
             
@@ -5294,7 +5306,7 @@ function MemberCard({
       try {
         await logGardenActivity({
           gardenId,
-          kind: "note" as any,
+          kind: "note",
           message: `promoted ${member.displayName || "a member"} to owner`,
           actorColor: null,
         });
@@ -5326,7 +5338,7 @@ function MemberCard({
       try {
         await logGardenActivity({
           gardenId,
-          kind: "note" as any,
+          kind: "note",
           message: `demoted ${member.displayName || "an owner"} to member`,
           actorColor: null,
         });
@@ -5348,7 +5360,7 @@ function MemberCard({
       try {
         await logGardenActivity({
           gardenId,
-          kind: "note" as any,
+          kind: "note",
           message: `removed ${member.displayName || "a member"}`,
           actorColor: null,
         });
@@ -5384,7 +5396,7 @@ function MemberCard({
                 variant="secondary"
                 size="icon"
                 className="rounded-full h-8 w-8"
-                onClick={(e: any) => e.stopPropagation()}
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
                 aria-label="Open member actions"
               >
                 <MoreHorizontal className="h-4 w-4" />
@@ -5436,6 +5448,7 @@ function MemberCard({
             style={
               member.accentKey
                 ? (() => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accentKey from member may not match AccentKey union
                     const opt = getAccentOption(member.accentKey as any);
                     return opt ? { color: `hsl(${opt.hsl})` } : undefined;
                   })()
@@ -5463,7 +5476,7 @@ function MemberCard({
           <Button
             variant="destructive"
             className="rounded-2xl"
-            onClick={async (e: any) => {
+            onClick={async (e: React.MouseEvent) => {
               e.stopPropagation();
               if (
                 !confirm(t("gardenDashboard.settingsSection.quitGardenConfirm"))
@@ -5658,7 +5671,7 @@ function GardenDetailsEditor({
         if (parts.length > 0) {
           await logGardenActivity({
             gardenId: garden.id,
-            kind: "note" as any,
+            kind: "note",
             message: `updated garden: ${parts.join(", ")}`,
             actorColor: null,
           });
@@ -5678,7 +5691,7 @@ function GardenDetailsEditor({
         </label>
         <Input
           value={name}
-          onChange={(e: any) => setName(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
           disabled={!canEdit}
         />
       </div>
@@ -5710,7 +5723,7 @@ function GardenDetailsEditor({
         </div>
         <Input
           value={imageUrl}
-          onChange={(e: any) => {
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
             setImageUrl(e.target.value);
             setUploadError(null);
             setUploadStatus(null);
@@ -5821,13 +5834,13 @@ function GardenPrivacyToggle({
         };
         await logGardenActivity({
           gardenId: garden.id,
-          kind: "note" as any,
+          kind: "note",
           message: privacyLabels[newPrivacy],
           actorColor: null,
         });
       } catch {}
       await onSaved();
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErr(e?.message || t("gardenDashboard.settingsSection.privacyUpdateFailed"));
     } finally {
       setSubmitting(false);

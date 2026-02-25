@@ -21,6 +21,7 @@ import { ValidatedInput } from "@/components/ui/validated-input"
 import { PasswordRules } from "@/components/ui/password-rules"
 import { useFieldValidation } from "@/hooks/useFieldValidation"
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase profile data */
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
 
 /**

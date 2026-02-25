@@ -48,6 +48,7 @@ import {
   recipeTimeEnum,
 } from "@/lib/composition"
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase plant data */
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
 type PlantCareData = NonNullable<Plant["plantCare"]>
 type PlantGrowthData = NonNullable<Plant["growth"]>

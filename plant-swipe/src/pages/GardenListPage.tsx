@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase data */
 // @ts-nocheck
 import React from "react";
 import { Card } from "@/components/ui/card";

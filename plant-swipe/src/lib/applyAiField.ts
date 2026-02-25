@@ -67,6 +67,7 @@ const normalizeEnumArrayInput = (enumTool: EnumTools, value: unknown): EnumArray
 }
 
 export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown): Plant {
+  /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic AI payload normalization; payload shape varies */
   const next: Plant = { ...prev }
 
   const shouldIgnore = ['colors', 'identity.colors', 'miscellaneous.source', 'source', 'sources', 'images'].some(
@@ -372,6 +373,7 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       return mutable
     }
   }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 }
 
 export function getCategoryForField(fieldKey: string): PlantFormCategory {

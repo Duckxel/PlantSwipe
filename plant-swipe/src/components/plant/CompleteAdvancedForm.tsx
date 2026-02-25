@@ -39,6 +39,7 @@ import {
   formatClassificationLabel,
 } from "@/constants/classification"
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic form/plant schema data */
 const selectBaseClass = "h-9 w-full rounded-md px-3 py-1 text-sm"
 
 // Helper component for array inputs
