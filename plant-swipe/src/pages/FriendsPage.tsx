@@ -30,6 +30,7 @@ import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { sendFriendRequestPushNotification, refreshAppBadge } from "@/lib/notifications";
 import { areUsersBlocked } from "@/lib/moderation";
 import { cn } from "@/lib/utils";
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic friend/profile API data */
 
 type FriendRequest = {
   id: string;
@@ -285,7 +286,7 @@ export const FriendsPage: React.FC = () => {
       }
 
       // Map RPC results to SearchResult format
-      let results: SearchResult[] = (data || [])
+      const results: SearchResult[] = (data || [])
         .filter((p: any) => p.id !== user.id)
         .map((p: any) => ({
           id: p.id,
@@ -327,6 +328,7 @@ export const FriendsPage: React.FC = () => {
       setError(e?.message || t("friends.errors.searchFailed"));
       setDialogSearching(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialogSearchQuery, user?.id, t]);
 
   // Helper function to mark search results with friend/pending status

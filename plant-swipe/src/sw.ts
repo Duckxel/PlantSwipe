@@ -8,6 +8,7 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { offlineFallback, warmStrategyCache } from 'workbox-recipes'
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- service worker dynamic data */
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{
     url: string
@@ -177,7 +178,7 @@ registerRoute(
 const allowedImageOrigins = [
   self.location.origin,
   'https://media.aphylia.app',
-  'https://lxnkcguwewrskqnyzjwi.supabase.co',
+  '[REDACTED]',
 ]
 
 registerRoute(

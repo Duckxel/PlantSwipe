@@ -1,4 +1,5 @@
- // @ts-nocheck
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
 import React, { Suspense, createContext, useContext, useState, useEffect, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import type {

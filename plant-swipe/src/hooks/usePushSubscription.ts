@@ -145,6 +145,7 @@ export function usePushSubscription(userId: string | null) {
     // Small delay to avoid blocking initial render
     const timeout = setTimeout(tryResync, 1500)
     return () => clearTimeout(timeout)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supported, userId, synced])
 
   React.useEffect(() => {

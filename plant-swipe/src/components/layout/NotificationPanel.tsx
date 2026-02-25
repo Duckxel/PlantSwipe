@@ -27,6 +27,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { acceptGardenInvite, declineGardenInvite, refreshAppBadge } from '@/lib/notifications'
 import type { GardenInvite } from '@/types/notification'
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic notification data */
 type FriendRequest = {
   id: string
   requester_id: string

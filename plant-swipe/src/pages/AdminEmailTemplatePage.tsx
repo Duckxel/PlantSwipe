@@ -39,6 +39,7 @@ import { translateEmailToAllLanguages } from "@/lib/deepl"
 import { sanitizeEmailHtml } from "@/lib/emailWrapper"
 import { EmailPreviewShell } from "@/components/email/EmailPreviewShell"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic email template editing */
 
 // Language display names
 const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {

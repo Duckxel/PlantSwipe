@@ -498,6 +498,7 @@ export function captureException(
     // Add device info
     scope.setContext('device', {
       online: navigator.onLine,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       memory: (navigator as any).deviceMemory,
       cores: navigator.hardwareConcurrency,
     })

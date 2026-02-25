@@ -88,6 +88,7 @@ export const NewConversationDialog: React.FC<NewConversationDialogProps> = ({
           displayName: profileMap.get(f.friend_id)?.display_name || null,
           avatarUrl: profileMap.get(f.friend_id)?.avatar_url || null
         })))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (e: any) {
         console.error('[new-conversation] Failed to load friends:', e)
         setError(e?.message || 'Failed to load friends')
@@ -116,6 +117,7 @@ export const NewConversationDialog: React.FC<NewConversationDialogProps> = ({
     try {
       const conversationId = await getOrCreateConversation(friendId)
       onConversationCreated(conversationId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[new-conversation] Failed to create conversation:', e)
       setError(e?.message || 'Failed to start conversation')

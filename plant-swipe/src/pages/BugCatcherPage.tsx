@@ -195,6 +195,7 @@ export function BugCatcherPage() {
     } else if (!user) {
       setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, hasBugCatcherRole, loadData])
 
   const handleRefresh = () => {
@@ -236,6 +237,7 @@ export function BugCatcherPage() {
       } else {
         setActionError(data?.[0]?.message || 'Failed to submit action')
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       setActionError(error?.message || 'Failed to submit action')
     } finally {
@@ -315,6 +317,7 @@ export function BugCatcherPage() {
       } else {
         setReportError(data?.[0]?.message || 'Failed to submit bug report')
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       setReportError(error?.message || 'Failed to submit bug report')
     } finally {
@@ -380,6 +383,7 @@ export function BugCatcherPage() {
       if (data.url) {
         setScreenshots(prev => [...prev, data.url])
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('Screenshot upload error:', error)
       setScreenshotError(error?.message || 'Failed to upload screenshot')

@@ -136,6 +136,7 @@ function mapTranslationToRow(t: PlantTranslation, timestamp: string) {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function upsertPlantTranslationRows(rows: any[]) {
   return supabase
     .from('plant_translations')

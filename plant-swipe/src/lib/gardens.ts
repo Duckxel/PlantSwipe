@@ -63,7 +63,7 @@ const missingSupabaseRpcs = new Set<string>()
 const missingSupabaseTablesOrViews = new Set<string>()
 let taskCachesDisabled = false
 
-function disableTaskCachesOnce(reason: string, error?: any) {
+function disableTaskCachesOnce(reason: string, error?: unknown) {
   if (taskCachesDisabled) return
   taskCachesDisabled = true
   const detail = reason ? ` (${reason})` : ''
@@ -81,7 +81,7 @@ async function computeUserTaskTotalsFromLiveData(userId: string, date: string) {
       return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
     }
 
-    const gardenIds = memberships.map((m: any) => m.garden_id)
+    const gardenIds = memberships.map((m: { garden_id: string }) => m.garden_id)
     const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
 
     let totalDue = 0
@@ -119,7 +119,7 @@ async function computeUserGardenBreakdownFromLiveData(userId: string, date: stri
       return {}
     }
 
-    const gardenIds = memberships.map((m: any) => m.garden_id)
+    const gardenIds = memberships.map((m: { garden_id: string }) => m.garden_id)
     const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
 
     const result: Record<string, {
@@ -134,9 +134,9 @@ async function computeUserGardenBreakdownFromLiveData(userId: string, date: stri
       const gid = String(membership.garden_id)
       const prog = verifiedProg[gid] || { due: 0, completed: 0 }
       const hasRemaining = prog.due > prog.completed
-      const garden = (membership as any).gardens
+      const garden = (membership as { gardens?: { name?: string } | null }).gardens
       result[gid] = {
-        gardenName: garden ? garden.name : '',
+        gardenName: garden?.name ?? '',
         due: prog.due,
         completed: prog.completed,
         hasRemainingTasks: hasRemaining,
@@ -219,12 +219,13 @@ const includesResourceName = (text: string, resource: string) => {
   return lower.includes(norm) || lower.includes(`public.${norm}`)
 }
 
-function isMissingRpcFunction(error: any, functionName: string): boolean {
+function isMissingRpcFunction(error: unknown, functionName: string): boolean {
   if (!error) return false
-  const code = String(error.code ?? error.status ?? '').toUpperCase()
-  const message = String(error.message ?? '').toLowerCase()
-  const details = String(error.details ?? '').toLowerCase()
-  const hint = String(error.hint ?? '').toLowerCase()
+  const err = error as Record<string, unknown>
+  const code = String(err.code ?? err.status ?? '').toUpperCase()
+  const message = String(err.message ?? '').toLowerCase()
+  const details = String(err.details ?? '').toLowerCase()
+  const hint = String(err.hint ?? '').toLowerCase()
   const combined = `${message} ${details} ${hint}`
   const functionMissing =
     code === 'PGRST204' ||
@@ -241,12 +242,13 @@ function isMissingRpcFunction(error: any, functionName: string): boolean {
   return false
 }
 
-function isRpcDependencyUnavailable(error: any, functionName: string): boolean {
+function isRpcDependencyUnavailable(error: unknown, functionName: string): boolean {
   if (!error) return false
-  const code = String(error.code ?? error.status ?? '').toUpperCase()
-  const message = String(error.message ?? '').toLowerCase()
-  const details = String(error.details ?? '').toLowerCase()
-  const hint = String(error.hint ?? '').toLowerCase()
+  const err = error as Record<string, unknown>
+  const code = String(err.code ?? err.status ?? '').toUpperCase()
+  const message = String(err.message ?? '').toLowerCase()
+  const details = String(err.details ?? '').toLowerCase()
+  const hint = String(err.hint ?? '').toLowerCase()
   const combined = `${message} ${details} ${hint}`
   const undefinedFunction =
     code === '42883' ||
@@ -261,12 +263,13 @@ function isRpcDependencyUnavailable(error: any, functionName: string): boolean {
   return false
 }
 
-function isMissingTableOrView(error: any, tableName: string): boolean {
+function isMissingTableOrView(error: unknown, tableName: string): boolean {
   if (!error) return false
-  const code = String(error.code ?? error.status ?? '').toUpperCase()
-  const message = String(error.message ?? '').toLowerCase()
-  const details = String(error.details ?? '').toLowerCase()
-  const hint = String(error.hint ?? '').toLowerCase()
+  const err = error as Record<string, unknown>
+  const code = String(err.code ?? err.status ?? '').toUpperCase()
+  const message = String(err.message ?? '').toLowerCase()
+  const details = String(err.details ?? '').toLowerCase()
+  const hint = String(err.hint ?? '').toLowerCase()
   const combined = `${message} ${details} ${hint}`
   const tableMissing =
     code === 'PGRST201' ||
@@ -305,7 +308,7 @@ export async function getGardenMemberCountsBatch(gardenIds: string[]): Promise<R
           console.warn('[gardens] get_garden_member_counts RPC failed, falling back to client query:', error)
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (!(isMissingRpcFunction(err, rpcName) || isRpcDependencyUnavailable(err, rpcName))) {
         console.warn('[gardens] get_garden_member_counts RPC failed, falling back to client query:', err)
       }
@@ -351,19 +354,23 @@ export async function listTasksForMultipleGardensMinimal(gardenIds: string[], _l
         .select(selectMinimalNoEmoji)
         .in('garden_id', safeIds)
         .order('created_at', { ascending: true })
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       data = res.data as any
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res.error as any
     }
   }
   if (error) throw new Error(error.message)
 
   const result: Record<string, Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>> = {}
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   for (const r of (data || []) as any[]) {
     const gid = String(r.garden_id)
     if (!result[gid]) result[gid] = []
     result[gid].push({
       id: String(r.id),
       type: r.type,
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       emoji: (r as any).emoji || null,
       gardenPlantId: String(r.garden_plant_id),
     })
@@ -382,7 +389,9 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   if (gardenIds.length === 0) return []
   
   // Try with privacy column first, fallback if column doesn't exist
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   let gardens: any[] = []
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   let gerr: any = null
   const result = await supabase
     .from('gardens')
@@ -402,6 +411,7 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   }
   
   if (gerr) throw new Error(gerr.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return gardens.map((g: any) => ({
     id: String(g.id),
     name: String(g.name),
@@ -417,7 +427,9 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
   const { name, coverImageUrl = null, ownerUserId, privacy = 'public' } = params
   
   // Try with privacy column first, fallback if column doesn't exist
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   let data: any = null
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   let error: any = null
   const result = await supabase
     .from('gardens')
@@ -445,6 +457,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
     coverImageUrl: data.cover_image_url || null,
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     privacy: ((data as any).privacy || privacy) as GardenPrivacy,
   }
   // Add owner as member
@@ -457,7 +470,9 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
 
 export async function getGarden(gardenId: string): Promise<Garden | null> {
   // Try with new privacy column first
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   let data: any = null
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   let error: any = null
   
   const result = await supabase
@@ -509,6 +524,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     coverImageUrl: data.cover_image_url || null,
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     streak: Number((data as any).streak ?? 0),
     privacy,
     locationCity: data.location_city || null,
@@ -585,6 +601,7 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
     .eq('garden_id', gardenId)
     .order('sort_index', { ascending: true, nullsFirst: false })
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const rows = (data || []) as any[]
   if (rows.length === 0) return []
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
@@ -616,13 +633,16 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
         const translation = translationMap.get(p.id) || null
         // Convert plant_images to photos format expected by mergePlantWithTranslation
         const images = Array.isArray(p.plant_images) ? p.plant_images : []
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         const photos = images.map((img: any) => ({
           url: img.link || '',
           isPrimary: img.use === 'primary',
           isVertical: false
         }))
         // Find primary image or use first image as fallback
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         const primaryImageUrl = images.find((img: any) => img.use === 'primary')?.link 
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
           || images.find((img: any) => img.use === 'discovery')?.link 
           || images[0]?.link 
           || p.image_url 
@@ -653,6 +673,7 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
       notes: r.notes || null,
       lastHealthUpdate: r.last_health_update || null,
       plant: idToPlant[plantId] || null,
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       sortIndex: (r as any).sort_index ?? null,
     }
   })
@@ -668,6 +689,7 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
     .order('sort_index', { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle()
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const nextIndex = Number((maxRow as any)?.sort_index ?? -1) + 1
   const { data, error } = await supabase
     .from('garden_plants')
@@ -683,6 +705,7 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
     seedsPlanted: Number(data.seeds_planted ?? 0),
     plantedAt: data.planted_at,
     expectedBloomDate: data.expected_bloom_date,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     plantsOnHand: Number((data as any).plants_on_hand ?? 0),
   }
 }
@@ -704,6 +727,7 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     .select('garden_id, user_id, role, joined_at')
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const rows = (data || []) as any[]
   const { data: profilesData, error: pErr } = await supabase.rpc('get_profiles_for_garden', { _garden_id: gardenId })
   if (pErr) throw new Error(pErr.message)
@@ -711,13 +735,20 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
   const idToEmail: Record<string, string | null> = {}
   const idToAccent: Record<string, string | null> = {}
   const idToAvatar: Record<string, string | null> = {}
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   for (const r of (profilesData as any[]) || []) {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const uid = String((r as any).user_id)
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     idToName[uid] = (r as any).display_name || null
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     idToEmail[uid] = (r as any).email || null
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     idToAccent[uid] = (r as any).accent_key || null
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     idToAvatar[uid] = (r as any).avatar_url || null
   }
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
     userId: String(r.user_id),
@@ -891,6 +922,7 @@ export async function getGardenTasks(gardenId: string, startDay: string, endDay:
     if (resp.ok) {
       const body = await resp.json().catch(() => null)
       if (body && body.ok !== false && Array.isArray(body.tasks)) {
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         return body.tasks.map((r: any) => ({
           id: String(r.id),
           gardenId: String(r.gardenId ?? r.garden_id ?? gardenId),
@@ -913,6 +945,7 @@ export async function getGardenTasks(gardenId: string, startDay: string, endDay:
     .lte('day', endDay)
     .order('day', { ascending: true })
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return (data || []).map((r: any) => ({
     id: String(r.id),
     gardenId: String(r.garden_id),
@@ -999,6 +1032,7 @@ export async function getGardenTodayProgressUltraFast(gardenId: string, dayIso: 
         _end_iso: end,
       })
       if (!error && data) {
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         let payload: any = data
         if (typeof payload === 'string') {
           try {
@@ -1010,7 +1044,9 @@ export async function getGardenTodayProgressUltraFast(gardenId: string, dayIso: 
         const row = Array.isArray(payload) ? payload[0] : payload
         if (row && typeof row === 'object') {
           return {
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
             due: Number((row as any).due ?? 0),
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
             completed: Number((row as any).completed ?? 0),
           }
         }
@@ -1075,6 +1111,7 @@ export async function getGardensTodayProgressBatch(gardenIds: string[], dayIso: 
         _end_iso: end,
       })
       if (!error && data) {
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         let rows: any = data
         if (typeof rows === 'string') {
           try {
@@ -1090,8 +1127,11 @@ export async function getGardensTodayProgressBatch(gardenIds: string[], dayIso: 
           const result: Record<string, { due: number; completed: number }> = {}
           for (const row of rows) {
             if (!row) continue
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
             result[String((row as any).garden_id)] = {
+              /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
               due: Number((row as any).due ?? 0),
+              /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
               completed: Number((row as any).completed ?? 0),
             }
           }
@@ -1152,14 +1192,18 @@ export async function listGardenTasksMinimal(gardenId: string, limit: number = 5
         .eq('garden_id', gardenId)
         .limit(limit)
         .order('created_at', { ascending: true })
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       data = res.data as any
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res.error as any
     }
   }
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return (data || []).map((r: any) => ({
     id: String(r.id),
     type: r.type,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     emoji: (r as any).emoji || null,
     gardenPlantId: String(r.garden_plant_id),
   }))
@@ -1181,6 +1225,7 @@ export async function getGardenPlantsMinimal(gardenIds: string[], limitPerGarden
     .limit(limitPerGarden * safeGardenIds.length) // Total limit
     .order('sort_index', { ascending: true, nullsFirst: false })
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const rows = (data || []) as any[]
   if (rows.length === 0) return []
   
@@ -1317,6 +1362,7 @@ export async function getGardenInstanceInventory(gardenId: string): Promise<Arra
     .select('garden_plant_id, seeds_on_hand, plants_on_hand')
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return (data || []).map((r: any) => ({
     gardenPlantId: String(r.garden_plant_id),
     seedsOnHand: Number(r.seeds_on_hand ?? 0),
@@ -1368,6 +1414,7 @@ export async function upsertGardenPlantSchedule(params: { gardenPlantId: string;
   const { gardenPlantId, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null, monthlyNthWeekdays = null } = params
   // Try with monthly_nth_weekdays column first; if the column doesn't exist, fallback to upsert without it
   const attempt = async (includeNth: boolean) => {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const payload: any = {
       garden_plant_id: gardenPlantId,
       period,
@@ -1396,17 +1443,25 @@ export async function getGardenPlantSchedule(gardenPlantId: string): Promise<{ p
   let { data, error } = await q
   if (error && /column .*monthly_nth_weekdays.* does not exist/i.test(error.message)) {
     const res2 = await base.select('period, amount, weekly_days, monthly_days, yearly_days').eq('garden_plant_id', gardenPlantId).maybeSingle()
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     data = res2.data as any
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     error = res2.error as any
   }
   if (error) throw new Error(error.message)
   if (!data) return null
   return {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     period: (data as any).period,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     amount: Number((data as any).amount ?? 0),
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     weeklyDays: (data as any).weekly_days || null,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     monthlyDays: (data as any).monthly_days || null,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     yearlyDays: (data as any).yearly_days || null,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     monthlyNthWeekdays: (data as any).monthly_nth_weekdays || null,
   }
 }
@@ -1451,25 +1506,33 @@ export async function listPlantTasks(gardenPlantId: string): Promise<GardenPlant
     const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
     if (noEmoji && noNth) {
       const res = await base.select(selectNoEmojiNoNth).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       data = res.data as any
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res.error as any
     } else if (noEmoji) {
       const res = await base.select(selectNoEmoji).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       data = res.data as any
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res.error as any
     } else if (noNth) {
       const res = await base.select(selectNoNth).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       data = res.data as any
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res.error as any
     }
   }
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return (data || []).map((r: any) => ({
     id: String(r.id),
     gardenId: String(r.garden_id),
     gardenPlantId: String(r.garden_plant_id),
     type: r.type,
     customName: r.custom_name || null,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     emoji: (r as any).emoji || null,
     scheduleKind: r.schedule_kind,
     dueAt: r.due_at || null,
@@ -1481,6 +1544,7 @@ export async function listPlantTasks(gardenPlantId: string): Promise<GardenPlant
     weeklyDays: r.weekly_days || null,
     monthlyDays: r.monthly_days || null,
     yearlyDays: r.yearly_days || null,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     monthlyNthWeekdays: (r as any).monthly_nth_weekdays || null,
     createdAt: String(r.created_at),
   }))
@@ -1504,6 +1568,7 @@ export async function listTaskOccurrences(taskId: string, windowDays = 60): Prom
     .lte('due_at', end.toISOString())
     .order('due_at', { ascending: true })
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return (data || []).map((r: any) => ({
     id: String(r.id),
     taskId: String(r.task_id),
@@ -1528,7 +1593,9 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
       .eq('id', occurrenceId)
       .single()
     
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     if (data && (data as any).garden_plant_tasks) {
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       const gardenId = String((data as any).garden_plant_tasks.garden_id)
       const today = new Date().toISOString().slice(0, 10)
       
@@ -1565,25 +1632,33 @@ export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask
     const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
     if (noEmoji && noNth) {
       const res = await base.select(selectNoEmojiNoNth).eq('garden_id', gardenId).order('created_at', { ascending: true })
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       data = res.data as any
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res.error as any
     } else if (noEmoji) {
       const res = await base.select(selectNoEmoji).eq('garden_id', gardenId).order('created_at', { ascending: true })
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       data = res.data as any
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res.error as any
     } else if (noNth) {
       const res = await base.select(selectNoNth).eq('garden_id', gardenId).order('created_at', { ascending: true })
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       data = res.data as any
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res.error as any
     }
   }
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return (data || []).map((r: any) => ({
     id: String(r.id),
     gardenId: String(r.garden_id),
     gardenPlantId: String(r.garden_plant_id),
     type: r.type,
     customName: r.custom_name || null,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     emoji: (r as any).emoji || null,
     scheduleKind: r.schedule_kind,
     dueAt: r.due_at || null,
@@ -1595,6 +1670,7 @@ export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask
     weeklyDays: r.weekly_days || null,
     monthlyDays: r.monthly_days || null,
     yearlyDays: r.yearly_days || null,
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     monthlyNthWeekdays: (r as any).monthly_nth_weekdays || null,
     createdAt: String(r.created_at),
   }))
@@ -1621,8 +1697,8 @@ export async function ensureTaskOccurrence(taskId: string, gardenPlantId: string
         { onConflict: 'task_id, due_at' }
       )
     if (error) throw error
-  } catch (e: any) {
-    const msg = String(e?.message || '')
+  } catch (e: unknown) {
+    const msg = String(e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e ? String((e as Record<string, unknown>).message) : ''))
     const noConstraint = /no unique|no exclusion constraint|ON CONFLICT specification/i.test(msg)
     if (!noConstraint) throw e
     // Fallback: pick an existing row (keep the one with the highest completed_count),
@@ -1634,6 +1710,7 @@ export async function ensureTaskOccurrence(taskId: string, gardenPlantId: string
       .eq('due_at', dueAtIso)
       .order('completed_count', { ascending: false, nullsFirst: false })
     if (Array.isArray(rows) && rows.length > 0) {
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       const keeper = rows[0] as any
       const nextReq = Math.max(Number(keeper.required_count || 1), Math.max(1, Number(requiredCount || 1)))
       await supabase
@@ -1922,7 +1999,7 @@ export async function resyncMultipleGardensTasks(gardenIds: string[], startIso: 
       if (error && !(isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName))) {
         console.warn('[gardens] ensure_gardens_tasks_occurrences RPC failed, falling back to parallel JS:', error)
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (!(isMissingRpcFunction(err, rpcName) || isRpcDependencyUnavailable(err, rpcName))) {
         console.warn('[gardens] ensure_gardens_tasks_occurrences RPC failed, falling back to parallel JS:', err)
       }
@@ -1954,6 +2031,7 @@ export async function createPatternTask(params: {
   const { gardenId, gardenPlantId, type, customName = null, emoji = null, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null, monthlyNthWeekdays = null, requiredCount = 1 } = params
   // Attempt insert with graceful fallbacks for optional columns (emoji, monthly_nth_weekdays)
   const attempt = async (includeEmoji: boolean, includeNth: boolean) => {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const payload: any = {
       garden_id: gardenId,
       garden_plant_id: gardenPlantId,
@@ -1987,11 +2065,14 @@ export async function createPatternTask(params: {
     if (noEmoji) includeEmoji = false
     if (noNth || noEmoji) {
       const res2 = await attempt(includeEmoji, includeNth)
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       data = res2.data as any
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res2.error as any
     }
   }
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return String((data as any).id)
 }
 
@@ -2009,6 +2090,7 @@ export async function updatePatternTask(params: {
   requiredCount?: number | null
 }): Promise<void> {
   const { taskId, type, customName, emoji, period, amount, weeklyDays, monthlyDays, yearlyDays, monthlyNthWeekdays, requiredCount } = params
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const basePayload: any = {}
   if (type) basePayload.type = type
   if (customName !== undefined) basePayload.custom_name = customName
@@ -2023,6 +2105,7 @@ export async function updatePatternTask(params: {
   basePayload.schedule_kind = 'repeat_pattern'
 
   const attempt = async (includeEmoji: boolean, includeNth: boolean) => {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const pl: any = { ...basePayload }
     if (!includeEmoji) delete pl.emoji
     if (!includeNth) delete pl.monthly_nth_weekdays
@@ -2042,6 +2125,7 @@ export async function updatePatternTask(params: {
     if (noEmoji) includeEmoji = false
     if (noNth || noEmoji) {
       const res2 = await attempt(includeEmoji, includeNth)
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       error = res2.error as any
     }
   }
@@ -2058,6 +2142,7 @@ export async function listOccurrencesForTasks(taskIds: string[], startIso: strin
     .lte('due_at', endIso)
     .order('due_at', { ascending: true })
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return (data || []).map((r: any) => ({
     id: String(r.id),
     taskId: String(r.task_id),
@@ -2184,8 +2269,11 @@ export async function listCompletionsForOccurrences(occurrenceIds: string[]): Pr
     .in('occurrence_id', occurrenceIds)
   if (error) throw new Error(error.message)
   const uniquePairs = new Map<string, { occurrenceId: string; userId: string }>()
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   for (const r of (rows || []) as any[]) {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const occId = String((r as any).occurrence_id)
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const uid = String((r as any).user_id)
     uniquePairs.set(`${occId}::${uid}`, { occurrenceId: occId, userId: uid })
   }
@@ -2197,7 +2285,9 @@ export async function listCompletionsForOccurrences(occurrenceIds: string[]): Pr
     .select('id, display_name')
     .in('id', userIds)
   const idToName: Record<string, string | null> = {}
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   for (const p of (profs || []) as any[]) {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     idToName[String(p.id)] = (p as any).display_name || null
   }
   const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
@@ -2310,7 +2400,9 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
     // OPTIMIZED: Direct query to cache table - FASTEST approach
     // If table doesn't exist, cacheErr will indicate that - handle gracefully
     const tableName = 'garden_task_daily_cache'
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     let cacheData: any[] | null = null
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     let cacheErr: any = null
     if (!missingSupabaseTablesOrViews.has(tableName)) {
       try {
@@ -2426,6 +2518,7 @@ export async function getGardenTodayOccurrencesCached(gardenId: string, dayIso: 
       .order('due_at', { ascending: true })
     
     if (!error && data && Array.isArray(data)) {
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       return data.map((r: any) => ({
         id: String(r.occurrence_id),
         taskId: String(r.task_id),
@@ -2721,7 +2814,9 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
   try {
     // Direct query to user cache table - FASTEST approach
     const userTable = 'user_task_daily_cache'
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     let userCache: any | null = null
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     let userCacheErr: any = null
     if (!missingSupabaseTablesOrViews.has(userTable)) {
       try {
@@ -2756,7 +2851,8 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
           .eq('user_id', userId)
         
         if (memberships && memberships.length > 0) {
-          const gardenIds = memberships.map((m: any) => m.garden_id)
+          const gardenIds = memberships.map((m: { garden_id: string }) => m.garden_id)
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
           let gardenCache: any[] | null = null
           if (!missingSupabaseTablesOrViews.has(gardenDailyTable)) {
             try {
@@ -2831,10 +2927,12 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
       return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
     }
     
-      const gardenIds = memberships.map((m: any) => m.garden_id)
+      const gardenIds = memberships.map((m: { garden_id: string }) => m.garden_id)
       
       // Direct query to garden cache - aggregate in one query
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       let gardenCache: any[] | null = null
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       let gardenCacheErr: any = null
       if (!missingSupabaseTablesOrViews.has(gardenDailyTable)) {
         try {
@@ -2942,14 +3040,16 @@ export async function getUserGardensTasksTodayCached(userId: string, dayIso?: st
       return {}
     }
     
-    const gardenIds = memberships.map((m: any) => m.garden_id)
+    const gardenIds = memberships.map((m: { garden_id: string }) => m.garden_id)
     const gardenNameMap: Record<string, string> = {}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     memberships.forEach((m: any) => {
       const g = m.gardens
       if (g) gardenNameMap[g.id] = g.name
     })
     
     // Filter cache data to only gardens user is member of (if cache exists)
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const filteredCache = (cacheData || []).filter((row: any) => 
       gardenIds.includes(String(row.garden_id))
     )
@@ -3084,6 +3184,7 @@ export async function listGardenActivityToday(gardenId: string, todayIso?: strin
       if (resp.ok) {
         const body = await resp.json().catch(() => null)
         if (body && body.ok !== false && Array.isArray(body?.activity)) {
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
           return body.activity.map((r: any) => ({
             id: String(r.id),
             gardenId: String(r.gardenId ?? r.garden_id ?? gardenId),
@@ -3109,6 +3210,7 @@ export async function listGardenActivityToday(gardenId: string, todayIso?: strin
     .lte('occurred_at', end)
     .order('occurred_at', { ascending: false })
   if (error) throw new Error(error.message)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return (data || []).map((r: any) => ({
     id: String(r.id),
     gardenId: String(r.garden_id),
@@ -3186,7 +3288,9 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
   if (gardenIds.length === 0) return []
   
   // Fetch gardens with privacy = 'public' only
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   let gardens: any[] = []
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   let gerr: any = null
   
   const result = await supabase
@@ -3204,6 +3308,7 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
       .from('gardens')
       .select('id, name, cover_image_url, created_by, created_at, streak')
       .in('id', gardenIds)
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     gardens = (fallbackResult.data || []).filter((g: any) => !g.is_private)
     gerr = fallbackResult.error
   }
@@ -3211,6 +3316,7 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
   if (gerr) throw new Error(gerr.message)
   if (gardens.length === 0) return []
   
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const publicGardenIds = gardens.map((g: any) => String(g.id))
   
   // Fetch plant counts and preview plants for each garden
@@ -3223,6 +3329,7 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
   if (gpErr) console.error('Error fetching garden plants:', gpErr)
   
   // Group plants by garden
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const plantsByGarden: Record<string, any[]> = {}
   for (const gp of gardenPlants || []) {
     const gid = String(gp.garden_id)
@@ -3258,7 +3365,9 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
     
     if (!pErr && plantRows) {
       for (const p of plantRows) {
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         const images = Array.isArray((p as any).plant_images) ? (p as any).plant_images : []
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         const photos = images.map((img: any) => ({
           url: img.link || '',
           isPrimary: img.use === 'primary',
@@ -3266,6 +3375,7 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
         }))
         const primaryUrl = getPrimaryPhotoUrl(photos) || (photos[0]?.url || null)
         plantsMap[String(p.id)] = {
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
           name: (p as any).common_name || '',
           imageUrl: primaryUrl
         }
@@ -3274,6 +3384,7 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
   }
   
   // Fetch owner display names
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const ownerIds = [...new Set(gardens.map((g: any) => String(g.created_by)))]
   const ownerNamesMap: Record<string, string | null> = {}
   if (ownerIds.length > 0) {
@@ -3290,11 +3401,13 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
   }
   
   // Build result with preview data
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return gardens.map((g: any) => {
     const gid = String(g.id)
     const gardenPlantsList = plantsByGarden[gid] || []
     
     // Get up to 4 preview plants with images
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const previewPlants = gardenPlantsList.slice(0, 4).map((gp: any) => {
       const plantId = String(gp.plant_id)
       const plantData = plantsMap[plantId] || { name: '', imageUrl: null }
@@ -3337,6 +3450,7 @@ export async function getAllPublicGardens(limit = 50): Promise<PublicGardenWithP
   if (gerr) throw new Error(gerr.message)
   if (!gardens || gardens.length === 0) return []
   
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const publicGardenIds = gardens.map((g: any) => String(g.id))
   
   // Fetch plant counts and preview plants for each garden
@@ -3349,6 +3463,7 @@ export async function getAllPublicGardens(limit = 50): Promise<PublicGardenWithP
   if (gpErr) console.error('Error fetching garden plants:', gpErr)
   
   // Group plants by garden
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const plantsByGarden: Record<string, any[]> = {}
   for (const gp of gardenPlants || []) {
     const gid = String(gp.garden_id)
@@ -3378,12 +3493,14 @@ export async function getAllPublicGardens(limit = 50): Promise<PublicGardenWithP
   if (allPlantIds.size > 0) {
     const { data: plantRows, error: pErr } = await supabase
       .from('plants')
-      .select('id, common_name, plant_images(link, use)')
-      .in('id', Array.from(allPlantIds))
+    .select('id, common_name, plant_images(link, use)')
+    .in('id', Array.from(allPlantIds))
     
     if (!pErr && plantRows) {
       for (const p of plantRows) {
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         const images = Array.isArray((p as any).plant_images) ? (p as any).plant_images : []
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         const photos = images.map((img: any) => ({
           url: img.link || '',
           isPrimary: img.use === 'primary',
@@ -3391,6 +3508,7 @@ export async function getAllPublicGardens(limit = 50): Promise<PublicGardenWithP
         }))
         const primaryUrl = getPrimaryPhotoUrl(photos) || (photos[0]?.url || null)
         plantsMap[String(p.id)] = {
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
           name: (p as any).common_name || '',
           imageUrl: primaryUrl
         }
@@ -3399,6 +3517,7 @@ export async function getAllPublicGardens(limit = 50): Promise<PublicGardenWithP
   }
   
   // Fetch owner display names
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const ownerIds = [...new Set(gardens.map((g: any) => String(g.created_by)))]
   const ownerNamesMap: Record<string, string | null> = {}
   if (ownerIds.length > 0) {
@@ -3415,10 +3534,12 @@ export async function getAllPublicGardens(limit = 50): Promise<PublicGardenWithP
   }
   
   // Build result with preview data
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return gardens.map((g: any) => {
     const gid = String(g.id)
     const gardenPlantsList = plantsByGarden[gid] || []
     
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     const previewPlants = gardenPlantsList.slice(0, 6).map((gp: any) => {
       const plantId = String(gp.plant_id)
       const plantData = plantsMap[plantId] || { name: '', imageUrl: null }
@@ -3461,6 +3582,7 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
   if (gerr) throw new Error(gerr.message)
   if (!gardens || gardens.length === 0) return []
   
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const fetchedGardenIds = gardens.map((g: any) => String(g.id))
   
   // Fetch plant counts and preview plants for each garden
@@ -3473,6 +3595,7 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
   if (gpErr) console.error('Error fetching garden plants:', gpErr)
   
   // Group plants by garden
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const plantsByGarden: Record<string, any[]> = {}
   for (const gp of gardenPlants || []) {
     const gid = String(gp.garden_id)
@@ -3507,7 +3630,9 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
     
     if (!pErr && plantRows) {
       for (const p of plantRows) {
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         const images = Array.isArray((p as any).plant_images) ? (p as any).plant_images : []
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
         const photos = images.map((img: any) => ({
           url: img.link || '',
           isPrimary: img.use === 'primary',
@@ -3515,6 +3640,7 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
         }))
         const primaryUrl = getPrimaryPhotoUrl(photos) || (photos[0]?.url || null)
         plantsMap[String(p.id)] = {
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
           name: (p as any).common_name || '',
           imageUrl: primaryUrl
         }
@@ -3523,6 +3649,7 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
   }
   
   // Fetch owner display names
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const ownerIds = [...new Set(gardens.map((g: any) => String(g.created_by)))]
   const ownerNamesMap: Record<string, string | null> = {}
   if (ownerIds.length > 0) {
@@ -3539,6 +3666,7 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
   }
   
   // Build result with preview data - maintain original order
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const gardensById = new Map(gardens.map((g: any) => [String(g.id), g]))
   
   return gardenIds
@@ -3548,6 +3676,7 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
       const gid = String(g.id)
       const gardenPlantsList = plantsByGarden[gid] || []
       
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       const previewPlants = gardenPlantsList.slice(0, 6).map((gp: any) => {
         const plantId = String(gp.plant_id)
         const plantData = plantsMap[plantId] || { name: '', imageUrl: null }

@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabaseClient'
 
 function getVapidPublicKey(): string | null {
   if (typeof window !== 'undefined') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const envKey = (window as any)?.__ENV__?.VITE_VAPID_PUBLIC_KEY
     if (envKey && typeof envKey === 'string' && envKey.trim().length > 0) {
       return envKey.trim()

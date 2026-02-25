@@ -478,3 +478,34 @@ For questions about:
 5. **Quality** → Test thoroughly before submitting
 
 **When in doubt, ask.** It's better to clarify than to introduce bugs or compliance issues.
+
+---
+
+## Cursor Cloud specific instructions
+
+### Services overview
+
+| Service | Port | Start command | Notes |
+|---------|------|--------------|-------|
+| **Vite Dev Server** (frontend) | 5173 | `cd plant-swipe && bun run dev` | Proxies `/api/*` to Express on port 3000 |
+| **Express API Server** (backend) | 3000 | `cd plant-swipe && bun run serve` | Requires `.env.server` with database credentials |
+| **Flask Admin API** (optional) | 5001 | `cd admin_api && pip install -r requirements.txt && gunicorn -b 127.0.0.1:5001 app:app` | Not needed for core user flows |
+
+Both the Express API and Vite dev server must be running for full functionality. Start Express first (port 3000), then Vite (port 5173). Access the app at `http://localhost:5173`.
+
+### Environment files
+
+The app requires two env files in `plant-swipe/`:
+- `.env` — client-side Vite variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, etc.)
+- `.env.server` — server-side secrets (`DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, API keys, etc.)
+
+These are not committed to the repo. When secrets are injected as environment variables, create these files by expanding the env vars into the files (the server uses `dotenv` to load them).
+
+### Key caveats
+
+- **Bun** is the package manager and runtime. Install it with `curl -fsSL https://bun.sh/install | bash` if missing. All commands (`bun run dev`, `bun run serve`, `bun run lint`, `bun run build`) use Bun.
+- **Hot-reload does not detect `node_modules` changes.** After `bun install`, restart both dev servers.
+- **Build includes sitemap generation** which needs database access. Set `SKIP_SITEMAP_GENERATION=1` to skip it if database credentials are unavailable.
+- **Lint has pre-existing warnings/errors** (914 warnings, 42 errors in existing code — unused variables in edge functions, `@ts-ignore` comments). These are not regressions.
+- To bind the Vite dev server to all interfaces (needed for remote access), use `VITE_DEV_HOST=0.0.0.0 bun run dev`.
+- For commands and scripts, see the Quick Reference table in this file or `plant-swipe/README.md`.

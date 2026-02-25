@@ -244,6 +244,7 @@ export default function PlantSwipe() {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useLanguageNavigate()
+  const handleOpenInfo = React.useCallback((p: { id: string }) => navigate(`/plants/${p.id}`), [navigate])
   const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "landing" | "discovery" | "gardens" | "search" | "profile" | "create" =
     pathWithoutLang === "/" ? "landing" :
@@ -309,7 +310,6 @@ export default function PlantSwipe() {
         // Network error – don't block, format is valid
       }
       return { valid: true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [t]),
     400,
     isSignupMode,
@@ -344,7 +344,6 @@ export default function PlantSwipe() {
       }
       const suggestionText = fmt.suggestion ? t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: fmt.suggestion }) : undefined
       return { valid: true, suggestion: suggestionText }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [t]),
     400,
     isSignupMode,
@@ -370,7 +369,6 @@ export default function PlantSwipe() {
       if (!authPassword) return { valid: false, error: t('auth.passwordsDontMatch', { defaultValue: "Passwords do not match" }) }
       if (val !== authPassword) return { valid: false, error: t('auth.passwordsDontMatch', { defaultValue: "Passwords do not match" }) }
       return { valid: true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [authPassword, t]),
     400,
     isSignupMode,
@@ -436,21 +434,6 @@ export default function PlantSwipe() {
     return { primaryColors: primary, advancedColors: advanced }
   }, [colorOptions])
   
-  const typeOptions = useMemo(() => {
-    const labels = new Set<string>()
-    plants.forEach((plant) => {
-      const label = getPlantTypeLabel(plant.classification)
-      if (label) labels.add(label)
-    })
-    return Array.from(labels).sort((a, b) => a.localeCompare(b))
-  }, [plants])
-  const usageOptions = useMemo(() => {
-    const labels = new Set<string>()
-    plants.forEach((plant) => {
-      getPlantUsageLabels(plant).forEach((label) => labels.add(label))
-    })
-    return Array.from(labels).sort((a, b) => a.localeCompare(b))
-  }, [plants])
   const likedSet = React.useMemo(() => new Set(likedIds), [likedIds])
 
   // Hydrate liked ids from profile when available
@@ -817,10 +800,14 @@ export default function PlantSwipe() {
   // This avoids repeating expensive string operations on every filter change
   // All Set-based lookups enable O(1) membership tests instead of O(n) array scans
   // Enhanced: Now includes color translations for bi-directional language matching
-  const preparedPlants = useMemo(() => {
+  const { preparedPlants, typeOptions, usageOptions } = useMemo(() => {
     const { aliasMap } = colorLookups
     const now = new Date()
     
+    // Collections for filter options
+    const typeLabelsSet = new Set<string>()
+    const usageLabelsSet = new Set<string>()
+
     // ⚡ Bolt: Cache tokenization results for unique color strings
     // This avoids redundant regex splitting and alias lookups for common colors (e.g. "green")
     // repeated across thousands of plants.
@@ -863,7 +850,7 @@ export default function PlantSwipe() {
       return tokens
     }
 
-    return plants.map((p) => {
+    const prepared = plants.map((p) => {
       // ⚡ Bolt: Use lazy getters for expensive properties to optimize initial load time
       // This avoids computing regexes, Sets, and string manipulations for thousands of plants
       // unless they are actually needed by active filters.
@@ -872,7 +859,6 @@ export default function PlantSwipe() {
       let _cachedColors: string[] | undefined
       let _cachedNormalizedColors: string[] | undefined
       let _cachedColorTokens: Set<string> | undefined
-      let _cachedUsageLabels: string[] | undefined
       let _cachedUsageSet: Set<string> | undefined
       let _cachedHabitats: string[] | undefined
       let _cachedHabitatSet: Set<string> | undefined
@@ -880,7 +866,17 @@ export default function PlantSwipe() {
       let _cachedSearchString: string | undefined
 
       // Type
-      const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
+      // Eagerly compute type label for both prepared plant and options
+      const rawTypeLabel = getPlantTypeLabel(p.classification)
+      if (rawTypeLabel) typeLabelsSet.add(rawTypeLabel)
+      const typeLabel = rawTypeLabel?.toLowerCase() ?? null
+
+      // Usage
+      // Eagerly compute usage labels for both prepared plant and options
+      // This replaces lazy calculation since we need it for filter options anyway
+      const rawUsageLabels = getPlantUsageLabels(p)
+      rawUsageLabels.forEach(label => usageLabelsSet.add(label))
+      const usageLabelsLower = rawUsageLabels.map(l => l.toLowerCase())
 
       // Maintenance
       const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
@@ -928,12 +924,6 @@ export default function PlantSwipe() {
         return _cachedNormalizedColors
       }
 
-      const getUsageLabels = () => {
-        if (_cachedUsageLabels) return _cachedUsageLabels
-        _cachedUsageLabels = getPlantUsageLabels(p).map((label) => label.toLowerCase())
-        return _cachedUsageLabels
-      }
-
       const getHabitats = () => {
         if (_cachedHabitats) return _cachedHabitats
         _cachedHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
@@ -973,12 +963,10 @@ export default function PlantSwipe() {
           return _cachedColorTokens
         },
         _typeLabel: typeLabel,
-        get _usageLabels() {
-           return getUsageLabels()
-        },
+        _usageLabels: usageLabelsLower, // Eager now
         get _usageSet() {
            if (_cachedUsageSet) return _cachedUsageSet
-           _cachedUsageSet = new Set(getUsageLabels())
+           _cachedUsageSet = new Set(usageLabelsLower)
            return _cachedUsageSet
         },
         get _habitats() {
@@ -1006,6 +994,12 @@ export default function PlantSwipe() {
         _isInProgress: isInProgress
       } as PreparedPlant
     })
+
+    return {
+      preparedPlants: prepared,
+      typeOptions: Array.from(typeLabelsSet).sort((a, b) => a.localeCompare(b)),
+      usageOptions: Array.from(usageLabelsSet).sort((a, b) => a.localeCompare(b))
+    }
   }, [plants, colorLookups])
 
   // Memoize color filter expansion separately to avoid recomputing on every filter change
@@ -2269,7 +2263,7 @@ export default function PlantSwipe() {
                 <Suspense fallback={routeLoadingFallback}>
                   <SearchPageLazy
                     plants={sortedSearchResults}
-                    openInfo={(p) => navigate(`/plants/${p.id}`)}
+                    openInfo={handleOpenInfo}
                     likedIds={likedIds}
                   />
                 </Suspense>

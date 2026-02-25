@@ -1,4 +1,7 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
+
+type EnvWithAdminToken = { __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: string } };
 import React from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
@@ -19,7 +22,7 @@ import { AdminPlantReportsPanel } from "@/components/admin/AdminPlantReportsPane
 import { AdminUserMessagesDialog } from "@/components/admin/AdminUserMessagesDialog";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
-import { getAccentOption } from "@/lib/accent";
+import { getAccentOption, type AccentKey } from "@/lib/accent";
 import { Link } from "@/components/i18n/Link";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 // Re-export for convenience
@@ -328,7 +331,6 @@ import {
   ROLE_CONFIG,
   type UserRole,
   checkFullAdminAccess,
-  checkEditorAccess,
 } from "@/constants/userRoles";
 import { UserRoleBadge, ProfileNameBadges } from "@/components/profile/UserRoleBadges";
 
@@ -532,8 +534,8 @@ export const AdminPage: React.FC = () => {
 
   // Get user's accent color (more subtle version)
   const accentColor = React.useMemo(() => {
-    const accentKey = (profile as any)?.accent_key || "emerald";
-    const accentOption = getAccentOption(accentKey as any);
+    const accentKey = (profile as { accent_key?: string })?.accent_key || "emerald";
+    const accentOption = getAccentOption(accentKey as AccentKey);
     if (!accentOption) return "hsl(142 72% 40%)";
     // Parse HSL and make it lighter/more subtle
     const hslMatch = accentOption.hsl.match(/(\d+)\s+(\d+)%\s+(\d+)%/);
@@ -549,8 +551,8 @@ export const AdminPage: React.FC = () => {
 
   // Get accent color with opacity for shadows
   const accentColorWithOpacity = React.useMemo(() => {
-    const accentKey = (profile as any)?.accent_key || "emerald";
-    const accentOption = getAccentOption(accentKey as any);
+    const accentKey = (profile as { accent_key?: string })?.accent_key || "emerald";
+    const accentOption = getAccentOption(accentKey as AccentKey);
     if (!accentOption) return "hsl(142 72% 40% / 0.2)";
     const hslMatch = accentOption.hsl.match(/(\d+)\s+(\d+)%\s+(\d+)%/);
     if (hslMatch) {
@@ -671,8 +673,10 @@ export const AdminPage: React.FC = () => {
     try {
       const c = String(code || "").toUpperCase();
       if (!c) return "";
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any -- Intl.DisplayNames may not exist in all environments */
       if ((Intl as any)?.DisplayNames) {
         try {
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any -- Intl.DisplayNames constructor */
           const dn = new (Intl as any).DisplayNames(
             [navigator.language || "en"],
             { type: "region" },
@@ -885,20 +889,21 @@ export const AdminPage: React.FC = () => {
             }
 
             return response;
-          } catch (fetchError: any) {
+          } catch (fetchError: unknown) {
             clearTimeout(timeoutId);
             throw fetchError;
           }
-        } catch (error: any) {
-          lastError = error;
+        } catch (error: unknown) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          const err = error instanceof Error ? error : { name: "", message: String(error) };
 
           // Network error or timeout - retry
           if (
             attempt < maxRetries &&
-            (error.name === "AbortError" ||
-              error.name === "TypeError" ||
-              error.message?.includes("fetch") ||
-              !error.message?.includes("4"))
+            (err.name === "AbortError" ||
+              err.name === "TypeError" ||
+              err.message?.includes("fetch") ||
+              !err.message?.includes("4"))
           ) {
             const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
             await new Promise((resolve) => setTimeout(resolve, delay));
@@ -915,6 +920,7 @@ export const AdminPage: React.FC = () => {
   );
 
   // Safely parse response body into JSON, tolerating HTML/error pages
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic JSON response
   const safeJson = React.useCallback(async (resp: Response): Promise<any> => {
     try {
       const contentType = (
@@ -945,7 +951,7 @@ export const AdminPage: React.FC = () => {
       appendConsole("[sync] Sync DB Schema: starting...");
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token || null;
-      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
       if (!token && !adminToken) {
         appendConsole(
           "[sync] Unable to locate credentials for schema sync. Sign in as an admin or configure VITE_ADMIN_STATIC_TOKEN.",
@@ -1221,7 +1227,7 @@ export const AdminPage: React.FC = () => {
       appendConsole('[deploy] Supabase Edge Functions: starting...')
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token || null
-      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+      const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
 
       const nodeHeaders: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
       if (token) nodeHeaders['Authorization'] = `Bearer ${token}`
@@ -1320,7 +1326,7 @@ export const AdminPage: React.FC = () => {
       const nodeHeaders = (() => {
         const h: Record<string, string> = { Accept: "application/json" };
         if (token) h["Authorization"] = `Bearer ${token}`;
-        const adminToken = (globalThis as any)?.__ENV__
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) h["X-Admin-Token"] = String(adminToken);
         return h;
@@ -1352,7 +1358,7 @@ export const AdminPage: React.FC = () => {
 
       // Fallback: call local Admin API via nginx if Node endpoint not reachable/forbidden
       if (!ok) {
-        const adminToken = (globalThis as any)?.__ENV__
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) {
           const adminHeaders: Record<string, string> = {
@@ -1444,7 +1450,7 @@ export const AdminPage: React.FC = () => {
       setConsoleOpen(true);
       appendConsole("[restart] Starting server restart...");
 
-      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
@@ -1517,7 +1523,7 @@ export const AdminPage: React.FC = () => {
       setConsoleOpen(true);
       appendConsole("[setup] Starting setup.sh...");
 
-      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
@@ -1582,7 +1588,7 @@ export const AdminPage: React.FC = () => {
       setConsoleOpen(true);
       appendConsole("[memory] Clearing system memory cache...");
 
-      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -1619,7 +1625,7 @@ export const AdminPage: React.FC = () => {
       setConsoleOpen(true);
       appendConsole("[git] Starting git pull...");
 
-      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
       const headers: Record<string, string> = {
         Accept: "text/event-stream",
       };
@@ -1703,7 +1709,7 @@ export const AdminPage: React.FC = () => {
       setConsoleOpen(true);
       appendConsole("[sitemap] Regenerating sitemap...");
 
-      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+      const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -2093,7 +2099,6 @@ export const AdminPage: React.FC = () => {
   const [aiPrefillCompletedPlants, setAiPrefillCompletedPlants] = React.useState<Array<{ name: string; success: boolean; error?: string; durationMs?: number }>>([]);
   const [aiPrefillStartTime, setAiPrefillStartTime] = React.useState<number | null>(null);
   const [aiPrefillElapsedTime, setAiPrefillElapsedTime] = React.useState<number>(0);
-  const [aiPrefillPlantStartTime, setAiPrefillPlantStartTime] = React.useState<number | null>(null);
   const [aiPrefillImageSources, setAiPrefillImageSources] = React.useState<Record<ExternalImageSource, SourceResult>>(() => {
     const initial: Record<string, SourceResult> = {};
     for (const s of IMAGE_SOURCES) {
@@ -2141,32 +2146,33 @@ export const AdminPage: React.FC = () => {
     meta: 'Meta',
   };
 
-  const parseRequestRows = React.useCallback((data: any[]): PlantRequestRow[] => {
+  const parseRequestRows = React.useCallback((data: unknown[]): PlantRequestRow[] => {
     return (data ?? [])
-      .map((row: any) => {
-        const id = row?.id ? String(row.id) : null;
+      .map((row: unknown) => {
+        const r = row as Record<string, unknown>;
+        const id = r?.id ? String(r.id) : null;
         if (!id) return null;
-        const requestCountRaw = row?.request_count;
+        const requestCountRaw = r?.request_count;
         const requestCount =
           typeof requestCountRaw === "number"
             ? requestCountRaw
             : Number(requestCountRaw ?? 0);
-        const requestedBy = row?.requested_by ? String(row.requested_by) : null;
+        const requestedBy = r?.requested_by ? String(r.requested_by) : null;
         return {
           id,
-          plant_name: row?.plant_name
-            ? String(row.plant_name)
-            : row?.plant_name_normalized
-              ? String(row.plant_name_normalized)
+          plant_name: r?.plant_name
+            ? String(r.plant_name)
+            : r?.plant_name_normalized
+              ? String(r.plant_name_normalized)
               : "Unknown request",
-          plant_name_normalized: row?.plant_name_normalized
-            ? String(row.plant_name_normalized)
-            : row?.plant_name
-              ? String(row.plant_name).toLowerCase().trim()
+          plant_name_normalized: r?.plant_name_normalized
+            ? String(r.plant_name_normalized)
+            : r?.plant_name
+              ? String(r.plant_name).toLowerCase().trim()
               : "",
           request_count: Number.isFinite(requestCount) ? requestCount : 0,
-          created_at: row?.created_at ?? null,
-          updated_at: row?.updated_at ?? null,
+          created_at: r?.created_at ?? null,
+          updated_at: r?.updated_at ?? null,
           requested_by: requestedBy,
           requester_name: null as string | null,
           requester_email: null as string | null,
@@ -2202,7 +2208,7 @@ export const AdminPage: React.FC = () => {
     } catch (err) {
       console.warn("Failed to load staff user IDs:", err);
     }
-  }, [supabase]);
+  }, []);
 
   /** Enrich rows with staff status from cached staff IDs */
   const enrichRowsWithStaffStatus = React.useCallback(
@@ -2259,7 +2265,7 @@ export const AdminPage: React.FC = () => {
             hasMoreSum = false;
           } else {
             totalSum += sumData.reduce(
-              (sum: number, row: any) => sum + (Number(row?.request_count) || 0),
+              (sum: number, row: unknown) => sum + (Number((row as Record<string, unknown>)?.request_count) || 0),
               0,
             );
             sumOffset += sumData.length;
@@ -2276,7 +2282,6 @@ export const AdminPage: React.FC = () => {
         let fetchOffset = 0;
         let exhausted = false;
 
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           const { data, error } = await supabase
             .from("requested_plants")
@@ -2324,7 +2329,7 @@ export const AdminPage: React.FC = () => {
         }
       }
     },
-    [supabase, parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests],
+    [parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests],
   );
 
   const loadMorePlantRequests = React.useCallback(async () => {
@@ -2339,7 +2344,6 @@ export const AdminPage: React.FC = () => {
       let fetchOffset = startOffset;
       let exhausted = false;
 
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const { data, error } = await supabase
           .from("requested_plants")
@@ -2385,7 +2389,6 @@ export const AdminPage: React.FC = () => {
     plantRequestsHasMore,
     plantRequests.length,
     plantRequestsTotalCount,
-    supabase,
     parseRequestRows,
     enrichRowsWithStaffStatus,
     hideStaffRequests,
@@ -2425,7 +2428,7 @@ export const AdminPage: React.FC = () => {
 
         // Get unique user IDs
         const userIds = [
-          ...new Set(requestUsersData.map((row: any) => String(row.user_id))),
+          ...new Set(requestUsersData.map((row: unknown) => String((row as Record<string, unknown>).user_id))),
         ];
 
         // Fetch profiles for these user IDs
@@ -2438,21 +2441,22 @@ export const AdminPage: React.FC = () => {
 
         // Fetch emails for each user using RPC function
         const usersWithEmails = await Promise.all(
-          (profilesData ?? []).map(async (profile: any) => {
+          (profilesData ?? []).map(async (profile: unknown) => {
+            const p = profile as Record<string, unknown>;
             let email: string | null = null;
             try {
               const { data: emailData } = await supabase.rpc(
                 "get_friend_email",
-                { _friend_id: profile.id },
+                { _friend_id: p.id },
               );
               email = emailData || null;
             } catch (err) {
-              console.warn("Failed to fetch email for user:", profile.id, err);
+              console.warn("Failed to fetch email for user:", p.id, err);
             }
             return {
-              id: String(profile.id),
-              display_name: profile?.display_name
-                ? String(profile.display_name)
+              id: String(p.id),
+              display_name: p?.display_name
+                ? String(p.display_name)
                 : null,
               email: email,
             };
@@ -2467,7 +2471,7 @@ export const AdminPage: React.FC = () => {
         setRequestUsersLoading(false);
       }
     },
-    [supabase],
+    [],
   );
 
   const handleOpenInfoDialog = React.useCallback(
@@ -2507,7 +2511,7 @@ export const AdminPage: React.FC = () => {
         setCompletingRequestId(null);
       }
     },
-    [completingRequestId, loadPlantRequests, supabase, user?.id],
+    [completingRequestId, loadPlantRequests, user?.id],
   );
 
   const handleOpenCreatePlantDialog = React.useCallback(
@@ -2567,7 +2571,7 @@ export const AdminPage: React.FC = () => {
     } finally {
       setSavingRequestName(false);
     }
-  }, [editingRequestName, supabase]);
+  }, [editingRequestName]);
 
   // Translate plant request name to English using AI (auto-detects language)
   const handleTranslateRequestName = React.useCallback(async (req: PlantRequestRow) => {
@@ -2605,7 +2609,7 @@ export const AdminPage: React.FC = () => {
     } finally {
       setTranslatingRequestId(null);
     }
-  }, [supabase]);
+  }, []);
 
   const handleBulkRequestOpenChange = React.useCallback(
     (open: boolean) => {
@@ -2657,9 +2661,10 @@ export const AdminPage: React.FC = () => {
           .is("completed_at", null)
           .in("plant_name_normalized", chunk);
         if (error) throw new Error(error.message);
-        (data ?? []).forEach((row: any) => {
-          if (row?.plant_name_normalized) {
-            existingNormalized.add(String(row.plant_name_normalized));
+        (data ?? []).forEach((row: unknown) => {
+          const r = row as Record<string, unknown>;
+          if (r?.plant_name_normalized) {
+            existingNormalized.add(String(r.plant_name_normalized));
           }
         });
       }
@@ -2755,7 +2760,7 @@ export const AdminPage: React.FC = () => {
     } finally {
       setBulkRequestSubmitting(false);
     }
-  }, [bulkRequestParsed, loadPlantRequests, supabase, user?.id]);
+  }, [bulkRequestParsed, loadPlantRequests, user?.id]);
 
   const handleOpenPlantEditor = React.useCallback(
     (plantId: string) => {
@@ -2815,18 +2820,20 @@ export const AdminPage: React.FC = () => {
       const translationPlantIds = new Set<string>();
       const translationPlants: Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }> = [];
       
-      (translationMatches || []).forEach((row: any) => {
-        const givenNames = Array.isArray(row?.given_names) ? row.given_names : [];
+      (translationMatches || []).forEach((row: unknown) => {
+        const r = row as Record<string, unknown>;
+        const givenNames = Array.isArray(r?.given_names) ? r.given_names : [];
         const matchesGivenName = givenNames.some(
           (gn: unknown) => typeof gn === "string" && gn.toLowerCase().includes(termLower)
         );
-        if (matchesGivenName && row?.plants?.id && !translationPlantIds.has(row.plants.id)) {
-          translationPlantIds.add(row.plants.id);
+        if (matchesGivenName && r?.plants && typeof r.plants === "object" && r.plants !== null && "id" in r.plants && !translationPlantIds.has(String((r.plants as Record<string, unknown>).id))) {
+          const plants = r.plants as Record<string, unknown>;
+          translationPlantIds.add(String(plants.id));
           translationPlants.push({
-            id: String(row.plants.id),
-            name: String(row.plants.name || ""),
-            scientific_name: row.plants.scientific_name || null,
-            status: row.plants.status || null,
+            id: String(plants.id),
+            name: String(plants.name || ""),
+            scientific_name: plants.scientific_name || null,
+            status: plants.status || null,
           });
         }
       });
@@ -2835,10 +2842,16 @@ export const AdminPage: React.FC = () => {
       const seenIds = new Set<string>();
       const merged: Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }> = [];
       
-      (directMatches || []).forEach((plant: any) => {
-        if (plant?.id && !seenIds.has(plant.id)) {
-          seenIds.add(plant.id);
-          merged.push(plant);
+      (directMatches || []).forEach((plant: unknown) => {
+        const p = plant as Record<string, unknown>;
+        if (p?.id && !seenIds.has(String(p.id))) {
+          seenIds.add(String(p.id));
+          merged.push({
+            id: String(p.id),
+            name: String(p.name || ""),
+            scientific_name: p.scientific_name ?? null,
+            status: p.status ?? null,
+          });
         }
       });
       
@@ -3112,7 +3125,7 @@ export const AdminPage: React.FC = () => {
       if (plantsError) throw new Error(plantsError.message);
 
       // Then, get English translations for all plants
-      const plantIds = (plantsData || []).map((p: any) => p.id);
+      const plantIds = (plantsData || []).map((p: unknown) => (p as Record<string, unknown>).id);
       const { data: translationsData } = await supabase
         .from("plant_translations")
         .select("plant_id, given_names")
@@ -3121,9 +3134,10 @@ export const AdminPage: React.FC = () => {
 
       // Build a map of plant_id -> given_names
       const givenNamesMap = new Map<string, string[]>();
-      (translationsData || []).forEach((t: any) => {
-        if (t?.plant_id && Array.isArray(t.given_names)) {
-          givenNamesMap.set(t.plant_id, t.given_names.map((n: unknown) => String(n || "")));
+      (translationsData || []).forEach((t: unknown) => {
+        const tr = t as Record<string, unknown>;
+        if (tr?.plant_id && Array.isArray(tr.given_names)) {
+          givenNamesMap.set(String(tr.plant_id), (tr.given_names as unknown[]).map((n: unknown) => String(n || "")));
         }
       });
 
@@ -3182,47 +3196,48 @@ export const AdminPage: React.FC = () => {
       if (error) throw new Error(error.message);
 
       const rows: PlantDashboardRow[] = (data ?? [])
-        .map((row: any) => {
-          if (!row?.id) return null;
-          const images = Array.isArray(row?.plant_images)
-            ? row.plant_images
+        .map((row: unknown) => {
+          const r = row as Record<string, unknown>;
+          if (!r?.id) return null;
+          const images = Array.isArray(r?.plant_images)
+            ? r.plant_images
             : [];
           const primaryImage =
-            images.find((img: any) => img?.use === "primary") ??
-            images.find((img: any) => img?.use === "discovery") ??
+            images.find((img: unknown) => (img as Record<string, unknown>)?.use === "primary") ??
+            images.find((img: unknown) => (img as Record<string, unknown>)?.use === "discovery") ??
             images[0];
 
           // Get given_names from the map
-          const givenNames = givenNamesMap.get(String(row.id)) || [];
-          const plantId = String(row.id);
+          const plantId = String(r.id);
+          const givenNames = givenNamesMap.get(plantId) || [];
 
             return {
               id: plantId,
-              name: row?.name ? String(row.name) : "Unnamed plant",
+              name: r?.name ? String(r.name) : "Unnamed plant",
               givenNames,
-              status: normalizePlantStatus(row?.status),
-              promotionMonth: toPromotionMonthSlug(row?.promotion_month),
-              primaryImage: primaryImage?.link
-                ? String(primaryImage.link)
+              status: normalizePlantStatus(r?.status),
+              promotionMonth: toPromotionMonthSlug(r?.promotion_month),
+              primaryImage: (primaryImage as Record<string, unknown>)?.link
+                ? String((primaryImage as Record<string, unknown>).link)
                 : null,
               updatedAt: (() => {
                 const timestamp =
-                  row?.updated_time ??
-                  row?.updated_at ??
-                  row?.updatedTime ??
+                  r?.updated_time ??
+                  r?.updated_at ??
+                  r?.updatedTime ??
                   null;
                 if (!timestamp) return null;
-                const parsed = Date.parse(timestamp);
+                const parsed = Date.parse(String(timestamp));
                 return Number.isFinite(parsed) ? parsed : null;
               })(),
               createdAt: (() => {
                 const timestamp =
-                  row?.created_time ??
-                  row?.created_at ??
-                  row?.createdTime ??
+                  r?.created_time ??
+                  r?.created_at ??
+                  r?.createdTime ??
                   null;
                 if (!timestamp) return null;
-                const parsed = Date.parse(timestamp);
+                const parsed = Date.parse(String(timestamp));
                 return Number.isFinite(parsed) ? parsed : null;
               })(),
               gardensCount: gardensCountMap.get(plantId) ?? 0,
@@ -3240,7 +3255,7 @@ export const AdminPage: React.FC = () => {
       setPlantDashboardInitialized(true);
       setPlantDashboardLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   const handleDeletePlant = React.useCallback(async () => {
     if (!plantToDelete) return;
@@ -3289,7 +3304,7 @@ export const AdminPage: React.FC = () => {
     } finally {
       setDeletingPlant(false);
     }
-  }, [plantToDelete, supabase]);
+  }, [plantToDelete]);
 
   const plantStatusCounts = React.useMemo(() => {
     return plantDashboardRows.reduce(
@@ -3403,18 +3418,18 @@ export const AdminPage: React.FC = () => {
       })
       .sort((a, b) => {
         switch (plantSortOption) {
-          case "updated":
-            // Sort by most recently updated first (descending)
+          case "updated": {
             const updatedA = a.updatedAt ?? 0;
             const updatedB = b.updatedAt ?? 0;
             if (updatedB !== updatedA) return updatedB - updatedA;
             return a.name.localeCompare(b.name);
-          case "created":
-            // Sort by most recently created first (descending)
+          }
+          case "created": {
             const createdA = a.createdAt ?? 0;
             const createdB = b.createdAt ?? 0;
             if (createdB !== createdA) return createdB - createdA;
             return a.name.localeCompare(b.name);
+          }
           case "name":
             return a.name.localeCompare(b.name);
           case "gardens":
@@ -3661,7 +3676,7 @@ export const AdminPage: React.FC = () => {
   const probeEndpoint = React.useCallback(
     async (
       url: string,
-      okCheck?: (body: any) => boolean,
+      okCheck?: (body: unknown) => boolean,
     ): Promise<ProbeResult> => {
       const started = Date.now();
       try {
@@ -3670,7 +3685,7 @@ export const AdminPage: React.FC = () => {
           const token = (await supabase.auth.getSession()).data.session
             ?.access_token;
           if (token) headers["Authorization"] = `Bearer ${token}`;
-          const staticToken = (globalThis as any)?.__ENV__
+          const staticToken = (globalThis as EnvWithAdminToken)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (staticToken) headers["X-Admin-Token"] = staticToken;
         } catch {}
@@ -3716,9 +3731,9 @@ export const AdminPage: React.FC = () => {
             errorCode: errorCodeFromBody || fallbackCode,
             errorMessage: errorMessageFromBody,
           };
-        } catch (fetchError: any) {
+        } catch (fetchError: unknown) {
           clearTimeout(timeoutId);
-          if (fetchError.name === "AbortError") {
+          if (fetchError instanceof Error && fetchError.name === "AbortError") {
             return {
               ok: false,
               latencyMs: null,
@@ -3895,7 +3910,7 @@ export const AdminPage: React.FC = () => {
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) headers["X-Admin-Token"] = String(adminToken);
       } catch {}
       const resp = await fetch("/api/admin/system-health", {
@@ -4095,7 +4110,7 @@ export const AdminPage: React.FC = () => {
             Pragma: "no-cache",
           };
           try {
-            const adminToken = (globalThis as any)?.__ENV__
+            const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) adminHeaders["X-Admin-Token"] = String(adminToken);
           } catch {}
@@ -4174,7 +4189,7 @@ export const AdminPage: React.FC = () => {
         let adminToken: string | null = null;
         try {
           adminToken =
-            ((globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN as
+            ((globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN as
               | string
               | undefined
               | null) || null;
@@ -4391,7 +4406,7 @@ export const AdminPage: React.FC = () => {
           const headers: Record<string, string> = { Accept: "application/json" };
           if (token) headers["Authorization"] = `Bearer ${token}`;
           try {
-            const adminToken = (globalThis as any)?.__ENV__
+            const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) headers["X-Admin-Token"] = String(adminToken);
           } catch {}
@@ -4481,7 +4496,7 @@ export const AdminPage: React.FC = () => {
           headers: (() => {
             const h: Record<string, string> = { Accept: "application/json" };
             if (token) h["Authorization"] = `Bearer ${token}`;
-            const adminToken = (globalThis as any)?.__ENV__
+            const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) h["X-Admin-Token"] = String(adminToken);
             return h;
@@ -4542,7 +4557,7 @@ export const AdminPage: React.FC = () => {
         const headers: Record<string, string> = { Accept: "application/json" };
         if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
-          const adminToken = (globalThis as any)?.__ENV__
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
@@ -4553,7 +4568,7 @@ export const AdminPage: React.FC = () => {
         if (resp && resp.ok) {
           const data = await safeJson(resp);
           const list: string[] = Array.isArray(data?.ips)
-            ? data.ips.map((s: any) => String(s)).filter(Boolean)
+            ? data.ips.map((s: unknown) => String(s)).filter(Boolean)
             : [];
           setIps(list);
           return;
@@ -4606,12 +4621,15 @@ export const AdminPage: React.FC = () => {
         const data = await safeJson(resp);
         const series: Array<{ date: string; uniqueVisitors: number }> =
           Array.isArray(data?.series7d)
-            ? data.series7d.map((d: any) => ({
-                date: String(d.date),
+            ? data.series7d.map((d: unknown) => {
+                const dd = d as Record<string, unknown>;
+                return {
+                date: String(dd.date),
                 uniqueVisitors: Number(
-                  d.uniqueVisitors ?? d.unique_visitors ?? 0,
+                  dd.uniqueVisitors ?? dd.unique_visitors ?? 0,
                 ),
-              }))
+              };
+              })
             : [];
         setVisitorsSeries(series);
         // Fetch weekly unique total from dedicated endpoint to keep requests separate
@@ -4659,21 +4677,24 @@ export const AdminPage: React.FC = () => {
                     visits: Number(sbd.otherCountries.visits || 0),
                     codes: Array.isArray(sbd.otherCountries.codes)
                       ? sbd.otherCountries.codes
-                          .map((x: any) => String(x || ""))
+                          .map((x: unknown) => String(x || ""))
                           .filter(Boolean)
                       : undefined,
                     items: Array.isArray(sbd.otherCountries.items)
                       ? sbd.otherCountries.items
-                          .map((it: any) => ({
-                            country: String(it?.country || ""),
-                            visits: Number(it?.visits || 0),
-                          }))
+                          .map((it: unknown) => {
+                            const item = it as Record<string, unknown>;
+                            return {
+                              country: String(item?.country || ""),
+                              visits: Number(item?.visits || 0),
+                            };
+                          })
                           .filter((it: { country: string }) => !!it.country)
                       : undefined,
                   }
                 : null;
             const totalCountryVisits =
-              tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) +
+              tc.reduce((a: number, b: { country: string; visits: number }) => a + (b.visits || 0), 0) +
               (oc?.visits || 0);
             const countriesWithPct =
               totalCountryVisits > 0
@@ -4711,7 +4732,7 @@ export const AdminPage: React.FC = () => {
                   }
                 : null;
             const totalRefVisits =
-              tr.reduce((a: number, b: any) => a + (b.visits || 0), 0) +
+              tr.reduce((a: number, b: { source: string; visits: number }) => a + (b.visits || 0), 0) +
               (orf?.visits || 0);
             const refsWithPct =
               totalRefVisits > 0
@@ -4790,10 +4811,11 @@ export const AdminPage: React.FC = () => {
     { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced", adminOnly: true },
   ];
   
-  // Filter nav items based on user's access level
+  // Filter nav items based on user's access level (allNavItems excluded - constant in component, would defeat memo)
   const navItems = React.useMemo(() => {
     if (isFullAdmin) return allNavItems;
     return allNavItems.filter(item => !item.adminOnly);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFullAdmin]);
 
   const activeTab: AdminTab = React.useMemo(() => {
@@ -4958,7 +4980,7 @@ export const AdminPage: React.FC = () => {
   const [memberError, setMemberError] = React.useState<string | null>(null);
   const [memberData, setMemberData] = React.useState<{
     user: { id: string; email: string; created_at?: string } | null;
-    profile: any;
+    profile: Record<string, unknown>;
     ips: string[];
     threatLevel?: number | null;
     lastOnlineAt?: string | null;
@@ -5157,7 +5179,7 @@ export const AdminPage: React.FC = () => {
         const headers: Record<string, string> = { Accept: "application/json" };
         if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
-          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
         const resp = await fetch(
@@ -5193,7 +5215,7 @@ export const AdminPage: React.FC = () => {
         const headers: Record<string, string> = { Accept: "application/json" };
         if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
-          const adminToken = (globalThis as any)?.__ENV__
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
@@ -5242,16 +5264,17 @@ export const AdminPage: React.FC = () => {
 
         const series = Array.isArray(data?.series30d)
           ? data.series30d
-              .map((d: any) => {
+              .map((d: unknown) => {
+                const dd = d as Record<string, unknown>;
                 // API returns dates in YYYY-MM-DD format from toISOString().slice(0,10)
-                let dateStr = String(d.date || "");
+                let dateStr = String(dd.date || "");
                 // Extract date part if it's an ISO string (handles edge cases)
                 if (dateStr.includes("T")) {
                   dateStr = dateStr.split("T")[0];
                 }
                 // If date is already in YYYY-MM-DD format, use it directly
                 if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                  return { date: dateStr, visits: Number(d.visits || 0) };
+                  return { date: dateStr, visits: Number(dd.visits || 0) };
                 }
                 // Try to normalize if format is different
                 if (dateStr) {
@@ -5260,7 +5283,7 @@ export const AdminPage: React.FC = () => {
                     if (!isNaN(dateObj.getTime())) {
                       dateStr = dateObj.toISOString().split("T")[0];
                       if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                        return { date: dateStr, visits: Number(d.visits || 0) };
+                        return { date: dateStr, visits: Number(dd.visits || 0) };
                       }
                     }
                   } catch {}
@@ -5311,7 +5334,7 @@ export const AdminPage: React.FC = () => {
         const headers: Record<string, string> = { Accept: "application/json" };
         if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
-          const adminToken = (globalThis as any)?.__ENV__
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
@@ -5324,25 +5347,26 @@ export const AdminPage: React.FC = () => {
         if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
         const rawMembers = Array.isArray(data?.members) ? data.members : [];
         const normalized: ListedMember[] = rawMembers
-          .map((m: any) => {
-            const id = m?.id ? String(m.id) : "";
+          .map((m: unknown) => {
+            const mm = m as Record<string, unknown>;
+            const id = mm?.id ? String(mm.id) : "";
             if (!id) return null;
             const displayName =
-              typeof m?.display_name === "string"
-                ? m.display_name
-                : typeof m?.displayName === "string"
-                  ? m.displayName
+              typeof mm?.display_name === "string"
+                ? mm.display_name
+                : typeof mm?.displayName === "string"
+                  ? mm.displayName
                   : null;
-            const email = typeof m?.email === "string" ? m.email : null;
+            const email = typeof mm?.email === "string" ? mm.email : null;
             const createdAt =
-              typeof m?.created_at === "string"
-                ? m.created_at
-                : typeof m?.createdAt === "string"
-                  ? m.createdAt
+              typeof mm?.created_at === "string"
+                ? mm.created_at
+                : typeof mm?.createdAt === "string"
+                  ? mm.createdAt
                   : null;
             const isAdmin =
-              m?.is_admin === true || m?.isAdmin === true ? true : false;
-            const roles = Array.isArray(m?.roles) ? m.roles : [];
+              mm?.is_admin === true || mm?.isAdmin === true ? true : false;
+            const roles = Array.isArray(mm?.roles) ? mm.roles : [];
             return {
               id,
               email,
@@ -5351,10 +5375,10 @@ export const AdminPage: React.FC = () => {
               isAdmin,
               roles,
               rpm5m:
-                typeof m?.rpm5m === "number"
-                  ? m.rpm5m
-                  : typeof m?.rpm5m === "string" && m.rpm5m.length > 0
-                    ? Number(m.rpm5m)
+                typeof mm?.rpm5m === "number"
+                  ? mm.rpm5m
+                  : typeof mm?.rpm5m === "string" && mm.rpm5m.length > 0
+                    ? Number(mm.rpm5m)
                     : null,
             } as ListedMember;
           })
@@ -5393,7 +5417,7 @@ export const AdminPage: React.FC = () => {
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) headers["X-Admin-Token"] = String(adminToken);
       } catch {}
       const resp = await fetch("/api/admin/role-stats", {
@@ -5430,7 +5454,7 @@ export const AdminPage: React.FC = () => {
         const headers: Record<string, string> = { Accept: "application/json" };
         if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
-          const adminToken = (globalThis as any)?.__ENV__
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
@@ -5477,24 +5501,30 @@ export const AdminPage: React.FC = () => {
           meanRpm5m:
             typeof data?.meanRpm5m === "number" ? data.meanRpm5m : null,
           adminNotes: Array.isArray(data?.adminNotes)
-            ? data.adminNotes.map((n: any) => ({
-                id: String(n.id),
-                admin_id: n?.admin_id || null,
-                admin_name: n?.admin_name || null,
-                message: String(n?.message || ""),
-                created_at: n?.created_at || null,
-              }))
+            ? data.adminNotes.map((n: unknown) => {
+                const nn = n as Record<string, unknown>;
+                return {
+                id: String(nn.id),
+                admin_id: nn?.admin_id || null,
+                admin_name: nn?.admin_name || null,
+                message: String(nn?.message || ""),
+                created_at: nn?.created_at || null,
+              };
+              })
             : [],
           files: Array.isArray(data?.files)
-            ? data.files.map((file: any) => ({
-                id: String(file.id),
-                imageUrl: file?.imageUrl || file?.image_url || null,
-                caption: file?.caption || null,
-                uploadedAt: file?.uploadedAt || file?.uploaded_at || null,
-                gardenPlantId: file?.gardenPlantId || file?.garden_plant_id || null,
-                plantName: file?.plantName || file?.plant_name || null,
-                adminCommentary: file?.adminCommentary || file?.admin_commentary || null,
-              }))
+            ? data.files.map((file: unknown) => {
+                const f = file as Record<string, unknown>;
+                return {
+                id: String(f.id),
+                imageUrl: f?.imageUrl || f?.image_url || null,
+                caption: f?.caption || null,
+                uploadedAt: f?.uploadedAt || f?.uploaded_at || null,
+                gardenPlantId: f?.gardenPlantId || f?.garden_plant_id || null,
+                plantName: f?.plantName || f?.plant_name || null,
+                adminCommentary: f?.adminCommentary || f?.admin_commentary || null,
+              };
+              })
             : [],
           scansTotal:
             typeof data?.scansTotal === "number" ? data.scansTotal : 0,
@@ -5503,76 +5533,85 @@ export const AdminPage: React.FC = () => {
               ? data.scansThisMonth
               : 0,
           scans: Array.isArray(data?.scans)
-            ? data.scans.map((scan: any) => ({
-                id: String(scan?.id || ""),
-                imageUrl: scan?.imageUrl || scan?.image_url || null,
-                imagePath: scan?.imagePath || scan?.image_path || null,
-                imageBucket: scan?.imageBucket || scan?.image_bucket || null,
-                apiStatus: scan?.apiStatus || scan?.api_status || null,
+            ? data.scans.map((scan: unknown) => {
+                const s = scan as Record<string, unknown>;
+                return {
+                id: String(s?.id || ""),
+                imageUrl: s?.imageUrl || s?.image_url || null,
+                imagePath: s?.imagePath || s?.image_path || null,
+                imageBucket: s?.imageBucket || s?.image_bucket || null,
+                apiStatus: s?.apiStatus || s?.api_status || null,
                 isPlant:
-                  typeof scan?.isPlant === "boolean"
-                    ? scan.isPlant
-                    : typeof scan?.is_plant === "boolean"
-                      ? scan.is_plant
+                  typeof s?.isPlant === "boolean"
+                    ? s.isPlant
+                    : typeof s?.is_plant === "boolean"
+                      ? s.is_plant
                       : null,
                 isPlantProbability:
-                  typeof scan?.isPlantProbability === "number"
-                    ? scan.isPlantProbability
-                    : typeof scan?.is_plant_probability === "number"
-                      ? scan.is_plant_probability
+                  typeof s?.isPlantProbability === "number"
+                    ? s.isPlantProbability
+                    : typeof s?.is_plant_probability === "number"
+                      ? s.is_plant_probability
                       : null,
-                topMatchName: scan?.topMatchName || scan?.top_match_name || null,
+                topMatchName: s?.topMatchName || s?.top_match_name || null,
                 topMatchScientificName:
-                  scan?.topMatchScientificName ||
-                  scan?.top_match_scientific_name ||
+                  s?.topMatchScientificName ||
+                  s?.top_match_scientific_name ||
                   null,
                 topMatchProbability:
-                  typeof scan?.topMatchProbability === "number"
-                    ? scan.topMatchProbability
-                    : typeof scan?.top_match_probability === "number"
-                      ? scan.top_match_probability
+                  typeof s?.topMatchProbability === "number"
+                    ? s.topMatchProbability
+                    : typeof s?.top_match_probability === "number"
+                      ? s.top_match_probability
                       : null,
                 classificationLevel:
-                  scan?.classificationLevel || scan?.classification_level || null,
+                  s?.classificationLevel || s?.classification_level || null,
                 matchedPlantId:
-                  scan?.matchedPlantId || scan?.matched_plant_id || null,
+                  s?.matchedPlantId || s?.matched_plant_id || null,
                 matchedPlantName:
-                  scan?.matchedPlantName || scan?.matched_plant_name || null,
+                  s?.matchedPlantName || s?.matched_plant_name || null,
                 matchedPlantScientificName:
-                  scan?.matchedPlantScientificName ||
-                  scan?.matched_plant_scientific_name ||
+                  s?.matchedPlantScientificName ||
+                  s?.matched_plant_scientific_name ||
                   null,
                 matchedPlantImage:
-                  scan?.matchedPlantImage || scan?.matched_plant_image || null,
-                userNotes: scan?.userNotes || scan?.user_notes || null,
-                createdAt: scan?.createdAt || scan?.created_at || null,
-              }))
+                  s?.matchedPlantImage || s?.matched_plant_image || null,
+                userNotes: s?.userNotes || s?.user_notes || null,
+                createdAt: s?.createdAt || s?.created_at || null,
+              };
+              })
             : [],
           mediaUploads: Array.isArray(data?.mediaUploads)
-            ? data.mediaUploads.map((media: any) => ({
-                id: String(media.id),
-                url: media?.url || media?.public_url || null,
-                bucket: media?.bucket || null,
-                path: media?.path || null,
-                mimeType: media?.mimeType || media?.mime_type || null,
-                sizeBytes: typeof media?.sizeBytes === "number" ? media.sizeBytes : (typeof media?.size_bytes === "number" ? media.size_bytes : null),
-                uploadSource: media?.uploadSource || media?.upload_source || "unknown",
-                createdAt: media?.createdAt || media?.created_at || null,
-              }))
+            ? data.mediaUploads.map((media: unknown) => {
+                const m = media as Record<string, unknown>;
+                return {
+                id: String(m.id),
+                url: m?.url || m?.public_url || null,
+                bucket: m?.bucket || null,
+                path: m?.path || null,
+                mimeType: m?.mimeType || m?.mime_type || null,
+                sizeBytes: typeof m?.sizeBytes === "number" ? m.sizeBytes : (typeof m?.size_bytes === "number" ? m.size_bytes : null),
+                uploadSource: m?.uploadSource || m?.upload_source || "unknown",
+                createdAt: m?.createdAt || m?.created_at || null,
+              };
+              })
             : [],
           mediaTotalCount: typeof data?.mediaTotalCount === "number" ? data.mediaTotalCount : 0,
           mediaTotalSize: typeof data?.mediaTotalSize === "number" ? data.mediaTotalSize : 0,
           userReports: Array.isArray(data?.userReports)
-            ? data.userReports.map((report: any) => ({
-                id: String(report.id),
-                reason: report?.reason || null,
-                status: report?.status || "review",
-                createdAt: report?.createdAt || report?.created_at || null,
-                classifiedAt: report?.classifiedAt || report?.classified_at || null,
-                reporterName: report?.reporterName || "Unknown",
-                classifierName: report?.classifierName || null,
-                type: report?.type || "against",
-              }))
+            ? data.userReports.map((report: unknown) => {
+                const r = report as Record<string, unknown>;
+                return {
+                id: String(r.id),
+                reason: r?.reason || null,
+                status: r?.status || "review",
+                createdAt: r?.createdAt || r?.created_at || null,
+                classifiedAt: r?.classifiedAt || r?.classified_at || null,
+                reporterName: r?.reporterName || "Unknown",
+                classifierName: r?.classifierName || null,
+                type: r?.type || "against",
+              };
+              })
             : [],
           reportsAgainstCount: typeof data?.reportsAgainstCount === "number" ? data.reportsAgainstCount : 0,
           reportsByCount: typeof data?.reportsByCount === "number" ? data.reportsByCount : 0,
@@ -5580,17 +5619,20 @@ export const AdminPage: React.FC = () => {
           bugCatcherRank: typeof data?.bugCatcherRank === "number" ? data.bugCatcherRank : null,
           bugActionsCompleted: typeof data?.bugActionsCompleted === "number" ? data.bugActionsCompleted : null,
           bugCompletedActions: Array.isArray(data?.bugCompletedActions) 
-            ? data.bugCompletedActions.map((action: any) => ({
-                id: String(action.id || ''),
-                actionId: String(action.actionId || ''),
-                title: String(action.title || 'Unknown Action'),
-                description: action.description || null,
-                questions: Array.isArray(action.questions) ? action.questions : [],
-                answers: action.answers || {},
-                pointsEarned: typeof action.pointsEarned === 'number' ? action.pointsEarned : 0,
-                completedAt: action.completedAt || null,
-                actionStatus: action.actionStatus || 'unknown',
-              }))
+            ? data.bugCompletedActions.map((action: unknown) => {
+                const a = action as Record<string, unknown>;
+                return {
+                id: String(a.id || ''),
+                actionId: String(a.actionId || ''),
+                title: String(a.title || 'Unknown Action'),
+                description: a.description || null,
+                questions: Array.isArray(a.questions) ? a.questions : [],
+                answers: a.answers || {},
+                pointsEarned: typeof a.pointsEarned === 'number' ? a.pointsEarned : 0,
+                completedAt: a.completedAt || null,
+                actionStatus: a.actionStatus || 'unknown',
+              };
+              })
             : [],
         });
         // Extract and set member roles
@@ -5609,7 +5651,7 @@ export const AdminPage: React.FC = () => {
           };
           if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
-            const adminToken = (globalThis as any)?.__ENV__
+            const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
           } catch {}
@@ -5637,7 +5679,7 @@ export const AdminPage: React.FC = () => {
           };
           if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
-            const adminToken = (globalThis as any)?.__ENV__
+            const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
           } catch {}
@@ -5719,7 +5761,7 @@ export const AdminPage: React.FC = () => {
         const headers: Record<string, string> = { Accept: "application/json" };
         if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
-          const adminToken = (globalThis as any)?.__ENV__
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
@@ -5730,12 +5772,15 @@ export const AdminPage: React.FC = () => {
         const data = await safeJson(resp);
         if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
         const users = Array.isArray(data?.users)
-          ? data.users.map((u: any) => ({
-              id: String(u.id),
-              email: u?.email ?? null,
-              display_name: u?.display_name ?? null,
-              last_seen_at: u?.last_seen_at ?? null,
-            }))
+          ? data.users.map((u: unknown) => {
+              const uu = u as Record<string, unknown>;
+              return {
+              id: String(uu.id),
+              email: uu?.email ?? null,
+              display_name: uu?.display_name ?? null,
+              last_seen_at: uu?.last_seen_at ?? null,
+            };
+            })
           : [];
         setIpResults(users);
         setIpUsed(typeof data?.ip === "string" ? data.ip : ip);
@@ -5760,7 +5805,7 @@ export const AdminPage: React.FC = () => {
           };
           if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
-            const adminToken = (globalThis as any)?.__ENV__
+            const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
           } catch {}
@@ -5788,7 +5833,7 @@ export const AdminPage: React.FC = () => {
           };
           if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
-            const adminToken = (globalThis as any)?.__ENV__
+            const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
           } catch {}
@@ -5905,10 +5950,10 @@ export const AdminPage: React.FC = () => {
     if (memberListLoading) return;
     // Always refresh when opening the list view
     loadMemberList({ reset: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeTab,
     membersView,
-    // Intentionally exclude memberListLoading to only trigger on view change
   ]);
 
   // Refresh role stats every time the list view is opened
@@ -5918,10 +5963,10 @@ export const AdminPage: React.FC = () => {
     if (roleStatsLoading) return;
     // Always refresh when opening the list view
     loadRoleStats();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeTab,
     membersView,
-    // Intentionally exclude roleStatsLoading to only trigger on view change
   ]);
 
   const performBan = React.useCallback(async () => {
@@ -5936,7 +5981,7 @@ export const AdminPage: React.FC = () => {
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const adminToken = (globalThis as any)?.__ENV__
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) headers["X-Admin-Token"] = String(adminToken);
       } catch {}
@@ -5973,7 +6018,7 @@ export const AdminPage: React.FC = () => {
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const adminToken = (globalThis as any)?.__ENV__
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) headers["X-Admin-Token"] = String(adminToken);
       } catch {}
@@ -6013,7 +6058,7 @@ export const AdminPage: React.FC = () => {
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const adminToken = (globalThis as any)?.__ENV__
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) headers["X-Admin-Token"] = String(adminToken);
       } catch {}
@@ -6061,7 +6106,7 @@ export const AdminPage: React.FC = () => {
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const adminToken = (globalThis as any)?.__ENV__
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) headers["X-Admin-Token"] = String(adminToken);
       } catch {}
@@ -6110,7 +6155,7 @@ export const AdminPage: React.FC = () => {
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const adminToken = (globalThis as any)?.__ENV__
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) headers["X-Admin-Token"] = String(adminToken);
       } catch {}
@@ -6143,7 +6188,7 @@ export const AdminPage: React.FC = () => {
   // Debounced email/username suggestions fetch
   React.useEffect(() => {
     let cancelled = false;
-    let timer: any = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const run = async () => {
       const q = lookupEmail.trim();
       if (q.length < 1) {
@@ -6159,7 +6204,7 @@ export const AdminPage: React.FC = () => {
         const headers: Record<string, string> = { Accept: "application/json" };
         if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
-          const adminToken = (globalThis as any)?.__ENV__
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
@@ -6174,11 +6219,14 @@ export const AdminPage: React.FC = () => {
         if (cancelled) return;
         if (resp.ok && Array.isArray(data?.suggestions)) {
           setEmailSuggestions(
-            data.suggestions.map((s: any) => ({
-              id: String(s.id),
-              email: s?.email ? String(s.email) : null,
-              display_name: s?.display_name ? String(s.display_name) : null,
-            })),
+            data.suggestions.map((s: unknown) => {
+              const ss = s as Record<string, unknown>;
+              return {
+              id: String(ss.id),
+              email: ss?.email ? String(ss.email) : null,
+              display_name: ss?.display_name ? String(ss.display_name) : null,
+            };
+            }),
           );
           setSuggestionsOpen(true);
           setHighlightIndex(-1);
@@ -7517,7 +7565,7 @@ export const AdminPage: React.FC = () => {
                                 active,
                                 payload,
                                 label,
-                              }: any) => {
+                              }: { active?: boolean; payload?: Array<{ value?: number }>; label?: string }) => {
                                 if (!active || !payload || payload.length === 0)
                                   return null;
                                 const current = payload[0]?.value as number;
@@ -7816,7 +7864,7 @@ export const AdminPage: React.FC = () => {
                                                       payload,
                                                     }: {
                                                       active?: boolean;
-                                                      payload?: any[];
+                                                      payload?: Array<{ payload?: { country: string; visits: number; pct?: number; isOther?: boolean } }>;
                                                     }) => {
                                                       if (
                                                         !active ||
@@ -10474,23 +10522,23 @@ export const AdminPage: React.FC = () => {
                                             ).toLocaleString()}
                                           </Badge>
                                         )}
-                                        {(memberData as any)?.lastCountry && (
+                                        {(memberData as Record<string, unknown>)?.lastCountry && (
                                           <Badge
                                             variant="outline"
                                             className="rounded-full px-2 py-0.5"
                                           >
                                             {countryCodeToName(
-                                              (memberData as any).lastCountry,
+                                              String((memberData as Record<string, unknown>).lastCountry),
                                             )}
                                           </Badge>
                                         )}
-                                        {(memberData as any)?.lastReferrer && (
+                                        {(memberData as Record<string, unknown>)?.lastReferrer && (
                                           <Badge
                                             variant="outline"
                                             className="rounded-full px-2 py-0.5"
                                           >
                                             Referrer{" "}
-                                            {(memberData as any).lastReferrer}
+                                            {String((memberData as Record<string, unknown>).lastReferrer)}
                                           </Badge>
                                         )}
                                         {memberData.user?.created_at && (
@@ -11492,7 +11540,7 @@ export const AdminPage: React.FC = () => {
                                       active,
                                       payload,
                                       label,
-                                    }: any) => {
+                                    }: { active?: boolean; payload?: Array<{ value?: number }>; label?: string }) => {
                                       if (
                                         !active ||
                                         !payload ||
@@ -12867,7 +12915,7 @@ const BroadcastControls: React.FC<{
   inline?: boolean;
   onExpired?: () => void;
   onActive?: () => void;
-}> = ({ inline = false, onExpired, onActive }) => {
+}> = ({ inline = false, onExpired: _onExpired, onActive }) => {
   const [active, setActive] = React.useState<BroadcastRecord | null>(() =>
     loadPersistedBroadcast(),
   );
@@ -12941,7 +12989,11 @@ const BroadcastControls: React.FC<{
           savePersistedBroadcast(b.broadcast);
           // Pre-fill edit fields so admin can immediately edit
           setMessage(b.broadcast.message || "");
-          setSeverity((b.broadcast.severity as any) || "info");
+          setSeverity(
+            b.broadcast.severity === "warning" || b.broadcast.severity === "danger"
+              ? b.broadcast.severity
+              : "info",
+          );
           // Inform parent to open the section if collapsed
           onActive?.();
         } else {
@@ -12958,6 +13010,7 @@ const BroadcastControls: React.FC<{
     } finally {
       setInitializing(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // On load, if an active message exists, go straight to edit mode
@@ -12994,7 +13047,7 @@ const BroadcastControls: React.FC<{
           setSeverity(
             (data?.severity === "warning" || data?.severity === "danger"
               ? data.severity
-              : "info") as any,
+              : "info") as "info" | "warning" | "danger",
           );
           if (data?.serverTime) {
             const serverMs = Date.parse(data.serverTime);
@@ -13016,6 +13069,7 @@ const BroadcastControls: React.FC<{
         es?.close();
       } catch {}
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // When current broadcast expires, revert to create form and notify parent (to re-open section)
@@ -13051,7 +13105,7 @@ const BroadcastControls: React.FC<{
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const staticToken = (globalThis as any)?.__ENV__
+        const staticToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (staticToken) headers["X-Admin-Token"] = String(staticToken);
       } catch {}
@@ -13103,7 +13157,7 @@ const BroadcastControls: React.FC<{
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const staticToken = (globalThis as any)?.__ENV__
+        const staticToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (staticToken) headers["X-Admin-Token"] = String(staticToken);
       } catch {}
@@ -13145,7 +13199,12 @@ const BroadcastControls: React.FC<{
           <select
             className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
             value={severity || "warning"}
-            onChange={(e) => setSeverity((e.target.value as any) || "warning")}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSeverity(
+                v === "info" || v === "warning" || v === "danger" ? v : "warning",
+              );
+            }}
             aria-label="Type"
           >
             <option value="info">Information</option>
@@ -13182,7 +13241,7 @@ const BroadcastControls: React.FC<{
                   };
                   if (token) headers["Authorization"] = `Bearer ${token}`;
                   try {
-                    const staticToken = (globalThis as any)?.__ENV__
+                    const staticToken = (globalThis as EnvWithAdminToken)?.__ENV__
                       ?.VITE_ADMIN_STATIC_TOKEN;
                     if (staticToken)
                       headers["X-Admin-Token"] = String(staticToken);
@@ -13260,7 +13319,12 @@ const BroadcastControls: React.FC<{
           <select
             className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
             value={severity}
-            onChange={(e) => setSeverity((e.target.value as any) || "warning")}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSeverity(
+                v === "info" || v === "warning" || v === "danger" ? v : "warning",
+              );
+            }}
             aria-label="Type"
           >
             <option value="info">Information</option>
@@ -13330,7 +13394,7 @@ function AddAdminNote({
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const adminToken = (globalThis as any)?.__ENV__
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) headers["X-Admin-Token"] = String(adminToken);
       } catch {}
@@ -13350,7 +13414,7 @@ function AddAdminNote({
         };
         if (token) headers2["Authorization"] = `Bearer ${token}`;
         try {
-          const adminToken = (globalThis as any)?.__ENV__
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
         } catch {}
@@ -13445,7 +13509,7 @@ function NoteRow({
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
-        const adminToken = (globalThis as any)?.__ENV__
+        const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) headers["X-Admin-Token"] = String(adminToken);
       } catch {}
@@ -13464,7 +13528,7 @@ function NoteRow({
         };
         if (token) headers2["Authorization"] = `Bearer ${token}`;
         try {
-          const adminToken = (globalThis as any)?.__ENV__
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
         } catch {}

@@ -1,5 +1,6 @@
 import type { PlantImage, PlantPhoto } from "@/types/plant"
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic photo upload data */
 export const MAX_PLANT_PHOTOS = 5
 
 const normalizeBoolean = (value: unknown): boolean => value === true

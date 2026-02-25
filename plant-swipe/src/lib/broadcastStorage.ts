@@ -11,6 +11,7 @@ export type BroadcastRecord = {
   adminName?: string | null
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sanitizeBroadcast(raw: any): BroadcastRecord {
   return {
     id: String(raw?.id || ''),

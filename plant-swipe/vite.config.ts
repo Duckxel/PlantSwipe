@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -46,7 +47,7 @@ const normalizeBasePath = (value?: string) => {
 }
 
 const appBase = normalizeBasePath(process.env.VITE_APP_BASE_PATH)
-const scope = appBase === '/' ? '/' : appBase
+const _scope = appBase === '/' ? '/' : appBase
 const disablePwaFlag = String(process.env.VITE_DISABLE_PWA || process.env.DISABLE_PWA || process.env.PWA_DISABLED || '').trim().toLowerCase()
 const isPwaDisabled = disablePwaFlag === 'true' || disablePwaFlag === '1' || disablePwaFlag === 'yes' || disablePwaFlag === 'on' || disablePwaFlag === 'disable' || disablePwaFlag === 'disabled'
 

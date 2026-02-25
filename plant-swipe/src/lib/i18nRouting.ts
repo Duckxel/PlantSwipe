@@ -1,3 +1,4 @@
+import { useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from './i18n'
 import i18n from './i18n'
@@ -29,6 +30,7 @@ export function saveLanguagePreference(lang: SupportedLanguage): void {
  */
 export function detectBrowserLanguage(): SupportedLanguage {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
     if (browserLang.startsWith('fr')) {
       return 'fr'
@@ -102,50 +104,54 @@ export function usePathWithoutLanguage(): string {
 }
 
 /**
- * Hook to navigate with language preservation
+ * Hook to navigate with language preservation.
+ * Returns a referentially stable function that reads the latest location/language
+ * via a ref, so consumers wrapped in React.memo won't re-render when the
+ * location object changes.
  */
 export function useLanguageNavigate() {
   const navigate = useNavigate()
   const location = useLocation()
   const currentLang = useLanguage()
-  
-  return (to: string | number, options?: { replace?: boolean; state?: any }) => {
-    // Handle browser history navigation (numbers)
+
+  const stateRef = useRef({ location, currentLang })
+  stateRef.current = { location, currentLang }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return useCallback((to: string | number, options?: { replace?: boolean; state?: any }) => {
+    const { location: loc, currentLang: lang } = stateRef.current
+
     if (typeof to === 'number') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       navigate(to as any, options)
       return
     }
-    
-    // Handle relative paths (paths that don't start with '/')
+
     let resolvedPath = to
     if (!to.startsWith('/')) {
-      // Resolve relative path against current location
-      const currentPathWithoutLang = removeLanguagePrefix(location.pathname)
-      // Remove trailing slash and add the relative path
-      const basePath = currentPathWithoutLang.endsWith('/') 
-        ? currentPathWithoutLang.slice(0, -1) 
+      const currentPathWithoutLang = removeLanguagePrefix(loc.pathname)
+      const basePath = currentPathWithoutLang.endsWith('/')
+        ? currentPathWithoutLang.slice(0, -1)
         : currentPathWithoutLang
       resolvedPath = basePath ? `${basePath}/${to}` : `/${to}`
     }
-    
-    // Handle string paths - always add language prefix for absolute paths
+
     const pathWithoutLang = removeLanguagePrefix(resolvedPath)
-    const pathWithLang = addLanguagePrefix(pathWithoutLang, currentLang)
-    
-    // Debug logging (can be removed in production)
+    const pathWithLang = addLanguagePrefix(pathWithoutLang, lang)
+
     if (process.env.NODE_ENV === 'development') {
       console.log('[useLanguageNavigate]', {
-        from: location.pathname,
+        from: loc.pathname,
         to,
         resolvedPath,
-        currentLang,
+        currentLang: lang,
         pathWithoutLang,
         pathWithLang
       })
     }
-    
+
     navigate(pathWithLang, options)
-  }
+  }, [navigate])
 }
 
 /**

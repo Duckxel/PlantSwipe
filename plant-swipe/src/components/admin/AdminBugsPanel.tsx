@@ -123,6 +123,7 @@ export const AdminBugsPanel: React.FC = () => {
   const [bonusPoints, setBonusPoints] = React.useState(15)
 
   // Action responses for viewing
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [viewingResponses, setViewingResponses] = React.useState<any[]>([])
   const [responsesDialogOpen, setResponsesDialogOpen] = React.useState(false)
 
@@ -291,6 +292,7 @@ export const AdminBugsPanel: React.FC = () => {
       await loadData()
       setActionDialogOpen(false)
       setEditingAction(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       setActionError(error?.message || 'Failed to save action')
     } finally {

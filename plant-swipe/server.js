@@ -302,6 +302,7 @@ import multer from 'multer'
 import sharp from 'sharp'
 import webpush from 'web-push'
 import cron from 'node-cron'
+import helmet from 'helmet'
 
 // Note: dotenv already loaded at top of file before Sentry init
 
@@ -1638,7 +1639,7 @@ const mediaProxyBaseUrl = (process.env.MEDIA_PROXY_URL || 'https://media.aphylia
 /**
  * Transforms a Supabase storage public URL to use the media proxy
  * Example:
- *   Input:  https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/file.svg
+ *   Input:  [REDACTED]/storage/v1/object/public/UTILITY/admin/uploads/svg/file.svg
  *   Output: https://media.aphylia.app/UTILITY/admin/uploads/svg/file.svg
  * 
  * @param {string|null|undefined} url - The Supabase storage public URL
@@ -2416,8 +2417,9 @@ async function deleteGardenCoverObject(publicUrl) {
   }
 }
 
-// Extract Supabase user id and email from Authorization header. Falls back to
-// decoding the JWT locally when the server anon client isn't configured.
+// Extract Supabase user id from Authorization header.
+// SECURITY: Only trusts Supabase-verified tokens. Never decodes JWTs locally
+// without signature verification, as that would allow forged tokens to be accepted.
 async function getUserIdFromRequest(req) {
   try {
     const header = req.get('authorization') || req.get('Authorization') || ''
@@ -2427,25 +2429,12 @@ async function getUserIdFromRequest(req) {
     if (!low.startsWith(prefix)) return null
     const token = header.slice(prefix.length).trim()
     if (!token) return null
-    // Preferred: ask Supabase to resolve the token (works with anon key)
     if (supabaseServer) {
       try {
         const { data, error } = await supabaseServer.auth.getUser(token)
         if (!error && data?.user?.id) return data.user.id
       } catch { }
     }
-    // Fallback: decode JWT payload locally to grab the subject (sub)
-    try {
-      const parts = token.split('.')
-      if (parts.length >= 2) {
-        const b64 = parts[1]
-        const norm = (b64 + '==='.slice((b64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/')
-        const json = Buffer.from(norm, 'base64').toString('utf8')
-        const payload = JSON.parse(json)
-        const sub = (payload && (payload.sub || payload.user_id))
-        if (typeof sub === 'string' && sub.length > 0) return sub
-      }
-    } catch { }
     return null
   } catch {
     return null
@@ -2464,8 +2453,10 @@ async function isAdminUserId(userId) {
   return false
 }
 
-// Resolve user (id/email) from request. Uses Supabase if available, otherwise
-// decodes the JWT locally. Returns null if no valid bearer token.
+// Resolve user (id/email) from request using Supabase token verification.
+// SECURITY: Only trusts Supabase-verified tokens. Never decodes JWTs locally
+// without signature verification, as that would allow forged tokens to be accepted.
+// Returns null if no valid bearer token or if verification fails.
 async function getUserFromRequest(req) {
   try {
     const header = req.get('authorization') || req.get('Authorization') || ''
@@ -2483,18 +2474,6 @@ async function getUserFromRequest(req) {
         }
       } catch { }
     }
-    try {
-      const parts = token.split('.')
-      if (parts.length >= 2) {
-        const b64 = parts[1]
-        const norm = (b64 + '==='.slice((b64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/')
-        const json = Buffer.from(norm, 'base64').toString('utf8')
-        const payload = JSON.parse(json)
-        const id = (payload && (payload.sub || payload.user_id)) || null
-        const email = (payload && (payload.email || payload.user_email)) || null
-        if (id) return { id, email }
-      }
-    } catch { }
     return null
   } catch {
     return null
@@ -4094,49 +4073,42 @@ app.options('/api/*', (_req, res) => {
   res.status(204).end()
 })
 
-// Content Security Policy - Allow all *.aphylia.app subdomains EXCEPT for images
-// img-src and media-src allow all sources; other directives restrict to aphylia.app domains
-const CSP_POLICY = [
-  "default-src 'self' *.aphylia.app",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.aphylia.app https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://recaptchaenterprise.googleapis.com",
-  "style-src 'self' 'unsafe-inline' *.aphylia.app https://fonts.googleapis.com",
-  "connect-src 'self' *.aphylia.app wss://*.aphylia.app https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://recaptchaenterprise.googleapis.com https://www.google.com https://*.sentry.io https://fonts.googleapis.com https://fonts.gstatic.com https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org",
-  "font-src 'self' *.aphylia.app https://fonts.gstatic.com data:",
-  "frame-src 'self' *.aphylia.app https://www.google.com https://recaptcha.google.com",
-  "img-src * data: blob:",
-  "media-src * data: blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self' *.aphylia.app",
-  "worker-src 'self' *.aphylia.app blob:",
-  "manifest-src 'self' *.aphylia.app"
-].join('; ')
+// Security headers middleware using Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'self'", "*.aphylia.app"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*.aphylia.app", "https://www.googletagmanager.com", "https://www.google.com", "https://www.gstatic.com", "https://recaptchaenterprise.googleapis.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "*.aphylia.app", "https://fonts.googleapis.com"],
+      connectSrc: ["'self'", "*.aphylia.app", "wss://*.aphylia.app", "https://*.supabase.co", "wss://*.supabase.co", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com", "https://recaptchaenterprise.googleapis.com", "https://www.google.com", "https://*.sentry.io", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://geocoding-api.open-meteo.com", "https://nominatim.openstreetmap.org"],
+      fontSrc: ["'self'", "*.aphylia.app", "https://fonts.gstatic.com", "data:"],
+      frameSrc: ["'self'", "*.aphylia.app", "https://www.google.com", "https://recaptcha.google.com"],
+      imgSrc: ["*", "data:", "blob:"],
+      mediaSrc: ["*", "data:", "blob:"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'", "*.aphylia.app"],
+      workerSrc: ["'self'", "*.aphylia.app", "blob:"],
+      manifestSrc: ["'self'", "*.aphylia.app"],
+    },
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  strictTransportSecurity: process.env.NODE_ENV === 'production' ? {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: false,
+  } : false,
+}))
 
-// Security headers middleware
+// Additional security headers not handled by Helmet
 app.use((_req, res, next) => {
-  // Content Security Policy
-  res.setHeader('Content-Security-Policy', CSP_POLICY)
-  
-  // Prevent MIME type sniffing
-  res.setHeader('X-Content-Type-Options', 'nosniff')
-  
-  // Prevent clickjacking (in addition to CSP frame-ancestors)
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
-  
-  // XSS protection (legacy browsers)
+  // XSS protection (legacy browsers, removed in Helmet 4)
   res.setHeader('X-XSS-Protection', '1; mode=block')
-  
-  // Referrer policy - don't leak URLs to external sites
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
   
   // Permissions policy - disable unnecessary browser features
   res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(self), microphone=()')
-  
-  // HSTS - enforce HTTPS (only in production)
-  if (process.env.NODE_ENV === 'production') {
-    // max-age=31536000 (1 year), includeSubDomains
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
-  }
   
   next()
 })

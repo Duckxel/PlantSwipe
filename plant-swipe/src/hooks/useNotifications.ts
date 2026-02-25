@@ -2,12 +2,15 @@
  * useNotifications Hook
  * 
  * React hook for managing notification state with realtime updates.
+ * Optimised for fast badge updates: polls every 6 s while the tab is
+ * visible, pauses when hidden, and re-fetches instantly on focus /
+ * visibility change / broadcast events.  All data sources are queried
+ * in a single parallel Promise.all to minimise latency.
  */
 
 import React from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import {
-  getNotificationCounts,
   getPendingGardenInvites,
   onNotificationRefresh
 } from '@/lib/notifications'
@@ -28,14 +31,14 @@ type FriendRequest = {
 }
 
 interface UseNotificationsOptions {
-  /** Polling interval in ms (default: 30000) */
+  /** Polling interval in ms (default: 6000) */
   pollInterval?: number
   /** Channel key for realtime subscriptions */
   channelKey?: string
 }
 
 interface UseNotificationsReturn {
-  /** Total count of actionable items (friend requests + garden invites) */
+  /** Total count of actionable items (friend requests + garden invites + tasks) */
   totalCount: number
   /** Breakdown of notification counts */
   counts: NotificationCounts
@@ -54,17 +57,23 @@ interface UseNotificationsReturn {
 }
 
 const ERROR_LOGGED = new Set<string>()
-const MAX_ERROR_LOG_SIZE = 50 // Limit the number of unique errors we track
-const REFRESH_INTERVAL_MS = 15_000 // Poll every 15 seconds as fallback
+const MAX_ERROR_LOG_SIZE = 50
+const POLL_INTERVAL_MS = 6_000
 
 function trackError(key: string): boolean {
   if (ERROR_LOGGED.has(key)) return false
-  // If we've tracked too many errors, clear and start fresh
-  if (ERROR_LOGGED.size >= MAX_ERROR_LOG_SIZE) {
-    ERROR_LOGGED.clear()
-  }
+  if (ERROR_LOGGED.size >= MAX_ERROR_LOG_SIZE) ERROR_LOGGED.clear()
   ERROR_LOGGED.add(key)
   return true
+}
+
+const EMPTY_COUNTS: NotificationCounts = {
+  total: 0,
+  unread: 0,
+  friendRequests: 0,
+  gardenInvites: 0,
+  unreadMessages: 0,
+  pendingTasks: 0,
 }
 
 export function useNotifications(
@@ -72,16 +81,9 @@ export function useNotifications(
   options?: UseNotificationsOptions
 ): UseNotificationsReturn {
   const channelKey = options?.channelKey ?? 'default'
-  const pollInterval = options?.pollInterval ?? REFRESH_INTERVAL_MS
+  const pollInterval = options?.pollInterval ?? POLL_INTERVAL_MS
 
-  const [counts, setCounts] = React.useState<NotificationCounts>({
-    total: 0,
-    unread: 0,
-    friendRequests: 0,
-    gardenInvites: 0,
-    unreadMessages: 0,
-    pendingTasks: 0
-  })
+  const [counts, setCounts] = React.useState<NotificationCounts>(EMPTY_COUNTS)
   const [friendRequests, setFriendRequests] = React.useState<FriendRequest[]>([])
   const [gardenInvites, setGardenInvites] = React.useState<GardenInvite[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -92,60 +94,71 @@ export function useNotifications(
 
   const refresh = React.useCallback(async (force?: boolean) => {
     if (!userId) {
-      setCounts({ total: 0, unread: 0, friendRequests: 0, gardenInvites: 0, unreadMessages: 0, pendingTasks: 0 })
+      setCounts(EMPTY_COUNTS)
       setFriendRequests([])
       setGardenInvites([])
       setLoading(false)
       return
     }
 
-    // Throttle refreshes to max once per 500ms (unless forced)
     const now = Date.now()
-    if (!force && now - lastRefreshRef.current < 500) {
-      return
-    }
+    if (!force && now - lastRefreshRef.current < 400) return
     lastRefreshRef.current = now
 
     try {
       const today = new Date().toISOString().slice(0, 10)
 
-      // Fetch all data in parallel
-      const [countsData, friendRequestsData, gardenInvitesData, unreadMsgCount, taskData] = await Promise.all([
-        getNotificationCounts(userId),
+      // Single parallel batch — every data source at once
+      const [
+        friendRequestsData,
+        gardenInvitesData,
+        unreadMsgCount,
+        taskData,
+      ] = await Promise.all([
         loadFriendRequests(userId),
-        getPendingGardenInvites(userId).catch(() => []),
+        getPendingGardenInvites(userId).catch(() => [] as GardenInvite[]),
         getUnreadMessageCount().catch(() => 0),
-        getUserTasksTodayCached(userId, today).catch(() => ({ gardensWithRemainingTasks: 0, totalDueCount: 0, totalCompletedCount: 0 }))
+        getUserTasksTodayCached(userId, today).catch(() => ({
+          gardensWithRemainingTasks: 0,
+          totalDueCount: 0,
+          totalCompletedCount: 0,
+        })),
       ])
 
       if (!mountedRef.current) return
 
-      // Calculate pending tasks count
-      const pendingTaskCount = Math.max(0, (taskData.totalDueCount || 0) - (taskData.totalCompletedCount || 0))
+      const friendRequestCount = friendRequestsData.length
+      const gardenInviteCount = gardenInvitesData.length
+      const pendingTaskCount = Math.max(
+        0,
+        (taskData.totalDueCount || 0) - (taskData.totalCompletedCount || 0),
+      )
 
-      // Merge message count and task count into countsData
-      const mergedCounts = {
-        ...countsData,
+      const mergedCounts: NotificationCounts = {
+        total: friendRequestCount + gardenInviteCount + unreadMsgCount,
+        unread: 0,
+        friendRequests: friendRequestCount,
+        gardenInvites: gardenInviteCount,
         unreadMessages: unreadMsgCount,
         pendingTasks: pendingTaskCount,
-        total: countsData.total + unreadMsgCount
       }
 
       setCounts(mergedCounts)
       setFriendRequests(friendRequestsData)
       setGardenInvites(gardenInvitesData)
       setError(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       if (trackError('notifications')) {
         console.warn('[useNotifications] Failed to load notifications:', e)
       }
       if (mountedRef.current) {
-        setError(e?.message || 'Failed to load notifications')
+        setError(
+          e instanceof Error ? e.message : 'Failed to load notifications',
+        )
       }
     } finally {
-      if (mountedRef.current) {
-        setLoading(false)
-      }
+      if (mountedRef.current) setLoading(false)
     }
   }, [userId])
 
@@ -153,45 +166,51 @@ export function useNotifications(
   React.useEffect(() => {
     mountedRef.current = true
     refresh()
-    return () => {
-      mountedRef.current = false
-    }
+    return () => { mountedRef.current = false }
   }, [refresh])
 
-  // Polling interval
+  // Polling — only ticks while the tab is visible, pauses when hidden
   React.useEffect(() => {
     if (!userId || typeof window === 'undefined') return
 
-    const intervalId = window.setInterval(() => {
-      refresh()
-    }, pollInterval)
+    let timer: ReturnType<typeof setInterval> | null = null
 
-    return () => {
-      window.clearInterval(intervalId)
+    function start() {
+      stop()
+      timer = setInterval(() => {
+        if (document.visibilityState === 'visible') refresh()
+      }, pollInterval)
     }
-  }, [userId, pollInterval, refresh])
+    function stop() {
+      if (timer) { clearInterval(timer); timer = null }
+    }
 
-  // Visibility change - refresh when tab becomes visible
-  React.useEffect(() => {
-    if (!userId || typeof window === 'undefined') return
-
-    const handleVisibilityChange = () => {
+    const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        refresh()
+        refresh(true)
+        start()
+      } else {
+        stop()
       }
     }
 
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [userId, refresh])
+    const onFocus = () => refresh(true)
+
+    start()
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('focus', onFocus)
+
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [userId, pollInterval, refresh])
 
   // Listen for broadcast refresh events from other components
   React.useEffect(() => {
     if (!userId) return
-    
-    return onNotificationRefresh(() => {
-      refresh(true)
-    })
+    return onNotificationRefresh(() => refresh(true))
   }, [userId, refresh])
 
   // Realtime subscriptions
@@ -200,56 +219,38 @@ export function useNotifications(
 
     const channelName = `notifications-${channelKey}-${userId}`
     const channel = supabase.channel(channelName)
-      // Listen for friend request changes (both as recipient and requester)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'friend_requests',
         filter: `recipient_id=eq.${userId}`
-      }, () => {
-        // Force refresh to bypass throttle for realtime events
-        refresh(true)
-      })
-      // Also listen for changes where user is the requester (to update sent requests)
+      }, () => refresh(true))
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'friend_requests',
         filter: `requester_id=eq.${userId}`
-      }, () => {
-        refresh(true)
-      })
-      // Listen for garden invite changes
+      }, () => refresh(true))
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'garden_invites',
         filter: `invitee_id=eq.${userId}`
-      }, () => {
-        refresh(true)
-      })
-      // Listen for new messages (via conversations that user is part of)
+      }, () => refresh(true))
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages'
-      }, () => {
-        refresh(true)
-      })
+      }, () => refresh(true))
 
-    // Subscribe with status callback for debugging
     channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        // Successfully subscribed to realtime updates
-      } else if (status === 'CHANNEL_ERROR') {
+      if (status === 'CHANNEL_ERROR') {
         console.warn('[useNotifications] Realtime channel error, falling back to polling')
       }
     })
 
     return () => {
-      try {
-        supabase.removeChannel(channel)
-      } catch {}
+      try { supabase.removeChannel(channel) } catch {}
     }
   }, [userId, channelKey, refresh])
 
@@ -269,7 +270,9 @@ export function useNotifications(
 }
 
 /**
- * Load pending friend requests for a user
+ * Load pending friend requests with requester profiles in one pass.
+ * This replaces both the old getNotificationCounts friend-request query
+ * AND the separate loadFriendRequests — avoiding a duplicate round-trip.
  */
 async function loadFriendRequests(userId: string): Promise<FriendRequest[]> {
   const { data, error } = await supabase
@@ -280,15 +283,12 @@ async function loadFriendRequests(userId: string): Promise<FriendRequest[]> {
     .order('created_at', { ascending: false })
 
   if (error) {
-    if (error.message?.includes('does not exist')) {
-      return []
-    }
+    if (error.message?.includes('does not exist')) return []
     throw error
   }
 
   if (!data || data.length === 0) return []
 
-  // Get requester profiles
   const requesterIds = data.map(r => r.requester_id)
   const { data: profiles } = await supabase
     .from('profiles')

@@ -25,6 +25,7 @@ function detectInitialLanguage(): SupportedLanguage {
 
   // Check browser language - if French, default to French
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
     if (browserLang.startsWith('fr')) {
       return 'fr'

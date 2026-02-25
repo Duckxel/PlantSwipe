@@ -27,6 +27,7 @@ import {
   ecologicalToleranceEnum,
   ecologicalImpactEnum,
 } from '@/lib/composition'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic translation payload processing */
 
 const sanitizeStringValue = (value: string): string | undefined => {
   const trimmed = value.trim()

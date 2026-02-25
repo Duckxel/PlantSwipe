@@ -77,7 +77,7 @@ export const BookmarksSection: React.FC<BookmarksSectionProps> = ({ userId, isOw
   const remainingCount = bookmarks.length - ITEMS_PER_ROW
 
   return (
-    <div className="mt-8 space-y-4">
+    <div id="bookmarks" className="mt-8 space-y-4 scroll-mt-24">
       <div className="flex items-center justify-between px-1">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <BookmarkIcon className="h-5 w-5 text-amber-600 dark:text-amber-400" />

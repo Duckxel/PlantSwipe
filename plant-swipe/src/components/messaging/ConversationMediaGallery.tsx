@@ -56,6 +56,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
         setError(null)
         const data = await getConversationImages(conversationId)
         setImages(data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (e: any) {
         console.error('[media-gallery] Failed to load images:', e)
         setError(e?.message || 'Failed to load images')
@@ -83,6 +84,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIndex, images.length])
   
   // Auto-hide controls after 3s of inactivity in fullscreen
@@ -171,6 +173,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
       if (navigator.vibrate) {
         navigator.vibrate(50)
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       // If file sharing fails, try URL sharing
       if (err.name !== 'AbortError') {

@@ -450,6 +450,7 @@ export async function createPlantScan(
  * This is useful when plants are added after the scan was created
  * Updates the scan record if a new match is found
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function recheckScanMatch(scan: any): Promise<any> {
   // Skip if already has a match
   if (scan.matched_plant_id || scan.matched_plant) {
@@ -658,6 +659,7 @@ export async function deleteScan(scanId: string): Promise<void> {
 /**
  * Transform database row to PlantScan type
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformDbRow(row: any): PlantScan {
   return {
     id: row.id,

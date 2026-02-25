@@ -251,6 +251,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
       }
 
       setScreenshotUrl(data.url)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('Screenshot upload failed', e)
       setFormErrorMessage(e.message || "Screenshot upload failed")

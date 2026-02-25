@@ -20,6 +20,7 @@ const ADVICE_SELECT = `
   created_at
 `
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mapAdviceRow = (row: any): PlantProAdvice => ({
   id: row.id,
   plantId: row.plant_id,
@@ -232,6 +233,7 @@ export async function getOrTranslateProAdvice(
   
   const translatedContent = await translateProAdviceContent(
     advice.content,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     targetLang as any,
     advice.originalLanguage
   )
@@ -276,6 +278,7 @@ export async function uploadProAdviceImage(file: File, options?: UploadOptions):
     signal: options?.signal,
   })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const payload = await response.json().catch(() => ({} as any))
   if (!response.ok) {
     const message = payload?.error || "Failed to upload image."

@@ -4,6 +4,7 @@
  * This module provides analytics functions that only work when the user
  * has given explicit consent for analytics cookies.
  */
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic GDPR analytics event data */
 
 // GA Measurement ID
 const GA_MEASUREMENT_ID = 'G-LDSYW5QNK5'

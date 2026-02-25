@@ -1,8 +1,7 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import React from 'react'
-import ReactDOM from 'react-dom'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
 import { listPlantTasks, deletePlantTask, updatePatternTask, resyncTaskOccurrencesForGarden, logGardenActivity, refreshGardenTaskCache } from '@/lib/gardens'
 import { broadcastGardenUpdate, addGardenBroadcastListener } from '@/lib/realtime'
@@ -12,6 +11,7 @@ import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
 import { Pencil, Trash2, Plus } from 'lucide-react'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic task scheduling data */
 
 const TASK_EMOJIS: Record<string, string> = {
   water: '💧',
@@ -108,7 +108,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
     return () => { try { supabase.removeChannel(channel) } catch {} }
   }, [open, gardenId, load])
 
-  const resetEditor = () => {
+  const _resetEditor = () => {
     setPatternPeriod('week')
     setPatternAmount(1)
     setPatternSelection({})

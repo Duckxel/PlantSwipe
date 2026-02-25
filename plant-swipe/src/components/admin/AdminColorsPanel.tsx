@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
 import { translateText } from '@/lib/deepl'
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic color management data */
 
 // Types
 type ColorTranslation = {

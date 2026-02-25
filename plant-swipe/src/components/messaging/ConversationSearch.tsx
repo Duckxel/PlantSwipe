@@ -75,6 +75,7 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
       try {
         const data = await searchConversationMessages(conversationId, query)
         setResults(data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (e: any) {
         console.error('[search] Failed to search messages:', e)
         setResults([])

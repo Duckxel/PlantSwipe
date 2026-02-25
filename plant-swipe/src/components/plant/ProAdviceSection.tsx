@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 import { createPlantProAdvice, deletePlantProAdvice, fetchPlantProAdvices, updatePlantProAdvice, uploadProAdviceImage, getOrTranslateProAdvice } from "@/lib/proAdvice"
 import type { PlantProAdvice } from "@/types/proAdvice"
 import type { SupportedLanguage } from "@/lib/i18n"
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic pro advice API data */
 
 const MAX_CONTENT_LENGTH = 150 // Characters before truncating
 
@@ -227,6 +228,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
         })
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedAdvice?.id, currentLanguage])
 
   const normalizeRoles = React.useCallback((roles?: string[] | null): UserRole[] => {

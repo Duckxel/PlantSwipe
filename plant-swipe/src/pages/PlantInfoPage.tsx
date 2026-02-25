@@ -89,6 +89,7 @@ import {
 } from '@/lib/composition'
 import worldMapLight from '@/assets/world-map-light.svg'
 import worldMapDark from '@/assets/world-map-dark.svg'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plant info API responses */
 
 type WaterSchedules = PlantWateringSchedule[]
 
@@ -559,6 +560,7 @@ const PlantInfoPage: React.FC = () => {
       ? ((profile as any).liked_plant_ids as any[]).map(String)
       : []
     setLikedIds(arr)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.liked_plant_ids])
 
   React.useEffect(() => {
@@ -622,6 +624,7 @@ const PlantInfoPage: React.FC = () => {
     }
     load()
     return () => { ignore = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, currentLang, profile?.is_admin, profile?.roles])
 
   // --- Impression tracking (page views) ---

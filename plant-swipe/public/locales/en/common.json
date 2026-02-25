@@ -2899,6 +2899,12 @@
       "subtitle": "First, let's get to know each other and the environment where your garden will evolve.",
       "getStarted": "Let's get started"
     },
+    "editLaterNote": "You can always change these later in Settings.",
+    "languageTheme": {
+      "title": "Personalize your experience",
+      "languageLabel": "Language",
+      "themeLabel": "Theme"
+    },
     "accent": {
       "title": "Choose your accent color",
       "subtitle": "Personalize your Aphylia experience",
@@ -2920,14 +2926,15 @@
       "geoNotSupported": "Geolocation is not supported by your browser"
     },
     "gardenType": {
-      "title": "Where is your garden located?",
+      "title": "What plant living space interests you?",
       "subtitle": "This helps us recommend the right plants for you",
-      "outside": "Outside, in a yard",
-      "outsideDesc": "I have an outdoor garden or yard",
-      "inside": "Inside your home",
-      "insideDesc": "I grow plants indoors",
-      "both": "Both inside and outside",
-      "bothDesc": "I have plants everywhere!"
+      "inside": "Indoor",
+      "insideDesc": "Houseplants and indoor gardening",
+      "outside": "Outdoor",
+      "outsideDesc": "Garden, balcony, or yard plants",
+      "both": "Both",
+      "bothDesc": "Indoor and outdoor plants",
+      "unsure": "I don't know yet"
     },
     "experience": {
       "title": "What's your gardening level?",
@@ -2985,6 +2992,27 @@
       "notificationTimeDescription": "When should we send you reminders?",
       "notificationTimeHelper": "Scheduled notifications will be sent at the same local time in your timezone ({{timezone}})."
     }
+  },
+  "profileActions": {
+    "title": "Get started",
+    "subtitle": "{{done}} of {{total}} completed",
+    "allDoneTitle": "All done!",
+    "allDoneSubtitle": "You completed every action. Great job!",
+    "congratulations": "Congratulations!",
+    "dismiss": "Dismiss",
+    "hooray": "Hooray!",
+    "skip": "Skip",
+    "remaining": "remaining",
+    "createGarden": "Create your first garden",
+    "createGardenDesc": "Head to the Gardens page and start your very own garden.",
+    "addPlant": "Add a plant to your garden",
+    "addPlantDesc": "Open one of your gardens and add your first plant to it.",
+    "addFriend": "Add a friend",
+    "addFriendDesc": "Search for other gardeners and send them a friend request.",
+    "completeProfile": "Complete your profile",
+    "completeProfileDesc": "Add a bio to make your profile more personal.",
+    "addBookmark": "Bookmark a plant",
+    "addBookmarkDesc": "Save a plant you like to one of your bookmark lists."
   },
   "emailVerification": {
     "title": "Verify Your Email",

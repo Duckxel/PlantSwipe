@@ -42,6 +42,7 @@ import { LinkShareDialog } from './LinkShareDialog'
 import { CameraCapture } from './CameraCapture'
 import { ConversationMediaGallery } from './ConversationMediaGallery'
 import { ConversationSearch } from './ConversationSearch'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic messaging data */
 
 interface ConversationViewProps {
   conversationId: string
@@ -142,7 +143,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         if (data?.language) {
           setRecipientLanguage(data.language)
         }
-      } catch (err) {
+      } catch (_err) {
         // Silently fail, default to 'en'
       }
     }
