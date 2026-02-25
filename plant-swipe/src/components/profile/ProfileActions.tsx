@@ -198,9 +198,6 @@ export function ProfileActions({ userId }: Props) {
         transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
         className="mt-4 rounded-[24px] border border-stone-200/60 dark:border-[#3e3e42]/60 bg-gradient-to-br from-white via-white to-accent/[0.03] dark:from-[#17171a] dark:via-[#17171a] dark:to-accent/[0.06] shadow-[0_8px_40px_-12px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_40px_-12px_rgba(0,0,0,0.5)] overflow-hidden"
       >
-        {/* Accent top stripe */}
-        <div className="h-1 bg-gradient-to-r from-accent/60 via-accent to-accent/60" />
-
         <div className="p-5 md:p-6">
           {/* Header */}
           <div className="flex items-center gap-4 mb-5">
