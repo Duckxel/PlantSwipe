@@ -3,8 +3,8 @@
  *
  * Defines onboarding actions shown on the user's profile page.
  * To add a new action: append an entry to PROFILE_ACTIONS with a unique id,
- * a translation key (add matching keys in locales/en and locales/fr),
- * the target route, an icon identifier, and a completion predicate.
+ * translation keys (titleKey + descKey — add matching keys in locales/en and
+ * locales/fr), the target route, an icon identifier, and a completion predicate.
  */
 
 export type ActionCheckData = {
@@ -17,8 +17,10 @@ export type ActionCheckData = {
 
 export type ProfileActionDef = {
   id: string
-  /** i18n key under "profileActions.<id>" */
+  /** i18n key for the action title */
   titleKey: string
+  /** i18n key for the short description shown below the title */
+  descKey: string
   /** Route the user should visit to complete this action */
   link: string
   /** Icon identifier resolved in the component */
@@ -31,6 +33,7 @@ export const PROFILE_ACTIONS: ProfileActionDef[] = [
   {
     id: 'create_garden',
     titleKey: 'profileActions.createGarden',
+    descKey: 'profileActions.createGardenDesc',
     link: '/gardens',
     iconId: 'garden',
     isCompleted: (d) => d.gardensCount >= 1,
@@ -38,13 +41,15 @@ export const PROFILE_ACTIONS: ProfileActionDef[] = [
   {
     id: 'add_plant',
     titleKey: 'profileActions.addPlant',
-    link: '/discovery',
+    descKey: 'profileActions.addPlantDesc',
+    link: '/gardens',
     iconId: 'plant',
     isCompleted: (d) => d.plantsTotal >= 1,
   },
   {
     id: 'add_friend',
     titleKey: 'profileActions.addFriend',
+    descKey: 'profileActions.addFriendDesc',
     link: '/friends',
     iconId: 'friend',
     isCompleted: (d) => d.friendsCount >= 1,
@@ -52,6 +57,7 @@ export const PROFILE_ACTIONS: ProfileActionDef[] = [
   {
     id: 'complete_profile',
     titleKey: 'profileActions.completeProfile',
+    descKey: 'profileActions.completeProfileDesc',
     link: '/u/_me',
     iconId: 'profile',
     isCompleted: (d) => d.hasBio,
@@ -59,7 +65,8 @@ export const PROFILE_ACTIONS: ProfileActionDef[] = [
   {
     id: 'add_bookmark',
     titleKey: 'profileActions.addBookmark',
-    link: '/discovery',
+    descKey: 'profileActions.addBookmarkDesc',
+    link: '/u/_me#bookmarks',
     iconId: 'bookmark',
     isCompleted: (d) => d.bookmarkCount >= 1,
   },

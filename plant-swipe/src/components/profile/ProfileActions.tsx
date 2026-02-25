@@ -11,7 +11,6 @@ import {
   ChevronRight,
   Check,
   PartyPopper,
-  X,
   Target,
 } from 'lucide-react'
 import {
@@ -341,7 +340,7 @@ function ActionRow({
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.04 }}
-      className={`group relative flex items-center gap-3 rounded-2xl border transition-all duration-200 ${
+      className={`group relative flex items-center rounded-2xl border transition-all duration-200 ${
         done
           ? 'border-accent/15 dark:border-accent/20 bg-accent/[0.04] dark:bg-accent/[0.07]'
           : 'border-stone-100 dark:border-stone-800 hover:border-stone-200 dark:hover:border-stone-700 hover:bg-stone-50/50 dark:hover:bg-stone-800/30'
@@ -352,7 +351,7 @@ function ActionRow({
         className="flex items-center gap-3 flex-1 min-w-0 px-3 py-3"
       >
         {/* Status icon */}
-        <div className="shrink-0 relative">
+        <div className="shrink-0 relative self-start mt-0.5">
           <AnimatePresence mode="wait">
             {done ? (
               <motion.div
@@ -383,31 +382,37 @@ function ActionRow({
           )}
         </div>
 
-        {/* Title */}
-        <span
-          className={`flex-1 text-sm leading-snug transition-all duration-300 ${
-            done
-              ? 'text-stone-400 dark:text-stone-500 line-through decoration-accent/40'
-              : 'text-stone-700 dark:text-stone-200 font-medium'
-          }`}
-        >
-          {t(action.titleKey)}
-        </span>
+        {/* Title + description */}
+        <div className="flex-1 min-w-0">
+          <span
+            className={`block text-sm leading-snug transition-all duration-300 ${
+              done
+                ? 'text-stone-400 dark:text-stone-500 line-through decoration-accent/40'
+                : 'text-stone-700 dark:text-stone-200 font-medium'
+            }`}
+          >
+            {t(action.titleKey)}
+          </span>
+          {!done && (
+            <span className="block text-xs text-stone-400 dark:text-stone-500 mt-0.5 leading-snug">
+              {t(action.descKey)}
+            </span>
+          )}
+        </div>
 
         {!done && (
           <ChevronRight className="h-4 w-4 text-stone-300 dark:text-stone-600 group-hover:text-accent transition-colors shrink-0" />
         )}
       </Link>
 
-      {/* Skip button — only for incomplete actions */}
+      {/* Skip button — always visible on mobile, hover on desktop */}
       {!done && (
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSkip() }}
-          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0 mr-2 p-1.5 rounded-lg text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
-          title={t('profileActions.skip', 'Skip')}
+          className="shrink-0 mr-2 px-2 py-1 rounded-lg text-[11px] text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
           aria-label={t('profileActions.skip', 'Skip')}
         >
-          <X className="h-3.5 w-3.5" />
+          {t('profileActions.skip', 'Skip')}
         </button>
       )}
     </motion.div>

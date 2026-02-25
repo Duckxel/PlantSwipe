@@ -3380,10 +3380,15 @@
     "skip": "Skip",
     "remaining": "remaining",
     "createGarden": "Create your first garden",
+    "createGardenDesc": "Head to the Gardens page and start your very own garden.",
     "addPlant": "Add a plant to your garden",
+    "addPlantDesc": "Open one of your gardens and add your first plant to it.",
     "addFriend": "Add a friend",
+    "addFriendDesc": "Search for other gardeners and send them a friend request.",
     "completeProfile": "Complete your profile",
-    "addBookmark": "Bookmark a plant"
+    "completeProfileDesc": "Add a bio to make your profile more personal.",
+    "addBookmark": "Bookmark a plant",
+    "addBookmarkDesc": "Save a plant you like to one of your bookmark lists."
   },
   "emailVerification": {
     "title": "Verify Your Email",

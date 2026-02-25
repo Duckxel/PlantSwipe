@@ -3380,10 +3380,15 @@
     "skip": "Passer",
     "remaining": "restantes",
     "createGarden": "Créez votre premier jardin",
+    "createGardenDesc": "Rendez-vous sur la page Jardins et créez votre propre jardin.",
     "addPlant": "Ajoutez une plante à votre jardin",
+    "addPlantDesc": "Ouvrez l'un de vos jardins et ajoutez-y votre première plante.",
     "addFriend": "Ajoutez un ami",
+    "addFriendDesc": "Recherchez d'autres jardiniers et envoyez-leur une demande d'ami.",
     "completeProfile": "Complétez votre profil",
-    "addBookmark": "Ajoutez une plante en favori"
+    "completeProfileDesc": "Ajoutez une bio pour rendre votre profil plus personnel.",
+    "addBookmark": "Ajoutez une plante en favori",
+    "addBookmarkDesc": "Sauvegardez une plante que vous aimez dans vos listes de favoris."
   },
   "emailVerification": {
     "title": "Vérifiez votre email",
