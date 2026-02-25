@@ -244,6 +244,7 @@ export default function PlantSwipe() {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useLanguageNavigate()
+  const handleOpenInfo = React.useCallback((p: { id: string }) => navigate(`/plants/${p.id}`), [navigate])
   const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "landing" | "discovery" | "gardens" | "search" | "profile" | "create" =
     pathWithoutLang === "/" ? "landing" :
@@ -2262,7 +2263,7 @@ export default function PlantSwipe() {
                 <Suspense fallback={routeLoadingFallback}>
                   <SearchPageLazy
                     plants={sortedSearchResults}
-                    openInfo={(p) => navigate(`/plants/${p.id}`)}
+                    openInfo={handleOpenInfo}
                     likedIds={likedIds}
                   />
                 </Suspense>
