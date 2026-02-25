@@ -61,7 +61,7 @@ type PlantCareData = NonNullable<Plant["plantCare"]>
 type PlantGrowthData = NonNullable<Plant["growth"]>
 type PlantEcologyData = NonNullable<Plant["ecology"]>
 
-const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
+const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta', 'adminCommentary', 'userNotes'])
 const IN_PROGRESS_STATUS = 'in_progress' as const
 const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
@@ -2042,7 +2042,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             if (fieldKey === 'misc' && (data as any)?.companionPlants) captureCompanionSuggestions((data as any).companionPlants)
             if (fieldKey === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
             updated = applyAiFieldToPlant(updated, fieldKey, data)
-            markFieldComplete(fieldKey)
           }
           const withId = { ...updated, id: updated.id || generateUUIDv4() }
           const normalized = normalizePlantWatering(withId)
