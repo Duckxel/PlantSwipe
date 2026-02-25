@@ -151,7 +151,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   label={t('common.menu', { defaultValue: 'Menu' })}
                   isActive={currentView === 'profile' || currentView === 'messages'}
                   onClick={() => setProfileMenuOpen(true)}
-                  badge={(totalCount + (counts.unreadMessages || 0) + actionsRemaining) > 0 ? (totalCount + (counts.unreadMessages || 0) + actionsRemaining) : undefined}
+                  badge={(totalCount + (counts.unreadMessages || 0)) > 0 ? (totalCount + (counts.unreadMessages || 0)) : undefined}
                 />
               </>
             ) : (
