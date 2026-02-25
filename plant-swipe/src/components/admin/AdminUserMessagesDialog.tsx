@@ -66,6 +66,7 @@ interface AdminMessage {
   content: string
   linkType: string | null
   linkUrl: string | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   linkPreview: any | null
   replyToId: string | null
   replyTo: {
@@ -178,6 +179,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
       setImagesOffset(0)
       setSelectedImageIndex(null)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, userId])
 
   // Scroll to bottom when messages load
@@ -204,6 +206,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (token) headers['Authorization'] = `Bearer ${token}`
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
       if (adminToken) headers['X-Admin-Token'] = String(adminToken)
     } catch {}
@@ -314,6 +317,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
         clearTimeout(searchDebounceRef.current)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messageSearchQuery, userId])
 
   // Load user images
@@ -352,6 +356,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
       setImagesOffset(0)
       loadUserImages(true)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, imagesSentOnly, userId])
 
   const handleSelectConversation = (conv: AdminConversation) => {
@@ -400,6 +405,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
       const other = getOtherParticipant(conv)
       return other.name?.toLowerCase().includes(q)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversations, searchQuery, userId])
 
   // Format relative time

@@ -80,6 +80,7 @@ export function useMessageNotifications({
           table: 'messages'
         },
         async (payload) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const newMessage = payload.new as any
           
           // Skip if message is from current user

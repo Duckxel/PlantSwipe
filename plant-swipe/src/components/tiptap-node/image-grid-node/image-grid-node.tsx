@@ -40,8 +40,8 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     align?: ImageGridAlign
   }
   
-  // Ensure images is always an array
-  const images = Array.isArray(attrs.images) ? attrs.images : []
+  // Ensure images is always an array (memoized to avoid dependency churn in hooks)
+  const images = useMemo(() => (Array.isArray(attrs.images) ? attrs.images : []), [attrs.images])
   const { columns = 2, gap = "md", rounded = true, width = "100%", align = "center" } = attrs
 
   // Get upload folder from extension storage, fallback to default

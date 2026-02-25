@@ -41,6 +41,7 @@ import {
   recipeTimeEnum,
 } from "@/lib/composition"
 import { monthNumberToSlug, monthNumbersToSlugs } from "@/lib/months"
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic AI prefill service data */
 
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
 const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])

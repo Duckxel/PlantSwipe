@@ -48,6 +48,7 @@ import {
   recipeTimeEnum,
 } from "@/lib/composition"
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase plant data */
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
 type PlantCareData = NonNullable<Plant["plantCare"]>
 type PlantGrowthData = NonNullable<Plant["growth"]>
@@ -1046,6 +1047,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (urlLanguage !== language) {
         setLanguage(urlLanguage)
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [urlLanguage])
 
     React.useEffect(() => {
@@ -1088,7 +1090,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       return () => {
         cancelled = true
       }
-    }, [requestId, id, supabase])
+    }, [requestId, id])
 
     // Track if initial load is complete
     const initialLoadCompleteRef = React.useRef(false)
@@ -1332,6 +1334,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     })
   }
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const savePlant = async (plantOverride?: Plant, options?: { skipOnSaved?: boolean }) => {
       const saveLanguage = language
       const plantToSave = plantOverride || plant
@@ -1655,7 +1658,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (isEnglish && pendingTranslations.length > 0) {
            const pendingPayloads = pendingTranslations.map(t => {
              // Create a copy without system fields
-             const { id, created_at, plant_id, ...rest } = t
+             const { id: _id, created_at: _created_at, plant_id: _plant_id, ...rest } = t
              return {
                ...rest,
                plant_id: savedId, // Link to the new plant ID

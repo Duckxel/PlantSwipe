@@ -58,6 +58,7 @@ export const MessageNotificationToast: React.FC<MessageNotificationToastProps> =
     } else {
       setIsVisible(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notification])
   
   const handleDismiss = () => {

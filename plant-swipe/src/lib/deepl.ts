@@ -512,6 +512,7 @@ export async function translatePlantToAllLanguages(
   fields: TranslationFields,
   sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
 ): Promise<Record<SupportedLanguage, TranslatedFields>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const translations: Record<SupportedLanguage, TranslatedFields> = {} as any
 
   for (const lang of SUPPORTED_LANGUAGES) {

@@ -15,7 +15,7 @@ interface SearchPageProps {
   likedIds?: string[];
 }
 
-export const SearchPage: React.FC<SearchPageProps> = ({
+export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   plants,
   openInfo,
   likedIds = [],
@@ -297,4 +297,4 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       </Button>
     </div>
   );
-};
+});

@@ -244,6 +244,7 @@ export default function PlantSwipe() {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useLanguageNavigate()
+  const handleOpenInfo = React.useCallback((p: { id: string }) => navigate(`/plants/${p.id}`), [navigate])
   const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "landing" | "discovery" | "gardens" | "search" | "profile" | "create" =
     pathWithoutLang === "/" ? "landing" :
@@ -309,7 +310,6 @@ export default function PlantSwipe() {
         // Network error – don't block, format is valid
       }
       return { valid: true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [t]),
     400,
     isSignupMode,
@@ -344,7 +344,6 @@ export default function PlantSwipe() {
       }
       const suggestionText = fmt.suggestion ? t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: fmt.suggestion }) : undefined
       return { valid: true, suggestion: suggestionText }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [t]),
     400,
     isSignupMode,
@@ -370,7 +369,6 @@ export default function PlantSwipe() {
       if (!authPassword) return { valid: false, error: t('auth.passwordsDontMatch', { defaultValue: "Passwords do not match" }) }
       if (val !== authPassword) return { valid: false, error: t('auth.passwordsDontMatch', { defaultValue: "Passwords do not match" }) }
       return { valid: true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [authPassword, t]),
     400,
     isSignupMode,
@@ -2265,7 +2263,7 @@ export default function PlantSwipe() {
                 <Suspense fallback={routeLoadingFallback}>
                   <SearchPageLazy
                     plants={sortedSearchResults}
-                    openInfo={(p) => navigate(`/plants/${p.id}`)}
+                    openInfo={handleOpenInfo}
                     likedIds={likedIds}
                   />
                 </Suspense>

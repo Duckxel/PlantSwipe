@@ -15,6 +15,7 @@ import type {
   CreateReportNoteParams,
   ReportStatus
 } from '@/types/moderation'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic moderation API data */
 
 // ===== User Reports =====
 

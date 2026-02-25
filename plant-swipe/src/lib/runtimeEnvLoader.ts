@@ -19,12 +19,14 @@ const normalizeBase = (value?: string) => {
 const resolveBasePath = () => {
   if (!hasWindow) return '/'
   const metaBase = normalizeBase((import.meta.env?.BASE_URL as string | undefined) || '/')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globalBase = normalizeBase((window as any).__PLANTSWIPE_BASE_PATH__ || '/')
   return metaBase !== '/' ? metaBase : globalBase
 }
 
 const basePath = resolveBasePath()
 if (hasWindow) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(window as any).__PLANTSWIPE_BASE_PATH__ = basePath
 }
 

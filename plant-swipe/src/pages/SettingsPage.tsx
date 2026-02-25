@@ -21,6 +21,7 @@ import { ValidatedInput } from "@/components/ui/validated-input"
 import { PasswordRules } from "@/components/ui/password-rules"
 import { useFieldValidation } from "@/hooks/useFieldValidation"
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase profile data */
 type SettingsTab = 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
 
 /**
@@ -104,7 +105,6 @@ export default function SettingsPage() {
       }
       const suggestionText = fmt.suggestion ? t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: fmt.suggestion }) : undefined
       return { valid: true, suggestion: suggestionText }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [email, t]),
     400,
   )
@@ -128,7 +128,6 @@ export default function SettingsPage() {
       if (!newPassword) return { valid: false, error: t('settings.password.passwordsDontMatch') }
       if (val !== newPassword) return { valid: false, error: t('settings.password.passwordsDontMatch') }
       return { valid: true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [newPassword, t]),
     400,
   )
@@ -390,6 +389,7 @@ export default function SettingsPage() {
       }
     }
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, profile, navigate])
 
   const handleAcceptNewEmailSuggestion = React.useCallback(() => {

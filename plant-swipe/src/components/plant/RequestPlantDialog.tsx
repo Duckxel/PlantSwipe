@@ -92,6 +92,7 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
       // Check if any plant has this name as a given_name
       let existingByGivenName: { id: string; name: string } | null = null
       if (translationMatches) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         for (const row of translationMatches as any[]) {
           const givenNames = Array.isArray(row?.given_names) ? row.given_names : []
           const matchesGivenName = givenNames.some(
@@ -240,6 +241,7 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
           const storedNormalized = normalize(similarMatch.plant_name_normalized ?? stored)
           const computedNormalized = similarMatch.plant_name_normalized ?? (storedNormalized || normalizedName)
 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const updatePayload: Record<string, any> = {
             updated_at: new Date().toISOString(),
             plant_name_normalized: computedNormalized || normalizedName
@@ -295,6 +297,7 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
         onOpenChange(false)
         setSuccess(false)
       }, 1500)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e?.message || t('requestPlant.error') || 'Failed to submit request')
     } finally {

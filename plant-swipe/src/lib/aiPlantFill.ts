@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient"
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic AI plant fill API responses */
 
 // Retry configuration for handling timeouts and rate limits
 const MAX_RETRIES = 2 // Reduced from 3 since server already has 10min timeout
@@ -48,7 +49,7 @@ async function fetchWithRetry(
   const signal = options.signal
   
   // Start with base retries, but allow escalation for gateway timeouts
-  let maxRetries = baseMaxRetries
+  const maxRetries = baseMaxRetries
   let initialDelay = INITIAL_RETRY_DELAY
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {

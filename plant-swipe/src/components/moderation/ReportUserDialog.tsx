@@ -49,6 +49,7 @@ export function ReportUserDialog({
         setReason('')
         setSuccess(false)
       }, 1500)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e?.message || t('moderation.report.error'))
     } finally {

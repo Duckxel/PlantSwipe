@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabaseClient'
 import type { Bookmark, BookmarkItem, BookmarkVisibility } from '@/types/bookmark'
 import type { Plant } from '@/types/plant'
 import { getPrimaryPhotoUrl } from '@/lib/photos'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic Supabase bookmark data */
 
 export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
   const { data, error } = await supabase

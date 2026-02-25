@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 const dom = new JSDOM('<!DOCTYPE html>');
 global.window = dom.window;
 global.document = dom.window.document;
-// @ts-ignore
+// @ts-expect-error JSDOM window assignment for test environment
 globalThis.window = dom.window;
 
 // Import the function to test

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic AI field progress tracking */
 export type RequiredFieldId =
   | 'scientificName'
   | 'colors'

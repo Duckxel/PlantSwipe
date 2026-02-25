@@ -1639,7 +1639,7 @@ const mediaProxyBaseUrl = (process.env.MEDIA_PROXY_URL || 'https://media.aphylia
 /**
  * Transforms a Supabase storage public URL to use the media proxy
  * Example:
- *   Input:  https://lxnkcguwewrskqnyzjwi.supabase.co/storage/v1/object/public/UTILITY/admin/uploads/svg/file.svg
+ *   Input:  [REDACTED]/storage/v1/object/public/UTILITY/admin/uploads/svg/file.svg
  *   Output: https://media.aphylia.app/UTILITY/admin/uploads/svg/file.svg
  * 
  * @param {string|null|undefined} url - The Supabase storage public URL
@@ -2417,8 +2417,9 @@ async function deleteGardenCoverObject(publicUrl) {
   }
 }
 
-// Extract Supabase user id and email from Authorization header. Falls back to
-// decoding the JWT locally when the server anon client isn't configured.
+// Extract Supabase user id from Authorization header.
+// SECURITY: Only trusts Supabase-verified tokens. Never decodes JWTs locally
+// without signature verification, as that would allow forged tokens to be accepted.
 async function getUserIdFromRequest(req) {
   try {
     const header = req.get('authorization') || req.get('Authorization') || ''
@@ -2428,25 +2429,12 @@ async function getUserIdFromRequest(req) {
     if (!low.startsWith(prefix)) return null
     const token = header.slice(prefix.length).trim()
     if (!token) return null
-    // Preferred: ask Supabase to resolve the token (works with anon key)
     if (supabaseServer) {
       try {
         const { data, error } = await supabaseServer.auth.getUser(token)
         if (!error && data?.user?.id) return data.user.id
       } catch { }
     }
-    // Fallback: decode JWT payload locally to grab the subject (sub)
-    try {
-      const parts = token.split('.')
-      if (parts.length >= 2) {
-        const b64 = parts[1]
-        const norm = (b64 + '==='.slice((b64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/')
-        const json = Buffer.from(norm, 'base64').toString('utf8')
-        const payload = JSON.parse(json)
-        const sub = (payload && (payload.sub || payload.user_id))
-        if (typeof sub === 'string' && sub.length > 0) return sub
-      }
-    } catch { }
     return null
   } catch {
     return null
@@ -2465,8 +2453,10 @@ async function isAdminUserId(userId) {
   return false
 }
 
-// Resolve user (id/email) from request. Uses Supabase if available, otherwise
-// decodes the JWT locally. Returns null if no valid bearer token.
+// Resolve user (id/email) from request using Supabase token verification.
+// SECURITY: Only trusts Supabase-verified tokens. Never decodes JWTs locally
+// without signature verification, as that would allow forged tokens to be accepted.
+// Returns null if no valid bearer token or if verification fails.
 async function getUserFromRequest(req) {
   try {
     const header = req.get('authorization') || req.get('Authorization') || ''
@@ -2484,18 +2474,6 @@ async function getUserFromRequest(req) {
         }
       } catch { }
     }
-    try {
-      const parts = token.split('.')
-      if (parts.length >= 2) {
-        const b64 = parts[1]
-        const norm = (b64 + '==='.slice((b64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/')
-        const json = Buffer.from(norm, 'base64').toString('utf8')
-        const payload = JSON.parse(json)
-        const id = (payload && (payload.sub || payload.user_id)) || null
-        const email = (payload && (payload.email || payload.user_email)) || null
-        if (id) return { id, email }
-      }
-    } catch { }
     return null
   } catch {
     return null

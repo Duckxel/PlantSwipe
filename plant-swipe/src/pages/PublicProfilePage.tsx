@@ -27,6 +27,7 @@ import { BlockUserDialog } from "@/components/moderation/BlockUserDialog"
 import { hasBlockedUser, unblockUser, isBlockedByUser } from "@/lib/moderation"
 import { getOrCreateConversation } from "@/lib/messaging"
 import { sendFriendRequestPushNotification, refreshAppBadge } from "@/lib/notifications"
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic public profile API data */
 
 type PublicProfile = {
   id: string
@@ -399,6 +400,7 @@ export default function PublicProfilePage() {
     }
     run()
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayParam, user?.id])
 
   const isOwner = Boolean(user?.id && pp?.id && user.id === pp.id)
@@ -698,6 +700,7 @@ export default function PublicProfilePage() {
     } finally {
       setFriendRequestLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, pp?.id, isOwner, profile?.display_name])
 
   const acceptFriendRequest = React.useCallback(async () => {
@@ -732,6 +735,7 @@ export default function PublicProfilePage() {
     } finally {
       setFriendRequestLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [friendRequestId, user?.id, pp?.id])
 
   React.useEffect(() => {

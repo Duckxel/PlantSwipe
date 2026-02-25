@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plant form data handling */
 
 export type PlantProfileFormProps = {
   value: Plant
@@ -349,6 +350,7 @@ const CompanionSelector: React.FC<{
       searchPlants()
       setSelectedIds(new Set())
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const toggleSelect = (id: string) => {

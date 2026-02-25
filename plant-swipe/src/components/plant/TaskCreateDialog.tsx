@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import React from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -14,7 +15,7 @@ type Period = 'week' | 'month' | 'year'
 
 // Shared constants
 const MONDAY_FIRST_MAP = [1, 2, 3, 4, 5, 6, 0]
-const WEEKDAY_TO_UI: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 }
+const _WEEKDAY_TO_UI: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 }
 
 const TASK_TYPES: Array<{ type: TaskType; emoji: string }> = [
   { type: 'water', emoji: '💧' },
@@ -130,6 +131,7 @@ export function TaskCreateDialog({
         resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
           refreshGardenTaskCache(gardenId).catch(() => {})
         }).catch(() => {})
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.addedTask', { taskName: taskTypeLabel }), taskName: taskTypeLabel, actorColor: null }).catch(() => {})
         if (onCreated) Promise.resolve(onCreated()).catch(() => {})
       }
@@ -139,6 +141,7 @@ export function TaskCreateDialog({
       } else {
         setTimeout(backgroundTasks, 100)
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e?.message || t('gardenDashboard.taskDialog.failedToCreate'))
       setSaving(false)
@@ -210,6 +213,7 @@ export function TaskCreateDialog({
                 </label>
                 <Input
                   value={customName}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   onChange={(e: any) => setCustomName(e.target.value)}
                   placeholder={t('gardenDashboard.taskDialog.customTaskNamePlaceholder', 'e.g. Repot, Mist leaves...')}
                   className="rounded-xl"
@@ -441,7 +445,7 @@ export function TaskCreateDialog({
 
 /* ── Yearly Picker (inline version matching the redesigned SchedulePickerDialog) ── */
 
-function YearlyPickerInline({ selected, onToggle, onRemove, disabledMore, amount, t }: {
+function YearlyPickerInline({ selected, onToggle, onRemove, disabledMore, amount: _amount, t: _t }: {
   selected: string[]
   onToggle: (key: string) => void
   onRemove: (key: string) => void

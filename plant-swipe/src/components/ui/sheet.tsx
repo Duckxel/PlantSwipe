@@ -64,8 +64,10 @@ const SheetContent = React.forwardRef<
   const mergeRefs = (node: HTMLDivElement | null) => {
     contentRef.current = node
     if (typeof ref === 'function') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ref(node as any)
     } else if (ref && typeof ref === 'object') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(ref as any).current = node
     }
   }

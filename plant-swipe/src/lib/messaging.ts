@@ -74,6 +74,7 @@ export async function getUserConversations(): Promise<ConversationWithDetails[]>
     throw new Error(error.message)
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (data || []).map((row: any) => ({
     conversationId: row.conversation_id,
     otherUserId: row.other_user_id,
@@ -400,7 +401,7 @@ export async function markMessagesAsRead(conversationId: string): Promise<number
       const notifications = await registration.getNotifications({ tag: `message-${conversationId}` })
       notifications.forEach(notification => notification.close())
     }
-  } catch (err) {
+  } catch (_err) {
     // Silently fail - notification dismissal is best effort
   }
   
@@ -412,7 +413,7 @@ export async function markMessagesAsRead(conversationId: string): Promise<number
       const { refreshAppBadge } = await import('./notifications')
       await refreshAppBadge(session.user.id)
     }
-  } catch (err) {
+  } catch (_err) {
     // Silently fail - badge update is best effort
   }
   
