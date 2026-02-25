@@ -1622,7 +1622,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         
         // Save related non-translatable shared data (images, colors, schedules, sources)
         // These should be saved regardless of the current language
-        const colorIds = await upsertColors(plantToSave.colors || plantToSave.identity?.colors || [])
+        const colorsRaw = plantToSave.colors || plantToSave.identity?.colors || []
+        const colorsNormalized = colorsRaw.map(c => typeof c === 'string' ? { name: c } : c) as PlantColor[]
+        const colorIds = await upsertColors(colorsNormalized)
         await linkColors(savedId, colorIds)
         await upsertImages(savedId, plantToSave.images || [])
         await upsertWateringSchedules(savedId, {

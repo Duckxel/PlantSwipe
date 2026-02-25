@@ -39,6 +39,7 @@ import {
 } from "@/lib/composition"
 
 const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images'])
+const IN_PROGRESS_STATUS = 'in_progress' as const
 
 // Helper to check if an error is a cancellation/abort error
 function isCancellationError(err: unknown): boolean {
@@ -841,7 +842,10 @@ export async function processPlantRequest(
     }
     
     // Save related data
-    const colorIds = await upsertColors(plant.colors || [])
+    const normalizedColors = (plant.colors || []).map(c =>
+      typeof c === 'string' ? { name: c } : c
+    ) as PlantColor[]
+    const colorIds = await upsertColors(normalizedColors)
     await linkColors(plantId, colorIds)
     await upsertImages(plantId, plant.images || [])
     await upsertWateringSchedules(plantId, {

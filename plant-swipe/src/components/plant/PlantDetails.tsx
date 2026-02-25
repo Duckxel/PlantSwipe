@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
-import type { Plant, PlantWateringSchedule } from "@/types/plant"
+import type { Plant, PlantSeason, PlantWateringSchedule } from "@/types/plant"
 import { useTranslation } from "react-i18next"
 import {
     SunMedium,
@@ -85,7 +85,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   }, [images, activeImageIndex, plant.name, imageViewer])
 
   const utilityBadges = plant.utility?.length ? plant.utility : []
-  const seasons = plant.identity?.season || plant.seasons || []
+  const seasons = plant.identity?.season || (plant.seasons as PlantSeason[] | undefined) || plant.season || []
 
   const translateUtility = (utility: string) => {
     const key = `plantDetails.utility.${utility.toLowerCase().replace(/[_\s-]/g, '')}`

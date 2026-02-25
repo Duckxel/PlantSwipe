@@ -314,7 +314,7 @@ export interface Plant {
   // -- Display / UI -----------------------------------------------------------
   images?: PlantImage[]
   image?: string
-  colors?: PlantColor[]
+  colors?: (PlantColor | string)[]
   colorNames?: string[]
   popularity?: { likes?: number; rank?: number; [key: string]: unknown }
 
@@ -339,24 +339,66 @@ export interface Plant {
   overview?: string
   /** @deprecated Use presentation */
   description?: string
+  /** @deprecated */
+  meaning?: string
+  /** @deprecated */
+  seedsAvailable?: boolean
+  /** @deprecated */
+  rarity?: string
+  /** @deprecated Use season */
+  seasons?: PlantSeason[]
+  /** @deprecated Use ediblePart */
+  comestiblePart?: EdiblePart[]
+  /** @deprecated */
+  fruitType?: string[]
+  /** @deprecated */
+  waterFreqAmount?: number
+  /** @deprecated */
+  waterFreqValue?: string
+  /** @deprecated */
+  waterFreqPeriod?: string
+  /** @deprecated */
+  waterFreqUnit?: string
+  /** @deprecated */
+  photos?: PlantImage[]
   /** @deprecated Use flat fields */
-  identity?: Record<string, unknown>
+  identity?: PlantIdentity
   /** @deprecated Use flat fields */
-  plantCare?: Record<string, unknown>
+  plantCare?: PlantCare
   /** @deprecated Use flat fields */
-  care?: Record<string, unknown>
+  care?: PlantCare
   /** @deprecated Use flat fields */
-  growth?: Record<string, unknown>
+  growth?: PlantGrowth
   /** @deprecated Use flat fields */
-  usage?: Record<string, unknown>
+  usage?: PlantUsage
   /** @deprecated Use flat fields */
-  ecology?: Record<string, unknown>
+  ecology?: PlantEcology
   /** @deprecated Use flat fields */
-  danger?: Record<string, unknown>
+  danger?: PlantDanger
   /** @deprecated Use flat fields */
-  miscellaneous?: Record<string, unknown>
+  miscellaneous?: PlantMiscellaneous
   /** @deprecated Use flat fields */
-  meta?: Record<string, unknown>
+  meta?: PlantMeta
+
+  // Legacy structured sub-objects
+  /** @deprecated */
+  phenology?: PlantPhenology
+  /** @deprecated */
+  environment?: PlantEnvironment
+  /** @deprecated */
+  planting?: PlantPlanting & { calendar?: PlantPlanting }
+  /** @deprecated */
+  classification?: PlantClassification
+  /** @deprecated */
+  traits?: PlantTraits
+  /** @deprecated */
+  dimensions?: PlantDimensions
+  /** @deprecated */
+  propagation?: PlantPropagation
+  /** @deprecated */
+  commerce?: PlantCommerce
+  /** @deprecated */
+  problems?: PlantProblems
 }
 
 // ============================================================================
@@ -394,47 +436,284 @@ export type PlantActivityValue = string
 export type PlantSubActivityValue = string
 
 /** @deprecated Use flat Plant interface */
-export interface PlantIdentity { [key: string]: unknown }
+export interface PlantIdentity {
+  givenNames?: string[]
+  scientificName?: string
+  canonicalName?: string
+  synonyms?: string[]
+  commonNames?: string[]
+  family?: string
+  taxonRank?: string
+  cultivarGroup?: string
+  cultivar?: string
+  genus?: string
+  overview?: string
+  promotionMonth?: number
+  lifeCycle?: string
+  season?: PlantSeason[]
+  foliagePersistance?: string
+  spiked?: boolean
+  toxicityHuman?: string
+  toxicityPets?: string
+  allergens?: string[]
+  colors?: PlantColor[]
+  multicolor?: boolean
+  bicolor?: boolean
+  scent?: boolean
+  symbolism?: string[]
+  livingSpace?: string
+  composition?: string[]
+  maintenanceLevel?: string
+  externalIds?: Record<string, string | Record<string, string>>
+  [key: string]: unknown
+}
+
 /** @deprecated Use flat Plant interface */
-export interface PlantCare { [key: string]: unknown }
+export interface PlantCareWatering {
+  season?: string
+  quantity?: number
+  timePeriod?: string
+  frequency?: string | { winter?: string; spring?: string; summer?: string; autumn?: string }
+  method?: string
+  depthCm?: number
+  schedules?: PlantWateringSchedule[]
+  [key: string]: unknown
+}
+
 /** @deprecated Use flat Plant interface */
-export interface PlantCareWatering { [key: string]: unknown }
+export interface PlantCare {
+  origin?: string[]
+  habitat?: string[]
+  temperatureMax?: number
+  temperatureMin?: number
+  temperatureIdeal?: number
+  levelSun?: string
+  hygrometry?: number
+  watering?: PlantCareWatering
+  wateringType?: string[]
+  division?: string[]
+  soil?: string[]
+  adviceSoil?: string
+  adviceMulching?: string
+  nutritionNeed?: string[]
+  fertilizer?: string[]
+  adviceFertilizer?: string
+  fertilizing?: { type?: string; schedule?: string; [key: string]: unknown }
+  pruning?: { bestMonths?: number[]; method?: string; [key: string]: unknown }
+  mulching?: { recommended?: boolean; material?: string; [key: string]: unknown }
+  stakingSupport?: boolean
+  repottingIntervalYears?: number
+  sunlight?: string
+  water?: string
+  difficulty?: string
+  maintenanceLevel?: string
+  fertilizingNotes?: string
+  pruningNotes?: string
+  [key: string]: unknown
+}
+
 /** @deprecated Use flat Plant interface */
-export interface PlantGrowth { [key: string]: unknown }
+export interface PlantGrowth {
+  sowingMonth?: number[]
+  floweringMonth?: number[]
+  fruitingMonth?: number[]
+  height?: number
+  wingspan?: number
+  tutoring?: boolean
+  adviceTutoring?: string
+  sowType?: string[]
+  separation?: number
+  transplanting?: boolean
+  adviceSowing?: string
+  cut?: string
+  sowingMonths?: number[]
+  plantingOutMonths?: number[]
+  hemisphere?: string
+  [key: string]: unknown
+}
+
 /** @deprecated Use flat Plant interface */
-export interface PlantUsage { [key: string]: unknown }
+export interface PlantUsage {
+  adviceMedicinal?: string
+  nutritionalIntake?: string[]
+  infusion?: boolean
+  adviceInfusion?: string
+  infusionMix?: Record<string, string>
+  recipesIdeas?: string[]
+  recipes?: PlantRecipe[]
+  aromatherapy?: boolean
+  spiceMixes?: string[]
+  gardenUses?: string[]
+  indoorOutdoor?: string
+  edibleParts?: string[]
+  culinaryUses?: string[]
+  medicinalUses?: string[]
+  [key: string]: unknown
+}
+
 /** @deprecated Use flat Plant interface */
-export interface PlantEcology { [key: string]: unknown }
+export interface PlantEcology {
+  melliferous?: boolean
+  polenizer?: string[]
+  beFertilizer?: boolean
+  groundEffect?: string
+  conservationStatus?: string
+  nativeRange?: string[]
+  pollinators?: string[]
+  wildlifeValue?: string[]
+  hemisphere?: string
+  [key: string]: unknown
+}
+
 /** @deprecated Use flat Plant interface */
-export interface PlantDanger { [key: string]: unknown }
+export interface PlantDanger {
+  pests?: string[]
+  diseases?: string[]
+  [key: string]: unknown
+}
+
 /** @deprecated Use flat Plant interface */
-export interface PlantMiscellaneous { [key: string]: unknown }
+export interface PlantMiscellaneous {
+  companions?: string[]
+  tags?: string[]
+  sources?: PlantSource[]
+  [key: string]: unknown
+}
+
 /** @deprecated Use flat Plant interface */
-export interface PlantMeta { [key: string]: unknown }
+export interface PlantMeta {
+  status?: string
+  adminCommentary?: string
+  contributors?: string[]
+  createdBy?: string
+  createdTime?: string
+  updatedBy?: string
+  updatedTime?: string
+  createdAt?: string
+  updatedAt?: string
+  rarity?: string
+  tags?: string[]
+  funFact?: string
+  sourceReferences?: string[]
+  authorNotes?: string
+  [key: string]: unknown
+}
+
 /** @deprecated */
-export interface PlantClassification { [key: string]: unknown }
+export interface PlantClassification {
+  type?: string
+  subclass?: string
+  subSubclass?: string
+  activities?: PlantActivityValue[]
+  subActivities?: Partial<Record<PlantActivityValue, PlantSubActivityValue[]>>
+  [key: string]: unknown
+}
+
 /** @deprecated */
 export type PlantIdentifiers = PlantIdentity
+
 /** @deprecated */
-export interface PlantTraits { [key: string]: unknown }
+export interface PlantTraits {
+  lifeCycle?: string
+  habit?: string[]
+  deciduousEvergreen?: string
+  growthRate?: string
+  thornsSpines?: boolean
+  fragrance?: string
+  dogFriendly?: boolean
+  catFriendly?: boolean
+  toxicity?: { toHumans?: string; toPets?: string }
+  allergenicity?: string
+  invasiveness?: { status?: string; regions?: string[] }
+  [key: string]: unknown
+}
+
 /** @deprecated */
-export interface PlantDimensions { [key: string]: unknown }
+export interface PlantDimensions {
+  height?: { minCm?: number; maxCm?: number }
+  spread?: { minCm?: number; maxCm?: number }
+  spacing?: { rowCm?: number; plantCm?: number }
+  containerFriendly?: boolean
+  [key: string]: unknown
+}
+
 /** @deprecated */
-export interface PlantPhenology { [key: string]: unknown }
+export interface PlantPhenology {
+  bloomMonths?: string[]
+  fruitMonths?: string[]
+  floweringMonths?: number[]
+  fruitingMonths?: number[]
+  seasons?: string[]
+  flowerColors?: ColorInfo[]
+  leafColors?: ColorInfo[]
+  scentNotes?: string[]
+  [key: string]: unknown
+}
+
 /** @deprecated */
-export interface PlantEnvironment { [key: string]: unknown }
+export interface PlantEnvironment {
+  soil?: { texture?: string[]; drainage?: string; fertility?: string; pH?: { min?: number; max?: number } }
+  climate?: { usdaZones?: string[]; rhsH?: string[] }
+  hardiness?: { usdaZones?: number[]; rhsH?: string }
+  temperature?: { minC?: number; maxC?: number }
+  moisture?: { min?: number; max?: number }
+  light?: string
+  lightIntensity?: string
+  sunExposure?: string
+  climatePref?: string[]
+  humidityPref?: string
+  windTolerance?: string
+  [key: string]: unknown
+}
+
 /** @deprecated */
-export interface PlantPropagation { [key: string]: unknown }
+export interface PlantPropagation {
+  methods?: string[]
+  stratification?: string
+  seed?: { stratification?: string; germinationDays?: { min?: number; max?: number } }
+  germination?: { germinationDays?: { min?: number; max?: number } }
+  [key: string]: unknown
+}
+
 /** @deprecated */
 export type PlantUsageLegacy = PlantUsage
 /** @deprecated */
 export type PlantEcologyLegacy = PlantEcology
+
 /** @deprecated */
-export interface PlantCommerce { [key: string]: unknown }
+export interface PlantCommerce {
+  availabilityRegions?: string[]
+  distributors?: string[]
+  seedsAvailable?: boolean
+  [key: string]: unknown
+}
+
 /** @deprecated */
-export interface PlantProblems { [key: string]: unknown }
+export interface PlantProblems {
+  pests?: string[]
+  diseases?: string[]
+  hazards?: string[]
+  [key: string]: unknown
+}
+
 /** @deprecated */
-export interface PlantPlanting { [key: string]: unknown }
+export interface PlantPlanting {
+  hemisphere?: string
+  sowingMonths?: number[]
+  plantingOutMonths?: number[]
+  promotionMonth?: number
+  calendar?: {
+    hemisphere?: string
+    sowingMonths?: number[]
+    plantingOutMonths?: number[]
+    promotionMonth?: number
+  }
+  sitePrep?: string[]
+  companionPlants?: string[]
+  avoidNear?: string[]
+  [key: string]: unknown
+}
+
 /** @deprecated */
 export type PlantMetaLegacy = PlantMeta
 /** @deprecated */

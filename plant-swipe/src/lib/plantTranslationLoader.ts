@@ -5,7 +5,7 @@
 
 import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
-import type { Plant, PlantImage } from '@/types/plant'
+import type { Plant, PlantImage, PlantWateringSchedule, MonthSlug } from '@/types/plant'
 import {
   encyclopediaCategoryEnum,
   utilityEnum,
@@ -27,7 +27,6 @@ import {
   ecologicalToleranceEnum,
   ecologicalImpactEnum,
 } from '@/lib/composition'
-/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic translation payload processing */
 
 const sanitizeStringValue = (value: string): string | undefined => {
   const trimmed = value.trim()
@@ -102,7 +101,7 @@ function mapDbRowToPlant(
     scientificNameVariety: (basePlant.scientific_name_variety as string) || undefined,
     family: (basePlant.family as string) || undefined,
     encyclopediaCategory: encyclopediaCategoryEnum.toDbArray(basePlant.encyclopedia_category) as Plant['encyclopediaCategory'],
-    featuredMonth: (basePlant.featured_month as string[]) || [],
+    featuredMonth: (basePlant.featured_month as MonthSlug[]) || [],
 
     // Section 2: Identity (non-translatable from plants table)
     climate: climateEnum.toDbArray(basePlant.climate) as Plant['climate'],
@@ -153,12 +152,12 @@ function mapDbRowToPlant(
     fertilizerAdvice: (translation.fertilizer_advice as string) || undefined,
 
     // Watering schedules (from related table)
-    wateringSchedules: schedules.length > 0 ? schedules : undefined,
+    wateringSchedules: schedules.length > 0 ? schedules as PlantWateringSchedule[] : undefined,
 
     // Section 4: Growth
-    sowingMonth: (basePlant.sowing_month as string[]) || [],
-    floweringMonth: (basePlant.flowering_month as string[]) || [],
-    fruitingMonth: (basePlant.fruiting_month as string[]) || [],
+    sowingMonth: (basePlant.sowing_month as MonthSlug[]) || [],
+    floweringMonth: (basePlant.flowering_month as MonthSlug[]) || [],
+    fruitingMonth: (basePlant.fruiting_month as MonthSlug[]) || [],
     heightCm: (basePlant.height_cm as number) || undefined,
     wingspanCm: (basePlant.wingspan_cm as number) || undefined,
     staking: (basePlant.staking as boolean) ?? false,
@@ -167,7 +166,7 @@ function mapDbRowToPlant(
     sowingMethod: sowingMethodEnum.toDbArray(basePlant.sowing_method) as Plant['sowingMethod'],
     transplanting: (basePlant.transplanting as boolean) || undefined,
     pruning: (basePlant.pruning as boolean) ?? false,
-    pruningMonth: (basePlant.pruning_month as string[]) || [],
+    pruningMonth: (basePlant.pruning_month as MonthSlug[]) || [],
     // Translatable
     stakingAdvice: (translation.staking_advice as string) || undefined,
     sowingAdvice: (translation.sowing_advice as string) || undefined,
@@ -423,7 +422,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     ])
 
     const { data: plantsData, error } = plantsResponse
-    const plants = plantsData as Record<string, unknown>[]
+    const plants = plantsData as unknown as Record<string, unknown>[]
     const { data: topLiked, error: topLikedError } = topLikedResponse
 
     if (error) throw error

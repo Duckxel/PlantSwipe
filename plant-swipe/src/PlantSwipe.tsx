@@ -24,7 +24,7 @@ import { CookieConsent, getConsentLevel } from "@/components/CookieConsent";
 import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
 import { BannedModal } from "@/components/moderation/BannedModal";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import type { Plant } from "@/types/plant";
+import type { Plant, PlantColor } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import { RequireEditor } from "@/pages/RequireAdmin";
@@ -910,7 +910,7 @@ export default function PlantSwipe() {
 
       const getColors = () => {
         if (_cachedColors) return _cachedColors
-        const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+        const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: PlantColor | string) => typeof c === 'string' ? c : c.name) : []
         const identityColors = Array.isArray(p.identity?.colors)
           ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
           : []

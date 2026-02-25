@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabaseClient'
 import type { Garden, GardenMember, GardenPlant, GardenPrivacy } from '@/types/garden'
 import type { GardenTaskRow } from '@/types/garden'
 import type { GardenPlantTask, GardenPlantTaskOccurrence, TaskType, TaskScheduleKind, TaskUnit } from '@/types/garden'
-import type { Plant } from '@/types/plant'
+import type { Plant, PlantImage } from '@/types/plant'
 import { getPrimaryPhotoUrl } from '@/lib/photos'
 import type { SupportedLanguage } from './i18n'
 import { mergePlantWithTranslation } from './plantTranslationLoader'
@@ -648,7 +648,16 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
           || p.image_url 
           || p.image
         const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl }
-        const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation)
+        const mergedPlant = mergePlantWithTranslation(
+          plantWithPhotos,
+          translation || {},
+          [],
+          images as PlantImage[],
+          [],
+          [],
+          {},
+          [],
+        )
         idToPlant[String(p.id)] = mergedPlant
       } catch (err) {
         console.error(`Error processing plant ${p.id}:`, err)
@@ -1287,7 +1296,7 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
       id: String(p.id),
       name: String(p.name || ''),
       scientificName: String(p.scientific_name || ''),
-      colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
+      colors: Array.isArray(p.colors) ? p.colors.map(String) as Plant['colors'] : [],
       seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
       rarity: p.rarity || undefined,
       meaning: p.meaning || '',

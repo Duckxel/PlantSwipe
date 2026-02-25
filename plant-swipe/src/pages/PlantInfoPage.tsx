@@ -27,11 +27,9 @@ import {
   ChevronDown,
   Pencil,
   MapPin,
-  Compass,
   Droplets,
   Sun,
   Leaf,
-  Flame,
   Sprout,
   Thermometer,
   Wind,
@@ -64,7 +62,6 @@ import {
   Minimize2,
   Flag,
 } from 'lucide-react'
-import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
   encyclopediaCategoryEnum,
@@ -599,13 +596,13 @@ const PlantInfoPage: React.FC = () => {
             scientificName: basicInfo.scientificName,
             status: basicInfo.status || 'in progress',
             family: basicInfo.family,
-            plantType: basicInfo.plantType,
-            levelSun: basicInfo.levelSun,
-            livingSpace: basicInfo.livingSpace,
-            lifeCycle: basicInfo.lifeCycle,
+            plantType: basicInfo.encyclopediaCategory?.[0],
+            levelSun: basicInfo.sunlight?.[0],
+            livingSpace: basicInfo.livingSpace?.[0],
+            lifeCycle: basicInfo.lifeCycle?.[0],
             season: basicInfo.season,
-            maintenanceLevel: basicInfo.maintenanceLevel,
-            overview: basicInfo.overview,
+            maintenanceLevel: basicInfo.careLevel?.[0],
+            overview: basicInfo.presentation,
             primaryImage: basicInfo.primaryImage,
           })
           setPlant(null)
@@ -966,7 +963,7 @@ const PlantInfoPage: React.FC = () => {
             </Badge>
           )}
           {/* Report Button — hidden for plants still in construction */}
-          {plant && plant.status !== 'in_progress' && plant.status !== 'in progres' && (
+          {plant && plant.status !== 'in_progress' && (
             <Button
               type="button"
               variant="outline"
@@ -1054,7 +1051,7 @@ const PlantInfoPage: React.FC = () => {
       </div>
       {/* Check if plant is "In Progress" - show construction message for regular users, full page with disclaimer for privileged users */}
       {(() => {
-        const isInConstruction = plant.status === 'in_progress' || plant.status === 'in progres'
+        const isInConstruction = plant.status === 'in_progress'
         // Check if user has privileged access: Admin, Editor, or Pro
         const hasPrivilegedAccess = profile?.is_admin === true || hasAnyRole(profile?.roles, [USER_ROLES.ADMIN, USER_ROLES.EDITOR, USER_ROLES.PRO])
         
@@ -1082,7 +1079,7 @@ const PlantInfoPage: React.FC = () => {
                 <div className="text-left p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-amber-200/50 dark:border-amber-500/20">
                   <h3 className="font-semibold text-lg text-stone-900 dark:text-white">{plant.name}</h3>
                   {plant.scientificNameSpecies && (
-                    <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.identity.scientificName}</p>
+                    <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.identity?.scientificName}</p>
                   )}
                 </div>
               </div>
@@ -1299,14 +1296,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   }, [t])
   
-  // Translate arrays of enum values
-  const translateEnumArray = React.useCallback((values: (string | null | undefined)[] | undefined): string[] => {
-    if (!values) return []
-    return values
-      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
-      .map(v => translateEnum(v))
-  }, [translateEnum])
-  
   const monthLabels = React.useMemo(() => [
     t('plantInfo:timeline.months.jan'),
     t('plantInfo:timeline.months.feb'),
@@ -1371,6 +1360,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 
       const createdTimestamp = formatTimestampDetailed(plant.createdTime)
       const updatedTimestamp = formatTimestampDetailed(plant.updatedTime)
+      const createdByLabel = plant.createdBy ?? undefined
+      const updatedByLabel = plant.updatedBy ?? undefined
       const contributorsList = Array.from(new Map(compactStrings(plant.contributors).map(n => [n.toLowerCase(), n])).values())
       const sourcesValue = formatSourcesList(plant.sources)
 
@@ -1596,8 +1587,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                     </div>
                     <div className="flex flex-wrap gap-2 sm:gap-2.5">
                       {palette.map((color, idx) => {
-                        const colorLabel = color.name || `Color ${idx + 1}`
-                        return <ColorSwatch key={`${colorLabel}-${idx}`} color={color} />
+                        const colorObj: PlantColor = typeof color === 'string' ? { name: color } : color
+                        const colorLabel = colorObj.name || `Color ${idx + 1}`
+                        return <ColorSwatch key={`${colorLabel}-${idx}`} color={colorObj} />
                       })}
                     </div>
                   </div>
@@ -2114,9 +2106,7 @@ const ColorSwatch: React.FC<{ color: PlantColor }> = ({ color }) => {
   )
 }
 
-type ToxicityLevel = 'Non-Toxic' | 'Midly Irritating' | 'Highly Toxic' | 'Lethally Toxic' | undefined
-
-const getToxicityConfig = (level: ToxicityLevel) => {
+const getToxicityConfig = (level: string | undefined) => {
   const normalized = level?.toLowerCase().replace(/[_\s-]/g, '') || ''
   switch (normalized) {
     case 'nontoxic':
@@ -2184,8 +2174,8 @@ const getToxicityConfig = (level: ToxicityLevel) => {
 }
 
 const ToxicityWarningBanner: React.FC<{
-  toxicityHuman: ToxicityLevel
-  toxicityPets: ToxicityLevel
+  toxicityHuman?: string
+  toxicityPets?: string
   t: (key: string) => string
 }> = ({ toxicityHuman, toxicityPets, t }) => {
   const humanConfig = getToxicityConfig(toxicityHuman)
@@ -2459,7 +2449,7 @@ const compactStrings = (values?: (string | null | undefined)[]) => {
     .filter((value) => Boolean(value) && isMeaningfulString(value))
 }
 
-const formatBooleanDescriptor = (value: boolean | null | undefined, positive: string, negative: string, showNegative = false) => {
+const formatBooleanDescriptor = (value: boolean | null | undefined, positive: string, negative: string | null, showNegative = false) => {
   if (value === undefined || value === null) return null
   if (value) return positive
   return showNegative ? negative : null
