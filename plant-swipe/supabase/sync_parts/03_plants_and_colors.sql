@@ -348,8 +348,27 @@ end $drop_obsolete_cols$;
 
 -- Force a full table rewrite to physically reclaim dropped-column slots.
 -- PostgreSQL DROP COLUMN only marks columns as invisible; they still count
--- toward the 1600-column hard limit. This no-op type change forces a rewrite.
-alter table public.plants alter column id type text using id;
+-- toward the 1600-column hard limit. A binary-compatible type change (e.g.
+-- text→text) is optimized to a no-op. We use timestamptz→bigint→timestamptz
+-- which is NOT binary compatible, guaranteeing a real table rewrite.
+do $force_rewrite$ declare
+  total_attrs integer;
+begin
+  if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='plants') then
+    return;
+  end if;
+  select count(*) into total_attrs
+    from pg_attribute
+    where attrelid = 'public.plants'::regclass and attnum > 0;
+  if total_attrs > 200 then
+    alter table public.plants alter column created_time
+      type bigint using (extract(epoch from created_time) * 1000000)::bigint;
+    alter table public.plants alter column created_time
+      type timestamptz using to_timestamp(created_time::double precision / 1000000);
+    alter table public.plants alter column created_time set default now();
+    alter table public.plants alter column created_time set not null;
+  end if;
+end $force_rewrite$;
 
 -- ========== Phase 0.5: Rename old columns to new names (avoids add+copy+drop) ==========
 -- For same-type renames this is a zero-cost metadata-only change that keeps column count stable.
