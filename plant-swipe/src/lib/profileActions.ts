@@ -17,7 +17,7 @@ export type ActionCheckData = {
 
 export type ProfileActionDef = {
   id: string
-  /** i18n key under "profileActions.<id>.title" */
+  /** i18n key under "profileActions.<id>" */
   titleKey: string
   /** Route the user should visit to complete this action */
   link: string
@@ -64,3 +64,43 @@ export const PROFILE_ACTIONS: ProfileActionDef[] = [
     isCompleted: (d) => d.bookmarkCount >= 1,
   },
 ]
+
+// ---- Skip / dismiss persistence (localStorage) ----
+
+const STORAGE_KEY = 'plantswipe.actions.skipped'
+
+export function getSkippedActionIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return new Set(JSON.parse(raw))
+  } catch {}
+  return new Set()
+}
+
+export function skipAction(actionId: string): Set<string> {
+  const set = getSkippedActionIds()
+  set.add(actionId)
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...set])) } catch {}
+  return set
+}
+
+export function unskipAction(actionId: string): Set<string> {
+  const set = getSkippedActionIds()
+  set.delete(actionId)
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...set])) } catch {}
+  return set
+}
+
+/**
+ * Compute the remaining (not done AND not skipped) action count.
+ * Used by TopBar / MobileNavBar to show a badge.
+ */
+export function getRemainingCount(
+  data: ActionCheckData | null,
+  skipped: Set<string>,
+): number {
+  if (!data) return 0
+  return PROFILE_ACTIONS.filter(
+    (a) => !a.isCompleted(data) && !skipped.has(a.id),
+  ).length
+}
