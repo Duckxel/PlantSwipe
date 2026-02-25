@@ -919,7 +919,7 @@ const baseFields: FieldConfig[] = [
 ]
 
 // ============================================================================
-// Section 2: Identity
+// Section 2: Identity (15 items)
 // ============================================================================
 const identityFields: FieldConfig[] = [
   { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
@@ -928,11 +928,6 @@ const identityFields: FieldConfig[] = [
   { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice"] },
   { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Flower","Fruit","Seed","Leaf","Stem","Bulb","Rhizome","Bark","Wood"] },
   { key: "thorny", label: "Thorny?", description: "Does the plant have thorns or spines?", type: "boolean" },
-  { key: "toxicityHuman", label: "Toxicity (Human)", description: "Toxicity level for humans", type: "select", options: ["Non-Toxic","Slightly Toxic","Very Toxic","Deadly","Undetermined"] },
-  { key: "toxicityPets", label: "Toxicity (Pets)", description: "Toxicity level for pets/animals", type: "select", options: ["Non-Toxic","Slightly Toxic","Very Toxic","Deadly","Undetermined"] },
-  { key: "poisoningMethod", label: "Poisoning Method(s)", description: "How poisoning can occur", type: "multiselect", options: ["Touch","Ingestion","Eye Contact","Inhalation","Sap Contact"] },
-  { key: "poisoningSymptoms", label: "Poisoning Symptoms", description: "Symptoms description for prevention", type: "textarea" },
-  { key: "allergens", label: "Allergens", description: "Known allergens", type: "tags" },
   { key: "lifeCycle", label: "Life Cycle", description: "Plant life cycle type(s)", type: "multiselect", options: ["Annual","Biennial","Perennial","Succulent Perennial","Monocarpic","Short Cycle","Ephemeral"] },
   { key: "averageLifespan", label: "Average Lifespan", description: "Expected lifespan range", type: "multiselect", options: ["Less than 1 year","2 years","3–10 years","10–50 years","50+ years"] },
   { key: "foliagePersistence", label: "Foliage Persistence", description: "How leaves behave across seasons", type: "multiselect", options: ["Deciduous","Evergreen","Semi-Evergreen","Marcescent","Winter Dormant","Dry Season Deciduous"] },
@@ -941,10 +936,22 @@ const identityFields: FieldConfig[] = [
   { key: "plantHabit", label: "Plant Habit / Shape", description: "Growth habit and form", type: "multiselect", options: ["Upright","Arborescent","Shrubby","Bushy","Clumping","Erect","Creeping","Carpeting","Ground Cover","Prostrate","Spreading","Climbing","Twining","Scrambling","Liana","Trailing","Columnar","Conical","Fastigiate","Globular","Spreading Flat","Rosette","Cushion","Ball Shaped","Succulent","Palmate","Rhizomatous","Suckering"] },
   { key: "multicolor", label: "Multicolor?", description: "Plant has 3+ distinct colors", type: "boolean" },
   { key: "bicolor", label: "Bicolor?", description: "Plant has exactly 2 colors", type: "boolean" },
+  { key: "fragrance", label: "Fragrance?", description: "Does the plant have a notable fragrance?", type: "boolean" },
 ]
 
 // ============================================================================
-// Section 3: Care
+// Section 2b: Safety & Toxicity (5 items)
+// ============================================================================
+const safetyFields: FieldConfig[] = [
+  { key: "toxicityHuman", label: "Toxicity (Human)", description: "Toxicity level for humans", type: "select", options: ["Non-Toxic","Slightly Toxic","Very Toxic","Deadly","Undetermined"] },
+  { key: "toxicityPets", label: "Toxicity (Pets)", description: "Toxicity level for pets/animals", type: "select", options: ["Non-Toxic","Slightly Toxic","Very Toxic","Deadly","Undetermined"] },
+  { key: "poisoningMethod", label: "Poisoning Method(s)", description: "How poisoning can occur", type: "multiselect", options: ["Touch","Ingestion","Eye Contact","Inhalation","Sap Contact"] },
+  { key: "poisoningSymptoms", label: "Poisoning Symptoms", description: "Symptoms description for prevention", type: "textarea" },
+  { key: "allergens", label: "Allergens", description: "Known allergens", type: "tags" },
+]
+
+// ============================================================================
+// Section 3: Care (10 items)
 // ============================================================================
 const careFields: FieldConfig[] = [
   { key: "careLevel", label: "Care Level", description: "How difficult to care for", type: "multiselect", options: ["Easy","Moderate","Complex"] },
@@ -958,6 +965,13 @@ const careFields: FieldConfig[] = [
   { key: "hygrometry", label: "Humidity (%)", description: "Preferred humidity level (0-100)", type: "number" },
   { key: "mistingFrequency", label: "Misting (per week)", description: "Times per week for misting", type: "number" },
   { key: "specialNeeds", label: "Special Needs", description: "Special care requirements", type: "tags" },
+  { key: "wateringSchedules", label: "Watering Schedule", description: "Detailed seasonal watering schedule", type: "watering" },
+]
+
+// ============================================================================
+// Section 3b: Care Details — Substrate, Mulch, Nutrition (8 items)
+// ============================================================================
+const careDetailsFields: FieldConfig[] = [
   { key: "substrate", label: "Substrate", description: "Suitable substrates/soil types", type: "tags" },
   { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags" },
   { key: "soilAdvice", label: "Soil Guidance", description: "Substrate/soil advice text", type: "textarea" },
@@ -967,7 +981,6 @@ const careFields: FieldConfig[] = [
   { key: "nutritionNeed", label: "Nutrient Needs", description: "Key nutritional requirements", type: "tags" },
   { key: "fertilizer", label: "Fertilizer", description: "Recommended fertilizer types", type: "tags" },
   { key: "fertilizerAdvice", label: "Fertilizer Advice", description: "Fertilizing schedule and advice", type: "textarea" },
-  { key: "wateringSchedules", label: "Watering Schedule", description: "Detailed seasonal watering schedule", type: "watering" },
 ]
 
 // ============================================================================
@@ -2408,16 +2421,18 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
   const [selectedCategory, setSelectedCategory] = React.useState<PlantFormCategory>('identity')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const [showCompanionRecommendations, setShowCompanionRecommendations] = React.useState(false)
-  const categoryLabels: Record<PlantFormCategory, string> = {
+  const categoryLabels: Record<string, string> = {
     base: t('plantAdmin.categories.base', '1. Base'),
     identity: t('plantAdmin.categories.identity', '2. Identity'),
-    care: t('plantAdmin.categories.care', '3. Care'),
-    growth: t('plantAdmin.categories.growth', '4. Growth'),
-    danger: t('plantAdmin.categories.danger', '5. Danger'),
-    ecology: t('plantAdmin.categories.ecology', '6. Ecology'),
-    consumption: t('plantAdmin.categories.consumption', '7. Consumption'),
-    misc: t('plantAdmin.categories.misc', '8. Misc'),
-    meta: t('plantAdmin.categories.meta', '9. Meta'),
+    safety: t('plantAdmin.categories.safety', '3. Safety & Toxicity'),
+    care: t('plantAdmin.categories.care', '4. Care'),
+    careDetails: t('plantAdmin.categories.careDetails', '5. Care Details'),
+    growth: t('plantAdmin.categories.growth', '6. Growth'),
+    danger: t('plantAdmin.categories.danger', '7. Danger'),
+    ecology: t('plantAdmin.categories.ecology', '8. Ecology'),
+    consumption: t('plantAdmin.categories.consumption', '9. Consumption'),
+    misc: t('plantAdmin.categories.misc', '10. Misc'),
+    meta: t('plantAdmin.categories.meta', '11. Meta'),
   }
   const scrollToCategory = (category: PlantFormCategory) => {
     setSelectedCategory(category)
@@ -2455,7 +2470,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     },
     [onChange, t, value],
   )
-  const categoriesWithoutBasics = plantFormCategoryOrder.filter((cat) => cat !== 'base')
+  const formTabOrder = ['identity','safety','care','careDetails','growth','danger','ecology','consumption','misc','meta'] as const
   const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
   return (
     <div className="space-y-6">
@@ -2486,15 +2501,15 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
         <div className={`${neuCardClass} rounded-2xl p-4`}>
           <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
           <div className="flex flex-wrap gap-3">
-            {categoriesWithoutBasics.map((key) => {
-              const info = categoryProgress?.[key]
+            {formTabOrder.map((key) => {
+              const info = categoryProgress?.[key as PlantFormCategory]
               return (
                 <div key={key} className="relative">
                   <Button
                     size="lg"
                     className="min-w-[110px] px-4 py-2 text-sm sm:text-base shadow-sm"
                     variant={selectedCategory === key ? 'default' : 'outline'}
-                    onClick={() => scrollToCategory(key)}
+                    onClick={() => scrollToCategory(key as PlantFormCategory)}
                   >
                     {categoryLabels[key]}
                   </Button>
@@ -2514,13 +2529,15 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
         </div>
 
         <div className="space-y-6">
-          {(['identity','care','growth','danger','ecology','consumption','misc','meta'] as PlantFormCategory[]).map((cat) => {
+          {(['identity','safety','care','careDetails','growth','danger','ecology','consumption','misc','meta'] as string[]).map((cat) => {
             if (selectedCategory !== cat) return null
-            const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat] = node }
-            const fieldGroups: Record<PlantFormCategory, FieldConfig[]> = {
+            const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat as PlantFormCategory] = node }
+            const fieldGroups: Record<string, FieldConfig[]> = {
               base: baseFields,
               identity: identityFields,
+              safety: safetyFields,
               care: careFields,
+              careDetails: careDetailsFields,
               growth: growthFields,
               danger: dangerFields,
               ecology: ecologyFields,
