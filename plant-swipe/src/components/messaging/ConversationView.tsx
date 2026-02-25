@@ -42,6 +42,7 @@ import { LinkShareDialog } from './LinkShareDialog'
 import { CameraCapture } from './CameraCapture'
 import { ConversationMediaGallery } from './ConversationMediaGallery'
 import { ConversationSearch } from './ConversationSearch'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic messaging data */
 
 interface ConversationViewProps {
   conversationId: string

@@ -131,6 +131,7 @@ export function TaskCreateDialog({
         resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
           refreshGardenTaskCache(gardenId).catch(() => {})
         }).catch(() => {})
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.addedTask', { taskName: taskTypeLabel }), taskName: taskTypeLabel, actorColor: null }).catch(() => {})
         if (onCreated) Promise.resolve(onCreated()).catch(() => {})
       }
@@ -140,6 +141,7 @@ export function TaskCreateDialog({
       } else {
         setTimeout(backgroundTasks, 100)
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e?.message || t('gardenDashboard.taskDialog.failedToCreate'))
       setSaving(false)
@@ -211,6 +213,7 @@ export function TaskCreateDialog({
                 </label>
                 <Input
                   value={customName}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   onChange={(e: any) => setCustomName(e.target.value)}
                   placeholder={t('gardenDashboard.taskDialog.customTaskNamePlaceholder', 'e.g. Repot, Mist leaves...')}
                   className="rounded-xl"

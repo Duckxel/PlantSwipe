@@ -44,6 +44,7 @@ export function BlockUserDialog({
         onOpenChange(false)
         setSuccess(false)
       }, 1000)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e?.message || t('moderation.block.error'))
     } finally {

@@ -145,6 +145,7 @@ export function usePushSubscription(userId: string | null) {
     // Small delay to avoid blocking initial render
     const timeout = setTimeout(tryResync, 1500)
     return () => clearTimeout(timeout)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supported, userId, synced])
 
   React.useEffect(() => {
@@ -193,7 +194,6 @@ export function usePushSubscription(userId: string | null) {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
       registration?.removeEventListener('updatefound', handleUpdateFound)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supported, userId, attemptResubscribe])
 
   // Auto-enable push notifications for new users (default behavior)

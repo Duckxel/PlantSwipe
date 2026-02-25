@@ -26,6 +26,7 @@ import { BlockUserDialog } from "@/components/moderation/BlockUserDialog"
 import { hasBlockedUser, unblockUser, isBlockedByUser } from "@/lib/moderation"
 import { getOrCreateConversation } from "@/lib/messaging"
 import { sendFriendRequestPushNotification, refreshAppBadge } from "@/lib/notifications"
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic public profile API data */
 
 type PublicProfile = {
   id: string

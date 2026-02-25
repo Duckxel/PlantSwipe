@@ -32,6 +32,7 @@ import {
   polenizerEnum,
   conservationStatusEnum,
 } from '@/lib/composition'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic translation payload processing */
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
 type PlantCareData = NonNullable<Plant["plantCare"]>

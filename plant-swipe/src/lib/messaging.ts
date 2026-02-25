@@ -74,6 +74,7 @@ export async function getUserConversations(): Promise<ConversationWithDetails[]>
     throw new Error(error.message)
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (data || []).map((row: any) => ({
     conversationId: row.conversation_id,
     otherUserId: row.other_user_id,

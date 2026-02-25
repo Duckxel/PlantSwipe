@@ -135,6 +135,7 @@ export function useNotifications(
       setFriendRequests(friendRequestsData)
       setGardenInvites(gardenInvitesData)
       setError(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       if (trackError('notifications')) {
         console.warn('[useNotifications] Failed to load notifications:', e)

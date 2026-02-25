@@ -64,6 +64,7 @@ export const MessagesPage: React.FC = () => {
       setError(null)
       const data = await getUserConversations()
       setConversations(data)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[messages] Failed to load conversations:', e)
       setError(e?.message || t('messages.errors.failedToLoad', { defaultValue: 'Failed to load conversations' }))

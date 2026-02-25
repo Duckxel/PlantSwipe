@@ -29,6 +29,7 @@ export function saveLanguagePreference(lang: SupportedLanguage): void {
  */
 export function detectBrowserLanguage(): SupportedLanguage {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
     if (browserLang.startsWith('fr')) {
       return 'fr'
@@ -109,9 +110,11 @@ export function useLanguageNavigate() {
   const location = useLocation()
   const currentLang = useLanguage()
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (to: string | number, options?: { replace?: boolean; state?: any }) => {
     // Handle browser history navigation (numbers)
     if (typeof to === 'number') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       navigate(to as any, options)
       return
     }

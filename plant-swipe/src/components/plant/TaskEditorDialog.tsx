@@ -11,6 +11,7 @@ import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
 import { Pencil, Trash2, Plus } from 'lucide-react'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic task scheduling data */
 
 const TASK_EMOJIS: Record<string, string> = {
   water: '💧',

@@ -30,6 +30,7 @@ import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { sendFriendRequestPushNotification, refreshAppBadge } from "@/lib/notifications";
 import { areUsersBlocked } from "@/lib/moderation";
 import { cn } from "@/lib/utils";
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic friend/profile API data */
 
 type FriendRequest = {
   id: string;

@@ -80,6 +80,7 @@ export function AdminReportsPanel() {
         limit: 100
       })
       setReports(data)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e?.message || 'Failed to load reports')
     } finally {

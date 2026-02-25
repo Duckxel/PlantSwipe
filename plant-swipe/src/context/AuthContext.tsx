@@ -8,6 +8,7 @@ import { setUser as setSentryUser } from '@/lib/sentry'
 // Import current legal document versions
 import termsVersion from '@/content/terms-version.json'
 import privacyVersion from '@/content/privacy-version.json'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic auth/profile data */
 
 // Default timezone for users who haven't set one
 const DEFAULT_TIMEZONE = 'Europe/London'

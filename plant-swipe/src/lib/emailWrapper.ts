@@ -14,6 +14,7 @@ import type { SupportedLanguage } from './i18n'
 import DOMPurify from 'dompurify'
 import { getDividerHTML, type DividerStyle } from '@/components/tiptap-node/styled-divider-node/styled-divider-node-extension'
 import { wrapEmailHtmlShared } from './emailTemplateShared'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic email template data */
 
 // SVG logo URL that should be replaced with PNG for email compatibility
 const SVG_LOGO_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/plant-swipe-icon.svg'

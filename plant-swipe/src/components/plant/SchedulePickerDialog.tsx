@@ -220,6 +220,7 @@ export function SchedulePickerDialog(props: {
       if (period === 'year') selection.yearlyDays = [...yearlyDays].sort()
       await onSave(selection)
       onOpenChange(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setError(e?.message || 'Failed to save schedule')
     } finally {

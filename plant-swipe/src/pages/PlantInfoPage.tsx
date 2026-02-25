@@ -92,6 +92,7 @@ import {
 } from '@/lib/composition'
 import worldMapLight from '@/assets/world-map-light.svg'
 import worldMapDark from '@/assets/world-map-dark.svg'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plant info API responses */
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
 type PlantCareData = NonNullable<Plant["plantCare"]>

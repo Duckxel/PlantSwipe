@@ -46,6 +46,7 @@ import {
 import type { PlantScan } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic scan API data */
 export const ScanPage: React.FC = () => {
   const { t } = useTranslation('common')
   const { user } = useAuth()

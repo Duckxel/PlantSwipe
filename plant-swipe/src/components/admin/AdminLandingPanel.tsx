@@ -77,6 +77,7 @@ import {
   Sprout,
   type LucideIcon,
 } from "lucide-react"
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic landing page CMS data */
 
 // Types
 type HeroCard = {

@@ -5950,11 +5950,10 @@ export const AdminPage: React.FC = () => {
     if (memberListLoading) return;
     // Always refresh when opening the list view
     loadMemberList({ reset: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeTab,
     membersView,
-    // Intentionally exclude memberListLoading to only trigger on view change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   // Refresh role stats every time the list view is opened
@@ -5964,11 +5963,10 @@ export const AdminPage: React.FC = () => {
     if (roleStatsLoading) return;
     // Always refresh when opening the list view
     loadRoleStats();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeTab,
     membersView,
-    // Intentionally exclude roleStatsLoading to only trigger on view change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   const performBan = React.useCallback(async () => {

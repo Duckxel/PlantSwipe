@@ -66,6 +66,7 @@ interface AdminMessage {
   content: string
   linkType: string | null
   linkUrl: string | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   linkPreview: any | null
   replyToId: string | null
   replyTo: {
@@ -205,6 +206,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (token) headers['Authorization'] = `Bearer ${token}`
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
       if (adminToken) headers['X-Admin-Token'] = String(adminToken)
     } catch {}

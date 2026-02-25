@@ -58,6 +58,7 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
       // Refresh bookmarks to update the "Saved" status
       await fetchBookmarks()
       // Don't close dialog - let user add/remove more
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error(e)
       alert(t('common.error'))

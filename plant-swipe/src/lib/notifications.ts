@@ -13,6 +13,7 @@ import type {
   GardenInviteStatus,
   NotificationCounts 
 } from '@/types/notification'
+/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic notification/push data */
 
 // ===== Notification CRUD =====
 
