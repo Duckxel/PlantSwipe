@@ -346,6 +346,11 @@ begin
   end loop;
 end $drop_obsolete_cols$;
 
+-- Force a full table rewrite to physically reclaim dropped-column slots.
+-- PostgreSQL DROP COLUMN only marks columns as invisible; they still count
+-- toward the 1600-column hard limit. This no-op type change forces a rewrite.
+alter table public.plants alter column id type text using id;
+
 -- ========== Phase 0.5: Rename old columns to new names (avoids add+copy+drop) ==========
 -- For same-type renames this is a zero-cost metadata-only change that keeps column count stable.
 do $rename_cols$ declare
