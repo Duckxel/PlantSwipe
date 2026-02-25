@@ -60,7 +60,12 @@ create table if not exists public.plants (
   scientific_name_species text,
   scientific_name_variety text,
   family text,
-  encyclopedia_category text[] not null default '{}'::text[],
+  encyclopedia_category text[] not null default '{}'::text[] check (encyclopedia_category <@ array[
+    'tree','shrub','small_shrub','fruit_tree','bamboo','cactus_succulent',
+    'herbaceous','palm','fruit_plant','aromatic_plant','medicinal_plant',
+    'climbing_plant','vegetable_plant','perennial_plant','bulb_plant',
+    'rhizome_plant','indoor_plant','fern','moss_lichen','aquatic_semi_aquatic'
+  ]),
   featured_month text[] not null default '{}'::text[],
 
   -- Section 2: Identity — Origin & environment
@@ -318,6 +323,11 @@ begin
   end if;
 
   -- plant_type (text) → encyclopedia_category (text[])
+  -- Old values: plant, flower, bamboo, shrub, tree, cactus, succulent
+  -- New values: tree, shrub, small_shrub, fruit_tree, bamboo, cactus_succulent,
+  --   herbaceous, palm, fruit_plant, aromatic_plant, medicinal_plant,
+  --   climbing_plant, vegetable_plant, perennial_plant, bulb_plant,
+  --   rhizome_plant, indoor_plant, fern, moss_lichen, aquatic_semi_aquatic
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='plant_type') then
     update public.plants set encyclopedia_category = case
       when plant_type = 'tree' then array['tree']
@@ -325,7 +335,7 @@ begin
       when plant_type = 'bamboo' then array['bamboo']
       when plant_type = 'cactus' then array['cactus_succulent']
       when plant_type = 'succulent' then array['cactus_succulent']
-      when plant_type = 'flower' then array['herbaceous']
+      when plant_type = 'flower' then array['perennial_plant']
       when plant_type = 'plant' then array['herbaceous']
       else '{}'::text[]
     end where plant_type is not null and (encyclopedia_category is null or array_length(encyclopedia_category, 1) is null);
@@ -706,6 +716,15 @@ begin
 
   -- Drop and recreate constraints for columns with updated enum values
   -- Each block: drop all check constraints on the column, then add the new one
+
+  -- encyclopedia_category
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'encyclopedia_category') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_encyclopedia_category_check check (encyclopedia_category <@ array['tree','shrub','small_shrub','fruit_tree','bamboo','cactus_succulent','herbaceous','palm','fruit_plant','aromatic_plant','medicinal_plant','climbing_plant','vegetable_plant','perennial_plant','bulb_plant','rhizome_plant','indoor_plant','fern','moss_lichen','aquatic_semi_aquatic']);
+  exception when duplicate_object then null;
+  end;
 
   -- utility
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
