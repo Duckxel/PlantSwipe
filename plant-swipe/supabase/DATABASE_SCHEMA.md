@@ -100,6 +100,8 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `colors` | Color catalog |
 | `plant_colors` | Plant-color associations |
 | `color_translations` | Color name translations |
+| `substrate_recipes` | Admin-managed substrate mix recipes |
+| `substrate_recipe_translations` | Recipe name/description translations |
 | `requested_plants` | User-requested plants to add |
 
 ### Gardens
@@ -604,6 +606,35 @@ created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
+### `substrate_recipes` (Admin-Managed Substrate Mix Formulas)
+
+Reusable substrate mix recipes that can be referenced by plants via `plants.substrate_mix` (stores recipe IDs). Admin/editor write only; public read.
+
+```sql
+id              UUID PRIMARY KEY
+name            TEXT NOT NULL UNIQUE              -- Canonical English name (e.g. "Pine Bark Mix")
+category        TEXT NOT NULL                     -- CHECK: orchid, cactus_succulent, carnivorous, seedling, tropical, aroid, bonsai, aquatic, general
+ingredients     TEXT[]                            -- List of ingredient keys (free text)
+created_by      TEXT
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### `substrate_recipe_translations`
+
+Multi-language name and description for substrate recipes.
+
+```sql
+id              UUID PRIMARY KEY
+recipe_id       UUID NOT NULL REFERENCES substrate_recipes(id) ON DELETE CASCADE
+language        TEXT NOT NULL REFERENCES translation_languages(code)
+name            TEXT NOT NULL                     -- Translated recipe name
+description     TEXT                              -- Translated guidance/notes
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+UNIQUE(recipe_id, language)
+```
+
 ### `plant_recipes`
 
 Structured recipe ideas linked to plants, with meal category and preparation time.
@@ -682,6 +713,8 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `gdpr_audit_log` | Admin SELECT only, anyone can INSERT |
 | `plant_contributors` | Anyone can SELECT; only admins/editors can INSERT/UPDATE/DELETE |
 | `plant_pro_advices` | Anyone can SELECT; author or admin/editor can UPDATE/DELETE; admin/editor/pro can INSERT |
+| `substrate_recipes` | Anyone can SELECT; only admins/editors can INSERT/UPDATE/DELETE |
+| `substrate_recipe_translations` | Anyone can SELECT; only admins/editors can INSERT/UPDATE/DELETE |
 | `plant_scans` | Users can manage own scans |
 | `impressions` | Admin SELECT only; server writes via service role |
 

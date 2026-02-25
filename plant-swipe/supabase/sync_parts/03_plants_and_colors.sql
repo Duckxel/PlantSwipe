@@ -1275,6 +1275,122 @@ do $$ begin
     );
 end $$;
 
+-- ========== Substrate recipes (admin-managed mix formulas) ==========
+-- Stores reusable substrate mix recipes that can be referenced by plants.
+-- Each recipe has a canonical English name, a category, and a list of ingredients.
+-- Recipes are managed by admins/editors; readable by everyone.
+-- Plants reference recipes via the substrate_mix text[] column (stores recipe IDs).
+create table if not exists public.substrate_recipes (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  category text not null check (category in (
+    'orchid','cactus_succulent','carnivorous','seedling',
+    'tropical','aroid','bonsai','aquatic','general'
+  )),
+  ingredients text[] not null default '{}'::text[],
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists substrate_recipes_category_idx on public.substrate_recipes(category);
+alter table public.substrate_recipes enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='substrate_recipes' and policyname='substrate_recipes_select_all') then
+    drop policy substrate_recipes_select_all on public.substrate_recipes;
+  end if;
+  create policy substrate_recipes_select_all on public.substrate_recipes for select to authenticated, anon using (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='substrate_recipes' and policyname='substrate_recipes_write') then
+    drop policy substrate_recipes_write on public.substrate_recipes;
+  end if;
+  create policy substrate_recipes_write on public.substrate_recipes
+    for all to authenticated
+    using (
+      exists (
+        select 1 from public.profiles
+        where id = auth.uid()
+          and (is_admin = true or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false))
+      )
+    )
+    with check (
+      exists (
+        select 1 from public.profiles
+        where id = auth.uid()
+          and (is_admin = true or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false))
+      )
+    );
+end $$;
+
+comment on table public.substrate_recipes is 'Admin-managed substrate mix recipes. Referenced by plants.substrate_mix (stores recipe IDs).';
+comment on column public.substrate_recipes.name is 'Canonical English name (unique). e.g. Orchid Bark Mix';
+comment on column public.substrate_recipes.category is 'Recipe category for grouping';
+comment on column public.substrate_recipes.ingredients is 'List of ingredient keys (free text, not constrained to substrate enum since recipe ingredients can be more specific)';
+
+-- ========== Substrate recipe translations ==========
+create table if not exists public.substrate_recipe_translations (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references public.substrate_recipes(id) on delete cascade,
+  language text not null references public.translation_languages(code),
+  name text not null,
+  description text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (recipe_id, language)
+);
+
+create index if not exists substrate_recipe_translations_recipe_id_idx on public.substrate_recipe_translations(recipe_id);
+alter table public.substrate_recipe_translations enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='substrate_recipe_translations' and policyname='substrate_recipe_translations_select_all') then
+    drop policy substrate_recipe_translations_select_all on public.substrate_recipe_translations;
+  end if;
+  create policy substrate_recipe_translations_select_all on public.substrate_recipe_translations for select to authenticated, anon using (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='substrate_recipe_translations' and policyname='substrate_recipe_translations_write') then
+    drop policy substrate_recipe_translations_write on public.substrate_recipe_translations;
+  end if;
+  create policy substrate_recipe_translations_write on public.substrate_recipe_translations
+    for all to authenticated
+    using (
+      exists (
+        select 1 from public.profiles
+        where id = auth.uid()
+          and (is_admin = true or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false))
+      )
+    )
+    with check (
+      exists (
+        select 1 from public.profiles
+        where id = auth.uid()
+          and (is_admin = true or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false))
+      )
+    );
+end $$;
+
+-- ========== Pre-populate substrate recipes from Notion spec ==========
+insert into public.substrate_recipes (name, category, ingredients) values
+  -- Orchid recipes
+  ('Pine Bark Mix', 'orchid', array['pine_bark','sphagnum_moss','horticultural_charcoal']),
+  ('Bark & Perlite Mix', 'orchid', array['pine_bark','perlite']),
+  -- Cactus & succulent recipes
+  ('Cactus Draining Mix', 'cactus_succulent', array['river_sand','pozzite','universal_potting_mix']),
+  ('Highly Draining Substrate', 'cactus_succulent', array['perlite','pumice','gravel']),
+  ('Mineral-Heavy Substrate', 'cactus_succulent', array['pumice','pozzite','crushed_slate']),
+  -- Carnivorous plant recipes
+  ('Carnivorous Peat Mix', 'carnivorous', array['blonde_peat','river_sand']),
+  ('Pure Sphagnum', 'carnivorous', array['sphagnum_moss']),
+  ('Acidic Poor Substrate', 'carnivorous', array['blonde_peat','perlite']),
+  -- Seedling recipes
+  ('Fine Seedling Mix', 'seedling', array['seed_starting_mix']),
+  ('Light Sterile Substrate', 'seedling', array['perlite','vermiculite']),
+  ('Sifted Coconut Coir', 'seedling', array['coconut_coir'])
+on conflict (name) do nothing;
+
 -- ========== Plant infusion mixes ==========
 create table if not exists public.plant_infusion_mixes (
   id uuid primary key default gen_random_uuid(),

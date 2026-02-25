@@ -97,6 +97,8 @@ do $$ declare
     'colors',
     'plant_colors',
     'color_translations',
+    'substrate_recipes',
+    'substrate_recipe_translations',
     'translation_languages',
     'plant_translations',
     'requested_plants',
