@@ -20,6 +20,8 @@ import {
   getSkippedActionIds,
   skipAction,
   getRemainingCount,
+  dismissAllDone,
+  isDismissedAllDone,
 } from '@/lib/profileActions'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -135,7 +137,7 @@ type Props = { userId: string }
 export function ProfileActions({ userId }: Props) {
   const { t } = useTranslation('common')
   const [data, setData] = React.useState<ActionCheckData | null>(null)
-  const [dismissed, setDismissed] = React.useState(false)
+  const [dismissed, setDismissed] = React.useState(isDismissedAllDone)
   const [skipped, setSkipped] = React.useState<Set<string>>(getSkippedActionIds)
   const prevCompletedRef = React.useRef<Set<string>>(new Set())
   const [justCompleted, setJustCompleted] = React.useState<string | null>(null)
@@ -225,17 +227,17 @@ export function ProfileActions({ userId }: Props) {
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="flex items-center justify-between rounded-2xl bg-accent/[0.07] dark:bg-accent/10 px-4 py-3"
+              className="flex flex-col items-center gap-3 py-2"
             >
               <div className="flex items-center gap-2 text-accent text-sm font-medium">
                 <PartyPopper className="h-4 w-4" />
                 {t('profileActions.congratulations', 'Congratulations!')}
               </div>
               <button
-                onClick={() => setDismissed(true)}
-                className="text-xs text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors underline underline-offset-2"
+                onClick={() => { dismissAllDone(); setDismissed(true) }}
+                className="px-6 py-2 rounded-full bg-accent text-white text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm"
               >
-                {t('profileActions.dismiss', 'Dismiss')}
+                {t('profileActions.hooray', 'Hooray!')}
               </button>
             </motion.div>
           ) : (

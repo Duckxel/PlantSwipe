@@ -111,3 +111,24 @@ export function getRemainingCount(
     (a) => !a.isCompleted(data) && !skipped.has(a.id),
   ).length
 }
+
+// ---- "All done" dismissal persistence ----
+// Stores the total action count at the time the user clicked "Hooray".
+// The card stays hidden until a new action is added (count increases).
+
+const DISMISSED_KEY = 'plantswipe.actions.dismissed_at_count'
+
+export function dismissAllDone(): void {
+  try {
+    localStorage.setItem(DISMISSED_KEY, String(PROFILE_ACTIONS.length))
+  } catch {}
+}
+
+export function isDismissedAllDone(): boolean {
+  try {
+    const stored = localStorage.getItem(DISMISSED_KEY)
+    if (stored === null) return false
+    return Number(stored) >= PROFILE_ACTIONS.length
+  } catch {}
+  return false
+}
