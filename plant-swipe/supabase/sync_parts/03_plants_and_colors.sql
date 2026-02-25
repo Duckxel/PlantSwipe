@@ -365,6 +365,7 @@ do $rename_cols$ declare
     array['polenizer', 'pollinators_attracted'],
     array['foliage_persistance', 'foliage_persistence']
   ];
+  r record;
 begin
   if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'plants') then
     return;
@@ -373,6 +374,14 @@ begin
     if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name = renames[i][1])
        and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name = renames[i][2])
     then
+      -- Drop check constraints on the old column before renaming (they block new values)
+      for r in (
+        select c.conname from pg_constraint c
+        join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid
+        where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = renames[i][1]
+      ) loop
+        execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+      end loop;
       execute format('alter table public.plants rename column %I to %I', renames[i][1], renames[i][2]);
     end if;
   end loop;

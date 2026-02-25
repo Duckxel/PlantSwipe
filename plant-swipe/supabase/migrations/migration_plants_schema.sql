@@ -97,6 +97,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scientific_name')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scientific_name_species')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'scientific_name') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column scientific_name to scientific_name_species;
     raise notice '  RENAME scientific_name → scientific_name_species';
   elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scientific_name') then
@@ -113,6 +114,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='spiked')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='thorny')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'spiked') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column spiked to thorny;
     raise notice '  RENAME spiked → thorny';
   elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='spiked') then
@@ -127,6 +129,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scent')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='fragrance')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'scent') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column scent to fragrance;
     raise notice '  RENAME scent → fragrance';
   elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scent') then
@@ -141,6 +144,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='tutoring')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='staking')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'tutoring') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column tutoring to staking;
     raise notice '  RENAME tutoring → staking';
   elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='tutoring') then
@@ -155,6 +159,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='companions')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='companion_plants')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'companions') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column companions to companion_plants;
     raise notice '  RENAME companions → companion_plants';
   elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='companions') then
@@ -171,6 +176,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='comestible_part')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='edible_part')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'comestible_part') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column comestible_part to edible_part;
     update public.plants set edible_part = array_replace(edible_part, 'root', 'rhizome')
       where edible_part is not null and 'root' = any(edible_part);
@@ -190,6 +196,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='habitat')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='climate')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'habitat') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column habitat to climate;
     update public.plants set climate = (
       select coalesce(array_agg(mapped), '{}'::text[]) from (
@@ -240,6 +247,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='composition')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='landscaping')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'composition') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column composition to landscaping;
     update public.plants set landscaping = (
       select coalesce(array_agg(case when v = 'ground cover' then 'ground_cover' else v end), '{}'::text[])
@@ -266,6 +274,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='soil')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='substrate')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'soil') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column soil to substrate;
     raise notice '  RENAME soil → substrate';
   elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='soil') then
@@ -282,6 +291,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='mulching')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='mulch_type')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'mulching') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column mulching to mulch_type;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='mulching_needed') then
       alter table public.plants add column mulching_needed boolean default false;
@@ -312,6 +322,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='sow_type')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='sowing_method')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'sow_type') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column sow_type to sowing_method;
     update public.plants set sowing_method = (
       select coalesce(array_agg(case
@@ -350,6 +361,7 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='polenizer')
      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='pollinators_attracted')
   then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'polenizer') loop execute 'alter table public.plants drop constraint ' || quote_ident(r.conname); end loop;
     alter table public.plants rename column polenizer to pollinators_attracted;
     raise notice '  RENAME polenizer → pollinators_attracted';
   elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='polenizer') then
