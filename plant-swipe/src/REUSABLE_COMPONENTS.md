@@ -355,6 +355,7 @@ const templates = [
 - Client-side filtering for static options (label + description + meta)
 - Selected item highlight with check icon
 - Clear selection footer
+- Accessible list markup (ul/li) and proper ARIA labels
 - Dark mode support
 - Configurable z-index for nested dialogs
 - Custom item renderer support
