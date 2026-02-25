@@ -398,35 +398,7 @@ begin
     raise notice '  polenizer → pollinators_attracted: skipped';
   end if;
 
-  -- 1m. foliage_persistance → foliage_persistence with value mapping
-  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistance')
-     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistence')
-  then
-    -- Drop constraints before rename (they reference the old name)
-    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'foliage_persistance') loop
-      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
-    end loop;
-    alter table public.plants rename column foliage_persistance to foliage_persistence;
-    update public.plants set foliage_persistence = (
-      select coalesce(array_agg(case when v = 'semi-evergreen' then 'semi_evergreen' else v end), '{}'::text[])
-      from unnest(foliage_persistence) as v
-    )
-    where foliage_persistence is not null and array_length(foliage_persistence, 1) > 0
-      and foliage_persistence && array['semi-evergreen'];
-    get diagnostics cnt = row_count;
-    raise notice '  RENAME foliage_persistance → foliage_persistence (value-mapped: % rows)', cnt;
-  elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistance') then
-    update public.plants set foliage_persistence = (
-      select coalesce(array_agg(case when v = 'semi-evergreen' then 'semi_evergreen' else v end), '{}'::text[])
-      from unnest(foliage_persistance) as v
-    )
-    where foliage_persistance is not null
-      and (foliage_persistence is null or array_length(foliage_persistence, 1) is null);
-    get diagnostics cnt = row_count;
-    raise notice '  COPY foliage_persistance → foliage_persistence: % rows', cnt;
-  else
-    raise notice '  foliage_persistance → foliage_persistence: skipped';
-  end if;
+  -- 1m. foliage_persistance → foliage_persistence: moved to type-change renames below (text → text[])
 
   -- ── Type-change renames (text → text[]) ────────────────────────────────
 
@@ -572,6 +544,39 @@ begin
     raise notice '  COPY maintenance_level → care_level: % rows', cnt;
   else
     raise notice '  maintenance_level → care_level: skipped';
+  end if;
+
+  -- 1m. foliage_persistance (text) → foliage_persistence (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistance')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistence')
+  then
+    update public.plants set foliage_persistance = case
+      when foliage_persistance = 'semi-evergreen' then 'semi_evergreen'
+      else foliage_persistance
+    end where foliage_persistance is not null;
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'foliage_persistance') loop
+      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+    end loop;
+    alter table public.plants rename column foliage_persistance to foliage_persistence;
+    alter table public.plants alter column foliage_persistence type text[]
+      using case when foliage_persistence is not null and trim(foliage_persistence::text) <> '' then array[foliage_persistence::text] else '{}'::text[] end;
+    alter table public.plants alter column foliage_persistence set default '{}'::text[];
+    begin alter table public.plants alter column foliage_persistence set not null; exception when others then null; end;
+    raise notice '  RENAME+RETYPE foliage_persistance → foliage_persistence (text → text[])';
+  elsif exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistance') then
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistence') then
+      alter table public.plants add column foliage_persistence text[] not null default '{}'::text[];
+    end if;
+    update public.plants set foliage_persistence = array[case
+      when foliage_persistance = 'semi-evergreen' then 'semi_evergreen'
+      else foliage_persistance
+    end]
+    where foliage_persistance is not null
+      and (foliage_persistence is null or array_length(foliage_persistence, 1) is null);
+    get diagnostics cnt = row_count;
+    raise notice '  COPY foliage_persistance → foliage_persistence: % rows', cnt;
+  else
+    raise notice '  foliage_persistance → foliage_persistence: skipped';
   end if;
 
   -- ── Merge columns ──────────────────────────────────────────────────────

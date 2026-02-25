@@ -395,8 +395,7 @@ do $rename_cols$ declare
     array['soil', 'substrate'],
     array['mulching', 'mulch_type'],
     array['sow_type', 'sowing_method'],
-    array['polenizer', 'pollinators_attracted'],
-    array['foliage_persistance', 'foliage_persistence']
+    array['polenizer', 'pollinators_attracted']
   ];
   r record;
 begin
@@ -506,6 +505,24 @@ begin
       using case when care_level is not null and trim(care_level::text) <> '' then array[care_level::text] else '{}'::text[] end;
     alter table public.plants alter column care_level set default '{}'::text[];
     begin alter table public.plants alter column care_level set not null; exception when others then null; end;
+  end if;
+
+  -- foliage_persistance (text) → foliage_persistence (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistance')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistence')
+  then
+    update public.plants set foliage_persistance = case
+      when foliage_persistance = 'semi-evergreen' then 'semi_evergreen'
+      else foliage_persistance
+    end where foliage_persistance is not null;
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'foliage_persistance') loop
+      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+    end loop;
+    alter table public.plants rename column foliage_persistance to foliage_persistence;
+    alter table public.plants alter column foliage_persistence type text[]
+      using case when foliage_persistence is not null and trim(foliage_persistence::text) <> '' then array[foliage_persistence::text] else '{}'::text[] end;
+    alter table public.plants alter column foliage_persistence set default '{}'::text[];
+    begin alter table public.plants alter column foliage_persistence set not null; exception when others then null; end;
   end if;
 end $rename_and_retype$;
 
@@ -947,18 +964,7 @@ begin
   exception when others then null;
   end;
 
-  begin
-    update public.plants set foliage_persistence = (
-      select coalesce(array_agg(case
-        when v = 'semi-evergreen' then 'semi_evergreen'
-        else v
-      end), '{}'::text[])
-      from unnest(foliage_persistence) as v
-    )
-    where foliage_persistence is not null and array_length(foliage_persistence, 1) > 0
-      and foliage_persistence && array['semi-evergreen'];
-  exception when others then null;
-  end;
+  -- foliage_persistence value-mapping is handled in Phase 0.5 $rename_and_retype$ block
 
   -- Backfill mulching_needed from mulch_type (for Phase 0.5 rename of mulching→mulch_type)
   begin
