@@ -48,7 +48,7 @@ async function fetchWithRetry(
   const signal = options.signal
   
   // Start with base retries, but allow escalation for gateway timeouts
-  let maxRetries = baseMaxRetries
+  const maxRetries = baseMaxRetries
   let initialDelay = INITIAL_RETRY_DELAY
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {

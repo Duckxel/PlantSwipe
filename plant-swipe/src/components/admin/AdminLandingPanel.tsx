@@ -1269,7 +1269,7 @@ const GlobalSettingsTab: React.FC<{
     setSaving(true)
     try {
       // Don't manually set updated_at - the database trigger handles it
-      const { id, ...settingsToSave } = localSettings
+      const { id: _id, ...settingsToSave } = localSettings
       
       const { data, error } = await supabase
         .from("landing_page_settings")
@@ -1584,7 +1584,7 @@ const HeroCardsTab: React.FC<{
         const originalCard = cards.find(c => c.id === card.id)
         if (originalCard && JSON.stringify(originalCard) !== JSON.stringify(card)) {
           // Don't manually set updated_at - the database trigger handles it
-          const { id, created_at, updated_at, ...cardToSave } = card
+          const { id: _id, created_at: _created_at, updated_at: _updated_at, ...cardToSave } = card
           const { error } = await supabase
             .from("landing_hero_cards")
             .update(cardToSave)
@@ -2036,7 +2036,7 @@ const StatsTab: React.FC<{
     try {
       if (selectedLang === "en") {
         // Save base English content - don't manually set updated_at, trigger handles it
-        const { id, updated_at, ...statsToSave } = localStats
+        const { id: _id, updated_at: _updated_at, ...statsToSave } = localStats
         const { data, error } = await supabase
           .from("landing_stats")
           .update(statsToSave)
@@ -2425,7 +2425,7 @@ const TestimonialsTab: React.FC<{
         const originalTestimonial = testimonials.find(t => t.id === testimonial.id)
         if (originalTestimonial && JSON.stringify(originalTestimonial) !== JSON.stringify(testimonial)) {
           // Don't manually set updated_at - the database trigger handles it
-          const { id, created_at, updated_at, ...testimonialToSave } = testimonial
+          const { id: _id, created_at: _created_at, updated_at: _updated_at, ...testimonialToSave } = testimonial
           const { error } = await supabase
             .from("landing_testimonials")
             .update(testimonialToSave)
@@ -2900,7 +2900,7 @@ const DemoFeaturesTab: React.FC<{
         for (const feature of localFeatures) {
           const originalFeature = features.find(f => f.id === feature.id)
           if (originalFeature && JSON.stringify(originalFeature) !== JSON.stringify(feature)) {
-            const { id, created_at, updated_at, ...featureToSave } = feature
+            const { id: _id, created_at: _created_at, updated_at: _updated_at, ...featureToSave } = feature
             const { error } = await supabase
               .from("landing_demo_features")
               .update(featureToSave)
@@ -3430,7 +3430,7 @@ const FAQTab: React.FC<{
         for (const item of localItems) {
           const originalItem = items.find(i => i.id === item.id)
           if (originalItem && JSON.stringify(originalItem) !== JSON.stringify(item)) {
-            const { id, created_at, updated_at, ...itemToSave } = item
+            const { id: _id, created_at: _created_at, updated_at: _updated_at, ...itemToSave } = item
             const { error } = await supabase
               .from("landing_faq")
               .update(itemToSave)

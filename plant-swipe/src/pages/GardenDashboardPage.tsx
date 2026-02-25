@@ -4364,7 +4364,7 @@ function OverviewSection({
   }, [plants, taskCountsPerPlant]);
 
   // Get plants with images for the gallery (legacy - kept for compatibility)
-  const plantsWithImages = React.useMemo(() => {
+  const _plantsWithImages = React.useMemo(() => {
     return allPlantsDisplay.filter((p) => p.imageUrl);
   }, [allPlantsDisplay]);
 

@@ -1655,7 +1655,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         if (isEnglish && pendingTranslations.length > 0) {
            const pendingPayloads = pendingTranslations.map(t => {
              // Create a copy without system fields
-             const { id, created_at, plant_id, ...rest } = t
+             const { id: _id, created_at: _created_at, plant_id: _plant_id, ...rest } = t
              return {
                ...rest,
                plant_id: savedId, // Link to the new plant ID

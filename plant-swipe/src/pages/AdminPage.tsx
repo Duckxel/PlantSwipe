@@ -328,7 +328,6 @@ import {
   ROLE_CONFIG,
   type UserRole,
   checkFullAdminAccess,
-  checkEditorAccess,
 } from "@/constants/userRoles";
 import { UserRoleBadge, ProfileNameBadges } from "@/components/profile/UserRoleBadges";
 
@@ -2093,7 +2092,6 @@ export const AdminPage: React.FC = () => {
   const [aiPrefillCompletedPlants, setAiPrefillCompletedPlants] = React.useState<Array<{ name: string; success: boolean; error?: string; durationMs?: number }>>([]);
   const [aiPrefillStartTime, setAiPrefillStartTime] = React.useState<number | null>(null);
   const [aiPrefillElapsedTime, setAiPrefillElapsedTime] = React.useState<number>(0);
-  const [aiPrefillPlantStartTime, setAiPrefillPlantStartTime] = React.useState<number | null>(null);
   const [aiPrefillImageSources, setAiPrefillImageSources] = React.useState<Record<ExternalImageSource, SourceResult>>(() => {
     const initial: Record<string, SourceResult> = {};
     for (const s of IMAGE_SOURCES) {
@@ -3403,18 +3401,18 @@ export const AdminPage: React.FC = () => {
       })
       .sort((a, b) => {
         switch (plantSortOption) {
-          case "updated":
-            // Sort by most recently updated first (descending)
+          case "updated": {
             const updatedA = a.updatedAt ?? 0;
             const updatedB = b.updatedAt ?? 0;
             if (updatedB !== updatedA) return updatedB - updatedA;
             return a.name.localeCompare(b.name);
-          case "created":
-            // Sort by most recently created first (descending)
+          }
+          case "created": {
             const createdA = a.createdAt ?? 0;
             const createdB = b.createdAt ?? 0;
             if (createdB !== createdA) return createdB - createdA;
             return a.name.localeCompare(b.name);
+          }
           case "name":
             return a.name.localeCompare(b.name);
           case "gardens":
@@ -12867,7 +12865,7 @@ const BroadcastControls: React.FC<{
   inline?: boolean;
   onExpired?: () => void;
   onActive?: () => void;
-}> = ({ inline = false, onExpired, onActive }) => {
+}> = ({ inline = false, onExpired: _onExpired, onActive }) => {
   const [active, setActive] = React.useState<BroadcastRecord | null>(() =>
     loadPersistedBroadcast(),
   );

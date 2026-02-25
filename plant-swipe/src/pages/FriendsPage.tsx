@@ -285,7 +285,7 @@ export const FriendsPage: React.FC = () => {
       }
 
       // Map RPC results to SearchResult format
-      let results: SearchResult[] = (data || [])
+      const results: SearchResult[] = (data || [])
         .filter((p: any) => p.id !== user.id)
         .map((p: any) => ({
           id: p.id,

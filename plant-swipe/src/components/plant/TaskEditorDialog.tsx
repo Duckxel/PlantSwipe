@@ -1,8 +1,6 @@
 // @ts-nocheck
 import React from 'react'
-import ReactDOM from 'react-dom'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
 import { listPlantTasks, deletePlantTask, updatePatternTask, resyncTaskOccurrencesForGarden, logGardenActivity, refreshGardenTaskCache } from '@/lib/gardens'
 import { broadcastGardenUpdate, addGardenBroadcastListener } from '@/lib/realtime'
@@ -108,7 +106,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
     return () => { try { supabase.removeChannel(channel) } catch {} }
   }, [open, gardenId, load])
 
-  const resetEditor = () => {
+  const _resetEditor = () => {
     setPatternPeriod('week')
     setPatternAmount(1)
     setPatternSelection({})

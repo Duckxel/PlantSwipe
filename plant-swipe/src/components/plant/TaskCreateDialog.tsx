@@ -14,7 +14,7 @@ type Period = 'week' | 'month' | 'year'
 
 // Shared constants
 const MONDAY_FIRST_MAP = [1, 2, 3, 4, 5, 6, 0]
-const WEEKDAY_TO_UI: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 }
+const _WEEKDAY_TO_UI: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 }
 
 const TASK_TYPES: Array<{ type: TaskType; emoji: string }> = [
   { type: 'water', emoji: '💧' },
@@ -441,7 +441,7 @@ export function TaskCreateDialog({
 
 /* ── Yearly Picker (inline version matching the redesigned SchedulePickerDialog) ── */
 
-function YearlyPickerInline({ selected, onToggle, onRemove, disabledMore, amount, t }: {
+function YearlyPickerInline({ selected, onToggle, onRemove, disabledMore, amount: _amount, t: _t }: {
   selected: string[]
   onToggle: (key: string) => void
   onRemove: (key: string) => void

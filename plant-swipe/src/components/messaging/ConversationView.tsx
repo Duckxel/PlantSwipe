@@ -142,7 +142,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         if (data?.language) {
           setRecipientLanguage(data.language)
         }
-      } catch (err) {
+      } catch (_err) {
         // Silently fail, default to 'en'
       }
     }
