@@ -20,17 +20,13 @@ import { plantSchema } from "@/lib/plantSchema"
 import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
 import {
   normalizeCompositionForDb,
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
-  poisoningMethodEnum,
   lifeCycleEnum,
-  averageLifespanEnum,
   foliagePersistenceEnum,
   livingSpaceEnum,
   seasonEnum,
-  climateEnum,
   careLevelEnum,
   sunlightEnum,
   wateringTypeEnum,
@@ -1526,6 +1522,32 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         } else {
           // For non-English: update ALL non-translatable fields in plants table
           // These fields are shared across all languages, so edits in any language should be saved
+          const p = plantToSave as any
+          const normalizedPromotionMonth = p.featuredMonth?.[0] ?? (p.identity?.promotionMonth != null
+            ? (Array.isArray(p.identity.promotionMonth) ? monthNumberToSlug(p.identity.promotionMonth[0]) : monthNumberToSlug(p.identity.promotionMonth))
+            : null)
+          const normalizedLifeCycle = lifeCycleEnum.toDbArray(p.lifeCycle || (p.identity?.lifeCycle ? [p.identity.lifeCycle] : []))
+          const normalizedIdentitySeasons = seasonEnum.toDbArray(p.season || p.identity?.season)
+          const normalizedToxicityHuman = toxicityEnum.toDb(p.toxicityHuman || p.identity?.toxicityHuman) || null
+          const normalizedToxicityPets = toxicityEnum.toDb(p.toxicityPets || p.identity?.toxicityPets) || null
+          const normalizedLivingSpace = livingSpaceEnum.toDbArray(p.livingSpace || (p.identity?.livingSpace ? [p.identity.livingSpace] : []))
+          const normalizedMaintenance = careLevelEnum.toDbArray(p.careLevel || (p.identity?.maintenanceLevel ? [p.identity.maintenanceLevel] : []))
+          const normalizedPlantType = plantTypeEnum.toDbArray(p.encyclopediaCategory || (p.plantType ? [p.plantType] : []))
+          const normalizedUtility = utilityEnum.toDbArray(p.utility)
+          const normalizedComestible = ediblePartEnum.toDbArray(p.ediblePart || p.comestiblePart)
+          const normalizedFruit = fruitTypeEnum.toDbArray(p.fruitType)
+          const normalizedLevelSun = sunlightEnum.toDbArray(p.sunlight || (p.plantCare?.levelSun ? [p.plantCare.levelSun] : []))
+          const normalizedHabitat = habitatEnum.toDbArray(p.climate || p.plantCare?.habitat || [])
+          const normalizedWateringType = wateringTypeEnum.toDbArray(p.wateringType || p.plantCare?.wateringType)
+          const normalizedDivision = divisionEnum.toDbArray(p.division || p.plantCare?.division)
+          const normalizedSoil = (p.substrate || p.plantCare?.soil || []) as string[]
+          const normalizedMulching = (p.mulchType || p.plantCare?.mulchType || []) as string[]
+          const normalizedNutritionNeed = (p.nutritionNeed || p.plantCare?.nutritionNeed || []) as string[]
+          const normalizedFertilizer = (p.fertilizer || p.plantCare?.fertilizer || []) as string[]
+          const normalizedSowType = sowTypeEnum.toDbArray(p.sowingMethod || p.growth?.sowType || [])
+          const normalizedPolenizer = (p.pollinatorsAttracted || p.ecology?.polenizer || []) as string[]
+          const normalizedConservationStatus = conservationStatusEnum.toDbArray(p.conservationStatus || (p.ecology?.conservationStatus ? [p.ecology.conservationStatus] : []))
+
           const nonEnglishUpdatePayload = {
             // Meta fields
             status: normalizedStatus,
