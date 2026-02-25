@@ -5,8 +5,7 @@
 
 import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
-import type { Plant, PlantImage, PlantSeason } from '@/types/plant'
-import { getPrimaryPhotoUrl, normalizePlantPhotos } from '@/lib/photos'
+import type { Plant, PlantImage } from '@/types/plant'
 import {
   encyclopediaCategoryEnum,
   utilityEnum,
