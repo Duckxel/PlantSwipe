@@ -271,7 +271,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
   const prefersCoarsePointer = usePrefersCoarsePointer()
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
-  const seasons = (current?.seasons ?? []) as PlantSeason[]
+  const seasons = (current?.season ?? current?.seasons ?? []) as PlantSeason[]
   const displayImage = React.useMemo(() => getDiscoveryPageImageUrl(current), [current])
   const shouldPrioritizeImage = Boolean(boostImagePriority && displayImage)
   const highlightBadges = React.useMemo(() => {
