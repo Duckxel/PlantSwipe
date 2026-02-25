@@ -1518,94 +1518,94 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           savedId = data?.id || plantId
         } else {
           // For non-English: update ALL non-translatable fields in plants table
-          // These fields are shared across all languages, so edits in any language should be saved
+          // Uses the same new-schema column names as the English path
           const p = plantToSave as any
-          const normalizedPromotionMonth = p.featuredMonth?.[0] ?? (p.identity?.promotionMonth != null
-            ? (Array.isArray(p.identity.promotionMonth) ? monthNumberToSlug(p.identity.promotionMonth[0]) : monthNumberToSlug(p.identity.promotionMonth))
-            : null)
-          const normalizedLifeCycle = lifeCycleEnum.toDbArray(p.lifeCycle || (p.identity?.lifeCycle ? [p.identity.lifeCycle] : []))
-          const normalizedIdentitySeasons = seasonEnum.toDbArray(p.season || p.identity?.season)
-          const normalizedToxicityHuman = toxicityEnum.toDb(p.toxicityHuman || p.identity?.toxicityHuman) || null
-          const normalizedToxicityPets = toxicityEnum.toDb(p.toxicityPets || p.identity?.toxicityPets) || null
-          const normalizedLivingSpace = livingSpaceEnum.toDbArray(p.livingSpace || (p.identity?.livingSpace ? [p.identity.livingSpace] : []))
-          const normalizedMaintenance = careLevelEnum.toDbArray(p.careLevel || (p.identity?.maintenanceLevel ? [p.identity.maintenanceLevel] : []))
-          const normalizedPlantType = plantTypeEnum.toDbArray(p.encyclopediaCategory || (p.plantType ? [p.plantType] : []))
-          const normalizedUtility = utilityEnum.toDbArray(p.utility)
-          const normalizedComestible = ediblePartEnum.toDbArray(p.ediblePart || p.comestiblePart)
-          const normalizedFruit = fruitTypeEnum.toDbArray(p.fruitType)
-          const normalizedLevelSun = sunlightEnum.toDbArray(p.sunlight || (p.plantCare?.levelSun ? [p.plantCare.levelSun] : []))
-          const normalizedHabitat = habitatEnum.toDbArray(p.climate || p.plantCare?.habitat || [])
-          const normalizedWateringType = wateringTypeEnum.toDbArray(p.wateringType || p.plantCare?.wateringType)
-          const normalizedDivision = divisionEnum.toDbArray(p.division || p.plantCare?.division)
-          const normalizedSoil = (p.substrate || p.plantCare?.soil || []) as string[]
-          const normalizedMulching = (p.mulchType || p.plantCare?.mulchType || []) as string[]
-          const normalizedNutritionNeed = (p.nutritionNeed || p.plantCare?.nutritionNeed || []) as string[]
-          const normalizedFertilizer = (p.fertilizer || p.plantCare?.fertilizer || []) as string[]
-          const normalizedSowType = sowTypeEnum.toDbArray(p.sowingMethod || p.growth?.sowType || [])
-          const normalizedPolenizer = (p.pollinatorsAttracted || p.ecology?.polenizer || []) as string[]
-          const normalizedConservationStatus = conservationStatusEnum.toDbArray(p.conservationStatus || (p.ecology?.conservationStatus ? [p.ecology.conservationStatus] : []))
-
           const nonEnglishUpdatePayload = {
-            // Meta fields
+            // Section 1: Base
+            scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
+            scientific_name_variety: p.scientificNameVariety || null,
+            family: p.family || p.identity?.family || null,
+            encyclopedia_category: p.encyclopediaCategory || (p.plantType ? [p.plantType] : []),
+            featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
+            // Section 2: Identity
+            climate: p.climate || [],
+            season: seasonEnum.toDbArray(p.season || p.identity?.season),
+            utility: utilityEnum.toDbArray(p.utility),
+            edible_part: ediblePartEnum.toDbArray(p.ediblePart || p.comestiblePart),
+            thorny: coerceBoolean(p.thorny ?? p.identity?.spiked, false),
+            toxicity_human: toxicityEnum.toDb(p.toxicityHuman || p.identity?.toxicityHuman) || null,
+            toxicity_pets: toxicityEnum.toDb(p.toxicityPets || p.identity?.toxicityPets) || null,
+            poisoning_method: p.poisoningMethod || [],
+            life_cycle: lifeCycleEnum.toDbArray(p.lifeCycle || (p.identity?.lifeCycle ? [p.identity.lifeCycle] : [])),
+            average_lifespan: p.averageLifespan || [],
+            foliage_persistence: foliagePersistenceEnum.toDbArray(p.foliagePersistence || (p.identity?.foliagePersistance ? [p.identity.foliagePersistance] : [])),
+            living_space: livingSpaceEnum.toDbArray(p.livingSpace || (p.identity?.livingSpace ? [p.identity.livingSpace] : [])),
+            landscaping: p.landscaping || normalizeCompositionForDb(p.identity?.composition) || [],
+            plant_habit: p.plantHabit || [],
+            multicolor: coerceBoolean(p.multicolor ?? p.identity?.multicolor, false),
+            bicolor: coerceBoolean(p.bicolor ?? p.identity?.bicolor, false),
+            // Section 3: Care
+            care_level: careLevelEnum.toDbArray(p.careLevel || (p.identity?.maintenanceLevel ? [p.identity.maintenanceLevel] : [])),
+            sunlight: sunlightEnum.toDbArray(p.sunlight || (p.plantCare?.levelSun ? [p.plantCare.levelSun] : [])),
+            temperature_max: p.temperatureMax || p.plantCare?.temperatureMax || null,
+            temperature_min: p.temperatureMin || p.plantCare?.temperatureMin || null,
+            temperature_ideal: p.temperatureIdeal || p.plantCare?.temperatureIdeal || null,
+            watering_frequency_warm: p.wateringFrequencyWarm || null,
+            watering_frequency_cold: p.wateringFrequencyCold || null,
+            watering_type: wateringTypeEnum.toDbArray(p.wateringType || p.plantCare?.wateringType),
+            hygrometry: p.hygrometry || p.plantCare?.hygrometry || null,
+            misting_frequency: p.mistingFrequency || null,
+            special_needs: p.specialNeeds || [],
+            substrate: p.substrate || [],
+            substrate_mix: p.substrateMix || [],
+            mulching_needed: coerceBoolean(p.mulchingNeeded, false),
+            mulch_type: p.mulchType || [],
+            nutrition_need: p.nutritionNeed || [],
+            fertilizer: p.fertilizer || [],
+            // Section 4: Growth
+            sowing_month: p.sowingMonth || monthNumbersToSlugs(p.growth?.sowingMonth) || [],
+            flowering_month: p.floweringMonth || monthNumbersToSlugs(p.growth?.floweringMonth) || [],
+            fruiting_month: p.fruitingMonth || monthNumbersToSlugs(p.growth?.fruitingMonth) || [],
+            height_cm: p.heightCm || p.growth?.height || null,
+            wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
+            staking: coerceBoolean(p.staking ?? p.growth?.tutoring, false),
+            division: divisionEnum.toDbArray(p.division || p.plantCare?.division),
+            cultivation_mode: p.cultivationMode || [],
+            sowing_method: sowingMethodEnum.toDbArray(p.sowingMethod || p.growth?.sowType),
+            transplanting: coerceBoolean(p.transplanting ?? p.growth?.transplanting, null),
+            pruning: coerceBoolean(p.pruning, false),
+            pruning_month: p.pruningMonth || [],
+            // Section 6: Ecology
+            conservation_status: conservationStatusEnum.toDbArray(p.conservationStatus || (p.ecology?.conservationStatus ? [p.ecology.conservationStatus] : [])),
+            ecological_status: p.ecologicalStatus || [],
+            biotopes: p.biotopes || [],
+            urban_biotopes: p.urbanBiotopes || [],
+            ecological_tolerance: ecologicalToleranceEnum.toDbArray(p.ecologicalTolerance),
+            biodiversity_role: p.biodiversityRole || [],
+            pollinators_attracted: p.pollinatorsAttracted || [],
+            birds_attracted: p.birdsAttracted || [],
+            mammals_attracted: p.mammalsAttracted || [],
+            ecological_management: p.ecologicalManagement || [],
+            ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
+            // Section 7: Consumption
+            infusion: coerceBoolean(p.infusion ?? p.usage?.infusion, false),
+            infusion_parts: p.infusionParts || [],
+            medicinal: coerceBoolean(p.medicinal, false),
+            aromatherapy: coerceBoolean(p.aromatherapy ?? p.usage?.aromatherapy, false),
+            fragrance: coerceBoolean(p.fragrance ?? p.identity?.scent, false),
+            edible_oil: p.edibleOil || null,
+            // Section 8: Misc
+            companion_plants: p.companionPlants || p.miscellaneous?.companions || [],
+            biotope_plants: p.biotopePlants || [],
+            beneficial_plants: p.beneficialPlants || [],
+            harmful_plants: p.harmfulPlants || [],
+            varieties: p.varieties || [],
+            // Section 9: Meta
             status: normalizedStatus,
-            admin_commentary: plantToSave.meta?.adminCommentary || null,
+            admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
+            user_notes: p.userNotes || null,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
-            // Non-translatable identity fields
-            scientific_name: plantToSave.identity?.scientificName || null,
-            promotion_month: normalizedPromotionMonth,
-            family: plantToSave.identity?.family || null,
-            life_cycle: normalizedLifeCycle || null,
-            season: normalizedIdentitySeasons,
-            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
-            spiked: coerceBoolean(plantToSave.identity?.spiked, false),
-            toxicity_human: normalizedToxicityHuman || null,
-            toxicity_pets: normalizedToxicityPets || null,
-            scent: coerceBoolean(plantToSave.identity?.scent, false),
-            living_space: normalizedLivingSpace || null,
-            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
-            maintenance_level: normalizedMaintenance || null,
-            multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
-            bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
-            // Non-translatable basic type fields
-            plant_type: normalizedPlantType || null,
-            utility: normalizedUtility,
-            comestible_part: normalizedComestible,
-            fruit_type: normalizedFruit,
-            // Non-translatable plant care fields
-            temperature_max: plantToSave.plantCare?.temperatureMax || null,
-            temperature_min: plantToSave.plantCare?.temperatureMin || null,
-            temperature_ideal: plantToSave.plantCare?.temperatureIdeal || null,
-            hygrometry: plantToSave.plantCare?.hygrometry || null,
-            level_sun: normalizedLevelSun || null,
-            habitat: normalizedHabitat,
-            watering_type: normalizedWateringType,
-            division: normalizedDivision,
-            soil: normalizedSoil,
-            mulching: normalizedMulching,
-            nutrition_need: normalizedNutritionNeed,
-            fertilizer: normalizedFertilizer,
-            // Non-translatable growth fields
-            sowing_month: monthNumbersToSlugs(plantToSave.growth?.sowingMonth),
-            flowering_month: monthNumbersToSlugs(plantToSave.growth?.floweringMonth),
-            fruiting_month: monthNumbersToSlugs(plantToSave.growth?.fruitingMonth),
-            height_cm: plantToSave.growth?.height || null,
-            wingspan_cm: plantToSave.growth?.wingspan || null,
-            tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
-            sow_type: normalizedSowType,
-            separation_cm: plantToSave.growth?.separation || null,
-            transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
-            // Non-translatable usage fields
-            infusion: coerceBoolean(plantToSave.usage?.infusion, false),
-            aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
-            // Non-translatable ecology fields
-            melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
-            polenizer: normalizedPolenizer,
-            be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
-            conservation_status: normalizedConservationStatus || null,
-            // Non-translatable miscellaneous fields
-            companion_plants: plantToSave.miscellaneous?.companions || [],
-            // Note: pests, diseases, spice_mixes are in plant_translations (translatable)
           }
           const { error: metaUpdateError } = await supabase
             .from('plants')
