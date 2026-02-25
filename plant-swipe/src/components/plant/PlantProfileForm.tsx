@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
-import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantType, PlantWateringSchedule, RecipeCategory, RecipeTime } from "@/types/plant"
+import { type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
+import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
@@ -1083,12 +1083,6 @@ const metaFields: FieldConfig[] = [
   { key: "userNotes", label: "User Notes", description: "User-contributed notes", type: "textarea" },
   { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
-
-// Legacy option arrays kept for backward compatibility with form rendering
-const utilityOptions = ["edible","ornamental","aromatic","medicinal","fragrant","cereal","spice"] as const
-const comestibleOptions = ["flower","fruit","seed","leaf","stem","bulb","rhizome","bark","wood"] as const
-const fruitOptions = ["nut","seed","stone"] as const
-const plantTypeOptions = ["tree","shrub","small_shrub","fruit_tree","bamboo","cactus_succulent","herbaceous","palm","fruit_plant","aromatic_plant","medicinal_plant","climbing_plant","vegetable_plant","perennial_plant","bulb_plant","rhizome_plant","indoor_plant","fern","moss_lichen","aquatic_semi_aquatic"] as const
 
 function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'common'>) {
     const value = getValue(plant, field.key)
@@ -2402,9 +2396,9 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
 export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
-    basics: null,
+    base: null,
     identity: null,
-    plantCare: null,
+    care: null,
     growth: null,
     danger: null,
     ecology: null,
