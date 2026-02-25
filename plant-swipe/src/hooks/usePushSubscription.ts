@@ -193,6 +193,7 @@ export function usePushSubscription(userId: string | null) {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
       registration?.removeEventListener('updatefound', handleUpdateFound)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supported, userId, attemptResubscribe])
 
   // Auto-enable push notifications for new users (default behavior)

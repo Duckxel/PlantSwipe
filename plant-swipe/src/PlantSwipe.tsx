@@ -309,7 +309,6 @@ export default function PlantSwipe() {
         // Network error – don't block, format is valid
       }
       return { valid: true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [t]),
     400,
     isSignupMode,
@@ -344,7 +343,6 @@ export default function PlantSwipe() {
       }
       const suggestionText = fmt.suggestion ? t('auth.emailSuggestion', { defaultValue: 'Did you mean {{suggestion}}?', suggestion: fmt.suggestion }) : undefined
       return { valid: true, suggestion: suggestionText }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [t]),
     400,
     isSignupMode,
@@ -370,7 +368,6 @@ export default function PlantSwipe() {
       if (!authPassword) return { valid: false, error: t('auth.passwordsDontMatch', { defaultValue: "Passwords do not match" }) }
       if (val !== authPassword) return { valid: false, error: t('auth.passwordsDontMatch', { defaultValue: "Passwords do not match" }) }
       return { valid: true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [authPassword, t]),
     400,
     isSignupMode,

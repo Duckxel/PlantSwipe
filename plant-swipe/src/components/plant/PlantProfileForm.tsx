@@ -349,6 +349,7 @@ const CompanionSelector: React.FC<{
       searchPlants()
       setSelectedIds(new Set())
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const toggleSelect = (id: string) => {

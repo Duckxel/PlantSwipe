@@ -187,7 +187,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
       } catch {}
     }
-  }, [forceSignOut])
+  }, [])
 
   // Immediately flag as banned if a cached profile shows a ban
   React.useEffect(() => {

@@ -178,6 +178,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
       setImagesOffset(0)
       setSelectedImageIndex(null)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, userId])
 
   // Scroll to bottom when messages load
@@ -314,6 +315,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
         clearTimeout(searchDebounceRef.current)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messageSearchQuery, userId])
 
   // Load user images
@@ -352,6 +354,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
       setImagesOffset(0)
       loadUserImages(true)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, imagesSentOnly, userId])
 
   const handleSelectConversation = (conv: AdminConversation) => {
@@ -400,6 +403,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
       const other = getOtherParticipant(conv)
       return other.name?.toLowerCase().includes(q)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversations, searchQuery, userId])
 
   // Format relative time

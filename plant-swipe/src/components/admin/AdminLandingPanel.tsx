@@ -475,6 +475,7 @@ const ImportPlantModal: React.FC<{
     if (open) {
       searchPlants(search)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, searchPlants])
 
   const handleSearch = (e: React.FormEvent) => {
@@ -3795,6 +3796,7 @@ const ShowcaseTab: React.FC<{
     if (localConfig && localConfig.plants_count !== localConfig.plant_cards.length) {
       setLocalConfig(prev => prev ? { ...prev, plants_count: prev.plant_cards.length } : null)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localConfig?.plant_cards.length])
 
   // Generate default calendar data (last 30 days)

@@ -227,6 +227,7 @@ export const ProAdviceSection: React.FC<ProAdviceSectionProps> = ({ plantId, pla
         })
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedAdvice?.id, currentLanguage])
 
   const normalizeRoles = React.useCallback((roles?: string[] | null): UserRole[] => {
