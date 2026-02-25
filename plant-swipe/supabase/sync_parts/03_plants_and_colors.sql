@@ -303,10 +303,232 @@ create unique index if not exists plants_name_unique on public.plants (lower(nam
 drop index if exists plants_scientific_name_unique;
 alter table if exists public.plants drop constraint if exists plants_scientific_name_unique;
 
+-- ========== Phase 0: Purge zombie columns by recreating the table ==========
+-- PostgreSQL DROP COLUMN only marks columns as invisible ("attisdropped") in
+-- pg_attribute. These zombies permanently count toward the 1600-column limit
+-- and survive table rewrites and VACUUM FULL. The ONLY way to remove them is
+-- to recreate the table from scratch.
+--
+-- Strategy: LIKE ... INCLUDING DEFAULTS copies only visible columns (no zombies),
+-- then we swap tables and rebuild all dependent objects.
+do $purge_zombies$ declare
+  zombie_count integer;
+  fk record;
+begin
+  if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='plants') then
+    return;
+  end if;
+
+  select count(*) into zombie_count
+    from pg_attribute
+    where attrelid = 'public.plants'::regclass and attnum > 0 and attisdropped;
+
+  if zombie_count < 50 then
+    return; -- few enough zombies, no rebuild needed
+  end if;
+
+  -- 1. Create clean copy (visible columns only, with defaults but no check constraints)
+  create table public.plants_clean (like public.plants including defaults);
+  insert into public.plants_clean select * from public.plants;
+
+  -- 2. Drop all FK constraints pointing to plants (they block DROP TABLE)
+  for fk in
+    select tc.constraint_name, tc.table_name
+    from information_schema.table_constraints tc
+    join information_schema.constraint_column_usage ccu
+      on tc.constraint_name = ccu.constraint_name and tc.table_schema = ccu.table_schema
+    where tc.constraint_type = 'FOREIGN KEY'
+      and ccu.table_schema = 'public' and ccu.table_name = 'plants'
+  loop
+    execute format('alter table public.%I drop constraint if exists %I', fk.table_name, fk.constraint_name);
+  end loop;
+
+  -- 3. Drop old table (indexes, check constraints, policies go with it)
+  drop table public.plants;
+
+  -- 4. Rename clean table
+  alter table public.plants_clean rename to plants;
+
+  -- 5. Recreate primary key and indexes
+  alter table public.plants add primary key (id);
+  create unique index if not exists plants_name_unique on public.plants (lower(name));
+
+  -- 6. Recreate FK constraints from dependent tables
+  alter table public.garden_inventory      add constraint garden_inventory_plant_id_fkey      foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.garden_plants         add constraint garden_plants_plant_id_fkey         foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.garden_transactions   add constraint garden_transactions_plant_id_fkey   foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_colors          add constraint plant_colors_plant_id_fkey          foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_contributors    add constraint plant_contributors_plant_id_fkey    foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_images          add constraint plant_images_plant_id_fkey          foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_infusion_mixes  add constraint plant_infusion_mixes_plant_id_fkey  foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_pro_advices     add constraint plant_pro_advices_plant_id_fkey     foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_recipes         add constraint plant_recipes_plant_id_fkey         foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_reports         add constraint plant_reports_plant_id_fkey         foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_scans           add constraint plant_scans_matched_plant_id_fkey   foreign key (matched_plant_id) references public.plants(id) on delete set null;
+  alter table public.plant_sources         add constraint plant_sources_plant_id_fkey         foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_stocks          add constraint plant_stocks_plant_id_fkey          foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_translations    add constraint plant_translations_plant_id_fkey    foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_watering_schedules add constraint plant_watering_schedules_plant_id_fkey foreign key (plant_id) references public.plants(id) on delete cascade;
+
+  -- 7. Enable RLS and recreate policies (sync Phase 3 will finalize these)
+  alter table public.plants enable row level security;
+  create policy plants_select_all on public.plants for select to authenticated, anon using (true);
+  create policy plants_insert on public.plants for insert to authenticated with check (true);
+  create policy plants_update on public.plants for update to authenticated using (true) with check (true);
+  create policy plants_delete on public.plants for delete to authenticated using (true);
+
+end $purge_zombies$;
+
+-- ========== Phase 0.5: Rename old columns to new names (avoids add+copy+drop) ==========
+-- For same-type renames this is a zero-cost metadata-only change that keeps column count stable.
+do $rename_cols$ declare
+  renames constant text[][] := array[
+    -- array['old_name', 'new_name']
+    array['scientific_name', 'scientific_name_species'],
+    array['spiked', 'thorny'],
+    array['scent', 'fragrance'],
+    array['tutoring', 'staking'],
+    array['companions', 'companion_plants'],
+    array['comestible_part', 'edible_part'],
+    array['habitat', 'climate'],
+    array['composition', 'landscaping'],
+    array['soil', 'substrate'],
+    array['mulching', 'mulch_type'],
+    array['sow_type', 'sowing_method'],
+    array['polenizer', 'pollinators_attracted']
+  ];
+  r record;
+begin
+  if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'plants') then
+    return;
+  end if;
+  for i in 1..array_length(renames, 1) loop
+    if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name = renames[i][1])
+       and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name = renames[i][2])
+    then
+      -- Drop check constraints on the old column before renaming (they block new values)
+      for r in (
+        select c.conname from pg_constraint c
+        join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid
+        where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = renames[i][1]
+      ) loop
+        execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+      end loop;
+      execute format('alter table public.plants rename column %I to %I', renames[i][1], renames[i][2]);
+    end if;
+  end loop;
+end $rename_cols$;
+
+-- For text→text[] type-change renames, rename first then alter type in Phase 2.
+-- plant_type→encyclopedia_category, promotion_month→featured_month, level_sun→sunlight, maintenance_level→care_level
+do $rename_and_retype$ declare
+  r record;
+begin
+  if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='plants') then
+    return;
+  end if;
+
+  -- plant_type (text) → encyclopedia_category (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='plant_type')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='encyclopedia_category')
+  then
+    update public.plants set plant_type = case
+      when plant_type = 'tree' then 'tree'
+      when plant_type = 'shrub' then 'shrub'
+      when plant_type = 'bamboo' then 'bamboo'
+      when plant_type = 'cactus' then 'cactus_succulent'
+      when plant_type = 'succulent' then 'cactus_succulent'
+      when plant_type = 'flower' then 'perennial_plant'
+      when plant_type = 'plant' then 'herbaceous'
+      else plant_type
+    end where plant_type is not null;
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'plant_type') loop
+      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+    end loop;
+    alter table public.plants rename column plant_type to encyclopedia_category;
+    alter table public.plants alter column encyclopedia_category type text[]
+      using case when encyclopedia_category is not null and trim(encyclopedia_category::text) <> '' then array[encyclopedia_category::text] else '{}'::text[] end;
+    alter table public.plants alter column encyclopedia_category set default '{}'::text[];
+    begin alter table public.plants alter column encyclopedia_category set not null; exception when others then null; end;
+  end if;
+
+  -- promotion_month (text) → featured_month (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='promotion_month')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='featured_month')
+  then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'promotion_month') loop
+      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+    end loop;
+    alter table public.plants rename column promotion_month to featured_month;
+    alter table public.plants alter column featured_month type text[]
+      using case when featured_month is not null and trim(featured_month::text) <> '' then array[featured_month::text] else '{}'::text[] end;
+    alter table public.plants alter column featured_month set default '{}'::text[];
+    begin alter table public.plants alter column featured_month set not null; exception when others then null; end;
+  end if;
+
+  -- level_sun (text) → sunlight (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='level_sun')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='sunlight')
+  then
+    update public.plants set level_sun = case
+      when level_sun = 'low light' then 'low_light'
+      when level_sun = 'shade' then 'deep_shade'
+      when level_sun = 'partial sun' then 'partial_sun'
+      when level_sun = 'full sun' then 'full_sun'
+      else level_sun
+    end where level_sun is not null;
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'level_sun') loop
+      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+    end loop;
+    alter table public.plants rename column level_sun to sunlight;
+    alter table public.plants alter column sunlight type text[]
+      using case when sunlight is not null and trim(sunlight::text) <> '' then array[sunlight::text] else '{}'::text[] end;
+    alter table public.plants alter column sunlight set default '{}'::text[];
+    begin alter table public.plants alter column sunlight set not null; exception when others then null; end;
+  end if;
+
+  -- maintenance_level (text) → care_level (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='maintenance_level')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='care_level')
+  then
+    update public.plants set maintenance_level = case
+      when maintenance_level in ('none','low') then 'easy'
+      when maintenance_level = 'moderate' then 'moderate'
+      when maintenance_level = 'heavy' then 'complex'
+      else maintenance_level
+    end where maintenance_level is not null;
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'maintenance_level') loop
+      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+    end loop;
+    alter table public.plants rename column maintenance_level to care_level;
+    alter table public.plants alter column care_level type text[]
+      using case when care_level is not null and trim(care_level::text) <> '' then array[care_level::text] else '{}'::text[] end;
+    alter table public.plants alter column care_level set default '{}'::text[];
+    begin alter table public.plants alter column care_level set not null; exception when others then null; end;
+  end if;
+
+  -- foliage_persistance (text) → foliage_persistence (text[])
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistance')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='foliage_persistence')
+  then
+    update public.plants set foliage_persistance = case
+      when foliage_persistance = 'semi-evergreen' then 'semi_evergreen'
+      else foliage_persistance
+    end where foliage_persistance is not null;
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'foliage_persistance') loop
+      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+    end loop;
+    alter table public.plants rename column foliage_persistance to foliage_persistence;
+    alter table public.plants alter column foliage_persistence type text[]
+      using case when foliage_persistence is not null and trim(foliage_persistence::text) <> '' then array[foliage_persistence::text] else '{}'::text[] end;
+    alter table public.plants alter column foliage_persistence set default '{}'::text[];
+    begin alter table public.plants alter column foliage_persistence set not null; exception when others then null; end;
+  end if;
+end $rename_and_retype$;
+
 -- ========== Phase 1: Add new columns for upgrades from older schema ==========
 do $add_plants_cols$
 declare
-  col_def record;
   col_defs text[][] := array[
     -- Section 1: Base
     array['scientific_name_species', 'text'],
@@ -685,6 +907,73 @@ begin
   exception when others then null;
   end;
 
+  -- Value-map renamed columns (needed when Phase 0.5 renamed old→new but values are still old)
+  begin
+    update public.plants set edible_part = array_replace(edible_part, 'root', 'rhizome')
+      where edible_part is not null and array_length(edible_part, 1) > 0
+      and 'root' = any(edible_part);
+  exception when others then null;
+  end;
+
+  begin
+    update public.plants set climate = (
+      select coalesce(array_agg(case
+        when v = 'tropical' then 'tropical_humid'
+        when v = 'temperate' then 'temperate_continental'
+        when v = 'arid' then 'tropical_dry'
+        when v = 'mediterranean' then 'mediterranean'
+        when v = 'mountain' then 'montane'
+        when v = 'coastal' then 'windswept_coastal'
+        when v = 'oceanic' then 'oceanic'
+        else v
+      end), '{}'::text[])
+      from unnest(climate) as v
+      where v not in ('aquatic','semi-aquatic','wetland','grassland','forest','urban')
+    )
+    where climate is not null and array_length(climate, 1) > 0
+      and climate && array['tropical','temperate','arid','mountain','coastal'];
+  exception when others then null;
+  end;
+
+  begin
+    update public.plants set landscaping = (
+      select coalesce(array_agg(case
+        when v = 'ground cover' then 'ground_cover'
+        else v
+      end), '{}'::text[])
+      from unnest(landscaping) as v
+    )
+    where landscaping is not null and array_length(landscaping, 1) > 0
+      and landscaping && array['ground cover'];
+  exception when others then null;
+  end;
+
+  begin
+    update public.plants set sowing_method = (
+      select coalesce(array_agg(case
+        when v = 'direct' then 'open_ground'
+        when v = 'indoor' then 'greenhouse'
+        when v = 'seed tray' then 'tray'
+        when v = 'cell' then 'tray'
+        else v
+      end), '{}'::text[])
+      from unnest(sowing_method) as v
+    )
+    where sowing_method is not null and array_length(sowing_method, 1) > 0
+      and sowing_method && array['direct','indoor','seed tray','cell'];
+  exception when others then null;
+  end;
+
+  -- foliage_persistence value-mapping is handled in Phase 0.5 $rename_and_retype$ block
+
+  -- Backfill mulching_needed from mulch_type (for Phase 0.5 rename of mulching→mulch_type)
+  begin
+    update public.plants set mulching_needed = true
+      where mulch_type is not null and array_length(mulch_type, 1) > 0
+      and (mulching_needed is null or mulching_needed = false);
+  exception when others then null;
+  end;
+
   -- Migrate conservation_status from text to text[] (if still text type)
   if exists (
     select 1 from information_schema.columns
@@ -692,14 +981,6 @@ begin
     and data_type = 'text' and udt_name = 'text'
   ) then
     begin
-      -- Drop all check constraints on conservation_status
-      perform (
-        select string_agg('alter table public.plants drop constraint ' || quote_ident(c.conname), '; ')
-        from pg_constraint c
-        join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid
-        where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'conservation_status'
-      );
-      -- Execute the drops
       declare r record;
       begin
         for r in (
