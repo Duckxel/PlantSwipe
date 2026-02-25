@@ -1775,14 +1775,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const userFriendlyError = parseSupabaseError(e, 'Please check the plant details.')
           setError(userFriendlyError)
           // Enhanced error logging
-          console.error('[savePlant] Error details:', {
-            message: e?.message,
-            code: e?.code,
-            details: e?.details,
-            hint: e?.hint,
-            context: e?.context,
-            fullError: e,
-          })
+          console.error(`[savePlant] Error: ${e?.message || 'Unknown'} | code=${e?.code || '-'} | details=${e?.details || '-'} | hint=${e?.hint || '-'} | context=${e?.context || '-'}`)
+          console.error('[savePlant] Full error object:', e)
       } finally {
         setSaving(false)
       }

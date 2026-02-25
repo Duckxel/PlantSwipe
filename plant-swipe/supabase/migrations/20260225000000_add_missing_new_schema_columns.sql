@@ -136,7 +136,7 @@ begin
   -- poisoning_method
   begin
     alter table public.plants add constraint plants_poisoning_method_check
-      check (poisoning_method <@ array['ingestion','contact','inhalation','sap','thorns']);
+      check (poisoning_method <@ array['touch','ingestion','eye_contact','inhalation','sap_contact']);
   exception when duplicate_object then null;
   end;
 end $add_checks$;
