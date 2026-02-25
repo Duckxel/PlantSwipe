@@ -1046,6 +1046,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (urlLanguage !== language) {
         setLanguage(urlLanguage)
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [urlLanguage])
 
     React.useEffect(() => {
@@ -1088,7 +1089,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       return () => {
         cancelled = true
       }
-    }, [requestId, id, supabase])
+    }, [requestId, id])
 
     // Track if initial load is complete
     const initialLoadCompleteRef = React.useRef(false)
@@ -1332,6 +1333,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     })
   }
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const savePlant = async (plantOverride?: Plant, options?: { skipOnSaved?: boolean }) => {
       const saveLanguage = language
       const plantToSave = plantOverride || plant

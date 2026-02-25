@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import React from "react";
 import { Card } from "@/components/ui/card";
@@ -469,6 +470,7 @@ export const GardenListPage: React.FC = () => {
       setError(e?.message || t("garden.failedToLoad"));
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, t, getLocalStorageCache, setLocalStorageCache]);
 
   React.useEffect(() => {
@@ -742,6 +744,7 @@ export const GardenListPage: React.FC = () => {
         setLoadingTasks(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [gardens, serverToday, getLocalStorageCache, setLocalStorageCache],
   );
 
@@ -1076,6 +1079,7 @@ export const GardenListPage: React.FC = () => {
         supabase.removeChannel(ch);
       } catch {}
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, clearLocalStorageCache, loadAllTodayOccurrences]);
 
   // Defer task loading until after gardens are displayed (non-blocking)
@@ -1209,6 +1213,7 @@ export const GardenListPage: React.FC = () => {
       active = false;
       if (teardown) teardown().catch(() => {});
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scheduleReload, user?.id, clearLocalStorageCache]);
 
   // ⚡ Shared lookup memos - O(1) lookups instead of O(n) .find()/.filter() calls

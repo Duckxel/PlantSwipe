@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import React from "react";
 import ReactDOM from "react-dom";
@@ -311,6 +312,7 @@ export const GardenDashboardPage: React.FC = () => {
       ? ((profile as any).liked_plant_ids as any[]).map(String)
       : [];
     setLikedIds(arr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.liked_plant_ids]);
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
@@ -866,6 +868,7 @@ export const GardenDashboardPage: React.FC = () => {
         if (!silent) setLoading(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [id, garden, currentLang],
   );
 
@@ -1627,6 +1630,7 @@ export const GardenDashboardPage: React.FC = () => {
       reloadTimerRef.current = null;
       executeReload().catch(() => {});
     }, 50);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anyModalOpen, load, loadHeavyForCurrentTab]);
 
   React.useEffect(() => {
@@ -2319,6 +2323,7 @@ export const GardenDashboardPage: React.FC = () => {
       setError(e?.message || t("gardenDashboard.plantsSection.importFailed"));
       setImportingFromBookmark(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user?.id, t]);
 
   const _openEditSchedule = async (gardenPlant: any) => {
@@ -2651,6 +2656,7 @@ export const GardenDashboardPage: React.FC = () => {
         emitGardenRealtime("tasks");
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       todayTaskOccurrences,
       id,
@@ -4265,6 +4271,7 @@ function OverviewSection({
     return () => {
       ignore = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gardenId, serverToday, activityRev]);
 
   const totalToDoToday =

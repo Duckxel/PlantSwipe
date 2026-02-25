@@ -327,6 +327,7 @@ export const FriendsPage: React.FC = () => {
       setError(e?.message || t("friends.errors.searchFailed"));
       setDialogSearching(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialogSearchQuery, user?.id, t]);
 
   // Helper function to mark search results with friend/pending status

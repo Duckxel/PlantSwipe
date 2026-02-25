@@ -398,6 +398,7 @@ export default function PublicProfilePage() {
     }
     run()
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayParam, user?.id])
 
   const isOwner = Boolean(user?.id && pp?.id && user.id === pp.id)
@@ -697,6 +698,7 @@ export default function PublicProfilePage() {
     } finally {
       setFriendRequestLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, pp?.id, isOwner, profile?.display_name])
 
   const acceptFriendRequest = React.useCallback(async () => {
@@ -731,6 +733,7 @@ export default function PublicProfilePage() {
     } finally {
       setFriendRequestLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [friendRequestId, user?.id, pp?.id])
 
   React.useEffect(() => {

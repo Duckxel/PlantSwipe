@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'

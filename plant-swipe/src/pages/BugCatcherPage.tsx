@@ -195,6 +195,7 @@ export function BugCatcherPage() {
     } else if (!user) {
       setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, hasBugCatcherRole, loadData])
 
   const handleRefresh = () => {

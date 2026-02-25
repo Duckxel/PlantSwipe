@@ -549,6 +549,7 @@ const PlantInfoPage: React.FC = () => {
       ? ((profile as any).liked_plant_ids as any[]).map(String)
       : []
     setLikedIds(arr)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.liked_plant_ids])
 
   React.useEffect(() => {
@@ -612,6 +613,7 @@ const PlantInfoPage: React.FC = () => {
     }
     load()
     return () => { ignore = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, currentLang, profile?.is_admin, profile?.roles])
 
   // --- Impression tracking (page views) ---

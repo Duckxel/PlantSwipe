@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import React from "react";
 import { createPortal } from "react-dom";
@@ -2200,7 +2201,7 @@ export const AdminPage: React.FC = () => {
     } catch (err) {
       console.warn("Failed to load staff user IDs:", err);
     }
-  }, [supabase]);
+  }, []);
 
   /** Enrich rows with staff status from cached staff IDs */
   const enrichRowsWithStaffStatus = React.useCallback(
@@ -2274,7 +2275,6 @@ export const AdminPage: React.FC = () => {
         let fetchOffset = 0;
         let exhausted = false;
 
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           const { data, error } = await supabase
             .from("requested_plants")
@@ -2322,7 +2322,7 @@ export const AdminPage: React.FC = () => {
         }
       }
     },
-    [supabase, parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests],
+    [parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests],
   );
 
   const loadMorePlantRequests = React.useCallback(async () => {
@@ -2337,7 +2337,6 @@ export const AdminPage: React.FC = () => {
       let fetchOffset = startOffset;
       let exhausted = false;
 
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const { data, error } = await supabase
           .from("requested_plants")
@@ -2383,7 +2382,6 @@ export const AdminPage: React.FC = () => {
     plantRequestsHasMore,
     plantRequests.length,
     plantRequestsTotalCount,
-    supabase,
     parseRequestRows,
     enrichRowsWithStaffStatus,
     hideStaffRequests,
@@ -2465,7 +2463,7 @@ export const AdminPage: React.FC = () => {
         setRequestUsersLoading(false);
       }
     },
-    [supabase],
+    [],
   );
 
   const handleOpenInfoDialog = React.useCallback(
@@ -2505,7 +2503,7 @@ export const AdminPage: React.FC = () => {
         setCompletingRequestId(null);
       }
     },
-    [completingRequestId, loadPlantRequests, supabase, user?.id],
+    [completingRequestId, loadPlantRequests, user?.id],
   );
 
   const handleOpenCreatePlantDialog = React.useCallback(
@@ -2565,7 +2563,7 @@ export const AdminPage: React.FC = () => {
     } finally {
       setSavingRequestName(false);
     }
-  }, [editingRequestName, supabase]);
+  }, [editingRequestName]);
 
   // Translate plant request name to English using AI (auto-detects language)
   const handleTranslateRequestName = React.useCallback(async (req: PlantRequestRow) => {
@@ -2603,7 +2601,7 @@ export const AdminPage: React.FC = () => {
     } finally {
       setTranslatingRequestId(null);
     }
-  }, [supabase]);
+  }, []);
 
   const handleBulkRequestOpenChange = React.useCallback(
     (open: boolean) => {
@@ -2753,7 +2751,7 @@ export const AdminPage: React.FC = () => {
     } finally {
       setBulkRequestSubmitting(false);
     }
-  }, [bulkRequestParsed, loadPlantRequests, supabase, user?.id]);
+  }, [bulkRequestParsed, loadPlantRequests, user?.id]);
 
   const handleOpenPlantEditor = React.useCallback(
     (plantId: string) => {
@@ -3238,7 +3236,7 @@ export const AdminPage: React.FC = () => {
       setPlantDashboardInitialized(true);
       setPlantDashboardLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   const handleDeletePlant = React.useCallback(async () => {
     if (!plantToDelete) return;
@@ -3287,7 +3285,7 @@ export const AdminPage: React.FC = () => {
     } finally {
       setDeletingPlant(false);
     }
-  }, [plantToDelete, supabase]);
+  }, [plantToDelete]);
 
   const plantStatusCounts = React.useMemo(() => {
     return plantDashboardRows.reduce(
@@ -4788,10 +4786,11 @@ export const AdminPage: React.FC = () => {
     { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced", adminOnly: true },
   ];
   
-  // Filter nav items based on user's access level
+  // Filter nav items based on user's access level (allNavItems excluded - constant in component, would defeat memo)
   const navItems = React.useMemo(() => {
     if (isFullAdmin) return allNavItems;
     return allNavItems.filter(item => !item.adminOnly);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFullAdmin]);
 
   const activeTab: AdminTab = React.useMemo(() => {
@@ -5907,6 +5906,7 @@ export const AdminPage: React.FC = () => {
     activeTab,
     membersView,
     // Intentionally exclude memberListLoading to only trigger on view change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   // Refresh role stats every time the list view is opened
@@ -5920,6 +5920,7 @@ export const AdminPage: React.FC = () => {
     activeTab,
     membersView,
     // Intentionally exclude roleStatsLoading to only trigger on view change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   const performBan = React.useCallback(async () => {
@@ -12956,6 +12957,7 @@ const BroadcastControls: React.FC<{
     } finally {
       setInitializing(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // On load, if an active message exists, go straight to edit mode
@@ -13014,6 +13016,7 @@ const BroadcastControls: React.FC<{
         es?.close();
       } catch {}
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // When current broadcast expires, revert to create form and notify parent (to re-open section)

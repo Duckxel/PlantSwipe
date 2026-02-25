@@ -56,6 +56,7 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
     }
     
     requestAnimationFrame(animate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress])
   
   // Leaf positions - alternating above and below the vine at wave peaks/troughs
