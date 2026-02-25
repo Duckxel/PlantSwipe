@@ -470,7 +470,6 @@ end $rename_and_retype$;
 -- ========== Phase 1: Add new columns for upgrades from older schema ==========
 do $add_plants_cols$
 declare
-  col_def record;
   col_defs text[][] := array[
     -- Section 1: Base
     array['scientific_name_species', 'text'],
@@ -934,14 +933,6 @@ begin
     and data_type = 'text' and udt_name = 'text'
   ) then
     begin
-      -- Drop all check constraints on conservation_status
-      perform (
-        select string_agg('alter table public.plants drop constraint ' || quote_ident(c.conname), '; ')
-        from pg_constraint c
-        join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid
-        where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'conservation_status'
-      );
-      -- Execute the drops
       declare r record;
       begin
         for r in (
