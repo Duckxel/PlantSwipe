@@ -3304,14 +3304,15 @@
       "geoNotSupported": "La géolocalisation n'est pas prise en charge par votre navigateur"
     },
     "gardenType": {
-      "title": "Où se trouve votre jardin ?",
+      "title": "Quel espace de vie pour vos plantes vous intéresse ?",
       "subtitle": "Cela nous aide à vous recommander les bonnes plantes",
-      "outside": "À l'extérieur, dans un jardin",
-      "outsideDesc": "J'ai un jardin ou une cour extérieure",
-      "inside": "À l'intérieur de votre maison",
-      "insideDesc": "Je cultive des plantes en intérieur",
-      "both": "À l'intérieur et à l'extérieur",
-      "bothDesc": "J'ai des plantes partout !"
+      "inside": "Intérieur",
+      "insideDesc": "Plantes d'intérieur et jardinage en maison",
+      "outside": "Extérieur",
+      "outsideDesc": "Plantes de jardin, balcon ou cour",
+      "both": "Les deux",
+      "bothDesc": "Plantes d'intérieur et d'extérieur",
+      "unsure": "Je ne sais pas encore"
     },
     "experience": {
       "title": "Quel est votre niveau en jardinage ?",

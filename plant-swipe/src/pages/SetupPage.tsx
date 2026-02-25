@@ -321,6 +321,7 @@ export function SetupPage() {
   })
   const [saving, setSaving] = React.useState(false)
   const [direction, setDirection] = React.useState<1 | -1>(1)
+  const [gardenTypeChoice, setGardenTypeChoice] = React.useState<GardenType | 'unsure' | null>(null)
 
   // Redirect if no user or already completed setup
   React.useEffect(() => {
@@ -382,8 +383,9 @@ export function SetupPage() {
     applyAccentByKey(key)
   }
 
-  const handleGardenTypeSelect = (type: GardenType) => {
-    setSetupData(prev => ({ ...prev, garden_type: type }))
+  const handleGardenTypeSelect = (choice: GardenType | 'unsure') => {
+    setGardenTypeChoice(choice)
+    setSetupData(prev => ({ ...prev, garden_type: choice === 'unsure' ? 'both' : choice }))
   }
 
   const handleExperienceSelect = (level: ExperienceLevel) => {
@@ -733,27 +735,33 @@ export function SetupPage() {
           >
             <QuestionHeader 
               icon={<Trees className="w-6 h-6 text-white" />}
-              question={t('setup.gardenType.title', 'Where is your garden located?')}
+              question={t('setup.gardenType.title', 'What plant living space interests you?')}
             />
 
             <div className="flex flex-col gap-3">
               <PillOption
-                selected={setupData.garden_type === 'outside'}
-                onClick={() => handleGardenTypeSelect('outside')}
-                label={t('setup.gardenType.outside', 'Outside, in a yard')}
+                selected={gardenTypeChoice === 'inside'}
+                onClick={() => handleGardenTypeSelect('inside')}
+                label={t('setup.gardenType.inside', 'Indoor')}
                 index={0}
               />
               <PillOption
-                selected={setupData.garden_type === 'inside'}
-                onClick={() => handleGardenTypeSelect('inside')}
-                label={t('setup.gardenType.inside', 'Inside your home')}
+                selected={gardenTypeChoice === 'outside'}
+                onClick={() => handleGardenTypeSelect('outside')}
+                label={t('setup.gardenType.outside', 'Outdoor')}
                 index={1}
               />
               <PillOption
-                selected={setupData.garden_type === 'both'}
+                selected={gardenTypeChoice === 'both'}
                 onClick={() => handleGardenTypeSelect('both')}
-                label={t('setup.gardenType.both', 'Both inside and outside')}
+                label={t('setup.gardenType.both', 'Both')}
                 index={2}
+              />
+              <PillOption
+                selected={gardenTypeChoice === 'unsure'}
+                onClick={() => handleGardenTypeSelect('unsure')}
+                label={t('setup.gardenType.unsure', "I don't know yet")}
+                index={3}
               />
             </div>
           </motion.div>

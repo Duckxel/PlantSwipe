@@ -3304,14 +3304,15 @@
       "geoNotSupported": "Geolocation is not supported by your browser"
     },
     "gardenType": {
-      "title": "Where is your garden located?",
+      "title": "What plant living space interests you?",
       "subtitle": "This helps us recommend the right plants for you",
-      "outside": "Outside, in a yard",
-      "outsideDesc": "I have an outdoor garden or yard",
-      "inside": "Inside your home",
-      "insideDesc": "I grow plants indoors",
-      "both": "Both inside and outside",
-      "bothDesc": "I have plants everywhere!"
+      "inside": "Indoor",
+      "insideDesc": "Houseplants and indoor gardening",
+      "outside": "Outdoor",
+      "outsideDesc": "Garden, balcony, or yard plants",
+      "both": "Both",
+      "bothDesc": "Indoor and outdoor plants",
+      "unsure": "I don't know yet"
     },
     "experience": {
       "title": "What's your gardening level?",
