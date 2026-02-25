@@ -1,117 +1,7 @@
-import type { Plant } from "@/types/plant"
-
-const DB_VALUES = ['flowerbed', 'path', 'hedge', 'ground cover', 'pot'] as const
-const UI_VALUES = ['Flowerbed', 'Path', 'Hedge', 'Ground Cover', 'Pot'] as const
-
-export type CompositionDbValue = typeof DB_VALUES[number]
-export type CompositionUiValue = typeof UI_VALUES[number]
-
-const DB_VALUE_SET = new Set<string>(DB_VALUES)
-const UI_VALUE_SET = new Set<string>(UI_VALUES)
-
-const DB_TO_UI_MAP: Record<CompositionDbValue, CompositionUiValue> = {
-  flowerbed: 'Flowerbed',
-  path: 'Path',
-  hedge: 'Hedge',
-  'ground cover': 'Ground Cover',
-  pot: 'Pot',
-}
-
-const UI_TO_DB_MAP = Object.entries(DB_TO_UI_MAP).reduce(
-  (acc, [db, ui]) => {
-    acc[ui as CompositionUiValue] = db as CompositionDbValue
-    return acc
-  },
-  {} as Record<CompositionUiValue, CompositionDbValue>,
-)
-
-const UI_LOWER_TO_DB_MAP = UI_VALUES.reduce((acc, ui) => {
-  acc[ui.toLowerCase()] = UI_TO_DB_MAP[ui]
-  return acc
-}, {} as Record<string, CompositionDbValue>)
-
-function coerceDbValue(raw?: string | null): CompositionDbValue | null {
-  if (!raw) return null
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  const lower = trimmed.toLowerCase()
-  if (DB_VALUE_SET.has(lower)) {
-    return lower as CompositionDbValue
-  }
-  if (UI_VALUE_SET.has(trimmed)) {
-    const mapped = UI_TO_DB_MAP[trimmed as CompositionUiValue]
-    return mapped ?? null
-  }
-  return UI_LOWER_TO_DB_MAP[lower] || null
-}
-
-export function normalizeCompositionForDb(values?: string[] | null): CompositionDbValue[] {
-  if (!values?.length) return []
-  const result: CompositionDbValue[] = []
-  for (const raw of values) {
-    const dbValue = coerceDbValue(raw)
-    if (!dbValue) continue
-    if (!result.includes(dbValue)) result.push(dbValue)
-  }
-  return result
-}
-
-export function expandCompositionFromDb(values?: string[] | null): CompositionUiValue[] {
-  if (!values?.length) return []
-  const result: CompositionUiValue[] = []
-  for (const raw of values) {
-    // Ensure raw is a string before calling trim() - AI might return objects
-    if (typeof raw !== 'string') continue
-    const trimmed = raw.trim().toLowerCase()
-    if (!trimmed) continue
-    const uiValue = DB_TO_UI_MAP[trimmed as CompositionDbValue]
-    if (uiValue && !result.includes(uiValue)) {
-      result.push(uiValue)
-    }
-  }
-  return result
-}
-
-const FOLIAGE_DB_VALUES = ['deciduous', 'evergreen', 'semi-evergreen', 'marcescent'] as const
-type FoliageDbValue = typeof FOLIAGE_DB_VALUES[number]
-type FoliageUiValue = NonNullable<NonNullable<Plant["identity"]>["foliagePersistance"]>
-const FOLIAGE_DB_SET = new Set<string>(FOLIAGE_DB_VALUES)
-
-const FOLIAGE_DB_TO_UI: Record<FoliageDbValue, FoliageUiValue> = {
-  deciduous: 'Deciduous',
-  evergreen: 'Evergreen',
-  'semi-evergreen': 'Semi-Evergreen',
-  marcescent: 'Marcescent',
-}
-
-const FOLIAGE_UI_TO_DB = Object.entries(FOLIAGE_DB_TO_UI).reduce(
-  (acc, [db, ui]) => {
-    acc[ui.toLowerCase()] = db as FoliageDbValue
-    return acc
-  },
-  {} as Record<string, FoliageDbValue>,
-)
-
-function coerceFoliageDbValue(raw?: string | null): FoliageDbValue | null {
-  if (!raw) return null
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  const lower = trimmed.toLowerCase()
-  if (FOLIAGE_DB_SET.has(lower)) {
-    return lower as FoliageDbValue
-  }
-  return FOLIAGE_UI_TO_DB[lower] || null
-}
-
-export function normalizeFoliagePersistanceForDb(value?: string | null): FoliageDbValue | null {
-  return coerceFoliageDbValue(value)
-}
-
-export function expandFoliagePersistanceFromDb(value?: string | null): FoliageUiValue | undefined {
-  const dbValue = coerceFoliageDbValue(value)
-  if (!dbValue) return undefined
-  return FOLIAGE_DB_TO_UI[dbValue]
-}
+// ============================================================================
+// Enum tools for plant fields — maps DB values ↔ UI labels
+// Updated for new DB schema (Feb 2026)
+// ============================================================================
 
 type EnumConfig = {
   dbValue: string
@@ -199,44 +89,104 @@ function createEnumTools(configs: readonly EnumConfig[]): EnumTools {
   }
 }
 
-export const plantTypeEnum = createEnumTools([
-  { dbValue: 'plant', uiValue: 'plant', aliases: ['herb', 'grass', 'fern', 'vine', 'bulb', 'perennial', 'annual', 'herbaceous', 'foliage', 'groundcover', 'ground cover', 'climber', 'creeper', 'aquatic', 'tropical', 'tropical plant', 'indoor', 'indoor plant', 'outdoor plant', 'ornamental plant', 'herbaceous plant', 'perennial plant', 'annual plant', 'houseplant', 'house plant', 'vegetable', 'vegetables', 'leafy', 'leafy plant', 'moss', 'mosses', 'lichen', 'lichens', 'epiphyte', 'epiphytes'] },
-  { dbValue: 'flower', uiValue: 'flower', aliases: ['flowering plant', 'flowering', 'blooming', 'blossom', 'flowers', 'ornamental flower', 'wildflower', 'wild flower'] },
-  { dbValue: 'bamboo', uiValue: 'bamboo', aliases: ['bamboos', 'bamboo plant'] },
-  { dbValue: 'shrub', uiValue: 'shrub', aliases: ['bush', 'bushes', 'shrubs', 'subshrub', 'sub-shrub', 'woody shrub', 'flowering shrub'] },
-  { dbValue: 'tree', uiValue: 'tree', aliases: ['trees', 'palm', 'palms', 'conifer', 'conifers', 'evergreen', 'deciduous', 'evergreen tree', 'deciduous tree', 'fruit tree', 'flowering tree', 'shade tree', 'ornamental tree'] },
-  { dbValue: 'cactus', uiValue: 'cactus', aliases: ['cacti', 'cactuses', 'desert plant', 'desert cactus'] },
-  { dbValue: 'succulent', uiValue: 'succulent', aliases: ['succulents', 'succulent plant', 'fat plant', 'fat plants'] },
+// -- Section 1: Base ----------------------------------------------------------
+
+export const encyclopediaCategoryEnum = createEnumTools([
+  { dbValue: 'tree', uiValue: 'Tree', aliases: ['trees'] },
+  { dbValue: 'shrub', uiValue: 'Shrub', aliases: ['shrubs', 'bush', 'bushes'] },
+  { dbValue: 'small_shrub', uiValue: 'Small Shrub', aliases: ['subshrub', 'sub-shrub'] },
+  { dbValue: 'fruit_tree', uiValue: 'Fruit Tree', aliases: ['fruit trees'] },
+  { dbValue: 'bamboo', uiValue: 'Bamboo', aliases: ['bamboos'] },
+  { dbValue: 'cactus_succulent', uiValue: 'Cactus & Succulent', aliases: ['cactus', 'succulent', 'cacti', 'succulents'] },
+  { dbValue: 'herbaceous', uiValue: 'Herbaceous', aliases: ['herb', 'herbs', 'herbaceous plant'] },
+  { dbValue: 'palm', uiValue: 'Palm', aliases: ['palms', 'palm tree'] },
+  { dbValue: 'fruit_plant', uiValue: 'Fruit Plant', aliases: ['fruit plants'] },
+  { dbValue: 'aromatic_plant', uiValue: 'Aromatic Plant', aliases: ['aromatic', 'aromatics'] },
+  { dbValue: 'medicinal_plant', uiValue: 'Medicinal Plant', aliases: ['medicinal'] },
+  { dbValue: 'climbing_plant', uiValue: 'Climbing Plant', aliases: ['climber', 'climbing', 'vine', 'vines'] },
+  { dbValue: 'vegetable_plant', uiValue: 'Vegetable Plant', aliases: ['vegetable', 'vegetables'] },
+  { dbValue: 'perennial_plant', uiValue: 'Perennial Plant', aliases: ['perennial', 'flower', 'flowering plant'] },
+  { dbValue: 'bulb_plant', uiValue: 'Bulb Plant', aliases: ['bulb', 'bulbs'] },
+  { dbValue: 'rhizome_plant', uiValue: 'Rhizome Plant', aliases: ['rhizome'] },
+  { dbValue: 'indoor_plant', uiValue: 'Indoor Plant', aliases: ['houseplant', 'indoor', 'house plant'] },
+  { dbValue: 'fern', uiValue: 'Fern', aliases: ['ferns'] },
+  { dbValue: 'moss_lichen', uiValue: 'Moss & Lichen', aliases: ['moss', 'lichen', 'mosses'] },
+  { dbValue: 'aquatic_semi_aquatic', uiValue: 'Aquatic / Semi-Aquatic', aliases: ['aquatic', 'semi-aquatic', 'water plant'] },
 ])
+
+// -- Section 2: Identity ------------------------------------------------------
 
 export const utilityEnum = createEnumTools([
-  { dbValue: 'comestible', uiValue: 'comestible', aliases: ['edible'] },
-  { dbValue: 'ornemental', uiValue: 'ornemental', aliases: ['ornamental'] },
-  { dbValue: 'produce_fruit', uiValue: 'produce_fruit', aliases: ['produce fruit', 'fruit'] },
-  { dbValue: 'aromatic', uiValue: 'aromatic' },
-  { dbValue: 'medicinal', uiValue: 'medicinal' },
-  { dbValue: 'odorous', uiValue: 'odorous' },
-  { dbValue: 'climbing', uiValue: 'climbing' },
-  { dbValue: 'cereal', uiValue: 'cereal' },
-  { dbValue: 'spice', uiValue: 'spice' },
+  { dbValue: 'edible', uiValue: 'Edible', aliases: ['comestible', 'food'] },
+  { dbValue: 'ornamental', uiValue: 'Ornamental', aliases: ['ornemental', 'decorative'] },
+  { dbValue: 'aromatic', uiValue: 'Aromatic' },
+  { dbValue: 'medicinal', uiValue: 'Medicinal' },
+  { dbValue: 'fragrant', uiValue: 'Fragrant', aliases: ['odorous', 'scented'] },
+  { dbValue: 'cereal', uiValue: 'Cereal', aliases: ['grain'] },
+  { dbValue: 'spice', uiValue: 'Spice', aliases: ['spices'] },
 ])
 
-export const comestiblePartEnum = createEnumTools([
-  { dbValue: 'flower', uiValue: 'flower', aliases: ['flowers'] },
-  { dbValue: 'fruit', uiValue: 'fruit', aliases: ['fruits'] },
-  { dbValue: 'seed', uiValue: 'seed', aliases: ['seeds'] },
-  { dbValue: 'leaf', uiValue: 'leaf', aliases: ['leaves'] },
-  { dbValue: 'stem', uiValue: 'stem', aliases: ['stems'] },
-  { dbValue: 'root', uiValue: 'root', aliases: ['roots'] },
-  { dbValue: 'bulb', uiValue: 'bulb', aliases: ['bulbs'] },
-  { dbValue: 'bark', uiValue: 'bark' },
-  { dbValue: 'wood', uiValue: 'wood' },
+export const ediblePartEnum = createEnumTools([
+  { dbValue: 'flower', uiValue: 'Flower', aliases: ['flowers'] },
+  { dbValue: 'fruit', uiValue: 'Fruit', aliases: ['fruits'] },
+  { dbValue: 'seed', uiValue: 'Seed', aliases: ['seeds'] },
+  { dbValue: 'leaf', uiValue: 'Leaf', aliases: ['leaves'] },
+  { dbValue: 'stem', uiValue: 'Stem', aliases: ['stems'] },
+  { dbValue: 'bulb', uiValue: 'Bulb', aliases: ['bulbs'] },
+  { dbValue: 'rhizome', uiValue: 'Rhizome', aliases: ['rhizomes', 'root', 'roots'] },
+  { dbValue: 'bark', uiValue: 'Bark' },
+  { dbValue: 'wood', uiValue: 'Wood' },
 ])
 
-export const fruitTypeEnum = createEnumTools([
-  { dbValue: 'nut', uiValue: 'nut', aliases: ['nuts'] },
-  { dbValue: 'seed', uiValue: 'seed', aliases: ['seeds'] },
-  { dbValue: 'stone', uiValue: 'stone', aliases: ['drupe'] },
+export const toxicityEnum = createEnumTools([
+  { dbValue: 'non_toxic', uiValue: 'Non-Toxic', aliases: ['non-toxic', 'nontoxic', 'safe'] },
+  { dbValue: 'slightly_toxic', uiValue: 'Slightly Toxic', aliases: ['midly irritating', 'mildly irritating', 'mild'] },
+  { dbValue: 'very_toxic', uiValue: 'Very Toxic', aliases: ['highly toxic', 'toxic'] },
+  { dbValue: 'deadly', uiValue: 'Deadly', aliases: ['lethally toxic', 'lethal', 'fatal'] },
+  { dbValue: 'undetermined', uiValue: 'Undetermined', aliases: ['unknown', 'not determined'] },
+])
+
+export const poisoningMethodEnum = createEnumTools([
+  { dbValue: 'touch', uiValue: 'Touch', aliases: ['contact', 'skin contact'] },
+  { dbValue: 'ingestion', uiValue: 'Ingestion', aliases: ['eating', 'swallowing'] },
+  { dbValue: 'eye_contact', uiValue: 'Eye Contact', aliases: ['eyes'] },
+  { dbValue: 'inhalation', uiValue: 'Inhalation', aliases: ['breathing', 'inhale'] },
+  { dbValue: 'sap_contact', uiValue: 'Sap Contact', aliases: ['sap'] },
+])
+
+export const lifeCycleEnum = createEnumTools([
+  { dbValue: 'annual', uiValue: 'Annual', aliases: ['annuals'] },
+  { dbValue: 'biennial', uiValue: 'Biennial', aliases: ['biennials'] },
+  { dbValue: 'perennial', uiValue: 'Perennial', aliases: ['perennials', 'perenials'] },
+  { dbValue: 'succulent_perennial', uiValue: 'Succulent Perennial' },
+  { dbValue: 'monocarpic', uiValue: 'Monocarpic' },
+  { dbValue: 'short_cycle', uiValue: 'Short Cycle', aliases: ['fast growing'] },
+  { dbValue: 'ephemeral', uiValue: 'Ephemeral', aliases: ['ephemerals'] },
+])
+
+export const averageLifespanEnum = createEnumTools([
+  { dbValue: 'less_than_1_year', uiValue: 'Less than 1 year', aliases: ['< 1 year'] },
+  { dbValue: '2_years', uiValue: '2 years' },
+  { dbValue: '3_to_10_years', uiValue: '3–10 years', aliases: ['3 to 10 years'] },
+  { dbValue: '10_to_50_years', uiValue: '10–50 years', aliases: ['10 to 50 years'] },
+  { dbValue: 'over_50_years', uiValue: '50+ years', aliases: ['over 50 years'] },
+])
+
+export const foliagePersistenceEnum = createEnumTools([
+  { dbValue: 'deciduous', uiValue: 'Deciduous' },
+  { dbValue: 'evergreen', uiValue: 'Evergreen' },
+  { dbValue: 'semi_evergreen', uiValue: 'Semi-Evergreen', aliases: ['semi-evergreen', 'semievergreen'] },
+  { dbValue: 'marcescent', uiValue: 'Marcescent' },
+  { dbValue: 'winter_dormant', uiValue: 'Winter Dormant', aliases: ['dormant in winter'] },
+  { dbValue: 'dry_season_deciduous', uiValue: 'Dry Season Deciduous' },
+])
+
+export const livingSpaceEnum = createEnumTools([
+  { dbValue: 'indoor', uiValue: 'Indoor', aliases: ['indoors'] },
+  { dbValue: 'outdoor', uiValue: 'Outdoor', aliases: ['outdoors'] },
+  { dbValue: 'both', uiValue: 'Both', aliases: ['indoor/outdoor'] },
+  { dbValue: 'terrarium', uiValue: 'Terrarium' },
+  { dbValue: 'greenhouse', uiValue: 'Greenhouse', aliases: ['glasshouse'] },
 ])
 
 export const seasonEnum = createEnumTools([
@@ -246,202 +196,188 @@ export const seasonEnum = createEnumTools([
   { dbValue: 'winter', uiValue: 'Winter', aliases: ['win'] },
 ])
 
-export const lifeCycleEnum = createEnumTools([
-  { dbValue: 'annual', uiValue: 'Annual', aliases: ['annuals'] },
-  { dbValue: 'biennials', uiValue: 'Biennials', aliases: ['biennial', 'biennials'] },
-  { dbValue: 'perenials', uiValue: 'Perenials', aliases: ['perennial', 'perennials', 'perrenial', 'perrenials'] },
-  { dbValue: 'ephemerals', uiValue: 'Ephemerals', aliases: ['ephemeral'] },
-  { dbValue: 'monocarpic', uiValue: 'Monocarpic', aliases: ['monocarp'] },
-  { dbValue: 'polycarpic', uiValue: 'Polycarpic', aliases: ['polycarp'] },
-])
-
-export const livingSpaceEnum = createEnumTools([
-  { dbValue: 'indoor', uiValue: 'Indoor', aliases: ['indoors'] },
-  { dbValue: 'outdoor', uiValue: 'Outdoor', aliases: ['outdoors'] },
-  { dbValue: 'both', uiValue: 'Both' },
-])
-
-export const maintenanceLevelEnum = createEnumTools([
-  { dbValue: 'none', uiValue: 'None', aliases: ['no', 'minimal'] },
-  { dbValue: 'low', uiValue: 'Low', aliases: ['light'] },
-  { dbValue: 'moderate', uiValue: 'Moderate', aliases: ['medium'] },
-  { dbValue: 'heavy', uiValue: 'Heavy', aliases: ['high'] },
-])
-
-export const toxicityEnum = createEnumTools([
-  { dbValue: 'non-toxic', uiValue: 'Non-Toxic', aliases: ['non toxic', 'safe'] },
-  { dbValue: 'midly irritating', uiValue: 'Midly Irritating', aliases: ['mildly irritating'] },
-  { dbValue: 'highly toxic', uiValue: 'Highly Toxic' },
-  { dbValue: 'lethally toxic', uiValue: 'Lethally Toxic', aliases: ['lethal'] },
-])
-
-export const habitatEnum = createEnumTools([
-  { dbValue: 'aquatic', uiValue: 'Aquatic' },
-  { dbValue: 'semi-aquatic', uiValue: 'Semi-Aquatic', aliases: ['semiaquatic'] },
-  { dbValue: 'wetland', uiValue: 'Wetland' },
-  { dbValue: 'tropical', uiValue: 'Tropical' },
-  { dbValue: 'temperate', uiValue: 'Temperate' },
-  { dbValue: 'arid', uiValue: 'Arid', aliases: ['desert'] },
+export const climateEnum = createEnumTools([
+  { dbValue: 'polar', uiValue: 'Polar' },
+  { dbValue: 'montane', uiValue: 'Montane', aliases: ['mountain'] },
+  { dbValue: 'oceanic', uiValue: 'Oceanic' },
+  { dbValue: 'degraded_oceanic', uiValue: 'Degraded Oceanic' },
+  { dbValue: 'temperate_continental', uiValue: 'Temperate Continental', aliases: ['temperate'] },
   { dbValue: 'mediterranean', uiValue: 'Mediterranean' },
-  { dbValue: 'mountain', uiValue: 'Mountain' },
-  { dbValue: 'grassland', uiValue: 'Grassland' },
-  { dbValue: 'forest', uiValue: 'Forest' },
-  { dbValue: 'coastal', uiValue: 'Coastal' },
-  { dbValue: 'urban', uiValue: 'Urban' },
+  { dbValue: 'tropical_dry', uiValue: 'Tropical Dry', aliases: ['arid'] },
+  { dbValue: 'tropical_humid', uiValue: 'Tropical Humid', aliases: ['tropical'] },
+  { dbValue: 'tropical_volcanic', uiValue: 'Tropical Volcanic' },
+  { dbValue: 'tropical_cyclonic', uiValue: 'Tropical Cyclonic' },
+  { dbValue: 'humid_insular', uiValue: 'Humid Insular' },
+  { dbValue: 'subtropical_humid', uiValue: 'Subtropical Humid' },
+  { dbValue: 'equatorial', uiValue: 'Equatorial' },
+  { dbValue: 'windswept_coastal', uiValue: 'Windswept Coastal', aliases: ['coastal'] },
 ])
 
-export const levelSunEnum = createEnumTools([
-  { dbValue: 'low light', uiValue: 'Low Light', aliases: ['lowlight'] },
-  { dbValue: 'shade', uiValue: 'Shade' },
-  { dbValue: 'partial sun', uiValue: 'Partial Sun', aliases: ['partial shade'] },
-  { dbValue: 'full sun', uiValue: 'Full Sun', aliases: ['fullsun'] },
+// -- Section 3: Care ----------------------------------------------------------
+
+export const careLevelEnum = createEnumTools([
+  { dbValue: 'easy', uiValue: 'Easy', aliases: ['none', 'low', 'minimal', 'beginner'] },
+  { dbValue: 'moderate', uiValue: 'Moderate', aliases: ['medium', 'intermediate'] },
+  { dbValue: 'complex', uiValue: 'Complex', aliases: ['heavy', 'high', 'advanced', 'expert'] },
+])
+
+export const sunlightEnum = createEnumTools([
+  { dbValue: 'full_sun', uiValue: 'Full Sun', aliases: ['fullsun'] },
+  { dbValue: 'partial_sun', uiValue: 'Partial Sun' },
+  { dbValue: 'partial_shade', uiValue: 'Partial Shade', aliases: ['semi-shade'] },
+  { dbValue: 'light_shade', uiValue: 'Light Shade' },
+  { dbValue: 'deep_shade', uiValue: 'Deep Shade', aliases: ['shade', 'full shade'] },
+  { dbValue: 'direct_light', uiValue: 'Direct Light', aliases: ['direct'] },
+  { dbValue: 'bright_indirect_light', uiValue: 'Bright Indirect Light', aliases: ['bright indirect'] },
+  { dbValue: 'medium_light', uiValue: 'Medium Light', aliases: ['low light'] },
+  { dbValue: 'low_light', uiValue: 'Low Light' },
 ])
 
 export const wateringTypeEnum = createEnumTools([
-  { dbValue: 'surface', uiValue: 'surface', aliases: ['surface watering'] },
-  { dbValue: 'buried', uiValue: 'buried' },
-  { dbValue: 'hose', uiValue: 'hose' },
-  { dbValue: 'drop', uiValue: 'drop', aliases: ['drip', 'drip line'] },
-  { dbValue: 'drench', uiValue: 'drench' },
+  { dbValue: 'hose', uiValue: 'Hose', aliases: ['hosepipe'] },
+  { dbValue: 'surface', uiValue: 'Surface', aliases: ['surface watering', 'top watering'] },
+  { dbValue: 'drip', uiValue: 'Drip', aliases: ['drop', 'drip line', 'drip irrigation'] },
+  { dbValue: 'soaking', uiValue: 'Soaking', aliases: ['drench', 'drenching', 'bottom watering'] },
+  { dbValue: 'wick', uiValue: 'Wick', aliases: ['wick watering', 'hoya'] },
 ])
+
+// -- Section 4: Growth --------------------------------------------------------
 
 export const divisionEnum = createEnumTools([
-  { dbValue: 'seed', uiValue: 'Seed' },
-  { dbValue: 'cutting', uiValue: 'Cutting' },
-  { dbValue: 'division', uiValue: 'Division' },
-  { dbValue: 'layering', uiValue: 'Layering' },
-  { dbValue: 'grafting', uiValue: 'Grafting' },
-  { dbValue: 'tissue separation', uiValue: 'Tissue Separation', aliases: ['tissue culture'] },
-  { dbValue: 'bulb separation', uiValue: 'Bulb separation', aliases: ['bulb division'] },
+  { dbValue: 'seed', uiValue: 'Seed', aliases: ['seeds', 'sowing'] },
+  { dbValue: 'clump_division', uiValue: 'Clump Division', aliases: ['division', 'tissue separation'] },
+  { dbValue: 'bulb_division', uiValue: 'Bulb Division', aliases: ['bulb separation'] },
+  { dbValue: 'rhizome_division', uiValue: 'Rhizome Division' },
+  { dbValue: 'cutting', uiValue: 'Cutting', aliases: ['cuttings', 'stem cutting'] },
+  { dbValue: 'layering', uiValue: 'Layering', aliases: ['air layering'] },
+  { dbValue: 'stolon', uiValue: 'Stolon', aliases: ['stolons', 'runner', 'runners'] },
+  { dbValue: 'sucker', uiValue: 'Sucker', aliases: ['suckers', 'offshoot'] },
+  { dbValue: 'grafting', uiValue: 'Grafting', aliases: ['graft'] },
+  { dbValue: 'spore', uiValue: 'Spore', aliases: ['spores'] },
 ])
 
-export const soilEnum = createEnumTools([
-  { dbValue: 'vermiculite', uiValue: 'Vermiculite' },
-  { dbValue: 'perlite', uiValue: 'Perlite' },
-  { dbValue: 'sphagnum moss', uiValue: 'Sphagnum moss', aliases: ['sphagnum'] },
-  { dbValue: 'rock wool', uiValue: 'rock wool', aliases: ['rockwool'] },
-  { dbValue: 'sand', uiValue: 'Sand' },
-  { dbValue: 'gravel', uiValue: 'Gravel' },
-  { dbValue: 'potting soil', uiValue: 'Potting Soil' },
-  { dbValue: 'peat', uiValue: 'Peat' },
-  { dbValue: 'clay pebbles', uiValue: 'Clay pebbles', aliases: ['clay pebbles'] },
-  { dbValue: 'coconut fiber', uiValue: 'coconut fiber', aliases: ['coconut coir'] },
-  { dbValue: 'bark', uiValue: 'Bark' },
-  { dbValue: 'wood chips', uiValue: 'Wood Chips' },
+export const sowingMethodEnum = createEnumTools([
+  { dbValue: 'open_ground', uiValue: 'Open Ground', aliases: ['direct', 'direct sowing'] },
+  { dbValue: 'pot', uiValue: 'Pot', aliases: ['container'] },
+  { dbValue: 'tray', uiValue: 'Tray', aliases: ['seed tray', 'cell', 'plug tray'] },
+  { dbValue: 'greenhouse', uiValue: 'Greenhouse', aliases: ['indoor', 'under cover'] },
+  { dbValue: 'mini_greenhouse', uiValue: 'Mini Greenhouse', aliases: ['propagator'] },
+  { dbValue: 'broadcast', uiValue: 'Broadcast', aliases: ['scatter'] },
+  { dbValue: 'row', uiValue: 'Row', aliases: ['in rows', 'drill'] },
 ])
 
-export const mulchingEnum = createEnumTools([
-  { dbValue: 'wood chips', uiValue: 'Wood Chips' },
-  { dbValue: 'bark', uiValue: 'Bark' },
-  { dbValue: 'green manure', uiValue: 'Green Manure' },
-  { dbValue: 'cocoa bean hulls', uiValue: 'Cocoa Bean Hulls' },
-  { dbValue: 'buckwheat hulls', uiValue: 'Buckwheat Hulls' },
-  { dbValue: 'cereal straw', uiValue: 'Cereal Straw' },
-  { dbValue: 'hemp straw', uiValue: 'Hemp Straw' },
-  { dbValue: 'woven fabric', uiValue: 'Woven Fabric' },
-  { dbValue: 'pozzolana', uiValue: 'Pozzolana' },
-  { dbValue: 'crushed slate', uiValue: 'Crushed Slate' },
-  { dbValue: 'clay pellets', uiValue: 'Clay Pellets' },
-])
-
-export const nutritionNeedEnum = createEnumTools([
-  { dbValue: 'nitrogen', uiValue: 'Nitrogen' },
-  { dbValue: 'phosphorus', uiValue: 'Phosphorus', aliases: ['phosphorous'] },
-  { dbValue: 'potassium', uiValue: 'Potassium' },
-  { dbValue: 'calcium', uiValue: 'Calcium' },
-  { dbValue: 'magnesium', uiValue: 'Magnesium' },
-  { dbValue: 'sulfur', uiValue: 'Sulfur' },
-  { dbValue: 'iron', uiValue: 'Iron' },
-  { dbValue: 'boron', uiValue: 'Boron' },
-  { dbValue: 'manganese', uiValue: 'Manganese' },
-  { dbValue: 'molybene', uiValue: 'Molybene', aliases: ['molybdenum'] },
-  { dbValue: 'chlorine', uiValue: 'Chlorine' },
-  { dbValue: 'copper', uiValue: 'Copper' },
-  { dbValue: 'zinc', uiValue: 'Zinc' },
-  { dbValue: 'nitrate', uiValue: 'Nitrate' },
-  { dbValue: 'phosphate', uiValue: 'Phosphate' },
-])
-
-export const fertilizerEnum = createEnumTools([
-  { dbValue: 'granular fertilizer', uiValue: 'Granular fertilizer' },
-  { dbValue: 'liquid fertilizer', uiValue: 'Liquid Fertilizer' },
-  { dbValue: 'meat flour', uiValue: 'Meat Flour' },
-  { dbValue: 'fish flour', uiValue: 'Fish flour' },
-  { dbValue: 'crushed bones', uiValue: 'Crushed bones' },
-  { dbValue: 'crushed horns', uiValue: 'Crushed Horns' },
-  { dbValue: 'slurry', uiValue: 'Slurry' },
-  { dbValue: 'manure', uiValue: 'Manure' },
-  { dbValue: 'animal excrement', uiValue: 'Animal excrement' },
-  { dbValue: 'sea fertilizer', uiValue: 'Sea Fertilizer' },
-  { dbValue: 'yurals', uiValue: 'Yurals' },
-  { dbValue: 'wine', uiValue: 'Wine' },
-  { dbValue: 'guano', uiValue: 'guano' },
-  { dbValue: 'coffee grounds', uiValue: 'Coffee Grounds' },
-  { dbValue: 'banana peel', uiValue: 'Banana peel' },
-  { dbValue: 'eggshell', uiValue: 'Eggshell' },
-  { dbValue: 'vegetable cooking water', uiValue: 'Vegetable cooking water' },
-  { dbValue: 'urine', uiValue: 'Urine' },
-  { dbValue: 'grass clippings', uiValue: 'Grass Clippings' },
-  { dbValue: 'vegetable waste', uiValue: 'Vegetable Waste' },
-  { dbValue: 'natural mulch', uiValue: 'Natural Mulch' },
-])
-
-export const sowTypeEnum = createEnumTools([
-  { dbValue: 'direct', uiValue: 'Direct' },
-  { dbValue: 'indoor', uiValue: 'Indoor' },
-  { dbValue: 'row', uiValue: 'Row' },
-  { dbValue: 'hill', uiValue: 'Hill' },
-  { dbValue: 'broadcast', uiValue: 'Broadcast' },
-  { dbValue: 'seed tray', uiValue: 'Seed Tray', aliases: ['seed trays', 'seedtray'] },
-  { dbValue: 'cell', uiValue: 'Cell' },
-  { dbValue: 'pot', uiValue: 'Pot' },
-])
-
-export const polenizerEnum = createEnumTools([
-  { dbValue: 'bee', uiValue: 'Bee' },
-  { dbValue: 'wasp', uiValue: 'Wasp' },
-  { dbValue: 'ant', uiValue: 'Ant' },
-  { dbValue: 'butterfly', uiValue: 'Butterfly' },
-  { dbValue: 'bird', uiValue: 'Bird' },
-  { dbValue: 'mosquito', uiValue: 'Mosquito' },
-  { dbValue: 'fly', uiValue: 'Fly' },
-  { dbValue: 'beetle', uiValue: 'Beetle' },
-  { dbValue: 'ladybug', uiValue: 'ladybug', aliases: ['ladybird'] },
-  { dbValue: 'stagbeetle', uiValue: 'Stagbeetle', aliases: ['stag beetle'] },
-  { dbValue: 'cockchafer', uiValue: 'Cockchafer' },
-  { dbValue: 'dungbeetle', uiValue: 'dungbeetle', aliases: ['dung beetle'] },
-  { dbValue: 'weevil', uiValue: 'weevil' },
-])
+// -- Section 6: Ecology -------------------------------------------------------
 
 export const conservationStatusEnum = createEnumTools([
-  { dbValue: 'safe', uiValue: 'Safe' },
-  { dbValue: 'at risk', uiValue: 'At Risk', aliases: ['atrisk'] },
-  { dbValue: 'vulnerable', uiValue: 'Vulnerable' },
-  { dbValue: 'endangered', uiValue: 'Endangered' },
-  { dbValue: 'critically endangered', uiValue: 'Critically Endangered', aliases: ['criticallyendangered'] },
-  { dbValue: 'extinct', uiValue: 'Extinct' },
+  { dbValue: 'least_concern', uiValue: 'Least Concern', aliases: ['safe', 'lc'] },
+  { dbValue: 'near_threatened', uiValue: 'Near Threatened', aliases: ['at risk', 'nt'] },
+  { dbValue: 'vulnerable', uiValue: 'Vulnerable', aliases: ['vu'] },
+  { dbValue: 'endangered', uiValue: 'Endangered', aliases: ['en'] },
+  { dbValue: 'critically_endangered', uiValue: 'Critically Endangered', aliases: ['critically endangered', 'cr'] },
+  { dbValue: 'extinct_in_wild', uiValue: 'Extinct in Wild', aliases: ['ew'] },
+  { dbValue: 'extinct', uiValue: 'Extinct', aliases: ['ex'] },
+  { dbValue: 'data_deficient', uiValue: 'Data Deficient', aliases: ['dd'] },
+  { dbValue: 'not_evaluated', uiValue: 'Not Evaluated', aliases: ['ne'] },
 ])
 
+export const ecologicalToleranceEnum = createEnumTools([
+  { dbValue: 'drought', uiValue: 'Drought', aliases: ['drought tolerant'] },
+  { dbValue: 'scorching_sun', uiValue: 'Scorching Sun', aliases: ['intense sun'] },
+  { dbValue: 'permanent_shade', uiValue: 'Permanent Shade', aliases: ['deep shade'] },
+  { dbValue: 'excess_water', uiValue: 'Excess Water', aliases: ['waterlogging', 'flooding'] },
+  { dbValue: 'frost', uiValue: 'Frost', aliases: ['frost tolerant', 'cold hardy'] },
+  { dbValue: 'heatwave', uiValue: 'Heatwave', aliases: ['heat tolerant'] },
+  { dbValue: 'wind', uiValue: 'Wind', aliases: ['wind tolerant', 'exposed'] },
+])
+
+export const ecologicalImpactEnum = createEnumTools([
+  { dbValue: 'neutral', uiValue: 'Neutral' },
+  { dbValue: 'favorable', uiValue: 'Favorable', aliases: ['positive', 'beneficial'] },
+  { dbValue: 'potentially_invasive', uiValue: 'Potentially Invasive', aliases: ['potentially invasive'] },
+  { dbValue: 'locally_invasive', uiValue: 'Locally Invasive', aliases: ['invasive'] },
+])
+
+// -- Shared -------------------------------------------------------------------
+
 export const timePeriodEnum = createEnumTools([
-  { dbValue: 'week', uiValue: 'week', aliases: ['weekly', 'per week', 'per-week', 'weeks', 'wk', 'wks'] },
-  { dbValue: 'month', uiValue: 'month', aliases: ['monthly', 'per month', 'per-month', 'months', 'mo', 'mos'] },
-  { dbValue: 'year', uiValue: 'year', aliases: ['yearly', 'annual', 'annually', 'per year', 'per-year', 'years', 'yr', 'yrs'] },
+  { dbValue: 'week', uiValue: 'week', aliases: ['weekly', 'per week', 'weeks', 'wk'] },
+  { dbValue: 'month', uiValue: 'month', aliases: ['monthly', 'per month', 'months', 'mo'] },
+  { dbValue: 'year', uiValue: 'year', aliases: ['yearly', 'annual', 'per year', 'years', 'yr'] },
 ])
 
 export const recipeCategoryEnum = createEnumTools([
   { dbValue: 'breakfast_brunch', uiValue: 'Breakfast & Brunch', aliases: ['breakfast', 'brunch'] },
-  { dbValue: 'starters_appetizers', uiValue: 'Starters & Appetizers', aliases: ['starters', 'appetizers', 'appetizer', 'starter'] },
+  { dbValue: 'starters_appetizers', uiValue: 'Starters & Appetizers', aliases: ['starters', 'appetizers'] },
   { dbValue: 'soups_salads', uiValue: 'Soups & Salads', aliases: ['soups', 'salads', 'soup', 'salad'] },
-  { dbValue: 'main_courses', uiValue: 'Main Courses', aliases: ['main course', 'main', 'mains', 'entree', 'entrees'] },
-  { dbValue: 'side_dishes', uiValue: 'Side Dishes', aliases: ['side dish', 'sides', 'side'] },
-  { dbValue: 'desserts', uiValue: 'Desserts', aliases: ['dessert', 'sweet', 'sweets'] },
-  { dbValue: 'drinks', uiValue: 'Drinks', aliases: ['drink', 'beverage', 'beverages'] },
+  { dbValue: 'main_courses', uiValue: 'Main Courses', aliases: ['main course', 'main', 'entree'] },
+  { dbValue: 'side_dishes', uiValue: 'Side Dishes', aliases: ['side dish', 'sides'] },
+  { dbValue: 'desserts', uiValue: 'Desserts', aliases: ['dessert', 'sweet'] },
+  { dbValue: 'drinks', uiValue: 'Drinks', aliases: ['drink', 'beverage'] },
   { dbValue: 'other', uiValue: 'Other' },
 ])
 
 export const recipeTimeEnum = createEnumTools([
-  { dbValue: 'quick', uiValue: 'Quick and Effortless', aliases: ['quick and effortless', 'fast', 'easy', 'quick & effortless'] },
-  { dbValue: '30_plus', uiValue: '30+ minutes Meals', aliases: ['30+ minutes', '30 plus', '30min', '30 minutes', 'medium'] },
-  { dbValue: 'slow_cooking', uiValue: 'Slow Cooking', aliases: ['slow', 'slow cook', 'long'] },
-  { dbValue: 'undefined', uiValue: 'Undefined', aliases: ['unknown', 'n/a', 'na'] },
+  { dbValue: 'quick', uiValue: 'Quick and Effortless', aliases: ['quick and effortless', 'fast', 'easy'] },
+  { dbValue: '30_plus', uiValue: '30+ minutes Meals', aliases: ['30+ minutes', '30 plus', '30min'] },
+  { dbValue: 'slow_cooking', uiValue: 'Slow Cooking', aliases: ['slow', 'slow cook'] },
+  { dbValue: 'undefined', uiValue: 'Undefined', aliases: ['unknown', 'n/a'] },
 ])
+
+// ============================================================================
+// Legacy aliases — old names still imported by existing code
+// ============================================================================
+
+/** @deprecated Use encyclopediaCategoryEnum */
+export const plantTypeEnum = encyclopediaCategoryEnum
+/** @deprecated Use ediblePartEnum */
+export const comestiblePartEnum = ediblePartEnum
+/** @deprecated Use foliagePersistenceEnum */
+export const foliagePersistanceEnum = foliagePersistenceEnum
+/** @deprecated Removed in new schema */
+export const fruitTypeEnum = createEnumTools([
+  { dbValue: 'nut', uiValue: 'nut' },
+  { dbValue: 'seed', uiValue: 'seed' },
+  { dbValue: 'stone', uiValue: 'stone' },
+])
+/** @deprecated Use climateEnum */
+export const habitatEnum = climateEnum
+/** @deprecated Use sunlightEnum */
+export const levelSunEnum = sunlightEnum
+/** @deprecated Use careLevelEnum */
+export const maintenanceLevelEnum = careLevelEnum
+/** @deprecated Use ediblePartEnum */
+export const soilEnum = createEnumTools([]) // substrate is now free-form
+/** @deprecated Use mulchType (no enum, free-form) */
+export const mulchingEnum = createEnumTools([])
+/** @deprecated Removed - now free-form */
+export const nutritionNeedEnum = createEnumTools([])
+/** @deprecated Removed - now free-form */
+export const fertilizerEnum = createEnumTools([])
+/** @deprecated Use sowingMethodEnum */
+export const sowTypeEnum = sowingMethodEnum
+/** @deprecated Replaced by pollinatorsAttracted (free-form) */
+export const polenizerEnum = createEnumTools([])
+
+// Legacy composition helpers — kept for backward compatibility
+export type CompositionDbValue = string
+export type CompositionUiValue = string
+
+export function normalizeCompositionForDb(values?: string[] | null): string[] {
+  if (!values?.length) return []
+  return values.map(v => v.toLowerCase().replace(/\s+/g, '_')).filter(Boolean)
+}
+
+export function expandCompositionFromDb(values?: string[] | null): string[] {
+  if (!values?.length) return []
+  return values
+}
+
+export function normalizeFoliagePersistanceForDb(value?: string | null): string | null {
+  if (!value) return null
+  return foliagePersistenceEnum.toDb(value)
+}
+
+export function expandFoliagePersistanceFromDb(value?: string | null): string | undefined {
+  if (!value) return undefined
+  return foliagePersistenceEnum.toUi(value)
+}
