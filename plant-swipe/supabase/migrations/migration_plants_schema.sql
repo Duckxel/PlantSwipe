@@ -19,80 +19,89 @@
 -- ============================================================================
 
 -- ============================================================================
--- PHASE 0: Drop obsolete columns to stay under PostgreSQL's 1600-column limit
+-- PHASE 0: Purge zombie columns by recreating the table
 -- ============================================================================
--- Drops ALL columns not in the final schema whitelist AND not needed as
--- migration sources. Must run first so subsequent phases can add columns.
+-- PostgreSQL DROP COLUMN only marks columns as invisible ("attisdropped") in
+-- pg_attribute. These zombies permanently count toward the 1600-column limit
+-- and survive table rewrites and VACUUM FULL. The ONLY way to remove them is
+-- to recreate the table from scratch.
+--
+-- Strategy: LIKE ... INCLUDING DEFAULTS copies only visible columns (no zombies),
+-- then we swap tables and rebuild all dependent objects.
 do $phase0$ declare
-  keep_columns constant text[] := array[
-    -- Final schema whitelist
-    'id','name',
-    'scientific_name_species','scientific_name_variety','family','encyclopedia_category','featured_month',
-    'climate','season','utility','edible_part','thorny','toxicity_human','toxicity_pets','poisoning_method',
-    'life_cycle','average_lifespan','foliage_persistence','living_space','landscaping','plant_habit',
-    'multicolor','bicolor',
-    'care_level','sunlight','temperature_max','temperature_min','temperature_ideal',
-    'watering_frequency_warm','watering_frequency_cold','watering_type','hygrometry','misting_frequency',
-    'special_needs','substrate','substrate_mix','mulching_needed','mulch_type','nutrition_need','fertilizer',
-    'sowing_month','flowering_month','fruiting_month','height_cm','wingspan_cm','staking',
-    'division','cultivation_mode','sowing_method','transplanting','pruning','pruning_month',
-    'conservation_status','ecological_status','biotopes','urban_biotopes','ecological_tolerance',
-    'biodiversity_role','pollinators_attracted','birds_attracted','mammals_attracted',
-    'ecological_management','ecological_impact',
-    'infusion','infusion_parts','medicinal','aromatherapy','fragrance','edible_oil',
-    'companion_plants','biotope_plants','beneficial_plants','harmful_plants','varieties','sponsored_shop_ids',
-    'status','admin_commentary','user_notes','created_by','created_time','updated_by','updated_time',
-    -- Old columns preserved as migration sources
-    'scientific_name','plant_type','promotion_month','spiked','scent','tutoring',
-    'companions','comestible_part','habitat','composition','level_sun','maintenance_level',
-    'soil','mulching','sow_type','polenizer','melliferous','be_fertilizer','foliage_persistance'
-  ];
-  rec record;
-  drop_count integer := 0;
+  zombie_count integer;
+  fk record;
 begin
   if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='plants') then
     raise notice '❌ plants table not found — aborting';
     return;
   end if;
-  raise notice '════════════════════════════════════════════════════════';
-  raise notice '🧹 PHASE 0: Drop obsolete columns';
-  raise notice '════════════════════════════════════════════════════════';
-  for rec in
-    select column_name from information_schema.columns
-    where table_schema = 'public' and table_name = 'plants'
-  loop
-    if not (rec.column_name = any(keep_columns)) then
-      execute format('alter table public.plants drop column if exists %I cascade', rec.column_name);
-      drop_count := drop_count + 1;
-    end if;
-  end loop;
-  raise notice '  Dropped % obsolete column(s)', drop_count;
-end $phase0$;
 
--- Force a full table rewrite to physically reclaim dropped-column slots.
--- PostgreSQL DROP COLUMN only marks columns as invisible; they still count
--- toward the 1600-column hard limit. A binary-compatible type change (e.g.
--- text→text) is optimized to a no-op. We use timestamptz→bigint→timestamptz
--- which is NOT binary compatible, guaranteeing a real table rewrite.
-do $force_rewrite$ declare
-  total_attrs integer;
-begin
-  if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='plants') then
+  select count(*) into zombie_count
+    from pg_attribute
+    where attrelid = 'public.plants'::regclass and attnum > 0 and attisdropped;
+
+  raise notice '════════════════════════════════════════════════════════';
+  raise notice '🧹 PHASE 0: Purge % zombie columns by table recreation', zombie_count;
+  raise notice '════════════════════════════════════════════════════════';
+
+  if zombie_count < 50 then
+    raise notice '  Skipped — zombie count below threshold';
     return;
   end if;
-  select count(*) into total_attrs
-    from pg_attribute
-    where attrelid = 'public.plants'::regclass and attnum > 0;
-  if total_attrs > 200 then
-    alter table public.plants alter column created_time
-      type bigint using (extract(epoch from created_time) * 1000000)::bigint;
-    alter table public.plants alter column created_time
-      type timestamptz using to_timestamp(created_time::double precision / 1000000);
-    alter table public.plants alter column created_time set default now();
-    alter table public.plants alter column created_time set not null;
-    raise notice '  Forced table rewrite: purged zombie columns (was % attributes)', total_attrs;
-  end if;
-end $force_rewrite$;
+
+  -- 1. Create clean copy (visible columns only, with defaults but no check constraints)
+  create table public.plants_clean (like public.plants including defaults);
+  insert into public.plants_clean select * from public.plants;
+
+  -- 2. Drop all FK constraints pointing to plants
+  for fk in
+    select tc.constraint_name, tc.table_name
+    from information_schema.table_constraints tc
+    join information_schema.constraint_column_usage ccu
+      on tc.constraint_name = ccu.constraint_name and tc.table_schema = ccu.table_schema
+    where tc.constraint_type = 'FOREIGN KEY'
+      and ccu.table_schema = 'public' and ccu.table_name = 'plants'
+  loop
+    execute format('alter table public.%I drop constraint if exists %I', fk.table_name, fk.constraint_name);
+  end loop;
+
+  -- 3. Drop old table
+  drop table public.plants;
+
+  -- 4. Rename clean table
+  alter table public.plants_clean rename to plants;
+
+  -- 5. Recreate primary key and indexes
+  alter table public.plants add primary key (id);
+  create unique index if not exists plants_name_unique on public.plants (lower(name));
+
+  -- 6. Recreate FK constraints
+  alter table public.garden_inventory      add constraint garden_inventory_plant_id_fkey      foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.garden_plants         add constraint garden_plants_plant_id_fkey         foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.garden_transactions   add constraint garden_transactions_plant_id_fkey   foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_colors          add constraint plant_colors_plant_id_fkey          foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_contributors    add constraint plant_contributors_plant_id_fkey    foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_images          add constraint plant_images_plant_id_fkey          foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_infusion_mixes  add constraint plant_infusion_mixes_plant_id_fkey  foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_pro_advices     add constraint plant_pro_advices_plant_id_fkey     foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_recipes         add constraint plant_recipes_plant_id_fkey         foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_reports         add constraint plant_reports_plant_id_fkey         foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_scans           add constraint plant_scans_matched_plant_id_fkey   foreign key (matched_plant_id) references public.plants(id) on delete set null;
+  alter table public.plant_sources         add constraint plant_sources_plant_id_fkey         foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_stocks          add constraint plant_stocks_plant_id_fkey          foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_translations    add constraint plant_translations_plant_id_fkey    foreign key (plant_id) references public.plants(id) on delete cascade;
+  alter table public.plant_watering_schedules add constraint plant_watering_schedules_plant_id_fkey foreign key (plant_id) references public.plants(id) on delete cascade;
+
+  -- 7. Enable RLS and recreate policies
+  alter table public.plants enable row level security;
+  create policy plants_select_all on public.plants for select to authenticated, anon using (true);
+  create policy plants_insert on public.plants for insert to authenticated with check (true);
+  create policy plants_update on public.plants for update to authenticated using (true) with check (true);
+  create policy plants_delete on public.plants for delete to authenticated using (true);
+
+  raise notice '  ✅ Table recreated — % zombie columns purged', zombie_count;
+end $phase0$;
 
 -- ============================================================================
 -- PHASE 1: RENAME old columns to new names (zero net column change)
