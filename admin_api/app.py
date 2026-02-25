@@ -441,6 +441,32 @@ def _get_sql_files_in_order(sync_parts_dir: str) -> list:
     return sql_files
 
 
+def _split_db_url_password(url: str) -> tuple[str, Optional[str]]:
+    """Split database URL into safe URL (no password) and password.
+
+    This is used to prevent leaking the password in the process list
+    when passing the connection string to psql via command line arguments.
+    """
+    try:
+        u = urlparse(url)
+        if not u.password:
+            return url, None
+
+        # Check if password is in netloc and reconstruct without it
+        if '@' in u.netloc:
+            # netloc format: user:pass@host:port or user@host:port
+            user_pass, host_part = u.netloc.rsplit('@', 1)
+            if ':' in user_pass:
+                # user:password
+                user, _ = user_pass.split(':', 1)
+                safe_netloc = f"{user}@{host_part}"
+                safe_url = urlunparse(u._replace(netloc=safe_netloc))
+                return safe_url, u.password
+    except Exception:
+        pass
+    return url, None
+
+
 def _ensure_sslmode_in_url(db_url: str) -> str:
     """Ensure SSL mode is set to 'require' for non-local databases.
     
@@ -904,7 +930,10 @@ def sync_schema():
             pass
         return jsonify({"ok": False, "error": "psql not available on server"}), 500
 
-    def _run_psql_with_ssl_fallback(cmd_args, db_url, timeout_secs=180):
+    # Strip password from DB URL to avoid leaking it in process list
+    safe_db_url, db_password = _split_db_url_password(db_url)
+
+    def _run_psql_with_ssl_fallback(cmd_args, db_url, password=None, timeout_secs=180):
         """Run psql with SSL, with multiple fallback strategies for certificate verification issues.
         
         Tries multiple approaches to work around SSL certificate verification failures:
@@ -931,6 +960,10 @@ def sync_schema():
             elif ca_cert_path:
                 env["PGSSLROOTCERT"] = ca_cert_path
             
+            # Use PGPASSWORD environment variable instead of passing password in connection string
+            if password:
+                env["PGPASSWORD"] = password
+
             return env
         
         def modify_url_sslmode(url, mode="require"):
@@ -1035,9 +1068,10 @@ def sync_schema():
             start_time = time.time()
             
             # Run psql for this file
+            # Use safe_db_url which does not contain the password
             cmd = [
                 "psql",
-                db_url,
+                safe_db_url,
                 "-v", "ON_ERROR_STOP=1",
                 "-X",
                 "-q",  # Quiet mode for cleaner output
@@ -1045,7 +1079,8 @@ def sync_schema():
             ]
             
             try:
-                res = _run_psql_with_ssl_fallback(cmd, db_url, timeout_secs=60)
+                # Pass safe_db_url and explicit password
+                res = _run_psql_with_ssl_fallback(cmd, safe_db_url, password=db_password, timeout_secs=60)
                 duration_ms = int((time.time() - start_time) * 1000)
                 
                 out = (res.stdout or "")
@@ -1153,8 +1188,12 @@ def sync_schema():
                 """
                 # Use subprocess to pipe SQL to psql to avoid escaping issues with shell arguments
                 # Use same SSL environment as the main psql call
+                # Also ensure PGPASSWORD is in env if available
+                if db_password:
+                    psql_env["PGPASSWORD"] = db_password
+
                 p = subprocess.Popen(
-                    ["psql", db_url, "-q", "-f", "-"],
+                    ["psql", safe_db_url, "-q", "-f", "-"],
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
