@@ -69,7 +69,12 @@ create table if not exists public.plants (
   featured_month text[] not null default '{}'::text[],
 
   -- Section 2: Identity — Origin & environment
-  climate text[] not null default '{}'::text[],
+  climate text[] not null default '{}'::text[] check (climate <@ array[
+    'polar','montane','oceanic','degraded_oceanic','temperate_continental',
+    'mediterranean','tropical_dry','tropical_humid','tropical_volcanic',
+    'tropical_cyclonic','humid_insular','subtropical_humid','equatorial',
+    'windswept_coastal'
+  ]),
   season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']),
 
   -- Section 2: Identity — Utility & safety
@@ -716,6 +721,15 @@ begin
 
   -- Drop and recreate constraints for columns with updated enum values
   -- Each block: drop all check constraints on the column, then add the new one
+
+  -- climate
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'climate') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_climate_check check (climate <@ array['polar','montane','oceanic','degraded_oceanic','temperate_continental','mediterranean','tropical_dry','tropical_humid','tropical_volcanic','tropical_cyclonic','humid_insular','subtropical_humid','equatorial','windswept_coastal']);
+  exception when duplicate_object then null;
+  end;
 
   -- encyclopedia_category
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'encyclopedia_category') loop

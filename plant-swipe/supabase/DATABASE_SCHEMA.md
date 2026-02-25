@@ -424,7 +424,7 @@ encyclopedia_category     TEXT[]                 -- CHECK: tree, shrub, small_sh
 featured_month            TEXT[]                 -- Multi-select months for promotion
 
 -- Section 2: Identity — Origin & environment
-climate                   TEXT[]                 -- Multi-select: polar, montane, oceanic, mediterranean, tropical_humid, etc.
+climate                   TEXT[]                 -- CHECK: polar, montane, oceanic, degraded_oceanic, temperate_continental, mediterranean, tropical_dry, tropical_humid, tropical_volcanic, tropical_cyclonic, humid_insular, subtropical_humid, equatorial, windswept_coastal
 season                    TEXT[]                 -- CHECK: spring, summer, autumn, winter
 
 -- Section 2: Identity — Utility & safety
