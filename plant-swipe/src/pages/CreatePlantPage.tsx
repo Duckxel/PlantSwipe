@@ -1006,17 +1006,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }>({ phase: 'idle', current: 0, total: 0, uploaded: 0, failed: 0 })
   const targetFields = React.useMemo(
     () =>
-      [
-        'base',
-        'identity',
-        'care',
-        'growth',
-        'danger',
-        'ecology',
-        'consumption',
-        'misc',
-        'meta',
-      ].filter((key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase())),
+      Object.keys(plantSchema).filter(
+        (key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase()),
+      ),
     [],
   )
   const aiFieldOrder = React.useMemo(() => targetFields, [targetFields])
@@ -2073,10 +2065,18 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
       const snapshot: Plant = finalPlant || plant
       if (needsOriginOrWater(snapshot)) {
-        await fillFieldWithRetries('care', undefined)
+        for (const key of ['origin', 'wateringFrequencyWarm', 'wateringFrequencyCold']) {
+          if (isFieldMissingForPlant(snapshot, key)) {
+            await fillFieldWithRetries(key, undefined)
+          }
+        }
       }
       if (needsMonths(snapshot)) {
-        await fillFieldWithRetries('growth', undefined)
+        for (const key of ['sowingMonth', 'floweringMonth', 'fruitingMonth']) {
+          if (isFieldMissingForPlant(snapshot, key)) {
+            await fillFieldWithRetries(key, undefined)
+          }
+        }
       }
 
       setPlant((prev) => {
