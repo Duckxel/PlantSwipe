@@ -1,4 +1,88 @@
 {
+  "header": {
+    "eyebrow": "Aperçu de la plante",
+    "title": "Apprenez à connaître la plante",
+    "subtitle": "Explorez ses dimensions, son rythme saisonnier et ses conditions de vie en un coup d'œil — puis plongez plus en détail si vous le souhaitez."
+  },
+  "cube": {
+    "eyebrow": "Vue 3D",
+    "title": "Dimensions",
+    "expand": "Agrandir",
+    "collapse": "Réduire"
+  },
+  "dimensions": {
+    "height": "Hauteur",
+    "heightSub": "Croissance verticale",
+    "spread": "Envergure",
+    "spreadSub": "Étendue du feuillage",
+    "spacing": "Espacement",
+    "spacingSub": "Espacement jardin"
+  },
+  "palette": {
+    "title": "Palette de couleurs"
+  },
+  "timeline": {
+    "title": "Calendrier saisonnier",
+    "hoverPrompt": "Survolez un mois",
+    "months": {
+      "jan": "Jan", "feb": "Fév", "mar": "Mar", "apr": "Avr",
+      "may": "Mai", "jun": "Jun", "jul": "Jul", "aug": "Aoû",
+      "sep": "Sep", "oct": "Oct", "nov": "Nov", "dec": "Déc"
+    },
+    "legend": {
+      "flowering": "Floraison",
+      "fruiting": "Fructification",
+      "sowing": "Semis"
+    }
+  },
+  "habitatMap": {
+    "title": "Carte de l'habitat"
+  },
+  "livingSpaceVisualizer": {
+    "title": "Espace de vie",
+    "pot": "Pot"
+  },
+  "recipes": {
+    "title": "Idées de recettes",
+    "subtitle": "Inspiration culinaire pour cette plante"
+  },
+  "gallery": {
+    "title": "Galerie d'images"
+  },
+  "companions": {
+    "title": "Plantes compagnes et associées",
+    "subtitle": "Plantes qui poussent bien ensemble ou variétés apparentées. Cliquez pour explorer."
+  },
+  "toxicityBanner": {
+    "title": "Avertissement de toxicité",
+    "subtitle": "Informations de sécurité importantes",
+    "humans": "Humains",
+    "pets": "Animaux",
+    "safeForAll": "Cette plante est sans danger pour les humains et les animaux",
+    "unknownToxicity": "Informations de toxicité non disponibles",
+    "levels": {
+      "nontoxic": "Sans danger",
+      "slightlytoxic": "Risque léger",
+      "verytoxic": "Dangereux",
+      "deadly": "Mortel",
+      "undetermined": "Inconnu"
+    },
+    "descriptions": {
+      "nontoxic": "Aucune toxicité connue",
+      "slightlytoxic": "Peut causer une légère irritation",
+      "verytoxic": "Peut causer des dommages graves",
+      "deadly": "Peut être fatal en cas d'ingestion",
+      "undetermined": "Toxicité non encore déterminée"
+    }
+  },
+  "meta": {
+    "recordHistory": "Historique",
+    "created": "Créé",
+    "updated": "Mis à jour",
+    "by": "par",
+    "contributors": "Contributeurs",
+    "sources": "Sources"
+  },
   "sections": {
     "identityTraits": "Identité",
     "safety": "Sécurité & Toxicité",

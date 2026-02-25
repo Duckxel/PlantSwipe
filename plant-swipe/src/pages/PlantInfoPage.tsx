@@ -443,7 +443,7 @@ const PlantInfoPage: React.FC = () => {
   const navigate = useLanguageNavigate()
   const { user, profile, refreshProfile } = useAuth()
   const { openLogin } = useAuthActions()
-  const { t } = useTranslation('common')
+  const { t } = useTranslation(['common', 'plantInfo'])
   const currentLang = useLanguage()
   const [plant, setPlant] = React.useState<Plant | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -738,8 +738,8 @@ const PlantInfoPage: React.FC = () => {
         `plantDetails.sunLevels.${key}`,
         `plantDetails.maintenanceLevels.${key}`,
         `plantDetails.seasons.${key}`,
-        `moreInfo.lifeCycle.${key}`,
-        `moreInfo.livingSpace.${key}`,
+        `plantInfo:lifeCycle.${key}`,
+        `plantInfo:livingSpace.${key}`,
       ]
       for (const k of translationKeys) {
         const translated = t(k, { defaultValue: '' })
@@ -843,7 +843,7 @@ const PlantInfoPage: React.FC = () => {
                     <div className="flex items-center gap-2 mb-1">
                       <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                       <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                        {t('moreInfo.labels.family', { defaultValue: 'Family' })}
+                        {t('plantInfo:labels.family', { defaultValue: 'Family' })}
                       </span>
                     </div>
                     <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
@@ -857,7 +857,7 @@ const PlantInfoPage: React.FC = () => {
                     <div className="flex items-center gap-2 mb-1">
                       <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                        {t('moreInfo.labels.lifeCycle', { defaultValue: 'Life Cycle' })}
+                        {t('plantInfo:labels.lifeCycle', { defaultValue: 'Life Cycle' })}
                       </span>
                     </div>
                     <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
@@ -899,7 +899,7 @@ const PlantInfoPage: React.FC = () => {
                     <div className="flex items-center gap-2 mb-1">
                       <MapPin className="h-4 w-4 text-rose-500 dark:text-rose-400" />
                       <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                        {t('moreInfo.labels.livingSpace', { defaultValue: 'Living Space' })}
+                        {t('plantInfo:labels.livingSpace', { defaultValue: 'Living Space' })}
                       </span>
                     </div>
                     <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
@@ -1260,40 +1260,39 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   // Comprehensive enum value translator
   const translateEnum = React.useCallback((value: string | null | undefined): string => {
     if (!value) return ''
-    const key = value.toLowerCase().replace(/[_\s-]/g, '')
+    const raw = value.toLowerCase().trim()
     
-    // Try specific translation keys in order of priority
-    const translationKeys = [
-      `plantDetails.utility.${key}`,
-      `plantDetails.seasons.${key}`,
-      `plantDetails.sunLevels.${key}`,
-      `plantDetails.maintenanceLevels.${key}`,
-      `plantDetails.plantType.${key}`,
-      `plantDetails.timePeriods.${key}`,
-      `moreInfo.enums.habitat.${key}`,
-      `moreInfo.enums.livingSpace.${key}`,
-      `moreInfo.enums.division.${key}`,
-      `moreInfo.enums.soil.${key}`,
-      `moreInfo.enums.mulching.${key}`,
-      `moreInfo.enums.fertilizer.${key}`,
-      `moreInfo.enums.wateringType.${key}`,
-      `moreInfo.enums.sowType.${key}`,
-      `moreInfo.enums.polenizer.${key}`,
-      `moreInfo.enums.conservationStatus.${key}`,
-      `moreInfo.enums.toxicity.${key}`,
-      `moreInfo.enums.lifeCycle.${key}`,
-      `moreInfo.enums.foliage.${key}`,
-      `moreInfo.enums.comestiblePart.${key}`,
-      `moreInfo.enums.fruitType.${key}`,
-      `moreInfo.enums.nutritionNeed.${key}`,
+    // All plantInfo enum groups to search through
+    const enumGroups = [
+      'utility', 'ediblePart', 'toxicity', 'poisoningMethod',
+      'lifeCycle', 'averageLifespan', 'foliagePersistence',
+      'livingSpace', 'season', 'climate', 'careLevel', 'sunlight',
+      'wateringType', 'division', 'sowingMethod', 'conservationStatus',
+      'ecologicalTolerance', 'ecologicalImpact', 'edibleOil',
+      'status', 'month', 'encyclopediaCategory',
     ]
     
-    for (const translationKey of translationKeys) {
-      const translated = t(translationKey, { defaultValue: '' })
-      if (translated && translated !== '') return translated
+    for (const group of enumGroups) {
+      const translated = t(`plantInfo:enums.${group}.${raw}`, { defaultValue: '' })
+      if (translated) return translated
     }
     
-    // Fallback: format the value nicely
+    // Also try common namespace for legacy keys
+    const legacyKey = raw.replace(/[_\s-]/g, '')
+    const legacyPaths = [
+      `plantDetails.utility.${legacyKey}`,
+      `plantDetails.seasons.${legacyKey}`,
+      `plantDetails.sunLevels.${legacyKey}`,
+      `plantDetails.maintenanceLevels.${legacyKey}`,
+      `plantDetails.plantType.${legacyKey}`,
+      `plantDetails.timePeriods.${legacyKey}`,
+    ]
+    for (const path of legacyPaths) {
+      const translated = t(`common:${path}`, { defaultValue: '' })
+      if (translated) return translated
+    }
+    
+    // Fallback: format the value nicely (replace _ with space, capitalize words)
     return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   }, [t])
   
@@ -1306,18 +1305,18 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   }, [translateEnum])
   
   const monthLabels = React.useMemo(() => [
-    t('moreInfo.timeline.months.jan'),
-    t('moreInfo.timeline.months.feb'),
-    t('moreInfo.timeline.months.mar'),
-    t('moreInfo.timeline.months.apr'),
-    t('moreInfo.timeline.months.may'),
-    t('moreInfo.timeline.months.jun'),
-    t('moreInfo.timeline.months.jul'),
-    t('moreInfo.timeline.months.aug'),
-    t('moreInfo.timeline.months.sep'),
-    t('moreInfo.timeline.months.oct'),
-    t('moreInfo.timeline.months.nov'),
-    t('moreInfo.timeline.months.dec'),
+    t('plantInfo:timeline.months.jan'),
+    t('plantInfo:timeline.months.feb'),
+    t('plantInfo:timeline.months.mar'),
+    t('plantInfo:timeline.months.apr'),
+    t('plantInfo:timeline.months.may'),
+    t('plantInfo:timeline.months.jun'),
+    t('plantInfo:timeline.months.jul'),
+    t('plantInfo:timeline.months.aug'),
+    t('plantInfo:timeline.months.sep'),
+    t('plantInfo:timeline.months.oct'),
+    t('plantInfo:timeline.months.nov'),
+    t('plantInfo:timeline.months.dec'),
   ], [t])
   
   const timelineData = React.useMemo(() => buildTimelineData(plant, monthLabels), [plant, monthLabels])
@@ -1329,9 +1328,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     setCubeExpanded(prev => !prev)
   }, [])
     const dimensionLegend = [
-      { label: t('moreInfo.dimensions.height'), value: height ? `${height} cm` : '—', subLabel: t('moreInfo.dimensions.heightSub') },
-      { label: t('moreInfo.dimensions.spread'), value: wingspan ? `${wingspan} cm` : '—', subLabel: t('moreInfo.dimensions.spreadSub') },
-      { label: t('moreInfo.dimensions.spacing'), value: spacing ? `${spacing} cm` : '—', subLabel: t('moreInfo.dimensions.spacingSub') },
+      { label: t('plantInfo:dimensions.height'), value: height ? `${height} cm` : '—', subLabel: t('plantInfo:dimensions.heightSub') },
+      { label: t('plantInfo:dimensions.spread'), value: wingspan ? `${wingspan} cm` : '—', subLabel: t('plantInfo:dimensions.spreadSub') },
+      { label: t('plantInfo:dimensions.spacing'), value: spacing ? `${spacing} cm` : '—', subLabel: t('plantInfo:dimensions.spacingSub') },
     ]
     const habitats = plant.climate || []
   const activePins = habitats.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
@@ -1345,13 +1344,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-stretch'
       : ''
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
-      if (!schedules.length) return t('moreInfo.values.flexible')
+      if (!schedules.length) return t('plantInfo:values.flexible')
       return schedules
         .map((schedule) => {
           const season = schedule.season ? `${translateEnum(schedule.season)}: ` : ''
           const quantity = schedule.quantity ? `${schedule.quantity}` : ''
           const period = schedule.timePeriod ? ` / ${translateEnum(schedule.timePeriod)}` : ''
-          return `${season}${quantity}${period}`.trim() || t('moreInfo.values.scheduled')
+          return `${season}${quantity}${period}`.trim() || t('plantInfo:values.scheduled')
         })
         .join(' • ')
     }
@@ -1514,10 +1513,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       className="space-y-4 sm:space-y-6"
     >
         <div className="flex flex-col gap-1.5 sm:gap-2">
-          <p className="text-[11px] uppercase tracking-[0.45em] text-emerald-500/80">{t('moreInfo.header.eyebrow')}</p>
-          <h2 className="text-xl sm:text-2xl font-semibold text-stone-900 dark:text-stone-100">{t('moreInfo.header.title')}</h2>
+          <p className="text-[11px] uppercase tracking-[0.45em] text-emerald-500/80">{t('plantInfo:header.eyebrow')}</p>
+          <h2 className="text-xl sm:text-2xl font-semibold text-stone-900 dark:text-stone-100">{t('plantInfo:header.title')}</h2>
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-            {t('moreInfo.header.subtitle')}
+            {t('plantInfo:header.subtitle')}
           </p>
         </div>
       
@@ -1529,7 +1528,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           <div className="relative space-y-3 sm:space-y-4">
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
               <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.timeline.title')}</span>
+              <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:timeline.title')}</span>
             </div>
             <GanttTimeline timelineData={timelineData} monthLabels={monthLabels} t={t} />
           </div>
@@ -1543,9 +1542,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             >
               <div className="mb-3">
                 <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
-                  {t('moreInfo.cube.eyebrow')}
+                  {t('plantInfo:cube.eyebrow')}
                 </p>
-                <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('moreInfo.cube.title')}</p>
+                <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('plantInfo:cube.title')}</p>
               </div>
               <div className={`grid gap-2 sm:gap-3 md:grid-cols-[1fr_200px] md:gap-3 md:auto-rows-auto ${
                 cubeExpanded ? 'grid-cols-1' : 'grid-cols-2 auto-rows-[1fr]'
@@ -1590,7 +1589,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <div className="relative space-y-1.5 sm:space-y-2">
                     <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
                       <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('moreInfo.palette.title')}</span>
+                      <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:palette.title')}</span>
                     </div>
                     <div className="flex flex-wrap gap-2 sm:gap-2.5">
                       {palette.map((color, idx) => {
@@ -1621,7 +1620,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             <div className="space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.habitatMap.title')}</span>
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:habitatMap.title')}</span>
               </div>
               <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
                 <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />
@@ -1647,22 +1646,22 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         {hasStructuredRecipes ? (
           <RecipeBox
             recipes={structuredRecipes}
-            title={t('moreInfo.recipes.title')}
-            subtitle={t('moreInfo.recipes.subtitle')}
+            title={t('plantInfo:recipes.title')}
+            subtitle={t('plantInfo:recipes.subtitle')}
             categoryLabels={{
-              breakfast_brunch: t('moreInfo.recipes.categories.breakfast_brunch', 'Breakfast & Brunch'),
-              starters_appetizers: t('moreInfo.recipes.categories.starters_appetizers', 'Starters & Appetizers'),
-              soups_salads: t('moreInfo.recipes.categories.soups_salads', 'Soups & Salads'),
-              main_courses: t('moreInfo.recipes.categories.main_courses', 'Main Courses'),
-              side_dishes: t('moreInfo.recipes.categories.side_dishes', 'Side Dishes'),
-              desserts: t('moreInfo.recipes.categories.desserts', 'Desserts'),
-              drinks: t('moreInfo.recipes.categories.drinks', 'Drinks'),
-              other: t('moreInfo.recipes.categories.other', 'Other'),
+              breakfast_brunch: t('plantInfo:recipes.categories.breakfast_brunch', 'Breakfast & Brunch'),
+              starters_appetizers: t('plantInfo:recipes.categories.starters_appetizers', 'Starters & Appetizers'),
+              soups_salads: t('plantInfo:recipes.categories.soups_salads', 'Soups & Salads'),
+              main_courses: t('plantInfo:recipes.categories.main_courses', 'Main Courses'),
+              side_dishes: t('plantInfo:recipes.categories.side_dishes', 'Side Dishes'),
+              desserts: t('plantInfo:recipes.categories.desserts', 'Desserts'),
+              drinks: t('plantInfo:recipes.categories.drinks', 'Drinks'),
+              other: t('plantInfo:recipes.categories.other', 'Other'),
             }}
             timeLabels={{
-              quick: t('moreInfo.recipes.times.quick', 'Quick'),
-              '30_plus': t('moreInfo.recipes.times.30_plus', '30+ min'),
-              slow_cooking: t('moreInfo.recipes.times.slow_cooking', 'Slow'),
+              quick: t('plantInfo:recipes.times.quick', 'Quick'),
+              '30_plus': t('plantInfo:recipes.times.30_plus', '30+ min'),
+              slow_cooking: t('plantInfo:recipes.times.slow_cooking', 'Slow'),
             }}
           />
         ) : recipesIdeasList.length > 0 ? (
@@ -1675,8 +1674,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <Utensils className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100">{t('moreInfo.recipes.title')}</h3>
-                  <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">{t('moreInfo.recipes.subtitle')}</p>
+                  <h3 className="text-lg sm:text-xl font-bold text-stone-900 dark:text-stone-100">{t('plantInfo:recipes.title')}</h3>
+                  <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">{t('plantInfo:recipes.subtitle')}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2.5 sm:gap-3">
@@ -1738,7 +1737,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
                   <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.gallery.title')}</span>
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:gallery.title')}</span>
                 </div>
                 <div className="max-h-[400px]">
                   <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
@@ -1755,10 +1754,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                   <Sprout className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('moreInfo.companions.title', 'Companion & Related Plants')}</span>
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:companions.title', 'Companion & Related Plants')}</span>
                 </div>
                 <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">
-                  {t('moreInfo.companions.subtitle', 'Plants that grow well together or are related varieties. Click to explore.')}
+                  {t('plantInfo:companions.subtitle', 'Plants that grow well together or are related varieties. Click to explore.')}
                 </p>
                 <CompanionPlantsCarousel 
                   companions={companionPlants} 
@@ -1772,10 +1771,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           {contributorsList.length > 0 && (
             <details className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
               <summary className="cursor-pointer text-xs sm:text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
-                {t('moreInfo.contributors.title', 'Contributors')}
+                {t('plantInfo:contributors.title', 'Contributors')}
               </summary>
               <div className="mt-3 space-y-2 text-xs sm:text-sm text-stone-600 dark:text-stone-400">
-                <p>{t('moreInfo.contributors.thanks', 'Thank you to all plant lovers that participated:')}</p>
+                <p>{t('plantInfo:contributors.thanks', 'Thank you to all plant lovers that participated:')}</p>
                 <div className="flex flex-wrap gap-2">
                   {contributorsList.map((name) => (
                     <Badge key={name} className="rounded-xl sm:rounded-2xl border-none bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
@@ -1792,7 +1791,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               {(createdTimestamp || createdByLabel) && (
                 <span className="flex items-center gap-1.5">
                   <CalendarDays className="h-3 w-3" />
-                  <span>{t('moreInfo.meta.created')}</span>
+                  <span>{t('plantInfo:meta.created')}</span>
                   <span className="text-stone-500 dark:text-stone-400">{createdTimestamp || '—'}</span>
                   {createdByLabel && <span>· {createdByLabel}</span>}
                 </span>
@@ -1800,7 +1799,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               {(updatedTimestamp || updatedByLabel) && (
                 <span className="flex items-center gap-1.5">
                   <Clock className="h-3 w-3" />
-                  <span>{t('moreInfo.meta.updated')}</span>
+                  <span>{t('plantInfo:meta.updated')}</span>
                   <span className="text-stone-500 dark:text-stone-400">{updatedTimestamp || '—'}</span>
                   {updatedByLabel && <span>· {updatedByLabel}</span>}
                 </span>
@@ -1808,7 +1807,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               {sourcesValue && (
                 <span className="flex items-center gap-1.5 basis-full justify-center mt-1">
                   <FileText className="h-3 w-3" />
-                  <span>{t('moreInfo.meta.sources')}:</span>
+                  <span>{t('plantInfo:meta.sources')}:</span>
                   <span className="text-stone-500 dark:text-stone-400">{sourcesValue}</span>
                 </span>
               )}
@@ -1837,21 +1836,21 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
   }> = [
     {
       key: 'flowering',
-      label: t('moreInfo.timeline.legend.flowering'),
+      label: t('plantInfo:timeline.legend.flowering'),
       color: TIMELINE_COLORS.flowering,
       bgClass: 'bg-orange-400',
       icon: <Flower2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.flowering }} />,
     },
     {
       key: 'fruiting',
-      label: t('moreInfo.timeline.legend.fruiting'),
+      label: t('plantInfo:timeline.legend.fruiting'),
       color: TIMELINE_COLORS.fruiting,
       bgClass: 'bg-green-500',
       icon: <Cherry className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.fruiting }} />,
     },
     {
       key: 'sowing',
-      label: t('moreInfo.timeline.legend.sowing'),
+      label: t('plantInfo:timeline.legend.sowing'),
       color: TIMELINE_COLORS.sowing,
       bgClass: 'bg-indigo-500',
       icon: <Sprout className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.sowing }} />,
@@ -1990,24 +1989,24 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
       <div className="relative space-y-1.5 sm:space-y-2 h-full flex flex-col">
         <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
           <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('moreInfo.livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
         </div>
 
         <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-1">
           <LivingSpacePanel
             active={isIndoor || isBoth}
             icon={<House className={`h-7 w-7 sm:h-8 sm:w-8 ${isIndoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
-            label={t('moreInfo.enums.livingSpace.indoor', { defaultValue: 'Indoor' })}
+            label={t('plantInfo:enums.livingSpace.indoor', { defaultValue: 'Indoor' })}
           />
           <LivingSpacePanel
             active={isOutdoor || isBoth}
             icon={<TreeDeciduous className={`h-7 w-7 sm:h-8 sm:w-8 ${isOutdoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
-            label={t('moreInfo.enums.livingSpace.outdoor', { defaultValue: 'Outdoor' })}
+            label={t('plantInfo:enums.livingSpace.outdoor', { defaultValue: 'Outdoor' })}
           />
           <LivingSpacePanel
             active={isPottable}
             icon={<Flower className={`h-7 w-7 sm:h-8 sm:w-8 ${isPottable ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
-            label={t('moreInfo.livingSpaceVisualizer.pot', { defaultValue: 'Pot' })}
+            label={t('plantInfo:livingSpaceVisualizer.pot', { defaultValue: 'Pot' })}
           />
         </div>
       </div>
@@ -2208,7 +2207,7 @@ const ToxicityWarningBanner: React.FC<{
           </div>
           <div>
             <p className="text-sm sm:text-base font-medium text-stone-600 dark:text-stone-400">
-              {t('moreInfo.toxicityBanner.unknownToxicity')}
+              {t('plantInfo:toxicityBanner.unknownToxicity')}
             </p>
           </div>
         </div>
@@ -2225,16 +2224,16 @@ const ToxicityWarningBanner: React.FC<{
           </div>
           <div className="flex-1">
             <h3 className="text-base sm:text-lg font-semibold text-emerald-700 dark:text-emerald-300">
-              {t('moreInfo.toxicityBanner.safeForAll')}
+              {t('plantInfo:toxicityBanner.safeForAll')}
             </h3>
             <div className="flex flex-wrap gap-3 mt-1">
               <div className="flex items-center gap-1.5 text-emerald-600/80 dark:text-emerald-400/80">
                 <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="text-xs sm:text-sm">{t('moreInfo.toxicityBanner.humans')}: {t('moreInfo.toxicityBanner.levels.nontoxic')}</span>
+                <span className="text-xs sm:text-sm">{t('plantInfo:toxicityBanner.humans')}: {t('plantInfo:toxicityBanner.levels.nontoxic')}</span>
               </div>
               <div className="flex items-center gap-1.5 text-emerald-600/80 dark:text-emerald-400/80">
                 <PawPrint className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="text-xs sm:text-sm">{t('moreInfo.toxicityBanner.pets')}: {t('moreInfo.toxicityBanner.levels.nontoxic')}</span>
+                <span className="text-xs sm:text-sm">{t('plantInfo:toxicityBanner.pets')}: {t('plantInfo:toxicityBanner.levels.nontoxic')}</span>
               </div>
             </div>
           </div>
@@ -2304,7 +2303,7 @@ const ToxicityWarningBanner: React.FC<{
             </div>
             <div>
               <p className="text-[10px] sm:text-xs uppercase tracking-wider font-medium text-stone-400 dark:text-stone-500">{label}</p>
-              <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-500">{t('moreInfo.toxicityBanner.unknownToxicity')}</p>
+              <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-500">{t('plantInfo:toxicityBanner.unknownToxicity')}</p>
             </div>
           </div>
         </div>
@@ -2340,12 +2339,12 @@ const ToxicityWarningBanner: React.FC<{
             <div className="flex items-center gap-1.5 mt-0.5">
               <IconComponent className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${config.textColor} flex-shrink-0`} />
               <p className={`${textSize} ${config.textColor}`}>
-                {t(`moreInfo.toxicityBanner.levels.${config.key}`)}
+                {t(`plantInfo:toxicityBanner.levels.${config.key}`)}
               </p>
             </div>
             {(isHigh || isLethal) && (
               <p className={`text-[10px] sm:text-xs ${config.labelColor} mt-0.5`}>
-                {t(`moreInfo.toxicityBanner.descriptions.${config.key}`)}
+                {t(`plantInfo:toxicityBanner.descriptions.${config.key}`)}
               </p>
             )}
           </div>
@@ -2359,8 +2358,8 @@ const ToxicityWarningBanner: React.FC<{
     return (
       <div className={`${bannerStyle.rounded} border ${bannerStyle.border} bg-gradient-to-r ${bannerStyle.bg} ${bannerStyle.padding}`}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-          {renderToxicityCard(humanConfig, 'human', t('moreInfo.toxicityBanner.humans'))}
-          {renderToxicityCard(petsConfig, 'pets', t('moreInfo.toxicityBanner.pets'))}
+          {renderToxicityCard(humanConfig, 'human', t('plantInfo:toxicityBanner.humans'))}
+          {renderToxicityCard(petsConfig, 'pets', t('plantInfo:toxicityBanner.pets'))}
         </div>
       </div>
     )
@@ -2391,11 +2390,11 @@ const ToxicityWarningBanner: React.FC<{
           </div>
           <div>
             <h3 className={`${titleSize} ${bannerStyle.titleColor}`}>
-              {t('moreInfo.toxicityBanner.title')}
+              {t('plantInfo:toxicityBanner.title')}
             </h3>
             {maxSeverity === 'lethal' && (
               <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">
-                {t('moreInfo.toxicityBanner.subtitle')}
+                {t('plantInfo:toxicityBanner.subtitle')}
               </p>
             )}
           </div>
@@ -2403,8 +2402,8 @@ const ToxicityWarningBanner: React.FC<{
         
         {/* Two-column toxicity cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-          {renderToxicityCard(humanConfig, 'human', t('moreInfo.toxicityBanner.humans'))}
-          {renderToxicityCard(petsConfig, 'pets', t('moreInfo.toxicityBanner.pets'))}
+          {renderToxicityCard(humanConfig, 'human', t('plantInfo:toxicityBanner.humans'))}
+          {renderToxicityCard(petsConfig, 'pets', t('plantInfo:toxicityBanner.pets'))}
         </div>
       </div>
     </div>

@@ -80,7 +80,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   typeOptions,
   usageOptions,
 }) => {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation(['common', 'plantInfo'])
   const currentLang = useLanguage()
 
   // Local UI State
@@ -360,7 +360,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
       {/* Habitat */}
       <div>
         <FilterSectionHeader
-          label={t("moreInfo.labels.habitat", { defaultValue: "Habitat" })}
+          label={t("plantInfo:labels.habitat", { defaultValue: "Habitat" })}
           isOpen={habitatSectionOpen}
           onToggle={() => setHabitatSectionOpen((prev) => !prev)}
         />
@@ -385,7 +385,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                   }`}
                   aria-pressed={isSelected}
                 >
-                  {t(`moreInfo.enums.habitat.${habitatKey}`, { defaultValue: habitat })}
+                  {t(`plantInfo:enums.habitat.${habitatKey}`, { defaultValue: habitat })}
                 </button>
               )
             })}
@@ -396,7 +396,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
       {/* Maintenance Level */}
       <div>
         <FilterSectionHeader
-          label={t("moreInfo.labels.maintenance", { defaultValue: "Maintenance" })}
+          label={t("plantInfo:labels.maintenance", { defaultValue: "Maintenance" })}
           isOpen={maintenanceSectionOpen}
           onToggle={() => setMaintenanceSectionOpen((prev) => !prev)}
         />
@@ -457,7 +457,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
       {/* Indoor / Outdoor - Not collapsible */}
       <div>
         <div className="text-xs font-medium mb-3 uppercase tracking-wide text-stone-500 dark:text-stone-300">
-          {t("moreInfo.labels.livingSpace", { defaultValue: "Living Space" })}
+          {t("plantInfo:labels.livingSpace", { defaultValue: "Living Space" })}
         </div>
         <div className="flex gap-2">
           {livingSpaceOptions.map((space) => {
@@ -479,7 +479,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                 }`}
                 aria-pressed={isSelected}
               >
-                {t(`moreInfo.enums.livingSpace.${spaceKey}`, { defaultValue: space })}
+                {t(`plantInfo:enums.livingSpace.${spaceKey}`, { defaultValue: space })}
               </button>
             )
           })}
@@ -528,13 +528,13 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
             <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
           ))}
           {habitatFilters.map((habitat) => (
-            <Badge key={habitat} variant="secondary" className="rounded-xl">{t(`moreInfo.enums.habitat.${habitat.toLowerCase().replace(/[\s-]/g, '')}`, { defaultValue: habitat })}</Badge>
+            <Badge key={habitat} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.habitat.${habitat.toLowerCase().replace(/[\s-]/g, '')}`, { defaultValue: habitat })}</Badge>
           ))}
           {maintenanceFilter && <Badge variant="secondary" className="rounded-xl">{t(`plantDetails.maintenanceLevels.${maintenanceFilter.toLowerCase()}`, { defaultValue: maintenanceFilter })}</Badge>}
           {petSafe && <Badge variant="secondary" className="rounded-xl">🐾 {t("plant.petSafe", { defaultValue: "Pet-Safe" })}</Badge>}
           {humanSafe && <Badge variant="secondary" className="rounded-xl">👤 {t("plant.humanSafe", { defaultValue: "Human-Safe" })}</Badge>}
           {livingSpaceFilters.map((space) => (
-            <Badge key={space} variant="secondary" className="rounded-xl">{t(`moreInfo.enums.livingSpace.${space.toLowerCase()}`, { defaultValue: space })}</Badge>
+            <Badge key={space} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.livingSpace.${space.toLowerCase()}`, { defaultValue: space })}</Badge>
           ))}
           {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
           {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}

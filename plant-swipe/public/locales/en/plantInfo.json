@@ -1,4 +1,88 @@
 {
+  "header": {
+    "eyebrow": "Plant overview",
+    "title": "Learn to know the plant",
+    "subtitle": "Explore its dimensions, seasonal rhythm and living conditions at a glance — then dive deeper if you want."
+  },
+  "cube": {
+    "eyebrow": "3D View",
+    "title": "Dimensions",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "dimensions": {
+    "height": "Height",
+    "heightSub": "Vertical growth",
+    "spread": "Spread",
+    "spreadSub": "Canopy reach",
+    "spacing": "Spacing",
+    "spacingSub": "Garden spacing"
+  },
+  "palette": {
+    "title": "Color Moodboard"
+  },
+  "timeline": {
+    "title": "Seasonal Timeline",
+    "hoverPrompt": "Hover a month",
+    "months": {
+      "jan": "Jan", "feb": "Feb", "mar": "Mar", "apr": "Apr",
+      "may": "May", "jun": "Jun", "jul": "Jul", "aug": "Aug",
+      "sep": "Sep", "oct": "Oct", "nov": "Nov", "dec": "Dec"
+    },
+    "legend": {
+      "flowering": "Flowering",
+      "fruiting": "Fruiting",
+      "sowing": "Sowing"
+    }
+  },
+  "habitatMap": {
+    "title": "Habitat Map"
+  },
+  "livingSpaceVisualizer": {
+    "title": "Living Space",
+    "pot": "Pot"
+  },
+  "recipes": {
+    "title": "Recipe Ideas",
+    "subtitle": "Culinary inspiration for this plant"
+  },
+  "gallery": {
+    "title": "Image Gallery"
+  },
+  "companions": {
+    "title": "Companion & Related Plants",
+    "subtitle": "Plants that grow well together or are related varieties. Click to explore."
+  },
+  "toxicityBanner": {
+    "title": "Toxicity Warning",
+    "subtitle": "Important safety information",
+    "humans": "Humans",
+    "pets": "Pets",
+    "safeForAll": "This plant is safe for both humans and pets",
+    "unknownToxicity": "Toxicity information not available",
+    "levels": {
+      "nontoxic": "Safe",
+      "slightlytoxic": "Mild Risk",
+      "verytoxic": "Dangerous",
+      "deadly": "Lethal",
+      "undetermined": "Unknown"
+    },
+    "descriptions": {
+      "nontoxic": "No known toxicity",
+      "slightlytoxic": "May cause mild irritation",
+      "verytoxic": "Can cause severe harm",
+      "deadly": "Can be fatal if ingested",
+      "undetermined": "Toxicity not yet determined"
+    }
+  },
+  "meta": {
+    "recordHistory": "Record History",
+    "created": "Created",
+    "updated": "Updated",
+    "by": "by",
+    "contributors": "Contributors",
+    "sources": "Sources"
+  },
   "sections": {
     "identityTraits": "Identity",
     "safety": "Safety & Toxicity",
