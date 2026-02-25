@@ -695,19 +695,19 @@ async function syncBidirectionalCompanions(
     try {
       const { data: companionData } = await supabase
         .from('plants')
-        .select('companions')
+        .select('companion_plants')
         .eq('id', companionId)
         .maybeSingle()
       
       if (companionData) {
-        const currentCompanions: string[] = companionData.companions || []
+        const currentCompanions: string[] = companionData.companion_plants || []
         if (!currentCompanions.includes(plantId)) {
           const updatedCompanions = [...currentCompanions, plantId]
           await supabase
             .from('plants')
-            .update({ companions: updatedCompanions })
+            .update({ companion_plants: updatedCompanions })
             .eq('id', companionId)
-          console.log(`[syncBidirectionalCompanions] Added ${plantId} to ${companionId}'s companions`)
+          console.log(`[syncBidirectionalCompanions] Added ${plantId} to ${companionId}'s companion_plants`)
         }
       }
     } catch (e) {
@@ -720,17 +720,17 @@ async function syncBidirectionalCompanions(
     try {
       const { data: companionData } = await supabase
         .from('plants')
-        .select('companions')
+        .select('companion_plants')
         .eq('id', companionId)
         .maybeSingle()
       
       if (companionData) {
-        const currentCompanions: string[] = companionData.companions || []
+        const currentCompanions: string[] = companionData.companion_plants || []
         if (currentCompanions.includes(plantId)) {
           const updatedCompanions = currentCompanions.filter(id => id !== plantId)
           await supabase
             .from('plants')
-            .update({ companions: updatedCompanions })
+            .update({ companion_plants: updatedCompanions })
             .eq('id', companionId)
           console.log(`[syncBidirectionalCompanions] Removed ${plantId} from ${companionId}'s companions`)
         }
@@ -923,7 +923,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       diseases: translation?.diseases || [] 
     },
     miscellaneous: {
-      companions: data.companions || [],
+      companions: data.companion_plants || [],
       // Translatable fields from plant_translations only
       tags: translation?.tags || [],
       sources: sourceList,
@@ -1607,7 +1607,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
             conservation_status: normalizedConservationStatus || null,
             // Non-translatable miscellaneous fields
-            companions: plantToSave.miscellaneous?.companions || [],
+            companion_plants: plantToSave.miscellaneous?.companions || [],
             // Note: pests, diseases, spice_mixes are in plant_translations (translatable)
           }
           const { error: metaUpdateError } = await supabase

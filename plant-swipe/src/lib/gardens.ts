@@ -9,13 +9,6 @@ import { mergePlantWithTranslation } from './plantTranslationLoader'
 
 type PlantCareShape = NonNullable<Plant['plantCare']>
 
-const LEVEL_SUN_MAP: Record<string, PlantCareShape['levelSun']> = {
-  'low light': 'Low Light',
-  shade: 'Shade',
-  'partial sun': 'Partial Sun',
-  'full sun': 'Full Sun',
-}
-
 const WATERING_TYPE_VALUES = ['surface', 'buried', 'hose', 'drop', 'drench'] as const
 type WateringTypeValue = (typeof WATERING_TYPE_VALUES)[number]
 
@@ -34,12 +27,6 @@ const SOIL_TYPE_VALUES = [
   'Wood Chips',
 ] as const
 type SoilTypeValue = (typeof SOIL_TYPE_VALUES)[number]
-
-function normalizeLevelSun(value: unknown): PlantCareShape['levelSun'] | undefined {
-  if (typeof value !== 'string') return undefined
-  const mapped = LEVEL_SUN_MAP[value.toLowerCase()]
-  return mapped
-}
 
 function normalizeWateringTypes(value: unknown): PlantCareShape['wateringType'] | undefined {
   if (!Array.isArray(value)) return undefined
@@ -1283,44 +1270,31 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
   const plantIds = rows.map(r => String(r.plant_id))
   const { data: plantRows } = await supabase
     .from('plants')
-    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, seeds_available, level_sun, watering_type, soil, maintenance_level, classification')
+    .select('id, name, scientific_name_species, season, care_level, sunlight, substrate, watering_type, plant_images(link, use), plant_colors(colors(id, name, hex_code))')
     .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
-  for (const p of plantRows || []) {
-    const levelSun = normalizeLevelSun(p.level_sun)
+  for (const p of (plantRows || []) as Array<Record<string, unknown>>) {
+    const rawImages = Array.isArray(p.plant_images) ? p.plant_images : []
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const images: PlantImage[] = (rawImages as any[]).map((img: any) => ({
+      url: img.link || '',
+      isPrimary: img.use === 'primary',
+      isVertical: false,
+    }))
     const wateringTypes = normalizeWateringTypes(p.watering_type)
-    const soilTypes = normalizeSoilTypes(p.soil)
-    const maintenanceLevel = typeof p.maintenance_level === 'string' ? p.maintenance_level : undefined
+    const soilTypes = normalizeSoilTypes(p.substrate)
 
     idToPlant[String(p.id)] = {
       id: String(p.id),
       name: String(p.name || ''),
-      scientificName: String(p.scientific_name || ''),
-      colors: Array.isArray(p.colors) ? p.colors.map(String) as Plant['colors'] : [],
-      seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-      rarity: p.rarity || undefined,
-      meaning: p.meaning || '',
-      description: p.description || '',
-      photos: Array.isArray(p.photos) ? p.photos : undefined,
-      image: getPrimaryPhotoUrl(Array.isArray(p.photos) ? p.photos : []) || p.image_url || '',
+      scientificName: String(p.scientific_name_species || ''),
+      season: Array.isArray(p.season) ? p.season as Plant['season'] : [],
+      image: getPrimaryPhotoUrl(images) || '',
+      images,
       care: {
-        levelSun,
         wateringType: wateringTypes,
         soil: soilTypes,
-        maintenanceLevel,
-        difficulty: maintenanceLevel,
       },
-      seedsAvailable: Boolean(p.seeds_available ?? false),
-      classification: (() => {
-        if (typeof p.classification === 'string') {
-          try {
-            return JSON.parse(p.classification)
-          } catch {
-            return undefined
-          }
-        }
-        return (p.classification as Plant['classification']) || undefined
-      })(),
     }
   }
   return rows.map(r => ({
@@ -3369,7 +3343,7 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
   if (allPlantIds.size > 0) {
     const { data: plantRows, error: pErr } = await supabase
       .from('plants')
-      .select('id, common_name, plant_images(link, use)')
+      .select('id, name, plant_images(link, use)')
       .in('id', Array.from(allPlantIds))
     
     if (!pErr && plantRows) {
@@ -3385,7 +3359,7 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
         const primaryUrl = getPrimaryPhotoUrl(photos) || (photos[0]?.url || null)
         plantsMap[String(p.id)] = {
           /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-          name: (p as any).common_name || '',
+          name: (p as any).name || '',
           imageUrl: primaryUrl
         }
       }
@@ -3502,7 +3476,7 @@ export async function getAllPublicGardens(limit = 50): Promise<PublicGardenWithP
   if (allPlantIds.size > 0) {
     const { data: plantRows, error: pErr } = await supabase
       .from('plants')
-    .select('id, common_name, plant_images(link, use)')
+    .select('id, name, plant_images(link, use)')
     .in('id', Array.from(allPlantIds))
     
     if (!pErr && plantRows) {
@@ -3518,7 +3492,7 @@ export async function getAllPublicGardens(limit = 50): Promise<PublicGardenWithP
         const primaryUrl = getPrimaryPhotoUrl(photos) || (photos[0]?.url || null)
         plantsMap[String(p.id)] = {
           /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-          name: (p as any).common_name || '',
+          name: (p as any).name || '',
           imageUrl: primaryUrl
         }
       }
@@ -3634,7 +3608,7 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
   if (allPlantIds.size > 0) {
     const { data: plantRows, error: pErr } = await supabase
       .from('plants')
-      .select('id, common_name, plant_images(link, use)')
+      .select('id, name, plant_images(link, use)')
       .in('id', Array.from(allPlantIds))
     
     if (!pErr && plantRows) {
@@ -3650,7 +3624,7 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
         const primaryUrl = getPrimaryPhotoUrl(photos) || (photos[0]?.url || null)
         plantsMap[String(p.id)] = {
           /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-          name: (p as any).common_name || '',
+          name: (p as any).name || '',
           imageUrl: primaryUrl
         }
       }

@@ -487,8 +487,8 @@ export async function processPlantRequest(
     // First, check by name or scientific_name in plants table
     const { data: existingByName } = await supabase
       .from('plants')
-      .select('id, name, scientific_name')
-      .or(`name.ilike.${englishPlantName},scientific_name.ilike.${englishPlantName}`)
+      .select('id, name, scientific_name_species')
+      .or(`name.ilike.${englishPlantName},scientific_name_species.ilike.${englishPlantName}`)
       .limit(1)
       .maybeSingle()
     

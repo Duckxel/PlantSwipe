@@ -2044,7 +2044,7 @@ export const AdminPage: React.FC = () => {
   const [addFromDialogOpen, setAddFromDialogOpen] = React.useState(false);
   const [addFromSearchQuery, setAddFromSearchQuery] = React.useState("");
   const [addFromSearchResults, setAddFromSearchResults] = React.useState<
-    Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }>
+    Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }>
   >([]);
   const [addFromSearchLoading, setAddFromSearchLoading] = React.useState(false);
   const [addButtonExpanded, setAddButtonExpanded] = React.useState(false);
@@ -2801,8 +2801,8 @@ export const AdminPage: React.FC = () => {
       // First, search plants by name or scientific_name
       const { data: directMatches, error: directError } = await supabase
         .from("plants")
-        .select("id, name, scientific_name, status")
-        .or(`name.ilike.%${trimmed}%,scientific_name.ilike.%${trimmed}%`)
+        .select("id, name, scientific_name_species, status")
+        .or(`name.ilike.%${trimmed}%,scientific_name_species.ilike.%${trimmed}%`)
         .order("name")
         .limit(20);
       if (directError) throw directError;
@@ -2810,7 +2810,7 @@ export const AdminPage: React.FC = () => {
       // Also search by given_names in translations table
       const { data: translationMatches, error: transError } = await supabase
         .from("plant_translations")
-        .select("plant_id, given_names, plants!inner(id, name, scientific_name, status)")
+        .select("plant_id, given_names, plants!inner(id, name, scientific_name_species, status)")
         .eq("language", "en")
         .limit(100);
       if (transError) throw transError;
@@ -2818,7 +2818,7 @@ export const AdminPage: React.FC = () => {
       // Filter translation matches where given_names contains the search term
       const termLower = trimmed.toLowerCase();
       const translationPlantIds = new Set<string>();
-      const translationPlants: Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }> = [];
+      const translationPlants: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
       
       (translationMatches || []).forEach((row: unknown) => {
         const r = row as Record<string, unknown>;
@@ -2832,7 +2832,7 @@ export const AdminPage: React.FC = () => {
           translationPlants.push({
             id: String(plants.id),
             name: String(plants.name || ""),
-            scientific_name: plants.scientific_name || null,
+            scientific_name_species: plants.scientific_name_species || null,
             status: plants.status || null,
           });
         }
@@ -2840,7 +2840,7 @@ export const AdminPage: React.FC = () => {
 
       // Merge results, avoiding duplicates
       const seenIds = new Set<string>();
-      const merged: Array<{ id: string; name: string; scientific_name?: string | null; status?: string | null }> = [];
+      const merged: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
       
       (directMatches || []).forEach((plant: unknown) => {
         const p = plant as Record<string, unknown>;
@@ -2849,7 +2849,7 @@ export const AdminPage: React.FC = () => {
           merged.push({
             id: String(p.id),
             name: String(p.name || ""),
-            scientific_name: p.scientific_name ?? null,
+            scientific_name_species: p.scientific_name_species ?? null,
             status: p.status ?? null,
           });
         }
@@ -3111,7 +3111,7 @@ export const AdminPage: React.FC = () => {
             id,
             name,
             status,
-            promotion_month,
+            featured_month,
             updated_time,
             created_time,
             plant_images (
@@ -3216,7 +3216,7 @@ export const AdminPage: React.FC = () => {
               name: r?.name ? String(r.name) : "Unnamed plant",
               givenNames,
               status: normalizePlantStatus(r?.status),
-              promotionMonth: toPromotionMonthSlug(r?.promotion_month),
+              promotionMonth: toPromotionMonthSlug(r?.featured_month),
               primaryImage: (primaryImage as Record<string, unknown>)?.link
                 ? String((primaryImage as Record<string, unknown>).link)
                 : null,
@@ -12813,8 +12813,8 @@ export const AdminPage: React.FC = () => {
                       className="w-full px-4 py-3 text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
                     >
                       <div className="font-medium text-sm">{plant.name}</div>
-                      {plant.scientific_name && (
-                        <div className="text-xs italic opacity-60">{plant.scientific_name}</div>
+                      {plant.scientific_name_species && (
+                        <div className="text-xs italic opacity-60">{plant.scientific_name_species}</div>
                       )}
                       {plant.status && (
                         <Badge variant="outline" className="mt-1 text-[10px]">
