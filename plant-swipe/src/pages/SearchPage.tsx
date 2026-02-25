@@ -15,7 +15,9 @@ interface SearchPageProps {
   likedIds?: string[];
 }
 
-export const SearchPage: React.FC<SearchPageProps> = ({
+// ⚡ Bolt: Memoize SearchPage to prevent unnecessary re-renders when parent re-renders (e.g. typing, scrolling)
+// but props (plants) are stable.
+export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   plants,
   openInfo,
   likedIds = [],
@@ -297,4 +299,4 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       </Button>
     </div>
   );
-};
+});

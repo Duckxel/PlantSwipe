@@ -1412,6 +1412,10 @@ export default function PlantSwipe() {
     if (current) navigate(`/plants/${current.id}`)
   }, [current, navigate])
 
+  const handleOpenInfo = React.useCallback((p: Plant) => {
+    navigate(`/plants/${p.id}`)
+  }, [navigate])
+
   // Swipe logic
   const x = useMotionValue(0)
   const y = useMotionValue(0)
@@ -2265,7 +2269,7 @@ export default function PlantSwipe() {
                 <Suspense fallback={routeLoadingFallback}>
                   <SearchPageLazy
                     plants={sortedSearchResults}
-                    openInfo={(p) => navigate(`/plants/${p.id}`)}
+                    openInfo={handleOpenInfo}
                     likedIds={likedIds}
                   />
                 </Suspense>

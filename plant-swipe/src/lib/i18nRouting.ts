@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from './i18n'
 import i18n from './i18n'
@@ -109,7 +110,7 @@ export function useLanguageNavigate() {
   const location = useLocation()
   const currentLang = useLanguage()
   
-  return (to: string | number, options?: { replace?: boolean; state?: any }) => {
+  return useCallback((to: string | number, options?: { replace?: boolean; state?: any }) => {
     // Handle browser history navigation (numbers)
     if (typeof to === 'number') {
       navigate(to as any, options)
@@ -145,7 +146,7 @@ export function useLanguageNavigate() {
     }
     
     navigate(pathWithLang, options)
-  }
+  }, [navigate, location, currentLang])
 }
 
 /**
