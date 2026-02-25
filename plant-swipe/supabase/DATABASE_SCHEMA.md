@@ -463,7 +463,7 @@ misting_frequency         INTEGER                -- Times per week
 
 -- Section 3: Care — Special needs, substrate, mulch, nutrition
 special_needs             TEXT[]                 -- Multi-select: winter_veil, etc.
-substrate                 TEXT[]                 -- Multi-select substrates (no check constraint — very large list)
+substrate                 TEXT[]                 -- CHECK (45 values): garden_soil, topsoil, loam, clay_soil, sandy_soil, silty_soil, universal_potting_mix, horticultural_potting_mix, seed_starting_mix, cutting_mix, vegetable_potting_mix, flowering_plant_mix, foliage_plant_mix, citrus_mix, orchid_mix, cactus_succulent_mix, ericaceous_mix, mature_compost, vermicompost, composted_manure, composted_leaves, leaf_mold, forest_humus, ramial_chipped_wood, coconut_coir, blonde_peat, brown_peat, composted_bark, river_sand, horticultural_sand, pozzite, perlite, vermiculite, pumice, gravel, clay_pebbles, zeolite, pumice_stone, schist, crushed_slate, calcareous_soil, acidic_soil, volcanic_soil, pure_mineral_substrate, draining_cactus_substrate
 substrate_mix             TEXT[]                 -- Special mixes: aroid_mix, cactus_mix, orchid_mix, etc.
 mulching_needed           BOOLEAN DEFAULT false
 mulch_type                TEXT[]                 -- Multi-select mulch types (no check constraint — very large list)

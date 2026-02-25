@@ -127,7 +127,25 @@ create table if not exists public.plants (
   special_needs text[] not null default '{}'::text[],
 
   -- Section 3: Care — Substrate & soil
-  substrate text[] not null default '{}'::text[],
+  substrate text[] not null default '{}'::text[] check (substrate <@ array[
+    -- Organic: soil & potting mixes
+    'garden_soil','topsoil','loam','clay_soil','sandy_soil','silty_soil',
+    'universal_potting_mix','horticultural_potting_mix','seed_starting_mix',
+    'cutting_mix','vegetable_potting_mix','flowering_plant_mix',
+    'foliage_plant_mix','citrus_mix','orchid_mix',
+    'cactus_succulent_mix','ericaceous_mix',
+    -- Organic: amendments
+    'mature_compost','vermicompost','composted_manure','composted_leaves',
+    'leaf_mold','forest_humus','ramial_chipped_wood','coconut_coir',
+    'blonde_peat','brown_peat','composted_bark',
+    -- Mineral: drainage
+    'river_sand','horticultural_sand','pozzite','perlite','vermiculite',
+    'pumice','gravel','clay_pebbles','zeolite','pumice_stone',
+    'schist','crushed_slate',
+    -- Mineral: specific soils
+    'calcareous_soil','acidic_soil','volcanic_soil',
+    'pure_mineral_substrate','draining_cactus_substrate'
+  ]),
   substrate_mix text[] not null default '{}'::text[],
 
   -- Section 3: Care — Mulch
@@ -920,6 +938,15 @@ begin
   end loop;
   begin
     alter table public.plants add constraint plants_ecological_impact_check check (ecological_impact <@ array['neutral','favorable','potentially_invasive','locally_invasive']);
+  exception when duplicate_object then null;
+  end;
+
+  -- substrate
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'substrate') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_substrate_check check (substrate <@ array['garden_soil','topsoil','loam','clay_soil','sandy_soil','silty_soil','universal_potting_mix','horticultural_potting_mix','seed_starting_mix','cutting_mix','vegetable_potting_mix','flowering_plant_mix','foliage_plant_mix','citrus_mix','orchid_mix','cactus_succulent_mix','ericaceous_mix','mature_compost','vermicompost','composted_manure','composted_leaves','leaf_mold','forest_humus','ramial_chipped_wood','coconut_coir','blonde_peat','brown_peat','composted_bark','river_sand','horticultural_sand','pozzite','perlite','vermiculite','pumice','gravel','clay_pebbles','zeolite','pumice_stone','schist','crushed_slate','calcareous_soil','acidic_soil','volcanic_soil','pure_mineral_substrate','draining_cactus_substrate']);
   exception when duplicate_object then null;
   end;
 
