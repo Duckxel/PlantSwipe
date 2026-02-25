@@ -150,7 +150,28 @@ create table if not exists public.plants (
 
   -- Section 3: Care — Mulch
   mulching_needed boolean default false,
-  mulch_type text[] not null default '{}'::text[],
+  mulch_type text[] not null default '{}'::text[] check (mulch_type <@ array[
+    -- Dry plant-based
+    'straw','hay','dead_leaves','dried_grass_clippings','pine_needles',
+    'dried_fern','crushed_miscanthus','flax_straw','hemp',
+    'untreated_wood_shavings','pine_bark','hardwood_bark','ramial_chipped_wood',
+    -- Fresh plant-based (use with care)
+    'fresh_grass_clippings','shredded_garden_waste','shredded_pruning_waste',
+    -- Vegetable garden specific
+    'cocoa_shells','buckwheat_hulls','flax_mulch','hemp_mulch',
+    'unprinted_brown_cardboard','kraft_paper','newspaper_vegetal_ink',
+    -- Natural forest
+    'forest_litter','fragmented_deadwood','oak_leaves','hazel_leaves','beech_leaves',
+    -- Mineral (non-nourishing, durable)
+    'gravel','pebbles','pozzolane','crushed_slate','schist',
+    'crushed_brick','decorative_sand','volcanic_rock','surface_clay_pebbles',
+    -- Living ground cover
+    'clover','ivy','bugle','creeping_thyme','strawberry',
+    'vinca','sedum','natural_lawn',
+    -- Recycled / ecological
+    'cardboard','kraft','burlap','biodegradable_fabric',
+    'crushed_eggshell','walnut_shells','hazelnut_shells','mixed_coffee_grounds'
+  ]),
 
   -- Section 3: Care — Nutrition
   nutrition_need text[] not null default '{}'::text[],
@@ -168,7 +189,12 @@ create table if not exists public.plants (
 
   -- Section 4: Growth — Propagation & cultivation
   division text[] not null default '{}'::text[] check (division <@ array['seed','clump_division','bulb_division','rhizome_division','cutting','layering','stolon','sucker','grafting','spore']),
-  cultivation_mode text[] not null default '{}'::text[],
+  cultivation_mode text[] not null default '{}'::text[] check (cultivation_mode <@ array[
+    'open_ground','flowerbed','vegetable_garden','raised_bed','orchard',
+    'rockery','slope','mound','pot','planter','hanging','greenhouse',
+    'indoor','pond','waterlogged_soil','hydroponic','aquaponic',
+    'mineral_substrate','permaculture','agroforestry'
+  ]),
   sowing_method text[] not null default '{}'::text[] check (sowing_method <@ array['open_ground','pot','tray','greenhouse','mini_greenhouse','broadcast','row']),
   transplanting boolean,
 
@@ -178,21 +204,70 @@ create table if not exists public.plants (
 
   -- Section 6: Ecology — Conservation & status
   conservation_status text[] not null default '{}'::text[] check (conservation_status <@ array['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated']),
-  ecological_status text[] not null default '{}'::text[],
+  ecological_status text[] not null default '{}'::text[] check (ecological_status <@ array[
+    'indigenous','endemic','subendemic','introduced','naturalized',
+    'subspontaneous','cultivated_only','ecologically_neutral',
+    'biodiversity_favorable','potentially_invasive','exotic_invasive',
+    'locally_invasive','competitive_dominant','pioneer_species',
+    'climax_species','structuring_species','indicator_species',
+    'host_species','relict_species','heritage_species','common_species',
+    'nitrogen_fixer','hygrophile','heliophile','sciaphile',
+    'halophile','calcicole','acidophile'
+  ]),
 
   -- Section 6: Ecology — Habitats
-  biotopes text[] not null default '{}'::text[],
-  urban_biotopes text[] not null default '{}'::text[],
+  biotopes text[] not null default '{}'::text[] check (biotopes <@ array[
+    -- Forest
+    'temperate_deciduous_forest','mixed_forest','coniferous_forest',
+    'mediterranean_forest','tropical_rainforest','tropical_dry_forest',
+    'shaded_understory','forest_edge','clearing','alluvial_forest',
+    -- Open / prairie
+    'natural_meadow','wet_meadow','dry_meadow','calcareous_grassland',
+    'sandy_grassland','steppe','savanna','garrigue','maquis','wasteland','fallow',
+    -- Wetland
+    'marsh','peat_bog','wetland','lakeshore','pond','natural_pool',
+    'reed_bed','stream','riverbank','swamp_forest','mangrove',
+    -- Dry / mineral
+    'rockery','scree','cliff','rocky_outcrop','stony_ground',
+    'calcareous_terrain','sandy_terrain','inland_dune',
+    'arid_steppe','desert','semi_desert',
+    -- Coastal
+    'coastal_dune','beach','foreshore','lagoon','salt_marsh',
+    'sea_cliff','coastal_forest','coastal_meadow',
+    -- Mountain
+    'alpine_meadow','montane_zone','subalpine_zone','alpine_zone',
+    'alpine_tundra','mountain_forest','mountain_edge',
+    -- Tropical
+    'tropical_humid_forest','tropical_dry_forest_2','primary_forest',
+    'secondary_forest','tropical_savanna','mangrove_tropical',
+    'cloud_forest','tropical_understory'
+  ]),
+  urban_biotopes text[] not null default '{}'::text[] check (urban_biotopes <@ array[
+    'urban_garden','periurban_garden','park','urban_wasteland',
+    'green_wall','green_roof','balcony','agricultural_hedge',
+    'cultivated_orchard','vegetable_garden','roadside'
+  ]),
 
   -- Section 6: Ecology — Tolerance & roles
   ecological_tolerance text[] not null default '{}'::text[] check (ecological_tolerance <@ array['drought','scorching_sun','permanent_shade','excess_water','frost','heatwave','wind']),
-  biodiversity_role text[] not null default '{}'::text[],
+  biodiversity_role text[] not null default '{}'::text[] check (biodiversity_role <@ array[
+    'melliferous','insect_refuge','bird_refuge','mammal_refuge',
+    'food_source','host_plant','nitrogen_fixer','soil_improver',
+    'ecological_corridor','natural_repellent','green_manure',
+    'fertility_improver','crop_shade','vegetable_garden_windbreak',
+    'moisture_retention','frost_protection','drought_protection'
+  ]),
   pollinators_attracted text[] not null default '{}'::text[],
   birds_attracted text[] not null default '{}'::text[],
   mammals_attracted text[] not null default '{}'::text[],
 
   -- Section 6: Ecology — Symbiosis & management
-  ecological_management text[] not null default '{}'::text[],
+  ecological_management text[] not null default '{}'::text[] check (ecological_management <@ array[
+    'let_seed','no_winter_pruning','keep_dry_foliage',
+    'natural_foliage_mulch','branch_chipping_mulch',
+    'improves_microbial_life','promotes_mycorrhizal_fungi',
+    'enriches_soil','structures_soil'
+  ]),
   ecological_impact text[] not null default '{}'::text[] check (ecological_impact <@ array['neutral','favorable','potentially_invasive','locally_invasive']),
 
   -- Section 7: Consumption
@@ -947,6 +1022,69 @@ begin
   end loop;
   begin
     alter table public.plants add constraint plants_substrate_check check (substrate <@ array['garden_soil','topsoil','loam','clay_soil','sandy_soil','silty_soil','universal_potting_mix','horticultural_potting_mix','seed_starting_mix','cutting_mix','vegetable_potting_mix','flowering_plant_mix','foliage_plant_mix','citrus_mix','orchid_mix','cactus_succulent_mix','ericaceous_mix','mature_compost','vermicompost','composted_manure','composted_leaves','leaf_mold','forest_humus','ramial_chipped_wood','coconut_coir','blonde_peat','brown_peat','composted_bark','river_sand','horticultural_sand','pozzite','perlite','vermiculite','pumice','gravel','clay_pebbles','zeolite','pumice_stone','schist','crushed_slate','calcareous_soil','acidic_soil','volcanic_soil','pure_mineral_substrate','draining_cactus_substrate']);
+  exception when duplicate_object then null;
+  end;
+
+  -- mulch_type
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'mulch_type') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_mulch_type_check check (mulch_type <@ array['straw','hay','dead_leaves','dried_grass_clippings','pine_needles','dried_fern','crushed_miscanthus','flax_straw','hemp','untreated_wood_shavings','pine_bark','hardwood_bark','ramial_chipped_wood','fresh_grass_clippings','shredded_garden_waste','shredded_pruning_waste','cocoa_shells','buckwheat_hulls','flax_mulch','hemp_mulch','unprinted_brown_cardboard','kraft_paper','newspaper_vegetal_ink','forest_litter','fragmented_deadwood','oak_leaves','hazel_leaves','beech_leaves','gravel','pebbles','pozzolane','crushed_slate','schist','crushed_brick','decorative_sand','volcanic_rock','surface_clay_pebbles','clover','ivy','bugle','creeping_thyme','strawberry','vinca','sedum','natural_lawn','cardboard','kraft','burlap','biodegradable_fabric','crushed_eggshell','walnut_shells','hazelnut_shells','mixed_coffee_grounds']);
+  exception when duplicate_object then null;
+  end;
+
+  -- cultivation_mode
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'cultivation_mode') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_cultivation_mode_check check (cultivation_mode <@ array['open_ground','flowerbed','vegetable_garden','raised_bed','orchard','rockery','slope','mound','pot','planter','hanging','greenhouse','indoor','pond','waterlogged_soil','hydroponic','aquaponic','mineral_substrate','permaculture','agroforestry']);
+  exception when duplicate_object then null;
+  end;
+
+  -- ecological_status
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'ecological_status') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_ecological_status_check check (ecological_status <@ array['indigenous','endemic','subendemic','introduced','naturalized','subspontaneous','cultivated_only','ecologically_neutral','biodiversity_favorable','potentially_invasive','exotic_invasive','locally_invasive','competitive_dominant','pioneer_species','climax_species','structuring_species','indicator_species','host_species','relict_species','heritage_species','common_species','nitrogen_fixer','hygrophile','heliophile','sciaphile','halophile','calcicole','acidophile']);
+  exception when duplicate_object then null;
+  end;
+
+  -- biotopes
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'biotopes') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_biotopes_check check (biotopes <@ array['temperate_deciduous_forest','mixed_forest','coniferous_forest','mediterranean_forest','tropical_rainforest','tropical_dry_forest','shaded_understory','forest_edge','clearing','alluvial_forest','natural_meadow','wet_meadow','dry_meadow','calcareous_grassland','sandy_grassland','steppe','savanna','garrigue','maquis','wasteland','fallow','marsh','peat_bog','wetland','lakeshore','pond','natural_pool','reed_bed','stream','riverbank','swamp_forest','mangrove','rockery','scree','cliff','rocky_outcrop','stony_ground','calcareous_terrain','sandy_terrain','inland_dune','arid_steppe','desert','semi_desert','coastal_dune','beach','foreshore','lagoon','salt_marsh','sea_cliff','coastal_forest','coastal_meadow','alpine_meadow','montane_zone','subalpine_zone','alpine_zone','alpine_tundra','mountain_forest','mountain_edge','tropical_humid_forest','tropical_dry_forest_2','primary_forest','secondary_forest','tropical_savanna','mangrove_tropical','cloud_forest','tropical_understory']);
+  exception when duplicate_object then null;
+  end;
+
+  -- urban_biotopes
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'urban_biotopes') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_urban_biotopes_check check (urban_biotopes <@ array['urban_garden','periurban_garden','park','urban_wasteland','green_wall','green_roof','balcony','agricultural_hedge','cultivated_orchard','vegetable_garden','roadside']);
+  exception when duplicate_object then null;
+  end;
+
+  -- biodiversity_role
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'biodiversity_role') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_biodiversity_role_check check (biodiversity_role <@ array['melliferous','insect_refuge','bird_refuge','mammal_refuge','food_source','host_plant','nitrogen_fixer','soil_improver','ecological_corridor','natural_repellent','green_manure','fertility_improver','crop_shade','vegetable_garden_windbreak','moisture_retention','frost_protection','drought_protection']);
+  exception when duplicate_object then null;
+  end;
+
+  -- ecological_management
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'ecological_management') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_ecological_management_check check (ecological_management <@ array['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil']);
   exception when duplicate_object then null;
   end;
 

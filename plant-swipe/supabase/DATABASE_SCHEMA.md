@@ -468,7 +468,7 @@ special_needs             TEXT[]                 -- Multi-select: winter_veil, e
 substrate                 TEXT[]                 -- CHECK (45 values): garden_soil, topsoil, loam, clay_soil, sandy_soil, silty_soil, universal_potting_mix, horticultural_potting_mix, seed_starting_mix, cutting_mix, vegetable_potting_mix, flowering_plant_mix, foliage_plant_mix, citrus_mix, orchid_mix, cactus_succulent_mix, ericaceous_mix, mature_compost, vermicompost, composted_manure, composted_leaves, leaf_mold, forest_humus, ramial_chipped_wood, coconut_coir, blonde_peat, brown_peat, composted_bark, river_sand, horticultural_sand, pozzite, perlite, vermiculite, pumice, gravel, clay_pebbles, zeolite, pumice_stone, schist, crushed_slate, calcareous_soil, acidic_soil, volcanic_soil, pure_mineral_substrate, draining_cactus_substrate
 substrate_mix             TEXT[]                 -- Special mixes: aroid_mix, cactus_mix, orchid_mix, etc.
 mulching_needed           BOOLEAN DEFAULT false
-mulch_type                TEXT[]                 -- Multi-select mulch types (no check constraint — very large list)
+mulch_type                TEXT[]                 -- CHECK (53 values): straw, hay, dead_leaves, pine_needles, pine_bark, ramial_chipped_wood, cocoa_shells, gravel, pebbles, pozzolane, crushed_slate, clover, sedum, etc.
 nutrition_need            TEXT[]                 -- Multi-select nutrients (no check constraint)
 fertilizer                TEXT[]                 -- Multi-select fertilizers (no check constraint)
 
@@ -484,7 +484,7 @@ staking                   BOOLEAN DEFAULT false  -- Whether staking/support is n
 
 -- Section 4: Growth — Propagation & cultivation
 division                  TEXT[]                 -- CHECK: seed, clump_division, bulb_division, rhizome_division, cutting, layering, stolon, sucker, grafting, spore
-cultivation_mode          TEXT[]                 -- Multi-select: open_ground, raised_bed, container, greenhouse, hydroponic, etc.
+cultivation_mode          TEXT[]                 -- CHECK (20 values): open_ground, flowerbed, vegetable_garden, raised_bed, orchard, rockery, slope, mound, pot, planter, hanging, greenhouse, indoor, pond, waterlogged_soil, hydroponic, aquaponic, mineral_substrate, permaculture, agroforestry
 sowing_method             TEXT[]                 -- CHECK: open_ground, pot, tray, greenhouse, mini_greenhouse, broadcast, row
 transplanting             BOOLEAN
 
@@ -494,21 +494,21 @@ pruning_month             TEXT[]                 -- Multi-select months
 
 -- Section 6: Ecology — Conservation & status
 conservation_status       TEXT[]                 -- CHECK (IUCN): least_concern, near_threatened, vulnerable, endangered, critically_endangered, extinct_in_wild, extinct, data_deficient, not_evaluated
-ecological_status         TEXT[]                 -- Multi-select: indigenous, endemic, introduced, naturalized, invasive, pioneer, etc.
+ecological_status         TEXT[]                 -- CHECK (28 values): indigenous, endemic, subendemic, introduced, naturalized, subspontaneous, cultivated_only, ecologically_neutral, biodiversity_favorable, potentially_invasive, exotic_invasive, locally_invasive, competitive_dominant, pioneer_species, climax_species, structuring_species, indicator_species, host_species, relict_species, heritage_species, common_species, nitrogen_fixer, hygrophile, heliophile, sciaphile, halophile, calcicole, acidophile
 
 -- Section 6: Ecology — Habitats
-biotopes                  TEXT[]                 -- Multi-select: temperate_deciduous_forest, wetland, steppe, coastal_dune, etc.
-urban_biotopes            TEXT[]                 -- Multi-select: urban_garden, park, balcony, green_wall, roadside, etc.
+biotopes                  TEXT[]                 -- CHECK (67 values): Forest, prairie, wetland, dry/mineral, coastal, mountain, tropical biotopes
+urban_biotopes            TEXT[]                 -- CHECK (11 values): urban_garden, periurban_garden, park, urban_wasteland, green_wall, green_roof, balcony, agricultural_hedge, cultivated_orchard, vegetable_garden, roadside
 
 -- Section 6: Ecology — Tolerance & roles
 ecological_tolerance      TEXT[]                 -- CHECK: drought, scorching_sun, permanent_shade, excess_water, frost, heatwave, wind
-biodiversity_role         TEXT[]                 -- Multi-select: melliferous, insect_refuge, bird_refuge, host_plant, nitrogen_fixer, etc.
+biodiversity_role         TEXT[]                 -- CHECK (17 values): melliferous, insect_refuge, bird_refuge, mammal_refuge, food_source, host_plant, nitrogen_fixer, soil_improver, ecological_corridor, natural_repellent, green_manure, fertility_improver, crop_shade, vegetable_garden_windbreak, moisture_retention, frost_protection, drought_protection
 pollinators_attracted     TEXT[]                 -- Multi-select (short list)
 birds_attracted           TEXT[]                 -- Multi-select (short list)
 mammals_attracted         TEXT[]                 -- Multi-select (short list)
 
 -- Section 6: Ecology — Symbiosis & management
-ecological_management     TEXT[]                 -- Multi-select: let_seed, no_winter_pruning, natural_mulch, etc.
+ecological_management     TEXT[]                 -- CHECK (9 values): let_seed, no_winter_pruning, keep_dry_foliage, natural_foliage_mulch, branch_chipping_mulch, improves_microbial_life, promotes_mycorrhizal_fungi, enriches_soil, structures_soil
 ecological_impact         TEXT[]                 -- CHECK: neutral, favorable, potentially_invasive, locally_invasive
 
 -- Section 7: Consumption
