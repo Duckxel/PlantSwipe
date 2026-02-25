@@ -1156,7 +1156,8 @@ const PlantInfoPage: React.FC = () => {
 }
 
 const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation(['common', 'plantInfo'])
+  const tp = (key: string, fallback?: string) => t(`plantInfo:${key}`, fallback || key)
   const currentLang = useLanguage()
   const navigate = useLanguageNavigate()
   
@@ -1373,139 +1374,139 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 
       // ── Section 2: Identity ──
       const identityItems = filterInfoItems([
-        { label: t('moreInfo.labels.family'), value: formatTextValue(plant.family) },
-        { label: t('moreInfo.labels.origin'), value: joinRaw(plant.origin) },
-        { label: t('moreInfo.labels.climate'), value: joinArr(plant.climate as string[]), icon: <MapPin className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.seasons'), value: joinArr(plant.season as string[]) },
-        { label: t('moreInfo.labels.utility'), value: joinArr(plant.utility as string[]), icon: <Palette className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.edibleParts'), value: joinArr(plant.ediblePart as string[]), icon: <Leaf className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.thorny', 'Thorny'), value: formatBooleanDescriptor(plant.thorny, t('moreInfo.values.hasThorns'), t('moreInfo.values.smoothStems')) },
-        { label: t('moreInfo.labels.lifeCycle'), value: joinArr(plant.lifeCycle as string[]) },
-        { label: t('moreInfo.labels.averageLifespan', 'Average Lifespan'), value: joinArr(plant.averageLifespan as string[]) },
-        { label: t('moreInfo.labels.foliage'), value: joinArr(plant.foliagePersistence as string[]) },
-        { label: t('moreInfo.labels.livingSpace'), value: joinArr(plant.livingSpace as string[]) },
-        { label: t('moreInfo.labels.landscaping', 'Landscaping'), value: joinArr(plant.landscaping) },
-        { label: t('moreInfo.labels.plantHabit', 'Plant Habit'), value: joinArr(plant.plantHabit) },
-        { label: t('moreInfo.labels.colorTraits'), value: [plant.multicolor ? t('moreInfo.values.multicolor') : null, plant.bicolor ? t('moreInfo.values.bicolor') : null].filter(Boolean).join(' • ') || null },
-        { label: t('moreInfo.labels.fragrance', 'Fragrance'), value: formatBooleanDescriptor(plant.fragrance, t('moreInfo.values.fragrant'), t('moreInfo.values.neutralScent')) },
+        { label: tp('labels.family'), value: formatTextValue(plant.family) },
+        { label: tp('labels.origin'), value: joinRaw(plant.origin) },
+        { label: tp('labels.climate'), value: joinArr(plant.climate as string[]), icon: <MapPin className="h-3.5 w-3.5" /> },
+        { label: tp('labels.seasons'), value: joinArr(plant.season as string[]) },
+        { label: tp('labels.utility'), value: joinArr(plant.utility as string[]), icon: <Palette className="h-3.5 w-3.5" /> },
+        { label: tp('labels.edibleParts'), value: joinArr(plant.ediblePart as string[]), icon: <Leaf className="h-3.5 w-3.5" /> },
+        { label: tp('labels.thorny'), value: formatBooleanDescriptor(plant.thorny, tp('values.hasThorns'), tp('values.smoothStems')) },
+        { label: tp('labels.lifeCycle'), value: joinArr(plant.lifeCycle as string[]) },
+        { label: tp('labels.averageLifespan'), value: joinArr(plant.averageLifespan as string[]) },
+        { label: tp('labels.foliage'), value: joinArr(plant.foliagePersistence as string[]) },
+        { label: tp('labels.livingSpace'), value: joinArr(plant.livingSpace as string[]) },
+        { label: tp('labels.landscaping'), value: joinArr(plant.landscaping) },
+        { label: tp('labels.plantHabit'), value: joinArr(plant.plantHabit) },
+        { label: tp('labels.colorTraits'), value: [plant.multicolor ? tp('values.multicolor') : null, plant.bicolor ? tp('values.bicolor') : null].filter(Boolean).join(' • ') || null },
+        { label: tp('labels.fragrance'), value: formatBooleanDescriptor(plant.fragrance, tp('values.fragrant'), tp('values.neutralScent')) },
       ])
 
       // ── Utility & Safety (Info Block Cards) ──
       const safetyItems = filterInfoItems([
-        { label: t('moreInfo.labels.toxicityHuman'), value: plant.toxicityHuman ? translateEnum(plant.toxicityHuman) : undefined, icon: <Skull className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.toxicityPets'), value: plant.toxicityPets ? translateEnum(plant.toxicityPets) : undefined, icon: <PawPrint className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.poisoningMethod', 'Poisoning Method'), value: joinArr(plant.poisoningMethod as string[]) },
-        { label: t('moreInfo.labels.poisoningSymptoms', 'Poisoning Symptoms'), value: formatTextValue(plant.poisoningSymptoms), variant: 'note' },
-        { label: t('moreInfo.labels.allergens'), value: joinRaw(plant.allergens) },
+        { label: tp('labels.toxicityHuman'), value: plant.toxicityHuman ? translateEnum(plant.toxicityHuman) : undefined, icon: <Skull className="h-3.5 w-3.5" /> },
+        { label: tp('labels.toxicityPets'), value: plant.toxicityPets ? translateEnum(plant.toxicityPets) : undefined, icon: <PawPrint className="h-3.5 w-3.5" /> },
+        { label: tp('labels.poisoningMethod'), value: joinArr(plant.poisoningMethod as string[]) },
+        { label: tp('labels.poisoningSymptoms'), value: formatTextValue(plant.poisoningSymptoms), variant: 'note' },
+        { label: tp('labels.allergens'), value: joinRaw(plant.allergens) },
       ])
 
       // ── Section 3: Care ──
       const careHighlights = filterInfoItems([
-        { label: t('moreInfo.labels.maintenance'), value: joinArr(plant.careLevel as string[]), icon: <Sprout className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.sunlight'), value: joinArr(plant.sunlight as string[]), icon: <Sun className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.temperature'), value: temperatureWindow, icon: <Thermometer className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.water'), value: formatWaterPlans(plant.wateringSchedules || []), icon: <Droplets className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.wateringWarm', 'Watering (Warm)'), value: plant.wateringFrequencyWarm ? `${plant.wateringFrequencyWarm}x/week` : null },
-        { label: t('moreInfo.labels.wateringCold', 'Watering (Cold)'), value: plant.wateringFrequencyCold ? `${plant.wateringFrequencyCold}x/week` : null },
-        { label: t('moreInfo.labels.wateringType'), value: joinArr(plant.wateringType as string[]) },
-        { label: t('moreInfo.labels.humidity'), value: humidityValue, icon: <Droplets className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.misting', 'Misting'), value: plant.mistingFrequency ? `${plant.mistingFrequency}x/week` : null },
-        { label: t('moreInfo.labels.specialNeeds', 'Special Needs'), value: joinRaw(plant.specialNeeds) },
+        { label: tp('labels.maintenance'), value: joinArr(plant.careLevel as string[]), icon: <Sprout className="h-3.5 w-3.5" /> },
+        { label: tp('labels.sunlight'), value: joinArr(plant.sunlight as string[]), icon: <Sun className="h-3.5 w-3.5" /> },
+        { label: tp('labels.temperature'), value: temperatureWindow, icon: <Thermometer className="h-3.5 w-3.5" /> },
+        { label: tp('labels.water'), value: formatWaterPlans(plant.wateringSchedules || []), icon: <Droplets className="h-3.5 w-3.5" /> },
+        { label: tp('labels.wateringWarm'), value: plant.wateringFrequencyWarm ? `${plant.wateringFrequencyWarm}x/week` : null },
+        { label: tp('labels.wateringCold'), value: plant.wateringFrequencyCold ? `${plant.wateringFrequencyCold}x/week` : null },
+        { label: tp('labels.wateringType'), value: joinArr(plant.wateringType as string[]) },
+        { label: tp('labels.humidity'), value: humidityValue, icon: <Droplets className="h-3.5 w-3.5" /> },
+        { label: tp('labels.misting'), value: plant.mistingFrequency ? `${plant.mistingFrequency}x/week` : null },
+        { label: tp('labels.specialNeeds'), value: joinRaw(plant.specialNeeds) },
       ])
       const careDetails = filterInfoItems([
-        { label: t('moreInfo.labels.substrate', 'Substrate'), value: joinArr(plant.substrate) },
-        { label: t('moreInfo.labels.substrateMix', 'Substrate Mix'), value: joinRaw(plant.substrateMix) },
-        { label: t('moreInfo.labels.soilAdvice'), value: formatTextValue(plant.soilAdvice), variant: 'note' },
-        { label: t('moreInfo.labels.mulching'), value: plant.mulchingNeeded ? joinArr(plant.mulchType) || t('moreInfo.values.recommended') : null },
-        { label: t('moreInfo.labels.mulchingAdvice'), value: formatTextValue(plant.mulchAdvice), variant: 'note' },
-        { label: t('moreInfo.labels.nutritionNeed'), value: joinRaw(plant.nutritionNeed) },
-        { label: t('moreInfo.labels.fertilizer'), value: joinRaw(plant.fertilizer) },
-        { label: t('moreInfo.labels.fertilizerAdvice'), value: formatTextValue(plant.fertilizerAdvice), variant: 'note' },
+        { label: tp('labels.substrate'), value: joinArr(plant.substrate) },
+        { label: tp('labels.substrateMix'), value: joinRaw(plant.substrateMix) },
+        { label: tp('labels.soilAdvice'), value: formatTextValue(plant.soilAdvice), variant: 'note' },
+        { label: tp('labels.mulching'), value: plant.mulchingNeeded ? joinArr(plant.mulchType) || tp('values.recommended') : null },
+        { label: tp('labels.mulchingAdvice'), value: formatTextValue(plant.mulchAdvice), variant: 'note' },
+        { label: tp('labels.nutritionNeed'), value: joinRaw(plant.nutritionNeed) },
+        { label: tp('labels.fertilizer'), value: joinRaw(plant.fertilizer) },
+        { label: tp('labels.fertilizerAdvice'), value: formatTextValue(plant.fertilizerAdvice), variant: 'note' },
       ])
 
       // ── Section 4: Growth ──
       const growthItems = filterInfoItems([
-        { label: t('moreInfo.labels.division', 'Propagation'), value: joinArr(plant.division as string[]) },
-        { label: t('moreInfo.labels.cultivationMode', 'Cultivation'), value: joinArr(plant.cultivationMode) },
-        { label: t('moreInfo.labels.sowType'), value: joinArr(plant.sowingMethod as string[]) },
-        { label: t('moreInfo.labels.needsSupport'), value: formatBooleanDescriptor(plant.staking, t('moreInfo.values.needsSupport'), t('moreInfo.values.selfSupporting'), true) },
-        { label: t('moreInfo.labels.supportNotes'), value: formatTextValue(plant.stakingAdvice), variant: 'note' },
-        { label: t('moreInfo.labels.transplanting'), value: formatBooleanDescriptor(plant.transplanting, t('moreInfo.values.transplantRecommended'), t('moreInfo.values.noTransplantNeeded'), true) },
-        { label: t('moreInfo.labels.transplantingTime', 'Transplant Time'), value: formatTextValue(plant.transplantingTime) },
-        { label: t('moreInfo.labels.outdoorPlanting', 'Outdoor Planting'), value: formatTextValue(plant.outdoorPlantingTime) },
-        { label: t('moreInfo.labels.sowingNotes'), value: formatTextValue(plant.sowingAdvice), variant: 'note' },
-        { label: t('moreInfo.labels.pruning', 'Pruning'), value: plant.pruning ? (joinArr(plant.pruningMonth as string[]) || t('moreInfo.values.recommended')) : null },
-        { label: t('moreInfo.labels.pruningAdvice', 'Pruning Advice'), value: formatTextValue(plant.pruningAdvice), variant: 'note' },
+        { label: tp('labels.division'), value: joinArr(plant.division as string[]) },
+        { label: tp('labels.cultivationMode'), value: joinArr(plant.cultivationMode) },
+        { label: tp('labels.sowType'), value: joinArr(plant.sowingMethod as string[]) },
+        { label: tp('labels.needsSupport'), value: formatBooleanDescriptor(plant.staking, tp('values.needsSupport'), tp('values.selfSupporting'), true) },
+        { label: tp('labels.supportNotes'), value: formatTextValue(plant.stakingAdvice), variant: 'note' },
+        { label: tp('labels.transplanting'), value: formatBooleanDescriptor(plant.transplanting, tp('values.transplantRecommended'), tp('values.noTransplantNeeded'), true) },
+        { label: tp('labels.transplantingTime'), value: formatTextValue(plant.transplantingTime) },
+        { label: tp('labels.outdoorPlanting'), value: formatTextValue(plant.outdoorPlantingTime) },
+        { label: tp('labels.sowingNotes'), value: formatTextValue(plant.sowingAdvice), variant: 'note' },
+        { label: tp('labels.pruning'), value: plant.pruning ? (joinArr(plant.pruningMonth as string[]) || tp('values.recommended')) : null },
+        { label: tp('labels.pruningAdvice'), value: formatTextValue(plant.pruningAdvice), variant: 'note' },
       ])
 
       // ── Section 5: Danger ──
       const dangerItems = filterInfoItems([
-        { label: t('moreInfo.labels.pests'), value: joinRaw(plant.pests) },
-        { label: t('moreInfo.labels.diseases'), value: joinRaw(plant.diseases) },
+        { label: tp('labels.pests'), value: joinRaw(plant.pests) },
+        { label: tp('labels.diseases'), value: joinRaw(plant.diseases) },
       ])
 
       // ── Section 6: Ecology & Biodiversity ──
       const ecologyItems = filterInfoItems([
-        { label: t('moreInfo.labels.conservation'), value: joinArr(plant.conservationStatus as string[]), icon: <ShieldCheck className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.ecologicalStatus', 'Ecological Status'), value: joinArr(plant.ecologicalStatus) },
-        { label: t('moreInfo.labels.biotopes', 'Biotopes'), value: joinArr(plant.biotopes) },
-        { label: t('moreInfo.labels.urbanBiotopes', 'Urban Biotopes'), value: joinArr(plant.urbanBiotopes) },
-        { label: t('moreInfo.labels.ecologicalTolerance', 'Tolerance'), value: joinArr(plant.ecologicalTolerance as string[]), icon: <Wind className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.biodiversityRole', 'Biodiversity Role'), value: joinArr(plant.biodiversityRole), icon: <Sprout className="h-3.5 w-3.5" /> },
-        { label: t('moreInfo.labels.beneficialRoles', 'Beneficial Roles'), value: joinRaw(plant.beneficialRoles) },
-        { label: t('moreInfo.labels.harmfulRoles', 'Harmful Roles'), value: joinRaw(plant.harmfulRoles) },
-        { label: t('moreInfo.labels.pollinators'), value: joinRaw(plant.pollinatorsAttracted) },
-        { label: t('moreInfo.labels.birdsAttracted', 'Birds Attracted'), value: joinRaw(plant.birdsAttracted) },
-        { label: t('moreInfo.labels.mammalsAttracted', 'Mammals Attracted'), value: joinRaw(plant.mammalsAttracted) },
-        { label: t('moreInfo.labels.symbiosis', 'Symbiosis'), value: joinRaw(plant.symbiosis) },
-        { label: t('moreInfo.labels.symbiosisNotes', 'Symbiosis Details'), value: formatTextValue(plant.symbiosisNotes), variant: 'note' },
-        { label: t('moreInfo.labels.ecologicalManagement', 'Eco Management'), value: joinArr(plant.ecologicalManagement) },
-        { label: t('moreInfo.labels.ecologicalImpact', 'Ecological Impact'), value: joinArr(plant.ecologicalImpact as string[]), icon: <Flag className="h-3.5 w-3.5" /> },
+        { label: tp('labels.conservation'), value: joinArr(plant.conservationStatus as string[]), icon: <ShieldCheck className="h-3.5 w-3.5" /> },
+        { label: tp('labels.ecologicalStatus'), value: joinArr(plant.ecologicalStatus) },
+        { label: tp('labels.biotopes'), value: joinArr(plant.biotopes) },
+        { label: tp('labels.urbanBiotopes'), value: joinArr(plant.urbanBiotopes) },
+        { label: tp('labels.ecologicalTolerance'), value: joinArr(plant.ecologicalTolerance as string[]), icon: <Wind className="h-3.5 w-3.5" /> },
+        { label: tp('labels.biodiversityRole'), value: joinArr(plant.biodiversityRole), icon: <Sprout className="h-3.5 w-3.5" /> },
+        { label: tp('labels.beneficialRoles'), value: joinRaw(plant.beneficialRoles) },
+        { label: tp('labels.harmfulRoles'), value: joinRaw(plant.harmfulRoles) },
+        { label: tp('labels.pollinators'), value: joinRaw(plant.pollinatorsAttracted) },
+        { label: tp('labels.birdsAttracted'), value: joinRaw(plant.birdsAttracted) },
+        { label: tp('labels.mammalsAttracted'), value: joinRaw(plant.mammalsAttracted) },
+        { label: tp('labels.symbiosis'), value: joinRaw(plant.symbiosis) },
+        { label: tp('labels.symbiosisNotes'), value: formatTextValue(plant.symbiosisNotes), variant: 'note' },
+        { label: tp('labels.ecologicalManagement'), value: joinArr(plant.ecologicalManagement) },
+        { label: tp('labels.ecologicalImpact'), value: joinArr(plant.ecologicalImpact as string[]), icon: <Flag className="h-3.5 w-3.5" /> },
       ])
 
       // ── Section 7: Consumption / Usage ──
       const consumptionItems = filterInfoItems([
-        { label: t('moreInfo.labels.nutritionalValue', 'Nutritional Value'), value: formatTextValue(plant.nutritionalValue) },
-        { label: t('moreInfo.labels.infusionFriendly'), value: formatBooleanDescriptor(plant.infusion, t('moreInfo.values.infusionReady'), t('moreInfo.values.notForInfusions')) },
-        { label: t('moreInfo.labels.infusionParts', 'Infusion Parts'), value: joinRaw(plant.infusionParts) },
-        { label: t('moreInfo.labels.infusionBenefits', 'Infusion Benefits'), value: formatTextValue(plant.infusionBenefits), variant: 'note' },
-        { label: t('moreInfo.labels.infusionRecipes', 'Infusion Recipes'), value: formatTextValue(plant.infusionRecipeIdeas), variant: 'note' },
-        { label: t('moreInfo.labels.infusionMix'), value: infusionMixSummary, variant: 'note' },
-        { label: t('moreInfo.labels.medicinal', 'Medicinal Plant'), value: formatBooleanDescriptor(plant.medicinal, t('moreInfo.values.medicinalPlant', 'Medicinal plant'), null) },
-        { label: t('moreInfo.labels.medicinalBenefits', 'Benefits'), value: formatTextValue(plant.medicinalBenefits), variant: 'note' },
-        { label: t('moreInfo.labels.medicinalUsage', 'Medical Usage'), value: formatTextValue(plant.medicinalUsage), variant: 'note' },
-        { label: t('moreInfo.labels.medicinalWarning', 'Safety Warning'), value: formatTextValue(plant.medicinalWarning), variant: 'note' },
-        { label: t('moreInfo.labels.medicinalHistory', 'History'), value: formatTextValue(plant.medicinalHistory), variant: 'note' },
-        { label: t('moreInfo.labels.fragrance', 'Fragrance'), value: formatBooleanDescriptor(plant.fragrance, t('moreInfo.values.fragrant'), null) },
-        { label: t('moreInfo.labels.aromatherapy'), value: formatBooleanDescriptor(plant.aromatherapy, t('moreInfo.values.essentialOils'), t('moreInfo.values.notForOils')) },
-        { label: t('moreInfo.labels.aromatherapyBenefits', 'Aromatherapy Benefits'), value: formatTextValue(plant.aromatherapyBenefits), variant: 'note' },
-        { label: t('moreInfo.labels.essentialOilBlends', 'Oil Blends'), value: formatTextValue(plant.essentialOilBlends), variant: 'note' },
-        { label: t('moreInfo.labels.edibleOil', 'Edible Oil'), value: plant.edibleOil ? translateEnum(plant.edibleOil) : null },
-        { label: t('moreInfo.labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
+        { label: tp('labels.nutritionalValue'), value: formatTextValue(plant.nutritionalValue) },
+        { label: tp('labels.infusionFriendly'), value: formatBooleanDescriptor(plant.infusion, tp('values.infusionReady'), tp('values.notForInfusions')) },
+        { label: tp('labels.infusionParts'), value: joinRaw(plant.infusionParts) },
+        { label: tp('labels.infusionBenefits'), value: formatTextValue(plant.infusionBenefits), variant: 'note' },
+        { label: tp('labels.infusionRecipes'), value: formatTextValue(plant.infusionRecipeIdeas), variant: 'note' },
+        { label: tp('labels.infusionMix'), value: infusionMixSummary, variant: 'note' },
+        { label: tp('labels.medicinal'), value: formatBooleanDescriptor(plant.medicinal, tp('values.medicinalPlant'), null) },
+        { label: tp('labels.medicinalBenefits'), value: formatTextValue(plant.medicinalBenefits), variant: 'note' },
+        { label: tp('labels.medicinalUsage'), value: formatTextValue(plant.medicinalUsage), variant: 'note' },
+        { label: tp('labels.medicinalWarning'), value: formatTextValue(plant.medicinalWarning), variant: 'note' },
+        { label: tp('labels.medicinalHistory'), value: formatTextValue(plant.medicinalHistory), variant: 'note' },
+        { label: tp('labels.fragrance'), value: formatBooleanDescriptor(plant.fragrance, tp('values.fragrant'), null) },
+        { label: tp('labels.aromatherapy'), value: formatBooleanDescriptor(plant.aromatherapy, tp('values.essentialOils'), tp('values.notForOils')) },
+        { label: tp('labels.aromatherapyBenefits'), value: formatTextValue(plant.aromatherapyBenefits), variant: 'note' },
+        { label: tp('labels.essentialOilBlends'), value: formatTextValue(plant.essentialOilBlends), variant: 'note' },
+        { label: tp('labels.edibleOil'), value: plant.edibleOil ? translateEnum(plant.edibleOil) : null },
+        { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
       ])
 
       // ── Section 8: Misc ──
       const miscItems = filterInfoItems([
-        { label: t('moreInfo.labels.companions'), value: companionNames.length ? companionNames.join(' • ') : null },
-        { label: t('moreInfo.labels.biotopePlants', 'Biotope Plants'), value: joinRaw(plant.biotopePlants) },
-        { label: t('moreInfo.labels.beneficialPlants', 'Beneficial Plants'), value: joinRaw(plant.beneficialPlants) },
-        { label: t('moreInfo.labels.harmfulPlants', 'Harmful Plants'), value: joinRaw(plant.harmfulPlants) },
-        { label: t('moreInfo.labels.varieties', 'Varieties'), value: joinRaw(plant.varieties) },
-        { label: t('moreInfo.labels.tags'), value: joinRaw(plant.plantTags) },
-        { label: t('moreInfo.labels.biodiversityTags', 'Biodiversity Tags'), value: joinRaw(plant.biodiversityTags) },
+        { label: tp('labels.companions'), value: companionNames.length ? companionNames.join(' • ') : null },
+        { label: tp('labels.biotopePlants'), value: joinRaw(plant.biotopePlants) },
+        { label: tp('labels.beneficialPlants'), value: joinRaw(plant.beneficialPlants) },
+        { label: tp('labels.harmfulPlants'), value: joinRaw(plant.harmfulPlants) },
+        { label: tp('labels.varieties'), value: joinRaw(plant.varieties) },
+        { label: tp('labels.tags'), value: joinRaw(plant.plantTags) },
+        { label: tp('labels.biodiversityTags'), value: joinRaw(plant.biodiversityTags) },
       ])
 
       // ── All sections in spec order ──
       const infoSections = [
-        { title: t('moreInfo.sections.identityTraits', 'Identity'), icon: <Palette className="h-4 w-4" />, items: identityItems },
-        { title: t('moreInfo.sections.safety', 'Safety & Toxicity'), icon: <Skull className="h-4 w-4" />, items: safetyItems },
-        { title: t('moreInfo.sections.careHighlights', 'Care'), icon: <Droplets className="h-4 w-4" />, items: careHighlights },
-        { title: t('moreInfo.sections.careDetails', 'Care Details'), icon: <Thermometer className="h-4 w-4" />, items: careDetails },
-        { title: t('moreInfo.sections.growthStructure', 'Growth & Propagation'), icon: <Sprout className="h-4 w-4" />, items: growthItems },
-        { title: t('moreInfo.sections.danger', 'Pests & Diseases'), icon: <AlertTriangle className="h-4 w-4" />, items: dangerItems },
-        { title: t('moreInfo.sections.ecology', 'Ecology & Biodiversity'), icon: <TreeDeciduous className="h-4 w-4" />, items: ecologyItems },
-        { title: t('moreInfo.sections.consumption', 'Consumption & Usage'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems },
-        { title: t('moreInfo.sections.misc', 'Companions & Tags'), icon: <Leaf className="h-4 w-4" />, items: miscItems },
+        { title: tp('sections.identityTraits'), icon: <Palette className="h-4 w-4" />, items: identityItems },
+        { title: tp('sections.safety'), icon: <Skull className="h-4 w-4" />, items: safetyItems },
+        { title: tp('sections.careHighlights'), icon: <Droplets className="h-4 w-4" />, items: careHighlights },
+        { title: tp('sections.careDetails'), icon: <Thermometer className="h-4 w-4" />, items: careDetails },
+        { title: tp('sections.growthStructure'), icon: <Sprout className="h-4 w-4" />, items: growthItems },
+        { title: tp('sections.danger'), icon: <AlertTriangle className="h-4 w-4" />, items: dangerItems },
+        { title: tp('sections.ecology'), icon: <TreeDeciduous className="h-4 w-4" />, items: ecologyItems },
+        { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems },
+        { title: tp('sections.misc'), icon: <Leaf className="h-4 w-4" />, items: miscItems },
       ].filter((section) => section.items.length > 0)
 
   return (
