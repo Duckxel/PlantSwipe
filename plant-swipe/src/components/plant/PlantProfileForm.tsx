@@ -938,7 +938,6 @@ const identityFields: FieldConfig[] = [
   { key: "plantHabit", label: "Plant Habit / Shape", description: "Growth habit and form", type: "multiselect", options: ["Upright","Arborescent","Shrubby","Bushy","Clumping","Erect","Creeping","Carpeting","Ground Cover","Prostrate","Spreading","Climbing","Twining","Scrambling","Liana","Trailing","Columnar","Conical","Fastigiate","Globular","Spreading Flat","Rosette","Cushion","Ball Shaped","Succulent","Palmate","Rhizomatous","Suckering"] },
   { key: "multicolor", label: "Multicolor?", description: "Plant has 3+ distinct colors", type: "boolean" },
   { key: "bicolor", label: "Bicolor?", description: "Plant has exactly 2 colors", type: "boolean" },
-  { key: "fragrance", label: "Fragrance?", description: "Does the plant have a notable fragrance?", type: "boolean" },
 ]
 
 // ============================================================================
@@ -2410,17 +2409,17 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const [showCompanionRecommendations, setShowCompanionRecommendations] = React.useState(false)
   const categoryLabels: Record<string, string> = {
-    base: t('plantAdmin.categories.base', '1. Base'),
-    identity: t('plantAdmin.categories.identity', '2. Identity'),
-    safety: t('plantAdmin.categories.safety', '3. Safety & Toxicity'),
-    care: t('plantAdmin.categories.care', '4. Care'),
-    careDetails: t('plantAdmin.categories.careDetails', '5. Care Details'),
-    growth: t('plantAdmin.categories.growth', '6. Growth'),
-    danger: t('plantAdmin.categories.danger', '7. Danger'),
-    ecology: t('plantAdmin.categories.ecology', '8. Ecology'),
-    consumption: t('plantAdmin.categories.consumption', '9. Consumption'),
-    misc: t('plantAdmin.categories.misc', '10. Misc'),
-    meta: t('plantAdmin.categories.meta', '11. Meta'),
+    base: t('plantAdmin.categories.base', 'Base'),
+    identity: t('plantAdmin.categories.identity', 'Identity'),
+    safety: t('plantAdmin.categories.safety', 'Safety & Toxicity'),
+    care: t('plantAdmin.categories.care', 'Care'),
+    careDetails: t('plantAdmin.categories.careDetails', 'Care Details'),
+    growth: t('plantAdmin.categories.growth', 'Growth'),
+    danger: t('plantAdmin.categories.danger', 'Danger'),
+    ecology: t('plantAdmin.categories.ecology', 'Ecology'),
+    consumption: t('plantAdmin.categories.consumption', 'Consumption'),
+    misc: t('plantAdmin.categories.misc', 'Misc'),
+    meta: t('plantAdmin.categories.meta', 'Meta'),
   }
   const scrollToCategory = (category: PlantFormCategory) => {
     setSelectedCategory(category)

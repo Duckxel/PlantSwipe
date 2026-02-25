@@ -2416,14 +2416,20 @@
       }
     },
     "categories": {
-      "basics": "Basics",
+      "base": "Base",
+      "basics": "Base",
       "identity": "Identity",
-      "plantCare": "Plant Care",
+      "safety": "Safety & Toxicity",
+      "care": "Care",
+      "careDetails": "Care Details",
+      "plantCare": "Care",
       "growth": "Growth",
-      "usage": "Usage",
+      "usage": "Consumption",
+      "consumption": "Consumption",
       "ecology": "Ecology",
       "danger": "Danger",
-      "miscellaneous": "Miscellaneous",
+      "miscellaneous": "Misc",
+      "misc": "Misc",
       "meta": "Meta"
     }
   },

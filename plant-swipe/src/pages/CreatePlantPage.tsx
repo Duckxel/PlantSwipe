@@ -2144,73 +2144,61 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     try {
       const sourceLang = language
       const translatedRows = [] as any[]
-      const primarySource = (plant.miscellaneous?.sources || [])[0]
+      const p2 = plant
+      const primarySource = Array.isArray(p2.sources) ? p2.sources[0] : (p2.miscellaneous?.sources || [])[0]
+      const safeText = (v: unknown) => typeof v === 'string' && v.trim() ? v : null
+      const safeArr = (v: unknown) => Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0) : []
+
         for (const target of targets) {
-        const translatedName = await translateText(plant.name || '', target, sourceLang)
-        const translatedGivenNames = await translateArray(plant.identity?.givenNames || [], target, sourceLang)
-        const translateArraySafe = (arr?: string[]) => translateArray(arr || [], target, sourceLang)
+        const translateSafe = async (v: unknown) => {
+          const s = safeText(v)
+          return s ? await translateText(s, target, sourceLang) : null
+        }
+        const translateArrSafe = (arr: unknown) => translateArray(safeArr(arr), target, sourceLang)
+
         const translatedSourceName = primarySource?.name
           ? await translateText(primarySource.name, target, sourceLang)
           : undefined
-        const translatedSource: Record<string, string> = {}
-        if (translatedSourceName) translatedSource.name = translatedSourceName
-        if (primarySource?.url) translatedSource.url = primarySource.url
 
-          // Note: All enum fields (family, life_cycle, season, foliage_persistance, toxicity_*,
-          // living_space, composition, maintenance_level) are NOT translated - they stay in plants table only
-          // Same for scientific_name, promotion_month, habitat, level_sun
-          // Only text fields that need actual translation go in plant_translations
           translatedRows.push({
           plant_id: plant.id,
           language: target,
-          name: translatedName,
-          given_names: translatedGivenNames,
-          overview: plant.identity?.overview
-            ? await translateText(plant.identity.overview, target, sourceLang)
-            : plant.identity?.overview || null,
-            allergens: await translateArraySafe(plant.identity?.allergens),
-            symbolism: await translateArraySafe(plant.identity?.symbolism),
-          origin: await translateArraySafe(plant.plantCare?.origin),
-          advice_soil: plant.plantCare?.adviceSoil
-            ? await translateText(plant.plantCare.adviceSoil, target, sourceLang)
-            : plant.plantCare?.adviceSoil || null,
-          advice_mulching: plant.plantCare?.adviceMulching
-            ? await translateText(plant.plantCare.adviceMulching, target, sourceLang)
-            : plant.plantCare?.adviceMulching || null,
-          advice_fertilizer: plant.plantCare?.adviceFertilizer
-            ? await translateText(plant.plantCare.adviceFertilizer, target, sourceLang)
-            : plant.plantCare?.adviceFertilizer || null,
-          advice_tutoring: plant.growth?.adviceTutoring
-            ? await translateText(plant.growth.adviceTutoring, target, sourceLang)
-            : plant.growth?.adviceTutoring || null,
-          advice_sowing: plant.growth?.adviceSowing
-            ? await translateText(plant.growth.adviceSowing, target, sourceLang)
-            : plant.growth?.adviceSowing || null,
-          cut: plant.growth?.cut
-            ? await translateText(plant.growth.cut, target, sourceLang)
-            : plant.growth?.cut || null,
-          advice_medicinal: plant.usage?.adviceMedicinal
-            ? await translateText(plant.usage.adviceMedicinal, target, sourceLang)
-            : plant.usage?.adviceMedicinal || null,
-          nutritional_intake: await translateArraySafe(plant.usage?.nutritionalIntake),
-          recipes_ideas: await translateArraySafe(
-            plant.usage?.recipes?.length
-              ? plant.usage.recipes.map(r => r.name).filter(Boolean)
-              : plant.usage?.recipesIdeas
-          ),
-          advice_infusion: plant.usage?.adviceInfusion
-            ? await translateText(plant.usage.adviceInfusion, target, sourceLang)
-            : plant.usage?.adviceInfusion || null,
-            ground_effect: plant.ecology?.groundEffect
-              ? await translateText(plant.ecology.groundEffect, target, sourceLang)
-              : plant.ecology?.groundEffect || null,
-          source_name: translatedSource.name || null,
-          source_url: translatedSource.url || null,
-          tags: await translateArraySafe(plant.miscellaneous?.tags),
-          // Translatable array fields (formerly non-translatable)
-          spice_mixes: await translateArraySafe(plant.usage?.spiceMixes),
-          pests: await translateArraySafe(plant.danger?.pests),
-          diseases: await translateArraySafe(plant.danger?.diseases),
+          name: await translateSafe(p2.name) || p2.name,
+          common_names: await translateArrSafe(p2.commonNames || p2.identity?.commonNames || p2.identity?.givenNames),
+          presentation: await translateSafe(p2.presentation || p2.identity?.overview || p2.description),
+          origin: await translateArrSafe(p2.origin || p2.plantCare?.origin),
+          allergens: await translateArrSafe(p2.allergens || p2.identity?.allergens),
+          poisoning_symptoms: await translateSafe(p2.poisoningSymptoms),
+          soil_advice: await translateSafe(p2.soilAdvice || p2.plantCare?.adviceSoil),
+          mulch_advice: await translateSafe(p2.mulchAdvice || p2.plantCare?.adviceMulching),
+          fertilizer_advice: await translateSafe(p2.fertilizerAdvice || p2.plantCare?.adviceFertilizer),
+          staking_advice: await translateSafe(p2.stakingAdvice || p2.growth?.adviceTutoring),
+          sowing_advice: await translateSafe(p2.sowingAdvice || p2.growth?.adviceSowing),
+          transplanting_time: await translateSafe(p2.transplantingTime),
+          outdoor_planting_time: await translateSafe(p2.outdoorPlantingTime),
+          pruning_advice: await translateSafe(p2.pruningAdvice || p2.growth?.cut),
+          pests: await translateArrSafe(p2.pests || p2.danger?.pests),
+          diseases: await translateArrSafe(p2.diseases || p2.danger?.diseases),
+          nutritional_value: await translateSafe(p2.nutritionalValue),
+          recipes_ideas: await translateArrSafe(p2.recipesIdeas),
+          infusion_benefits: await translateSafe(p2.infusionBenefits || p2.usage?.adviceInfusion),
+          infusion_recipe_ideas: await translateSafe(p2.infusionRecipeIdeas),
+          medicinal_benefits: await translateSafe(p2.medicinalBenefits),
+          medicinal_usage: await translateSafe(p2.medicinalUsage || p2.usage?.adviceMedicinal),
+          medicinal_warning: await translateSafe(p2.medicinalWarning),
+          medicinal_history: await translateSafe(p2.medicinalHistory),
+          aromatherapy_benefits: await translateSafe(p2.aromatherapyBenefits),
+          essential_oil_blends: await translateSafe(p2.essentialOilBlends),
+          beneficial_roles: await translateArrSafe(p2.beneficialRoles),
+          harmful_roles: await translateArrSafe(p2.harmfulRoles),
+          symbiosis: await translateArrSafe(p2.symbiosis),
+          symbiosis_notes: await translateSafe(p2.symbiosisNotes),
+          plant_tags: await translateArrSafe(p2.plantTags || p2.miscellaneous?.tags),
+          biodiversity_tags: await translateArrSafe(p2.biodiversityTags),
+          source_name: translatedSourceName || null,
+          source_url: primarySource?.url || null,
+          user_notes: await translateSafe(p2.userNotes),
+          spice_mixes: await translateArrSafe(p2.spiceMixes || p2.usage?.spiceMixes),
         })
       }
 
