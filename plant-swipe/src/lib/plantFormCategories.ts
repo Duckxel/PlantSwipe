@@ -1,39 +1,176 @@
+// ============================================================================
+// Plant form categories — 9 sections matching the DB schema specification
+// ============================================================================
+
 export type PlantFormCategory =
-  | 'basics'
+  | 'base'
   | 'identity'
-  | 'plantCare'
+  | 'care'
   | 'growth'
-  | 'usage'
-  | 'ecology'
   | 'danger'
-  | 'miscellaneous'
+  | 'ecology'
+  | 'consumption'
+  | 'misc'
   | 'meta'
 
 export const plantFormCategoryOrder: PlantFormCategory[] = [
-  'basics',
+  'base',
   'identity',
-  'plantCare',
+  'care',
   'growth',
-  'usage',
-  'ecology',
   'danger',
-  'miscellaneous',
+  'ecology',
+  'consumption',
+  'misc',
   'meta',
 ]
 
-const fieldCategoryOverrides: Record<string, PlantFormCategory> = {
+const fieldCategoryMap: Record<string, PlantFormCategory> = {
+  // Section 1: Base
+  encyclopediaCategory: 'base',
+  scientificNameSpecies: 'base',
+  scientificNameVariety: 'base',
+  family: 'base',
+  commonNames: 'base',
+  presentation: 'base',
+  featuredMonth: 'base',
+  colors: 'base',
+  images: 'base',
+
+  // Section 2: Identity
+  origin: 'identity',
+  climate: 'identity',
+  season: 'identity',
+  utility: 'identity',
+  ediblePart: 'identity',
+  thorny: 'identity',
+  toxicityHuman: 'identity',
+  toxicityPets: 'identity',
+  poisoningMethod: 'identity',
+  poisoningSymptoms: 'identity',
+  allergens: 'identity',
+  lifeCycle: 'identity',
+  averageLifespan: 'identity',
+  foliagePersistence: 'identity',
+  livingSpace: 'identity',
+  landscaping: 'identity',
+  plantHabit: 'identity',
+  multicolor: 'identity',
+  bicolor: 'identity',
+
+  // Section 3: Care
+  careLevel: 'care',
+  sunlight: 'care',
+  temperatureMax: 'care',
+  temperatureMin: 'care',
+  temperatureIdeal: 'care',
+  wateringFrequencyWarm: 'care',
+  wateringFrequencyCold: 'care',
+  wateringType: 'care',
+  hygrometry: 'care',
+  mistingFrequency: 'care',
+  specialNeeds: 'care',
+  substrate: 'care',
+  substrateMix: 'care',
+  soilAdvice: 'care',
+  mulchingNeeded: 'care',
+  mulchType: 'care',
+  mulchAdvice: 'care',
+  nutritionNeed: 'care',
+  fertilizer: 'care',
+  fertilizerAdvice: 'care',
+
+  // Section 4: Growth
+  sowingMonth: 'growth',
+  floweringMonth: 'growth',
+  fruitingMonth: 'growth',
+  heightCm: 'growth',
+  wingspanCm: 'growth',
+  staking: 'growth',
+  stakingAdvice: 'growth',
+  division: 'growth',
+  cultivationMode: 'growth',
+  sowingMethod: 'growth',
+  transplanting: 'growth',
+  transplantingTime: 'growth',
+  outdoorPlantingTime: 'growth',
+  sowingAdvice: 'growth',
+  pruning: 'growth',
+  pruningMonth: 'growth',
+  pruningAdvice: 'growth',
+
+  // Section 5: Danger
+  pests: 'danger',
+  diseases: 'danger',
+
+  // Section 6: Ecology
+  conservationStatus: 'ecology',
+  ecologicalStatus: 'ecology',
+  biotopes: 'ecology',
+  urbanBiotopes: 'ecology',
+  ecologicalTolerance: 'ecology',
+  biodiversityRole: 'ecology',
+  pollinatorsAttracted: 'ecology',
+  birdsAttracted: 'ecology',
+  mammalsAttracted: 'ecology',
+  beneficialRoles: 'ecology',
+  harmfulRoles: 'ecology',
+  symbiosis: 'ecology',
+  symbiosisNotes: 'ecology',
+  ecologicalManagement: 'ecology',
+  ecologicalImpact: 'ecology',
+
+  // Section 7: Consumption
+  infusion: 'consumption',
+  infusionParts: 'consumption',
+  infusionBenefits: 'consumption',
+  infusionRecipeIdeas: 'consumption',
+  medicinal: 'consumption',
+  medicinalBenefits: 'consumption',
+  medicinalUsage: 'consumption',
+  medicinalWarning: 'consumption',
+  medicinalHistory: 'consumption',
+  nutritionalValue: 'consumption',
+  recipes: 'consumption',
+  aromatherapy: 'consumption',
+  aromatherapyBenefits: 'consumption',
+  essentialOilBlends: 'consumption',
+  fragrance: 'consumption',
+  edibleOil: 'consumption',
+  spiceMixes: 'consumption',
+
+  // Section 8: Misc
+  companionPlants: 'misc',
+  biotopePlants: 'misc',
+  beneficialPlants: 'misc',
+  harmfulPlants: 'misc',
+  varieties: 'misc',
+  plantTags: 'misc',
+  biodiversityTags: 'misc',
+  sources: 'misc',
+
+  // Section 9: Meta
+  status: 'meta',
+  adminCommentary: 'meta',
+  userNotes: 'meta',
+  contributors: 'meta',
+
+  // Legacy aliases (map old names to new categories)
+  plantType: 'base',
   identity: 'identity',
-  plantCare: 'plantCare',
+  plantCare: 'care',
   growth: 'growth',
-  usage: 'usage',
+  usage: 'consumption',
   ecology: 'ecology',
   danger: 'danger',
-  miscellaneous: 'miscellaneous',
+  miscellaneous: 'misc',
   meta: 'meta',
+  description: 'base',
+  basics: 'base',
 }
 
 export function mapFieldToCategory(fieldKey: string): PlantFormCategory {
-  return fieldCategoryOverrides[fieldKey] || 'basics'
+  return fieldCategoryMap[fieldKey] || 'base'
 }
 
 export type CategoryProgress = Record<
