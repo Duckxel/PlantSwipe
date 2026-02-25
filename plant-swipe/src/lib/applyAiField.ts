@@ -1,29 +1,32 @@
+// ============================================================================
+// Apply AI field data to a Plant object
+// Handles normalization, enum validation, and type coercion
+// Updated for new flat DB schema (Feb 2026)
+// ============================================================================
+
 import type { Plant } from "@/types/plant"
 import { mapFieldToCategory, type PlantFormCategory } from "./plantFormCategories"
 import type { EnumTools } from "@/lib/composition"
 import {
-  expandCompositionFromDb,
-  expandFoliagePersistanceFromDb,
-  plantTypeEnum,
+  encyclopediaCategoryEnum,
   utilityEnum,
-  comestiblePartEnum,
-  fruitTypeEnum,
-  seasonEnum,
-  lifeCycleEnum,
-  livingSpaceEnum,
-  maintenanceLevelEnum,
+  ediblePartEnum,
   toxicityEnum,
-  habitatEnum,
-  levelSunEnum,
+  poisoningMethodEnum,
+  lifeCycleEnum,
+  averageLifespanEnum,
+  foliagePersistenceEnum,
+  livingSpaceEnum,
+  seasonEnum,
+  climateEnum,
+  careLevelEnum,
+  sunlightEnum,
   wateringTypeEnum,
   divisionEnum,
-  soilEnum,
-  mulchingEnum,
-  nutritionNeedEnum,
-  fertilizerEnum,
-  sowTypeEnum,
-  polenizerEnum,
+  sowingMethodEnum,
   conservationStatusEnum,
+  ecologicalToleranceEnum,
+  ecologicalImpactEnum,
   recipeCategoryEnum,
   recipeTimeEnum,
 } from "@/lib/composition"
@@ -44,388 +47,339 @@ const isExplicitArrayClear = (value: unknown) =>
 
 const normalizeEnumValueInput = (enumTool: EnumTools, value: unknown): EnumValueResult => {
   if (value === undefined) return { shouldUpdate: false }
-  if (shouldClearValue(value)) {
-    return { shouldUpdate: true, value: undefined }
-  }
+  if (shouldClearValue(value)) return { shouldUpdate: true, value: undefined }
   const ui = enumTool.toUi(value)
-  if (ui !== undefined) {
-    return { shouldUpdate: true, value: ui }
-  }
+  if (ui !== undefined) return { shouldUpdate: true, value: ui }
+  // For the new schema, also accept raw DB values directly
+  const db = enumTool.toDb(value)
+  if (db !== null) return { shouldUpdate: true, value: db }
   return { shouldUpdate: false }
 }
 
 const normalizeEnumArrayInput = (enumTool: EnumTools, value: unknown): EnumArrayResult => {
   if (value === undefined) return { shouldUpdate: false }
-  const normalized = enumTool.toUiArray(value)
-  if (normalized.length > 0) {
-    return { shouldUpdate: true, value: normalized }
-  }
-  if (isExplicitArrayClear(value) || shouldClearValue(value)) {
-    return { shouldUpdate: true, value: [] }
-  }
+  // Try DB array first (new schema uses DB keys directly)
+  const dbArr = enumTool.toDbArray(value)
+  if (dbArr.length > 0) return { shouldUpdate: true, value: dbArr }
+  const uiArr = enumTool.toUiArray(value)
+  if (uiArr.length > 0) return { shouldUpdate: true, value: uiArr }
+  if (isExplicitArrayClear(value) || shouldClearValue(value)) return { shouldUpdate: true, value: [] }
   return { shouldUpdate: false }
 }
 
-export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown): Plant {
-  const next: Plant = { ...prev }
+const normalizeStringArray = (value: unknown): string[] | undefined => {
+  if (value === undefined) return undefined
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .map(item => item.trim())
+  }
+  if (typeof value === 'string' && value.trim()) return [value.trim()]
+  return []
+}
 
-  const shouldIgnore = ['colors', 'identity.colors', 'miscellaneous.source', 'source', 'sources', 'images'].some(
-    (blocked) => fieldKey.toLowerCase() === blocked.toLowerCase(),
-  )
-  if (shouldIgnore) return next
+const normalizeString = (value: unknown): string | undefined => {
+  if (value === undefined) return undefined
+  if (typeof value === 'string') return value.trim() || undefined
+  return undefined
+}
 
-  switch (fieldKey) {
-    case 'id':
-      return { ...next, id: typeof data === 'string' ? data : next.id }
-    case 'plantType': {
-      const result = normalizeEnumValueInput(plantTypeEnum as EnumTools, data)
-      if (!result.shouldUpdate) {
-        // If AI returned an unrecognized value but data was provided, default to 'plant'
-        // This prevents database constraint violations when an unrecognized type is returned
-        if (data !== undefined && data !== null && typeof data === 'string' && data.trim()) {
-          console.warn(`[applyAiField] Unrecognized plantType "${data}", defaulting to "plant"`)
-          return { ...next, plantType: 'plant' }
-        }
-        return next
-      }
-      return { ...next, plantType: result.value as Plant['plantType'] | undefined }
-    }
-    case 'utility': {
-      const result = normalizeEnumArrayInput(utilityEnum as EnumTools, data)
-      if (!result.shouldUpdate) return next
-      return { ...next, utility: result.value as Plant['utility'] }
-    }
-    case 'comestiblePart': {
-      const result = normalizeEnumArrayInput(comestiblePartEnum as EnumTools, data)
-      if (!result.shouldUpdate) return next
-      return { ...next, comestiblePart: result.value as Plant['comestiblePart'] }
-    }
-    case 'fruitType': {
-      const result = normalizeEnumArrayInput(fruitTypeEnum as EnumTools, data)
-      if (!result.shouldUpdate) return next
-      return { ...next, fruitType: result.value as Plant['fruitType'] }
-    }
-    case 'images':
-      // Always preserve existing images - AI should never overwrite user-added images
-      return next
-    case 'colors':
-      return { ...next, colors: Array.isArray(data) ? (data as any) : next.colors }
-    case 'seasons': {
-      const result = normalizeEnumArrayInput(seasonEnum as EnumTools, data)
-      if (!result.shouldUpdate) return next
-      return { ...next, seasons: result.value as Plant['seasons'] }
-    }
-    case 'description':
-      return { ...next, description: typeof data === 'string' ? data : next.description }
-    case 'identity': {
-      type IdentityComposition = NonNullable<NonNullable<Plant['identity']>['composition']>
-      const payload = { ...(data as Record<string, unknown>) }
-      delete (payload as any).colors
-      // Remove fields that belong at the top level, not in identity
-      delete (payload as any).plant_type
-      delete (payload as any).plantType
-      delete (payload as any).utility
-      delete (payload as any).comestible_part
-      delete (payload as any).comestiblePart
-      delete (payload as any).fruit_type
-      delete (payload as any).fruitType
-      if ('composition' in payload) {
-        const normalizedComposition = expandCompositionFromDb(
-          payload.composition as string[] | null | undefined,
-        ) as IdentityComposition | undefined
-        if (normalizedComposition) {
-          ;(payload as { composition?: IdentityComposition }).composition = normalizedComposition
-        } else {
-          delete (payload as Record<string, unknown>).composition
-        }
-      }
-      const lifeCycleResult = normalizeEnumValueInput(lifeCycleEnum as EnumTools, (payload as any).lifeCycle)
-      if (lifeCycleResult.shouldUpdate) {
-        (payload as any).lifeCycle = lifeCycleResult.value
-      }
-      const livingSpaceResult = normalizeEnumValueInput(livingSpaceEnum as EnumTools, (payload as any).livingSpace)
-      if (livingSpaceResult.shouldUpdate) {
-        (payload as any).livingSpace = livingSpaceResult.value
-      }
-      const maintenanceResult = normalizeEnumValueInput(maintenanceLevelEnum as EnumTools, (payload as any).maintenanceLevel)
-      if (maintenanceResult.shouldUpdate) {
-        (payload as any).maintenanceLevel = maintenanceResult.value
-      }
-      const toxicityHumanResult = normalizeEnumValueInput(toxicityEnum as EnumTools, (payload as any).toxicityHuman)
-      if (toxicityHumanResult.shouldUpdate) {
-        (payload as any).toxicityHuman = toxicityHumanResult.value
-      }
-      const toxicityPetsResult = normalizeEnumValueInput(toxicityEnum as EnumTools, (payload as any).toxicityPets)
-      if (toxicityPetsResult.shouldUpdate) {
-        (payload as any).toxicityPets = toxicityPetsResult.value
-      }
-      const seasonResult = normalizeEnumArrayInput(seasonEnum as EnumTools, (payload as any).season)
-      if (seasonResult.shouldUpdate) {
-        (payload as any).season = seasonResult.value
-      }
-      if (payload.foliagePersistance !== undefined) {
-        (payload as any).foliagePersistance = expandFoliagePersistanceFromDb(
-          typeof payload.foliagePersistance === 'string'
-            ? (payload as any).foliagePersistance
-            : String(payload.foliagePersistance ?? ''),
-        )
-      }
-      // Explicitly handle multicolor and bicolor booleans
-      if ('multicolor' in payload) {
-        (payload as any).multicolor = typeof payload.multicolor === 'boolean' ? payload.multicolor : Boolean(payload.multicolor)
-      }
-      if ('bicolor' in payload) {
-        (payload as any).bicolor = typeof payload.bicolor === 'boolean' ? payload.bicolor : Boolean(payload.bicolor)
-      }
-      return { ...next, identity: { ...(next.identity || {}), ...payload } }
-    }
-    case 'plantCare': {
-      const payload = { ...(data as Record<string, unknown>) }
-      const habitatResult = normalizeEnumArrayInput(habitatEnum as EnumTools, (payload as any).habitat)
-      if (habitatResult.shouldUpdate) {
-        (payload as any).habitat = habitatResult.value
-      }
-      const levelSunResult = normalizeEnumValueInput(levelSunEnum as EnumTools, (payload as any).levelSun)
-      if (levelSunResult.shouldUpdate) {
-        (payload as any).levelSun = levelSunResult.value
-      }
-      const wateringTypeResult = normalizeEnumArrayInput(wateringTypeEnum as EnumTools, (payload as any).wateringType)
-      if (wateringTypeResult.shouldUpdate) {
-        (payload as any).wateringType = wateringTypeResult.value
-      }
-      const divisionResult = normalizeEnumArrayInput(divisionEnum as EnumTools, (payload as any).division)
-      if (divisionResult.shouldUpdate) {
-        (payload as any).division = divisionResult.value
-      }
-      const soilResult = normalizeEnumArrayInput(soilEnum as EnumTools, (payload as any).soil)
-      if (soilResult.shouldUpdate) {
-        (payload as any).soil = soilResult.value
-      }
-      const mulchingResult = normalizeEnumArrayInput(mulchingEnum as EnumTools, (payload as any).mulching)
-      if (mulchingResult.shouldUpdate) {
-        (payload as any).mulching = mulchingResult.value
-      }
-      const nutritionResult = normalizeEnumArrayInput(nutritionNeedEnum as EnumTools, (payload as any).nutritionNeed)
-      if (nutritionResult.shouldUpdate) {
-        (payload as any).nutritionNeed = nutritionResult.value
-      }
-      const fertilizerResult = normalizeEnumArrayInput(fertilizerEnum as EnumTools, (payload as any).fertilizer)
-      if (fertilizerResult.shouldUpdate) {
-        (payload as any).fertilizer = fertilizerResult.value
-      }
-      // Explicitly handle temperature fields - ensure they're numbers or undefined
-      if ('temperatureMax' in payload) {
-        const val: unknown = payload.temperatureMax
-        if (typeof val === 'number' && isFinite(val)) {
-          (payload as any).temperatureMax = val
-        } else if (typeof val === 'string' && val.trim()) {
-          const trimmed = val.trim()
-          const parsed = parseFloat(trimmed)
-          if (isFinite(parsed) && !isNaN(parsed)) {
-            (payload as any).temperatureMax = parsed
-          } else {
-            (payload as any).temperatureMax = undefined
-          }
-        } else {
-          (payload as any).temperatureMax = undefined
-        }
-      }
-      if ('temperatureMin' in payload) {
-        const val: unknown = payload.temperatureMin
-        if (typeof val === 'number' && isFinite(val)) {
-          (payload as any).temperatureMin = val
-        } else if (typeof val === 'string' && val.trim()) {
-          const trimmed = val.trim()
-          const parsed = parseFloat(trimmed)
-          if (isFinite(parsed) && !isNaN(parsed)) {
-            (payload as any).temperatureMin = parsed
-          } else {
-            (payload as any).temperatureMin = undefined
-          }
-        } else {
-          (payload as any).temperatureMin = undefined
-        }
-      }
-      if ('temperatureIdeal' in payload) {
-        const val: unknown = payload.temperatureIdeal
-        if (typeof val === 'number' && isFinite(val)) {
-          (payload as any).temperatureIdeal = val
-        } else if (typeof val === 'string' && val.trim()) {
-          const trimmed = val.trim()
-          const parsed = parseFloat(trimmed)
-          if (isFinite(parsed) && !isNaN(parsed)) {
-            (payload as any).temperatureIdeal = parsed
-          } else {
-            (payload as any).temperatureIdeal = undefined
-          }
-        } else {
-          (payload as any).temperatureIdeal = undefined
-        }
-      }
-      // Explicitly handle origin array
-      if ('origin' in payload) {
-        const originVal = payload.origin
-        if (Array.isArray(originVal)) {
-          (payload as any).origin = originVal.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map(item => item.trim())
-        } else if (typeof originVal === 'string' && originVal.trim()) {
-          (payload as any).origin = [originVal.trim()]
-        } else {
-          (payload as any).origin = []
-        }
-      }
-      return { ...next, plantCare: { ...(next.plantCare || {}), ...payload } }
-    }
-    case 'growth': {
-      const payload = { ...(data as Record<string, unknown>) }
-      const normalizeMonthsProp = (prop: 'sowingMonth' | 'floweringMonth' | 'fruitingMonth') => {
-        if (prop in payload) {
-          payload[prop] = normalizeMonthArray(payload[prop])
-        }
-      }
-      normalizeMonthsProp('sowingMonth')
-      normalizeMonthsProp('floweringMonth')
-      normalizeMonthsProp('fruitingMonth')
-      const sowTypeResult = normalizeEnumArrayInput(sowTypeEnum as EnumTools, (payload as any).sowType)
-      if (sowTypeResult.shouldUpdate) {
-        (payload as any).sowType = sowTypeResult.value
-      }
-        return { ...next, growth: { ...(next.growth || {}), ...payload } }
-    }
-    case 'usage': {
-      const payload = { ...(data as Record<string, unknown>) }
-      // Normalize infusionMix - AI might return array of objects [{mix_name, benefit}] instead of Record<string, string>
-      if ('infusionMix' in payload) {
-        const mix = payload.infusionMix
-        if (Array.isArray(mix)) {
-          // Convert array of {mix_name, benefit} objects to Record<string, string>
-          const normalized: Record<string, string> = {}
-          for (const item of mix) {
-            if (item && typeof item === 'object') {
-              const key = (item as any).mix_name || (item as any).name || (item as any).key
-              const value = (item as any).benefit || (item as any).value || ''
-              if (key && typeof key === 'string' && key.trim()) {
-                normalized[key.trim()] = typeof value === 'string' ? value.trim() : String(value || '')
-              }
-            }
-          }
-          payload.infusionMix = normalized
-        } else if (mix && typeof mix === 'object' && !Array.isArray(mix)) {
-          // Already a Record - ensure values are strings
-          const normalized: Record<string, string> = {}
-          for (const [k, v] of Object.entries(mix as Record<string, unknown>)) {
-            if (k && typeof k === 'string' && k.trim()) {
-              normalized[k.trim()] = typeof v === 'string' ? v.trim() : String(v || '')
-            }
-          }
-          payload.infusionMix = normalized
-        } else {
-          payload.infusionMix = {}
-        }
-      }
-      // Normalize recipes - AI returns array of {name, category, time} objects
-      if ('recipes' in payload && Array.isArray(payload.recipes)) {
-        const normalizedRecipes = (payload.recipes as any[])
-          .filter((item: any) => item && typeof item === 'object' && item.name && typeof item.name === 'string' && item.name.trim())
-          .map((item: any) => ({
-            name: String(item.name).trim(),
-            category: recipeCategoryEnum.toUi(item.category) || 'Other',
-            time: recipeTimeEnum.toUi(item.time) || 'Undefined',
-          }))
-        payload.recipes = normalizedRecipes
-        // Also populate recipesIdeas from structured recipes for backward compatibility
-        if (normalizedRecipes.length > 0 && (!payload.recipesIdeas || (Array.isArray(payload.recipesIdeas) && payload.recipesIdeas.length === 0))) {
-          payload.recipesIdeas = normalizedRecipes.map((r: any) => r.name)
-        }
-      }
-      return { ...next, usage: { ...(next.usage || {}), ...payload } }
-    }
-    case 'ecology': {
-      const payload = { ...(data as Record<string, unknown>) }
-      const polenizerResult = normalizeEnumArrayInput(polenizerEnum as EnumTools, (payload as any).polenizer)
-      if (polenizerResult.shouldUpdate) {
-        (payload as any).polenizer = polenizerResult.value
-      }
-      const conservationResult = normalizeEnumValueInput(conservationStatusEnum as EnumTools, (payload as any).conservationStatus)
-      if (conservationResult.shouldUpdate) {
-        (payload as any).conservationStatus = conservationResult.value
-      }
-      return { ...next, ecology: { ...(next.ecology || {}), ...payload } }
-    }
-    case 'danger':
-      return { ...next, danger: { ...(next.danger || {}), ...(data as Record<string, unknown>) } }
-    case 'miscellaneous': {
-      const payload = { ...(data as Record<string, unknown>) }
-      delete (payload as any).source
-      delete (payload as any).sources
-      return { ...next, miscellaneous: { ...(next.miscellaneous || {}), ...payload } }
-    }
-    case 'meta': {
-      if (data && typeof data === 'object') {
-        const { status: _ignoredStatus, ...rest } = data as Record<string, unknown>
-        return { ...next, meta: { ...(next.meta || {}), ...rest } }
-      }
-      return next
-    }
-    default: {
-      const mutable = next as Plant & Record<string, unknown>
-      mutable[fieldKey] = data as any
-      return mutable
+const normalizeBoolean = (value: unknown): boolean | undefined => {
+  if (value === undefined) return undefined
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const lower = value.toLowerCase().trim()
+    if (lower === 'true' || lower === 'yes' || lower === '1') return true
+    if (lower === 'false' || lower === 'no' || lower === '0') return false
+  }
+  return undefined
+}
+
+const normalizeInteger = (value: unknown): number | undefined => {
+  if (value === undefined || value === null) return undefined
+  if (typeof value === 'number' && isFinite(value)) return Math.round(value)
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value.trim())
+    if (isFinite(parsed) && !isNaN(parsed)) return Math.round(parsed)
+  }
+  return undefined
+}
+
+const MONTH_SLUGS = [
+  'january','february','march','april','may','june',
+  'july','august','september','october','november','december',
+] as const
+const MONTH_LOOKUP: Record<string, string> = {}
+MONTH_SLUGS.forEach((slug, i) => {
+  MONTH_LOOKUP[slug] = slug
+  MONTH_LOOKUP[slug.slice(0, 3)] = slug
+  MONTH_LOOKUP[String(i + 1)] = slug
+  MONTH_LOOKUP[String(i + 1).padStart(2, '0')] = slug
+})
+
+const normalizeMonthArray = (value: unknown): string[] => {
+  if (!value) return []
+  const source = Array.isArray(value) ? value : [value]
+  const result: string[] = []
+  for (const entry of source) {
+    const key = typeof entry === 'number' ? String(entry) : typeof entry === 'string' ? entry.trim().toLowerCase() : null
+    if (key && MONTH_LOOKUP[key] && !result.includes(MONTH_LOOKUP[key])) {
+      result.push(MONTH_LOOKUP[key])
     }
   }
+  return result
+}
+
+// Fields that AI should never overwrite
+const IGNORED_FIELDS = new Set([
+  'id', 'name', 'images', 'image', 'status',
+  'createdBy', 'createdTime', 'updatedBy', 'updatedTime',
+])
+
+// Enum field → EnumTools mapping
+const ENUM_FIELDS: Record<string, EnumTools> = {
+  encyclopediaCategory: encyclopediaCategoryEnum as EnumTools,
+  utility: utilityEnum as EnumTools,
+  ediblePart: ediblePartEnum as EnumTools,
+  poisoningMethod: poisoningMethodEnum as EnumTools,
+  lifeCycle: lifeCycleEnum as EnumTools,
+  averageLifespan: averageLifespanEnum as EnumTools,
+  foliagePersistence: foliagePersistenceEnum as EnumTools,
+  livingSpace: livingSpaceEnum as EnumTools,
+  season: seasonEnum as EnumTools,
+  climate: climateEnum as EnumTools,
+  careLevel: careLevelEnum as EnumTools,
+  sunlight: sunlightEnum as EnumTools,
+  wateringType: wateringTypeEnum as EnumTools,
+  division: divisionEnum as EnumTools,
+  sowingMethod: sowingMethodEnum as EnumTools,
+  conservationStatus: conservationStatusEnum as EnumTools,
+  ecologicalTolerance: ecologicalToleranceEnum as EnumTools,
+  ecologicalImpact: ecologicalImpactEnum as EnumTools,
+}
+
+const SINGLE_ENUM_FIELDS: Record<string, EnumTools> = {
+  toxicityHuman: toxicityEnum as EnumTools,
+  toxicityPets: toxicityEnum as EnumTools,
+}
+
+// Month-based array fields
+const MONTH_FIELDS = new Set([
+  'featuredMonth', 'sowingMonth', 'floweringMonth', 'fruitingMonth', 'pruningMonth',
+])
+
+// Boolean fields
+const BOOLEAN_FIELDS = new Set([
+  'thorny', 'multicolor', 'bicolor', 'mulchingNeeded', 'staking',
+  'transplanting', 'pruning', 'infusion', 'medicinal', 'aromatherapy', 'fragrance',
+])
+
+// Integer fields
+const INTEGER_FIELDS = new Set([
+  'temperatureMax', 'temperatureMin', 'temperatureIdeal',
+  'wateringFrequencyWarm', 'wateringFrequencyCold',
+  'hygrometry', 'mistingFrequency', 'heightCm', 'wingspanCm',
+])
+
+// String (text) fields
+const TEXT_FIELDS = new Set([
+  'scientificNameSpecies', 'scientificNameVariety', 'family',
+  'presentation', 'poisoningSymptoms',
+  'soilAdvice', 'mulchAdvice', 'fertilizerAdvice',
+  'stakingAdvice', 'sowingAdvice', 'transplantingTime',
+  'outdoorPlantingTime', 'pruningAdvice',
+  'nutritionalValue', 'infusionBenefits', 'infusionRecipeIdeas',
+  'medicinalBenefits', 'medicinalUsage', 'medicinalWarning', 'medicinalHistory',
+  'aromatherapyBenefits', 'essentialOilBlends',
+  'symbiosisNotes', 'adminCommentary', 'userNotes',
+])
+
+// String array (tag) fields
+const TAG_FIELDS = new Set([
+  'commonNames', 'origin', 'allergens',
+  'landscaping', 'plantHabit', 'specialNeeds',
+  'substrate', 'substrateMix', 'mulchType', 'nutritionNeed', 'fertilizer',
+  'cultivationMode', 'infusionParts',
+  'pests', 'diseases',
+  'ecologicalStatus', 'biotopes', 'urbanBiotopes',
+  'biodiversityRole', 'pollinatorsAttracted', 'birdsAttracted', 'mammalsAttracted',
+  'beneficialRoles', 'harmfulRoles', 'symbiosis',
+  'ecologicalManagement',
+  'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
+  'varieties', 'plantTags', 'biodiversityTags', 'spiceMixes',
+])
+
+/**
+ * Apply AI-generated data for a single field (section or flat field) to a Plant.
+ * The AI can return data either as a flat object with field keys matching the Plant interface,
+ * or as a section key (base, identity, care, etc.) with an object of fields.
+ */
+export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown): Plant {
+  if (IGNORED_FIELDS.has(fieldKey)) return prev
+
+  const next: Plant = { ...prev }
+
+  // If the fieldKey is a section name, data is an object with multiple fields
+  const sectionNames = ['base', 'identity', 'care', 'growth', 'danger', 'ecology', 'consumption', 'misc', 'meta']
+  if (sectionNames.includes(fieldKey) && data && typeof data === 'object' && !Array.isArray(data)) {
+    let result = next
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      if (IGNORED_FIELDS.has(key)) continue
+      result = applySingleField(result, key, value)
+    }
+    return result
+  }
+
+  // Legacy section names → map to new names
+  const legacyMap: Record<string, string> = {
+    plantType: 'encyclopediaCategory',
+    plantCare: 'care',
+    usage: 'consumption',
+    miscellaneous: 'misc',
+  }
+  const mappedKey = legacyMap[fieldKey] || fieldKey
+
+  if (sectionNames.includes(mappedKey) && data && typeof data === 'object' && !Array.isArray(data)) {
+    let result = next
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      if (IGNORED_FIELDS.has(key)) continue
+      result = applySingleField(result, key, value)
+    }
+    return result
+  }
+
+  return applySingleField(next, mappedKey, data)
+}
+
+function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant {
+  if (IGNORED_FIELDS.has(fieldKey) || data === undefined) return plant
+
+  const next = { ...plant } as Plant & Record<string, unknown>
+
+  // Enum array fields
+  if (ENUM_FIELDS[fieldKey]) {
+    const result = normalizeEnumArrayInput(ENUM_FIELDS[fieldKey], data)
+    if (result.shouldUpdate) next[fieldKey] = result.value
+    return next
+  }
+
+  // Single enum fields
+  if (SINGLE_ENUM_FIELDS[fieldKey]) {
+    const result = normalizeEnumValueInput(SINGLE_ENUM_FIELDS[fieldKey], data)
+    if (result.shouldUpdate) next[fieldKey] = result.value
+    return next
+  }
+
+  // edibleOil special case
+  if (fieldKey === 'edibleOil') {
+    if (typeof data === 'string') {
+      const lower = data.toLowerCase().trim()
+      if (['yes', 'no', 'unknown'].includes(lower)) next.edibleOil = lower as 'yes' | 'no' | 'unknown'
+    }
+    return next
+  }
+
+  // Month array fields
+  if (MONTH_FIELDS.has(fieldKey)) {
+    next[fieldKey] = normalizeMonthArray(data)
+    return next
+  }
+
+  // Boolean fields
+  if (BOOLEAN_FIELDS.has(fieldKey)) {
+    const val = normalizeBoolean(data)
+    if (val !== undefined) next[fieldKey] = val
+    return next
+  }
+
+  // Integer fields
+  if (INTEGER_FIELDS.has(fieldKey)) {
+    const val = normalizeInteger(data)
+    if (val !== undefined) next[fieldKey] = val
+    return next
+  }
+
+  // Text fields
+  if (TEXT_FIELDS.has(fieldKey)) {
+    const val = normalizeString(data)
+    if (val !== undefined) next[fieldKey] = val
+    return next
+  }
+
+  // Tag (string array) fields
+  if (TAG_FIELDS.has(fieldKey)) {
+    const val = normalizeStringArray(data)
+    if (val !== undefined) next[fieldKey] = val
+    return next
+  }
+
+  // Colors — special handling
+  if (fieldKey === 'colors') {
+    if (Array.isArray(data)) {
+      next.colors = data.filter((c: unknown) =>
+        c && typeof c === 'object' && 'name' in (c as Record<string, unknown>)
+      ) as Plant['colors']
+    }
+    return next
+  }
+
+  // Recipes — special handling
+  if (fieldKey === 'recipes') {
+    if (Array.isArray(data)) {
+      next.recipes = (data as Record<string, unknown>[])
+        .filter(item => item && typeof item === 'object' && item.name && typeof item.name === 'string')
+        .map(item => ({
+          name: String(item.name).trim(),
+          category: (recipeCategoryEnum.toUi(item.category as string) || 'Other') as Plant['recipes'] extends (infer U)[] ? U extends { category: infer C } ? C : never : never,
+          time: (recipeTimeEnum.toUi(item.time as string) || 'Undefined') as Plant['recipes'] extends (infer U)[] ? U extends { time: infer T } ? T : never : never,
+        })) as Plant['recipes']
+    }
+    return next
+  }
+
+  // Sources — special handling
+  if (fieldKey === 'sources') {
+    if (Array.isArray(data)) {
+      next.sources = (data as Record<string, unknown>[])
+        .filter(item => item && typeof item === 'object' && item.name)
+        .map(item => ({
+          name: String(item.name).trim(),
+          url: item.url ? String(item.url).trim() : undefined,
+        }))
+    }
+    return next
+  }
+
+  // Infusion mixes — special handling
+  if (fieldKey === 'infusionMixes' || fieldKey === 'infusionMix') {
+    if (Array.isArray(data)) {
+      const normalized: Record<string, string> = {}
+      for (const item of data as Record<string, unknown>[]) {
+        const key = (item?.mix_name || item?.name || item?.key) as string
+        const value = (item?.benefit || item?.value || '') as string
+        if (key && typeof key === 'string' && key.trim()) {
+          normalized[key.trim()] = typeof value === 'string' ? value.trim() : String(value || '')
+        }
+      }
+      next.infusionMixes = normalized
+    } else if (data && typeof data === 'object' && !Array.isArray(data)) {
+      const normalized: Record<string, string> = {}
+      for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+        if (k && k.trim()) normalized[k.trim()] = typeof v === 'string' ? v.trim() : String(v || '')
+      }
+      next.infusionMixes = normalized
+    }
+    return next
+  }
+
+  // Fallback: set directly if we have a value
+  if (data !== null && data !== undefined) {
+    next[fieldKey] = data
+  }
+
+  return next
 }
 
 export function getCategoryForField(fieldKey: string): PlantFormCategory {
   return mapFieldToCategory(fieldKey)
-}
-
-const MONTH_LABELS = [
-  'january',
-  'february',
-  'march',
-  'april',
-  'may',
-  'june',
-  'july',
-  'august',
-  'september',
-  'october',
-  'november',
-  'december',
-] as const
-
-const MONTH_NAME_TO_NUMBER: Record<string, number> = MONTH_LABELS.reduce((acc, label, index) => {
-  const value = index + 1
-  acc[label] = value
-  acc[label.slice(0, 3)] = value
-  const padded = value.toString().padStart(2, '0')
-  acc[padded] = value
-  acc[String(value)] = value
-  return acc
-}, {} as Record<string, number>)
-
-function normalizeMonthValue(entry: unknown): number | null {
-  if (typeof entry === 'number' && Number.isFinite(entry)) {
-    const int = Math.round(entry)
-    if (int >= 1 && int <= 12) return int
-  }
-  if (typeof entry === 'string') {
-    const trimmed = entry.trim()
-    if (!trimmed) return null
-    const lower = trimmed.toLowerCase()
-    if (MONTH_NAME_TO_NUMBER[lower]) return MONTH_NAME_TO_NUMBER[lower]
-  }
-  return null
-}
-
-function normalizeMonthArray(value: unknown): number[] {
-  if (value === null || value === undefined) return []
-  const source = Array.isArray(value) ? value : [value]
-  const result: number[] = []
-  for (const entry of source) {
-    const normalized = normalizeMonthValue(entry)
-    if (normalized && !result.includes(normalized)) {
-      result.push(normalized)
-    }
-  }
-  return result
 }
