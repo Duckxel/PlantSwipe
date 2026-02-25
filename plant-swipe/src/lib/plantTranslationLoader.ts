@@ -423,7 +423,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     ])
 
     const { data: plantsData, error } = plantsResponse
-    const plants = plantsData as Record<string, unknown>[]
+    const plants = plantsData as any[]
     const { data: topLiked, error: topLikedError } = topLikedResponse
 
     if (error) throw error
@@ -498,5 +498,11 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
   }
 }
 
-// Re-export legacy function name
-export const mergePlantWithTranslation = mapDbRowToPlant
+/**
+ * Legacy wrapper — old code passes (basePlant, translation).
+ * Fills missing args with defaults so the new mapDbRowToPlant works.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mergePlantWithTranslation(basePlant: any, translation: any): Plant {
+  return mapDbRowToPlant(basePlant, translation || {}, [], [], [], [], {}, [])
+}

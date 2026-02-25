@@ -748,8 +748,8 @@ const PlantInfoPage: React.FC = () => {
       return value.replace(/[_-]/g, ' ')
     }
     
-    const hasBasicInfo = limitedPlantInfo.family || limitedPlantInfo.plantType || limitedPlantInfo.lifeCycle
-    const hasCareInfo = limitedPlantInfo.levelSun || limitedPlantInfo.maintenanceLevel || limitedPlantInfo.livingSpace
+    const hasBasicInfo = limitedPlantInfo.family || limitedPlantInfo.encyclopediaCategory?.[0] || limitedPlantInfo.lifeCycle?.[0]
+    const hasCareInfo = limitedPlantInfo.sunlight?.[0] || limitedPlantInfo.careLevel?.[0] || limitedPlantInfo.livingSpace
     const hasSeasons = limitedPlantInfo.season && limitedPlantInfo.season.length > 0
     
     return (
@@ -815,16 +815,16 @@ const PlantInfoPage: React.FC = () => {
           {/* Available plant info */}
           <div className="p-6 sm:p-8 space-y-6">
             {/* Overview if available */}
-            {limitedPlantInfo.overview && (
+            {limitedPlantInfo.presentation && (
               <div className="text-stone-700 dark:text-stone-300 text-sm sm:text-base leading-relaxed">
-                {limitedPlantInfo.overview}
+                {limitedPlantInfo.presentation}
               </div>
             )}
             
             {/* Basic Info Grid */}
             {(hasBasicInfo || hasCareInfo || hasSeasons) && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-                {limitedPlantInfo.plantType && (
+                {limitedPlantInfo.encyclopediaCategory?.[0] && (
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -833,7 +833,7 @@ const PlantInfoPage: React.FC = () => {
                       </span>
                     </div>
                     <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
-                      {translateLimitedEnum(limitedPlantInfo.plantType)}
+                      {translateLimitedEnum(limitedPlantInfo.encyclopediaCategory?.[0])}
                     </p>
                   </div>
                 )}
@@ -852,7 +852,7 @@ const PlantInfoPage: React.FC = () => {
                   </div>
                 )}
                 
-                {limitedPlantInfo.lifeCycle && (
+                {limitedPlantInfo.lifeCycle?.[0] && (
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -861,12 +861,12 @@ const PlantInfoPage: React.FC = () => {
                       </span>
                     </div>
                     <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
-                      {translateLimitedEnum(limitedPlantInfo.lifeCycle)}
+                      {translateLimitedEnum(limitedPlantInfo.lifeCycle?.[0])}
                     </p>
                   </div>
                 )}
                 
-                {limitedPlantInfo.levelSun && (
+                {limitedPlantInfo.sunlight?.[0] && (
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <Sun className="h-4 w-4 text-amber-500 dark:text-amber-400" />
@@ -875,12 +875,12 @@ const PlantInfoPage: React.FC = () => {
                       </span>
                     </div>
                     <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
-                      {translateLimitedEnum(limitedPlantInfo.levelSun)}
+                      {translateLimitedEnum(limitedPlantInfo.sunlight?.[0])}
                     </p>
                   </div>
                 )}
                 
-                {limitedPlantInfo.maintenanceLevel && (
+                {limitedPlantInfo.careLevel?.[0] && (
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <Wrench className="h-4 w-4 text-stone-600 dark:text-stone-400" />
@@ -889,7 +889,7 @@ const PlantInfoPage: React.FC = () => {
                       </span>
                     </div>
                     <p className="font-medium text-sm sm:text-base text-stone-900 dark:text-white">
-                      {translateLimitedEnum(limitedPlantInfo.maintenanceLevel)}
+                      {translateLimitedEnum(limitedPlantInfo.careLevel?.[0])}
                     </p>
                   </div>
                 )}
@@ -2177,8 +2177,8 @@ const getToxicityConfig = (level: ToxicityLevel) => {
 }
 
 const ToxicityWarningBanner: React.FC<{
-  toxicityHuman: ToxicityLevel
-  toxicityPets: ToxicityLevel
+  toxicityHuman?: ToxicityLevel
+  toxicityPets?: ToxicityLevel
   t: (key: string) => string
 }> = ({ toxicityHuman, toxicityPets, t }) => {
   const humanConfig = getToxicityConfig(toxicityHuman)
@@ -2452,7 +2452,7 @@ const compactStrings = (values?: (string | null | undefined)[]) => {
     .filter((value) => Boolean(value) && isMeaningfulString(value))
 }
 
-const formatBooleanDescriptor = (value: boolean | null | undefined, positive: string, negative: string, showNegative = false) => {
+const formatBooleanDescriptor = (value: boolean | null | undefined, positive: string, negative: string | null, showNegative = false) => {
   if (value === undefined || value === null) return null
   if (value) return positive
   return showNegative ? negative : null

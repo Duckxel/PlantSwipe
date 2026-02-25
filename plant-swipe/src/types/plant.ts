@@ -125,7 +125,7 @@ export interface ColorInfo {
 export interface PlantWateringSchedule {
   season?: string
   quantity?: number
-  timePeriod?: "week" | "month" | "year"
+  timePeriod?: string
 }
 
 export interface PlantSource {
@@ -315,8 +315,7 @@ export interface Plant {
   // -- Display / UI -----------------------------------------------------------
   images?: PlantImage[]
   image?: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  colors?: PlantColor[] | any[]
+  colors?: any
   colorNames?: string[]
   popularity?: { likes?: number; rank?: number; [key: string]: unknown }
 
@@ -324,41 +323,53 @@ export interface Plant {
   sourceName?: string
   sourceUrl?: string
 
-  // Catch-all for legacy/dynamic fields
-  [key: string]: unknown
-
   // =========================================================================
   // LEGACY fields — kept for backward compatibility during migration
-  // These map to old nested structures; new code should use flat fields above
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // =========================================================================
-  /** @deprecated Use flat fields instead */
   plantType?: string
-  /** @deprecated Use commonNames */
   givenNames?: string[]
-  /** @deprecated Use scientificNameSpecies */
   scientificName?: string
-  /** @deprecated Use presentation */
   overview?: string
-  /** @deprecated Use presentation */
   description?: string
-  /** @deprecated Use flat fields */
-  identity?: Record<string, unknown>
-  /** @deprecated Use flat fields */
-  plantCare?: Record<string, unknown>
-  /** @deprecated Use flat fields */
-  care?: Record<string, unknown>
-  /** @deprecated Use flat fields */
-  growth?: Record<string, unknown>
-  /** @deprecated Use flat fields */
-  usage?: Record<string, unknown>
-  /** @deprecated Use flat fields */
-  ecology?: Record<string, unknown>
-  /** @deprecated Use flat fields */
-  danger?: Record<string, unknown>
-  /** @deprecated Use flat fields */
-  miscellaneous?: Record<string, unknown>
-  /** @deprecated Use flat fields */
-  meta?: Record<string, unknown>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  identity?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  plantCare?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  care?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  growth?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  usage?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ecology?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  danger?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  miscellaneous?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  meta?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  classification?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  phenology?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  environment?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  dimensions?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  planting?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  commerce?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  problems?: any
+  seasons?: PlantSeason[]
+  rarity?: string
+  seedsAvailable?: boolean
+  meaning?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
 }
 
 // ============================================================================
