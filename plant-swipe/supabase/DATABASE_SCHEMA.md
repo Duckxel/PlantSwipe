@@ -442,8 +442,8 @@ foliage_persistence       TEXT[]                 -- CHECK: deciduous, evergreen,
 
 -- Section 2: Identity — Habitat & plant form
 living_space              TEXT[]                 -- CHECK: indoor, outdoor, both, terrarium, greenhouse
-landscaping               TEXT[]                 -- Multi-select: pot, planter, hanging, flowerbed, hedge, ground_cover, etc.
-plant_habit               TEXT[]                 -- Multi-select: upright, arborescent, bushy, clumping, climbing, trailing, etc.
+landscaping               TEXT[]                 -- CHECK: pot, planter, hanging, window_box, green_wall, flowerbed, border, edging, path, tree_base, vegetable_garden, orchard, hedge, free_growing, trimmed_hedge, windbreak, pond_edge, waterside, ground_cover, grove, background, foreground
+plant_habit               TEXT[]                 -- CHECK: upright, arborescent, shrubby, bushy, clumping, erect, creeping, carpeting, ground_cover, prostrate, spreading, climbing, twining, scrambling, liana, trailing, columnar, conical, fastigiate, globular, spreading_flat, rosette, cushion, ball_shaped, succulent, palmate, rhizomatous, suckering
 multicolor                BOOLEAN DEFAULT false
 bicolor                   BOOLEAN DEFAULT false
 

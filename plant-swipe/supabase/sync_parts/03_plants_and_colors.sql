@@ -92,8 +92,20 @@ create table if not exists public.plants (
 
   -- Section 2: Identity — Habitat & plant form
   living_space text[] not null default '{}'::text[] check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']),
-  landscaping text[] not null default '{}'::text[],
-  plant_habit text[] not null default '{}'::text[],
+  landscaping text[] not null default '{}'::text[] check (landscaping <@ array[
+    'pot','planter','hanging','window_box','green_wall','flowerbed','border',
+    'edging','path','tree_base','vegetable_garden','orchard','hedge',
+    'free_growing','trimmed_hedge','windbreak','pond_edge','waterside',
+    'ground_cover','grove','background','foreground'
+  ]),
+  plant_habit text[] not null default '{}'::text[] check (plant_habit <@ array[
+    'upright','arborescent','shrubby','bushy','clumping','erect',
+    'creeping','carpeting','ground_cover','prostrate','spreading',
+    'climbing','twining','scrambling','liana',
+    'trailing','columnar','conical','fastigiate','globular',
+    'spreading_flat','rosette','cushion','ball_shaped',
+    'succulent','palmate','rhizomatous','suckering'
+  ]),
   multicolor boolean default false,
   bicolor boolean default false,
 
@@ -818,6 +830,24 @@ begin
   end loop;
   begin
     alter table public.plants add constraint plants_living_space_check check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']);
+  exception when duplicate_object then null;
+  end;
+
+  -- landscaping
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'landscaping') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_landscaping_check check (landscaping <@ array['pot','planter','hanging','window_box','green_wall','flowerbed','border','edging','path','tree_base','vegetable_garden','orchard','hedge','free_growing','trimmed_hedge','windbreak','pond_edge','waterside','ground_cover','grove','background','foreground']);
+  exception when duplicate_object then null;
+  end;
+
+  -- plant_habit
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'plant_habit') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_plant_habit_check check (plant_habit <@ array['upright','arborescent','shrubby','bushy','clumping','erect','creeping','carpeting','ground_cover','prostrate','spreading','climbing','twining','scrambling','liana','trailing','columnar','conical','fastigiate','globular','spreading_flat','rosette','cushion','ball_shaped','succulent','palmate','rhizomatous','suckering']);
   exception when duplicate_object then null;
   end;
 
