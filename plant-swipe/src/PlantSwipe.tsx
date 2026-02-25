@@ -904,9 +904,11 @@ export default function PlantSwipe() {
       // Pre-compute promotion status
       const isPromoted = isPlantOfTheMonth(p, now)
 
-      // Pre-compute in-progress status
-      const status = p.meta?.status?.toLowerCase()
-      const isInProgress = status === 'in progres' || status === 'in progress'
+      // Pre-compute in-progress status (new flat: p.status, legacy: p.meta?.status)
+      const flatStatus = (typeof p.status === 'string' ? p.status : '').toLowerCase()
+      const legacyStatus = (typeof p.meta?.status === 'string' ? p.meta.status : '').toLowerCase()
+      const isInProgress = flatStatus === 'in_progress' || flatStatus === 'in progres' || flatStatus === 'in progress'
+        || legacyStatus === 'in progres' || legacyStatus === 'in progress'
 
       const getColors = () => {
         if (_cachedColors) return _cachedColors

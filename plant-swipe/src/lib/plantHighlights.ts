@@ -1,4 +1,5 @@
 import type { Plant } from "@/types/plant"
+import { monthSlugToNumber } from "@/lib/months"
 
 const DAYS_IN_MS = 24 * 60 * 60 * 1000
 
@@ -19,27 +20,30 @@ const parseDate = (value?: string): Date | null => {
 
 /**
  * Checks if a plant should be featured as "Plant of the Month"
- * 
- * Database schema (000_sync_schema.sql):
- *   promotion_month text check (promotion_month in ('january','february',...,'december'))
- * 
- * The loaders convert text slugs to numbers (1-12) via monthSlugToNumber().
- * This function checks if the plant's promotion month matches the current month.
+ *
+ * New schema: plant.featuredMonth is a MonthSlug[] (e.g. ["february"])
+ * Legacy: plant.planting?.calendar?.promotionMonth or plant.identity?.promotionMonth (number 1-12)
  */
 export const isPlantOfTheMonth = (plant?: Plant | null, referenceDate: Date = new Date()): boolean => {
   if (!plant) return false
-  // Check both possible locations for promotionMonth (number 1-12)
-  // - planting.calendar.promotionMonth (used by loadPlantPreviews & loadPlantsWithTranslations)
-  // - identity.promotionMonth (legacy location)
+  const currentMonth = referenceDate.getMonth() + 1
+
+  // New flat schema: featuredMonth is MonthSlug[] (e.g. ["february", "march"])
+  if (Array.isArray(plant.featuredMonth) && plant.featuredMonth.length > 0) {
+    return plant.featuredMonth.some(slug => monthSlugToNumber(slug) === currentMonth)
+  }
+
+  // Legacy nested fields
   const promotionMonth = normalizeMonth(
     plant.planting?.calendar?.promotionMonth ?? plant.identity?.promotionMonth
   )
-  if (!promotionMonth) return false
-  return promotionMonth === referenceDate.getMonth() + 1
+  if (promotionMonth) return promotionMonth === currentMonth
+
+  return false
 }
 
 export const isNewPlant = (plant?: Plant | null, referenceDate: Date = new Date(), windowDays = 7): boolean => {
-  const createdAtRaw = plant?.meta?.createdAt
+  const createdAtRaw = plant?.createdTime ?? plant?.meta?.createdAt as string | undefined
   if (!createdAtRaw) return false
   const createdAt = parseDate(createdAtRaw)
   if (!createdAt) return false

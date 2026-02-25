@@ -100,7 +100,8 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
       <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6 items-stretch">
         {visiblePlants.map((p) => {
           // Check if plant is "in progress"
-          const isInProgress = p.meta?.status?.toLowerCase() === 'in progres' || p.meta?.status?.toLowerCase() === 'in progress'
+          const statusStr = (typeof p.status === 'string' ? p.status : typeof p.meta?.status === 'string' ? p.meta.status : '').toLowerCase()
+          const isInProgress = statusStr === 'in_progress' || statusStr === 'in progres' || statusStr === 'in progress'
 
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
           if (isPlantOfTheMonth(p)) {
