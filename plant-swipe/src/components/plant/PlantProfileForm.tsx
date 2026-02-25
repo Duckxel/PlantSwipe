@@ -10,7 +10,7 @@ import type { TFunction } from "i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantType, PlantWateringSchedule, RecipeCategory, RecipeTime } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 
@@ -162,7 +162,7 @@ const TagInput: React.FC<{
               onClick={() => onChange(value.filter((_, i) => i !== idx))}
               aria-label={`Remove ${tag}`}
             >
-              ×
+              <X className="h-3 w-3" />
             </button>
           </span>
         ))}
@@ -575,10 +575,10 @@ const CompanionSelector: React.FC<{
               <button
                 type="button"
                 onClick={() => removeCompanion(c.id)}
-                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 aria-label={`Remove ${c.name}`}
               >
-                ×
+                <X className="h-4 w-4" />
               </button>
             </div>
           ))}
@@ -877,8 +877,8 @@ const SourcesEditor: React.FC<{ value: PlantSource[] | undefined; onChange: (v: 
                 </a>
               )}
             </div>
-            <button type="button" className="text-red-600" onClick={() => remove(idx)} aria-label="Remove source">
-              ×
+            <button type="button" className="text-red-600 hover:text-red-800" onClick={() => remove(idx)} aria-label="Remove source">
+              <X className="h-4 w-4" />
             </button>
           </div>
         ))}
@@ -1739,11 +1739,11 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                     <button
                       type="button"
                       onClick={() => removeRecipe(idx)}
-                      className="text-red-500 hover:text-red-700 text-sm font-bold px-1.5 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                      className="text-red-500 hover:text-red-700 p-1 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                       title="Remove recipe"
                       aria-label={`Remove recipe: ${recipe.name || 'Untitled'}`}
                     >
-                      ×
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2024,11 +2024,11 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
             <span className="font-medium">{c.name}</span>
             <button 
               type="button" 
-              className="opacity-50 hover:opacity-100 hover:text-red-600 focus:opacity-100 focus:text-red-600 transition-opacity rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              className="opacity-50 hover:opacity-100 hover:text-red-600 focus:opacity-100 focus:text-red-600 transition-opacity rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 flex items-center justify-center w-5 h-5"
               onClick={() => onChange(colors.filter((_, i) => i !== idx))}
               aria-label={`Remove color: ${c.name}`}
             >
-              ×
+              <X className="h-3 w-3" />
             </button>
           </span>
         ))}
@@ -2088,18 +2088,10 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
                   <SearchInput 
                     value={search} 
                     onChange={(e) => setSearch(e.target.value)} 
+                    onClear={() => setSearch("")}
                     placeholder={t('plantAdmin.colors.searchPlaceholder', 'Search by name or hex code (e.g., #ff0000)')}
                     className="w-full"
                   />
-                  {search && (
-                    <button 
-                      type="button"
-                      onClick={() => setSearch("")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
-                    >
-                      ×
-                    </button>
-                  )}
                 </div>
 
                 {/* Color grid */}
