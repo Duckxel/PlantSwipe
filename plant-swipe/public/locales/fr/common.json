@@ -3277,6 +3277,12 @@
       "subtitle": "D'abord, apprenons à nous connaître et découvrons l'environnement où votre jardin va évoluer.",
       "getStarted": "C'est parti !"
     },
+    "editLaterNote": "Vous pourrez toujours modifier ces choix plus tard dans les Paramètres.",
+    "languageTheme": {
+      "title": "Personnalisez votre expérience",
+      "languageLabel": "Langue",
+      "themeLabel": "Thème"
+    },
     "accent": {
       "title": "Choisissez votre couleur d'accent",
       "subtitle": "Personnalisez votre expérience Aphylia",
@@ -3298,14 +3304,15 @@
       "geoNotSupported": "La géolocalisation n'est pas prise en charge par votre navigateur"
     },
     "gardenType": {
-      "title": "Où se trouve votre jardin ?",
+      "title": "Quel espace de vie pour vos plantes vous intéresse ?",
       "subtitle": "Cela nous aide à vous recommander les bonnes plantes",
-      "outside": "À l'extérieur, dans un jardin",
-      "outsideDesc": "J'ai un jardin ou une cour extérieure",
-      "inside": "À l'intérieur de votre maison",
-      "insideDesc": "Je cultive des plantes en intérieur",
-      "both": "À l'intérieur et à l'extérieur",
-      "bothDesc": "J'ai des plantes partout !"
+      "inside": "Intérieur",
+      "insideDesc": "Plantes d'intérieur et jardinage en maison",
+      "outside": "Extérieur",
+      "outsideDesc": "Plantes de jardin, balcon ou cour",
+      "both": "Les deux",
+      "bothDesc": "Plantes d'intérieur et d'extérieur",
+      "unsure": "Je ne sais pas encore"
     },
     "experience": {
       "title": "Quel est votre niveau en jardinage ?",
@@ -3363,6 +3370,27 @@
       "notificationTimeDescription": "Quand devons-nous vous envoyer des rappels ?",
       "notificationTimeHelper": "Les notifications planifiées seront envoyées à la même heure locale dans votre fuseau horaire ({{timezone}})."
     }
+  },
+  "profileActions": {
+    "title": "Pour bien démarrer",
+    "subtitle": "{{done}} sur {{total}} complétés",
+    "allDoneTitle": "Tout est fait !",
+    "allDoneSubtitle": "Vous avez complété toutes les actions. Bravo !",
+    "congratulations": "Félicitations !",
+    "dismiss": "Masquer",
+    "hooray": "Hourra !",
+    "skip": "Passer",
+    "remaining": "restantes",
+    "createGarden": "Créez votre premier jardin",
+    "createGardenDesc": "Rendez-vous sur la page Jardins et créez votre propre jardin.",
+    "addPlant": "Ajoutez une plante à votre jardin",
+    "addPlantDesc": "Ouvrez l'un de vos jardins et ajoutez-y votre première plante.",
+    "addFriend": "Ajoutez un ami",
+    "addFriendDesc": "Recherchez d'autres jardiniers et envoyez-leur une demande d'ami.",
+    "completeProfile": "Complétez votre profil",
+    "completeProfileDesc": "Ajoutez une bio pour rendre votre profil plus personnel.",
+    "addBookmark": "Ajoutez une plante en favori",
+    "addBookmarkDesc": "Sauvegardez une plante que vous aimez dans vos listes de favoris."
   },
   "emailVerification": {
     "title": "Vérifiez votre email",

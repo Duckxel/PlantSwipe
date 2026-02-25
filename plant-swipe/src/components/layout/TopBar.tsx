@@ -17,6 +17,7 @@ interface TopBarProps {
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { useNotifications } from "@/hooks/useNotifications"
+import { useProfileActionsCount } from "@/components/profile/ProfileActions"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 import { checkEditorAccess, checkBugCatcherAccess } from "@/constants/userRoles"
 import { NotificationBell } from "@/components/layout/NotificationPanel"
@@ -32,6 +33,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const [menuPosition, setMenuPosition] = React.useState<{ top: number; right: number } | null>(null)
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "topbar" })
   const { totalCount, counts, friendRequests, gardenInvites, refresh: refreshNotifications } = useNotifications(user?.id ?? null, { channelKey: "topbar" })
+  const actionsRemaining = useProfileActionsCount(user?.id)
 
   const recomputeMenuPosition = React.useCallback(() => {
     const anchor = anchorRef.current
@@ -193,7 +195,13 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                     </button>
                   )}
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
-                    <User className="h-4 w-4" /> {t('common.profile')}
+                    <User className="h-4 w-4" />
+                    <span className="flex-1">{t('common.profile')}</span>
+                    {actionsRemaining > 0 && (
+                      <span className="h-5 min-w-5 px-1 rounded-full bg-accent text-white text-[10px] font-medium flex items-center justify-center">
+                        {actionsRemaining}
+                      </span>
+                    )}
                   </button>
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/scan') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2 text-emerald-600 dark:text-emerald-400" role="menuitem">
                     <ScanLine className="h-4 w-4" /> {t('scan.title', { defaultValue: 'Scan' })}

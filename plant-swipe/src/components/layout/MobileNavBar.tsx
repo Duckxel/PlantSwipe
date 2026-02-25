@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { useNotifications } from "@/hooks/useNotifications"
+import { useProfileActionsCount } from "@/components/profile/ProfileActions"
 import { useTranslation } from "react-i18next"
 import { checkEditorAccess, checkBugCatcherAccess } from "@/constants/userRoles"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -48,6 +49,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const { user, profile } = useAuth()
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "mobile" })
   const { totalCount, counts, friendRequests, gardenInvites, refresh: refreshNotifications } = useNotifications(user?.id ?? null, { channelKey: "mobile" })
+  const actionsRemaining = useProfileActionsCount(user?.id)
   const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
   const [guestMenuOpen, setGuestMenuOpen] = React.useState(false)
@@ -252,6 +254,33 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                     </p>
                   </div>
                   <ChevronRight className="h-5 w-5 text-amber-600/50 dark:text-amber-400/50" />
+                </button>
+              </div>
+            )}
+
+            {/* Profile actions remaining */}
+            {actionsRemaining > 0 && (
+              <div className="px-4 py-3">
+                <button
+                  onClick={() => {
+                    setProfileMenuOpen(false)
+                    if (onProfile) onProfile()
+                    else navigate('/u/_me')
+                  }}
+                  className="w-full p-4 rounded-2xl bg-accent/[0.07] dark:bg-accent/10 border border-accent/20 dark:border-accent/15 flex items-center gap-4 active:scale-[0.98] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <div className="h-10 w-10 rounded-full bg-accent/15 dark:bg-accent/20 flex items-center justify-center">
+                    <User className="h-5 w-5 text-accent" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-stone-800 dark:text-stone-100">
+                      {t("profileActions.title", { defaultValue: "Get started" })}
+                    </p>
+                    <p className="text-sm text-stone-500 dark:text-stone-400">
+                      {actionsRemaining} {t("profileActions.remaining", { defaultValue: "remaining" })}
+                    </p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-accent/50" />
                 </button>
               </div>
             )}

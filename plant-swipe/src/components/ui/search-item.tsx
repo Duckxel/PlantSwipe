@@ -263,6 +263,8 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
           ref={ref}
           type="button"
           disabled={disabled || loading}
+          aria-haspopup="dialog"
+          aria-expanded={open}
           onClick={() => {
             setSearch("")
             setOpen(true)
@@ -310,6 +312,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={searchPlaceholder}
+                  aria-label={searchPlaceholder}
                   autoFocus
                   className="w-full h-10 pl-9 pr-8 rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] text-sm text-stone-900 dark:text-white placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
                 />
@@ -318,6 +321,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                     type="button"
                     onClick={() => setSearch("")}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-stone-400 hover:text-stone-600"
+                    aria-label="Clear search"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -339,37 +343,38 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                   </p>
                 </div>
               ) : (
-                <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+                <ul className="grid gap-3 grid-cols-2 sm:grid-cols-3" role="list">
                   {filteredOptions.map((option) => {
                     const isActive = option.id === value
                     return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => {
-                          onSelect(option)
-                          setOpen(false)
-                        }}
-                        className={cn(
-                          "group relative rounded-xl sm:rounded-2xl border p-4 cursor-pointer transition-all text-left",
-                          isActive
-                            ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 shadow-md shadow-emerald-500/10"
-                            : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5",
-                        )}
-                      >
-                        {/* Hover gradient accent */}
-                        <div className={cn(
-                          "absolute inset-x-0 top-0 h-1 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 transition-opacity",
-                          isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                        )} />
+                      <li key={option.id} className="contents">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelect(option)
+                            setOpen(false)
+                          }}
+                          className={cn(
+                            "group relative w-full h-full rounded-xl sm:rounded-2xl border p-4 cursor-pointer transition-all text-left",
+                            isActive
+                              ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 shadow-md shadow-emerald-500/10"
+                              : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5",
+                          )}
+                        >
+                          {/* Hover gradient accent */}
+                          <div className={cn(
+                            "absolute inset-x-0 top-0 h-1 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 transition-opacity",
+                            isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                          )} />
 
-                        {renderItem
-                          ? renderItem(option, isActive)
-                          : defaultRenderItem(option, isActive)}
-                      </button>
+                          {renderItem
+                            ? renderItem(option, isActive)
+                            : defaultRenderItem(option, isActive)}
+                        </button>
+                      </li>
                     )
                   })}
-                </div>
+                </ul>
               )}
             </div>
 

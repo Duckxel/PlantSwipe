@@ -569,6 +569,22 @@ create index if not exists friends_friend_idx on public.friends(friend_id);
 alter table public.friend_requests enable row level security;
 alter table public.friends enable row level security;
 
+-- SECURITY DEFINER helper: check if a user is shadow-banned (threat_level >= 3)
+-- Bypasses profiles RLS to avoid infinite recursion when called from
+-- friend_requests INSERT policy -> profiles SELECT policy -> friend_requests SELECT
+create or replace function public.is_shadow_banned(_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = _user_id and coalesce(threat_level, 0) >= 3
+  );
+$$;
+grant execute on function public.is_shadow_banned(uuid) to authenticated;
+
 -- RLS policies for friend_requests
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='friend_requests' and policyname='friend_requests_select_own') then
@@ -588,17 +604,12 @@ do $$ begin
   end if;
   -- Users can send friend requests only from themselves, and CANNOT target shadow-banned users (threat_level = 3)
   -- Also prevent shadow-banned users from sending friend requests themselves
+  -- Uses SECURITY DEFINER helpers to avoid RLS recursion (profiles SELECT -> friend_requests SELECT loop)
   create policy friend_requests_insert_own on public.friend_requests for insert to authenticated
     with check (
       requester_id = (select auth.uid())
-      and not exists (
-        select 1 from public.profiles p
-        where p.id = recipient_id and coalesce(p.threat_level, 0) >= 3
-      )
-      and not exists (
-        select 1 from public.profiles p
-        where p.id = requester_id and coalesce(p.threat_level, 0) >= 3
-      )
+      and not public.is_shadow_banned(recipient_id)
+      and not public.is_shadow_banned(requester_id)
     );
 end $$;
 
