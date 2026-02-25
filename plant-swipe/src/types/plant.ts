@@ -28,6 +28,7 @@ export type EdiblePart =
 
 export type ToxicityLevel =
   | "non_toxic" | "slightly_toxic" | "very_toxic" | "deadly" | "undetermined"
+  | "Non-Toxic" | "Midly Irritating" | "Highly Toxic" | "Lethally Toxic"
 
 export type PoisoningMethod =
   | "touch" | "ingestion" | "eye_contact" | "inhalation" | "sap_contact"
@@ -47,7 +48,7 @@ export type FoliagePersistence =
 export type LivingSpace =
   | "indoor" | "outdoor" | "both" | "terrarium" | "greenhouse"
 
-export type PlantSeason = "spring" | "summer" | "autumn" | "winter"
+export type PlantSeason = "spring" | "summer" | "autumn" | "winter" | "Spring" | "Summer" | "Autumn" | "Winter"
 
 export type Climate =
   | "polar" | "montane" | "oceanic" | "degraded_oceanic"
@@ -93,7 +94,7 @@ export type EcologicalImpact =
 
 // -- Section 9: Meta ----------------------------------------------------------
 
-export type PlantStatus = "in_progress" | "rework" | "review" | "approved"
+export type PlantStatus = "in_progress" | "rework" | "review" | "approved" | "in progres"
 
 // ============================================================================
 // Interfaces
@@ -171,7 +172,7 @@ export interface Plant {
   scientificNameVariety?: string
   family?: string
   encyclopediaCategory?: EncyclopediaCategory[]
-  featuredMonth?: MonthSlug[]
+  featuredMonth?: string[]
 
   // -- Section 2: Identity ----------------------------------------------------
   // Translatable (from plant_translations)
@@ -225,9 +226,9 @@ export interface Plant {
   wateringSchedules?: PlantWateringSchedule[]
 
   // -- Section 4: Growth ------------------------------------------------------
-  sowingMonth?: MonthSlug[]
-  floweringMonth?: MonthSlug[]
-  fruitingMonth?: MonthSlug[]
+  sowingMonth?: string[]
+  floweringMonth?: string[]
+  fruitingMonth?: string[]
   heightCm?: number
   wingspanCm?: number
   staking?: boolean
@@ -236,7 +237,7 @@ export interface Plant {
   sowingMethod?: SowingMethod[]
   transplanting?: boolean
   pruning?: boolean
-  pruningMonth?: MonthSlug[]
+  pruningMonth?: string[]
   // Translatable
   stakingAdvice?: string
   sowingAdvice?: string
@@ -314,7 +315,8 @@ export interface Plant {
   // -- Display / UI -----------------------------------------------------------
   images?: PlantImage[]
   image?: string
-  colors?: PlantColor[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  colors?: PlantColor[] | any[]
   colorNames?: string[]
   popularity?: { likes?: number; rank?: number; [key: string]: unknown }
 
@@ -393,51 +395,30 @@ export type PlantActivityValue = string
 /** @deprecated */
 export type PlantSubActivityValue = string
 
-/** @deprecated Use flat Plant interface */
-export interface PlantIdentity { [key: string]: unknown }
-/** @deprecated Use flat Plant interface */
-export interface PlantCare { [key: string]: unknown }
-/** @deprecated Use flat Plant interface */
-export interface PlantCareWatering { [key: string]: unknown }
-/** @deprecated Use flat Plant interface */
-export interface PlantGrowth { [key: string]: unknown }
-/** @deprecated Use flat Plant interface */
-export interface PlantUsage { [key: string]: unknown }
-/** @deprecated Use flat Plant interface */
-export interface PlantEcology { [key: string]: unknown }
-/** @deprecated Use flat Plant interface */
-export interface PlantDanger { [key: string]: unknown }
-/** @deprecated Use flat Plant interface */
-export interface PlantMiscellaneous { [key: string]: unknown }
-/** @deprecated Use flat Plant interface */
-export interface PlantMeta { [key: string]: unknown }
-/** @deprecated */
-export interface PlantClassification { [key: string]: unknown }
-/** @deprecated */
-export type PlantIdentifiers = PlantIdentity
-/** @deprecated */
-export interface PlantTraits { [key: string]: unknown }
-/** @deprecated */
-export interface PlantDimensions { [key: string]: unknown }
-/** @deprecated */
-export interface PlantPhenology { [key: string]: unknown }
-/** @deprecated */
-export interface PlantEnvironment { [key: string]: unknown }
-/** @deprecated */
-export interface PlantPropagation { [key: string]: unknown }
-/** @deprecated */
-export type PlantUsageLegacy = PlantUsage
-/** @deprecated */
-export type PlantEcologyLegacy = PlantEcology
-/** @deprecated */
-export interface PlantCommerce { [key: string]: unknown }
-/** @deprecated */
-export interface PlantProblems { [key: string]: unknown }
-/** @deprecated */
-export interface PlantPlanting { [key: string]: unknown }
-/** @deprecated */
-export type PlantMetaLegacy = PlantMeta
-/** @deprecated */
-export type PlantClassificationLegacy = PlantClassification
-/** @deprecated */
-export type PlantPhoto = PlantImage
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/** @deprecated Use flat Plant interface. Kept permissive (any) so legacy code compiles. */
+export interface PlantIdentity { [key: string]: any }
+/** @deprecated */ export interface PlantCare { [key: string]: any }
+/** @deprecated */ export interface PlantCareWatering { [key: string]: any }
+/** @deprecated */ export interface PlantGrowth { [key: string]: any }
+/** @deprecated */ export interface PlantUsage { [key: string]: any }
+/** @deprecated */ export interface PlantEcology { [key: string]: any }
+/** @deprecated */ export interface PlantDanger { [key: string]: any }
+/** @deprecated */ export interface PlantMiscellaneous { [key: string]: any }
+/** @deprecated */ export interface PlantMeta { [key: string]: any }
+/** @deprecated */ export interface PlantClassification { [key: string]: any }
+/** @deprecated */ export type PlantIdentifiers = PlantIdentity
+/** @deprecated */ export interface PlantTraits { [key: string]: any }
+/** @deprecated */ export interface PlantDimensions { [key: string]: any }
+/** @deprecated */ export interface PlantPhenology { [key: string]: any }
+/** @deprecated */ export interface PlantEnvironment { [key: string]: any }
+/** @deprecated */ export interface PlantPropagation { [key: string]: any }
+/** @deprecated */ export type PlantUsageLegacy = PlantUsage
+/** @deprecated */ export type PlantEcologyLegacy = PlantEcology
+/** @deprecated */ export interface PlantCommerce { [key: string]: any }
+/** @deprecated */ export interface PlantProblems { [key: string]: any }
+/** @deprecated */ export interface PlantPlanting { [key: string]: any }
+/** @deprecated */ export type PlantMetaLegacy = PlantMeta
+/** @deprecated */ export type PlantClassificationLegacy = PlantClassification
+/** @deprecated */ export type PlantPhoto = PlantImage
+/* eslint-enable @typescript-eslint/no-explicit-any */

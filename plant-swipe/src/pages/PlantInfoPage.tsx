@@ -27,11 +27,9 @@ import {
   ChevronDown,
   Pencil,
   MapPin,
-  Compass,
   Droplets,
   Sun,
   Leaf,
-  Flame,
   Sprout,
   Thermometer,
   Wind,
@@ -64,7 +62,6 @@ import {
   Minimize2,
   Flag,
 } from 'lucide-react'
-import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
   encyclopediaCategoryEnum,
@@ -461,13 +458,13 @@ const PlantInfoPage: React.FC = () => {
     scientificName?: string
     status: string
     family?: string
-    plantType?: string
-    levelSun?: string
-    livingSpace?: string
-    lifeCycle?: string
+    encyclopediaCategory?: string[]
+    sunlight?: string[]
+    livingSpace?: string[]
+    lifeCycle?: string[]
     season?: string[]
-    maintenanceLevel?: string
-    overview?: string
+    careLevel?: string[]
+    presentation?: string
     primaryImage?: string
   } | null>(null)
   const shareTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -597,15 +594,15 @@ const PlantInfoPage: React.FC = () => {
           setLimitedPlantInfo({
             name: basicInfo.name || 'Unknown Plant',
             scientificName: basicInfo.scientificName,
-            status: basicInfo.status || 'in progress',
+            status: basicInfo.status || 'in_progress',
             family: basicInfo.family,
-            plantType: basicInfo.plantType,
-            levelSun: basicInfo.levelSun,
+            encyclopediaCategory: basicInfo.encyclopediaCategory,
+            sunlight: basicInfo.sunlight,
             livingSpace: basicInfo.livingSpace,
             lifeCycle: basicInfo.lifeCycle,
             season: basicInfo.season,
-            maintenanceLevel: basicInfo.maintenanceLevel,
-            overview: basicInfo.overview,
+            careLevel: basicInfo.careLevel,
+            presentation: basicInfo.presentation,
             primaryImage: basicInfo.primaryImage,
           })
           setPlant(null)
@@ -1082,7 +1079,7 @@ const PlantInfoPage: React.FC = () => {
                 <div className="text-left p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-amber-200/50 dark:border-amber-500/20">
                   <h3 className="font-semibold text-lg text-stone-900 dark:text-white">{plant.name}</h3>
                   {plant.scientificNameSpecies && (
-                    <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.identity.scientificName}</p>
+                    <p className="text-sm italic text-stone-600 dark:text-stone-400">{plant.scientificNameSpecies}</p>
                   )}
                 </div>
               </div>
@@ -1300,12 +1297,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   }, [t])
   
   // Translate arrays of enum values
-  const translateEnumArray = React.useCallback((values: (string | null | undefined)[] | undefined): string[] => {
-    if (!values) return []
-    return values
-      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
-      .map(v => translateEnum(v))
-  }, [translateEnum])
   
   const monthLabels = React.useMemo(() => [
     t('plantInfo:timeline.months.jan'),
@@ -1371,6 +1362,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 
       const createdTimestamp = formatTimestampDetailed(plant.createdTime)
       const updatedTimestamp = formatTimestampDetailed(plant.updatedTime)
+      const createdByLabel = formatTextValue(plant.createdBy)
+      const updatedByLabel = formatTextValue(plant.updatedBy)
       const contributorsList = Array.from(new Map(compactStrings(plant.contributors).map(n => [n.toLowerCase(), n])).values())
       const sourcesValue = formatSourcesList(plant.sources)
 

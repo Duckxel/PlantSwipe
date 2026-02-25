@@ -39,6 +39,7 @@ import {
 } from "@/lib/composition"
 
 const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images'])
+const IN_PROGRESS_STATUS = 'in_progress'
 
 // Helper to check if an error is a cancellation/abort error
 function isCancellationError(err: unknown): boolean {

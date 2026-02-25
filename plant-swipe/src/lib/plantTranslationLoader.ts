@@ -102,7 +102,7 @@ function mapDbRowToPlant(
     scientificNameVariety: (basePlant.scientific_name_variety as string) || undefined,
     family: (basePlant.family as string) || undefined,
     encyclopediaCategory: encyclopediaCategoryEnum.toDbArray(basePlant.encyclopedia_category) as Plant['encyclopediaCategory'],
-    featuredMonth: (basePlant.featured_month as string[]) || [],
+    featuredMonth: (basePlant.featured_month as string[]) || [] as string[],
 
     // Section 2: Identity (non-translatable from plants table)
     climate: climateEnum.toDbArray(basePlant.climate) as Plant['climate'],
