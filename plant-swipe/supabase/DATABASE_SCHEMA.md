@@ -512,6 +512,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | Function | Purpose |
 |----------|---------|
 | `is_admin_user(uuid)` | Check if user is admin (bypasses RLS) |
+| `is_shadow_banned(uuid)` | Check if user is shadow-banned / threat_level >= 3 (bypasses RLS) |
 | `has_role(uuid, text)` | Check if user has specific role |
 | `has_any_role(uuid, text[])` | Check if user has any of the roles |
 
