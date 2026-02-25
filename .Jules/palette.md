@@ -43,3 +43,7 @@
 ## 2026-05-29 - Prop Spreading for Accessibility
 **Learning:** Custom atomic components like `Switch` that don't spread `...props` to their underlying interactive element effectively swallow accessibility attributes like `aria-label` passed by consumers, making them inaccessible in specific contexts.
 **Action:** Always spread `...props` to the root interactive element of reusable UI components to enable consumers to augment them with necessary ARIA attributes.
+
+## 2026-05-30 - Retrofitting Accessibility with Display Contents
+**Learning:** Adding semantic list structure (`ul`, `li`) to existing grid layouts often breaks CSS if `li` introduces a new block context. Using `className="contents"` (display: contents) on the `li` effectively makes it disappear from the layout tree, preserving the original grid behavior while adding necessary semantics for screen readers.
+**Action:** Use `display: contents` when wrapping grid items in semantic containers to avoid rewriting complex grid layouts.
