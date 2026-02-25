@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
-import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
@@ -63,7 +63,7 @@ type PlantGrowthData = NonNullable<Plant["growth"]>
 type PlantEcologyData = NonNullable<Plant["ecology"]>
 
 const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
-const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
+const IN_PROGRESS_STATUS = 'in_progress' as const
 const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
 
@@ -1286,10 +1286,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
   const normalizePlantWatering = (candidate: Plant): Plant => ({
     ...candidate,
-    plantCare: {
-      ...(candidate.plantCare || {}),
-      watering: { ...(candidate.plantCare?.watering || {}), schedules: normalizeSchedules(candidate.plantCare?.watering?.schedules) },
-    },
+    wateringSchedules: normalizeSchedules(candidate.wateringSchedules),
   })
     const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
     const showAiProgressCard = aiWorking || (!aiCompleted && hasAiProgress)
@@ -1937,15 +1934,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
-      // Always preserve images from the current state
       images: candidate.images && candidate.images.length > 0 ? candidate.images : currentImages,
-      meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
+      status: candidate.status || IN_PROGRESS_STATUS,
     })
     const needsMonths = (p: Plant) =>
-      !((p.growth?.sowingMonth || []).length && (p.growth?.floweringMonth || []).length && (p.growth?.fruitingMonth || []).length)
+      !((p.sowingMonth || []).length && (p.floweringMonth || []).length && (p.fruitingMonth || []).length)
     const needsOriginOrWater = (p: Plant) => {
-      const hasOrigin = (p.plantCare?.origin || []).length > 0
-      const hasSchedule = (p.plantCare?.watering?.schedules || []).length > 0
+      const hasOrigin = (p.origin || []).length > 0
+      const hasSchedule = (p.wateringSchedules || []).length > 0
       return !(hasOrigin && hasSchedule)
     }
 
@@ -2021,6 +2017,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               if (field === 'complete') return
               if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
               if (field === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
+              if (field === 'base' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
+              if (field === 'misc' && (data as any)?.companionPlants) captureCompanionSuggestions((data as any).companionPlants)
               if (field === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
               setPlant((prev) => {
                 const applied = applyAiFieldToPlant(prev, field, data)
@@ -2055,6 +2053,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           for (const [fieldKey, data] of Object.entries(aiData as Record<string, unknown>)) {
             if (fieldKey.toLowerCase().includes('color')) captureColorSuggestions(data)
             if (fieldKey === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
+            if (fieldKey === 'base' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
+            if (fieldKey === 'misc' && (data as any)?.companionPlants) captureCompanionSuggestions((data as any).companionPlants)
             if (fieldKey === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
             updated = applyAiFieldToPlant(updated, fieldKey, data)
             markFieldComplete(fieldKey)
@@ -2074,34 +2074,27 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
       const snapshot: Plant = finalPlant || plant
       if (needsOriginOrWater(snapshot)) {
-        await fillFieldWithRetries('plantCare', snapshot.plantCare)
+        await fillFieldWithRetries('care', undefined)
       }
       if (needsMonths(snapshot)) {
-        await fillFieldWithRetries('growth', snapshot.growth)
+        await fillFieldWithRetries('growth', undefined)
       }
 
       setPlant((prev) => {
         const target = normalizePlantWatering(finalPlant || prev)
-        // Preserve images from current state
         const preservedImages = prev.images && prev.images.length > 0 ? prev.images : currentImages
-        const ensuredWater = (target.plantCare?.watering?.schedules || []).length
-          ? normalizeSchedules(target.plantCare?.watering?.schedules)
+        const ensuredWater = normalizeSchedules(target.wateringSchedules).length
+          ? normalizeSchedules(target.wateringSchedules)
           : [{ season: undefined, quantity: 1, timePeriod: 'week' as const }]
-        const ensuredGrowth = {
-          sowingMonth: target.growth?.sowingMonth?.length ? target.growth.sowingMonth : [3],
-          floweringMonth: target.growth?.floweringMonth?.length ? target.growth.floweringMonth : [6],
-          fruitingMonth: target.growth?.fruitingMonth?.length ? target.growth.fruitingMonth : [9],
-        }
         const next = {
           ...target,
           images: preservedImages,
-          plantCare: {
-            ...(target.plantCare || {}),
-            origin: (target.plantCare?.origin || []).length ? target.plantCare?.origin : ['Unknown'],
-            watering: { ...(target.plantCare?.watering || {}), schedules: ensuredWater },
-          },
-          growth: { ...(target.growth || {}), ...ensuredGrowth },
-          meta: { ...(target.meta || {}), status: IN_PROGRESS_STATUS },
+          origin: (target.origin || []).length ? target.origin : ['Unknown'],
+          wateringSchedules: ensuredWater,
+          sowingMonth: (target.sowingMonth || []).length ? target.sowingMonth : ['march' as MonthSlug],
+          floweringMonth: (target.floweringMonth || []).length ? target.floweringMonth : ['june' as MonthSlug],
+          fruitingMonth: (target.fruitingMonth || []).length ? target.fruitingMonth : ['september' as MonthSlug],
+          status: target.status || IN_PROGRESS_STATUS,
         }
         finalPlant = next
         return next

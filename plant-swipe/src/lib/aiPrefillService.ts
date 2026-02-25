@@ -306,9 +306,9 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   if (insertError) throw { ...insertError, context: 'images' }
 }
 
-async function upsertWateringSchedules(plantId: string, schedules: Plant["plantCare"] | undefined) {
+async function upsertWateringSchedules(plantId: string, schedules: PlantWateringSchedule[] | undefined) {
   await supabase.from('plant_watering_schedules').delete().eq('plant_id', plantId)
-  const entries = normalizeSchedules(schedules?.watering?.schedules)
+  const entries = normalizeSchedules(schedules)
   const rows = entries.map((entry) => ({
     plant_id: plantId,
     season: normalizeSeasonSlug(entry.season),
@@ -555,19 +555,13 @@ export async function processPlantRequest(
       id: generateUUIDv4(),
       name: englishPlantName,
       utility: [],
-      comestiblePart: [],
-      fruitType: [],
+      ediblePart: [],
       images: [],
-      identity: { givenNames: [], colors: [], multicolor: false, bicolor: false },
-      plantCare: { watering: { schedules: [] } },
-      growth: {},
-      usage: {},
-      ecology: {},
-      danger: {},
-      miscellaneous: { sources: [] },
-      meta: { status: IN_PROGRESS_STATUS },
-      seasons: [],
       colors: [],
+      season: [],
+      wateringSchedules: [],
+      sources: [],
+      status: IN_PROGRESS_STATUS,
     }
     
     let plant: Plant = { ...emptyPlant }
@@ -628,26 +622,17 @@ export async function processPlantRequest(
     // Ensure plant name is always the English name (AI might overwrite or corrupt it)
     plant.name = englishPlantName
     
-    // Ensure required fields have defaults
+    // Ensure required fields have defaults (use flat fields)
     plant = {
       ...plant,
-      plantCare: {
-        ...(plant.plantCare || {}),
-        origin: (plant.plantCare?.origin || []).length ? plant.plantCare?.origin : ['Unknown'],
-        watering: {
-          ...(plant.plantCare?.watering || {}),
-          schedules: normalizeSchedules(plant.plantCare?.watering?.schedules).length
-            ? normalizeSchedules(plant.plantCare?.watering?.schedules)
-            : [{ season: undefined, quantity: 1, timePeriod: 'week' as const }],
-        },
-      },
-      growth: {
-        ...(plant.growth || {}),
-        sowingMonth: (plant.growth?.sowingMonth || []).length ? plant.growth?.sowingMonth : [3],
-        floweringMonth: (plant.growth?.floweringMonth || []).length ? plant.growth?.floweringMonth : [6],
-        fruitingMonth: (plant.growth?.fruitingMonth || []).length ? plant.growth?.fruitingMonth : [9],
-      },
-      meta: { ...(plant.meta || {}), status: IN_PROGRESS_STATUS },
+      origin: (plant.origin || []).length ? plant.origin : ['Unknown'],
+      wateringSchedules: normalizeSchedules(plant.wateringSchedules).length
+        ? normalizeSchedules(plant.wateringSchedules)
+        : [{ season: undefined, quantity: 1, timePeriod: 'week' as const }],
+      sowingMonth: (plant.sowingMonth || []).length ? plant.sowingMonth : ['march'],
+      floweringMonth: (plant.floweringMonth || []).length ? plant.floweringMonth : ['june'],
+      fruitingMonth: (plant.fruitingMonth || []).length ? plant.fruitingMonth : ['september'],
+      status: plant.status || IN_PROGRESS_STATUS,
     }
     
     if (signal?.aborted) {
@@ -848,9 +833,7 @@ export async function processPlantRequest(
     const colorIds = await upsertColors(normalizedColors)
     await linkColors(plantId, colorIds)
     await upsertImages(plantId, plant.images || [])
-    await upsertWateringSchedules(plantId, {
-      watering: { schedules: normalizedSchedules },
-    })
+    await upsertWateringSchedules(plantId, normalizedSchedules)
     await upsertSources(plantId, sources)
     await upsertContributors(plantId, contributors)
     await upsertInfusionMixes(plantId, plant.infusionMixes)
