@@ -2390,7 +2390,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
       })
       if (alreadyAdded) return
       const next: PlantColor = hex ? { name, hexCode: hex } : { name }
-      onChange(setValue(value, 'colors', [...current, next]))
+      onChange(setValue(value, 'identity.colors', [...current, next]))
     },
     [onChange, t, value],
   )
