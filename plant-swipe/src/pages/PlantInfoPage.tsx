@@ -1344,7 +1344,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const joinArr = (arr: string[] | undefined) => arr?.length ? arr.map(v => translateEnum(v)).join(' • ') : null
       const joinRaw = (arr: string[] | undefined) => arr?.length ? arr.join(' • ') : null
 
-      const temperatureWindow = formatTemperatureRange(plant.temperatureMin, plant.temperatureIdeal, plant.temperatureMax)
+      const temperatureWindow = plant.temperatureIdeal != null ? `${plant.temperatureIdeal}°C` : null
       const humidityValue = plant.hygrometry != null ? `${plant.hygrometry}%` : null
       const companionNames = companionPlants.length > 0 ? companionPlants.map(c => c.name) : compactStrings(plant.companionPlants)
       const infusionMixSummary = formatInfusionMixSummary(plant.infusionMixes)
