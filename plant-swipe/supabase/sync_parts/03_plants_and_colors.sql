@@ -117,6 +117,7 @@ create table if not exists public.plants (
   temperature_ideal integer,
 
   -- Section 3: Care — Water & humidity
+  watering_mode text default 'always',
   watering_frequency_warm integer,
   watering_frequency_cold integer,
   watering_type text[] not null default '{}'::text[] check (watering_type <@ array['hose','surface','drip','soaking','wick']),
@@ -559,6 +560,7 @@ declare
     array['temperature_max', 'integer'],
     array['temperature_min', 'integer'],
     array['temperature_ideal', 'integer'],
+    array['watering_mode', 'text default ''always'''],
     array['watering_frequency_warm', 'integer'],
     array['watering_frequency_cold', 'integer'],
     array['watering_type', 'text[] not null default ''{}''::text[]'],
@@ -1446,6 +1448,7 @@ do $$ declare
     'temperature_max',
     'temperature_min',
     'temperature_ideal',
+    'watering_mode',
     'watering_frequency_warm',
     'watering_frequency_cold',
     'watering_type',
@@ -1558,7 +1561,7 @@ end $$;
 create table if not exists public.plant_watering_schedules (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
-  season text check (season is null or season in ('spring','summer','autumn','winter')),
+  season text check (season is null or season in ('spring','summer','autumn','winter','hot','cold')),
   quantity integer,
   time_period text check (time_period is null or time_period in ('week','month','year')),
   created_at timestamptz not null default now()
@@ -1584,7 +1587,7 @@ do $$ begin
   if exists (select 1 from information_schema.constraint_column_usage where table_name='plant_watering_schedules' and constraint_name='plant_watering_schedules_time_period_check') then
     alter table public.plant_watering_schedules drop constraint plant_watering_schedules_time_period_check;
   end if;
-  alter table public.plant_watering_schedules add constraint plant_watering_schedules_season_check check (season is null or season in ('spring','summer','autumn','winter'));
+  alter table public.plant_watering_schedules add constraint plant_watering_schedules_season_check check (season is null or season in ('spring','summer','autumn','winter','hot','cold'));
   alter table public.plant_watering_schedules add constraint plant_watering_schedules_time_period_check check (time_period is null or time_period in ('week','month','year'));
 end $$;
 create index if not exists plant_watering_schedules_plant_id_idx on public.plant_watering_schedules(plant_id);

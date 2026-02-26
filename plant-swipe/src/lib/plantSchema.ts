@@ -134,8 +134,13 @@ export const plantSchema = {
   temperatureMax: { type: 'int', description: 'Maximum temperature tolerance in °C' },
   temperatureMin: { type: 'int', description: 'Minimum temperature tolerance in °C' },
   temperatureIdeal: { type: 'int', description: 'Ideal growing temperature in °C' },
-  wateringFrequencyWarm: { type: 'int', description: 'Watering times per week in warm season' },
-  wateringFrequencyCold: { type: 'int', description: 'Watering times per week in cold season' },
+  wateringMode: {
+    type: 'enum',
+    options: ['always', 'seasonal'],
+    description: 'Whether watering is the same year-round ("always") or varies by temperature ("seasonal" = hot/cold)',
+  },
+  wateringFrequencyWarm: { type: 'int', description: 'Watering times per week in warm/hot season (legacy — prefer wateringSchedules)' },
+  wateringFrequencyCold: { type: 'int', description: 'Watering times per week in cold season (legacy — prefer wateringSchedules)' },
   wateringType: {
     type: 'enum[]',
     options: ['hose','surface','drip','soaking','wick'],
