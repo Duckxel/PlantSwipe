@@ -36,6 +36,9 @@ export type PlantProfileFormProps = {
   onChange: (plant: Plant) => void
   colorSuggestions?: PlantColor[]
   companionSuggestions?: string[]
+  biotopeSuggestions?: string[]
+  beneficialSuggestions?: string[]
+  harmfulSuggestions?: string[]
   categoryProgress?: CategoryProgress
   /** Current language for companion search (e.g., 'en', 'fr'). Defaults to 'en'. */
   language?: string
@@ -2381,11 +2384,14 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const [showCompanionRecommendations, setShowCompanionRecommendations] = React.useState(false)
+  const [showBiotopeRecommendations, setShowBiotopeRecommendations] = React.useState(false)
+  const [showBeneficialRecommendations, setShowBeneficialRecommendations] = React.useState(false)
+  const [showHarmfulRecommendations, setShowHarmfulRecommendations] = React.useState(false)
 
   const categoryLabels: Record<string, string> = {
     base: t('plantAdmin.categories.base', 'Base'),
@@ -2424,6 +2430,21 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     if (companionSuggestions?.length) setShowCompanionRecommendations(true)
     else setShowCompanionRecommendations(false)
   }, [companionSuggestions?.length])
+
+  React.useEffect(() => {
+    if (biotopeSuggestions?.length) setShowBiotopeRecommendations(true)
+    else setShowBiotopeRecommendations(false)
+  }, [biotopeSuggestions?.length])
+
+  React.useEffect(() => {
+    if (beneficialSuggestions?.length) setShowBeneficialRecommendations(true)
+    else setShowBeneficialRecommendations(false)
+  }, [beneficialSuggestions?.length])
+
+  React.useEffect(() => {
+    if (harmfulSuggestions?.length) setShowHarmfulRecommendations(true)
+    else setShowHarmfulRecommendations(false)
+  }, [harmfulSuggestions?.length])
 
   const addSuggestedColor = React.useCallback(
     (suggestion: PlantColor | { name?: string; hexCode?: string; hex?: string; label?: string }) => {
@@ -2805,6 +2826,9 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
       <CompanionSelector
         value={Array.isArray(value.biotopePlants) ? value.biotopePlants : []}
         onChange={(v) => setPath('biotopePlants', v)}
+        suggestions={biotopeSuggestions}
+        showSuggestions={showBiotopeRecommendations}
+        onToggleSuggestions={() => setShowBiotopeRecommendations(prev => !prev)}
         currentPlantId={value.id}
         language={language}
       />
@@ -2815,6 +2839,9 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
           <CompanionSelector
             value={Array.isArray(value.beneficialPlants) ? value.beneficialPlants : []}
             onChange={(v) => setPath('beneficialPlants', v)}
+            suggestions={beneficialSuggestions}
+            showSuggestions={showBeneficialRecommendations}
+            onToggleSuggestions={() => setShowBeneficialRecommendations(prev => !prev)}
             currentPlantId={value.id}
             language={language}
           />
@@ -2824,6 +2851,9 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
           <CompanionSelector
             value={Array.isArray(value.harmfulPlants) ? value.harmfulPlants : []}
             onChange={(v) => setPath('harmfulPlants', v)}
+            suggestions={harmfulSuggestions}
+            showSuggestions={showHarmfulRecommendations}
+            onToggleSuggestions={() => setShowHarmfulRecommendations(prev => !prev)}
             currentPlantId={value.id}
             language={language}
           />

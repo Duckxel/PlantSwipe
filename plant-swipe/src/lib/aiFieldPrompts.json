@@ -117,11 +117,14 @@
   ],
   "misc": [
     "Populate the MISC section for {{plantName}}. Return a JSON object:",
-    "- `companionPlants`: array of common names of good companion plants",
+    "- `companionPlants`: array of up to 10 common names of good companion plants (plants that grow well together)",
+    "- `biotopePlants`: array of up to 10 common names of plants that share the same natural biotope/habitat",
+    "- `beneficialPlants`: array of up to 10 common names of plants that are beneficial to this plant (e.g. nitrogen fixers, pest repellers)",
+    "- `harmfulPlants`: array of up to 10 common names of plants that are harmful or antagonistic to this plant",
     "- `plantTags`: array of searchable keywords (e.g. [\"drought-tolerant\",\"bee-friendly\",\"edible\"])",
     "- `biodiversityTags`: array of biodiversity keywords",
     "- `sources`: array of citation objects [{\"name\":\"...\",\"url\":\"...\"}]",
-    "Use standard common names for companions. Prefer high-quality references."
+    "Use standard common names for all plant suggestions. These are suggestions only — they will NOT be applied directly. Prefer high-quality references."
   ],
   "meta": [
     "When meta data is requested for {{plantName}}, return:",

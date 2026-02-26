@@ -133,6 +133,8 @@ const normalizeMonthArray = (value: unknown): string[] => {
 const IGNORED_FIELDS = new Set([
   'id', 'name', 'images', 'image', 'status',
   'createdBy', 'createdTime', 'updatedBy', 'updatedTime',
+  // Plant relation fields are suggestion-only — AI must not write IDs directly
+  'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
 ])
 
 // Enum field → EnumTools mapping
@@ -203,7 +205,6 @@ const TAG_FIELDS = new Set([
   'biodiversityRole', 'pollinatorsAttracted', 'birdsAttracted', 'mammalsAttracted',
   'beneficialRoles', 'harmfulRoles', 'symbiosis',
   'ecologicalManagement',
-  'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
   'plantTags', 'biodiversityTags', 'spiceMixes',
 ])
 

@@ -1168,6 +1168,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [plantVarieties, setPlantVarieties] = React.useState<PlantVariety[]>([])
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
+  const [biotopeSuggestions, setBiotopeSuggestions] = React.useState<string[]>([])
+  const [beneficialSuggestions, setBeneficialSuggestions] = React.useState<string[]>([])
+  const [harmfulSuggestions, setHarmfulSuggestions] = React.useState<string[]>([])
   const [fetchingExternalImages, setFetchingExternalImages] = React.useState(false)
   const [externalImageSources, setExternalImageSources] = React.useState<Record<ExternalImageSource, SourceResult>>(() => {
     const initial: Record<string, SourceResult> = {}
@@ -1516,8 +1519,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     if (parsed.length) setColorSuggestions(parsed)
   }
 
-  const captureCompanionSuggestions = (data: unknown) => {
-    if (!data) return
+  const parsePlantNames = (data: unknown): string[] => {
+    if (!data) return []
     const parsed: string[] = []
     if (Array.isArray(data)) {
       data.forEach((entry) => {
@@ -1526,7 +1529,24 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         }
       })
     }
+    return parsed
+  }
+
+  const captureCompanionSuggestions = (data: unknown) => {
+    const parsed = parsePlantNames(data)
     if (parsed.length) setCompanionSuggestions(parsed)
+  }
+
+  const capturePlantRelationSuggestions = (aiData: unknown) => {
+    if (!aiData || typeof aiData !== 'object') return
+    const d = aiData as Record<string, unknown>
+    if (d.companionPlants) captureCompanionSuggestions(d.companionPlants)
+    const biotope = parsePlantNames(d.biotopePlants)
+    if (biotope.length) setBiotopeSuggestions(biotope)
+    const beneficial = parsePlantNames(d.beneficialPlants)
+    if (beneficial.length) setBeneficialSuggestions(beneficial)
+    const harmful = parsePlantNames(d.harmfulPlants)
+    if (harmful.length) setHarmfulSuggestions(harmful)
   }
   const normalizePlantWatering = (candidate: Plant): Plant => ({
     ...candidate,
@@ -2240,7 +2260,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
               if (field === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
               if (field === 'base' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
-              if (field === 'misc' && (data as any)?.companionPlants) captureCompanionSuggestions((data as any).companionPlants)
+              if (field === 'misc' || field === 'miscellaneous') capturePlantRelationSuggestions(data)
               if (field === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
               setPlant((prev) => {
                 const applied = applyAiFieldToPlant(prev, field, data)
@@ -2276,7 +2296,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             if (fieldKey.toLowerCase().includes('color')) captureColorSuggestions(data)
             if (fieldKey === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
             if (fieldKey === 'base' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
-            if (fieldKey === 'misc' && (data as any)?.companionPlants) captureCompanionSuggestions((data as any).companionPlants)
+            if (fieldKey === 'misc' || fieldKey === 'miscellaneous') capturePlantRelationSuggestions(data)
             if (fieldKey === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
             updated = applyAiFieldToPlant(updated, fieldKey, data)
           }
@@ -2920,6 +2940,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             onChange={setPlant}
             colorSuggestions={colorSuggestions}
             companionSuggestions={companionSuggestions}
+            biotopeSuggestions={biotopeSuggestions}
+            beneficialSuggestions={beneficialSuggestions}
+            harmfulSuggestions={harmfulSuggestions}
             categoryProgress={hasAiProgress ? aiProgress : undefined}
             language={language}
             onImageRemove={(imageUrl) => {
