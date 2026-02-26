@@ -117,6 +117,7 @@ create table if not exists public.plants (
   temperature_ideal integer,
 
   -- Section 3: Care — Water & humidity
+  watering_mode text default 'always',
   watering_frequency_warm integer,
   watering_frequency_cold integer,
   watering_type text[] not null default '{}'::text[] check (watering_type <@ array['hose','surface','drip','soaking','wick']),
@@ -559,6 +560,7 @@ declare
     array['temperature_max', 'integer'],
     array['temperature_min', 'integer'],
     array['temperature_ideal', 'integer'],
+    array['watering_mode', 'text default ''always'''],
     array['watering_frequency_warm', 'integer'],
     array['watering_frequency_cold', 'integer'],
     array['watering_type', 'text[] not null default ''{}''::text[]'],
@@ -1113,8 +1115,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_climate_check check (climate <@ array['polar','montane','oceanic','degraded_oceanic','temperate_continental','mediterranean','tropical_dry','tropical_humid','tropical_volcanic','tropical_cyclonic','humid_insular','subtropical_humid','equatorial','windswept_coastal']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_climate_check check (climate <@ array['polar','montane','oceanic','degraded_oceanic','temperate_continental','mediterranean','tropical_dry','tropical_humid','tropical_volcanic','tropical_cyclonic','humid_insular','subtropical_humid','equatorial','windswept_coastal']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- encyclopedia_category
@@ -1122,8 +1124,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_encyclopedia_category_check check (encyclopedia_category <@ array['tree','shrub','small_shrub','fruit_tree','bamboo','cactus_succulent','herbaceous','palm','fruit_plant','aromatic_plant','medicinal_plant','climbing_plant','vegetable_plant','perennial_plant','bulb_plant','rhizome_plant','indoor_plant','fern','moss_lichen','aquatic_semi_aquatic']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_encyclopedia_category_check check (encyclopedia_category <@ array['tree','shrub','small_shrub','fruit_tree','bamboo','cactus_succulent','herbaceous','palm','fruit_plant','aromatic_plant','medicinal_plant','climbing_plant','vegetable_plant','perennial_plant','bulb_plant','rhizome_plant','indoor_plant','fern','moss_lichen','aquatic_semi_aquatic']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- utility
@@ -1131,8 +1133,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_utility_check check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_utility_check check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- edible_part
@@ -1140,8 +1142,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_edible_part_check check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_edible_part_check check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- toxicity_human
@@ -1149,8 +1151,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_toxicity_human_check check (toxicity_human in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined'));
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_toxicity_human_check check (toxicity_human in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- toxicity_pets
@@ -1158,8 +1160,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_toxicity_pets_check check (toxicity_pets in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined'));
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_toxicity_pets_check check (toxicity_pets in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- poisoning_method
@@ -1167,8 +1169,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_poisoning_method_check check (poisoning_method <@ array['touch','ingestion','eye_contact','inhalation','sap_contact']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_poisoning_method_check check (poisoning_method <@ array['touch','ingestion','eye_contact','inhalation','sap_contact']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- life_cycle
@@ -1176,8 +1178,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_life_cycle_check check (life_cycle <@ array['annual','biennial','perennial','succulent_perennial','monocarpic','short_cycle','ephemeral']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_life_cycle_check check (life_cycle <@ array['annual','biennial','perennial','succulent_perennial','monocarpic','short_cycle','ephemeral']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- average_lifespan
@@ -1185,8 +1187,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_average_lifespan_check check (average_lifespan <@ array['less_than_1_year','2_years','3_to_10_years','10_to_50_years','over_50_years']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_average_lifespan_check check (average_lifespan <@ array['less_than_1_year','2_years','3_to_10_years','10_to_50_years','over_50_years']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- foliage_persistence
@@ -1194,8 +1196,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_foliage_persistence_check check (foliage_persistence <@ array['deciduous','evergreen','semi_evergreen','marcescent','winter_dormant','dry_season_deciduous']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_foliage_persistence_check check (foliage_persistence <@ array['deciduous','evergreen','semi_evergreen','marcescent','winter_dormant','dry_season_deciduous']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- living_space
@@ -1203,8 +1205,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_living_space_check check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_living_space_check check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- landscaping
@@ -1212,8 +1214,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_landscaping_check check (landscaping <@ array['pot','planter','hanging','window_box','green_wall','flowerbed','border','edging','path','tree_base','vegetable_garden','orchard','hedge','free_growing','trimmed_hedge','windbreak','pond_edge','waterside','ground_cover','grove','background','foreground']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_landscaping_check check (landscaping <@ array['pot','planter','hanging','window_box','green_wall','flowerbed','border','edging','path','tree_base','vegetable_garden','orchard','hedge','free_growing','trimmed_hedge','windbreak','pond_edge','waterside','ground_cover','grove','background','foreground']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- plant_habit
@@ -1221,8 +1223,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_plant_habit_check check (plant_habit <@ array['upright','arborescent','shrubby','bushy','clumping','erect','creeping','carpeting','ground_cover','prostrate','spreading','climbing','twining','scrambling','liana','trailing','columnar','conical','fastigiate','globular','spreading_flat','rosette','cushion','ball_shaped','succulent','palmate','rhizomatous','suckering']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_plant_habit_check check (plant_habit <@ array['upright','arborescent','shrubby','bushy','clumping','erect','creeping','carpeting','ground_cover','prostrate','spreading','climbing','twining','scrambling','liana','trailing','columnar','conical','fastigiate','globular','spreading_flat','rosette','cushion','ball_shaped','succulent','palmate','rhizomatous','suckering']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- care_level
@@ -1230,8 +1232,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_care_level_check check (care_level <@ array['easy','moderate','complex']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_care_level_check check (care_level <@ array['easy','moderate','complex']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- sunlight
@@ -1239,8 +1241,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_sunlight_check check (sunlight <@ array['full_sun','partial_sun','partial_shade','light_shade','deep_shade','direct_light','bright_indirect_light','medium_light','low_light']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_sunlight_check check (sunlight <@ array['full_sun','partial_sun','partial_shade','light_shade','deep_shade','direct_light','bright_indirect_light','medium_light','low_light']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- watering_type
@@ -1248,8 +1250,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_watering_type_check check (watering_type <@ array['hose','surface','drip','soaking','wick']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_watering_type_check check (watering_type <@ array['hose','surface','drip','soaking','wick']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- division
@@ -1257,8 +1259,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_division_check check (division <@ array['seed','clump_division','bulb_division','rhizome_division','cutting','layering','stolon','sucker','grafting','spore']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_division_check check (division <@ array['seed','clump_division','bulb_division','rhizome_division','cutting','layering','stolon','sucker','grafting','spore']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- sowing_method
@@ -1266,8 +1268,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_sowing_method_check check (sowing_method <@ array['open_ground','pot','tray','greenhouse','mini_greenhouse','broadcast','row']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_sowing_method_check check (sowing_method <@ array['open_ground','pot','tray','greenhouse','mini_greenhouse','broadcast','row']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- conservation_status
@@ -1275,8 +1277,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_conservation_status_check check (conservation_status <@ array['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_conservation_status_check check (conservation_status <@ array['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- ecological_tolerance
@@ -1284,8 +1286,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_ecological_tolerance_check check (ecological_tolerance <@ array['drought','scorching_sun','permanent_shade','excess_water','frost','heatwave','wind']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_ecological_tolerance_check check (ecological_tolerance <@ array['drought','scorching_sun','permanent_shade','excess_water','frost','heatwave','wind']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- ecological_impact
@@ -1293,89 +1295,61 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_ecological_impact_check check (ecological_impact <@ array['neutral','favorable','potentially_invasive','locally_invasive']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_ecological_impact_check check (ecological_impact <@ array['neutral','favorable','potentially_invasive','locally_invasive']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
-  -- substrate
+  -- substrate (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'substrate') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_substrate_check check (substrate <@ array['garden_soil','topsoil','loam','clay_soil','sandy_soil','silty_soil','universal_potting_mix','horticultural_potting_mix','seed_starting_mix','cutting_mix','vegetable_potting_mix','flowering_plant_mix','foliage_plant_mix','citrus_mix','orchid_mix','cactus_succulent_mix','ericaceous_mix','mature_compost','vermicompost','composted_manure','composted_leaves','leaf_mold','forest_humus','ramial_chipped_wood','coconut_coir','blonde_peat','brown_peat','composted_bark','river_sand','horticultural_sand','pozzite','perlite','vermiculite','pumice','gravel','clay_pebbles','zeolite','pumice_stone','schist','crushed_slate','calcareous_soil','acidic_soil','volcanic_soil','pure_mineral_substrate','draining_cactus_substrate']);
-  exception when duplicate_object then null;
-  end;
 
-  -- mulch_type
+  -- mulch_type (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'mulch_type') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_mulch_type_check check (mulch_type <@ array['straw','hay','dead_leaves','dried_grass_clippings','pine_needles','dried_fern','crushed_miscanthus','flax_straw','hemp','untreated_wood_shavings','pine_bark','hardwood_bark','ramial_chipped_wood','fresh_grass_clippings','shredded_garden_waste','shredded_pruning_waste','cocoa_shells','buckwheat_hulls','flax_mulch','hemp_mulch','unprinted_brown_cardboard','kraft_paper','newspaper_vegetal_ink','forest_litter','fragmented_deadwood','oak_leaves','hazel_leaves','beech_leaves','gravel','pebbles','pozzolane','crushed_slate','schist','crushed_brick','decorative_sand','volcanic_rock','surface_clay_pebbles','clover','ivy','bugle','creeping_thyme','strawberry','vinca','sedum','natural_lawn','cardboard','kraft','burlap','biodegradable_fabric','crushed_eggshell','walnut_shells','hazelnut_shells','mixed_coffee_grounds']);
-  exception when duplicate_object then null;
-  end;
 
   -- cultivation_mode
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'cultivation_mode') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_cultivation_mode_check check (cultivation_mode <@ array['open_ground','flowerbed','vegetable_garden','raised_bed','orchard','rockery','slope','mound','pot','planter','hanging','greenhouse','indoor','pond','waterlogged_soil','hydroponic','aquaponic','mineral_substrate','permaculture','agroforestry']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_cultivation_mode_check check (cultivation_mode <@ array['open_ground','flowerbed','vegetable_garden','raised_bed','orchard','rockery','slope','mound','pot','planter','hanging','greenhouse','indoor','pond','waterlogged_soil','hydroponic','aquaponic','mineral_substrate','permaculture','agroforestry']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
-  -- ecological_status
+  -- ecological_status (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'ecological_status') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_ecological_status_check check (ecological_status <@ array['indigenous','endemic','subendemic','introduced','naturalized','subspontaneous','cultivated_only','ecologically_neutral','biodiversity_favorable','potentially_invasive','exotic_invasive','locally_invasive','competitive_dominant','pioneer_species','climax_species','structuring_species','indicator_species','host_species','relict_species','heritage_species','common_species','nitrogen_fixer','hygrophile','heliophile','sciaphile','halophile','calcicole','acidophile']);
-  exception when duplicate_object then null;
-  end;
 
-  -- biotopes
+  -- biotopes (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'biotopes') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_biotopes_check check (biotopes <@ array['temperate_deciduous_forest','mixed_forest','coniferous_forest','mediterranean_forest','tropical_rainforest','tropical_dry_forest','shaded_understory','forest_edge','clearing','alluvial_forest','natural_meadow','wet_meadow','dry_meadow','calcareous_grassland','sandy_grassland','steppe','savanna','garrigue','maquis','wasteland','fallow','marsh','peat_bog','wetland','lakeshore','pond','natural_pool','reed_bed','stream','riverbank','swamp_forest','mangrove','rockery','scree','cliff','rocky_outcrop','stony_ground','calcareous_terrain','sandy_terrain','inland_dune','arid_steppe','desert','semi_desert','coastal_dune','beach','foreshore','lagoon','salt_marsh','sea_cliff','coastal_forest','coastal_meadow','alpine_meadow','montane_zone','subalpine_zone','alpine_zone','alpine_tundra','mountain_forest','mountain_edge','tropical_humid_forest','tropical_dry_forest_2','primary_forest','secondary_forest','tropical_savanna','mangrove_tropical','cloud_forest','tropical_understory']);
-  exception when duplicate_object then null;
-  end;
 
-  -- urban_biotopes
+  -- urban_biotopes (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'urban_biotopes') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_urban_biotopes_check check (urban_biotopes <@ array['urban_garden','periurban_garden','park','urban_wasteland','green_wall','green_roof','balcony','agricultural_hedge','cultivated_orchard','vegetable_garden','roadside']);
-  exception when duplicate_object then null;
-  end;
 
-  -- biodiversity_role
+  -- biodiversity_role (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'biodiversity_role') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_biodiversity_role_check check (biodiversity_role <@ array['melliferous','insect_refuge','bird_refuge','mammal_refuge','food_source','host_plant','nitrogen_fixer','soil_improver','ecological_corridor','natural_repellent','green_manure','fertility_improver','crop_shade','vegetable_garden_windbreak','moisture_retention','frost_protection','drought_protection']);
-  exception when duplicate_object then null;
-  end;
 
-  -- ecological_management
+  -- ecological_management (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'ecological_management') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_ecological_management_check check (ecological_management <@ array['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil']);
-  exception when duplicate_object then null;
-  end;
 
   -- season
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'season') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_season_check check (season <@ array['spring','summer','autumn','winter']);
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_season_check check (season <@ array['spring','summer','autumn','winter']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- edible_oil
@@ -1383,8 +1357,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_edible_oil_check check (edible_oil in ('yes','no','unknown'));
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_edible_oil_check check (edible_oil in ('yes','no','unknown')) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- status
@@ -1392,8 +1366,8 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_status_check check (status in ('in_progress','rework','review','approved'));
-  exception when duplicate_object then null;
+    alter table public.plants add constraint plants_status_check check (status in ('in_progress','rework','review','approved')) not valid;
+  exception when duplicate_object then null; when check_violation then null;
   end;
 
   -- Drop old check constraints on removed columns (nutrition_need, fertilizer — now unconstrained)
@@ -1474,6 +1448,7 @@ do $$ declare
     'temperature_max',
     'temperature_min',
     'temperature_ideal',
+    'watering_mode',
     'watering_frequency_warm',
     'watering_frequency_cold',
     'watering_type',
@@ -1586,7 +1561,7 @@ end $$;
 create table if not exists public.plant_watering_schedules (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
-  season text check (season is null or season in ('spring','summer','autumn','winter')),
+  season text check (season is null or season in ('spring','summer','autumn','winter','hot','cold')),
   quantity integer,
   time_period text check (time_period is null or time_period in ('week','month','year')),
   created_at timestamptz not null default now()
@@ -1612,7 +1587,7 @@ do $$ begin
   if exists (select 1 from information_schema.constraint_column_usage where table_name='plant_watering_schedules' and constraint_name='plant_watering_schedules_time_period_check') then
     alter table public.plant_watering_schedules drop constraint plant_watering_schedules_time_period_check;
   end if;
-  alter table public.plant_watering_schedules add constraint plant_watering_schedules_season_check check (season is null or season in ('spring','summer','autumn','winter'));
+  alter table public.plant_watering_schedules add constraint plant_watering_schedules_season_check check (season is null or season in ('spring','summer','autumn','winter','hot','cold'));
   alter table public.plant_watering_schedules add constraint plant_watering_schedules_time_period_check check (time_period is null or time_period in ('week','month','year'));
 end $$;
 create index if not exists plant_watering_schedules_plant_id_idx on public.plant_watering_schedules(plant_id);

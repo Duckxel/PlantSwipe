@@ -49,6 +49,8 @@ export type LivingSpace =
 
 export type PlantSeason = "spring" | "summer" | "autumn" | "winter"
 
+export type WateringMode = "always" | "seasonal"
+
 export type Climate =
   | "polar" | "montane" | "oceanic" | "degraded_oceanic"
   | "temperate_continental" | "mediterranean" | "tropical_dry"
@@ -125,6 +127,8 @@ export interface PlantWateringSchedule {
   season?: string
   quantity?: number
   timePeriod?: "week" | "month" | "year"
+  /** @deprecated Use season 'hot' or 'cold' instead of spring/summer/autumn/winter */
+  legacySeason?: boolean
 }
 
 export interface PlantSource {
@@ -204,6 +208,7 @@ export interface Plant {
   temperatureMax?: number
   temperatureMin?: number
   temperatureIdeal?: number
+  wateringMode?: WateringMode
   wateringFrequencyWarm?: number
   wateringFrequencyCold?: number
   wateringType?: WateringType[]

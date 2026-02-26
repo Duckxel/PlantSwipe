@@ -134,6 +134,7 @@ function mapDbRowToPlant(
     temperatureMax: (basePlant.temperature_max as number) || undefined,
     temperatureMin: (basePlant.temperature_min as number) || undefined,
     temperatureIdeal: (basePlant.temperature_ideal as number) || undefined,
+    wateringMode: (basePlant.watering_mode as Plant['wateringMode']) || 'always',
     wateringFrequencyWarm: (basePlant.watering_frequency_warm as number) || undefined,
     wateringFrequencyCold: (basePlant.watering_frequency_cold as number) || undefined,
     wateringType: wateringTypeEnum.toDbArray(basePlant.watering_type) as Plant['wateringType'],

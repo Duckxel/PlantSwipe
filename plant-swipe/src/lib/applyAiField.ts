@@ -5,7 +5,7 @@
 // ============================================================================
 
 import type { Plant } from "@/types/plant"
-import { mapFieldToCategory, type PlantFormCategory } from "./plantFormCategories"
+import { mapFieldToCategory, isFieldGatedOff, BOOLEAN_GATE_DEPS, type PlantFormCategory } from "./plantFormCategories"
 import type { EnumTools } from "@/lib/composition"
 import {
   encyclopediaCategoryEnum,
@@ -58,9 +58,9 @@ const normalizeEnumValueInput = (enumTool: EnumTools, value: unknown): EnumValue
 
 const normalizeEnumArrayInput = (enumTool: EnumTools, value: unknown): EnumArrayResult => {
   if (value === undefined) return { shouldUpdate: false }
-  // Try DB array first (new schema uses DB keys directly)
-  const dbArr = enumTool.toDbArray(value)
-  if (dbArr.length > 0) return { shouldUpdate: true, value: dbArr }
+  // Return UI labels — the form chip options use human-readable labels as values
+  // (e.g. "Cactus & Succulent" not "cactus_succulent"), and the save function
+  // converts back to DB format via toDbArray() before persisting.
   const uiArr = enumTool.toUiArray(value)
   if (uiArr.length > 0) return { shouldUpdate: true, value: uiArr }
   if (isExplicitArrayClear(value) || shouldClearValue(value)) return { shouldUpdate: true, value: [] }
@@ -254,11 +254,15 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
 function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant {
   if (IGNORED_FIELDS.has(fieldKey) || data === undefined) return plant
 
+  // Skip fields whose boolean gate is false
+  if (isFieldGatedOff(plant as unknown as Record<string, unknown>, fieldKey)) return plant
+
   const next = { ...plant } as Plant & Record<string, unknown>
 
   // Enum array fields
   if (ENUM_FIELDS[fieldKey]) {
     const result = normalizeEnumArrayInput(ENUM_FIELDS[fieldKey], data)
+    console.log(`[applyAiField] enum "${fieldKey}": input=`, data, `→ shouldUpdate=${result.shouldUpdate}, value=`, result.value)
     if (result.shouldUpdate) next[fieldKey] = result.value
     return next
   }
@@ -279,6 +283,15 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
     return next
   }
 
+  // wateringMode special case
+  if (fieldKey === 'wateringMode') {
+    if (typeof data === 'string') {
+      const lower = data.toLowerCase().trim()
+      if (['always', 'seasonal'].includes(lower)) next.wateringMode = lower as 'always' | 'seasonal'
+    }
+    return next
+  }
+
   // Month array fields
   if (MONTH_FIELDS.has(fieldKey)) {
     next[fieldKey] = normalizeMonthArray(data)
@@ -288,7 +301,15 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
   // Boolean fields
   if (BOOLEAN_FIELDS.has(fieldKey)) {
     const val = normalizeBoolean(data)
-    if (val !== undefined) next[fieldKey] = val
+    if (val !== undefined) {
+      next[fieldKey] = val
+      // When a gate field is set to false, clear its dependent fields
+      if (val === false && BOOLEAN_GATE_DEPS[fieldKey]) {
+        for (const dep of BOOLEAN_GATE_DEPS[fieldKey]) {
+          next[dep] = undefined
+        }
+      }
+    }
     return next
   }
 

@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
-import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime } from "@/types/plant"
+import { type CategoryProgress, type PlantFormCategory, BOOLEAN_GATE_DEPS } from "@/lib/plantFormCategories"
+import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime, WateringMode } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
@@ -67,6 +67,8 @@ interface FieldConfig {
     caseInsensitive?: boolean
     placeholder?: string
   }
+  /** If set, this field is only shown when the gate field is true */
+  gatedBy?: string
 }
 
 const sanitizeOptionKey = (value: unknown) => {
@@ -705,105 +707,196 @@ const CompanionSelector: React.FC<{
   )
 }
 
+/** Derive watering mode from existing schedule data */
+function deriveWateringMode(schedules?: PlantWateringSchedule[], explicitMode?: WateringMode): WateringMode {
+  if (explicitMode) return explicitMode
+  if (!schedules?.length) return 'always'
+  const hasHotCold = schedules.some((s) => s.season === 'hot' || s.season === 'cold')
+  return hasHotCold ? 'seasonal' : 'always'
+}
+
+/** Build schedules array from the structured form state */
+function buildSchedulesFromMode(
+  mode: WateringMode,
+  always: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] },
+  hot: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] },
+  cold: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] },
+): PlantWateringSchedule[] {
+  if (mode === 'seasonal') {
+    return [
+      { season: 'hot', quantity: hot.quantity, timePeriod: hot.timePeriod },
+      { season: 'cold', quantity: cold.quantity, timePeriod: cold.timePeriod },
+    ]
+  }
+  return [{ quantity: always.quantity, timePeriod: always.timePeriod }]
+}
+
+const TimePeriodSelect: React.FC<{
+  value: PlantWateringSchedule['timePeriod'] | undefined
+  onChange: (v: PlantWateringSchedule['timePeriod'] | undefined) => void
+  t: TFunction
+}> = ({ value, onChange, t }) => (
+  <select
+    className="h-9 rounded-md border px-2 text-sm"
+    value={value || ""}
+    onChange={(e) => onChange(e.target.value ? (e.target.value as PlantWateringSchedule['timePeriod']) : undefined)}
+  >
+    <option value="">{t('plantAdmin.watering.timePeriodPlaceholder', 'Time period')}</option>
+    {(['week', 'month', 'year'] as const).map((opt) => (
+      <option key={opt} value={opt}>
+        {t(`plantAdmin.optionLabels.${opt}`, opt)}
+      </option>
+    ))}
+  </select>
+)
+
 const WateringScheduleEditor: React.FC<{
   value: PlantWateringSchedule[] | undefined
   onChange: (schedules: PlantWateringSchedule[]) => void
-}> = ({ value, onChange }) => {
+  wateringMode?: WateringMode
+  onWateringModeChange?: (mode: WateringMode) => void
+}> = ({ value, onChange, wateringMode, onWateringModeChange }) => {
   const { t } = useTranslation('common')
   const schedules = Array.isArray(value) ? value : []
-  const [draft, setDraft] = React.useState<PlantWateringSchedule>({ season: "", quantity: undefined, timePeriod: undefined })
-  const addDraft = () => {
-    if (!(draft.season?.trim() || draft.quantity !== undefined || draft.timePeriod)) return
-    onChange([...schedules, { season: draft.season?.trim(), quantity: draft.quantity, timePeriod: draft.timePeriod }])
-    setDraft({ season: "", quantity: undefined, timePeriod: draft.timePeriod })
+  const mode = deriveWateringMode(schedules, wateringMode)
+
+  // Extract current values from schedules
+  const alwaysEntry = schedules.find((s) => !s.season) || schedules[0] || {}
+  const hotEntry = schedules.find((s) => s.season === 'hot') || {}
+  const coldEntry = schedules.find((s) => s.season === 'cold') || {}
+
+  const setMode = (newMode: WateringMode) => {
+    onWateringModeChange?.(newMode)
+    if (newMode === 'always') {
+      // Convert to single schedule — take hot entry as default or keep existing
+      const src = hotEntry.quantity != null ? hotEntry : alwaysEntry
+      onChange(buildSchedulesFromMode('always', src, hotEntry, coldEntry))
+    } else {
+      // Convert to seasonal — use current always values as hot default
+      const src = alwaysEntry.quantity != null ? alwaysEntry : hotEntry
+      onChange(buildSchedulesFromMode('seasonal', alwaysEntry,
+        { quantity: src.quantity, timePeriod: src.timePeriod },
+        { quantity: coldEntry.quantity ?? src.quantity, timePeriod: coldEntry.timePeriod ?? src.timePeriod }
+      ))
+    }
   }
-  const update = (idx: number, patch: Partial<PlantWateringSchedule>) => {
-    onChange(
-      schedules.map((s, i) => (i === idx ? { ...s, ...patch } : s))
-    )
+
+  const updateAlways = (patch: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] }) => {
+    const updated = { ...alwaysEntry, ...patch }
+    onChange(buildSchedulesFromMode('always', updated, hotEntry, coldEntry))
   }
-  const remove = (idx: number) => onChange(schedules.filter((_, i) => i !== idx))
-    return (
-      <div className="grid gap-3">
-          {schedules.map((schedule, idx) => (
-          <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <Input
-                  placeholder={t('plantAdmin.watering.seasonPlaceholder', 'Season (optional)')}
-                value={schedule.season || ""}
-                onChange={(e) => update(idx, { season: e.target.value })}
-              />
-              <Input
-                  placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
-                type="number"
-                value={schedule.quantity ?? ""}
-                onChange={(e) => {
-                  const nextVal = e.target.value === "" ? undefined : parseInt(e.target.value, 10)
-                  update(idx, { quantity: Number.isFinite(nextVal as number) ? nextVal : undefined })
-                }}
-              />
-              <select
-                className="h-9 rounded-md border px-2 text-sm"
-                value={schedule.timePeriod || ""}
-                onChange={(e) => update(idx, { timePeriod: e.target.value ? (e.target.value as any) : undefined })}
-              >
-                  <option value="">{t('plantAdmin.watering.timePeriodPlaceholder', 'Time period')}</option>
-                  {(['week', 'month', 'year'] as const).map((opt) => (
-                    <option key={opt} value={opt}>
-                      {t(`plantAdmin.optionLabels.${opt}`, opt)}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div className="flex justify-end">
-              <Button variant="ghost" type="button" onClick={() => remove(idx)} className="text-red-600">
-                  {t('plantAdmin.actions.remove', 'Remove')}
-              </Button>
-            </div>
-          </div>
-        ))}
-        <div className="grid gap-2 rounded border border-dashed p-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <Input
-                placeholder={t('plantAdmin.watering.seasonPlaceholder', 'Season (optional)')}
-              value={draft.season}
-              onChange={(e) => setDraft((d) => ({ ...d, season: e.target.value }))}
-            />
-            <Input
-                placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
-              type="number"
-              value={draft.quantity ?? ""}
-              onChange={(e) => {
-                const nextVal = e.target.value === "" ? undefined : parseInt(e.target.value, 10)
-                setDraft((d) => ({ ...d, quantity: Number.isFinite(nextVal as number) ? nextVal : undefined }))
-                }}
-              />
-            <select
-              className="h-9 rounded-md border px-2 text-sm"
-              value={draft.timePeriod || ""}
-              onChange={(e) => setDraft((d) => ({ ...d, timePeriod: e.target.value ? (e.target.value as any) : undefined }))}
-            >
-                <option value="">{t('plantAdmin.watering.timePeriodPlaceholder', 'Time period')}</option>
-                {(['week', 'month', 'year'] as const).map((opt) => (
-                  <option key={opt} value={opt}>
-                    {t(`plantAdmin.optionLabels.${opt}`, opt)}
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{t('plantAdmin.watering.helper', 'Season is optional. Add as many watering schedules as needed.')}</span>
-            <Button
-              type="button"
-              onClick={addDraft}
-              disabled={!(draft.season?.trim() || draft.quantity !== undefined || draft.timePeriod)}
-            >
-                {t('plantAdmin.watering.addSchedule', 'Add schedule')}
-            </Button>
-          </div>
-        </div>
+
+  const updateHot = (patch: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] }) => {
+    const updated = { ...hotEntry, ...patch }
+    onChange(buildSchedulesFromMode('seasonal', alwaysEntry, updated, coldEntry))
+  }
+
+  const updateCold = (patch: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] }) => {
+    const updated = { ...coldEntry, ...patch }
+    onChange(buildSchedulesFromMode('seasonal', alwaysEntry, hotEntry, updated))
+  }
+
+  const parseNumber = (val: string): number | undefined => {
+    if (val === '') return undefined
+    const n = parseInt(val, 10)
+    return Number.isFinite(n) ? n : undefined
+  }
+
+  return (
+    <div className="grid gap-3">
+      {/* Mode toggle */}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant={mode === 'always' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setMode('always')}
+        >
+          {t('plantAdmin.watering.modeAlways', 'Always (same year-round)')}
+        </Button>
+        <Button
+          type="button"
+          variant={mode === 'seasonal' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setMode('seasonal')}
+        >
+          {t('plantAdmin.watering.modeSeasonal', 'Seasonal (Hot / Cold)')}
+        </Button>
       </div>
-    )
+
+      {mode === 'always' ? (
+        /* Always mode — single quantity + time period */
+        <div className="rounded border p-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Input
+              placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
+              type="number"
+              min={0}
+              value={alwaysEntry.quantity ?? ""}
+              onChange={(e) => updateAlways({ quantity: parseNumber(e.target.value) })}
+            />
+            <TimePeriodSelect
+              value={alwaysEntry.timePeriod}
+              onChange={(tp) => updateAlways({ timePeriod: tp })}
+              t={t}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t('plantAdmin.watering.alwaysHelper', 'Same watering schedule all year round.')}
+          </p>
+        </div>
+      ) : (
+        /* Seasonal mode — hot and cold */
+        <div className="grid gap-3">
+          {/* Hot environment */}
+          <div className="rounded border p-3">
+            <Label className="mb-2 font-medium text-orange-600">
+              {t('plantAdmin.watering.hotLabel', 'Hot environment')}
+            </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+              <Input
+                placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
+                type="number"
+                min={0}
+                value={hotEntry.quantity ?? ""}
+                onChange={(e) => updateHot({ quantity: parseNumber(e.target.value) })}
+              />
+              <TimePeriodSelect
+                value={hotEntry.timePeriod}
+                onChange={(tp) => updateHot({ timePeriod: tp })}
+                t={t}
+              />
+            </div>
+          </div>
+
+          {/* Cold environment */}
+          <div className="rounded border p-3">
+            <Label className="mb-2 font-medium text-blue-600">
+              {t('plantAdmin.watering.coldLabel', 'Cold environment')}
+            </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+              <Input
+                placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
+                type="number"
+                min={0}
+                value={coldEntry.quantity ?? ""}
+                onChange={(e) => updateCold({ quantity: parseNumber(e.target.value) })}
+              />
+              <TimePeriodSelect
+                value={coldEntry.timePeriod}
+                onChange={(tp) => updateCold({ timePeriod: tp })}
+                t={t}
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {t('plantAdmin.watering.seasonalHelper', 'Set different watering needs for hot and cold environments so users can adjust based on temperature.')}
+          </p>
+        </div>
+      )}
+    </div>
+  )
 }
 
 const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Record<string, string>) => void; keyLabel?: string; valueLabel?: string }> = ({ value, onChange, keyLabel, valueLabel }) => {
@@ -960,13 +1053,11 @@ const careFields: FieldConfig[] = [
   { key: "temperatureMax", label: "Temperature Max (°C)", description: "Maximum tolerable temperature", type: "number" },
   { key: "temperatureMin", label: "Temperature Min (°C)", description: "Minimum tolerable temperature", type: "number" },
   { key: "temperatureIdeal", label: "Temperature Ideal (°C)", description: "Ideal growing temperature", type: "number" },
-  { key: "wateringFrequencyWarm", label: "Watering (Warm Season)", description: "Times per week in warm season", type: "number" },
-  { key: "wateringFrequencyCold", label: "Watering (Cold Season)", description: "Times per week in cold season", type: "number" },
+  { key: "wateringSchedules", label: "Watering Schedule", description: "Set a global or seasonal (hot/cold) watering schedule", type: "watering" },
   { key: "wateringType", label: "Watering Type", description: "Preferred watering methods", type: "multiselect", options: ["Hose","Surface","Drip","Soaking","Wick"] },
   { key: "hygrometry", label: "Humidity (%)", description: "Preferred humidity level (0-100)", type: "number" },
   { key: "mistingFrequency", label: "Misting (per week)", description: "Times per week for misting", type: "number" },
   { key: "specialNeeds", label: "Special Needs", description: "Special care requirements", type: "tags" },
-  { key: "wateringSchedules", label: "Watering Schedule", description: "Detailed seasonal watering schedule", type: "watering" },
 ]
 
 // ============================================================================
@@ -977,8 +1068,8 @@ const careDetailsFields: FieldConfig[] = [
   { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags" },
   { key: "soilAdvice", label: "Soil Guidance", description: "Substrate/soil advice text", type: "textarea" },
   { key: "mulchingNeeded", label: "Mulching Needed?", description: "Is mulching recommended?", type: "boolean" },
-  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags" },
-  { key: "mulchAdvice", label: "Mulch Advice", description: "Mulching guidance", type: "textarea" },
+  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags", gatedBy: "mulchingNeeded" },
+  { key: "mulchAdvice", label: "Mulch Advice", description: "Mulching guidance", type: "textarea", gatedBy: "mulchingNeeded" },
   { key: "nutritionNeed", label: "Nutrient Needs", description: "Key nutritional requirements", type: "tags" },
   { key: "fertilizer", label: "Fertilizer", description: "Recommended fertilizer types", type: "tags" },
   { key: "fertilizerAdvice", label: "Fertilizer Advice", description: "Fertilizing schedule and advice", type: "textarea" },
@@ -994,17 +1085,17 @@ const growthFields: FieldConfig[] = [
   { key: "heightCm", label: "Height (cm)", description: "Mature height in centimeters", type: "number" },
   { key: "wingspanCm", label: "Spread / Width (cm)", description: "Mature spread in centimeters", type: "number" },
   { key: "staking", label: "Staking Needed?", description: "Does the plant need staking/support?", type: "boolean" },
-  { key: "stakingAdvice", label: "Staking Advice", description: "What type of support and how to stake", type: "textarea" },
+  { key: "stakingAdvice", label: "Staking Advice", description: "What type of support and how to stake", type: "textarea", gatedBy: "staking" },
   { key: "division", label: "Division / Propagation", description: "How to propagate", type: "multiselect", options: ["Seed","Clump Division","Bulb Division","Rhizome Division","Cutting","Layering","Stolon","Sucker","Grafting","Spore"] },
   { key: "cultivationMode", label: "Cultivation Mode", description: "Type of growing setup", type: "multiselect", options: ["Open Ground","Flowerbed","Vegetable Garden","Raised Bed","Orchard","Rockery","Slope","Mound","Pot","Planter","Hanging","Greenhouse","Indoor","Pond","Waterlogged Soil","Hydroponic","Aquaponic","Mineral Substrate","Permaculture","Agroforestry"] },
   { key: "sowingMethod", label: "Sowing Method", description: "How to sow seeds", type: "multiselect", options: ["Open Ground","Pot","Tray","Greenhouse","Mini Greenhouse","Broadcast","Row"] },
   { key: "transplanting", label: "Transplanting?", description: "Does the plant need transplanting?", type: "boolean" },
-  { key: "transplantingTime", label: "Transplanting Time", description: "When to transplant (e.g. after 4 true leaves)", type: "text" },
-  { key: "outdoorPlantingTime", label: "Outdoor Planting Time", description: "When to plant outdoors", type: "text" },
+  { key: "transplantingTime", label: "Transplanting Time", description: "When to transplant (e.g. after 4 true leaves)", type: "text", gatedBy: "transplanting" },
+  { key: "outdoorPlantingTime", label: "Outdoor Planting Time", description: "When to plant outdoors", type: "text", gatedBy: "transplanting" },
   { key: "sowingAdvice", label: "Sowing Advice", description: "Sowing and planting instructions", type: "textarea" },
   { key: "pruning", label: "Pruning Needed?", description: "Does the plant need pruning?", type: "boolean" },
-  { key: "pruningMonth", label: "Pruning Month(s)", description: "Best months for pruning", type: "multiselect", options: monthOptions },
-  { key: "pruningAdvice", label: "Pruning Advice", description: "Pruning technique and tips", type: "textarea" },
+  { key: "pruningMonth", label: "Pruning Month(s)", description: "Best months for pruning", type: "multiselect", options: monthOptions, gatedBy: "pruning" },
+  { key: "pruningAdvice", label: "Pruning Advice", description: "Pruning technique and tips", type: "textarea", gatedBy: "pruning" },
 ]
 
 // ============================================================================
@@ -1042,21 +1133,21 @@ const ecologyFields: FieldConfig[] = [
 const consumptionFields: FieldConfig[] = [
   { key: "nutritionalValue", label: "Nutritional Value", description: "Nutritional information for edible plants", type: "textarea" },
   { key: "infusion", label: "Usable for Infusion?", description: "Can be used for tea/infusion", type: "boolean" },
-  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags" },
-  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea" },
-  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea" },
+  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags", gatedBy: "infusion" },
+  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea", gatedBy: "infusion" },
+  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea", gatedBy: "infusion" },
   { key: "medicinal", label: "Medicinal Plant?", description: "Does the plant have medicinal uses?", type: "boolean" },
-  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea" },
-  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea" },
-  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea" },
-  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea" },
+  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea", gatedBy: "medicinal" },
+  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea", gatedBy: "medicinal" },
+  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea", gatedBy: "medicinal" },
+  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea", gatedBy: "medicinal" },
   { key: "fragrance", label: "Fragrance?", description: "Does the plant have a notable fragrance?", type: "boolean" },
   { key: "aromatherapy", label: "Aromatherapy?", description: "Used in aromatherapy?", type: "boolean" },
-  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea" },
-  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea" },
+  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea", gatedBy: "aromatherapy" },
+  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea", gatedBy: "aromatherapy" },
   { key: "edibleOil", label: "Edible Oil?", description: "Does the plant produce an edible oil?", type: "select", options: ["Yes","No","Unknown"] },
   { key: "spiceMixes", label: "Spice Mixes", description: "Spice blend uses", type: "tags" },
-  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict" },
+  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict", gatedBy: "infusion" },
 ]
 
 // ============================================================================
@@ -1220,8 +1311,10 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         }
         case "multiselect": {
           const currentValues = isMonthMultiField ? normalizeMonthArray(value) : (Array.isArray(value) ? [...value] : [])
+          // Normalize for comparison: handles "cactus_succulent" vs "Cactus & Succulent"
+          const canon = (v: unknown) => typeof v === 'string' ? v.replace(/[_\s&/–-]+/g, '').toLowerCase() : v
           const includesValue = (candidate: unknown) =>
-            currentValues.some((entry) => Object.is(entry, candidate) || (typeof entry === "string" && typeof candidate === "string" && entry === candidate))
+            currentValues.some((entry) => Object.is(entry, candidate) || canon(entry) === canon(candidate))
           return (
             <div className="grid gap-2">
               <Label>{label}</Label>
@@ -1234,7 +1327,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
                       type="button"
                       onClick={() => {
                         const nextValues = selected
-                          ? currentValues.filter((entry) => !(Object.is(entry, opt.value) || (typeof entry === "string" && typeof opt.value === "string" && entry === opt.value)))
+                          ? currentValues.filter((entry) => !(Object.is(entry, opt.value) || canon(entry) === canon(opt.value)))
                           : [...currentValues, opt.value]
                         onChange(field.key, nextValues)
                       }}
@@ -1282,7 +1375,12 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         return (
           <div className="grid gap-2">
               <Label>{label}</Label>
-            <WateringScheduleEditor value={value as any} onChange={(v) => onChange(field.key, v)} />
+            <WateringScheduleEditor
+              value={value as any}
+              onChange={(v) => onChange(field.key, v)}
+              wateringMode={plant.wateringMode}
+              onWateringModeChange={(m) => onChange('wateringMode', m)}
+            />
               <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
@@ -2458,7 +2556,16 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     [onChange, t, value],
   )
   const formTabOrder = ['identity','safety','care','careDetails','growth','danger','ecology','consumption','misc','meta'] as const
-  const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
+  const setPath = (path: string, val: any) => {
+    let next = setValue(value, path, val)
+    // When a boolean gate is toggled OFF, clear its dependent fields
+    if (val === false && BOOLEAN_GATE_DEPS[path]) {
+      for (const dep of BOOLEAN_GATE_DEPS[path]) {
+        next = setValue(next, dep, undefined)
+      }
+    }
+    onChange(next)
+  }
   return (
     <div className="space-y-6">
       <div ref={(node) => { sectionRefs.current.base = node }} className="flex-1">
@@ -2557,6 +2664,8 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                   <CardContent className="flex flex-col gap-4">
                       {fieldGroups[cat].map((f) => {
                         if (cat === 'misc' && f.key === 'companionPlants') return null
+                        // Hide dependent fields when their boolean gate is false
+                        if (f.gatedBy && getValue(value, f.gatedBy) !== true) return null
                         return renderField(value, setPath, f, t)
                       })}
                     {cat === 'consumption' && (
