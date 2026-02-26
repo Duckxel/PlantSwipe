@@ -847,6 +847,7 @@ const baseFields: FieldConfig[] = [
   { key: "scientificNameSpecies", label: "Scientific Name (Species)", description: "Latin binomial (e.g. Monstera deliciosa)", type: "text" },
   { key: "scientificNameVariety", label: "Scientific Name (Variety)", description: "Variety or cultivar name", type: "text" },
   { key: "family", label: "Family", description: "Botanical family (e.g. Araceae)", type: "text" },
+  { key: "plantType", label: "Plant Type", description: "Primary botanical type of the plant", type: "select", options: ["Tree","Shrub","Herbaceous","Groundcover","Palm","Bamboo","Cactus","Succulent","Fern","Moss","Lichen","Epiphyte","Parasitic"] },
   { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
   { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthOptions },
 ]
@@ -855,7 +856,6 @@ const baseFields: FieldConfig[] = [
 // Section 2: Identity (15 items)
 // ============================================================================
 const identityFields: FieldConfig[] = [
-  { key: "plantType", label: "Plant Type", description: "Primary botanical type of the plant", type: "select", options: ["Tree","Shrub","Herbaceous","Groundcover","Palm","Bamboo","Cactus","Succulent","Fern","Moss","Lichen","Epiphyte","Parasitic"] },
   { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
   { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
   { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
