@@ -211,9 +211,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     {
       label: t('plantDetails.stats.temperature'),
       value:
-        tempMin !== undefined && tempMax !== undefined
-          ? `${tempMin}°C to ${tempMax}°C`
-          : tempIdeal !== undefined
+        tempIdeal !== undefined
           ? `${tempIdeal}°C`
           : t('plantDetails.values.stable'),
       iconColor: "text-rose-500 dark:text-rose-400",
