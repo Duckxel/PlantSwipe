@@ -32,7 +32,8 @@
     "legend": {
       "flowering": "Floraison",
       "fruiting": "Fructification",
-      "sowing": "Semis"
+      "sowing": "Semis",
+      "pruning": "Taille"
     }
   },
   "habitatMap": {
