@@ -10,7 +10,7 @@ import {
     ChevronRight,
     Droplet,
     Wrench,
-    Sun,
+    Flame,
     Snowflake,
   } from "lucide-react"
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer"
@@ -182,7 +182,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       customValue: wateringData.seasonal ? (
         <div className="flex flex-col gap-1 mt-0.5">
           <div className="flex items-center gap-1.5">
-            <Sun className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-amber-500 dark:text-amber-400 shrink-0" />
+            <Flame className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-orange-500 dark:text-orange-400 shrink-0" />
             <span className="text-sm lg:text-base font-semibold leading-tight text-foreground">{wateringData.seasonal.hot}</span>
           </div>
           <div className="flex items-center gap-1.5">
