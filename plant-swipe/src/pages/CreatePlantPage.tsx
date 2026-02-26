@@ -1004,6 +1004,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.featuredMonth = data.featured_month || (plant.identity?.promotionMonth ? [plant.identity.promotionMonth] : [])
 
   // Section 2: Identity (non-translatable enums from plants table)
+  flat.plantType = data.plant_type || plant.plantType || undefined
   flat.origin = translation?.origin || plant.plantCare?.origin || []
   flat.climate = climateEnum.toUiArray(data.climate) as string[]
   flat.season = seasonEnum.toUiArray(data.season) as string[]
@@ -1665,6 +1666,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
             // Section 2: Identity
+            plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
             season: seasonEnum.toDbArray(p.season || p.identity?.season),
             utility: utilityEnum.toDbArray(p.utility),
@@ -1760,6 +1762,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
             // Section 2: Identity
+            plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
             season: seasonEnum.toDbArray(p.season || p.identity?.season),
             utility: utilityEnum.toDbArray(p.utility),

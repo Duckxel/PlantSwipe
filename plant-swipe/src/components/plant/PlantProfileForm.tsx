@@ -855,6 +855,7 @@ const baseFields: FieldConfig[] = [
 // Section 2: Identity (15 items)
 // ============================================================================
 const identityFields: FieldConfig[] = [
+  { key: "plantType", label: "Plant Type", description: "Primary botanical type of the plant", type: "select", options: ["Tree","Shrub","Herbaceous","Groundcover","Palm","Bamboo","Cactus","Succulent","Fern","Moss","Lichen","Epiphyte","Parasitic"] },
   { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
   { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
   { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
