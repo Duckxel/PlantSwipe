@@ -1028,7 +1028,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.allergens = translation?.allergens || plant.identity?.allergens || []
 
   // Section 3: Care
-  flat.careLevel = careLevelEnum.toUiArray(data.care_level) as string[]
+  flat.careLevel = (careLevelEnum.toUiArray(data.care_level) as string[])[0] || undefined
   flat.sunlight = sunlightEnum.toUiArray(data.sunlight) as string[]
   flat.temperatureMax = data.temperature_max ?? undefined
   flat.temperatureMin = data.temperature_min ?? undefined

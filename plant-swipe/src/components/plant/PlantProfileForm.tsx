@@ -885,7 +885,7 @@ const safetyFields: FieldConfig[] = [
 // Section 3: Care (10 items)
 // ============================================================================
 const careFields: FieldConfig[] = [
-  { key: "careLevel", label: "Care Level", description: "How difficult to care for", type: "multiselect", options: ["Easy","Moderate","Complex"] },
+  { key: "careLevel", label: "Care Level", description: "How difficult to care for", type: "select", options: ["Easy","Moderate","Complex"] },
   { key: "sunlight", label: "Sunlight / Exposure", description: "Light requirements", type: "multiselect", options: ["Full Sun","Partial Sun","Partial Shade","Light Shade","Deep Shade","Direct Light","Bright Indirect Light","Medium Light","Low Light"] },
   { key: "temperatureMax", label: "Temperature Max (°C)", description: "Maximum tolerable temperature", type: "number" },
   { key: "temperatureMin", label: "Temperature Min (°C)", description: "Minimum tolerable temperature", type: "number" },
